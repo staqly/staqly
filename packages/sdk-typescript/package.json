@@ -41,7 +41,7 @@
     "format:check": "oxfmt --check"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
+    "@types/node": "^26.6.5",
     "oxfmt": "^0.73.0",
     "oxlint": "^1.88.0",
     "publint": "^0.3.25",
