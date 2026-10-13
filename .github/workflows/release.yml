@@ -1,0 +1,83 @@
+# prod-<timestamp> tags (bin/deploy.sh): build and publish the images,
+# linux/amd64 + linux/arm64, to
+#   ghcr.io/staqly/staqly-api:prod-<timestamp> and :latest
+#   ghcr.io/staqly/staqly-web:prod-<timestamp> and :latest
+# v<semver> tags (bin/release.sh): publish the staqly binary (CLI + `staqly
+# serve`) for macOS, Linux and Windows as a GitHub release (goreleaser).
+name: Release
+
+on:
+  push:
+    tags: ['prod-*', 'v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: Image ${{ matrix.name }}
+    if: startsWith(github.ref_name, 'prod-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - { name: staqly-api, context: apps/api }
+          - { name: staqly-web, context: apps/web, build-contexts: api=apps/api }
+    steps:
+      - uses: actions/checkout@v7
+
+      # Both images cross-compile on the runner (BUILDPLATFORM), no QEMU.
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          build-contexts: ${{ matrix.build-contexts }}
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ github.ref_name }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.licenses=Apache-2.0
+          cache-from: type=gha,scope=release-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.name }}
+
+  binaries:
+    name: Binaries (goreleaser)
+    if: startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 } # changelog since the previous v* tag
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc, cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      - uses: actions/setup-go@v7
+        with: { go-version-file: apps/cli/go.mod, cache-dependency-path: apps/cli/go.sum }
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          workdir: apps/cli
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}

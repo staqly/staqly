@@ -1,0 +1,67 @@
+---
+title: Scripts & SDK
+description: Call the REST API from shell scripts, the TypeScript SDK or any HTTP client.
+---
+
+Everything the dashboard and the agents do goes through the same REST API at
+`http://localhost:3333`. In local mode, scripts on this machine need no credentials; in
+cloud mode add `Authorization: Bearer stk_…`.
+
+```bash tab="curl"
+API=http://localhost:3333
+
+# pending images across all collections
+curl -s "$API/v1/items?status=pending&type=image"
+
+# approve (optionally editing first) / reject with feedback / run a custom action
+curl -s -X POST $API/v1/items/$ITEM/actions/approve    -H 'Content-Type: application/json' -d '{"edits":{"content":"Fixed caption"}}'
+curl -s -X POST $API/v1/items/$ITEM/actions/reject     -H 'Content-Type: application/json' -d '{"feedback":"Too dark"}'
+curl -s -X POST $API/v1/items/$ITEM/actions/regenerate -H 'Content-Type: application/json' -d '{"feedback":"Make her smile"}'
+
+# history
+curl -s $API/v1/items/$ITEM/events
+```
+
+```ts tab="TypeScript SDK"
+import { Staqly } from '@staqly/sdk';
+
+const staqly = new Staqly(); // local mode: http://localhost:3333, no key
+
+for await (const item of staqly.iterateItems({ status: 'pending', type: 'image' })) {
+  console.log(item.id, item.title);
+}
+
+await staqly.approve(itemId, { edits: { content: 'Fixed caption' } });
+await staqly.reject(otherId, 'Too dark');
+await staqly.runAction(thirdId, 'regenerate', { feedback: 'Make her smile' });
+```
+
+```python tab="Python"
+import requests
+
+API = "http://localhost:3333"
+
+pending = requests.get(f"{API}/v1/items", params={"status": "pending", "type": "image"}).json()
+for item in pending["data"]:
+    print(item["id"], item["title"])
+
+requests.post(f"{API}/v1/items/{item_id}/actions/reject", json={"feedback": "Too dark"})
+```
+
+## From inside Docker
+
+A script running in a container uses the API's service name on the staqly network
+(`http://api:3333`) or `http://host.docker.internal:3333`. Both are recognised as local
+names. Any other host name must be added to `LOCAL_ALLOWED_HOSTS`, otherwise keyless requests
+get `403 not_local`.
+
+## The demo seed script
+
+`make seed` (= `scripts/seed.sh`) loads three collections and a handful of items through the
+public API, so events and webhooks fire as usual. In cloud mode:
+`STAQLY_API_URL=… STAQLY_API_KEY=stk_… scripts/seed.sh`.
+
+<Cards>
+  <Card title="TypeScript SDK" href="/docs/sdk/typescript">Typed client and `verifyWebhook`.</Card>
+  <Card title="API overview" href="/docs/api">Conventions: errors, pagination, idempotency, uploads.</Card>
+</Cards>

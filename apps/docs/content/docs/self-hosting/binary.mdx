@@ -1,0 +1,74 @@
+---
+title: Without Docker
+description: The default way to run staqly — one binary with the API, MCP and dashboard.
+---
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh
+staqly serve
+```
+
+The install script detects macOS or Linux (amd64, arm64), downloads the latest release, checks
+it against the release's `checksums.txt` and puts `staqly` in `~/.local/bin`. On Windows,
+download the `.zip` from the [releases](https://github.com/staqly/staqly/releases).
+
+| Install setting | Default |
+|---|---|
+| `STAQLY_VERSION` | latest release (e.g. `v0.2.0` to pin one) |
+| `STAQLY_INSTALL_DIR` | `~/.local/bin` |
+
+`staqly` is also the [CLI](/docs/cli), so one install gives you both.
+
+## What `staqly serve` runs
+
+One process — the same server as the `staqly-api` Docker image, plus the dashboard:
+
+| What | Address | Reachable from |
+|---|---|---|
+| REST API + MCP | `127.0.0.1:3333` (`/mcp`) | this computer only, keyless |
+| Dashboard | `127.0.0.1:8080` | this computer only, no sign-in |
+| Data | `~/.local/share/staqly` | SQLite database + uploads |
+
+```bash
+staqly serve --data ~/staqly-data      # another data directory (or STAQLY_DATA_DIR)
+staqly serve --port 4333 --web-port 9090
+staqly serve --expose                  # dashboard on all interfaces, for phones and tablets
+```
+
+With `--expose`, every browser signs in once with a one-time link, exactly like the Docker
+setup: run `staqly serve connect-link`, or scan the QR code from **Connect a device**. Set
+`PUBLIC_WEB_URL` (e.g. `http://192.168.1.23:8080`) so QR codes point at an address phones can
+reach. Every other [setting](/docs/self-hosting/configuration) is read from the environment.
+
+## Operator commands
+
+The [operator commands](/docs/self-hosting/operator-cli) run against the same data directory:
+
+```bash
+staqly serve connect-link              # one-time sign-in link for a browser
+staqly serve backup ~/staqly-backup.db # consistent backup while staqly runs
+staqly serve recovery-key              # new recovery key; signs out every browser
+```
+
+## Run it in the background
+
+`staqly serve` stays in the foreground and stops cleanly on Ctrl-C (or SIGTERM). To keep it
+running, use your system's service manager — a minimal systemd user unit:
+
+```ini title="~/.config/systemd/user/staqly.service"
+[Unit]
+Description=staqly
+
+[Service]
+ExecStart=%h/.local/bin/staqly serve
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user enable --now staqly
+```
+
+Upgrading: see [Upgrades](/docs/self-hosting/upgrades).

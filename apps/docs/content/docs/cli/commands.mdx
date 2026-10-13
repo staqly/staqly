@@ -1,0 +1,189 @@
+---
+title: Commands
+description: Every staqly command — serve, push, inbox, items, collections, events, webhooks, rules, watchers, keys, mcp config.
+---
+
+Run `staqly <command> --help` for every flag with examples. Collection arguments accept a
+**name or an ID**.
+
+## serve — run staqly on this computer
+
+```bash
+staqly serve [--data DIR] [--port 3333] [--web-port 8080] [--expose]
+staqly serve connect-link | backup <file> | workspaces | recovery-key | set-plan <ws> <plan>
+```
+
+Runs the API, MCP and dashboard in one process, without Docker — see
+[Without Docker](/docs/self-hosting/binary). With arguments it runs an
+[operator command](/docs/self-hosting/operator-cli) against the same data instead.
+
+## status
+
+```bash
+staqly status         # health + version, mode, workspace, principal, masked key, plan, usage vs limits, pending count
+staqly status --json
+```
+
+## push — create an item and wait for a decision
+
+`push` is `items create … --wait` under a shorter name.
+
+```bash
+staqly push "Blog posts" --title "Launch post" --content @post.md
+echo "Delete 3 stale branches?" | staqly push Ops --title "Branch cleanup" --stdin
+staqly push Avatars --file avatar.png --meta prompt="smiling" --meta seed=42
+staqly push Deploys --title "Deploy v1.4" --external-ref "$GITHUB_SHA" --timeout 1h
+staqly push Deploys --title "FYI" --no-wait
+staqly push Ops --title "Drop table?" --expires-in 24h --editable title,metadata.sql
+```
+
+- Long-polls `GET /v1/items/{id}/wait` (up to 60 s per request) until the item leaves
+  `pending` or `--timeout` passes (default `30m`) — no busy polling.
+- Retries network errors, `5xx` and `429` (honouring `Retry-After`). Falls back to polling on
+  servers without `/wait`.
+- Prints the decision and the reviewer's feedback, then exits `0` / `2` / `3` / `4` (see
+  [exit codes](/docs/cli#exit-codes)). With `--json` it prints the final item.
+
+## items
+
+```bash
+staqly items list [--collection C] [--status pending] [--type image] [--q text] [--source s] [--sort created_asc] [--limit 50] [--cursor X] [--all]
+staqly items get itm_123                  # fields, metadata, content, available actions
+staqly items create <collection> [--title --content TEXT|-|@file --stdin --file PATH --url --type --metadata '{json}' --meta k=v --source --external-ref --status --idempotency-key --expires-in 24h --editable title,content] [--wait [--timeout 30m]]
+staqly items approve itm_1 [itm_2 …] [--feedback "…"|-m "…"] [--expected-version N]
+staqly items reject  itm_1 [--feedback "…"]
+staqly items action  itm_1 regenerate [--feedback "make her smile"] [--payload '{"n":2}']
+staqly items update  itm_1 [--status completed] [--metadata-patch '{"url":"…","old":null}'] [--metadata '{…}'] [--title] [--content] [--url] [--collection] [--expected-version]
+staqly items history itm_1                # activity, oldest first
+staqly items result  itm_1 --status completed|failed [--result '{"url":"…"}'] [--error "…"]
+```
+
+- `--file` uploads the file as the item's media.
+- `--content @path` reads a file; `--content -` or `--stdin` reads stdin.
+- `--meta k=v` values that parse as JSON keep their type: `seed=42` is a number, `tags=["a"]`
+  an array.
+- `--expires-in` takes a duration (`24h`) or seconds (60 s – 90 days); `--editable` lists what a
+  reviewer may change before approving.
+- `items result` reports what happened after acting on an approved item.
+- JSON creates send an automatic `Idempotency-Key`; pass your own with `--idempotency-key` to
+  make retries from your scripts safe.
+
+## inbox
+
+```bash
+staqly inbox                              # interactive on a terminal
+staqly inbox --collection "Blog posts"
+staqly inbox --no-interactive             # plain table
+staqly inbox --watch                      # keep printing new pending items
+staqly inbox --watch --json               # NDJSON stream
+```
+
+| Key | Action |
+|---|---|
+| <Kbd>j</Kbd> / <Kbd>k</Kbd> or <Kbd>↑</Kbd> / <Kbd>↓</Kbd> | Move |
+| <Kbd>Enter</Kbd>, <Kbd>Space</Kbd> or <Kbd>o</Kbd> | Show details |
+| <Kbd>a</Kbd> | Approve |
+| <Kbd>r</Kbd> | Reject — type feedback, <Kbd>Enter</Kbd> to send, <Kbd>Esc</Kbd> to cancel |
+| <Kbd>g</Kbd> | Refresh |
+| <Kbd>q</Kbd> or <Kbd>Ctrl</Kbd>+<Kbd>C</Kbd> | Quit |
+
+The list refreshes every `--interval` (default `5s`).
+
+## collections
+
+```bash
+staqly collections list [--archived]
+staqly collections create "Instagram Avatar" [--description … --icon … --color … --view gallery|table|list]
+staqly collections get "Instagram Avatar"
+staqly collections rename "Instagram Avatar" "Avatars"
+staqly collections archive Avatars [--undo]
+staqly collections delete Avatars [--yes]   # without --yes: type the name to confirm
+```
+
+## events
+
+```bash
+staqly events tail                          # last 20 events, oldest first
+staqly events tail --follow --type 'item.*' # poll for new events (--interval 2s)
+staqly events tail -f --json | jq -c 'select(.type=="item.rejected")'
+staqly events tail --item itm_1 --collection Avatars --actor-type api_key --limit 100
+```
+
+`--follow` tracks the highest `seq` printed and pages back so no event is missed. An exact
+`--type` is filtered by the server; a glob such as `item.*` by the CLI.
+
+## webhooks
+
+```bash
+staqly webhooks list                         # secrets masked
+staqly webhooks create --url https://example.com/hook --events item.approved,item.rejected [--collection Avatars] [--description …] [--timeout-ms 10000] [--max-attempts 8] [--inactive]
+staqly webhooks test wh_123
+staqly webhooks deliveries [--webhook wh_123] [--status failed] [--limit 50]
+staqly webhooks retry dlv_123
+staqly webhooks delete wh_123
+```
+
+`create` prints the signing secret once.
+
+## rules
+
+```bash
+staqly rules list
+staqly rules create --name "Auto-approve staging" --action auto_approve --collection Deploys --when 'env eq staging' --when 'amount lte 100'
+staqly rules create --name "Expire stale" --action expire --after 72h
+staqly rules create --name "Big spend" --action escalate --when 'amount gt 1000' --note "ping finance"
+staqly rules create --file rule.json         # full RuleInput JSON ('-' = stdin)
+staqly rules delete rul_123
+```
+
+`--when 'path op value'` adds a metadata condition (`eq ne lt lte gt gte contains in not_in
+exists`; for `in` / `not_in` give a comma list or JSON array). Other flags: `--type`,
+`--source` (glob), `--contains`, `--priority`, `--disabled`, `--feedback`, `--set-status`,
+`--after`, `--note`. See [Rules engine](/docs/automation/rules).
+
+## watchers
+
+```bash
+staqly watchers presets
+staqly watchers create --preset github-releases --param owner=golang --param repo=go --collection Releases [--every 2h] [--name …] [--paused]
+staqly watchers create --kind rss --url https://blog.example.com/feed.xml --collection Reading --keyword AI --exclude crypto
+staqly watchers create --kind url_diff --url https://example.com/pricing --collection Competitors
+staqly watchers list
+staqly watchers run wat_123        # check now; exit 1 if the source errored
+staqly watchers pause wat_123
+staqly watchers resume wat_123
+staqly watchers delete wat_123
+```
+
+## keys (admin)
+
+```bash
+staqly keys list
+staqly keys create --name "CI gate" --scope items:read,items:write [--expires 2027-01-01]   # printed once
+staqly keys revoke key_123
+```
+
+API keys are a cloud-mode feature; a local server accepts them but doesn't need them.
+
+## mcp config
+
+Prints a ready-to-use MCP configuration for an agent client, pointing at the current profile's
+server (`<url>/mcp`):
+
+```bash
+staqly mcp config claude                     # `claude mcp add …` + .mcp.json snippet
+staqly mcp config codex                      # `codex mcp add …` + ~/.codex/config.toml
+staqly mcp config opencode --stdio           # opencode.json for docker exec -i staqly-api mcp-stdio
+staqly mcp config cursor --snippet > .cursor/mcp.json
+```
+
+When a key is configured, snippets reference `$STAQLY_API_KEY` — the key itself is never
+printed. `--container` changes the container name used with `--stdio`.
+
+## Other
+
+```bash
+staqly version [--json]
+staqly completion bash|zsh|fish
+staqly --help · staqly <command> --help
+```

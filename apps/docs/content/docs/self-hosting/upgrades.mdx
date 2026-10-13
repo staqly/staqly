@@ -1,0 +1,40 @@
+---
+title: Upgrades & migrations
+description: Install the new binary or pull new images, and let embedded migrations do the rest.
+---
+
+## Binary (`staqly serve`)
+
+```bash
+staqly serve backup ~/staqly-backup.db   # always take a backup first (works while it runs)
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh   # latest release
+```
+
+Then restart `staqly serve`. Pin a version with `STAQLY_VERSION=v0.2.0` before `sh`. To roll
+back, install the previous version and restore the backup into the data directory
+(`~/.local/share/staqly/workspace.db`) while staqly is stopped.
+
+## Docker
+
+```bash
+make backup                      # always take a backup first
+git pull
+make up                          # pulls the images for STAQLY_VERSION and recreates the containers
+```
+
+- With the default `STAQLY_VERSION=latest`, `make up` pulls the newest images. If you pinned
+  a tag in `.env` (e.g. `prod-20261013-140500`), change it to the newer `prod-…` tag first.
+- Building from source instead? `make dev` (or `docker compose up -d --build`) rebuilds the
+  images from your checkout.
+- Data lives in the named volume, so pulling, rebuilding or recreating containers keeps it.
+- Database migrations (goose) are **embedded in the binary** and run automatically at startup,
+  each in its own transaction. If a start is interrupted, the next start resumes from the last
+  fully applied migration.
+- There is no separate migration command and nothing to run by hand.
+
+If something goes wrong, restore the backup you just took (and pin the previous `prod-…` tag in
+`STAQLY_VERSION`): `make restore BACKUP=backups/<timestamp>`.
+
+<Callout type="error">
+`docker compose down -v` deletes the data volume. Plain `docker compose down` is safe.
+</Callout>

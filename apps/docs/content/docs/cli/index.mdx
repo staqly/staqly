@@ -1,0 +1,116 @@
+---
+title: staqly CLI
+description: Push AI output for review, block a script until a human decides, and review the inbox from a terminal.
+---
+
+`staqly` is the command-line client for staqly — a single static Go binary that talks to the
+API over HTTP, so it works against a local server or a cloud workspace.
+
+```bash
+staqly push Deploys --title "Deploy v1.4"   # wait for a decision
+staqly inbox                                 # review in the terminal
+staqly status                                # server, plan, usage
+```
+
+## Install
+
+```bash tab="Install script"
+# macOS, Linux (amd64, arm64) → ~/.local/bin/staqly; STAQLY_VERSION / STAQLY_INSTALL_DIR to override
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh
+```
+
+```bash tab="From the repository"
+make web         # embeds the dashboard for `staqly serve`
+cd apps/cli
+make build       # → apps/cli/bin/staqly
+make install     # → $(go env GOPATH)/bin/staqly
+```
+
+`staqly serve` runs the whole server on this computer without Docker: API and
+MCP on `127.0.0.1:3333`, dashboard on `http://localhost:8080`.
+
+Release archives for macOS, Linux and Windows (amd64, arm64) are on the
+[releases page](https://github.com/staqly/staqly/releases); the script checks
+them against `checksums.txt`. Shell completion:
+
+```bash
+source <(staqly completion bash)        # or zsh
+staqly completion fish > ~/.config/fish/completions/staqly.fish
+```
+
+## Configuration
+
+| Setting | Flag | Environment | Profile field | Default |
+|---|---|---|---|---|
+| API base URL | `--api-url` (alias `--url`) | `STAQLY_API_URL` | `url` | `http://localhost:3333` |
+| API key | `--key` | `STAQLY_API_KEY` | `key` | none — local mode is keyless |
+| Profile | `--profile` | `STAQLY_PROFILE` | `current` | `default` |
+| Config file | — | `STAQLY_CONFIG` | — | `$XDG_CONFIG_HOME/staqly/config.json`, else `~/.config/staqly/config.json` |
+
+Precedence: **flag → environment → selected profile → default**.
+
+A key stored in a profile is only sent to **that profile's own URL**. If `--api-url` or
+`STAQLY_API_URL` points somewhere else, the CLI sends no key and prints a note — pass `--key` or
+`STAQLY_API_KEY` to authenticate against the other server. The CLI also warns when a key would
+go over plain `http://` to a host other than `localhost` / loopback: use `https://` for remote
+servers.
+
+<Callout type="warn" title="--url means something else for some commands">
+`items create` / `push` (the item's URL), `webhooks create` (the receiver URL) and
+`watchers create` (the feed or page URL) use `--url` for their own field. Set the API address
+with `--api-url` or `STAQLY_API_URL` there.
+</Callout>
+
+### Profiles
+
+```bash
+staqly login                                                  # local server, keyless → profile "default"
+staqly login --url https://staqly.example.com --key {API_KEY} --profile work
+echo "$KEY" | staqly login --url https://staqly.example.com --key - --profile ci
+staqly profiles                 # list (keys masked); * marks the current one
+staqly profiles use work        # switch
+staqly status --profile ci      # one-off
+staqly logout --profile ci      # remove a profile
+```
+
+`login` checks the credentials against `GET /v1/session` before saving (skip with
+`--no-verify`), writes the config file (directory `0700`, file `0600`) and makes the profile
+current. Without `--key` it uses `STAQLY_API_KEY` or asks at a hidden prompt.
+
+## Output
+
+- Human-readable tables by default; colours only on a terminal (`NO_COLOR=1`, `TERM=dumb` or
+  `--no-color` turn them off).
+- `--json` prints the API response unchanged. Streaming commands (`events tail`,
+  `inbox --watch`) print NDJSON.
+- With `--json`, errors go to stderr as
+  `{"error":{"code","status","message","fields","details","retry_after_seconds"}}`.
+- Text from the server (titles, content, metadata, event data, error messages) is untrusted.
+  Human output strips control characters, ANSI / OSC escape sequences (screen clearing,
+  clipboard writes, hyperlinks) and Unicode bidi overrides before printing. `--json` keeps the
+  data intact but writes C1 controls and bidi overrides as `\uXXXX` escapes, so the JSON is
+  equivalent and still safe to view in a terminal.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success. With `push` / `--wait`: **approved** |
+| `1` | Error — API, network, failed confirmation, or some items of a multi-item command failed |
+| `2` | `push` / `--wait`: **rejected** |
+| `3` | `push` / `--wait`: **timed out** (still pending) or the item **expired** |
+| `4` | `push` / `--wait`: the item left `pending` with another status (e.g. a custom action, archived) |
+| `64` | Usage error — unknown command or flag, missing arguments |
+| `130` | Interrupted (Ctrl-C). `--follow` and `--watch` exit `0` on Ctrl-C |
+
+## Errors in plain language
+
+`401` suggests `--key` or `staqly login`; `402` shows the plan limit, usage and maximum; `403
+not_local` means a keyless request came from another machine; `403` (scope) names the missing
+scope; `409` means the item changed or was already decided; `422` lists each invalid field;
+`429` shows the `Retry-After` value. When the server can't be reached, the error names the URL.
+
+<Cards>
+  <Card title="Commands" href="/docs/cli/commands">Every command with its flags.</Card>
+  <Card title="Scripting recipes" href="/docs/cli/scripting">CI gates, closing the loop, shell loops.</Card>
+</Cards>

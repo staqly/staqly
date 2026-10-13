@@ -1,0 +1,104 @@
+---
+title: Logs & tracing
+description: JSON logs on stdout, their fields, and how to follow one request from the edge to the API.
+---
+
+The API writes **one JSON object per line to stdout** — ready for `docker compose logs`, Loki,
+Datadog or Cloudflare Logpush. No agent or OpenTelemetry collector is needed.
+
+```bash
+docker compose logs -f api
+```
+
+`mcp-stdio` logs text to **stderr** (stdout is its protocol channel), at `warn` unless
+`LOG_LEVEL` / `LOG_FORMAT` say otherwise.
+
+| Variable | Default | |
+|---|---|---|
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` (case-insensitive). Anything else refuses to start. |
+| `LOG_FORMAT` | `json` | `json`, or `text` for reading in a terminal. Set it in `.env` next to `compose.yml`. |
+
+**Never logged:** query strings, request and response headers and bodies, API keys, session
+tokens, decision-link tokens (the path shows `/v1/decide/{token}`) and channel secrets.
+
+## Fields
+
+Every line:
+
+| Field | Example | |
+|---|---|---|
+| `time`, `level`, `msg` | `INFO`, `http_request` | Standard fields |
+| `service` | `staqly-api` | `staqly-mcp-stdio` for the STDIO server |
+| `version` | `prod-20261013-140500` | Build version of the image (`dev` for local builds) |
+| `mode` | `local` / `cloud` | |
+
+Lines logged while handling a request add:
+
+| Field | |
+|---|---|
+| `request_id` | Same as the `X-Request-Id` header and `request_id` in error bodies |
+| `trace_id`, `span_id` | From a valid W3C `traceparent` request header (invalid ones are ignored). `trace_id` is also returned in error bodies |
+| `cf_ray` | The `CF-Ray` header, when it looks like a ray ID |
+| `method`, `path` | The path only, never the query string |
+| `workspace_id`, `principal` | After authentication. `principal` is `api_key:key_…`, `session`, `local` or `system:…` — never a secret |
+
+The **access line** (`msg` = `http_request`, one per request) also has `status`,
+`duration_ms`, `bytes` (response body size), `ip` (the client IP as used for rate limiting —
+see `TRUST_PROXY`), `user_agent` (first 200 characters) and `route` (the route pattern, e.g.
+`/v1/items/{id}`). Its level follows the status: `error` for 5xx, `warn` for 429, `info`
+otherwise. `/health`, `/livez` and `/readyz` are not logged at `info`.
+
+An unexpected error (HTTP 500) also logs `msg` = `internal error` with `err` and the request
+fields above.
+
+Background workers add `worker` (`webhooks`, `watchers`, `notifications`, `telegram-poller`,
+`exports`, `retention`, `expiry`, `obs-heartbeat`) and, where known, `workspace_id` plus the
+entity: `delivery_id` / `webhook_id`, `watcher_id`, `channel_id`, `export_id`, `item_id`.
+
+```json
+{"time":"2026-10-13T12:00:00.123Z","level":"INFO","msg":"http_request","service":"staqly-api","version":"prod-20261013-140500","mode":"cloud","request_id":"api-1/abc-000042","trace_id":"4bf92f3577b34da6a3ce929d0e0e4736","span_id":"00f067aa0ba902b7","cf_ray":"8f2c1a2b3c4d5e6f-AMS","method":"POST","path":"/v1/collections/col_…/items","workspace_id":"ws_…","principal":"api_key:key_…","status":201,"duration_ms":12,"bytes":845,"ip":"203.0.113.9","user_agent":"n8n/1.80","route":"/v1/collections/{id}/items"}
+```
+
+## Following one request
+
+Every response carries `X-Request-Id` (yours if you sent one), and error bodies repeat it —
+plus `trace_id` when the request had a `traceparent` header:
+
+```json
+{
+  "error": { "code": "internal", "message": "internal server error" },
+  "request_id": "api-1/abc-000042",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+}
+```
+
+Search the logs for either value to find everything about that request:
+
+```bash
+docker compose logs api | grep 'api-1/abc-000042'
+```
+
+```text
+# Loki / Grafana
+{service="staqly-api"} | json | trace_id="4bf92f3577b34da6a3ce929d0e0e4736"
+{service="staqly-api"} | json | level="ERROR" | workspace_id="ws_…"
+```
+
+To tie staqly into your own traces, send a W3C `traceparent` header from your client, Worker
+or proxy; the API logs its `trace_id` and `span_id` on every line of that request.
+
+## Cloudflare
+
+Behind Cloudflare (proxy or Containers), keep `LOG_FORMAT=json` and ship stdout:
+
+- With Cloudflare Containers / Workers Logs, the container's stdout is collected as is.
+- With Logpush, push the HTTP request logs and the container logs to the same destination
+  (R2, S3, Datadog, Loki…).
+- Correlate an edge request with the API line by **`cf_ray`** — Cloudflare adds the `CF-Ray`
+  header to every proxied request — and, if your Worker or client sends a `traceparent`, by
+  `trace_id`.
+- Set `TRUST_PROXY=true` so `ip` is the client address (Cloudflare appends it to
+  `X-Forwarded-For`) rather than the edge's.
+
+Metrics, health probes, and rate limits are covered in
+[Monitoring](/docs/self-hosting/monitoring).

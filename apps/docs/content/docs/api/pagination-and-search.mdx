@@ -1,0 +1,82 @@
+---
+title: Pagination & search
+description: Opaque keyset cursors, filters, sorting and full-text search across items.
+---
+
+## Cursors
+
+List endpoints return a page and, if there is more, a `next_cursor`:
+
+```json
+{ "data": [ { "id": "itm_…" } ], "next_cursor": "eyJ…" }
+```
+
+Pass it back as `?cursor=` with the **same filters and sort** to get the next page; stop when
+`next_cursor` is absent. Cursors are **opaque** — don't parse or build them. Pagination is
+keyset-based (sort value + ID), so pages don't shift or repeat when new items arrive while you
+page through. `limit` defaults to 50 and is capped at 200.
+
+```ts
+// SDK: iterate every page
+for await (const item of staqly.iterateItems({ status: 'approved' })) { /* … */ }
+```
+
+## Listing items
+
+`GET /v1/items` (all collections) or `GET /v1/collections/{id}/items` (one collection) — both
+need `items:read`.
+
+| Parameter | |
+|---|---|
+| `collection_id` | Only this collection |
+| `status` | `draft`, `pending`, `approved`, `rejected`, `expired`, `processing`, `completed`, `failed`, `archived` |
+| `type` | `image`, `video`, `text`, `link`, `json`, `file` |
+| `source` | Exact source, e.g. `n8n` |
+| `external_ref` | Exact external reference |
+| `created_after`, `created_before` | Creation time range — RFC 3339 or `YYYY-MM-DD`; *after* is inclusive, *before* exclusive |
+| `decided_after`, `decided_before` | Decision time range (approved / rejected / expired) |
+| `q` | Full-text search, see below |
+| `sort` | `relevance`, `created_desc`, `created_asc`, `updated_desc`, `updated_asc`, `decided_desc`, `title_asc` |
+| `limit`, `cursor` | Paging |
+
+`sort` defaults to **`relevance`** when `q` is set and to **`created_desc`** otherwise.
+
+```bash
+# images approved yesterday
+curl -s "http://localhost:3333/v1/items?status=approved&type=image&decided_after=2026-10-12&decided_before=2026-10-13"
+
+# oldest pending first (how the Inbox orders them)
+curl -s "http://localhost:3333/v1/items?status=pending&sort=created_asc"
+```
+
+## Full-text search
+
+`q` searches **title, content and metadata** with SQLite FTS5:
+
+- every word must match, as a **prefix** — `gold hou` finds *golden hour*;
+- **diacritics are folded** — `slonca` finds *słońca*;
+- your text is quoted term by term, so FTS operators can't be injected;
+- results are ranked by **BM25** with the title weighted highest (`sort=relevance`).
+
+### Limits
+
+- Search text is limited to **16 distinct words** and **256 bytes** of word text; anything
+  beyond is ignored. One-letter words match exactly, not as a prefix.
+- A listing or search runs for at most **5 seconds**. A full-text search (`q`) that takes
+  longer returns `422 search_too_broad` — add more specific words or filters (collection,
+  status, dates). A plain listing returns `503 timeout` — retry, or narrow it with filters.
+
+```json
+{ "error": { "code": "search_too_broad", "message": "search too broad: it took too long; add more specific words or filters", "fields": { "q": "too broad" } } }
+```
+
+## Events
+
+`GET /v1/events` pages the activity log newest first with the same cursor scheme. Filters:
+`item_id`, `collection_id`, `type` (exact), `actor_type` (`local`, `session`, `api_key`,
+`system`).
+
+## Webhook deliveries
+
+`GET /v1/webhook-deliveries` returns the latest deliveries (filter by `webhook_id` and
+`status`: `pending`, `succeeded`, `failed`; `limit` up to 200). It has no cursor.

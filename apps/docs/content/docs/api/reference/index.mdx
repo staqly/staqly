@@ -1,0 +1,33 @@
+---
+title: Overview
+description: Every REST endpoint, generated from the OpenAPI 3.2 contract.
+---
+
+These pages are generated at build time from
+[`apps/api/openapi.yaml`](https://github.com/staqly/staqly/blob/main/apps/api/openapi.yaml) — the
+same contract the dashboard and the TypeScript SDK are typed from. A running instance serves
+it at `http://localhost:3333/openapi.yaml`; this site has a copy at [/openapi.yaml](/openapi.yaml).
+
+<Cards>
+  <Card title="Setup" href="/docs/api/reference/setup">Health, mode, signup, plans, MCP endpoint.</Card>
+  <Card title="Auth" href="/docs/api/reference/auth">Session, workspace, usage, API keys, devices, recovery.</Card>
+  <Card title="Collections" href="/docs/api/reference/collections">Create, configure, archive, delete.</Card>
+  <Card title="Items" href="/docs/api/reference/items">Create, list, search, decide, wait, report results, history.</Card>
+  <Card title="Media" href="/docs/api/reference/media">Upload and download files.</Card>
+  <Card title="Events" href="/docs/api/reference/events">The activity log.</Card>
+  <Card title="Webhooks" href="/docs/api/reference/webhooks">Endpoints, deliveries, retries, tests.</Card>
+  <Card title="Rules" href="/docs/api/reference/rules">Auto-approve, reject, expire, escalate.</Card>
+  <Card title="Watchers" href="/docs/api/reference/watchers">Feeds, page monitors, presets.</Card>
+  <Card title="Notifications" href="/docs/api/reference/notifications">Channels, deliveries, one-tap decision links.</Card>
+  <Card title="Integrations" href="/docs/api/reference/integrations">Telegram, Slack and Discord callbacks.</Card>
+  <Card title="System" href="/docs/api/reference/system">Liveness, readiness, metrics.</Card>
+</Cards>
+
+**Local mode** needs no credentials. **Cloud mode** expects `Authorization: Bearer stk_…`; the
+scope each operation needs is listed in [Authentication & scopes](/docs/api/authentication#scopes).
+
+<Callout>
+The pages show request and response schemas and generated code samples. There is no "try it"
+console: the docs are hosted separately, and staqly's API deliberately refuses cross-origin
+browser requests.
+</Callout>

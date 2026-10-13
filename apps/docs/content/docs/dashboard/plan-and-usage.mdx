@@ -1,0 +1,29 @@
+---
+title: Plan & usage
+description: See the current plan, this month's usage and the available plans.
+---
+
+**Settings → Plan & usage** (also in the command palette) shows:
+
+- the workspace's **current plan** — *Unlocked* on local installs, *Free*, *Indie* or *Team*
+  in cloud mode;
+- **usage this period** (calendar month, UTC): items created, webhooks, active API keys,
+  rules, active watchers and storage, each against its limit (∞ when unlimited);
+- the **plans** with their prices and limits.
+
+Online payments are not available yet: the operator of a cloud instance changes plans with
+`make set-plan`. See [Plans & limits](/docs/plans).
+
+The same data is available from the API:
+
+```bash
+curl -s http://localhost:3333/v1/workspace/usage
+```
+
+```json
+{
+  "plan": { "id": "unlocked", "name": "Unlocked", "limits": { "items_per_month": -1, "…": "…" } },
+  "period": "2026-10",
+  "usage": { "items_per_month": 42, "webhooks": 1, "api_keys": 0, "storage_bytes": 1048576, "rules": 2, "watchers": 1 }
+}
+```

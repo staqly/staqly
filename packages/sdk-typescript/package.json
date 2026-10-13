@@ -1,0 +1,74 @@
+{
+  "name": "@staqly/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript/JavaScript SDK for staqly \u2014 the local-first workspace where AI agents store generated content and humans review it.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./webhooks": {
+      "types": "./dist/webhooks.d.ts",
+      "default": "./dist/webhooks.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "gen": "npx --yes -p typescript@5.9.3 -p openapi-typescript@7.13.0 openapi-typescript ../../apps/api/openapi.yaml -o src/schema.ts",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings && publint --strict",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:live": "STAQLY_LIVE=1 vitest run test/live.test.ts",
+    "check": "npm run typecheck && npm run build && npm run lint && npm test",
+    "prepublishOnly": "npm run check",
+    "format": "oxlint --fix --quiet; oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^20.19.0",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0",
+    "publint": "^0.3.25",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "keywords": [
+    "staqly",
+    "staqly",
+    "ai-agents",
+    "human-in-the-loop",
+    "approval",
+    "review",
+    "sdk",
+    "webhooks"
+  ],
+  "homepage": "https://github.com/staqly/staqly/tree/main/packages/sdk-typescript#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/staqly/staqly.git",
+    "directory": "packages/sdk-typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/staqly/staqly/issues"
+  }
+}

@@ -1,0 +1,132 @@
+---
+title: Errors
+description: One error shape, stable machine-readable codes, and what to do about each.
+---
+
+Every error has the same shape:
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "title: must be at most 500 characters",
+    "fields": { "title": "must be at most 500 characters" }
+  }
+}
+```
+
+- `code` — stable, machine-readable; switch on this, not on `message`.
+- `message` — human-readable explanation.
+- `fields` — per-field problems (validation errors).
+- `details` — structured data for some errors (plan limits).
+
+Error responses also carry a top-level `request_id` (the same value as the `X-Request-Id`
+header) and, when the request sent a W3C `traceparent` header, its `trace_id`. Quote them when
+reporting a problem — they find the matching log lines. See
+[Logs & tracing](/docs/self-hosting/logs-and-tracing#following-one-request).
+
+```json
+{
+  "error": { "code": "not_found", "message": "item not found" },
+  "request_id": "api-1/abc-000042",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+}
+```
+
+## Codes
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `bad_request` | Malformed JSON or unknown fields in the body |
+| 401 | `unauthorized` | Missing, invalid, expired or revoked credentials |
+| 401 | `invalid_link` | Device-link token is not valid |
+| 402 | `plan_limit_exceeded` | Over a cloud plan limit — see below |
+| 403 | `forbidden` | The key lacks a scope (*"missing required scope items:review"*), the change needs `items:review` (see below), or the operation isn't available to this caller |
+| 403 | `not_local` | Local mode refused a credential-less request that doesn't provably come from this machine |
+| 403 | `csrf_failed` | A cookie-authenticated unsafe request without a valid `X-CSRF-Token` |
+| 404 | `not_found` | Unknown ID (or one in another workspace) |
+| 409 | `conflict` | State conflict — see below |
+| 405 | `method_not_allowed` | A decision link (`/v1/decide/…`) called with a method other than GET / POST |
+| 409 | `item_changed` | A decision link or chat button was for an older version of the item — see below |
+| 409 | `idempotency_in_progress` | A request with the same `Idempotency-Key` is still running |
+| 410 | `link_used` / `link_expired` | A device link was already used / is older than 5 minutes |
+| 410 | `gone` | A one-tap decision link was used or expired; a workspace export is no longer available |
+| 413 | `too_large` | Body or file over the limit |
+| 415 | `unsupported_media_type` | Upload type not allowed (e.g. SVG, HTML), or a request content type other than JSON / multipart |
+| 422 | `validation_failed` | Invalid input; see `fields` |
+| 422 | `not_editable` | An edit-before-approve touched a field outside the item's `editable` list |
+| 422 | `idempotency_mismatch` | `Idempotency-Key` reused with a different request |
+| 422 | `search_too_broad` | A full-text search (`q`) ran longer than 5 seconds — add words or filters |
+| 429 | `rate_limited` | Too many requests — see [rate limits](/docs/self-hosting/monitoring#rate-limits). The `Retry-After` header says how many seconds to wait |
+| 500 | `internal` | Unexpected server error (logged server-side with the `request_id`) |
+| 502 | `bad_gateway` | The dashboard's `/api` proxy can't reach the API |
+| 503 | `timeout` | An item listing without `q` ran longer than 5 seconds — retry, or add filters |
+| 503 | `busy` | The database was locked by another process (e.g. a backup) — retry after `Retry-After` (1 s) |
+
+### 402 `plan_limit_exceeded`
+
+Cloud workspaces are limited by their [plan](/docs/plans). The error tells you which limit
+was hit:
+
+```json
+{
+  "error": {
+    "code": "plan_limit_exceeded",
+    "message": "The Free plan allows 100 items per month; upgrade the workspace plan to continue.",
+    "details": { "limit": "items_per_month", "max": 100, "used": 100, "plan": "free" }
+  }
+}
+```
+
+| `details.limit` | Triggered by |
+|---|---|
+| `items_per_month` | Creating an item (including watcher items) |
+| `webhooks` | Creating a webhook |
+| `api_keys` | Creating an API key |
+| `storage_bytes` | Uploading a file |
+| `max_upload_bytes` | Uploading a file larger than the plan allows |
+| `rules` | Creating a rule |
+| `watchers` | Creating or resuming a watcher |
+| `notification_channels` | Creating a notification channel |
+| `min_watcher_interval_seconds` | A watcher `every` faster than the plan allows |
+
+Don't retry a 402 automatically — it won't succeed until the plan changes or the month rolls
+over.
+
+### 403 `not_local`
+
+The message explains which check failed — the peer address, the `Host` header (*"Host … is
+not a local name (add it to LOCAL_ALLOWED_HOSTS)"*), a cross-site `Origin`, or a browser that
+isn't connected. See [Authentication](/docs/api/authentication#local-mode-no-credentials).
+
+### 403 `forbidden` on item changes
+
+Besides a missing scope, a key with `items:write` but not `items:review` gets `403` when it:
+
+- edits the content of an **approved** or **rejected** item (*"editing the content of an
+  approved item requires items:review (metadata_patch is allowed)"*),
+- makes a status change outside the agent lifecycle (*"changing status from pending to
+  completed requires items:review"*),
+- creates an item directly as approved / rejected, or a rule that auto-approves / auto-rejects.
+
+The allowed changes are listed in [Security model](/docs/self-hosting/security#review-integrity).
+
+### 409 `item_changed`
+
+Decision links and chat buttons are bound to the item version the message showed. If the item
+was changed since, nothing is decided: *"item changed since this message — open it in
+staqly"*. Review the current version in the dashboard. A one-tap link stays used.
+
+### 409 `conflict`
+
+| Message | Meaning |
+|---|---|
+| *cannot approve an item that is approved (allowed from: pending)* | Someone decided it first, or the action isn't allowed in the current status |
+| *item was modified (version 3, expected 2)* | Your `expected_version` is stale — reload and retry |
+| *a collection with this name already exists* | Collection names are unique per workspace |
+| *collection is archived* | Archived collections are read-only |
+| *results can be reported for approved or processing items* | `POST /v1/items/{id}/result` on an undecided or rejected item |
+| *action … emits the reserved event …* | A custom action stored before reserved events were enforced; change its `event` in the collection settings |
+
+Concurrent decisions on one item always resolve to exactly one success; everyone else gets
+`409`. Treat it as "already handled", not as a failure to retry blindly.

@@ -1,0 +1,139 @@
+---
+title: Troubleshooting
+description: Common errors and how to fix them.
+---
+
+<Accordions type="multiple">
+<Accordion title="403 not_local">
+Local mode refused a credential-less request; the message says which check failed.
+
+- **Peer:** only loopback and the networks in `LOCAL_TRUSTED_PEERS` get keyless access.
+  `compose.yml` sets the private ranges; run directly (`go run ./cmd/server`), the server
+  listens on `127.0.0.1:3333` and trusts loopback only. Another machine on your LAN should use
+  a QR session (or cloud mode with API keys) rather than widening `LOCAL_TRUSTED_PEERS`.
+- **Host:** use `localhost` / `127.0.0.1` or a compose service name, or add your host name to
+  `LOCAL_ALLOWED_HOSTS`.
+- **Origin:** browsers are accepted only from the dashboard (`localhost`, `127.0.0.1` or
+  `[::1]` on `WEB_PORT`, the origin of `PUBLIC_WEB_URL`). A browser tool on another port (e.g.
+  the MCP Inspector) needs its origin in `LOCAL_ALLOWED_ORIGINS`. Pages from other sites are
+  refused on purpose.
+- **Dashboard:** a browser that isn't signed in. Sign in with a link from `make connect` or a
+  QR code.
+</Accordion>
+<Accordion title="The API refuses to start: config: …">
+Invalid settings stop the server instead of falling back silently: `STAQLY_MODE` must be
+`local` or `cloud`; `LOCAL_TRUSTED_PEERS` entries must be CIDRs or IP addresses;
+`NOTIFY_SECRET_KEY` must be at least 32 bytes (`openssl rand -hex 32`); `LOG_LEVEL` must be
+`debug`, `info`, `warn` or `error` and `LOG_FORMAT` `json` or `text`.
+</Accordion>
+<Accordion title="403 … requires items:review when updating an item">
+With `items:write` alone, an approved or rejected item's content is frozen (`metadata_patch`
+still works) and only the lifecycle status changes are allowed — approved → processing →
+completed / failed, retries, resubmitting, archiving. Rules that auto-approve or auto-reject
+also need `items:review`. The full list is in
+[Security model](/docs/self-hosting/security#review-integrity).
+</Accordion>
+<Accordion title="409 item_changed: item changed since this message">
+The decision link or chat button was for an older version of the item — the agent changed it
+after the notification was sent. Nothing was decided; open the item in the dashboard and review
+the current version.
+</Accordion>
+<Accordion title="422 search_too_broad / 503 timeout on item lists">
+A listing or search ran longer than 5 seconds. Add more specific words or filters (collection,
+status, dates). Searches use at most 16 distinct words. See
+[Pagination & search](/docs/api/pagination-and-search#limits).
+</Accordion>
+<Accordion title="422 … must be re-entered when … changes (notification channel)">
+Changing where a channel sends requires re-entering its secret in the same request. See
+[Notifications](/docs/automation/notifications#managing-channels).
+</Accordion>
+<Accordion title="429 from a webhook or channel Send test button">
+Test sends are limited per API key or session: a burst of 5, then 10 per minute.
+</Accordion>
+<Accordion title="The dashboard asks me to connect this device">
+Every browser signs in once. Run `make open` (opens a signed-in browser) or `make connect`
+(prints a one-time link). Links expire after 5 minutes and work once.
+</Accordion>
+<Accordion title="Phone: the QR link doesn't open">
+Set `PUBLIC_WEB_URL=http://<your computer's LAN IP>:8080` in `.env`, run `docker compose up -d`,
+and make sure the phone is on the same network and port 8080 isn't blocked by a firewall. See
+[Phones & tablets](/docs/dashboard/phones-and-tablets).
+</Accordion>
+<Accordion title="402 plan_limit_exceeded (cloud)">
+The workspace hit a plan limit; `error.details.limit` says which. See **Settings → Plan &
+usage**. The operator can upgrade with `make set-plan WS={WORKSPACE_ID} PLAN=indie`.
+</Accordion>
+<Accordion title="429 rate_limited when creating a workspace (cloud)">
+At most 5 signups per hour per IP. Behind a reverse proxy set `TRUST_PROXY=true`, otherwise all
+users share the proxy's IP.
+</Accordion>
+<Accordion title="The login page appears but I never set up (cloud)">
+Another setup already happened on this volume (e.g. a previous run). Use the recovery key at
+`/login`, or get a new one with `make recovery-key`.
+</Accordion>
+<Accordion title="Lost every session and the recovery key (cloud)">
+On the host: `docker exec staqly-api server recovery-key {WORKSPACE_ID}` and sign in at `/login`
+with the printed key. This needs shell access to the server — there is no remote backdoor. It
+signs out every other browser of that workspace.
+</Accordion>
+<Accordion title="403 csrf_failed from scripts">
+You are sending a session cookie. Scripts should use `Authorization: Bearer {API_KEY}` (no
+CSRF needed).
+</Accordion>
+<Accordion title="403 forbidden: missing required scope …">
+The API key lacks a scope. Create a key with the right scopes under **Integrations → API
+keys**. The signup key intentionally lacks `admin` and `rules:manage`.
+</Accordion>
+<Accordion title="Webhook deliveries fail: private / loopback destination … is not allowed">
+Adjust `WEBHOOK_ALLOW_PRIVATE` / `WEBHOOK_ALLOW_LOOPBACK`. `WEBHOOK_ALLOW_PRIVATE` defaults to
+`true` in local mode and `false` in cloud mode. In cloud mode the delivery log keeps only the
+status code and a short reason, never the response body. Inside Docker, `localhost` is the
+API container itself — use `host.docker.internal` or a compose service name (see
+[n8n networking](/docs/agents/n8n#networking--pick-your-setup)).
+</Accordion>
+<Accordion title="Webhook deliveries: connection refused from n8n on the host (Linux)">
+Make n8n listen on all interfaces (or the Docker bridge) and use
+`http://host.docker.internal:5678/…`; the compose file maps it to the host gateway.
+</Accordion>
+<Accordion title="A watcher is degraded or paused">
+Check `last_error` in `GET /v1/watchers`. Common causes: the feed URL moved (404), the site
+disallows automated access in `robots.txt` (`robots_disallowed`), the source isn't an RSS/Atom
+feed, or the address is private (watchers fetch public addresses only unless
+`WATCHER_ALLOW_PRIVATE=true`). Fix it, then resume with `PATCH /v1/watchers/{id}`
+`{"status":"active"}`.
+</Accordion>
+<Accordion title="n8n Code node: Cannot find module 'crypto'">
+Set `NODE_FUNCTION_ALLOW_BUILTIN=crypto` on n8n (the example `integrations/n8n/compose.yml`
+does). The demo workflow needs it: its **Verify & parse** node fails closed and rejects every
+event until `webhookSecret` is set.
+</Accordion>
+<Accordion title="MCP STDIO prints nothing / exits">
+Don't pass `-t` to `docker exec`. In cloud mode forward the key
+(`docker exec -i -e STAQLY_API_KEY …`). Run `docker exec -i staqly-api mcp-stdio` by hand —
+errors go to stderr.
+</Accordion>
+<Accordion title="Port already in use">
+Set `API_PORT` / `WEB_PORT` in `.env`. If you change `API_PORT`, also update `PUBLIC_API_URL`
+and your MCP client URLs.
+</Accordion>
+<Accordion title="Upload rejected with 415">
+Only common image, video, audio, PDF, text, CSV, Markdown, JSON and ZIP files are accepted;
+SVG and HTML are refused because they can carry script. Raise the size limit with
+`MAX_UPLOAD_MB`.
+</Accordion>
+<Accordion title="database is locked">
+Shouldn't happen with the bundled configuration (immediate transactions and a 10 s busy
+timeout). Make sure only one `server` process uses a data directory.
+</Accordion>
+</Accordions>
+
+## Logs
+
+```bash
+docker compose logs -f api
+```
+
+JSON lines on stdout (`LOG_FORMAT=text` for a terminal, `LOG_LEVEL=debug` for more); request
+paths are logged, headers and query strings are not. Find everything about one failed request
+by the `request_id` (or `trace_id`) from the error body — see
+[Logs & tracing](/docs/self-hosting/logs-and-tracing).

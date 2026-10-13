@@ -1,0 +1,60 @@
+---
+title: API overview
+description: Conventions of the staqly REST API — base URL, formats, errors, pagination and more.
+---
+
+The REST API is what the dashboard, the MCP server, the SDK and your automations all use.
+Its contract is an **OpenAPI 3.2** document: `apps/api/openapi.yaml` in the repository,
+served live at `http://localhost:3333/openapi.yaml`, and rendered in the
+[API reference](/docs/api/reference).
+
+| | |
+|---|---|
+| Base URL | `http://localhost:3333` (local) · `https://<your host>` (cloud) |
+| Versioning | Everything lives under `/v1` |
+| Formats | JSON request and response bodies; `multipart/form-data` for uploads. Other content types are rejected. Unknown JSON fields are rejected (`400`). |
+| Auth | None in local mode; `Authorization: Bearer stk_…` in cloud mode — [Authentication](/docs/api/authentication) |
+| Errors | `{"error":{"code","message","fields","details"}}` — [Errors](/docs/api/errors) |
+| Lists | `{"data":[…],"next_cursor":"…"}` with opaque keyset cursors — [Pagination & search](/docs/api/pagination-and-search) |
+| Retries | `Idempotency-Key` header, 24 h replay window — [Idempotency](/docs/api/idempotency) |
+| Timestamps | ISO-8601 UTC strings; filters accept RFC 3339 or `YYYY-MM-DD` |
+| IDs | Prefixed: `col_…`, `itm_…`, `evt_…`, `wh_…`, `dlv_…`, `rul_…`, `wat_…`, `nch_…`, `exp_…` |
+| Request IDs | Every response has `X-Request-Id`; errors include `request_id` |
+
+## Resources
+
+| Area | Endpoints |
+|---|---|
+| Collections | `/v1/collections`, `/v1/collections/{id}` — `{id}` may also be the exact name |
+| Items | `/v1/items`, `/v1/collections/{id}/items`, `/v1/items/{id}`, `/actions/{action}`, `/events`, `/versions`, `/wait`, `/result`, `/v1/items/bulk-actions` |
+| Media | `/v1/media`, `/v1/media/{id}` — [Media uploads](/docs/api/media) |
+| Events | `/v1/events` — [Event types](/docs/api/events) |
+| Webhooks | `/v1/webhooks`, `/v1/webhook-deliveries` — [Webhooks](/docs/automation/webhooks) |
+| Rules | `/v1/rules` — [Rules engine](/docs/automation/rules) |
+| Watchers | `/v1/watchers`, `/v1/watcher-presets` — [Watchers](/docs/automation/watchers) |
+| Notifications | `/v1/notification-channels`, `/v1/decide/{token}`, `/v1/integrations/{telegram,slack,discord}` — [Notifications](/docs/automation/notifications) |
+| Export & privacy | `/v1/events/export`, `/v1/workspace/export`, `/v1/workspace/exports/{id}`, `/v1/items/{id}/purge` — [Data export](/docs/self-hosting/data-export) |
+| Workspace & auth | `/v1/session`, `/v1/workspace`, `/v1/workspace/usage`, `/v1/plans`, `/v1/api-keys`, `/v1/sessions`, `/v1/device-links` |
+| Health & metrics | `GET /health`, `/livez`, `/readyz`, `/metrics` — [Monitoring](/docs/self-hosting/monitoring) |
+| MCP | `POST /mcp` — Streamable HTTP, see [MCP](/docs/mcp) |
+
+## A typical flow
+
+```bash
+API=http://localhost:3333
+
+# 1. create (idempotently) — collection by name
+curl -s -X POST "$API/v1/collections/Instagram%20Avatar/items" \
+  -H 'Content-Type: application/json' -H 'Idempotency-Key: gen-42' \
+  -d '{"title":"Caption draft","content":"Golden hour ☀️","metadata":{"seed":42},"source":"n8n"}'
+
+# 2. a human approves it in the Inbox → webhook item.approved
+
+# 3. report the outcome
+curl -s -X PATCH $API/v1/items/$ITEM -H 'Content-Type: application/json' \
+  -d '{"status":"completed","metadata_patch":{"instagram_post_id":"1790…"}}'
+```
+
+Headers on every response: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+`X-Frame-Options: DENY`, `Cache-Control: no-store`. Request logs contain paths only — never
+headers or query strings.

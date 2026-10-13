@@ -1,0 +1,81 @@
+---
+title: Phones & tablets
+description: Review on the go — scan a QR code and your phone opens staqly already signed in.
+---
+
+The dashboard is built for phones and tablets as well as desktops: a bottom tab bar
+(*Inbox*, *Collections*, *Activity*, *Webhooks*), one-card-at-a-time review with swipe
+gestures, and touch targets of at least 44 px.
+
+## Connect a device
+
+In the dashboard choose **Connect a device** (in **Settings → Devices** or the command
+palette). It shows a **QR code** with a one-time link; scanning it opens staqly on the
+phone already signed in — no key or password to type.
+
+- The token is in the URL **fragment** (`/connect#…`), so it never reaches server logs,
+  proxies or `Referer` headers. It is stored hashed.
+- It **expires after 5 minutes** and **works once**.
+- The phone gets its own browser session (30 days). It appears under
+  **Settings → Devices**, where you can revoke it.
+- Only the dashboard can create links — API keys cannot mint browser sessions.
+
+<Callout type="warn">
+The QR grants full access to the workspace. Scan it only with your own device and don't
+share screenshots of it.
+</Callout>
+
+## Local mode: point the QR at your computer
+
+A local install already publishes the dashboard on port `8080` of your network interfaces.
+The QR code just needs an address your phone can reach — your computer's LAN IP:
+
+<Steps>
+<Step>
+
+Set the public dashboard URL in `.env` (in the repository root):
+
+```bash
+echo "PUBLIC_WEB_URL=http://192.168.1.23:8080" >> .env   # your computer's LAN IP
+```
+
+</Step>
+<Step>
+
+Apply it:
+
+```bash
+docker compose up -d
+```
+
+</Step>
+<Step>
+
+Open **Connect a device** in the dashboard and scan the QR code with your phone (same Wi-Fi).
+
+</Step>
+</Steps>
+
+If `PUBLIC_WEB_URL` is not set, the QR points at `localhost`, which only works on the computer
+itself — the dialog tells you so and shows this hint.
+
+**Every browser signs in once**, including the one on the computer running staqly: Docker
+Desktop hides the real client address and a `Host` header can be forged, so the dashboard
+cannot tell "this computer" from "someone on the Wi-Fi". `make up` / `make open` open a
+signed-in browser on this computer; `make connect` prints a one-time link for any other
+browser.
+
+The **API stays on `127.0.0.1`**: agents, MCP and scripts on this computer keep working
+without keys, and nothing on the network can call the API directly.
+
+## Troubleshooting
+
+**"This device isn't connected"** — use *Connect a device* on your computer and scan the QR
+(or open a link from `make connect`).
+
+**The phone can't open the link** — check `PUBLIC_WEB_URL` uses the computer's LAN IP (not
+`localhost`), that both devices are on the same network, and that no firewall blocks port
+`8080`.
+
+**The link says it was already used or expired** — each link signs in exactly one browser
+within 5 minutes. Create a new QR code.

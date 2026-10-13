@@ -1,0 +1,46 @@
+---
+title: Operator CLI
+description: Server subcommands and make targets for backups, workspaces, plans, recovery and sign-in links.
+---
+
+The API image ships one `server` binary with operator subcommands. Whoever can run them
+already controls the data volume, so they need no further authentication — and there is no
+remote equivalent. Without Docker, the same subcommands run as `staqly serve <subcommand>`
+(e.g. `staqly serve connect-link`) against `staqly serve`'s data directory; `staqly serve backup`
+copies the database only, so back up the `uploads/` folder next to it as well.
+
+| Make target | Runs in the container | Does |
+|---|---|---|
+| `make backup` | `server backup <file>` | Consistent online backup (`VACUUM INTO`) + uploads archive |
+| `make restore BACKUP=…` | — | Replace data with a backup (stops and starts the API) |
+| `make workspaces` | `server workspaces` | List workspaces: id, plan, created, name |
+| `make set-plan WS=… PLAN=…` | `server set-plan <ws> <plan>` | Change a workspace's plan: `free`, `indie`, `team` |
+| `make recovery-key [WS=…]` | `server recovery-key [ws]` | Print a **new** recovery key (the old one stops working) and sign out every browser session of the workspace. Default: the local workspace |
+| `make connect [WS=…]` | `server connect-link [ws]` | Print a one-time browser sign-in link (5 minutes, single use) |
+| `make open` | `server connect-link` | Same, and open it in this computer's browser |
+| `make mcp-stdio` | `mcp-stdio` | MCP over STDIO in the API container |
+
+Run them directly with `docker exec`:
+
+```bash
+docker exec staqly-api server workspaces
+docker exec staqly-api server set-plan {WORKSPACE_ID} indie
+docker exec staqly-api server recovery-key {WORKSPACE_ID}
+docker exec staqly-api server connect-link
+docker exec staqly-api server backup /data/backups/manual.db
+```
+
+Without Docker: `go run ./cmd/server <subcommand>` from `apps/api`, with the same `DATA_DIR`.
+
+## Lost every session and the recovery key?
+
+On the host, `make recovery-key WS={WORKSPACE_ID}` prints a fresh key; sign in at `/login`
+with it. This needs shell access to the server — there is no remote backdoor.
+
+Like a rotation from the dashboard, it **signs out every browser session** of the workspace.
+The key is the only thing printed on stdout, so scripts can capture it; the number of revoked
+sessions goes to stderr:
+
+```bash
+key=$(docker exec staqly-api server recovery-key {WORKSPACE_ID})   # stderr: Revoked 2 browser session(s) of this workspace.
+```

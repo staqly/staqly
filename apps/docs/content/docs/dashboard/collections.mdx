@@ -1,0 +1,46 @@
+---
+title: Collections & views
+description: Organise outputs into collections, browse them as a gallery, table or list, and configure their actions.
+---
+
+**Collections** in the sidebar lists every collection with a cover image and item counts per
+status. Open one to browse its items.
+
+## Creating a collection
+
+Use **New collection** (also in the command palette, <Kbd>⌘</Kbd> <Kbd>K</Kbd>). Names are
+unique within the workspace, so agents can refer to a collection by name:
+`create_item` with `collection: "Instagram Avatar"` just works.
+
+Agents can create collections too — *“Create a collection called AI Research”* — via the
+`create_collection` MCP tool or `POST /v1/collections`.
+
+## Views
+
+Switch between three views; each collection remembers its **default view**:
+
+| View | Best for |
+|---|---|
+| **Gallery** | Images and videos — a visual grid |
+| **Table** | Structured output; sortable columns |
+| **List** | Text, links and research notes |
+
+Above the items you can **search** within the collection, filter by **status** and
+**type**, and **sort**: *Best match* (when searching), *Newest first*, *Oldest first*,
+*Recently updated*, *Recently decided*, *Title A–Z*. See [Search](/docs/dashboard/search).
+
+## Adding items by hand
+
+**Add item** opens a dialog with four tabs — **Upload**, **Text**, **Link** and **JSON** — the
+same things your agents send through the API. Archived collections are read-only.
+
+## Collection settings
+
+The settings sheet has four sections:
+
+- **General** — name, description, icon, colour, default view.
+- **Actions** — the buttons reviewers and agents can run on items in this collection (see
+  [Custom actions](/docs/automation/custom-actions)).
+- **Archive** — hide the collection and make it read-only; unarchive any time.
+- **Danger zone** — permanently delete the collection and every item in it. You confirm by
+  typing its name.

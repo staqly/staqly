@@ -1,0 +1,39 @@
+---
+title: Example prompts
+description: Things to ask Claude Code, Codex or OpenCode once staqly is connected.
+---
+
+## Storing output
+
+- *“Create a collection called Instagram Avatar.”* → `create_collection`
+- *“Add this generated image to my Instagram Avatar collection.”* → `create_item` with
+  `media_base64` (or an external `url`)
+- *“Save this research summary to AI Research with the sources in metadata.”* → `create_item`
+
+## Finding things
+
+- *“Show me all pending images.”* → `list_pending_approvals` with `type=image`
+- *“Find the images I approved yesterday.”* → `search_items` with `status=approved`,
+  `type=image`, `decided_after`, `decided_before`
+- *“What happened to itm_…?”* → `get_item_history`
+- *“Search everything about golden hour.”* → `search_items` with `query`
+
+## Deciding
+
+- *“Reject itm_… with feedback: the lighting is too harsh.”* → `reject_item`
+- *“Approve itm_… but fix the typo in the caption first.”* → `approve_item` with `content`
+- *“Regenerate itm_… with feedback: make her smile.”* → `execute_custom_action`
+
+## Asking for permission
+
+- *“Before you run the migration, ask me for approval in staqly and wait for my answer.”* →
+  `create_item` → `await_decision` → (act) → `report_result`.
+  See [Gate a risky agent action on human approval](/docs/cookbook/approval-gate).
+
+## Automating
+
+- *“Create a rule that auto-approves items whose metadata.score is at least 0.9.”* →
+  `create_rule` (needs `rules:manage` in cloud mode)
+- *“Watch r/midjourney and put new posts into my Inspiration collection every hour.”* →
+  `list_watcher_presets` → `create_watcher_from_preset`
+- *“Are any of my watchers failing?”* → `list_watchers`

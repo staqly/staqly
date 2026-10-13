@@ -1,0 +1,95 @@
+---
+title: TypeScript SDK
+description: "@staqly/sdk — a thin, typed client over the REST API plus webhook verification."
+---
+
+`@staqly/sdk` lives in `packages/sdk-typescript`. It has **no runtime dependencies** (global
+`fetch` and Web Crypto), needs Node 20+ (or any modern runtime with `fetch`), and its types are
+generated from the same OpenAPI contract as the API.
+
+## Install
+
+The SDK is part of the repository. Build it and install it from the path:
+
+```bash
+cd packages/sdk-typescript && npm install && npm run build
+cd /your/project && npm install /path/to/staqly/packages/sdk-typescript
+```
+
+## Create a client
+
+```ts
+import { Staqly } from '@staqly/sdk';
+
+const local = new Staqly(); // http://localhost:3333, no key (local mode)
+const docker = new Staqly({ baseUrl: 'http://api:3333' }); // from a container on the staqly network
+const cloud = new Staqly({ baseUrl: 'https://staqly.example.com', apiKey: process.env.STAQLY_API_KEY });
+```
+
+Options: `baseUrl`, `apiKey` (cloud only), and a custom `fetch`.
+
+## Methods
+
+| Area | Methods |
+|---|---|
+| Collections | `listCollections(includeArchived?)`, `getCollection(idOrName)`, `createCollection(input)`, `updateCollection(id, input)`, `deleteCollection(id, confirmName)` |
+| Items | `listItems(query)`, `iterateItems(query)` (async generator over all pages), `getItem(id)`, `createItem(collection, input, { idempotencyKey })`, `createItemWithFile(collection, blob, filename, input)`, `updateItem(id, input)`, `deleteItem(id)` |
+| Decisions | `approve(id, { edits, feedback })`, `reject(id, feedback)`, `runAction(id, action, input)`, `availableActions(id)`, `itemHistory(id)` |
+| Media | `uploadMedia(blob, filename)` |
+| Events & webhooks | `listEvents(query)`, `listWebhooks()`, `createWebhook(input)`, `deleteWebhook(id)` |
+| Anything else | `request(method, path, { query, body, form, idempotencyKey })` |
+
+`collection` arguments accept an ID or the exact name.
+
+```ts
+const item = await staqly.createItem(
+  'Instagram Avatar',
+  { title: 'Caption draft', content: 'Golden hour ☀️', metadata: { seed: 42 }, source: 'my-script' },
+  { idempotencyKey: 'run-8812-3' },
+);
+
+for await (const it of staqly.iterateItems({ status: 'approved', decided_after: '2026-10-12' })) {
+  console.log(it.title);
+}
+```
+
+Endpoints without a dedicated helper — rules, watchers, waiting for a decision, reporting
+results — are one `request` call away:
+
+```ts
+import type { Item } from '@staqly/sdk';
+
+const { decided, item: current } = await staqly.request<{ decided: boolean; item: Item }>(
+  'GET', `/v1/items/${item.id}/wait`, { query: { timeout: 60 } },
+);
+```
+
+## Errors
+
+Non-2xx responses throw `StaqlyError` with `status`, `code`, `message` and `fields`:
+
+```ts
+import { StaqlyError } from '@staqly/sdk';
+
+try {
+  await staqly.approve(id);
+} catch (e) {
+  if (e instanceof StaqlyError && e.status === 409) {
+    // someone else decided first
+  }
+}
+```
+
+## Verifying webhooks
+
+```ts
+import { verifyWebhook } from '@staqly/sdk';
+
+const ok = await verifyWebhook(process.env.STAQLY_WEBHOOK_SECRET!, rawBody, {
+  timestamp: request.headers.get('x-staqly-timestamp'),
+  signature: request.headers.get('x-staqly-signature'),
+}); // rejects timestamps more than 300 s away (4th argument)
+```
+
+Pass the **raw** body exactly as received. Types such as `Item`, `Collection`, `Webhook`,
+`Event`, `ItemStatus` are exported too.

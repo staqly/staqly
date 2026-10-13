@@ -1,0 +1,1640 @@
+openapi: 3.2.1
+info:
+  title: staqly API
+  version: 1.0.0
+  license: { name: Apache-2.0, identifier: Apache-2.0 }
+  description: |
+    Local-first workspace for AI agent output.
+
+    **Local mode** (default, `STAQLY_MODE=local`): no credentials. Requests
+    are accepted only from this machine (loopback/Docker peers, local Host
+    names, local or absent Origin).
+
+    **Cloud mode** (`STAQLY_MODE=cloud`, hosted, many workspaces): anyone can
+    create a workspace on the Free plan (unless SETUP_TOKEN restricts signup).
+    Every API key and session belongs to one workspace. Authenticate
+    automations with `Authorization: Bearer {API_KEY}`. The dashboard uses an
+    HttpOnly session cookie and must send `X-CSRF-Token` on unsafe requests.
+    Plan limits are enforced per workspace; exceeding one returns **402**
+    `plan_limit_exceeded` with `details`.
+
+    Other devices (phones) join a workspace through one-time "connect a
+    device" links (`/v1/device-links`), in both modes.
+
+    Unsafe requests accept an `Idempotency-Key` header; repeating the same key
+    with the same method, path, query string and body replays the original
+    response for 24 hours. Responses that carry a secret (new API keys,
+    recovery keys, device links, webhook signing secrets) and responses over
+    1 MiB are never stored: repeating such a request runs it again.
+
+    Any request may answer **503** `busy` with `Retry-After` when the
+    database stays locked by another process for too long; retry it.
+servers:
+  - url: http://localhost:3333
+security:
+  - {}            # local mode
+  - bearer: []    # cloud mode
+tags:
+  - name: setup
+  - name: auth
+  - name: collections
+  - name: items
+  - name: media
+  - name: events
+  - name: webhooks
+  - name: rules
+  - name: watchers
+  - name: notifications
+    description: Notification channels (Telegram, Slack, Discord, ntfy, email) and one-tap decision links
+  - name: integrations
+    description: Callbacks from chat platforms (signature-verified, no API key)
+  - name: system
+    description: Health, readiness and metrics
+
+paths:
+  /health:
+    get:
+      tags: [setup]
+      security: []
+      summary: Liveness and database check
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { status: { type: string }, version: { type: string } } } } } }
+
+  /openapi.yaml:
+    get:
+      tags: [setup]
+      security: [{}]
+      summary: This OpenAPI document
+      responses: { "200": { description: OpenAPI 3.2 YAML, content: { application/yaml: { schema: { type: string } } } } }
+
+  /v1/setup:
+    get:
+      tags: [setup]
+      security: []
+      summary: Whether the workspace has been created
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [initialized, mode, signup_open, setup_token_required]
+                properties:
+                  initialized: { type: boolean, description: Local mode only }
+                  mode: { type: string, enum: [local, cloud] }
+                  signup_open: { type: boolean, description: "Cloud: anyone may create a workspace" }
+                  setup_token_required: { type: boolean }
+                  public_api_url: { type: string, description: "PUBLIC_API_URL: the API's base URL for agents and tools (shown in dashboard snippets)" }
+
+  /v1/workspaces:
+    post:
+      tags: [setup]
+      security: []
+      summary: Create a cloud workspace (Free plan)
+      description: Cloud mode only; each call creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, a default API key, a recovery key and a browser session cookie. Secrets are returned only in this response.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                setup_token: { type: string, description: Required when the server sets SETUP_TOKEN }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace, api_key, recovery_key, csrf_token]
+                properties:
+                  workspace: { $ref: "#/components/schemas/Workspace" }
+                  api_key: { $ref: "#/components/schemas/APIKey" }
+                  recovery_key: { type: string }
+                  csrf_token: { type: string }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /v1/plans:
+    get:
+      tags: [setup]
+      security: [{}]
+      summary: Cloud plans and their limits (-1 = unlimited)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Plan" } } } } } } }
+
+  /v1/workspace/usage:
+    get:
+      tags: [auth]
+      summary: Current plan and usage (local installs report the unlocked plan)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plan, period, usage]
+                properties:
+                  plan: { $ref: "#/components/schemas/Plan" }
+                  period: { type: string, examples: ["2026-10"] }
+                  usage:
+                    type: object
+                    properties:
+                      items_per_month: { type: integer }
+                      webhooks: { type: integer }
+                      api_keys: { type: integer }
+                      storage_bytes: { type: integer }
+                      rules: { type: integer }
+                      watchers: { type: integer, description: Active (not paused) watchers }
+                      notification_channels: { type: integer }
+
+  /v1/device-links:
+    post:
+      tags: [auth]
+      summary: Create a one-time "connect a device" link (QR code)
+      description: Dashboard only (session or local principal). The token is in the URL fragment, valid for 5 minutes, single use.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expires_at, reachable]
+                properties:
+                  url: { type: string, examples: ["https://staqly.example.com/connect#abc..."] }
+                  expires_at: { type: string }
+                  reachable: { type: boolean, description: false when the URL points at localhost }
+                  hint: { type: string }
+        "403": { $ref: "#/components/responses/Error" }
+  /v1/device-links/redeem:
+    post:
+      tags: [auth]
+      security: [{}]
+      summary: Exchange a device-link token for a session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      responses:
+        "201": { description: Session cookie set, content: { application/json: { schema: { type: object, properties: { csrf_token: { type: string } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+
+  /v1/sessions/recover:
+    post:
+      tags: [auth]
+      security: []
+      summary: Exchange the recovery key for a new browser session
+      description: Every other session of the workspace is signed out.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [recovery_key], properties: { recovery_key: { type: string } } }
+      responses:
+        "201": { description: Session cookie set, content: { application/json: { schema: { type: object, properties: { csrf_token: { type: string } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /v1/session:
+    get:
+      tags: [auth]
+      summary: Current principal, workspace and CSRF token
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mode, workspace, principal, csrf_token]
+                properties:
+                  mode: { type: string, enum: [local, cloud] }
+                  workspace: { $ref: "#/components/schemas/Workspace" }
+                  principal:
+                    type: object
+                    required: [type, id, name, scopes]
+                    properties:
+                      type: { type: string, enum: [local, session, api_key] }
+                      id: { type: string }
+                      name: { type: string }
+                      scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+                  csrf_token: { type: string, description: Empty for API-key callers }
+        "401": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [auth]
+      summary: Log out (revoke the current session)
+      responses: { "204": { description: Logged out } }
+
+  /v1/sessions:
+    get:
+      tags: [auth]
+      summary: List active browser sessions (admin)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Session" } } } } } } }
+  /v1/sessions/{id}:
+    delete:
+      tags: [auth]
+      summary: Revoke a session (admin)
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses: { "204": { description: Revoked } }
+
+  /v1/workspace:
+    get:
+      tags: [auth]
+      summary: Get the workspace
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Workspace" } } } } }
+    patch:
+      tags: [auth]
+      summary: Rename the workspace (admin)
+      requestBody: { content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Workspace" } } } } }
+    delete:
+      tags: [auth]
+      summary: Permanently delete this workspace and all its data (cloud, dashboard session only)
+      description: |
+        Deletes collections, items, versions, media files, events, webhooks,
+        deliveries, rules, watchers, API keys, sessions and exports. Requires a
+        session (API keys get 403) and `confirm` equal to the workspace name.
+        Local mode returns 409: delete the data volume instead.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm: { type: string, description: The exact workspace name }
+      responses:
+        "204": { description: Deleted; the session cookie is cleared }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+
+  /v1/recovery-key/rotate:
+    post:
+      tags: [auth]
+      summary: Issue a new recovery key (dashboard sessions only)
+      description: Every other session of the workspace is signed out.
+      responses:
+        "200": { description: "The new key, shown once", content: { application/json: { schema: { type: object, properties: { recovery_key: { type: string } } } } } }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /v1/api-keys:
+    get:
+      tags: [auth]
+      summary: List API keys (admin)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/APIKey" } }
+                  available_scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+    post:
+      tags: [auth]
+      summary: Create a scoped API key (admin). The raw key is returned once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scopes]
+              properties:
+                name: { type: string }
+                scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+                expires_at: { type: string, description: RFC3339 or YYYY-MM-DD }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/APIKey" } } } } }
+  /v1/api-keys/{id}:
+    delete:
+      tags: [auth]
+      summary: Revoke an API key (admin)
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses: { "204": { description: Revoked } }
+  /v1/api-keys/{id}/rotate:
+    post:
+      tags: [auth]
+      summary: Revoke a key and issue a replacement with the same name and scopes (admin)
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses: { "201": { description: New key, content: { application/json: { schema: { $ref: "#/components/schemas/APIKey" } } } } }
+
+  /v1/collections:
+    get:
+      tags: [collections]
+      summary: List collections (collections:read)
+      parameters:
+        - { name: include_archived, in: query, schema: { type: boolean } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Collection" } } } } } } }
+    post:
+      tags: [collections]
+      summary: Create a collection (collections:write)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CollectionInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Collection" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/collections/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [collections]
+      summary: Get a collection
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Collection" } } } }, "404": { $ref: "#/components/responses/Error" } }
+    patch:
+      tags: [collections]
+      summary: Update (rename, archive, configure actions/default view)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CollectionInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Collection" } } } } }
+    delete:
+      tags: [collections]
+      summary: Permanently delete a collection and its items
+      parameters:
+        - { name: confirm, in: query, required: true, description: Must equal the collection name, schema: { type: string } }
+      responses: { "204": { description: Deleted }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/collections/{id}/items:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [items]
+      summary: List items in a collection
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ItemStatus" } }
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/ItemType" } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ItemPage" } } } } }
+    post:
+      tags: [items]
+      summary: Create an item (items:write)
+      description: |
+        JSON body, or `multipart/form-data` with one `file` part (uploaded as media;
+        more than one is 400, and the upload is deleted again if the item can't
+        be created) and an optional `item` part containing the JSON fields. The
+        `{id}` may also be the collection's exact name.
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/CreateItemInput" } }
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                item: { type: string, description: JSON-encoded CreateItemInput }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /v1/items:
+    get:
+      tags: [items]
+      summary: List / search items across collections (items:read)
+      parameters:
+        - { name: collection_id, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ItemStatus" } }
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/ItemType" } }
+        - { name: q, in: query, description: "Full-text search (prefix match, diacritics-insensitive) over title, content and metadata", schema: { type: string } }
+        - { name: source, in: query, schema: { type: string } }
+        - { name: external_ref, in: query, schema: { type: string } }
+        - { name: created_after, in: query, schema: { type: string } }
+        - { name: created_before, in: query, schema: { type: string } }
+        - { name: decided_after, in: query, schema: { type: string } }
+        - { name: decided_before, in: query, schema: { type: string } }
+        - { name: sort, in: query, description: "Defaults to relevance when q is set, otherwise created_desc", schema: { type: string, enum: [relevance, created_desc, created_asc, updated_desc, updated_asc, decided_desc, title_asc] } }
+        - { name: limit, in: query, schema: { type: integer, maximum: 200 } }
+        - { name: cursor, in: query, description: Opaque keyset cursor (next_cursor), schema: { type: string } }
+      description: |
+        A query runs for at most 5 seconds. A full-text search (`q`) that
+        exceeds it returns 422 `search_too_broad` (add words or filters); a
+        plain listing returns 503 `timeout`. Search text is limited to 16
+        distinct words / 256 bytes; one-letter words match exactly.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ItemPage" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/items/bulk-actions:
+    post:
+      tags: [items]
+      summary: Run one action on up to 100 items; each item succeeds or fails independently
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, action]
+              properties:
+                ids: { type: array, items: { type: string } }
+                action: { type: string }
+                feedback: { type: string }
+      responses:
+        "200":
+          description: Per-item results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        ok: { type: boolean }
+                        error: { $ref: "#/components/schemas/ErrorBody" }
+                        item: { $ref: "#/components/schemas/Item" }
+  /v1/items/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [items]
+      summary: Get an item
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }, "404": { $ref: "#/components/responses/Error" } }
+    patch:
+      tags: [items]
+      summary: Update an item (items:write). Status may not be set to approved/rejected here.
+      description: |
+        With items:write alone: content (title, content, url, media_id,
+        metadata) of an approved or rejected item can't change (metadata_patch
+        can), and only these status changes are allowed: draft↔pending,
+        any→archived, approved→processing|completed|failed,
+        processing→completed|failed, failed→processing|pending,
+        rejected→pending, expired→pending. Anything else needs items:review (403).
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateItemInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [items]
+      summary: Delete an item (history is kept)
+      responses: { "204": { description: Deleted } }
+  /v1/items/{id}/actions:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [items]
+      summary: Actions the caller may run on the item in its current status
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/ActionDef" } } } } } } } }
+  /v1/items/{id}/actions/{action}:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+      - { name: action, in: path, required: true, schema: { type: string }, description: "approve, reject (items:review) or a collection action (actions:execute)" }
+    post:
+      tags: [items]
+      summary: Approve, reject or run a custom action
+      description: Atomic; concurrent decisions on the same item yield exactly one success, others get 409.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                feedback: { type: string }
+                edits: { $ref: "#/components/schemas/ItemFields" }
+                payload: { description: Arbitrary JSON forwarded in the event/webhook }
+                expected_version: { type: integer }
+      responses:
+        "200": { description: Updated item, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/items/{id}/events:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [items]
+      summary: Item activity history
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EventPage" } } } } }
+  /v1/items/{id}/wait:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [items]
+      summary: Long-poll until the item is decided (leaves pending) or the timeout passes
+      parameters:
+        - { name: timeout, in: query, description: "Seconds to wait (default 30, max 60)", schema: { type: integer, maximum: 60 } }
+      responses:
+        "200":
+          description: Current item; decided=false means the timeout passed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decided, item]
+                properties:
+                  decided: { type: boolean }
+                  item: { $ref: "#/components/schemas/Item" }
+  /v1/items/{id}/result:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      tags: [items]
+      summary: Report the outcome after acting on an approved item (completed or failed)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [completed, failed] }
+                result: { description: "Any JSON, stored in metadata.result" }
+                error: { type: string, description: Stored in metadata.error }
+      responses:
+        "200": { description: Updated item, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/items/{id}/versions:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [items]
+      summary: Snapshots of the item before each change
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        version: { type: integer }
+                        snapshot: { $ref: "#/components/schemas/Item" }
+                        actor: { type: string }
+                        created_at: { type: string }
+
+  /v1/media:
+    post:
+      tags: [media]
+      summary: Upload a file (items:write). Type is detected from content; SVG/HTML are rejected.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        "201": { description: Uploaded, content: { application/json: { schema: { $ref: "#/components/schemas/Media" } } } }
+        "413": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+  /v1/media/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [media]
+      summary: Download/preview a file (items:read). Supports Range requests.
+      description: >
+        With `w`, returns a thumbnail at most `w` pixels wide instead of the
+        original (PNG, JPEG, GIF first frame, WebP). Thumbnails are generated
+        on first request and cached on disk; JPEG for opaque images, PNG when
+        there is transparency; EXIF orientation is applied. Images are never
+        upscaled: when the original is not wider than `w`, it is returned
+        as is, as it is for AVIF and for images over 50 megapixels (not
+        decoded server-side). Thumbnail responses carry an `ETag` and
+        `Cache-Control: private, max-age=31536000, immutable` (a media id
+        never changes content). Other file types answer 422 when `w` is set.
+      parameters:
+        - { name: download, in: query, schema: { type: string }, description: Force attachment disposition }
+        - { name: w, in: query, schema: { type: integer, enum: [160, 320, 640, 1280] }, description: "Thumbnail width in pixels (images only)" }
+      responses:
+        "200": { description: File bytes (or the thumbnail) }
+        "304": { description: Not modified (If-None-Match on a thumbnail) }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [media]
+      summary: Delete a file (items referencing it lose their media)
+      responses: { "204": { description: Deleted } }
+
+  /v1/events:
+    get:
+      tags: [events]
+      summary: Workspace activity log, newest first (items:read)
+      description: >
+        Credential and session audit events (api_key.*, session.*,
+        recovery_key.*, device.*, device_link.*) are only listed for admin
+        principals (dashboard sessions, local mode, keys with the admin scope).
+      parameters:
+        - { name: item_id, in: query, schema: { type: string } }
+        - { name: collection_id, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: actor_type, in: query, schema: { type: string, enum: [local, session, api_key, system] } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EventPage" } } } } }
+
+  /v1/webhooks:
+    get:
+      tags: [webhooks]
+      summary: List webhooks (webhooks:manage)
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Webhook" } } } } } } } }
+    post:
+      tags: [webhooks]
+      summary: Create a webhook. A signing secret is generated.
+      description: The response is the only one that shows the signing secret in full (besides rotate_secret); store it now.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } } }
+  /v1/webhooks/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [webhooks]
+      summary: Get a webhook
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } } }
+    patch:
+      tags: [webhooks]
+      summary: Update a webhook (set rotate_secret to issue a new secret)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } } }
+    delete:
+      tags: [webhooks]
+      summary: Delete a webhook
+      responses: { "204": { description: Deleted } }
+  /v1/webhooks/{id}/test:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      tags: [webhooks]
+      summary: Queue a webhook.test delivery
+      description: Rate-limited per principal (burst 5, then 10 per minute).
+      responses:
+        "202": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/Delivery" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/webhook-deliveries:
+    get:
+      tags: [webhooks]
+      summary: Delivery history
+      parameters:
+        - { name: webhook_id, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, succeeded, failed] } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Delivery" } } } } } } } }
+  /v1/webhook-deliveries/{id}/retry:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      tags: [webhooks]
+      summary: Re-queue a finished delivery
+      responses: { "202": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/Delivery" } } } } }
+
+  /v1/rules:
+    get:
+      tags: [rules]
+      summary: List approval rules (rules:manage)
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Rule" } } } } } } } }
+    post:
+      tags: [rules]
+      summary: Create a rule (evaluated on new pending items, lowest priority first, first match wins)
+      description: rules:manage; auto_approve / auto_reject rules (creating them, or changing one) also need items:review.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RuleInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Rule" } } } }
+        "402": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/rules/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [rules]
+      summary: Get a rule
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Rule" } } } } }
+    patch:
+      tags: [rules]
+      summary: Update a rule
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RuleInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Rule" } } } } }
+    delete:
+      tags: [rules]
+      summary: Delete a rule
+      responses: { "204": { description: Deleted } }
+
+  /v1/watcher-presets:
+    get:
+      tags: [watchers]
+      summary: Catalog of ready-made watcher sources
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/WatcherPreset" } } } } } } } }
+  /v1/watchers:
+    get:
+      tags: [watchers]
+      summary: List watchers (watchers:manage)
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Watcher" } } } } } } } }
+    post:
+      tags: [watchers]
+      summary: Create a watcher (rss feed or url_diff page monitor)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WatcherInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Watcher" } } } }
+        "402": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/watchers/from-preset:
+    post:
+      tags: [watchers]
+      summary: Create a watcher from a preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preset_id, collection]
+              properties:
+                preset_id: { type: string }
+                params: { type: object, additionalProperties: { type: string } }
+                collection: { type: string, description: Collection ID or name }
+                name: { type: string }
+                every: { type: string, examples: ["30m", "6h"] }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Watcher" } } } }
+        "402": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/watchers/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [watchers]
+      summary: Get a watcher
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Watcher" } } } } }
+    patch:
+      tags: [watchers]
+      summary: Update, pause (status=paused) or resume (status=active) a watcher
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WatcherInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Watcher" } } } } }
+    delete:
+      tags: [watchers]
+      summary: Delete a watcher
+      responses: { "204": { description: Deleted } }
+  /v1/watchers/{id}/run:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      tags: [watchers]
+      summary: Check the source now
+      responses:
+        "200":
+          description: Run result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, error] }
+                  new_items: { type: integer }
+                  entries_seen: { type: integer }
+                  baseline: { type: boolean, description: First run only records existing entries }
+                  error: { type: string }
+
+  /v1/events/export:
+    get:
+      tags: [events]
+      summary: Export the activity log as NDJSON or CSV, oldest first (items:read)
+      description: |
+        Streams every matching event (chunked; no page size). CSV columns:
+        `created_at,id,type,actor_type,actor_id,actor_name,collection_id,item_id,data`
+        where `data` is the event's JSON. CSV cells starting with `=`, `+`, `-`,
+        `@`, tab or CR are prefixed with `'` (spreadsheet formula injection).
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [ndjson, csv], default: ndjson } }
+        - { name: from, in: query, description: "created_at >= (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+        - { name: to, in: query, description: "created_at < (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+        - { name: type, in: query, description: Exact event type, schema: { type: string } }
+        - { name: type_prefix, in: query, description: "Literal prefix, e.g. `item.`", schema: { type: string } }
+        - { name: actor_type, in: query, schema: { type: string, enum: [session, api_key, local, system] } }
+        - { name: actor_id, in: query, schema: { type: string } }
+        - { name: collection_id, in: query, schema: { type: string } }
+        - { name: item_id, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Event stream (attachment)
+          content:
+            application/x-ndjson:
+              schema: { $ref: "#/components/schemas/Event" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /v1/workspace/export:
+    post:
+      tags: [auth]
+      summary: Start a full workspace export (admin; GDPR data portability)
+      description: |
+        Queues a background job that builds a ZIP (workspace.json,
+        collections.ndjson, items.ndjson with versions, events.ndjson,
+        media.ndjson, media/ files under their original names, webhooks.json
+        with secrets redacted, rules.json, watchers.json, README.txt).
+        Only one export per workspace may be pending or running (409 with
+        `details.export_id`). Finished archives are deleted after 24 hours.
+      responses:
+        "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceExport" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /v1/workspace/exports/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [auth]
+      summary: Export job status (admin)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceExport" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /v1/workspace/exports/{id}/download:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [auth]
+      summary: Download a finished export (admin)
+      responses:
+        "200": { description: ZIP archive, content: { application/zip: { schema: { type: string, contentMediaType: application/zip } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+
+  /v1/items/{id}/purge:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      tags: [items]
+      summary: Delete an item and its history, including every event about it (admin)
+      description: |
+        Unlike DELETE /v1/items/{id} (which keeps the item's events as
+        history), purge also deletes the item's events and their webhook
+        deliveries (including pending ones), its media when no other item uses
+        it, and cached idempotent responses containing it. One content-free
+        `item.purged` event is recorded. Finished workspace exports are expired.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurgeResult" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /livez:
+    get:
+      operationId: livez
+      tags: [system]
+      summary: Liveness probe
+      description: 200 while the process can serve HTTP. Does not touch the database.
+      security: []
+      responses:
+        "200":
+          description: Alive
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+
+  /readyz:
+    get:
+      operationId: readyz
+      tags: [system]
+      summary: Readiness probe
+      description: |
+        Checks the database (ping), that every embedded migration is applied,
+        and that the background workers are running (heartbeat newer than 30s).
+        `workers` is `not_started` (not a failure) when the process runs no
+        background workers.
+      security: []
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+        "503":
+          description: Not ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+
+  /metrics:
+    get:
+      operationId: metrics
+      tags: [system]
+      summary: Prometheus metrics (text exposition format 0.0.4)
+      description: |
+        Allowed for direct requests from this machine (loopback peer, local
+        Host, no proxy/Origin headers) or with `Authorization: Bearer
+        <METRICS_TOKEN>`. Everything else gets 404.
+      security:
+        - {}
+        - metricsToken: []
+      responses:
+        "200":
+          description: Metrics
+          content:
+            text/plain:
+              schema: { type: string }
+        "404":
+          description: Not allowed (endpoint hidden)
+
+  /v1/notification-channels:
+    get:
+      tags: [notifications]
+      summary: List notification channels (scope channels:manage)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/NotificationChannel" } } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [notifications]
+      summary: Create a notification channel
+      description: >
+        Secrets in `config` (bot_token, webhook_url, signing_secret, access_token,
+        password) are encrypted at rest and always returned masked. Plan limit
+        `notification_channels` (402).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannelInput" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannel" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /v1/notification-channels/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [notifications]
+      summary: Get a notification channel
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannel" } } } }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [notifications]
+      summary: Update a notification channel
+      description: >
+        `config` keys are merged into the stored config; `null` removes a key and a
+        masked secret value (as returned by GET) keeps the stored secret.
+        Changing a destination (telegram chat_id, slack/discord channel, ntfy
+        server_url, email host/port/tls/username) requires re-entering the
+        stored secret it would be sent with (bot_token, access_token, password)
+        in the same request, else 422. Disabling a channel revokes its
+        one-tap decision links. Setting `enabled: true` resets the failure
+        counter. `type` cannot change.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannelInput" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannel" } } } }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [notifications]
+      summary: Delete a notification channel
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Error" }
+
+  /v1/notification-channels/{id}/test:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      tags: [notifications]
+      summary: Send a test message now
+      description: Rate-limited per principal (burst 5, then 10 per minute).
+      responses:
+        "200":
+          description: Result of the attempt (delivery errors are reported, not raised)
+          content: { application/json: { schema: { type: object, required: [ok], properties: { ok: { type: boolean }, error: { type: string } } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /v1/notification-channels/{id}/deliveries:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      tags: [notifications]
+      summary: Recent notification outbox rows for a channel
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/NotificationDelivery" } } } } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /v1/decide/{token}:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string }, description: Single-use decision token from a notification }
+    get:
+      tags: [notifications]
+      summary: One-tap decision confirmation page (HTML)
+      description: >
+        Shows the item and a confirmation form. Does not decide (safe for
+        link-preview bots). Public; the token is the credential. Links of
+        deleted or disabled channels no longer work; a pending item that
+        changed since the message was sent answers 409.
+      security: [{}]
+      responses:
+        "200": { description: Confirmation page, content: { text/html: { schema: { type: string } } } }
+        "404": { description: Unknown link, content: { text/html: { schema: { type: string } } } }
+        "409": { description: Item changed since the message was sent, content: { text/html: { schema: { type: string } } } }
+        "410": { description: Link used or expired, content: { text/html: { schema: { type: string } } } }
+    post:
+      tags: [notifications]
+      summary: Perform the link's action (approve or reject)
+      description: >
+        Consumes the link and runs the action through the normal action path as
+        actor "Link: <channel name>". Accepts an empty body, a form or JSON with an
+        optional `feedback` (reject only). Returns HTML, or JSON when
+        `Accept: application/json`.
+      security: [{}]
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded: { schema: { type: object, properties: { feedback: { type: string, maxLength: 5000 } } } }
+          application/json: { schema: { type: object, properties: { feedback: { type: string, maxLength: 5000 } } } }
+      responses:
+        "200": { description: Decided, content: { text/html: { schema: { type: string } }, application/json: { schema: { $ref: "#/components/schemas/DecisionResult" } } } }
+        "404": { description: Unknown link }
+        "409": { description: "Item already decided, or (code item_changed) the item changed since the message was sent — links are bound to the item version they showed. The link is consumed either way." }
+        "410": { description: Link used or expired }
+
+  /v1/integrations/telegram/{channel_id}:
+    parameters:
+      - { name: channel_id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [integrations]
+      summary: Telegram webhook (webhook mode channels)
+      description: Verified by the `X-Telegram-Bot-Api-Secret-Token` header (registered automatically via setWebhook).
+      security: [{}]
+      parameters:
+        - { name: X-Telegram-Bot-Api-Secret-Token, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: Telegram Update } } } }
+      responses:
+        "200": { description: Handled }
+        "401": { description: Bad or missing secret token }
+        "404": { description: Unknown or disabled channel }
+
+  /v1/integrations/slack/interactions:
+    post:
+      tags: [integrations]
+      summary: Slack interactivity request URL
+      description: Verified with `X-Slack-Signature` / `X-Slack-Request-Timestamp` (v0 HMAC-SHA256 with the channel's signing secret, 5-minute window).
+      security: [{}]
+      requestBody: { required: true, content: { application/x-www-form-urlencoded: { schema: { type: object, properties: { payload: { type: string } } } } } }
+      responses:
+        "200": { description: Acknowledged }
+        "401": { description: Invalid signature }
+
+  /v1/integrations/discord/interactions:
+    post:
+      tags: [integrations]
+      summary: Discord interactions endpoint URL
+      description: Verified with `X-Signature-Ed25519` / `X-Signature-Timestamp` against the application public key. Answers PING, buttons and the reject-reason modal.
+      security: [{}]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: Discord Interaction } } } }
+      responses:
+        "200": { description: Interaction response, content: { application/json: { schema: { type: object } } } }
+        "401": { description: Invalid signature }
+
+  /mcp:
+    post:
+      tags: [setup]
+      summary: MCP Streamable HTTP endpoint (stateless; keyless in local mode, bearer API key in cloud mode)
+      responses: { "200": { description: JSON-RPC response } }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, description: "API key: stk_..." }
+    session: { type: apiKey, in: cookie, name: staqly_session }
+
+    metricsToken:
+      type: http
+      scheme: bearer
+      description: The METRICS_TOKEN environment value (not an API key).
+
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: string } }
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { $ref: "#/components/schemas/ErrorBody" }
+              request_id: { type: string, description: Same as the X-Request-Id response header }
+              trace_id: { type: string, description: "W3C trace id from the request's traceparent header, when one was sent (for correlating with logs)" }
+
+    RateLimited:
+      description: |
+        Too many requests (`error.code` = `rate_limited`). Unauthenticated
+        sensitive endpoints (POST /v1/sessions/recover, POST
+        /v1/device-links/redeem, POST /v1/workspaces, /v1/decide/*) are
+        limited per client IP; other /v1 and /mcp requests in cloud mode are
+        limited per API key / session.
+      headers:
+        Retry-After: { $ref: "#/components/headers/Retry-After" }
+        X-Request-Id: { $ref: "#/components/headers/X-Request-Id" }
+      content:
+        application/json:
+          schema: { type: object, required: [error], properties: { error: { $ref: "#/components/schemas/ErrorBody" }, request_id: { type: string }, trace_id: { type: string } } }
+
+  schemas:
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [unauthorized, forbidden, not_found, conflict, validation_failed, csrf_failed, rate_limited, search_too_broad, timeout, item_changed] }
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+        details: { type: object, additionalProperties: true, description: "plan_limit_exceeded: limit, max, used, plan" }
+
+    Scope:
+      type: string
+      enum: ["collections:read", "collections:write", "items:read", "items:write", "items:review", "actions:execute", "webhooks:manage", "rules:manage", "watchers:manage", "channels:manage", admin]
+
+    ItemStatus:
+      type: string
+      enum: [draft, pending, approved, rejected, expired, processing, completed, failed, archived]
+
+    ItemType:
+      type: string
+      enum: [image, video, text, link, json, file]
+
+    RuleMatch:
+      type: object
+      properties:
+        collection_ids: { type: array, items: { type: string } }
+        types: { type: array, items: { $ref: "#/components/schemas/ItemType" } }
+        source_pattern: { type: string, description: "Glob on item.source (* and ?)" }
+        text_contains: { type: string, description: Case-insensitive match in title or content }
+        conditions:
+          type: array
+          items:
+            type: object
+            required: [path, op]
+            properties:
+              path: { type: string, description: Dot path into item metadata }
+              op: { type: string, enum: [eq, ne, lt, lte, gt, gte, contains, in, not_in, exists] }
+              value: { description: Comparison value (array for in/not_in) }
+    RuleParams:
+      type: object
+      properties:
+        feedback: { type: string }
+        status: { $ref: "#/components/schemas/ItemStatus" }
+        after_seconds: { type: integer, minimum: 60, maximum: 7776000 }
+        note: { type: string }
+        channel_id: { type: string, description: "escalate: notify only this notification channel" }
+    Rule:
+      type: object
+      required: [id, name, priority, enabled, match, action, params, times_applied, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        priority: { type: integer }
+        enabled: { type: boolean }
+        match: { $ref: "#/components/schemas/RuleMatch" }
+        action: { type: string, enum: [auto_approve, auto_reject, set_status, expire, escalate] }
+        params: { $ref: "#/components/schemas/RuleParams" }
+        times_applied: { type: integer }
+        created_at: { type: string }
+        updated_at: { type: string }
+    RuleInput:
+      type: object
+      properties:
+        name: { type: string }
+        priority: { type: integer }
+        enabled: { type: boolean }
+        match: { $ref: "#/components/schemas/RuleMatch" }
+        action: { type: string, enum: [auto_approve, auto_reject, set_status, expire, escalate] }
+        params: { $ref: "#/components/schemas/RuleParams" }
+    Watcher:
+      type: object
+      required: [id, name, kind, url, collection_id, keywords, exclude_keywords, every, every_seconds, status, last_error, last_run_at, next_run_at, items_created, fail_count, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string, enum: [rss, url_diff] }
+        url: { type: string }
+        collection_id: { type: string }
+        keywords: { type: array, items: { type: string } }
+        exclude_keywords: { type: array, items: { type: string } }
+        every: { type: string, examples: ["1h0m0s"] }
+        every_seconds: { type: integer }
+        preset_id: { type: string }
+        status: { type: string, enum: [active, degraded, paused] }
+        last_error: { type: string }
+        last_run_at: { type: [string, "null"] }
+        next_run_at: { type: string }
+        items_created: { type: integer }
+        fail_count: { type: integer }
+        created_at: { type: string }
+        updated_at: { type: string }
+    WatcherInput:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [rss, url_diff] }
+        url: { type: string }
+        collection: { type: string, description: Collection ID or name }
+        keywords: { type: array, items: { type: string } }
+        exclude_keywords: { type: array, items: { type: string } }
+        every: { type: string, examples: ["15m", "6h"] }
+        status: { type: string, enum: [active, paused] }
+    WatcherPreset:
+      type: object
+      required: [id, title, category, kind, description, default_every, params]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        category: { type: string }
+        kind: { type: string, enum: [rss, url_diff] }
+        description: { type: string }
+        default_every: { type: string }
+        params:
+          type: array
+          items:
+            type: object
+            required: [name, label, required]
+            properties:
+              name: { type: string }
+              label: { type: string }
+              required: { type: boolean }
+              default: { type: string }
+              placeholder: { type: string }
+
+    Plan:
+      type: object
+      required: [id, name, price_usd_month, highlight, limits, features]
+      properties:
+        id: { type: string, enum: [free, indie, team, unlocked] }
+        name: { type: string }
+        price_usd_month: { type: integer }
+        highlight: { type: boolean }
+        limits:
+          type: object
+          required: [items_per_month, webhooks, api_keys, storage_bytes, max_upload_bytes, rules, watchers, min_watcher_interval_seconds, notification_channels]
+          properties:
+            items_per_month: { type: integer }
+            webhooks: { type: integer }
+            api_keys: { type: integer }
+            storage_bytes: { type: integer }
+            max_upload_bytes: { type: integer }
+            rules: { type: integer }
+            watchers: { type: integer }
+            min_watcher_interval_seconds: { type: integer }
+            notification_channels: { type: integer }
+        features: { type: array, items: { type: string } }
+
+    Workspace:
+      type: object
+      required: [id, name, plan, recovery_rotated_at, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        plan: { type: string, enum: [free, indie, team, unlocked] }
+        recovery_rotated_at: { type: string }
+        created_at: { type: string }
+
+    APIKey:
+      type: object
+      required: [id, name, prefix, scopes, created_at, last_used_at, expires_at, revoked_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string }
+        scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+        created_at: { type: string }
+        last_used_at: { type: [string, "null"] }
+        expires_at: { type: [string, "null"] }
+        revoked_at: { type: [string, "null"] }
+        key: { type: string, description: Raw secret; only in create/rotate responses }
+
+    Session:
+      type: object
+      required: [id, user_agent, created_at, last_seen_at, expires_at, current]
+      properties:
+        id: { type: string }
+        user_agent: { type: string }
+        created_at: { type: string }
+        last_seen_at: { type: string }
+        expires_at: { type: string }
+        current: { type: boolean }
+
+    ActionDef:
+      type: object
+      required: [name, label, event, requires_feedback]
+      properties:
+        name: { type: string, pattern: "^[a-z][a-z0-9_]{0,39}$" }
+        label: { type: string }
+        event: { type: string, description: "Event emitted, e.g. item.regenerate_requested. Reserved names emitted by staqly itself (item.created, item.updated, item.deleted, item.approved, item.rejected, item.escalated, item.expired, item.status_changed, item.rule_applied, item.completed, item.failed, item.purged) are refused; item.archived is allowed." }
+        requires_feedback: { type: boolean }
+        set_status: { $ref: "#/components/schemas/ItemStatus" }
+        allowed_statuses: { type: array, items: { $ref: "#/components/schemas/ItemStatus" } }
+        builtin: { type: boolean }
+
+    Collection:
+      type: object
+      required: [id, name, description, icon, color, default_view, actions, archived, archived_at, created_at, updated_at, item_count, status_counts]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        icon: { type: string }
+        color: { type: string }
+        default_view: { type: string, enum: [gallery, table, list] }
+        actions: { type: array, items: { $ref: "#/components/schemas/ActionDef" } }
+        archived: { type: boolean }
+        archived_at: { type: [string, "null"] }
+        created_at: { type: string }
+        updated_at: { type: string }
+        item_count: { type: integer }
+        status_counts: { type: object, additionalProperties: { type: integer } }
+        cover:
+          type: object
+          properties:
+            media_id: { type: string }
+            url: { type: string }
+
+    CollectionInput:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        icon: { type: string }
+        color: { type: string }
+        default_view: { type: string, enum: [gallery, table, list] }
+        actions: { type: array, items: { $ref: "#/components/schemas/ActionDef" } }
+        archived: { type: boolean }
+
+    MediaRef:
+      type: object
+      required: [id, mime_type, size_bytes, original_name, url]
+      properties:
+        id: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+        original_name: { type: string }
+        url: { type: string, description: Absolute URL (PUBLIC_API_URL); requires authentication }
+
+    Media:
+      allOf:
+        - $ref: "#/components/schemas/MediaRef"
+        - type: object
+          properties:
+            sha256: { type: string }
+            created_at: { type: string }
+
+    Item:
+      type: object
+      required: [id, collection_id, title, type, content, url, media, metadata, status, source, external_ref, feedback, version, decided_at, created_at, updated_at]
+      properties:
+        id: { type: string }
+        collection_id: { type: string }
+        title: { type: string }
+        type: { $ref: "#/components/schemas/ItemType" }
+        content: { type: string }
+        url: { type: string }
+        media: { oneOf: [{ $ref: "#/components/schemas/MediaRef" }, { type: "null" }] }
+        metadata: { type: object, additionalProperties: true }
+        status: { $ref: "#/components/schemas/ItemStatus" }
+        source: { type: string }
+        external_ref: { type: string }
+        feedback: { type: string, description: Latest review/action feedback }
+        version: { type: integer }
+        decided_at: { type: [string, "null"] }
+        expires_at: { type: [string, "null"], description: Pending items become expired after this time }
+        editable: { type: array, items: { type: string }, description: Fields a reviewer may edit before approving (empty = all) }
+        created_at: { type: string }
+        updated_at: { type: string }
+
+    ItemFields:
+      type: object
+      properties:
+        title: { type: string }
+        content: { description: "String, or any JSON value (stored compacted)" }
+        url: { type: string }
+        media_id: { type: string, description: Empty string clears }
+        metadata: { type: object, additionalProperties: true, description: Replaces metadata }
+        metadata_patch: { type: object, additionalProperties: true, description: Merges top-level keys; null removes a key }
+
+    CreateItemInput:
+      allOf:
+        - $ref: "#/components/schemas/ItemFields"
+        - type: object
+          properties:
+            type: { $ref: "#/components/schemas/ItemType" }
+            status: { $ref: "#/components/schemas/ItemStatus" }
+            source: { type: string }
+            external_ref: { type: string }
+            expires_in: { oneOf: [{ type: integer, minimum: 60 }, { type: string, examples: ["24h"] }], description: Undecided pending items expire after this (60 s – 90 days) }
+            editable: { type: array, items: { type: string }, description: "title, content, url, media_id, metadata or metadata.<key>" }
+
+    UpdateItemInput:
+      allOf:
+        - $ref: "#/components/schemas/ItemFields"
+        - type: object
+          properties:
+            status: { $ref: "#/components/schemas/ItemStatus" }
+            source: { type: string }
+            external_ref: { type: string }
+            collection_id: { type: string }
+            expected_version: { type: integer }
+
+    ItemPage:
+      type: object
+      required: [data]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Item" } }
+        next_cursor: { type: string }
+
+    Event:
+      type: object
+      required: [id, seq, type, collection_id, item_id, actor, data, created_at]
+      properties:
+        id: { type: string }
+        seq: { type: integer }
+        type: { type: string, examples: [item.created, item.approved, item.rejected, item.regenerate_requested, item.status_changed] }
+        collection_id: { type: [string, "null"] }
+        item_id: { type: [string, "null"] }
+        actor:
+          type: object
+          required: [type, id, name]
+          properties:
+            type: { type: string }
+            id: { type: string }
+            name: { type: string }
+        data: { type: object, additionalProperties: true }
+        created_at: { type: string }
+
+    EventPage:
+      type: object
+      required: [data]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Event" } }
+        next_cursor: { type: string }
+
+    Webhook:
+      type: object
+      required: [id, url, description, secret, events, collection_ids, active, timeout_ms, max_attempts, created_at, updated_at]
+      properties:
+        id: { type: string }
+        url: { type: string }
+        description: { type: string }
+        secret: { type: string, description: "HMAC key; X-Staqly-Signature = sha256=hex(HMAC_SHA256(secret, timestamp + '.' + body)). Shown in full only in the create response and after rotate_secret; elsewhere masked as whsec_****<last 4>." }
+        events: { type: array, items: { type: string }, description: 'Exact names or globs: "*", "item.*"' }
+        collection_ids: { type: array, items: { type: string }, description: Empty means all collections }
+        active: { type: boolean }
+        timeout_ms: { type: integer }
+        max_attempts: { type: integer }
+        created_at: { type: string }
+        updated_at: { type: string }
+
+    WebhookInput:
+      type: object
+      properties:
+        url: { type: string }
+        description: { type: string }
+        events: { type: array, items: { type: string } }
+        collection_ids: { type: array, items: { type: string } }
+        active: { type: boolean }
+        timeout_ms: { type: integer, minimum: 1000, maximum: 60000 }
+        max_attempts: { type: integer, minimum: 1, maximum: 20 }
+        rotate_secret: { type: boolean }
+
+    Delivery:
+      type: object
+      required: [id, webhook_id, event_id, event_type, status, attempts, last_error, last_response, created_at]
+      properties:
+        id: { type: string }
+        webhook_id: { type: string }
+        event_id: { type: string }
+        event_type: { type: string }
+        status: { type: string, enum: [pending, succeeded, failed] }
+        attempts: { type: integer }
+        next_attempt_at: { type: [string, "null"] }
+        last_status_code: { type: [integer, "null"] }
+        last_error: { type: string }
+        last_response: { type: string, description: "First 2 KB of the receiver's response body (local mode only; always empty in cloud mode)" }
+        last_attempt_at: { type: [string, "null"] }
+        delivered_at: { type: [string, "null"] }
+        created_at: { type: string }
+
+    WorkspaceExport:
+      type: object
+      required: [id, status, size_bytes, created_at, started_at, finished_at, expires_at]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [pending, running, ready, failed, expired] }
+        size_bytes: { type: integer }
+        error: { type: string }
+        created_at: { type: string, format: date-time }
+        started_at: { type: [string, "null"], format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        expires_at: { type: string, format: date-time }
+        download_url: { type: string, description: "Relative URL, present when status is ready" }
+
+    PurgeResult:
+      type: object
+      required: [item_id, events_deleted, media_deleted]
+      properties:
+        item_id: { type: string }
+        events_deleted: { type: integer }
+        media_deleted: { type: boolean }
+
+    Readiness:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+        checks:
+          type: object
+          properties:
+            database: { type: string, enum: [ok, unavailable] }
+            migrations: { type: string, description: "ok, unknown, or pending (applied < embedded)" }
+            workers: { type: string, enum: [ok, not_started, stale, stopped] }
+
+    NotificationChannelConfig:
+      type: object
+      additionalProperties: false
+      description: >
+        Type-specific settings. Secret fields are write-only (returned masked, e.g. "••••abcd").
+        telegram: bot_token*, chat_id*, mode (polling|webhook), approver_user_ids.
+        slack: webhook_url* or bot_token*+channel*, signing_secret (enables buttons), approver_user_ids.
+        discord: webhook_url* or bot_token*+channel*; application_id + public_key enable buttons; approver_user_ids.
+        ntfy: topic*, server_url (default https://ntfy.sh), access_token, priority.
+        email: host*, port, username, password, from*, to*, tls (starttls|tls|none).
+      properties:
+        bot_token: { type: string, writeOnly: true, description: Secret (Telegram/Slack/Discord bot token) }
+        chat_id: { type: string }
+        mode: { type: string, enum: [polling, webhook] }
+        webhook_url: { type: string, format: uri, description: Secret (Slack/Discord webhook URL) }
+        channel: { type: string, description: Slack channel ID or Discord channel ID (bot mode) }
+        signing_secret: { type: string, description: Secret (Slack app signing secret) }
+        application_id: { type: string }
+        public_key: { type: string, description: Discord application public key (hex) }
+        approver_user_ids: { type: array, items: { type: string }, description: Platform user IDs allowed to decide from chat }
+        server_url: { type: string, format: uri }
+        topic: { type: string }
+        access_token: { type: string, description: Secret (ntfy token) }
+        priority: { type: integer, minimum: 1, maximum: 5 }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        password: { type: string, description: Secret (SMTP password) }
+        from: { type: string }
+        to: { type: array, items: { type: string, format: email } }
+        tls: { type: string, enum: [starttls, tls, none] }
+    NotificationChannelInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 100 }
+        type: { type: string, enum: [telegram, slack, discord, ntfy, email], description: Required on create; immutable }
+        enabled: { type: boolean }
+        config: { $ref: "#/components/schemas/NotificationChannelConfig" }
+        events:
+          type: array
+          items: { type: string }
+          description: 'Event patterns (glob, "*"). Default ["item.created", "item.escalated"]; item.created only fires for pending items.'
+        collection_ids: { type: array, items: { type: string } }
+        digest_window_seconds: { type: integer, minimum: 0, maximum: 86400, description: Batch events within this window into one message (0 = immediately) }
+    NotificationChannel:
+      type: object
+      required: [id, name, type, enabled, config, events, collection_ids, digest_window_seconds, fail_count, last_error, interactive, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [telegram, slack, discord, ntfy, email] }
+        enabled: { type: boolean }
+        config: { type: object, additionalProperties: true, description: Settings with secrets masked }
+        events: { type: array, items: { type: string } }
+        collection_ids: { type: array, items: { type: string } }
+        digest_window_seconds: { type: integer }
+        fail_count: { type: integer, description: Consecutive failed sends; the channel is disabled at NOTIFY_MAX_FAILS }
+        last_error: { type: string }
+        disabled_reason: { type: string }
+        last_sent_at: { type: [string, "null"], format: date-time }
+        interactive: { type: boolean, description: Approve/Reject buttons in chat (otherwise one-tap links) }
+        integration_url: { type: string, description: URL to configure in Slack/Discord (or registered with Telegram in webhook mode) }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NotificationDelivery:
+      type: object
+      properties:
+        id: { type: string }
+        channel_id: { type: string }
+        event_id: { type: string }
+        event_type: { type: string }
+        item_id: { type: [string, "null"] }
+        status: { type: string, enum: [pending, sent, failed, skipped] }
+        attempts: { type: integer }
+        next_attempt_at: { type: [string, "null"], format: date-time }
+        last_error: { type: string }
+        sent_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    DecisionResult:
+      type: object
+      properties:
+        message: { type: string }
+        status: { type: string, enum: [approved, rejected, ""] }
+        item_id: { type: string }
+        action: { type: string, enum: [approve, reject] }
+
+  headers:
+    X-Request-Id:
+      description: Request id (the caller's X-Request-Id if sent, else generated). Present on every response.
+      schema: { type: string }
+    Retry-After:
+      description: Seconds until a retry may succeed (sent with 429, and with 503 `busy`).
+      schema: { type: integer, minimum: 1 }

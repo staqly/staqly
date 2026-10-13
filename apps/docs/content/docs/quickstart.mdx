@@ -1,0 +1,148 @@
+---
+title: Quickstart
+description: Run staqly locally, create your first item and connect an agent — in about five minutes.
+---
+
+No account, no API key. Install the `staqly` binary (macOS, Linux) or use Docker.
+
+<Steps>
+<Step>
+
+### Start staqly
+
+```bash tab="Install script (recommended)"
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh
+staqly serve   # API + MCP + dashboard in one process; Ctrl-C stops it
+```
+
+```bash tab="Docker"
+git clone https://github.com/staqly/staqly.git
+cd staqly
+make up        # pulls the images, starts them, then opens the dashboard signed in
+```
+
+The install script puts `staqly` in `~/.local/bin` after checking the release checksum
+(Windows: download the `.zip` from the [releases](https://github.com/staqly/staqly/releases)).
+Data lives in `~/.local/share/staqly`. More in [Without Docker](/docs/self-hosting/binary).
+
+With Docker, `make up` pulls `ghcr.io/staqly/staqly-api` and `ghcr.io/staqly/staqly-web`
+(tag `STAQLY_VERSION`, default `latest`); `make dev` builds them from your checkout instead —
+see [Docker Compose](/docs/self-hosting/docker-compose).
+
+| What | URL | Reachable from |
+|---|---|---|
+| Dashboard | http://localhost:8080 | this computer (`staqly serve`); your network with `--expose` or Docker |
+| REST API | http://localhost:3333 (contract at `/openapi.yaml`) | this computer only (`127.0.0.1`) |
+| MCP (Streamable HTTP) | http://localhost:3333/mcp | this computer only |
+
+The workspace is created automatically on first start.
+
+</Step>
+<Step>
+
+### Open the dashboard
+
+Open **http://localhost:8080**. There is no sign-up and no password:
+
+- `staqly serve` keeps the dashboard on this computer, so it opens straight away.
+- When the dashboard is reachable from your network (`staqly serve --expose`, or Docker, so
+  phones can use it), each browser signs in once with a **one-time link**: `make up` opens one
+  for you; otherwise run `staqly serve connect-link` or `make connect` and paste the link.
+- Links work once and expire after 5 minutes; sessions last 30 days.
+- For your phone, see [Phones & tablets](/docs/dashboard/phones-and-tablets).
+
+</Step>
+<Step>
+
+### Create your first item
+
+Agents and scripts on this machine call the API without credentials. Create a collection,
+then add an item to it — collections can be referenced by ID *or by exact name*:
+
+```bash
+API=http://localhost:3333
+
+curl -s -X POST $API/v1/collections -H 'Content-Type: application/json' \
+  -d '{"name":"Instagram Avatar","default_view":"gallery"}'
+
+curl -s -X POST "$API/v1/collections/Instagram%20Avatar/items" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Caption draft","content":"Golden hour ☀️","metadata":{"prompt":"rooftop, sunset","seed":42},"source":"quickstart"}'
+```
+
+The response is the new item. It starts as `pending`, so it is waiting in your Inbox:
+
+```json
+{
+  "id": "itm_…",
+  "collection_id": "col_…",
+  "title": "Caption draft",
+  "type": "text",
+  "content": "Golden hour ☀️",
+  "metadata": { "prompt": "rooftop, sunset", "seed": 42 },
+  "status": "pending",
+  "source": "quickstart",
+  "version": 1,
+  "decided_at": null
+}
+```
+
+Uploading an image is one multipart request:
+
+```bash
+curl -s -X POST "$API/v1/collections/Instagram%20Avatar/items" \
+  -F file=@avatar.png \
+  -F 'item={"title":"Avatar #1","content":"caption","metadata":{"seed":42}}'
+```
+
+</Step>
+<Step>
+
+### Connect your agent
+
+Add staqly as an MCP server. In local mode, no key is needed:
+
+```bash tab="Claude Code"
+claude mcp add --transport http staqly http://localhost:3333/mcp
+claude mcp list        # → staqly: http://localhost:3333/mcp (HTTP) - ✔ Connected
+```
+
+```bash tab="Codex"
+codex mcp add staqly --url http://localhost:3333/mcp
+```
+
+```json tab="OpenCode (opencode.json)"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "staqly": { "type": "remote", "url": "http://localhost:3333/mcp", "enabled": true }
+  }
+}
+```
+
+Then just ask:
+
+> *“Create a collection called AI Research.”*
+> *“Show me all pending images.”*
+> *“Find the images I approved yesterday.”*
+
+</Step>
+<Step>
+
+### Review it
+
+Back in the Inbox, use <Kbd>j</Kbd> / <Kbd>k</Kbd> to move, <Kbd>a</Kbd> to approve and
+<Kbd>r</Kbd> to reject with feedback. Every decision is recorded as an event and can be
+delivered to your automations as a [signed webhook](/docs/automation/webhooks).
+
+</Step>
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Concepts" href="/docs/concepts">How collections, items, statuses and actions fit together.</Card>
+  <Card title="n8n" href="/docs/agents/n8n">Import the Instagram Avatar demo workflow.</Card>
+  <Card title="Rules" href="/docs/automation/rules">Auto-approve, auto-reject, expire and escalate new items.</Card>
+  <Card title="Phones & tablets" href="/docs/dashboard/phones-and-tablets">Review from your phone with a QR code.</Card>
+</Cards>

@@ -1,0 +1,102 @@
+# Staqly: local-first workspace for AI agents.
+#   make up    pull the released images (ghcr.io/staqly/*) and start
+#   make dev   build the images from this checkout and start
+# STAQLY_VERSION picks the image tag (default: latest, or a deploy: prod-<timestamp>).
+# The API listens on 127.0.0.1 only (agents, MCP and scripts on this machine
+# need no key). The dashboard is reachable from your network; browsers sign in
+# once with a one-time link (`make up` opens it for you).
+# n8n is not part of the stack: use your own, or integrations/n8n/compose.yml.
+name: staqly
+
+services:
+  api:
+    build:
+      context: ./apps/api
+      args: { VERSION: "${STAQLY_VERSION:-dev}" }   # `make dev` builds locally
+    image: ghcr.io/staqly/staqly-api:${STAQLY_VERSION:-latest}
+    container_name: staqly-api
+    restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+      STAQLY_MODE: ${STAQLY_MODE:-local}
+      LOCAL_ALLOWED_HOSTS: staqly-api,${LOCAL_ALLOWED_HOSTS:-}
+      # The API only trusts loopback peers by default. Inside Docker this
+      # computer reaches it from the bridge gateway, and n8n etc. from the
+      # staqly network, so private ranges count as "this machine". The port is
+      # published on 127.0.0.1 only, so other hosts cannot use this.
+      LOCAL_TRUSTED_PEERS: ${LOCAL_TRUSTED_PEERS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
+      LOCAL_ALLOWED_ORIGINS: ${LOCAL_ALLOWED_ORIGINS:-}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3333}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      WEB_PORT: ${WEB_PORT:-8080}
+      # The dashboard is published on all interfaces, so a request arriving
+      # through it can't be proven to come from this computer: require sessions.
+      DASHBOARD_EXPOSED: "true"
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      # Empty = mode default: true in local mode (n8n on the Docker network/LAN),
+      # false in cloud mode (tenants must not reach your private network).
+      WEBHOOK_ALLOW_PRIVATE: ${WEBHOOK_ALLOW_PRIVATE:-}
+      WEBHOOK_ALLOW_LOOPBACK: ${WEBHOOK_ALLOW_LOOPBACK:-false}
+      WEBHOOK_RETRY_BASE: ${WEBHOOK_RETRY_BASE:-15s}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      # Optional settings documented in .env.example are passed through as-is.
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      RATE_LIMIT_DISABLED: ${RATE_LIMIT_DISABLED:-}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-}
+      RATE_LIMIT_AUTH_PER_MINUTE: ${RATE_LIMIT_AUTH_PER_MINUTE:-}
+      RETENTION_DELIVERIES_DAYS: ${RETENTION_DELIVERIES_DAYS:-}
+      RETENTION_EVENTS_DAYS: ${RETENTION_EVENTS_DAYS:-}
+      RETENTION_ARCHIVED_ITEMS_DAYS: ${RETENTION_ARCHIVED_ITEMS_DAYS:-}
+      WATCHER_ALLOW_PRIVATE: ${WATCHER_ALLOW_PRIVATE:-}
+      NOTIFY_SECRET_KEY: ${NOTIFY_SECRET_KEY:-}
+      NOTIFY_PUBLIC_API_URL: ${NOTIFY_PUBLIC_API_URL:-}
+      NOTIFY_ALLOW_PRIVATE: ${NOTIFY_ALLOW_PRIVATE:-}
+    volumes:
+      - staqly-data:/data
+    ports:
+      # The API is never exposed beyond this machine: agents run here, phones
+      # go through the dashboard, and cloud setups put a reverse proxy in front.
+      - "127.0.0.1:${API_PORT:-3333}:3333"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach n8n running on the host (Linux)
+    stop_grace_period: 30s
+    # Hardening: immutable root filesystem (state lives in /data), no
+    # privilege escalation, no Linux capabilities, bounded memory/processes.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: ${API_MEM_LIMIT:-512m}
+    pids_limit: ${API_PIDS_LIMIT:-256}
+
+  web:
+    build:
+      context: ./apps/web
+      additional_contexts: { api: ./apps/api }   # the Go web server lives there
+      args: { VERSION: "${STAQLY_VERSION:-dev}" }
+    image: ghcr.io/staqly/staqly-web:${STAQLY_VERSION:-latest}
+    container_name: staqly-web
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: "http://api:3333"     # read at runtime by the /api proxy
+    ports:
+      # Reachable from your network (phones, tablets). Every browser signs in
+      # once with a one-time link: `make up` opens one, `make connect` prints
+      # another, phones scan a QR code from "Connect a device".
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: ${WEB_MEM_LIMIT:-128m}
+    pids_limit: ${WEB_PIDS_LIMIT:-256}
+
+volumes:
+  staqly-data:

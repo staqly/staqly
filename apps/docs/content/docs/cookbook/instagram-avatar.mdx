@@ -1,0 +1,131 @@
+---
+title: Instagram Avatar, end to end
+description: Generate → review → publish → feedback → regenerate, with the bundled n8n demo workflow and no external accounts.
+---
+
+This recipe runs the full loop with the importable n8n workflow
+`integrations/n8n/instagram-avatar-demo.json`. Generation and publishing are **mocked**, so
+you need no AI or Instagram account — swap the mock nodes for real ones later.
+
+```mermaid
+flowchart LR
+  GEN[Mock AI Generator] --> CREATE[Create item] --> COL[(Instagram Avatar)] --> INBOX{Inbox}
+  INBOX -- approve --> PUB[Mock Publisher] --> DONE[completed + instagram_post_id]
+  INBOX -- reject --> FB[feedback → metadata.feedback_log]
+  INBOX -- regenerate --> GEN2[Mock Generator<br/>uses feedback] --> NEW[new item, original archived]
+```
+
+<Steps>
+<Step>
+
+### Start n8n
+
+Use your own n8n, or run the example next to staqly (it joins the `staqly_default` network):
+
+```bash
+docker compose -f integrations/n8n/compose.yml up -d     # n8n at http://localhost:5678
+```
+
+Open it and create the n8n owner account. The example publishes n8n on `127.0.0.1` only; to
+reach it from other machines, change the port mapping and protect n8n yourself (owner account,
+HTTPS).
+
+</Step>
+<Step>
+
+### Register the collection and the webhook
+
+```bash
+./integrations/n8n/setup-demo.sh
+# n8n on the host instead of the compose network:
+./integrations/n8n/setup-demo.sh http://host.docker.internal:5678/webhook/staqly-demo
+```
+
+It creates the **Instagram Avatar** collection (gallery view) and a webhook for
+`item.approved`, `item.rejected`, `item.regenerate_requested` and `item.publish_requested` on
+that collection — and prints the **signing secret** and a random **demo token**. It needs
+`curl` and `jq` or `python3`; an API key is passed to curl through a private header file, never
+on the command line. Cloud instance:
+`STAQLY_API_URL=https://staqly.example.com STAQLY_API_KEY={API_KEY} ./integrations/n8n/setup-demo.sh <url>`.
+
+</Step>
+<Step>
+
+### Import the workflow
+
+In n8n: **Create workflow → ⋯ → Import from file** → `instagram-avatar-demo.json`. With the
+example compose you can also run:
+
+```bash
+docker compose -f integrations/n8n/compose.yml exec n8n \
+  n8n import:workflow --input=/workflows/instagram-avatar-demo.json
+```
+
+</Step>
+<Step>
+
+### Configure the nodes
+
+- If n8n is **not** on the staqly compose network, change `apiBaseUrl` in the **Config** node
+  and in **Verify & parse** (`http://localhost:3333` for n8n on the host).
+- Paste the secret into `CONFIG.webhookSecret` in **Verify & parse**. The node **fails
+  closed**: while the secret is empty it rejects every event. It checks that
+  `X-Staqly-Timestamp` is a plain number within 5 minutes, verifies `X-Staqly-Signature`
+  (HMAC-SHA256, constant-time compare) and drops repeated deliveries of the same
+  `X-Staqly-Event-Id` (the last 500 IDs are kept in the workflow's static data). Verification
+  uses Node's `crypto`, which needs `NODE_FUNCTION_ALLOW_BUILTIN=crypto` (set in the example
+  compose).
+- Paste the demo token into `DEMO_TOKEN` in **Check demo token**. The HTTP generate trigger
+  only runs for requests that send it in an `X-Demo-Token` header; while it is empty the HTTP
+  trigger is disabled. The manual trigger needs no token.
+- Local mode needs no credentials. Cloud: on each HTTP Request node choose *Authentication →
+  Generic → Header Auth* with `Authorization: Bearer {API_KEY}`.
+
+</Step>
+<Step>
+
+### Generate and review
+
+**Publish** (activate) the workflow, then run **Generate sample content** — or:
+
+```bash
+curl -X POST http://localhost:5678/webhook/staqly-demo-generate -H 'X-Demo-Token: {DEMO_TOKEN}'
+```
+
+A pending image appears in the Inbox. Then try each path:
+
+| You do | n8n does | You see |
+|---|---|---|
+| **Approve** | marks it *processing*, "publishes" it, records the result | item `completed` with `metadata.instagram_post_id` |
+| **Reject** with feedback | records the feedback | feedback appended to `metadata.feedback_log` |
+| **Regenerate** with feedback ("make her smile") | generates a new image using the feedback | a new pending item; the original is archived with `superseded_by` |
+
+</Step>
+</Steps>
+
+## How the workflow is built
+
+```mermaid
+flowchart TD
+  T1([Generate sample content]) --> CFG[Config]
+  T2([POST /webhook/staqly-demo-generate]) --> TOK[Check demo token<br/>X-Demo-Token] --> CFG
+  CFG --> ENS[Ensure collection] --> GREQ[Generation request] --> GEN[Mock AI Generator<br/>PNG + caption + prompt]
+  GEN --> SUB[Submit for review<br/>multipart POST /v1/collections/…/items]
+  SUB --> REGEN{Is regeneration?}
+  REGEN -- yes --> ARCH[Archive original<br/>superseded_by]
+  EV([POST /webhook/staqly-demo<br/>staqly webhook]) --> VER[Verify & parse<br/>timestamp + HMAC + dedupe] --> ROUTE{Route by event}
+  ROUTE -- item.approved / item.publish_requested --> PROC[Mark processing] --> MPUB[Mock Publisher] --> REC[Record publication<br/>completed + instagram_post_id]
+  ROUTE -- item.rejected --> RFB[Record feedback] --> SFB[Save feedback<br/>metadata.feedback_log]
+  ROUTE -- item.regenerate_requested --> RREQ[Regeneration request] --> GEN
+```
+
+All of these paths were exercised against a real n8n 2.42.7 instance (local mode, no
+credentials), including rejection of unsigned, forged, stale and malformed-timestamp events,
+deduplication of a repeated event ID, and rejection of generate requests without the demo
+token.
+
+## Going further
+
+- Pull in visual references with an [inspiration watcher](/docs/automation/watchers#example-inspiration-for-the-instagram-avatar).
+- Auto-approve captions your model is confident about with a [rule](/docs/automation/rules).
+- Review on your phone: [Review on your phone](/docs/cookbook/review-on-your-phone).

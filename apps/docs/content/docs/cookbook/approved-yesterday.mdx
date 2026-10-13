@@ -1,0 +1,42 @@
+---
+title: “Find what I approved yesterday”
+description: Ask your agent in plain language — it turns it into a search with decision-date filters.
+---
+
+Once staqly is connected to [Claude Code](/docs/agents/claude-code),
+[Codex](/docs/agents/codex) or [OpenCode](/docs/agents/opencode), just ask:
+
+> *“Find the images I approved yesterday.”*
+
+The agent calls `search_items`:
+
+```json
+{
+  "status": "approved",
+  "type": "image",
+  "decided_after": "2026-10-12",
+  "decided_before": "2026-10-13"
+}
+```
+
+`decided_after` is inclusive and `decided_before` exclusive, both accept `YYYY-MM-DD` or RFC
+3339 — so this is exactly "yesterday" in UTC. staqly's server instructions tell the model
+about these filters, so you don't have to.
+
+## Variations
+
+| Ask | Tool call |
+|---|---|
+| *“…and only the ones about golden hour”* | add `"query": "golden hour"` (ranked by relevance) |
+| *“What did I reject this week, and why?”* | `status: rejected`, `decided_after: <Monday>`; the agent reads each item's `feedback` |
+| *“Which Instagram Avatar posts were published today?”* | `collection: "Instagram Avatar"`, `status: completed`, `created_after: <today>` |
+| *“Show me everything still waiting for me.”* | `list_pending_approvals` |
+
+## The same with curl
+
+```bash
+curl -s "http://localhost:3333/v1/items?status=approved&type=image&decided_after=2026-10-12&decided_before=2026-10-13"
+```
+
+Page through long results with `next_cursor` — see
+[Pagination & search](/docs/api/pagination-and-search).

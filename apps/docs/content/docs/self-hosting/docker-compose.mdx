@@ -1,0 +1,113 @@
+---
+title: Docker Compose
+description: Run staqly as two containers with one data volume.
+---
+
+```bash
+git clone https://github.com/staqly/staqly.git && cd staqly
+make up          # pull the images, start, wait until healthy, open the dashboard signed in
+```
+
+`compose.yml` (project name `staqly`) defines:
+
+| Service | Container | Image | Port | Notes |
+|---|---|---|---|---|
+| `api` | `staqly-api` | `ghcr.io/staqly/staqly-api` (Go, Alpine) | `127.0.0.1:3333` | REST, MCP, webhook worker, watchers. Health-checked via `/health`. Runs as uid 10001. |
+| `web` | `staqly-web` | `ghcr.io/staqly/staqly-web` (static dashboard + Go server) | `:8080` | The dashboard; proxies `/api/*` to `http://api:3333`. Starts once the API is healthy. |
+
+All state is in the named volume **`staqly_staqly-data`** mounted at `/data`:
+
+```text
+/data/workspace.db          SQLite database (WAL: -wal / -shm side files while running)
+/data/uploads/              media files
+/data/notify_secret.key     key for notification-channel secrets (unless NOTIFY_SECRET_KEY is set)
+```
+
+## Pre-built images or a local build
+
+`make up` pulls the pre-built images from GitHub Container Registry and falls back to a local
+build if they are missing. Images are published from `main`: every production deploy is tagged
+`prod-<UTC timestamp>` (e.g. `prod-20261013-140500`), and CI publishes both images as
+`:prod-<timestamp>` and `:latest`. `STAQLY_VERSION` selects the tag (default `latest`); pin one
+in `.env` to stay on it:
+
+```bash title=".env"
+STAQLY_VERSION=prod-20261013-140500     # default: latest
+```
+
+To run your own changes, build the images from the checkout instead:
+
+```bash
+make dev                         # build locally, start, open the dashboard
+docker compose up -d --build     # the same without make
+```
+
+## Ports and who can reach them
+
+- **API `3333`** binds to `127.0.0.1` only. Agents, MCP and scripts on this computer use it
+  without keys; nothing else on the network can reach it. Docker forwards these requests from
+  its bridge network, which is why compose sets `LOCAL_TRUSTED_PEERS` to the private ranges.
+- **Dashboard `8080`** is published on all interfaces so phones and tablets can use it. Every
+  browser signs in once with a one-time link (see
+  [Phones & tablets](/docs/dashboard/phones-and-tablets)); compose sets `DASHBOARD_EXPOSED=true`
+  so nothing arriving through the dashboard counts as local.
+
+Change ports with `API_PORT` / `WEB_PORT` in `.env`. If you change `API_PORT`, also update
+`PUBLIC_API_URL` and your MCP client URLs.
+
+## The dashboard proxy
+
+The dashboard serves `/api/*` with a streaming route handler that relays requests to the API
+without buffering them in memory. It reads `API_INTERNAL_URL` (compose: `http://api:3333`) at
+runtime, so the same image works with any API address. Request bodies are capped at **110 MB**
+(the API's default upload limit is 100 MB; larger bodies get `413 too_large`), and when the API
+is down the proxy answers `502 bad_gateway`.
+
+## Hardening
+
+Both containers run with:
+
+- a **read-only root filesystem** (`read_only: true`; state lives in the `/data` volume, plus
+  small `tmpfs` mounts for `/tmp` and the dashboard's cache),
+- **no Linux capabilities** (`cap_drop: [ALL]`) and `no-new-privileges`,
+- non-root users,
+- memory and process limits:
+
+| Variable | Default |
+|---|---|
+| `API_MEM_LIMIT` / `WEB_MEM_LIMIT` | `512m` |
+| `API_PIDS_LIMIT` / `WEB_PIDS_LIMIT` | `256` |
+
+## Everyday commands
+
+| Command | Does |
+|---|---|
+| `make up` | Pulls the images (builds them if missing), starts and waits until healthy, then opens a signed-in browser |
+| `make dev` | Same, but builds the images from your checkout |
+| `make pull` | Downloads the images for `STAQLY_VERSION` without restarting anything |
+| `make open` | Opens the dashboard in this computer's browser with a one-time sign-in link |
+| `make connect` | Prints a one-time sign-in link for another browser |
+| `make down` | Stops containers (the data volume is kept) |
+| `make logs` / `make ps` | Follow logs / container status |
+| `make seed` | Load demo data |
+| `make backup` / `make restore BACKUP=…` | [Backup & restore](/docs/self-hosting/backup-and-restore) |
+| `make mcp-stdio` | Run the MCP STDIO server in the API container |
+
+<Callout type="error" title="Don't use docker compose down -v">
+`-v` **deletes the data volume** — your database and uploads.
+</Callout>
+
+## Running without Docker
+
+```bash
+cd apps/api && go run ./cmd/server          # local mode, data in ./data, listens on 127.0.0.1:3333
+cd apps/web && npm install && npm run dev    # dashboard; API_INTERNAL_URL defaults to http://localhost:3333
+```
+
+Outside Docker the API trusts loopback only for keyless access (`LOCAL_TRUSTED_PEERS` is
+empty). Add `WEBHOOK_ALLOW_LOOPBACK=true` when webhook receivers listen on localhost.
+
+## n8n
+
+n8n is not part of the stack. Use your own, or the example next to staqly:
+`docker compose -f integrations/n8n/compose.yml up -d` — see [n8n](/docs/agents/n8n).

@@ -1,0 +1,128 @@
+---
+title: Local vs cloud
+description: One app, two modes — keyless on your own machine, or hosted with workspaces, keys and plans.
+---
+
+staqly runs in one of two modes, selected with `STAQLY_MODE`.
+
+| | Local mode (default) | Cloud mode |
+|---|---|---|
+| `STAQLY_MODE` | `local` | `cloud` |
+| Workspaces | One, created automatically | Many — anyone can create one ("no card, no email"), or only holders of `SETUP_TOKEN` |
+| Plan | **Unlocked** (no limits) | **Free** by default; Indie / Team set by the operator |
+| Agents, n8n, scripts | No credentials (this machine only) | API key `stk_…` — the key decides which workspace you work in |
+| Dashboard | Each browser signs in once with a one-time link (`make up`, `make connect`, QR) | Session cookie + CSRF token; recovery key for lost sessions |
+| Phones and tablets | **Connect a device** QR (set `PUBLIC_WEB_URL` to your LAN address) | **Connect a device** QR |
+| MCP | `http://localhost:3333/mcp` or `docker exec -i staqly-api mcp-stdio` | `https://<host>/mcp` + `Authorization: Bearer {API_KEY}` |
+
+## Local mode
+
+`make up` starts staqly and opens the dashboard already signed in. No sign-up, no API
+key, no password. Every local process — agents included — has full API access.
+
+| | Reachable from | Credentials |
+|---|---|---|
+| **API** `:3333` (REST + MCP) | this computer only — bound to `127.0.0.1` | none |
+| **Dashboard** `:8080` | your network, so phones and tablets can use it | every browser signs in **once** with a one-time link; sessions last 30 days |
+
+Why does even this computer's browser sign in? Docker Desktop hides the real client address
+and a `Host` header can be forged, so the dashboard cannot tell "this computer" from "someone
+on the Wi-Fi". `make up` (or `make open`) opens a signed-in browser for you, `make connect`
+prints another one-time link, and phones scan a QR code from **Connect a device**.
+
+### Why local mode is safe without keys
+
+- The API port binds to **`127.0.0.1`**, so nothing outside this computer can reach it directly.
+  Run outside Docker, the server itself listens on `127.0.0.1:3333` by default.
+- Credential-less requests must come from a **loopback peer** or one inside
+  **`LOCAL_TRUSTED_PEERS`**. Compose sets it to the private ranges
+  (`10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7`) because Docker forwards published ports
+  from its bridge network; outside Docker it is empty, so only loopback counts.
+- The **`Host`** header must be a local name — `localhost`, `127.0.0.1`, `::1`, `api`,
+  `host.docker.internal`, `*.localhost`, the API container name or anything in
+  `LOCAL_ALLOWED_HOSTS`. This defeats DNS rebinding.
+- Any **`Origin`** header must be the dashboard's own (`localhost`, `127.0.0.1` or `[::1]` on
+  `WEB_PORT`, or the origin of `PUBLIC_WEB_URL`) or listed in `LOCAL_ALLOWED_ORIGINS`, so a
+  website you visit — even a page on another localhost port — cannot drive your staqly with
+  cross-site requests.
+- Requests arriving through the **dashboard proxy** are never trusted as local
+  (`DASHBOARD_EXPOSED=true` in compose): every browser needs a session from a one-time link.
+
+A request that fails these checks gets `403 not_local`.
+
+<Callout title="Need per-agent permissions locally?">
+Local mode gives every local client full access. To limit what an agent can do, run in
+cloud mode on localhost and give the agent a scoped API key.
+</Callout>
+
+## Defaults that depend on the mode
+
+| Variable | Local default | Cloud default | |
+|---|---|---|---|
+| `ADDR` | `127.0.0.1:3333` | `:3333` | The Docker image sets `:3333`; compose publishes the port on `127.0.0.1` |
+| `COOKIE_SECURE` | `false` | `true` | Set `false` in cloud mode only for plain-HTTP testing |
+| `WEBHOOK_ALLOW_PRIVATE` | `true` | `false` | Tenants must not reach the operator's network |
+| `LOCAL_TRUSTED_PEERS` | empty (loopback only); compose sets the private ranges | — | Peers that get keyless access |
+| `LOCAL_ALLOWED_ORIGINS` | empty | — | Extra browser origins accepted besides the dashboard |
+
+`WATCHER_ALLOW_PRIVATE` and `NOTIFY_ALLOW_PRIVATE` default to `false` in **both** modes.
+`STAQLY_MODE` is trimmed and case-insensitive; any value other than `local` or `cloud` refuses to
+start, so a typo never silently picks a mode. All variables:
+[Configuration](/docs/self-hosting/configuration).
+
+## Cloud mode
+
+`STAQLY_MODE=cloud` turns the same app into a hosted, multi-tenant service:
+
+- **Signup** creates a workspace on the Free plan, plus a default API key, a recovery key
+  and a browser session. Signup is public and rate-limited to 5 workspaces per hour per
+  client IP, unless `SETUP_TOKEN` is set.
+- **API keys** (`stk_…`) are scoped; only their SHA-256 hashes are stored. Manage them under
+  **Integrations → API keys**. See [Authentication & scopes](/docs/api/authentication).
+- The **dashboard** uses an HttpOnly session cookie and a CSRF token.
+- The **recovery key** is the way back in when every browser session is lost. Using or
+  rotating it signs out every other session.
+- **Plans** limit each workspace; over a limit the API answers
+  [`402 plan_limit_exceeded`](/docs/api/errors#402-plan_limit_exceeded). See
+  [Plans & limits](/docs/plans).
+
+Clients switch to a cloud workspace by using its URL plus that workspace's key:
+
+```bash tab="curl"
+curl https://staqly.example.com/v1/items?status=pending \
+  -H "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+```bash tab="Claude Code"
+claude mcp add --transport http staqly https://staqly.example.com/mcp \
+  --header "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+```bash tab="Codex"
+codex mcp add staqly --url https://staqly.example.com/mcp --bearer-token-env-var STAQLY_API_KEY
+```
+
+```ts tab="TypeScript SDK"
+import { Staqly } from '@staqly/sdk';
+
+const cloud = new Staqly({ baseUrl: 'https://staqly.example.com', apiKey: process.env.STAQLY_API_KEY });
+```
+
+Several workspaces = several keys: each key only sees its own workspace.
+
+## Moving local data to the cloud
+
+<Steps>
+<Step>
+Locally: `make backup`.
+</Step>
+<Step>
+On the server, start the stack in cloud mode, then `make restore BACKUP=backups/<timestamp>`.
+</Step>
+<Step>
+Get a recovery key for the restored workspace — `make workspaces`, then
+`make recovery-key WS={WORKSPACE_ID}` — and sign in at `/login`.
+</Step>
+</Steps>
+
+Deploying a cloud instance is covered in [Cloud deployment](/docs/self-hosting/cloud-deployment).

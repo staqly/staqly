@@ -1,0 +1,1 @@
+{"title": "Self-hosting", "pages": ["binary", "docker-compose", "configuration", "backup-and-restore", "upgrades", "data-export", "cloud-deployment", "monitoring", "logs-and-tracing", "operator-cli", "security", "troubleshooting"]}

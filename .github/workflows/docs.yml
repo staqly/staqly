@@ -1,0 +1,52 @@
+# Publishes the documentation site (apps/docs, static export) to GitHub Pages
+# on every push to main that touches it. Settings → Pages → Source: GitHub Actions.
+#
+# Served from https://staqly.github.io/staqly, hence DOCS_BASE_PATH=/staqly.
+# For docs.staqly.ai: set the custom domain in Settings → Pages, clear
+# DOCS_BASE_PATH and point SITE_URL at the domain.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/docs/**', 'apps/api/openapi.yaml', '.github/workflows/docs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: apps/docs } }
+    env:
+      DOCS_BASE_PATH: /staqly
+      SITE_URL: https://staqly.github.io/staqly
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc, cache: npm, cache-dependency-path: apps/docs/package-lock.json }
+      - run: npm ci
+      - name: Build (static export + link check)
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v5
+        with: { path: apps/docs/out }
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
