@@ -1,0 +1,106 @@
+---
+title: Local vs cloud
+description: One app, two modes — keyless on your own machine, or hosted with workspaces, keys and plans.
+---
+
+staq.ly runs in one of two modes, selected with `STAQLY_MODE`.
+
+| | Local mode (default) | Cloud mode |
+|---|---|---|
+| `STAQLY_MODE` | `local` | `cloud` |
+| Workspaces | One, created automatically | Many — anyone can create one ("no card, no email"), or only holders of `SETUP_TOKEN` |
+| Plan | **Unlocked** (no limits) | **Free** by default; Indie / Team set by the operator |
+| Agents, n8n, scripts | No credentials (this machine only) | API key `stk_…` — the key decides which workspace you work in |
+| Dashboard | Each browser signs in once with a one-time link (`make up`, `make connect`, QR) | Session cookie + CSRF token; recovery key for lost sessions |
+| Phones and tablets | **Connect a device** QR (set `PUBLIC_WEB_URL` to your LAN address) | **Connect a device** QR |
+| MCP | `http://localhost:3333/mcp` or `docker exec -i staqly-api mcp-stdio` | `https://<host>/mcp` + `Authorization: Bearer <API key>` |
+
+## Local mode
+
+`make up` starts staq.ly and opens the dashboard already signed in. No sign-up, no API
+key, no password. Every local process — agents included — has full API access.
+
+| | Reachable from | Credentials |
+|---|---|---|
+| **API** `:3333` (REST + MCP) | this computer only — bound to `127.0.0.1` | none |
+| **Dashboard** `:8080` | your network, so phones and tablets can use it | every browser signs in **once** with a one-time link; sessions last 30 days |
+
+Why does even this computer's browser sign in? Docker Desktop hides the real client address
+and a `Host` header can be forged, so the dashboard cannot tell "this computer" from "someone
+on the Wi-Fi". `make up` (or `make open`) opens a signed-in browser for you, `make connect`
+prints another one-time link, and phones scan a QR code from **Connect a device**.
+
+### Why local mode is safe without keys
+
+- The API port binds to **`127.0.0.1`**, so nothing outside this computer can reach it directly.
+- Credential-less requests must come from a **loopback or private peer** address.
+- The **`Host`** header must be a local name — `localhost`, `127.0.0.1`, `::1`, `api`,
+  `host.docker.internal`, `*.localhost`, the API container name or anything in
+  `LOCAL_ALLOWED_HOSTS`. This defeats DNS rebinding.
+- Any **`Origin`** header must be local, so a website you visit cannot drive your
+  staq.ly with cross-site requests.
+- Requests arriving through the **dashboard proxy** are never trusted as local: every
+  browser needs a session from a one-time link.
+
+A request that fails these checks gets `403 not_local`.
+
+<Callout title="Need per-agent permissions locally?">
+Local mode gives every local client full access. To limit what an agent can do, run in
+cloud mode on localhost and give the agent a scoped API key.
+</Callout>
+
+## Cloud mode
+
+`STAQLY_MODE=cloud` turns the same app into a hosted, multi-tenant service:
+
+- **Signup** creates a workspace on the Free plan, plus a default API key, a recovery key
+  and a browser session. Signup is public and rate-limited to 5 workspaces per hour per
+  client IP, unless `SETUP_TOKEN` is set.
+- **API keys** (`stk_…`) are scoped; only their SHA-256 hashes are stored. Manage them under
+  **Integrations → API keys**. See [Authentication & scopes](/docs/api/authentication).
+- The **dashboard** uses an HttpOnly session cookie and a CSRF token.
+- The **recovery key** is the way back in when every browser session is lost.
+- **Plans** limit each workspace; over a limit the API answers
+  [`402 plan_limit_exceeded`](/docs/api/errors#402-plan_limit_exceeded). See
+  [Plans & limits](/docs/plans).
+
+Clients switch to a cloud workspace by using its URL plus that workspace's key:
+
+```bash tab="curl"
+curl https://staq.example.com/v1/items?status=pending \
+  -H "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+```bash tab="Claude Code"
+claude mcp add --transport http staqly https://staq.example.com/mcp \
+  --header "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+```bash tab="Codex"
+codex mcp add staqly --url https://staq.example.com/mcp --bearer-token-env-var STAQLY_API_KEY
+```
+
+```ts tab="TypeScript SDK"
+import { Staqly } from '@staqly/sdk';
+
+const cloud = new Staqly({ baseUrl: 'https://staq.example.com', apiKey: process.env.STAQLY_API_KEY });
+```
+
+Several workspaces = several keys: each key only sees its own workspace.
+
+## Moving local data to the cloud
+
+<Steps>
+<Step>
+Locally: `make backup`.
+</Step>
+<Step>
+On the server, start the stack in cloud mode, then `make restore BACKUP=backups/<timestamp>`.
+</Step>
+<Step>
+Get a recovery key for the restored workspace — `make workspaces`, then
+`make recovery-key WS=<workspace id>` — and sign in at `/login`.
+</Step>
+</Steps>
+
+Deploying a cloud instance is covered in [Cloud deployment](/docs/self-hosting/cloud-deployment).

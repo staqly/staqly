@@ -1,0 +1,47 @@
+---
+title: OpenAI Codex
+description: Add staq.ly to the Codex CLI over Streamable HTTP or STDIO.
+---
+
+## Local mode (no key)
+
+```bash tab="HTTP (recommended)"
+codex mcp add staqly --url http://localhost:3333/mcp
+```
+
+```bash tab="STDIO"
+codex mcp add staqly -- docker exec -i staqly-api mcp-stdio
+```
+
+Or merge this into `~/.codex/config.toml`:
+
+```toml tab="HTTP" title="~/.codex/config.toml"
+[mcp_servers.staqly]
+url = "http://localhost:3333/mcp"
+```
+
+```toml tab="STDIO" title="~/.codex/config.toml"
+[mcp_servers.staqly]
+command = "docker"
+args = ["exec", "-i", "staqly-api", "mcp-stdio"]
+```
+
+## Cloud instance
+
+Codex reads the bearer token from an environment variable:
+
+```bash
+export STAQLY_API_KEY=stk_…
+codex mcp add staqly --url https://staq.example.com/mcp --bearer-token-env-var STAQLY_API_KEY
+```
+
+```toml title="~/.codex/config.toml"
+[mcp_servers.staqly]
+url = "https://staq.example.com/mcp"
+bearer_token_env_var = "STAQLY_API_KEY"
+```
+
+<Callout title="Verified">
+With Codex CLI 0.162.1, `codex exec` called `staqly/create_item` (with a bearer key) and
+`staqly/list_pending_approvals` (keyless) successfully.
+</Callout>

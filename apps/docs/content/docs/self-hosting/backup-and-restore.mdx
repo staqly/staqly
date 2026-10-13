@@ -1,0 +1,59 @@
+---
+title: Backup & restore
+description: Consistent online backups of the SQLite database and uploads, and how to restore them.
+---
+
+All state lives in the `staqly_staqly-data` Docker volume: `/data/workspace.db` and
+`/data/uploads/`.
+
+<Callout type="warn" title="Never copy workspace.db from a running server">
+Under WAL the latest commits may live only in `workspace.db-wal`, and a file copy taken
+mid-write can be torn. Use the backup command below.
+</Callout>
+
+## Backup (online, consistent)
+
+```bash
+make backup            # = scripts/backup.sh → backups/<timestamp>/{workspace.db,uploads.tar.gz}
+```
+
+1. `docker exec staqly-api server backup /data/backups/workspace-<ts>.db` runs SQLite
+   **`VACUUM INTO`** — a transactionally consistent, compacted copy taken while the server
+   keeps serving requests (the search index is rebuilt in the copy).
+2. The copy is moved to `./backups/<ts>/workspace.db`.
+3. `uploads/` is archived to `./backups/<ts>/uploads.tar.gz`.
+
+Media files are written before the database row that references them and are never modified
+afterwards, so taking the database snapshot first and the uploads second never yields a row
+pointing at a missing file. Copy `./backups` somewhere off the machine.
+
+## Restore
+
+```bash
+make restore BACKUP=backups/20261013T081329Z     # asks for confirmation; FORCE=1 to skip
+```
+
+The script stops the API, deletes `workspace.db`, `-wal` and `-shm` (stale WAL files must not
+be replayed onto the restored database), copies the backup in, replaces `uploads/`, fixes
+ownership and starts the API. Pending migrations run automatically on start. Sessions and API
+keys are restored as they were at backup time.
+
+## Manual equivalent
+
+```bash
+docker exec staqly-api server backup /data/backups/manual.db
+docker cp staqly-api:/data/backups/manual.db ./workspace.db
+docker run --rm -v staqly_staqly-data:/data:ro -v "$PWD:/b" alpine tar czf /b/uploads.tar.gz -C /data uploads
+```
+
+Without Docker: `go run ./cmd/server backup ./backup.db` (uses `DATA_DIR` / `DATABASE_PATH`
+like the server).
+
+## Scheduling
+
+Run `make backup` from cron (or a systemd timer) on the host, then ship `./backups` off the
+machine:
+
+```text
+0 3 * * *  cd /opt/staqly && make backup >> backups/backup.log 2>&1
+```

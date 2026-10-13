@@ -1,0 +1,68 @@
+---
+title: OpenCode
+description: Add staq.ly to OpenCode through the mcp block of opencode.json.
+---
+
+OpenCode reads MCP servers from `opencode.json` in your project root. Copy one of these
+files (they ship in `integrations/opencode/`) or merge the `mcp` block into your existing
+config.
+
+## Local mode (no key)
+
+```json tab="HTTP (recommended)" title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "staqly": {
+      "type": "remote",
+      "url": "http://localhost:3333/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+```json tab="STDIO" title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "staqly": {
+      "type": "local",
+      "command": ["docker", "exec", "-i", "staqly-api", "mcp-stdio"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Check the connection:
+
+```bash
+opencode mcp list        # → ✓ staqly  connected
+```
+
+## Cloud instance
+
+OpenCode substitutes `{env:STAQLY_API_KEY}` from the environment, so the key is not written
+into the file:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "staqly": {
+      "type": "remote",
+      "url": "https://staq.example.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:STAQLY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+<Callout title="Verified">
+With OpenCode 2.0.25, over HTTP and STDIO, including a real `list_collections` call via
+`opencode run`.
+</Callout>

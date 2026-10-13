@@ -1,0 +1,50 @@
+---
+title: Review on your phone
+description: Approve and reject from the couch — connect your phone with a QR code in under a minute.
+---
+
+<Steps>
+<Step>
+
+### Give staq.ly your LAN address
+
+On the computer running staq.ly, find its IP on your Wi-Fi (e.g. `192.168.1.23`) and set:
+
+```bash
+echo "PUBLIC_WEB_URL=http://192.168.1.23:8080" >> .env
+docker compose up -d
+```
+
+</Step>
+<Step>
+
+### Show the QR code
+
+In the dashboard open **Connect a device** (**Settings → Devices**, or <Kbd>⌘</Kbd> <Kbd>K</Kbd>
+→ *Connect a device*).
+
+</Step>
+<Step>
+
+### Scan it
+
+Point your phone's camera at the code. staq.ly opens already signed in — the link works once
+and expires after 5 minutes.
+
+</Step>
+<Step>
+
+### Review
+
+The phone Inbox shows **one large card at a time**. Swipe left and right to move between
+items; the sticky bar at the bottom has **Reject**, **Approve** and a menu with custom actions
+such as *Regenerate*.
+
+</Step>
+</Steps>
+
+The phone appears under **Settings → Devices** — revoke it there if you lose it. The API itself
+stays on `127.0.0.1`: the phone talks only to the dashboard.
+
+Away from home? Run staq.ly in [cloud mode](/docs/self-hosting/cloud-deployment) behind HTTPS
+and connect your phone the same way.

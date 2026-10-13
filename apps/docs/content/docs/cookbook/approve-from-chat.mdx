@@ -1,0 +1,77 @@
+---
+title: Approve from chat
+description: Get a Telegram message for every new item and approve it with one tap — even with staq.ly running on a laptop.
+---
+
+Telegram's **polling mode** needs no public URL: staq.ly asks Telegram for button presses
+itself. That makes it the easiest way to review from your phone while staq.ly runs on your
+laptop.
+
+<Steps>
+<Step>
+
+### Create a bot
+
+In Telegram open **@BotFather**, send `/newbot`, pick a name and copy the **bot token**
+(`123456:ABC…`). Then open a chat with your new bot and send `/start`.
+
+</Step>
+<Step>
+
+### Find your chat ID
+
+Open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and copy
+`message.chat.id`. (Alternatively create the channel with any chat ID first, then send
+`/chatid` to the bot — it replies with the right one.)
+
+</Step>
+<Step>
+
+### Create the channel
+
+```bash
+curl -s -X POST http://localhost:3333/v1/notification-channels \
+  -H 'Content-Type: application/json' -d '{
+  "name": "My phone",
+  "type": "telegram",
+  "config": { "bot_token": "123456:ABC…", "chat_id": "123456789" }
+}'
+```
+
+The defaults notify you about new pending items (`item.created`) and rule escalations
+(`item.escalated`). Check it works:
+
+```bash
+curl -s -X POST http://localhost:3333/v1/notification-channels/$CHANNEL_ID/test
+# → {"ok":true}
+```
+
+</Step>
+<Step>
+
+### Review from Telegram
+
+Create an item — or let an agent do it — and the bot sends it to you, with the image if it has
+one:
+
+- ✅ **Approve** / ❌ **Reject** decide immediately; the buttons are replaced by
+  "✅ Approved by @you".
+- 💬 **Reject with reason** asks you to reply; your reply text becomes the item's feedback,
+  which your automation receives in the `item.rejected` webhook (e.g. to regenerate).
+
+</Step>
+</Steps>
+
+## Tips
+
+- **Too many messages?** Set `"digest_window_seconds": 300` to get at most one message every 5
+  minutes, with buttons for the first 10 items.
+- **Only some collections?** Set `collection_ids`.
+- **A team group:** add the bot to a group, use the group's (negative) chat ID and list who may
+  decide in `approver_user_ids`.
+- **Combine with an approval gate:** an agent that calls `await_decision` continues the moment
+  you tap Approve in Telegram — see [Gate a risky agent action](/docs/cookbook/approval-gate).
+- Keep one channel per bot: two pollers on the same bot steal each other's updates.
+
+Other channels (Slack, Discord, ntfy, email) and their setup are in
+[Notifications](/docs/automation/notifications).

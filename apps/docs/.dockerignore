@@ -1,0 +1,10 @@
+# Build context is apps/docs; the OpenAPI spec comes from the named context `api`.
+node_modules
+.next
+out
+.source
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+.DS_Store
+.env*

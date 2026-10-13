@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "staqly": {
+      "type": "remote",
+      "url": "https://staq.example.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:STAQLY_API_KEY}"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+---
+title: Upgrades & migrations
+description: Pull, rebuild, and let embedded migrations do the rest.
+---
+
+```bash
+make backup                      # always take a backup first
+git pull
+docker compose up -d --build     # or: make up
+```
+
+- Data lives in the named volume, so rebuilding or recreating containers keeps it.
+- Database migrations (goose) are **embedded in the binary** and run automatically at startup,
+  each in its own transaction. If a start is interrupted, the next start resumes from the last
+  fully applied migration.
+- There is no separate migration command and nothing to run by hand.
+
+If something goes wrong, restore the backup you just took:
+`make restore BACKUP=backups/<timestamp>`.
+
+<Callout type="error">
+`docker compose down -v` deletes the data volume. Plain `docker compose down` is safe.
+</Callout>

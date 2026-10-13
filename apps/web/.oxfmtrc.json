@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 120,
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "sortPackageJson": false,
+  "ignorePatterns": ["AGENTS.md", "lib/api-types.ts", "package-lock.json", ".next/**", "next-env.d.ts"],
+  "overrides": [
+    {
+      "files": ["components/ui/**"],
+      "options": { "semi": false, "printWidth": 80 }
+    }
+  ]
+}

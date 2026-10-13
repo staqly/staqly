@@ -1,0 +1,35 @@
+---
+title: Settings
+description: Workspace name, appearance, connected devices, recovery key and backups.
+---
+
+**Settings** collects everything about the workspace itself.
+
+| Section | What it does |
+|---|---|
+| **Workspace** | Rename the workspace. |
+| **Appearance** | Light, dark or system theme. |
+| **Devices** | Phones and browsers connected with a QR code or `make connect` (local mode) or signed in to this workspace (cloud). Revoke any of them; **Connect a device** creates a new QR. |
+| **Recovery key** <Badge>cloud</Badge> | Rotate the recovery key — the only way to regain admin access if every browser session is lost. Shown once; store it somewhere safe. |
+| **Backup & restore** | How to create a consistent snapshot (`make backup`). See [Backup & restore](/docs/self-hosting/backup-and-restore). |
+| **Sign out** <Badge>cloud</Badge> | End the session in this browser. |
+| **Plan & usage** | See [Plan & usage](/docs/dashboard/plan-and-usage). |
+
+## Integrations
+
+The **Integrations** area of the sidebar has copy-ready setup instructions with your instance's
+real URLs: **REST API**, **MCP**, **Claude Code**, **Codex**, **OpenCode** and **n8n**. In cloud mode it also
+contains **API keys**:
+
+- create a key with a name, a set of [scopes](/docs/api/authentication#scopes) and an optional
+  expiry — the raw key is shown **once**;
+- **rotate** a key (revoke it and issue a replacement with the same name and scopes);
+- **revoke** a key.
+
+Snippets on the integration pages include the key you just created, kept only in memory in
+that browser tab — never in local storage.
+
+## Webhooks
+
+**Webhooks** has its own sidebar entry: create, edit, test and delete endpoints, and browse
+the delivery history with manual retry. See [Webhooks](/docs/automation/webhooks).

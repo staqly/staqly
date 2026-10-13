@@ -1,0 +1,186 @@
+---
+title: Webhooks
+description: Signed, retried, at-least-once event deliveries to n8n and your own services.
+---
+
+A webhook sends events — an item was approved, rejected, regenerated, escalated — to an
+HTTP endpoint. Configure webhooks under **Webhooks** in the dashboard or with
+`POST /v1/webhooks` (scope `webhooks:manage`).
+
+```bash
+curl -s -X POST http://localhost:3333/v1/webhooks -H 'Content-Type: application/json' -d '{
+  "url": "http://n8n:5678/webhook/staqly-demo",
+  "description": "n8n publisher",
+  "events": ["item.approved", "item.rejected", "item.*_requested"],
+  "collection_ids": ["col_…"]
+}'
+```
+
+The response contains the generated signing **`secret`** (`whsec_…`). Rotate it any time
+with `PATCH /v1/webhooks/{id}` and `{"rotate_secret": true}`.
+
+| Field | Default | Notes |
+|---|---|---|
+| `url` | — | Absolute `http(s)` URL, no credentials in it |
+| `events` | `["*"]` | Exact names or globs: `"*"`, `"item.*"`, `"item.*_requested"` |
+| `collection_ids` | `[]` | Only events from these collections; empty = all |
+| `active` | `true` | Pause without deleting |
+| `timeout_ms` | `10000` | 1,000 – 60,000 |
+| `max_attempts` | `8` | 1 – 20 |
+
+## The request
+
+```http
+POST <your url>
+Content-Type: application/json
+User-Agent: Staqly-Webhooks/1.0
+X-Staqly-Event: item.approved
+X-Staqly-Event-Id: evt_…          # stable per event — deduplicate on this
+X-Staqly-Delivery: dlv_…          # stable across retries of one delivery
+X-Staqly-Timestamp: 1791800000    # unix seconds, when this attempt was signed
+X-Staqly-Signature: sha256=<hex HMAC-SHA256(secret, timestamp + "." + raw body)>
+```
+
+```json
+{
+  "id": "evt_…",
+  "type": "item.approved",
+  "created_at": "2026-10-13T08:13:29.000000Z",
+  "workspace_id": "ws_…",
+  "delivery_id": "dlv_…",
+  "attempt": 1,
+  "actor": { "type": "session", "id": "…", "name": "…" },
+  "data": {
+    "item": { "id": "itm_…", "status": "approved", "title": "Avatar #1", "metadata": { "seed": 42 }, "…": "…" },
+    "collection": { "id": "col_…", "name": "Instagram Avatar" },
+    "action": "approve",
+    "feedback": "",
+    "edited": true,
+    "diff": { "content": { "before": "caption", "after": "Fixed caption" } },
+    "previous_status": "pending"
+  }
+}
+```
+
+- The payload is built from the **event snapshot** taken when the change happened — not the
+  item's current state.
+- `actor.type` is `local`, `session`, `api_key` or `system` (rules, watchers, expiry).
+- Decisions made by a [rule](/docs/automation/rules) include `data.rule` (`id`, `name`,
+  `action`).
+- Media URLs inside `data.item.media.url` use `PUBLIC_API_URL` and require authentication.
+
+See [Event types](/docs/api/events) for everything you can subscribe to.
+
+## Verifying signatures
+
+Compute `HMAC-SHA256(secret, "<X-Staqly-Timestamp>.<raw body>")`, hex-encode it, prefix
+`sha256=` and compare in constant time with `X-Staqly-Signature`. Use the **raw** request
+body — re-serialised JSON will not match. Rejecting timestamps older than a few minutes
+protects against replays.
+
+```ts tab="Node.js"
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export function verifyStaqly(secret: string, rawBody: string, headers: Record<string, string | undefined>) {
+  const ts = headers['x-staqly-timestamp'] ?? '';
+  const sig = headers['x-staqly-signature'] ?? '';
+  if (!ts || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+  const expected = 'sha256=' + createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex');
+  return sig.length === expected.length && timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+}
+```
+
+```python tab="Python"
+import hashlib, hmac, time
+
+def verify_staqly(secret: str, raw_body: bytes, headers) -> bool:
+    ts = headers.get("X-Staqly-Timestamp", "")
+    sig = headers.get("X-Staqly-Signature", "")
+    if not ts or abs(time.time() - int(ts)) > 300:
+        return False
+    mac = hmac.new(secret.encode(), ts.encode() + b"." + raw_body, hashlib.sha256)
+    return hmac.compare_digest(sig, "sha256=" + mac.hexdigest())
+```
+
+```go tab="Go"
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"math"
+	"net/http"
+	"strconv"
+	"time"
+)
+
+func verifyStaqly(secret string, body []byte, h http.Header) bool {
+	ts := h.Get("X-Staqly-Timestamp")
+	n, err := strconv.ParseInt(ts, 10, 64)
+	if err != nil || math.Abs(float64(time.Now().Unix()-n)) > 300 {
+		return false
+	}
+	m := hmac.New(sha256.New, []byte(secret))
+	m.Write([]byte(ts + "."))
+	m.Write(body)
+	expected := "sha256=" + hex.EncodeToString(m.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(h.Get("X-Staqly-Signature")))
+}
+```
+
+```ts tab="TypeScript SDK"
+import { verifyWebhook } from '@staqly/sdk';
+
+const ok = await verifyWebhook(secret, rawBody, {
+  timestamp: req.headers.get('x-staqly-timestamp'),
+  signature: req.headers.get('x-staqly-signature'),
+}); // 300 s tolerance by default
+```
+
+## Delivery guarantees
+
+Delivery is **at-least-once**:
+
+- The event and its delivery rows are written **in the same database transaction** as the
+  change (a transactional outbox). If the change commits, the delivery exists.
+- A background worker sends deliveries **outside** any transaction. It leases each one before
+  sending; if the process dies mid-send, the lease expires and the delivery is retried. Pending
+  deliveries survive restarts.
+- So a receiver can see the same event twice. **Deduplicate on `X-Staqly-Event-Id`** (or the
+  body's `id`) when a side effect must not repeat.
+
+## Retries
+
+A delivery succeeds on any `2xx` response. Anything else — non-2xx, timeout, connection
+error — is retried with exponential backoff:
+
+| | |
+|---|---|
+| First retry after | `WEBHOOK_RETRY_BASE` (default **15 s**) |
+| Growth | doubles every attempt, ±20 % jitter |
+| Cap | `WEBHOOK_RETRY_MAX` (default **1 h**) |
+| Gives up after | `max_attempts` (default **8**) → status `failed` |
+| Stops immediately on | **`410 Gone`** |
+
+The delivery history keeps status, attempts, the last status code, error and the first 2 KB
+of the last response. See it under **Webhooks** in the dashboard or via
+`GET /v1/webhook-deliveries?webhook_id=…&status=failed`; re-queue a finished delivery with
+`POST /v1/webhook-deliveries/{id}/retry`. `POST /v1/webhooks/{id}/test` queues a
+`webhook.test` event to that webhook only.
+
+## Network policy (SSRF guard)
+
+Webhook URLs are user input, so the worker restricts where it connects:
+
+- **Always blocked**: link-local addresses (including the `169.254.169.254` cloud metadata
+  endpoint), multicast and unspecified addresses.
+- **Private** addresses (LAN, Docker networks — e.g. `http://n8n:5678`) are allowed by
+  default; turn them off with `WEBHOOK_ALLOW_PRIVATE=false`.
+- **Loopback** (`127.0.0.1`) is blocked by default; enable with `WEBHOOK_ALLOW_LOOPBACK=true`
+  only when the API runs outside Docker and the receiver listens on localhost. Inside
+  Docker, `localhost` is the API container itself — use `host.docker.internal` or a compose
+  service name.
+- The check runs on the **resolved IP at connect time**, so DNS rebinding cannot sneak past
+  it. **Redirects are not followed** and no proxy is taken from the environment.
+
+A blocked target shows up in the delivery's `last_error`, e.g.
+`private destination … is not allowed (set WEBHOOK_ALLOW_PRIVATE=true)`.

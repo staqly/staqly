@@ -1,0 +1,98 @@
+---
+title: Custom actions
+description: Add buttons like Regenerate or Publish to a collection — no code; your automations do the work.
+---
+
+Custom actions extend *approve* and *reject* with whatever your workflow needs. They are
+configured per collection, without code. Running one:
+
+1. checks that the item's current status is allowed,
+2. optionally moves the item to a new status,
+3. stores the feedback (if any) on the item,
+4. records an event and notifies matching [webhooks](/docs/automation/webhooks).
+
+**External tools do the actual work** — e.g. n8n receives `item.regenerate_requested` and
+generates a new image using the reviewer's feedback.
+
+## Defaults
+
+New collections get four actions unless you pass your own:
+
+| `name` | Label | Allowed from | `set_status` | Event | Feedback |
+|---|---|---|---|---|---|
+| `regenerate` | Regenerate | pending, rejected, failed | processing | `item.regenerate_requested` | required |
+| `publish` | Publish | approved | processing | `item.publish_requested` | optional |
+| `retry` | Retry | failed | processing | `item.retry_requested` | optional |
+| `archive` | Archive | any | archived | `item.archived` | optional |
+
+## Definition
+
+| Field | Rules |
+|---|---|
+| `name` | `^[a-z][a-z0-9_]{0,39}$`, unique; `approve` and `reject` are reserved |
+| `label` | Button text; defaults to the name, capitalised |
+| `event` | Must look like `item.something`; defaults to `item.<name>_requested` |
+| `requires_feedback` | Ask the reviewer for a note (e.g. "make her smile") |
+| `set_status` | Optional new status — **never** `approved` or `rejected` (those need the built-in actions and the `items:review` scope) |
+| `allowed_statuses` | Statuses the action can run from; empty = any |
+
+A collection can have up to 20 custom actions. Edit them in the dashboard under
+**Collection settings → Actions**, or with the API:
+
+```bash
+curl -s -X PATCH http://localhost:3333/v1/collections/$COLLECTION_ID \
+  -H 'Content-Type: application/json' -d '{
+  "actions": [
+    { "name": "regenerate", "label": "Regenerate", "requires_feedback": true, "set_status": "processing",
+      "allowed_statuses": ["pending", "rejected", "failed"] },
+    { "name": "publish", "label": "Publish", "set_status": "processing", "allowed_statuses": ["approved"] },
+    { "name": "translate", "label": "Translate to German", "event": "item.translate_requested",
+      "allowed_statuses": ["approved"] }
+  ]
+}'
+```
+
+`actions` replaces the whole list — include the ones you want to keep.
+
+## Running an action
+
+<Tabs items={["Dashboard", "REST", "MCP", "TypeScript"]}>
+<Tab value="Dashboard">
+
+Custom actions appear next to *Approve* / *Reject* in the Inbox and on the item page,
+filtered to the ones allowed in the item's current status. Several selected items can be
+processed at once.
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl -s -X POST http://localhost:3333/v1/items/$ITEM/actions/regenerate \
+  -H 'Content-Type: application/json' \
+  -d '{"feedback":"Make her smile","payload":{"variant":"b"}}'
+```
+
+`payload` is arbitrary JSON forwarded in the event and webhook. `GET /v1/items/{id}/actions`
+lists what the caller may run right now. `POST /v1/items/bulk-actions` runs one action on up
+to 100 items (`{"ids":[…],"action":"publish"}`), each succeeding or failing independently.
+
+</Tab>
+<Tab value="MCP">
+
+`list_available_actions` then `execute_custom_action`:
+
+> *“Regenerate itm_… with feedback: make her smile.”*
+
+</Tab>
+<Tab value="TypeScript">
+
+```ts
+await staqly.runAction(itemId, 'regenerate', { feedback: 'Make her smile' });
+const actions = await staqly.availableActions(itemId);
+```
+
+</Tab>
+</Tabs>
+
+Running a custom action needs the **`actions:execute`** scope. An action that isn't allowed
+in the current status returns `409`; a missing required feedback returns `422`.

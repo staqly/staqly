@@ -1,0 +1,68 @@
+---
+title: Cloud deployment
+description: Run staq.ly as a hosted, multi-workspace service behind a TLS reverse proxy.
+---
+
+The same stack becomes a hosted service with `STAQLY_MODE=cloud`.
+
+<Steps>
+<Step>
+
+### Configure
+
+```bash title=".env"
+STAQLY_MODE=cloud
+COOKIE_SECURE=true
+PUBLIC_API_URL=https://staq.example.com
+PUBLIC_WEB_URL=https://staq.example.com
+TRUST_PROXY=true            # behind your reverse proxy
+# SETUP_TOKEN=…             # set to make signup private
+```
+
+</Step>
+<Step>
+
+### Start
+
+```bash
+docker compose up -d --build
+```
+
+</Step>
+<Step>
+
+### Put a TLS reverse proxy in front
+
+Route your domain to the dashboard on port `8080` — it proxies `/api/*` to the API itself. If
+agents and automations should call the API directly (REST, MCP), also route `/v1`, `/mcp` and
+`/openapi.yaml` to `127.0.0.1:3333`.
+
+```text title="Caddyfile"
+staq.example.com {
+	@api path /v1/* /mcp /openapi.yaml /health
+	reverse_proxy @api 127.0.0.1:3333
+	reverse_proxy 127.0.0.1:8080
+}
+```
+
+</Step>
+<Step>
+
+### Create a workspace
+
+Open `https://staq.example.com`. Signup creates a workspace on the **Free** plan, a default API
+key, a recovery key and a browser session — save the keys; they are shown once.
+
+</Step>
+</Steps>
+
+## Notes
+
+- The API container's port stays bound to `127.0.0.1`; only the proxy reaches it.
+- In compose the dashboard port is published on all interfaces — firewall it so that only
+  your reverse proxy can reach `8080`, or change the port mapping.
+- Signup is rate-limited to **5 workspaces per hour per client IP**. Without `TRUST_PROXY=true`
+  every user appears to come from the proxy's IP.
+- Plans are assigned by the operator (`make set-plan`) — payments aren't integrated yet. See
+  [Plans & limits](/docs/plans) and the [operator CLI](/docs/self-hosting/operator-cli).
+- Moving a local install to the server: [Local vs cloud](/docs/local-vs-cloud#moving-local-data-to-the-cloud).

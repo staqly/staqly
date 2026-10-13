@@ -1,0 +1,79 @@
+---
+title: n8n
+description: Send items from n8n to staq.ly and react to review decisions with signed webhooks.
+---
+
+n8n talks to staq.ly in two directions:
+
+- **n8n → staq.ly**: HTTP Request nodes call the REST API. No credentials in local mode; in
+  cloud mode add a *Header Auth* credential (`Authorization: Bearer <API key>`).
+- **staq.ly → n8n**: a staq.ly [webhook](/docs/automation/webhooks) posts review events to an
+  n8n *Webhook* trigger, signed with HMAC.
+
+## Networking — pick your setup
+
+Inside a container, `localhost` is the container itself, not your machine.
+
+| n8n runs… | n8n → staq.ly API URL | staq.ly webhook URL (→ n8n) |
+|---|---|---|
+| **On the staq.ly Docker network** (e.g. `integrations/n8n/compose.yml`) | `http://api:3333` | `http://n8n:5678/webhook/staqly-demo` |
+| **On the host** (`npx n8n`, desktop app) | `http://localhost:3333` | `http://host.docker.internal:5678/webhook/staqly-demo` |
+| **In another container / compose project** | `http://host.docker.internal:3333`, or attach n8n to `staqly_default` and use `http://api:3333` | `http://host.docker.internal:5678/…`, or on a shared network `http://<n8n-container>:5678/…` |
+
+- In local mode staq.ly only accepts keyless requests whose `Host` is a local name. `api`,
+  `localhost`, `host.docker.internal` and the container name are built in. If n8n reaches
+  staq.ly under another name, add it to `LOCAL_ALLOWED_HOSTS`.
+- `host.docker.internal` works on Docker Desktop. On Linux, staq.ly's compose file maps it to
+  the host gateway for the API container; for another n8n container on Linux, add the same
+  `extra_hosts: ["host.docker.internal:host-gateway"]` entry.
+- To share a network with an existing n8n container:
+  `docker network connect staqly_default <n8n-container>`.
+- Webhook targets on private networks are allowed by default (`WEBHOOK_ALLOW_PRIVATE=true`);
+  loopback targets are not (`WEBHOOK_ALLOW_LOOPBACK=false`) — only relevant when the API runs
+  outside Docker and n8n listens on `localhost`.
+- Media URLs inside webhook payloads use `PUBLIC_API_URL`. If n8n should download images from
+  those URLs, set `PUBLIC_API_URL` to an address n8n can reach (e.g. `http://api:3333`).
+
+## The Instagram Avatar demo
+
+An importable workflow — `integrations/n8n/instagram-avatar-demo.json` — runs the full
+generate → review → publish loop with local mocks, no external accounts. The step-by-step
+walkthrough is in the [Instagram Avatar cookbook](/docs/cookbook/instagram-avatar).
+
+```bash
+docker compose -f integrations/n8n/compose.yml up -d    # n8n at http://localhost:5678
+./integrations/n8n/setup-demo.sh                         # collection + webhook; prints the signing secret
+```
+
+## Building your own flows
+
+<Steps>
+<Step>
+
+**Create items** — `POST /v1/collections/{id or name}/items`, either JSON or multipart with a
+`file` (binary) part and an `item` part holding the JSON fields. Send an `Idempotency-Key`
+header (JSON requests) so n8n retries don't create duplicates.
+
+</Step>
+<Step>
+
+**React to decisions** — subscribe a webhook to `item.approved`, `item.rejected` and
+`item.*_requested` (custom actions), optionally filtered by collection. Verify the
+[signature](/docs/automation/webhooks#verifying-signatures) in a Code node.
+
+</Step>
+<Step>
+
+**Report progress** — `PATCH /v1/items/{id}` with `status` (`processing` / `completed` /
+`failed`) and `metadata_patch`, e.g. `{"status":"completed","metadata_patch":{"instagram_post_id":"1790…"}}`.
+
+</Step>
+</Steps>
+
+Deliveries are at-least-once: use `event.id` (or the `X-Staqly-Event-Id` header) to
+deduplicate side effects that must not repeat.
+
+<Callout title="Code node: Cannot find module 'crypto'">
+Signature verification uses Node's `crypto`, which n8n only allows in Code nodes with
+`NODE_FUNCTION_ALLOW_BUILTIN=crypto` (already set in `integrations/n8n/compose.yml`).
+</Callout>

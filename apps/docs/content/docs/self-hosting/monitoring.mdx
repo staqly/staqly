@@ -1,0 +1,114 @@
+---
+title: Monitoring
+description: Request IDs, health probes, Prometheus metrics, rate limits and optional Sentry — no extra services needed.
+---
+
+## Request IDs
+
+Every response carries **`X-Request-Id`** — your own if you sent one, otherwise a generated
+one. Error bodies include it as `request_id`, and it appears in the access log and in Sentry
+events. Quote it when reporting a problem.
+
+```json
+{ "error": { "code": "not_found", "message": "item not found" }, "request_id": "my-req-1" }
+```
+
+## Health endpoints
+
+| Endpoint | Use for | Checks |
+|---|---|---|
+| `GET /health` | Simple uptime checks | DB ping, version |
+| `GET /livez` | Liveness (Docker, Kubernetes) | Only that the process answers — never touches the DB, so a slow disk doesn't cause restarts |
+| `GET /readyz` | Readiness, load balancers | DB ping, all embedded migrations applied, background workers alive |
+
+`/readyz` returns `200 {"status":"ok","checks":{"database":"ok","migrations":"ok","workers":"ok"}}`
+or `503` with `"status":"unavailable"`. `migrations` can be `pending (N < M)`; `workers` is
+`stale` when the heartbeat (every 5 s) is older than 30 s, or `stopped` after shutdown.
+
+```yaml
+healthcheck:
+  test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3333/readyz"]
+  interval: 15s
+  timeout: 3s
+  retries: 3
+```
+
+## Prometheus metrics
+
+`GET /metrics` serves the Prometheus text format. A request is allowed when it comes
+**directly from this machine** (loopback peer, local `Host`, no forwarding headers or `Origin`)
+**or** sends `Authorization: Bearer <METRICS_TOKEN>`. Everything else gets a plain `404`. With
+Docker, Prometheus reaches the API over the bridge network — set `METRICS_TOKEN`.
+
+```yaml title="prometheus.yml"
+scrape_configs:
+  - job_name: staqly
+    scrape_interval: 30s
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/staqly_metrics_token   # contains METRICS_TOKEN
+    static_configs:
+      - targets: ["api:3333"]
+```
+
+| Metric | Type | Labels |
+|---|---|---|
+| `http_requests_total` | counter | `method`, `route` (pattern, e.g. `/v1/items/{id}`), `status` |
+| `http_request_duration_seconds` | histogram | `method`, `route` |
+| `staqly_rate_limited_total` | counter | `scope` (`ip`, `principal`) |
+| `staqly_webhook_deliveries` | gauge | `status` (`pending`, `succeeded`, `failed`) |
+| `staqly_webhook_outbox_oldest_pending_seconds` | gauge | — (outbox lag) |
+| `staqly_webhook_outbox_due` | gauge | — (worker backlog) |
+| `staqly_watchers` | gauge | `status` (`active`, `degraded`, `paused`) |
+| `staqly_items` | gauge | `status` |
+| `staqly_metrics_db_up` | gauge | — |
+| `staqly_build_info` | gauge | `version`, `mode` |
+| `process_start_time_seconds`, `go_*` | various | — |
+
+Labels never contain IDs, URLs, keys or workspace names. DB gauges are computed per scrape, so
+15–60 s intervals are plenty.
+
+**Useful queries**
+
+```text
+sum by (route) (rate(http_requests_total[5m]))                                   # request rate
+sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))   # error ratio
+histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))
+staqly_webhook_outbox_oldest_pending_seconds                                      # webhook lag
+```
+
+**Suggested alerts**: outbox lag `> 900` for 10 min (above `WEBHOOK_RETRY_MAX`);
+`staqly_watchers{status="degraded"} > 0` for 1 h; 5xx ratio above 1 % for 5 min; `up == 0` or
+`/readyz` failing.
+
+## Rate limits
+
+In-memory token buckets in the single API process:
+
+| Limiter | Applies to | Key | Default |
+|---|---|---|---|
+| Sensitive (`ip`) | `POST /v1/sessions/recover`, `POST /v1/device-links/redeem`, `POST /v1/workspaces`, `/v1/decide/*` | client IP + endpoint | 10/min, burst 10 |
+| API (`principal`) | everything else under `/v1` and `/mcp` — **cloud mode only** | API key or session | 600/min, burst 100 |
+
+Local mode has no per-principal limit; probes and `/metrics` are never limited. The cloud signup
+cap (5 per hour per IP) applies as well. Over a limit: `429` with `Retry-After`:
+
+```json
+{ "error": { "code": "rate_limited", "message": "too many requests; retry after 6s" } }
+```
+
+| Variable | Default | |
+|---|---|---|
+| `RATE_LIMIT_DISABLED` | `false` | Turn the limits off (the signup cap stays) |
+| `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_BURST` | `10` / same | Sensitive endpoints, per IP |
+| `RATE_LIMIT_AUTH_PER_MINUTE` / `RATE_LIMIT_AUTH_BURST` | `600` / `100` | Authenticated API, per principal |
+| `TRUST_PROXY` | `false` | Take the client IP from `X-Forwarded-For` — only behind your own proxy that overwrites it |
+
+## Sentry (optional)
+
+Set `SENTRY_DSN` (`https://<public_key>@<host>/<project_id>`) to report **panics** (with stack
+traces) and **5xx responses**. `SENTRY_ENVIRONMENT` defaults to the mode; the release is the
+server version. Events carry only `method`, `route`, `status` and `request_id` — never headers,
+query strings, bodies, IPs or user data. A 64-slot queue drops events under an error storm
+instead of slowing the API.

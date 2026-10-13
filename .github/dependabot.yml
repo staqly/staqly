@@ -1,0 +1,20 @@
+# Weekly dependency updates, grouped per ecosystem to keep PRs few.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories: ["/apps/api", "/apps/cli"]
+    schedule: { interval: weekly }
+    groups: { go: { patterns: ["*"] } }
+  - package-ecosystem: npm
+    directories: ["/apps/web", "/apps/docs", "/packages/sdk-typescript"]
+    schedule: { interval: weekly }
+    groups: { npm: { patterns: ["*"], update-types: [minor, patch] } }
+  - package-ecosystem: uv
+    directory: /packages/sdk-python
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directories: ["/apps/api", "/apps/web", "/apps/docs"]
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

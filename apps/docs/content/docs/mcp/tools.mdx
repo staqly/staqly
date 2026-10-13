@@ -1,0 +1,220 @@
+---
+title: Tools reference
+description: All 21 MCP tools with their inputs and the scope each needs in cloud mode.
+---
+
+Scopes only matter in **cloud mode** (with an API key); in local mode every tool is
+available. Tools marked *read-only* are annotated as such for clients that care. Collection
+inputs accept an ID (`col_…`) **or** the exact name.
+
+## Collections
+
+### `list_collections`
+List collections with item counts per status. *Read-only* · `collections:read`
+
+| Input | Type | |
+|---|---|---|
+| `include_archived` | boolean | Include archived collections |
+
+### `get_collection`
+Get a collection by ID or name, including its configured actions. *Read-only* · `collections:read`
+
+| Input | Type | |
+|---|---|---|
+| `collection` | string, required | ID or exact name |
+
+### `create_collection`
+Create a collection (e.g. "Instagram Avatar"). New collections get the default actions
+*regenerate, publish, retry, archive*. · `collections:write`
+
+| Input | Type | |
+|---|---|---|
+| `name` | string, required | |
+| `description` | string | |
+| `default_view` | string | `gallery`, `table` or `list` |
+
+## Items
+
+### `list_items`
+List items, optionally filtered; newest first. *Read-only* · `items:read`
+
+| Input | Type | |
+|---|---|---|
+| `collection` | string | ID or name |
+| `status` | string | `draft`, `pending`, `approved`, `rejected`, `expired`, `processing`, `completed`, `failed`, `archived` |
+| `type` | string | `image`, `video`, `text`, `link`, `json`, `file` |
+| `sort` | string | `created_desc` (default), `created_asc`, `updated_desc`, `decided_desc`, `title_asc` |
+| `limit` | integer | Default 50, max 200 |
+| `cursor` | string | `next_cursor` from a previous call |
+
+### `get_item`
+One item with content, metadata, media and status. *Read-only* · `items:read`
+
+| Input | Type | |
+|---|---|---|
+| `item_id` | string, required | `itm_…` |
+
+### `create_item`
+Add an item to a collection. Items default to `pending` so they show up for review. ·
+`items:write`
+
+| Input | Type | |
+|---|---|---|
+| `collection` | string, required | ID or exact name |
+| `title` | string | |
+| `type` | string | Inferred when omitted |
+| `content` | string | Text body, caption, or a JSON string |
+| `url` | string | External http(s) URL (a link or externally hosted media) |
+| `media_base64` | string | Base64-encoded file to upload (image, video, PDF…) |
+| `media_filename` | string | File name for `media_base64`, e.g. `avatar.png` |
+| `metadata` | object | Arbitrary JSON: prompt, model, seed, score… |
+| `status` | string | Initial status, default `pending` |
+| `source` | string | Producer identifier; defaults to `mcp:<caller name>` |
+| `external_ref` | string | Your own reference ID |
+| `expires_in` | string | Undecided items expire after this duration, e.g. `24h` |
+| `editable` | string[] | Fields a reviewer may edit before approving: `title`, `content`, `url`, `metadata`, `metadata.<key>` |
+
+### `update_item`
+Update fields or status (e.g. `processing`, `completed`, `failed`). Approve/reject must use
+`approve_item` / `reject_item`. · `items:write`
+
+| Input | Type | |
+|---|---|---|
+| `item_id` | string, required | |
+| `title`, `content`, `url`, `external_ref` | string | |
+| `metadata_patch` | object | Keys to set; a `null` value removes the key |
+| `status` | string | `draft`, `pending`, `processing`, `completed`, `failed`, `archived` |
+| `expected_version` | integer | Fail with a conflict if the item changed since this version |
+
+### `search_items`
+Full-text search over title, content and metadata with optional filters — e.g. images approved
+yesterday. *Read-only* · `items:read`
+
+| Input | Type | |
+|---|---|---|
+| `query` | string | Text to find |
+| `collection`, `status`, `type` | string | Filters |
+| `created_after` / `created_before` | string | `YYYY-MM-DD` or RFC 3339 (after inclusive, before exclusive) |
+| `decided_after` / `decided_before` | string | Decision time range |
+| `limit` | integer | |
+
+### `get_item_history`
+The event history (decisions, edits, actions) and prior versions of an item. *Read-only* ·
+`items:read`
+
+| Input | Type | |
+|---|---|---|
+| `item_id` | string, required | |
+
+## Review
+
+### `list_pending_approvals`
+Items waiting for review across all collections, oldest first. *Read-only* · `items:read`
+
+| Input | Type | |
+|---|---|---|
+| `collection` | string | |
+| `type` | string | e.g. `image` |
+| `limit` | integer | |
+
+### `approve_item`
+Approve a pending item, optionally editing title/content first. · `items:review`
+
+| Input | Type | |
+|---|---|---|
+| `item_id` | string, required | |
+| `feedback` | string | Optional note stored with the decision |
+| `title`, `content` | string | Edits applied before approving (subject to the item's `editable` list) |
+
+### `reject_item`
+Reject a pending item with feedback explaining why. · `items:review`
+
+| Input | Type | |
+|---|---|---|
+| `item_id` | string, required | |
+| `feedback` | string, required | Sent to automations so they can regenerate |
+
+### `list_available_actions`
+Actions the caller can run on an item in its current status. *Read-only* · `items:read`
+
+| Input | Type | |
+|---|---|---|
+| `item_id` | string, required | |
+
+### `execute_custom_action`
+Run a collection action such as *regenerate* or *publish*. It records an event and notifies
+webhooks; external automations do the actual work. · `actions:execute`
+
+| Input | Type | |
+|---|---|---|
+| `item_id` | string, required | |
+| `action` | string, required | From `list_available_actions` |
+| `feedback` | string | Required by some actions (e.g. regenerate) |
+| `payload` | object | Extra JSON passed to webhook receivers |
+
+## Approval gate
+
+### `await_decision`
+Wait until a human approves or rejects an item (or it expires). Returns `decided: false` on
+timeout — call again to keep waiting. *Read-only* · `items:read`
+
+| Input | Type | |
+|---|---|---|
+| `item_id` | string, required | |
+| `timeout_seconds` | integer | Default 60, max 300 |
+
+Returns `{ "decided": true, "item": { …, "status": "approved" } }`.
+
+### `report_result`
+After an approved item was acted on (e.g. published), record the outcome. · `items:write`
+
+| Input | Type | |
+|---|---|---|
+| `item_id` | string, required | Must be `approved` or `processing` |
+| `status` | string, required | `completed` or `failed` |
+| `result` | object | Outcome details, stored in `metadata.result` (e.g. `{"post_url": "…"}`) |
+| `error` | string | Failure reason, stored in `metadata.error` |
+
+See [Gate a risky agent action on human approval](/docs/cookbook/approval-gate).
+
+## Rules
+
+### `list_rules`
+Approval rules, evaluated on item creation, lowest priority first; first match wins.
+*Read-only* · `rules:manage`
+
+### `create_rule`
+Create a rule. · `rules:manage`
+
+| Input | Type | |
+|---|---|---|
+| `name` | string, required | |
+| `priority` | integer | Lower runs first (default 100) |
+| `action` | string, required | `auto_approve`, `auto_reject`, `set_status`, `expire`, `escalate` |
+| `match` | object | `collection_ids`, `types`, `source_pattern`, `text_contains`, `conditions`; empty matches every new pending item |
+| `params` | object | `feedback` (approve/reject), `status` (set_status), `after_seconds` (expire), `note` (escalate) |
+
+Details: [Rules engine](/docs/automation/rules).
+
+## Watchers
+
+### `list_watcher_presets`
+Ready-made sources (Hacker News, Reddit, Pinterest, YouTube, GitHub, npm, PyPI, arXiv, Google
+News, any RSS feed, page changes…). *Read-only* · no scope needed
+
+### `create_watcher_from_preset`
+Start watching a source: new entries become pending items in the collection. ·
+`watchers:manage`
+
+| Input | Type | |
+|---|---|---|
+| `preset_id` | string, required | From `list_watcher_presets` |
+| `params` | object | Preset parameters, e.g. `{"subreddit": "midjourney"}` |
+| `collection` | string, required | ID or name that receives new entries |
+| `name` | string | |
+| `every` | string | Check interval, e.g. `30m` or `6h` |
+
+### `list_watchers`
+Watchers with their status, last run and errors. *Read-only* · `watchers:manage`
+
+Details: [Watchers & presets](/docs/automation/watchers).

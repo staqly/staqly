@@ -1,0 +1,36 @@
+---
+title: Operator CLI
+description: Server subcommands and make targets for backups, workspaces, plans, recovery and sign-in links.
+---
+
+The API image ships one `server` binary with operator subcommands. Whoever can run them
+already controls the data volume, so they need no further authentication — and there is no
+remote equivalent.
+
+| Make target | Runs in the container | Does |
+|---|---|---|
+| `make backup` | `server backup <file>` | Consistent online backup (`VACUUM INTO`) + uploads archive |
+| `make restore BACKUP=…` | — | Replace data with a backup (stops and starts the API) |
+| `make workspaces` | `server workspaces` | List workspaces: id, plan, created, name |
+| `make set-plan WS=… PLAN=…` | `server set-plan <ws> <plan>` | Change a workspace's plan: `free`, `indie`, `team` |
+| `make recovery-key [WS=…]` | `server recovery-key [ws]` | Print a **new** recovery key (the old one stops working). Default: the local workspace |
+| `make connect [WS=…]` | `server connect-link [ws]` | Print a one-time browser sign-in link (5 minutes, single use) |
+| `make open` | `server connect-link` | Same, and open it in this computer's browser |
+| `make mcp-stdio` | `mcp-stdio` | MCP over STDIO in the API container |
+
+Run them directly with `docker exec`:
+
+```bash
+docker exec staqly-api server workspaces
+docker exec staqly-api server set-plan ws_… indie
+docker exec staqly-api server recovery-key ws_…
+docker exec staqly-api server connect-link
+docker exec staqly-api server backup /data/backups/manual.db
+```
+
+Without Docker: `go run ./cmd/server <subcommand>` from `apps/api`, with the same `DATA_DIR`.
+
+## Lost every session and the recovery key?
+
+On the host, `make recovery-key WS=<workspace id>` prints a fresh key; sign in at `/login`
+with it. This needs shell access to the server — there is no remote backdoor.

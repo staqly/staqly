@@ -1,0 +1,31 @@
+---
+title: Idempotency
+description: Retry unsafe requests safely with an Idempotency-Key header.
+---
+
+Networks fail and automations retry. Send an **`Idempotency-Key`** header on unsafe requests
+(POST, PATCH, DELETE) and a retry with the same key returns the **original response** instead
+of doing the work twice.
+
+```bash
+curl -s -X POST "http://localhost:3333/v1/collections/Instagram%20Avatar/items" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: n8n-run-8812-item-3' \
+  -d '{"title":"Avatar #3","content":"…","source":"n8n"}'
+```
+
+| Situation | Response |
+|---|---|
+| First request | Processed normally; status and body are stored |
+| Same key, same method + path + body | The stored response is replayed, with header `Idempotent-Replayed: true` |
+| Same key, **different** request | `422 idempotency_mismatch` |
+| Same key while the first is still running | `409 idempotency_in_progress` — retry shortly |
+| First attempt failed with a `5xx` | The key is released, so a retry runs again |
+
+- Keys are scoped to the **caller** (the API key, session or local principal) and kept for
+  **24 hours**. Up to 200 characters; use something unique per logical operation, such as a
+  workflow run ID plus an index.
+- Only **JSON** requests are covered. Multipart uploads ignore the header — deduplicate them
+  yourself, e.g. by `external_ref`.
+- Webhook *deliveries* to you are at-least-once; deduplicate them on `X-Staqly-Event-Id`
+  ([Webhooks](/docs/automation/webhooks#delivery-guarantees)).

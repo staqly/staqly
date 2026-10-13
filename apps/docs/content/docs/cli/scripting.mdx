@@ -1,0 +1,64 @@
+---
+title: Scripting recipes
+description: Use staqly in shell scripts and CI — gates, closing the loop, feedback, bulk actions, event loops.
+---
+
+## CI gate: require approval before deploying
+
+```yaml
+- name: Wait for human approval
+  env:
+    STAQLY_API_URL: https://staq.example.com
+    STAQLY_API_KEY: ${{ secrets.STAQLY_API_KEY }}   # scopes: items:write items:read
+  run: staqly push Deploys --title "Deploy ${GITHUB_REF_NAME}" --external-ref "$GITHUB_SHA" --timeout 2h
+- name: Deploy
+  run: ./deploy.sh
+```
+
+Full walkthrough: [Agent approval gate in CI](/docs/cookbook/ci-approval-gate).
+
+## Branch on the outcome
+
+```bash
+staqly push Deploys --title "Release v1.4" --timeout 1h
+case $? in
+  0) ./deploy.sh ;;
+  2) echo "Rejected, not deploying"; exit 1 ;;
+  3) echo "Nobody decided in time"; exit 1 ;;
+  *) echo "staq.ly error"; exit 1 ;;
+esac
+```
+
+## Close the loop: approve, act, report
+
+```bash
+id=$(staqly push Social --title "Post" --content "$text" --json | jq -r .id) || exit $?
+if url=$(./publish.sh "$text"); then
+  staqly items result "$id" --status completed --result "{\"url\":\"$url\"}"
+else
+  staqly items result "$id" --status failed --error "publish failed"
+fi
+```
+
+## Use the reviewer's feedback
+
+```bash
+result=$(staqly push Copy --title "Tagline" --content "$draft" --json); code=$?
+feedback=$(jq -r .feedback <<<"$result")
+[ $code -eq 2 ] && regenerate --hint "$feedback"
+```
+
+## Approve everything matching a search
+
+```bash
+staqly items list --status pending --q "typo fix" --all --json \
+  | jq -r '.data[].id' | xargs staqly items approve --feedback "bulk"
+```
+
+## React to decisions in a shell loop
+
+```bash
+staqly events tail -f --type item.approved --json | while read -r ev; do
+  id=$(jq -r .item_id <<<"$ev"); publish "$id" && staqly items update "$id" --status completed
+done
+```

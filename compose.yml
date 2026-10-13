@@ -1,0 +1,78 @@
+# Staqly: local-first workspace for AI agents.
+#   docker compose up -d --build     # API (:3333) + dashboard (:8080)
+# The API listens on 127.0.0.1 only (agents, MCP and scripts on this machine
+# need no key). The dashboard is reachable from your network; browsers sign in
+# once with a one-time link (`make up` opens it for you).
+# n8n is not part of the stack: use your own, or integrations/n8n/compose.yml.
+name: staqly
+
+services:
+  api:
+    build:
+      context: ./apps/api
+      args: { VERSION: "${STAQLY_VERSION:-dev}" }
+    image: staqly-api:local
+    container_name: staqly-api
+    restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+      STAQLY_MODE: ${STAQLY_MODE:-local}
+      LOCAL_ALLOWED_HOSTS: staqly-api,${LOCAL_ALLOWED_HOSTS:-}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3333}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      WEB_PORT: ${WEB_PORT:-8080}
+      # The dashboard is published on all interfaces, so a request arriving
+      # through it can't be proven to come from this computer: require sessions.
+      DASHBOARD_EXPOSED: "true"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      WEBHOOK_ALLOW_PRIVATE: ${WEBHOOK_ALLOW_PRIVATE:-true}
+      WEBHOOK_ALLOW_LOOPBACK: ${WEBHOOK_ALLOW_LOOPBACK:-false}
+      WEBHOOK_RETRY_BASE: ${WEBHOOK_RETRY_BASE:-15s}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Optional settings documented in .env.example are passed through as-is.
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      RATE_LIMIT_DISABLED: ${RATE_LIMIT_DISABLED:-}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-}
+      RATE_LIMIT_AUTH_PER_MINUTE: ${RATE_LIMIT_AUTH_PER_MINUTE:-}
+      RETENTION_DELIVERIES_DAYS: ${RETENTION_DELIVERIES_DAYS:-}
+      RETENTION_EVENTS_DAYS: ${RETENTION_EVENTS_DAYS:-}
+      RETENTION_ARCHIVED_ITEMS_DAYS: ${RETENTION_ARCHIVED_ITEMS_DAYS:-}
+      WATCHER_ALLOW_PRIVATE: ${WATCHER_ALLOW_PRIVATE:-}
+      NOTIFY_SECRET_KEY: ${NOTIFY_SECRET_KEY:-}
+      NOTIFY_PUBLIC_API_URL: ${NOTIFY_PUBLIC_API_URL:-}
+      NOTIFY_ALLOW_PRIVATE: ${NOTIFY_ALLOW_PRIVATE:-}
+    volumes:
+      - staqly-data:/data
+    ports:
+      # The API is never exposed beyond this machine: agents run here, phones
+      # go through the dashboard, and cloud setups put a reverse proxy in front.
+      - "127.0.0.1:${API_PORT:-3333}:3333"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach n8n running on the host (Linux)
+    stop_grace_period: 30s
+
+  web:
+    build:
+      context: ./apps/web
+      args: { API_INTERNAL_URL: "http://api:3333" }
+    image: staqly-web:local
+    container_name: staqly-web
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3333}
+    ports:
+      # Reachable from your network (phones, tablets). Every browser signs in
+      # once with a one-time link: `make up` opens one, `make connect` prints
+      # another, phones scan a QR code from "Connect a device".
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  staqly-data:

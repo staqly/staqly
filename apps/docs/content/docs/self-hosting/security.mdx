@@ -1,0 +1,76 @@
+---
+title: Security model
+description: How staq.ly protects your workspace in local and cloud mode.
+---
+
+## Network exposure
+
+- The **API** (`3333`) binds to `127.0.0.1` in compose — never reachable from the network.
+  Cloud setups put a reverse proxy in front.
+- The **dashboard** (`8080`) is published on the network so phones can use it, and therefore
+  requires a session for **every** browser.
+
+## Local mode without keys
+
+Credential-less requests are accepted only when the peer is loopback/private, the `Host`
+header is a local name (defeats DNS rebinding), any `Origin` is local (defeats cross-site
+requests from websites you visit), and the request doesn't come through the dashboard
+proxy. Every local process has full access — for per-agent permissions run cloud mode on
+localhost. Details: [Authentication](/docs/api/authentication).
+
+## Secrets
+
+| Secret | Stored as |
+|---|---|
+| API keys `stk_…` (256-bit) | SHA-256 hash + 6-character display prefix |
+| Session tokens (256-bit) | SHA-256 hash; HttpOnly, SameSite=Lax cookie, `Secure` with `COOKIE_SECURE` |
+| Recovery keys (200-bit) | SHA-256 hash |
+| Device-link tokens | SHA-256 hash; 5-minute, single-use, carried in the URL fragment |
+| Webhook secrets | **Plain text** — needed to sign deliveries. Protect the data volume. |
+
+High-entropy random secrets make a plain SHA-256 an adequate verifier. Raw keys are shown
+once. Logs contain request paths only — never headers or query strings.
+
+## Least privilege
+
+- API keys are scoped. Creating content (`items:write`) is separate from deciding on it
+  (`items:review`), so a generator agent cannot approve its own output.
+- `rules:manage` (rules can auto-approve) and `admin` are not in the default key.
+- REST and MCP call the **same** domain services, which check scopes themselves — no transport
+  can bypass authorization. Every query is scoped by workspace.
+- Cookie-authenticated unsafe requests need a CSRF token. `/mcp` never accepts cookies.
+
+## Decisions
+
+Approve/reject are atomic: a single write transaction checks status and version, stores a
+version snapshot, writes the event and queues webhooks. Concurrent decisions yield exactly one
+winner. Custom actions cannot set `approved` or `rejected`. Events are immutable.
+
+## Uploads
+
+Types are sniffed from content against an allowlist; **SVG and HTML are refused**. Files are
+served only after authorization, with `nosniff`, a sandboxing Content-Security-Policy and the
+stored MIME type. The server never fetches URLs that items reference.
+
+## Notifications
+
+Channel secrets (bot tokens, SMTP passwords…) are encrypted at rest with `NOTIFY_SECRET_KEY`
+(or a generated key file in the data directory — back it up), masked in responses and never
+logged. Chat buttons are HMAC-signed per channel and only count from the approver allowlist;
+Slack, Discord and Telegram callbacks are verified. One-tap links are single-use, expire, and
+decide only on POST from a confirmation page. Details: [Notifications](/docs/automation/notifications#security).
+
+## Workspace deletion and export
+
+Deleting a workspace requires a signed-in dashboard session — API keys get `403` even with
+`admin`. Exports never include API keys, sessions or the recovery key, and webhook secrets are
+redacted. See [Data export & privacy](/docs/self-hosting/data-export).
+
+## Outbound requests
+
+- **Webhooks**: the IP policy is enforced on the resolved address at connect time; link-local
+  (cloud metadata), multicast and unspecified addresses are always blocked; private and
+  loopback targets are configurable; redirects are not followed.
+- **Watchers**: public internet only by default, loopback and link-local always refused,
+  every redirect hop re-checked, `robots.txt` respected, size and time limits. Fetched content
+  is marked `untrusted` — agents are told to treat it as data, never instructions.

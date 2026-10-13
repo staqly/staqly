@@ -1,0 +1,65 @@
+---
+title: Docker Compose
+description: The default way to run staq.ly — two containers, one volume.
+---
+
+```bash
+git clone https://github.com/staqly/staqly.git && cd staqly
+make up          # build, start, wait until healthy, open the dashboard signed in
+```
+
+`compose.yml` (project name `staqly`) defines:
+
+| Service | Container | Image | Port | Notes |
+|---|---|---|---|---|
+| `api` | `staqly-api` | `staqly-api:local` (Go, Alpine) | `127.0.0.1:3333` | REST, MCP, webhook worker, watchers. Health-checked via `/health`. Runs as uid 10001. |
+| `web` | `staqly-web` | `staqly-web:local` (Next.js) | `:8080` | The dashboard; proxies `/api/*` to `http://api:3333`. Starts once the API is healthy. |
+
+All state is in the named volume **`staqly_staqly-data`** mounted at `/data`:
+
+```text
+/data/workspace.db     SQLite database (WAL: -wal / -shm side files while running)
+/data/uploads/         media files
+```
+
+## Ports and who can reach them
+
+- **API `3333`** binds to `127.0.0.1` only. Agents, MCP and scripts on this computer use it
+  without keys; nothing else on the network can reach it.
+- **Dashboard `8080`** is published on all interfaces so phones and tablets can use it. Every
+  browser signs in once with a one-time link (see
+  [Phones & tablets](/docs/dashboard/phones-and-tablets)).
+
+Change ports with `API_PORT` / `WEB_PORT` in `.env`. If you change `API_PORT`, also update
+`PUBLIC_API_URL` and your MCP client URLs.
+
+## Everyday commands
+
+| Command | Does |
+|---|---|
+| `make up` | `docker compose up -d --build --wait`, then opens a signed-in browser |
+| `make open` | Opens the dashboard in this computer's browser with a one-time sign-in link |
+| `make connect` | Prints a one-time sign-in link for another browser |
+| `make down` | Stops containers (the data volume is kept) |
+| `make logs` / `make ps` | Follow logs / container status |
+| `make seed` | Load demo data |
+| `make backup` / `make restore BACKUP=…` | [Backup & restore](/docs/self-hosting/backup-and-restore) |
+| `make mcp-stdio` | Run the MCP STDIO server in the API container |
+
+<Callout type="error" title="Don't use docker compose down -v">
+`-v` **deletes the data volume** — your database and uploads.
+</Callout>
+
+## Running without Docker
+
+```bash
+cd apps/api && go run ./cmd/server          # local mode, data in ./data, :3333
+cd apps/web && npm install && npm run dev    # dashboard; API_INTERNAL_URL defaults to http://localhost:3333
+```
+
+Add `WEBHOOK_ALLOW_LOOPBACK=true` when webhook receivers listen on localhost.
+
+## n8n
+
+n8n is not part of the stack. Use your own, or the example next to staq.ly:
+`docker compose -f integrations/n8n/compose.yml up -d` — see [n8n](/docs/agents/n8n).

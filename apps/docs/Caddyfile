@@ -1,0 +1,40 @@
+# Caddy config for the static docs export (used by the Dockerfile).
+# Serves /srv on :8090 as a non-root user. TLS is expected to be terminated
+# in front of the container; to let Caddy serve a public domain itself,
+# replace ":8090" with "docs.example.com", drop `auto_https off` and publish 80/443.
+{
+	auto_https off
+	admin off
+}
+
+:8090 {
+	root * /srv
+	encode zstd gzip
+
+	# Pretty URLs: /docs/quickstart → /docs/quickstart.html (Next.js static export layout).
+	try_files {path} {path}.html {path}/index.html
+
+	# Hashed build assets never change.
+	header /_next/static/* Cache-Control "public, max-age=31536000, immutable"
+
+	# Types Caddy can't infer from the file name.
+	header /api/search Content-Type "application/json"
+	@markdown path *.md
+	header @markdown Content-Type "text/markdown; charset=utf-8"
+	header /openapi.yaml Content-Type "application/yaml; charset=utf-8"
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		-Server
+	}
+
+	file_server
+
+	# Branded 404 page from the export.
+	handle_errors {
+		rewrite * /404.html
+		file_server
+	}
+}

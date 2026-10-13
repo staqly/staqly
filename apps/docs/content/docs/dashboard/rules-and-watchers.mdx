@@ -1,0 +1,35 @@
+---
+title: Rules & watchers
+description: Manage approval rules and watchers from the dashboard.
+---
+
+Both have their own entries in the sidebar (and the command palette, <Kbd>⌘</Kbd> <Kbd>K</Kbd>).
+
+## Rules
+
+**Rules** lists your rules in the order they run. Drag a rule to **reorder** it (that's its
+priority — the first match wins), switch it on or off with **Enabled** (disabled rules are
+skipped), and see how often each one fired (*Applied N times*).
+
+Creating or editing a rule opens a sheet that reads like a sentence:
+
+- **When a new item…** — *in collections*, *of type*, *source matches* (a glob such as
+  `n8n-*`), *title or content contains* (case-insensitive) — **…and its metadata** conditions
+  (`metadata.score` `gte` `0.9`).
+- **Then** — auto-approve, auto-reject (with feedback), set a status, **expire if not reviewed
+  within** a time (with presets in minutes, hours or days), or escalate (emits
+  `item.escalated`).
+
+How rules behave is explained in [Rules engine](/docs/automation/rules).
+
+## Watchers
+
+**Watchers** shows each watcher with its status (*active*, *degraded*, *paused*), the last
+check and errors. Per watcher you can **Check now**, **Pause** / **Resume**, edit or delete it.
+
+**Add a watcher** opens a catalog of sources — search for *reddit*, *youtube*, *github*… —
+or choose **Custom feed or page** to paste any RSS/Atom URL or watch a page for changes. Pick the
+collection new entries go to, optional **Keywords** / **Exclude keywords** and how often to check.
+
+Items created by watchers carry an **External content** badge everywhere in the dashboard. See
+[Watchers & presets](/docs/automation/watchers).

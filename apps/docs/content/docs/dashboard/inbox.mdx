@@ -1,0 +1,69 @@
+---
+title: Inbox
+description: Review what your agents made — approve, reject with feedback, edit, or run custom actions, mostly from the keyboard.
+---
+
+The Inbox is where pending items wait for a decision, across every collection. Open it at
+**http://localhost:8080/inbox** (it is also the dashboard's start page).
+
+## Filters
+
+- **Status tabs** — *Pending* (default, oldest first), *Approved* and *Rejected* (most
+  recently decided first).
+- **Collection** and **type** filters (`image`, `video`, `text`, `link`, `json`, `file`).
+
+Filters live in the URL (`?status=…&collection=…&type=…`), so you can bookmark a view such
+as "pending images in Instagram Avatar". The list refreshes on its own every 20 seconds.
+
+## Deciding
+
+The active item is shown in full on the right: preview, content, metadata and the actions
+available in its current status.
+
+- **Approve** — the item becomes `approved`; webhooks receive `item.approved`.
+- **Edit & approve** — fix the title or caption first; the edit and the decision are one
+  atomic change.
+- **Reject** — asks for feedback ("too dark", "wrong product"). The feedback is stored on
+  the item and sent to automations so they can regenerate.
+- **Custom actions** — e.g. *Regenerate* (asks for feedback), *Publish*, *Archive*: whatever
+  the item's collection defines for its status. See [Custom actions](/docs/automation/custom-actions).
+
+When two people (or agents) decide the same item at the same moment, exactly one decision
+wins; the other sees a conflict instead of silently overwriting it.
+
+## Keyboard shortcuts
+
+| Keys | Action |
+|---|---|
+| <Kbd>j</Kbd> or <Kbd>↓</Kbd> | Next item |
+| <Kbd>k</Kbd> or <Kbd>↑</Kbd> | Previous item |
+| <Kbd>a</Kbd> | Approve |
+| <Kbd>r</Kbd> | Reject with feedback |
+| <Kbd>e</Kbd> | Edit, then approve |
+| <Kbd>x</Kbd> | Toggle selection |
+| <Kbd>⇧</Kbd> <Kbd>A</Kbd> | Approve selected |
+| <Kbd>o</Kbd> or <Kbd>Enter</Kbd> | Open the item page |
+| <Kbd>Esc</Kbd> | Clear selection |
+| <Kbd>?</Kbd> | Show shortcuts |
+| <Kbd>⌘</Kbd> <Kbd>K</Kbd> / <Kbd>Ctrl</Kbd> <Kbd>K</Kbd> | Command palette (anywhere) |
+
+Shortcuts are ignored while you type in a field or a dialog is open. In the feedback box,
+<Kbd>Enter</Kbd> submits and <Kbd>Shift</Kbd> + <Kbd>Enter</Kbd> adds a new line.
+
+## Bulk decisions
+
+Select items with <Kbd>x</Kbd> (or the checkboxes), then **Approve selected**
+(<Kbd>⇧</Kbd> <Kbd>A</Kbd>) or run another action on all of them. Up to 100 items are
+processed per request, and each one succeeds or fails independently — an item someone else
+already decided is reported, the rest go through.
+
+## On a phone
+
+On small screens the Inbox shows **one large card at a time**: swipe left and right (or tap
+the arrows) to move, and use the sticky action bar — *Reject*, *Approve*, and a menu for
+custom actions — above the bottom tab bar. See [Phones & tablets](/docs/dashboard/phones-and-tablets).
+
+## Content from the internet
+
+Items created by [watchers](/docs/automation/watchers) carry `metadata.untrusted = true` and
+show an **External content** badge. Treat their text and links as untrusted.

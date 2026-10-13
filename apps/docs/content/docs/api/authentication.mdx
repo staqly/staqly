@@ -1,0 +1,93 @@
+---
+title: Authentication & scopes
+description: Keyless local mode, scoped API keys in cloud mode, sessions, CSRF and recovery keys.
+---
+
+## Local mode: no credentials
+
+In local mode (the default) requests without credentials get a full-access `local`
+principal — **if** they provably come from this machine:
+
+- the TCP peer is a loopback or private address (Docker forwards from its bridge network),
+- the `Host` header is a local name: `localhost`, `127.0.0.1`, `::1`, `api`,
+  `host.docker.internal`, anything ending in `.localhost`, plus `LOCAL_ALLOWED_HOSTS`
+  (compose adds the container name `staqly-api`),
+- any `Origin` header is local (blocks requests from web pages on other sites),
+- the request does not come through the dashboard proxy — browsers use sessions.
+
+Otherwise the API answers `403 not_local` with the reason. Bearer keys and session cookies
+are honoured in local mode too.
+
+## Cloud mode: API keys
+
+Automations authenticate with a **bearer API key**:
+
+```bash
+curl https://staq.example.com/v1/items -H "Authorization: Bearer stk_…"
+```
+
+- Keys look like `stk_…` (256 bits of randomness). Only a SHA-256 hash and a 6-character
+  display prefix are stored; the raw key is shown **once**, when created or rotated.
+- Each key belongs to one workspace — the key decides which workspace you work in.
+- Keys can expire (`expires_at`, RFC 3339 or `YYYY-MM-DD`), be **rotated** (revoke + new key
+  with the same name and scopes) and **revoked**. `last_used_at` shows when a key was last
+  used.
+- Manage keys in **Integrations → API keys** or via `/v1/api-keys` (needs `admin`).
+
+An invalid, expired or revoked key returns `401 unauthorized`.
+
+### Scopes
+
+| Scope | Allows |
+|---|---|
+| `collections:read` | List and read collections |
+| `collections:write` | Create, update, archive and delete collections |
+| `items:read` | List, search and read items, history, versions, media, events; wait for decisions |
+| `items:write` | Create, update and delete items; upload media; report results |
+| `items:review` | **Approve and reject** (and create items directly as approved/rejected) |
+| `actions:execute` | Run custom collection actions |
+| `webhooks:manage` | Manage webhooks and their deliveries |
+| `rules:manage` | Manage [rules](/docs/automation/rules) |
+| `watchers:manage` | Manage [watchers](/docs/automation/watchers) |
+| `channels:manage` | Manage [notification channels](/docs/automation/notifications) (they hold secrets such as bot tokens) |
+| `admin` | Everything, including API keys, sessions, renaming the workspace, the [workspace export](/docs/self-hosting/data-export) and item purge |
+
+Creating content (`items:write`) is separate from deciding on it (`items:review`), so a
+generator agent cannot approve its own output.
+
+The key created at signup has every scope **except `admin`, `rules:manage` and
+`channels:manage`** — key management stays in the dashboard, a rule can approve content
+without a human, and channels hold secrets, so grant those deliberately.
+
+Suggested keys:
+
+| Agent | Scopes |
+|---|---|
+| Generator (n8n, a script) | `collections:read items:read items:write` |
+| Reviewer agent | `collections:read items:read items:review` |
+| Publisher | `items:read items:write actions:execute` |
+| Read-only dashboard/report | `collections:read items:read` |
+
+A call without the needed scope returns `403 forbidden` — *"missing required scope
+items:review"*. The same check applies over MCP.
+
+## Browser sessions
+
+The dashboard uses an HttpOnly session cookie (`staqly_session`, SameSite=Lax, `Secure` with
+`COOKIE_SECURE=true`, 30-day expiry, revocable). Sessions hold every scope — the dashboard is
+the workspace owner.
+
+- Cookie-authenticated **unsafe** requests (POST/PATCH/DELETE) must send the session's CSRF
+  token in `X-CSRF-Token`; otherwise `403 csrf_failed`. `GET /v1/session` returns the token.
+- Scripts should never use cookies — use a bearer key (no CSRF needed).
+- `/mcp` accepts only bearer keys, never cookies.
+- New sessions come from cloud signup, the recovery key, or a one-time **device link**
+  (`/v1/device-links`, dashboard only — API keys cannot mint browser sessions).
+
+## Recovery key
+
+In cloud mode each workspace has a **recovery key** (`staqly-recovery-…`, 200 bits) — the
+only way back in when every browser session is lost. It is accepted only by
+`POST /v1/sessions/recover` (the `/login` page), stored hashed, rotated from a dashboard
+session (**Settings → Recovery key**) or on the server with `make recovery-key`. MCP never
+accepts or exposes it.

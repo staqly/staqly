@@ -1,0 +1,62 @@
+---
+title: Event types
+description: Every event staq.ly records — the activity log, webhook subscriptions and item history all use these.
+---
+
+Events are immutable records with an `id`, a monotonically increasing `seq`, a `type`, the
+`actor`, optional `collection_id` / `item_id`, and `data`. Item events carry a snapshot:
+`data.item` (the item after the change) and `data.collection` (`id`, `name`).
+
+## Items
+
+| Type | When | Extra `data` |
+|---|---|---|
+| `item.created` | An item was created (by anyone, including watchers) | — |
+| `item.updated` | Fields changed via `PATCH` | `previous_status` |
+| `item.status_changed` | Status changed via `PATCH`, or by a `set_status` rule | `previous_status`, `rule` |
+| `item.approved` | Approved — by a person, an agent or an `auto_approve` rule | `action`, `feedback`, `edited`, `diff` (when edited), `rule` |
+| `item.rejected` | Rejected — with feedback | `action`, `feedback`, `rule` |
+| `item.expired` | A pending item passed its `expires_at` | `feedback` (*"Expired before review"*) |
+| `item.completed` | Outcome reported with `/result` (or `report_result`) | `result`, `error` |
+| `item.failed` | Failure reported with `/result` | `result`, `error` |
+| `item.escalated` | An `escalate` rule matched | `rule`, `note` |
+| `item.rule_applied` | An `expire` rule set a deadline | `rule`, `expires_at` |
+| `item.regenerate_requested` | *Regenerate* action ran | `action`, `feedback`, `payload` |
+| `item.publish_requested` | *Publish* action ran | `action`, `feedback`, `payload` |
+| `item.retry_requested` | *Retry* action ran | `action`, `feedback`, `payload` |
+| `item.archived` | *Archive* action ran | `action` |
+| `item.<name>_requested` | Any other custom action (or the event name you configured) | `action`, `feedback`, `payload` |
+| `item.deleted` | An item was deleted (its history is kept) | — |
+| `item.purged` | An item and its history were [purged](/docs/self-hosting/data-export#purge-an-item) | IDs and counts only |
+
+Every status-changing item event also includes `previous_status`.
+
+## Everything else
+
+| Type | When |
+|---|---|
+| `collection.created`, `collection.updated`, `collection.archived`, `collection.deleted` | Collection changes |
+| `rule.created`, `rule.updated`, `rule.deleted` | Rule changes |
+| `watcher.created` | A watcher was created |
+| `webhook.test` | *Send test* on a webhook (delivered to that webhook only) |
+| `workspace.created` | The workspace was set up |
+| `workspace.export_requested`, `workspace.exported` | A [workspace export](/docs/self-hosting/data-export) was requested / finished |
+| `retention.items_pruned`, `retention.events_pruned` | The [retention](/docs/self-hosting/data-export#retention) worker deleted old data |
+| `api_key.created`, `api_key.revoked` | Key management (cloud) |
+| `session.recovered` | Someone signed in with the recovery key |
+| `device_link.created` | A *Connect a device* link was created |
+
+## Subscribing
+
+Webhooks match `events` patterns against the type: exact names, `"*"`, or globs such as
+`"item.*"` and `"item.*_requested"`. Optionally restrict to `collection_ids`. See
+[Webhooks](/docs/automation/webhooks).
+
+## Actors
+
+| `actor.type` | Who |
+|---|---|
+| `local` | Anyone on this machine in local mode (agents, scripts) |
+| `session` | A signed-in browser |
+| `api_key` | An API key; `actor.name` is the key's name |
+| `system` | staq.ly itself: `Rule: <name>`, `Watcher: <name>`, `Expiry`, setup — and chat decisions: `Telegram: @name`, `Slack: name`, `Discord: name`, `Link: <channel>` |

@@ -1,0 +1,50 @@
+---
+title: Other MCP clients
+description: Connect any MCP client that supports Streamable HTTP or STDIO.
+---
+
+Any MCP client works. You need one of:
+
+| Transport | Configuration |
+|---|---|
+| **Streamable HTTP** | URL `http://localhost:3333/mcp` |
+| **STDIO** | Command `docker`, arguments `exec -i staqly-api mcp-stdio` |
+
+## Streamable HTTP details
+
+- The endpoint is **stateless**: each JSON-RPC request is authenticated on its own and gets
+  a server bound to that caller. There is no MCP session to keep alive or hijack.
+- Responses are plain JSON (`application/json`), not server-sent events.
+- **Local mode**: no credentials. The same local-only checks as the REST API apply
+  (loopback/private peer, local `Host`, local or absent `Origin`).
+- **Cloud mode**: send `Authorization: Bearer stk_…`. Cookies are never accepted on `/mcp`.
+
+A raw request, to check connectivity without a client:
+
+```bash
+curl -s http://localhost:3333/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+```
+
+## STDIO details
+
+`mcp-stdio` is a second binary in the API image. Run it **inside** the running container so
+it opens the same SQLite database (WAL mode handles several processes on one host). Webhook
+deliveries it queues are sent by the server's worker.
+
+- Use `docker exec -i` — **never `-t`**.
+- Cloud mode: forward the key, `docker exec -i -e STAQLY_API_KEY staqly-api mcp-stdio`, with
+  `STAQLY_API_KEY` set in the client's environment.
+- Without Docker: `cd apps/api && go build -o staqly-mcp ./cmd/mcp-stdio` and run it with
+  `DATA_DIR` pointing at the server's data directory.
+- Errors go to stderr — run the command by hand to see them.
+
+## Server information
+
+The server announces itself as **`staqly`** ("staq.ly Agent Workspace") and sends
+instructions telling the model that items usually start as `pending`, that collections can
+be referenced by ID or exact name, and how to search by decision date.
+
+See the full [tool reference](/docs/mcp/tools).

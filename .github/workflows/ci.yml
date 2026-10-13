@@ -1,0 +1,161 @@
+# CI for the staq.ly monorepo: formatting, lint, types, tests and builds for
+# every part, plus Docker images and a full end-to-end run.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ── Go API ────────────────────────────────────────────────────────────────
+  api:
+    name: API (Go)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: apps/api } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
+      - uses: sqlc-dev/setup-sqlc@v5
+        with: { sqlc-version: "1.31.1" }
+      - name: Formatting (gofmt)
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo "::error::run gofmt -w"; exit 1; }
+      - name: Generated queries are up to date (sqlc)
+        run: sqlc diff
+      - run: go vet ./...
+      - name: Tests (race detector, incl. OpenAPI contract test)
+        run: go test -race -count=1 ./...
+      - name: Lint OpenAPI
+        run: npx --yes @redocly/cli@latest lint openapi.yaml --skip-rule operation-operationId --skip-rule operation-4xx-response --skip-rule no-server-example.com --skip-rule tag-description --skip-rule no-unused-components
+
+  # ── staqly CLI ────────────────────────────────────────────────────────────
+  cli:
+    name: CLI (Go)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: apps/cli } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: apps/cli/go.mod, cache-dependency-path: apps/cli/go.sum }
+      - name: Formatting (gofmt)
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - run: go build ./cmd/staqly
+
+  # ── Dashboard ─────────────────────────────────────────────────────────────
+  web:
+    name: Dashboard (Next.js)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: apps/web } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      - run: npm ci
+      - name: API types are up to date with openapi.yaml
+        run: npm run gen:api && git diff --exit-code lib/api-types.ts
+      - name: Formatting (oxfmt)
+        run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  # ── Documentation site ────────────────────────────────────────────────────
+  docs:
+    name: Docs (Fumadocs)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: apps/docs } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: npm, cache-dependency-path: apps/docs/package-lock.json }
+      - run: npm ci
+      - name: Formatting (oxfmt)
+        run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Build (static export + link check)
+        run: npm run build
+
+  # ── SDKs ──────────────────────────────────────────────────────────────────
+  sdk-typescript:
+    name: SDK (TypeScript)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: packages/sdk-typescript } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: npm, cache-dependency-path: packages/sdk-typescript/package-lock.json }
+      - run: npm ci
+      - name: Schema types are up to date with openapi.yaml
+        run: npm run gen && git diff --exit-code src/schema.ts
+      - name: Formatting (oxfmt)
+        run: npm run format:check
+      - name: Typecheck, build, lint, test
+        run: npm run check
+
+  sdk-python:
+    name: SDK (Python)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: packages/sdk-python } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with: { enable-cache: true, cache-dependency-glob: packages/sdk-python/uv.lock }
+      - run: uv sync --locked
+      - name: Lint + formatting (ruff)
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: Types (mypy --strict)
+        run: uv run mypy --strict
+      - name: Tests (incl. sync-client codegen check)
+        run: uv run pytest -q
+      - run: uv build
+
+  # ── Docker images + end-to-end ────────────────────────────────────────────
+  docker:
+    name: Docker images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: API image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/api
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: Dashboard image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/web
+          build-args: API_INTERNAL_URL=http://api:3333
+          push: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+      - name: Docs image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/docs
+          build-contexts: api=apps/api
+          push: false
+          cache-from: type=gha,scope=docs
+          cache-to: type=gha,mode=max,scope=docs
+
+  e2e:
+    name: End-to-end (Docker Compose)
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    steps:
+      - uses: actions/checkout@v7
+      - run: ./scripts/e2e.sh

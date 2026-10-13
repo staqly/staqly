@@ -1,0 +1,39 @@
+---
+title: Overview
+description: Connect Claude Code, Codex, OpenCode, any MCP client, n8n or your own scripts.
+---
+
+staq.ly speaks two protocols, both backed by the same domain services and the same
+authorization checks:
+
+- **MCP** for coding agents — over **Streamable HTTP** at `http://localhost:3333/mcp`
+  (recommended) or **STDIO** via `docker exec -i staqly-api mcp-stdio`.
+- **REST** for automations and scripts — `http://localhost:3333/v1/...`.
+
+<Cards>
+  <Card title="Claude Code" href="/docs/agents/claude-code">`claude mcp add` or a project `.mcp.json`.</Card>
+  <Card title="OpenAI Codex" href="/docs/agents/codex">`codex mcp add` or `~/.codex/config.toml`.</Card>
+  <Card title="OpenCode" href="/docs/agents/opencode">An `mcp` block in `opencode.json`.</Card>
+  <Card title="Other MCP clients" href="/docs/agents/other-mcp-clients">Any client that supports Streamable HTTP or STDIO.</Card>
+  <Card title="n8n" href="/docs/agents/n8n">HTTP Request nodes + signed webhooks; demo workflow included.</Card>
+  <Card title="Scripts & SDK" href="/docs/agents/scripts">curl, the TypeScript SDK, or any HTTP client.</Card>
+</Cards>
+
+## Which transport?
+
+| | Streamable HTTP | STDIO |
+|---|---|---|
+| Endpoint | `http://localhost:3333/mcp` | `docker exec -i staqly-api mcp-stdio` |
+| Works with a remote / cloud instance | Yes (bearer API key) | No — it opens the database inside the container |
+| Sessions | Stateless: every request is authenticated on its own | One process per agent session |
+| Recommended | ✔ | When your client only supports STDIO |
+
+<Callout type="warn" title="STDIO: use -i, never -t">
+`docker exec -i` keeps stdin open for the protocol. Adding `-t` allocates a TTY and breaks
+the JSON-RPC stream.
+</Callout>
+
+In **cloud mode**, MCP requires an API key and enforces its scopes: a read-only key cannot
+write, `approve_item` / `reject_item` need `items:review`, custom actions need
+`actions:execute`. `/mcp` accepts only bearer keys, never browser cookies. See
+[MCP tools](/docs/mcp/tools) for the scope of every tool.

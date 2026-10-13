@@ -1,0 +1,97 @@
+---
+title: Errors
+description: One error shape, stable machine-readable codes, and what to do about each.
+---
+
+Every error has the same shape:
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "title: must be at most 500 characters",
+    "fields": { "title": "must be at most 500 characters" }
+  }
+}
+```
+
+- `code` — stable, machine-readable; switch on this, not on `message`.
+- `message` — human-readable explanation.
+- `fields` — per-field problems (validation errors).
+- `details` — structured data for some errors (plan limits).
+
+Error responses also carry a top-level `request_id` (the same value as the `X-Request-Id`
+header) — quote it when reporting a problem. See [Monitoring](/docs/self-hosting/monitoring#request-ids).
+
+## Codes
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `bad_request` | Malformed JSON or unknown fields in the body |
+| 401 | `unauthorized` | Missing, invalid, expired or revoked credentials |
+| 401 | `invalid_link` | Device-link token is not valid |
+| 402 | `plan_limit_exceeded` | Over a cloud plan limit — see below |
+| 403 | `forbidden` | The key lacks a scope (*"missing required scope items:review"*), or the operation isn't available to this caller |
+| 403 | `not_local` | Local mode refused a credential-less request that doesn't provably come from this machine |
+| 403 | `csrf_failed` | A cookie-authenticated unsafe request without a valid `X-CSRF-Token` |
+| 404 | `not_found` | Unknown ID (or one in another workspace) |
+| 409 | `conflict` | State conflict — see below |
+| 409 | `idempotency_in_progress` | A request with the same `Idempotency-Key` is still running |
+| 410 | `link_used` / `link_expired` | A device link was already used / is older than 5 minutes |
+| 410 | `gone` | A one-tap decision link was used or expired; a workspace export is no longer available |
+| 413 | `too_large` | Body or file over the limit |
+| 415 | `unsupported_media_type` | Upload type not allowed (e.g. SVG, HTML), or a request content type other than JSON / multipart |
+| 422 | `validation_failed` | Invalid input; see `fields` |
+| 422 | `not_editable` | An edit-before-approve touched a field outside the item's `editable` list |
+| 422 | `idempotency_mismatch` | `Idempotency-Key` reused with a different request |
+| 429 | `rate_limited` | Too many requests — see [rate limits](/docs/self-hosting/monitoring#rate-limits). The `Retry-After` header says how many seconds to wait |
+| 500 | `internal` | Unexpected server error (logged server-side) |
+
+### 402 `plan_limit_exceeded`
+
+Cloud workspaces are limited by their [plan](/docs/plans). The error tells you which limit
+was hit:
+
+```json
+{
+  "error": {
+    "code": "plan_limit_exceeded",
+    "message": "The Free plan allows 100 items per month; upgrade the workspace plan to continue.",
+    "details": { "limit": "items_per_month", "max": 100, "used": 100, "plan": "free" }
+  }
+}
+```
+
+| `details.limit` | Triggered by |
+|---|---|
+| `items_per_month` | Creating an item (including watcher items) |
+| `webhooks` | Creating a webhook |
+| `api_keys` | Creating an API key |
+| `storage_bytes` | Uploading a file |
+| `max_upload_bytes` | Uploading a file larger than the plan allows |
+| `rules` | Creating a rule |
+| `watchers` | Creating or resuming a watcher |
+| `notification_channels` | Creating a notification channel |
+| `min_watcher_interval_seconds` | A watcher `every` faster than the plan allows |
+
+Don't retry a 402 automatically — it won't succeed until the plan changes or the month rolls
+over.
+
+### 403 `not_local`
+
+The message explains which check failed — the peer address, the `Host` header (*"Host … is
+not a local name (add it to LOCAL_ALLOWED_HOSTS)"*), a cross-site `Origin`, or a browser that
+isn't connected. See [Authentication](/docs/api/authentication#local-mode-no-credentials).
+
+### 409 `conflict`
+
+| Message | Meaning |
+|---|---|
+| *cannot approve an item that is approved (allowed from: pending)* | Someone decided it first, or the action isn't allowed in the current status |
+| *item was modified (version 3, expected 2)* | Your `expected_version` is stale — reload and retry |
+| *a collection with this name already exists* | Collection names are unique per workspace |
+| *collection is archived* | Archived collections are read-only |
+| *results can be reported for approved or processing items* | `POST /v1/items/{id}/result` on an undecided or rejected item |
+
+Concurrent decisions on one item always resolve to exactly one success; everyone else gets
+`409`. Treat it as "already handled", not as a failure to retry blindly.

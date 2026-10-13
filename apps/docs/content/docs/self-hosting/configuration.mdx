@@ -1,0 +1,99 @@
+---
+title: Configuration reference
+description: Every environment variable, its default and what it does.
+---
+
+Everything has a sensible default. To change something, copy `.env.example` to `.env` in the
+repository root and uncomment the lines you need; Docker Compose passes them to the
+containers. Restart with `docker compose up -d` after editing.
+
+## Mode and access
+
+| Variable | Default | |
+|---|---|---|
+| `STAQLY_MODE` | `local` | `local`: keyless, one workspace, no limits, API for this machine only. `cloud`: many workspaces, API keys, sessions, plans. See [Local vs cloud](/docs/local-vs-cloud). |
+| `SETUP_TOKEN` | — | Cloud: when set, only holders of this token can create workspaces (signup is otherwise public). |
+| `LOCAL_ALLOWED_HOSTS` | — | Extra `Host` names treated as local in local mode, comma- or space-separated (e.g. `my-host.lan`). Compose always adds `staqly-api`. |
+| `COOKIE_SECURE` | `false` | Mark session cookies `Secure`. Set `true` behind HTTPS. |
+| `TRUST_PROXY` | `false` | Take the client IP from `X-Forwarded-For` (signup rate limiting). Only behind your own reverse proxy. |
+| `SESSION_TTL` | `720h` | Browser session lifetime (Go duration). |
+| `DASHBOARD_EXPOSED` | `true` in compose | Requests arriving through the dashboard proxy are never treated as local, so every browser needs a session. Compose sets it because the dashboard is published on the network. |
+
+## URLs and ports
+
+| Variable | Default | |
+|---|---|---|
+| `API_PORT` | `3333` | Host port for the API (bound to `127.0.0.1`). Compose only. |
+| `WEB_PORT` | `8080` | Host port for the dashboard; also used in links printed by the CLI. |
+| `PUBLIC_API_URL` | `http://localhost:3333` | Base of absolute media URLs in API responses and webhook payloads. Set it to what receivers can reach (e.g. `http://api:3333` for n8n on the Docker network, or your public URL). |
+| `PUBLIC_WEB_URL` | — | Dashboard URL used in *Connect a device* QR codes and sign-in links — your LAN IP (`http://192.168.1.23:8080`) or domain. Without it, links point at `localhost`. |
+| `ADDR` | `:3333` | Listen address inside the API process. |
+
+## Storage and limits
+
+| Variable | Default | |
+|---|---|---|
+| `DATA_DIR` | `./data` (`/data` in Docker) | Data directory. |
+| `DATABASE_PATH` | `$DATA_DIR/workspace.db` | SQLite database file. |
+| `UPLOAD_DIR` | `$DATA_DIR/uploads` | Media files. |
+| `MAX_UPLOAD_MB` | `100` | Maximum upload size. Cloud plans can be stricter, never larger. |
+
+## Webhooks and watchers
+
+| Variable | Default | |
+|---|---|---|
+| `WEBHOOK_ALLOW_PRIVATE` | `true` | Allow webhook deliveries to private addresses (LAN, Docker networks — e.g. n8n). |
+| `WEBHOOK_ALLOW_LOOPBACK` | `false` | Allow deliveries to `127.0.0.1` / `::1`. Only useful when the API runs outside Docker. |
+| `WEBHOOK_RETRY_BASE` | `15s` | First retry delay; doubles per attempt. |
+| `WEBHOOK_RETRY_MAX` | `1h` | Maximum retry delay. |
+| `WATCHER_ALLOW_PRIVATE` | `false` | Let [watchers](/docs/automation/watchers) fetch private (LAN) addresses. Loopback and link-local are always refused. |
+
+## Notifications
+
+| Variable | Default | |
+|---|---|---|
+| `NOTIFY_SECRET_KEY` | — | Encrypts channel secrets. If unset, a key is generated into `DATA_DIR/notify_secret.key` — back it up with the database. |
+| `NOTIFY_PUBLIC_API_URL` | `PUBLIC_API_URL` | Base URL of one-tap decision links and the Telegram webhook. |
+| `NOTIFY_ALLOW_PRIVATE` | `false` | Allow channels to post to LAN addresses (self-hosted ntfy, SMTP relay). |
+
+More (retries, link lifetime, Telegram polling) in [Notifications → Configuration](/docs/automation/notifications#configuration);
+those are not passed through by `compose.yml` — add them to the `api` service if needed.
+
+## Observability
+
+| Variable | Default | |
+|---|---|---|
+| `METRICS_TOKEN` | — | Bearer token for `/metrics` from outside this machine (e.g. Prometheus in Docker). |
+| `SENTRY_DSN` | — | Report panics and 5xx to Sentry. `SENTRY_ENVIRONMENT` defaults to the mode. |
+| `RATE_LIMIT_DISABLED` | `false` | Turn off rate limits (the signup cap stays). |
+| `RATE_LIMIT_PER_MINUTE` | `10` | Sensitive unauthenticated endpoints, per IP (`RATE_LIMIT_BURST` = same by default). |
+| `RATE_LIMIT_AUTH_PER_MINUTE` | `600` | Cloud: per API key / session (`RATE_LIMIT_AUTH_BURST` = 100). |
+
+See [Monitoring](/docs/self-hosting/monitoring).
+
+## Retention
+
+| Variable | Default | |
+|---|---|---|
+| `RETENTION_DELIVERIES_DAYS` | `30` | Delete finished webhook deliveries after N days (`0` = keep). |
+| `RETENTION_EVENTS_DAYS` | `0` | Delete events older than N days (`0` = keep forever). |
+| `RETENTION_ARCHIVED_ITEMS_DAYS` | `0` | Delete archived items unchanged for N days (`0` = never). |
+
+See [Data export & privacy](/docs/self-hosting/data-export#retention).
+
+## Logging and build
+
+| Variable | Default | |
+|---|---|---|
+| `LOG_LEVEL` | `info` | `debug` for more detail. Logs are JSON lines; request paths are logged, headers and query strings never. |
+| `STAQLY_VERSION` | `dev` | Version string baked into the API image (shown in `/health` and MCP server info). Compose build arg. |
+
+## Tools and scripts
+
+| Variable | Used by | |
+|---|---|---|
+| `STAQLY_API_KEY` | `mcp-stdio`, `scripts/seed.sh`, `integrations/n8n/setup-demo.sh` | API key for cloud mode. |
+| `STAQLY_API_URL` | `scripts/seed.sh`, `setup-demo.sh` | API base URL (default `http://localhost:3333`). |
+| `STAQLY_CONTAINER` | `scripts/backup.sh` | API container name (default `staqly-api`). |
+| `STAQLY_VOLUME` | `scripts/backup.sh`, `scripts/restore.sh` | Data volume (default `staqly_staqly-data`). |
+| `FORCE=1` | `make restore` | Skip the confirmation prompt. |

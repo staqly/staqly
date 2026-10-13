@@ -1,0 +1,69 @@
+---
+title: Plans & limits
+description: Free, Indie and Team plans for cloud workspaces — and what happens when you hit a limit.
+---
+
+Plans apply to **cloud mode** only. Local installs are always **Unlocked**: no limits
+(usage is still shown for information).
+
+| | Free | Indie — $9/mo | Team — $29/mo |
+|---|---|---|---|
+| Items created / month | 100 | 2,000 | Unlimited |
+| Watchers (active) | 3 | 20 | Unlimited |
+| Fastest watcher interval | every 15 min | every 5 min | every minute |
+| Rules | 5 | 50 | Unlimited |
+| Notification channels | 2 | 10 | Unlimited |
+| Webhooks | 3 | 20 | Unlimited |
+| Active API keys | 3 | 20 | Unlimited |
+| Storage | 1 GB | 20 GB | 200 GB |
+| Max file size | 25 MB | 100 MB | 500 MB (capped by `MAX_UPLOAD_MB`) |
+
+Signed webhooks, MCP, full history and backups are on every plan.
+
+## How limits are counted
+
+- Limits apply **per workspace** — every API key of a workspace shares its plan.
+- **Items / month** is metered when an item is created, per calendar month (UTC), in the
+  same transaction as the insert. Deleting items does not refund quota. Items created by
+  [watchers](/docs/automation/watchers) count too.
+- **Watchers** count only active ones: a paused watcher frees its slot, and resuming it
+  checks the limit again.
+- Webhooks, API keys, rules, notification channels and storage are counted from what currently exists.
+
+## Hitting a limit
+
+A request over a limit fails with **HTTP 402** and machine-readable `details`:
+
+```json
+{
+  "error": {
+    "code": "plan_limit_exceeded",
+    "message": "The Free plan allows 100 items per month; upgrade the workspace plan to continue.",
+    "details": { "limit": "items_per_month", "max": 100, "used": 100, "plan": "free" }
+  }
+}
+```
+
+`details.limit` is one of `items_per_month`, `webhooks`, `api_keys`, `storage_bytes`,
+`max_upload_bytes`, `rules`, `watchers`, `notification_channels` or `min_watcher_interval_seconds` (a watcher asked
+to check more often than the plan allows).
+
+## Checking usage
+
+- Dashboard: **Settings → Plan & usage** ([details](/docs/dashboard/plan-and-usage)).
+- API: `GET /v1/plans` lists plans and limits (`-1` = unlimited); `GET /v1/workspace/usage`
+  returns the current plan, the period (`2026-10`) and usage.
+
+## Changing plans
+
+<Callout type="warn" title="Payments are not integrated yet">
+The operator changes a workspace's plan on the server:
+
+```bash
+make workspaces                                 # id, plan, created, name
+make set-plan WS=<workspace id> PLAN=indie      # free | indie | team
+```
+</Callout>
+
+The plan table lives in `apps/api/internal/app/plans.go` — the single source of truth for
+limits and for the pricing shown in the dashboard.

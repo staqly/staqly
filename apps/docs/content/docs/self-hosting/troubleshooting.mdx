@@ -1,0 +1,94 @@
+---
+title: Troubleshooting
+description: Common errors and how to fix them.
+---
+
+<Accordions type="multiple">
+<Accordion title="403 not_local">
+Local mode refused a credential-less request because its peer address, `Host` or `Origin` is
+not local — or it came through the dashboard from a browser that isn't signed in. Use
+`localhost` / `127.0.0.1` or a compose service name, or add your host name to
+`LOCAL_ALLOWED_HOSTS`. Browsers sign in with a link from `make connect` or a QR code. A page
+from another website is refused on purpose.
+</Accordion>
+<Accordion title="The dashboard asks me to connect this device">
+Every browser signs in once. Run `make open` (opens a signed-in browser) or `make connect`
+(prints a one-time link). Links expire after 5 minutes and work once.
+</Accordion>
+<Accordion title="Phone: the QR link doesn't open">
+Set `PUBLIC_WEB_URL=http://<your computer's LAN IP>:8080` in `.env`, run `docker compose up -d`,
+and make sure the phone is on the same network and port 8080 isn't blocked by a firewall. See
+[Phones & tablets](/docs/dashboard/phones-and-tablets).
+</Accordion>
+<Accordion title="402 plan_limit_exceeded (cloud)">
+The workspace hit a plan limit; `error.details.limit` says which. See **Settings → Plan &
+usage**. The operator can upgrade with `make set-plan WS=<workspace id> PLAN=indie`.
+</Accordion>
+<Accordion title="429 rate_limited when creating a workspace (cloud)">
+At most 5 signups per hour per IP. Behind a reverse proxy set `TRUST_PROXY=true`, otherwise all
+users share the proxy's IP.
+</Accordion>
+<Accordion title="The login page appears but I never set up (cloud)">
+Another setup already happened on this volume (e.g. a previous run). Use the recovery key at
+`/login`, or get a new one with `make recovery-key`.
+</Accordion>
+<Accordion title="Lost every session and the recovery key (cloud)">
+On the host: `docker exec staqly-api server recovery-key <workspace id>` and sign in at `/login`.
+This needs shell access to the server — there is no remote backdoor.
+</Accordion>
+<Accordion title="403 csrf_failed from scripts">
+You are sending a session cookie. Scripts should use `Authorization: Bearer <API key>` (no
+CSRF needed).
+</Accordion>
+<Accordion title="403 forbidden: missing required scope …">
+The API key lacks a scope. Create a key with the right scopes under **Integrations → API
+keys**. The signup key intentionally lacks `admin` and `rules:manage`.
+</Accordion>
+<Accordion title="Webhook deliveries fail: private / loopback destination … is not allowed">
+Adjust `WEBHOOK_ALLOW_PRIVATE` / `WEBHOOK_ALLOW_LOOPBACK`. Inside Docker, `localhost` is the
+API container itself — use `host.docker.internal` or a compose service name (see
+[n8n networking](/docs/agents/n8n#networking--pick-your-setup)).
+</Accordion>
+<Accordion title="Webhook deliveries: connection refused from n8n on the host (Linux)">
+Make n8n listen on all interfaces (or the Docker bridge) and use
+`http://host.docker.internal:5678/…`; the compose file maps it to the host gateway.
+</Accordion>
+<Accordion title="A watcher is degraded or paused">
+Check `last_error` in `GET /v1/watchers`. Common causes: the feed URL moved (404), the site
+disallows automated access in `robots.txt` (`robots_disallowed`), the source isn't an RSS/Atom
+feed, or the address is private (watchers fetch public addresses only unless
+`WATCHER_ALLOW_PRIVATE=true`). Fix it, then resume with `PATCH /v1/watchers/{id}`
+`{"status":"active"}`.
+</Accordion>
+<Accordion title="n8n Code node: Cannot find module 'crypto'">
+Set `NODE_FUNCTION_ALLOW_BUILTIN=crypto` on n8n, or leave the demo's `webhookSecret` empty (no
+verification — fine only for a quick local test).
+</Accordion>
+<Accordion title="MCP STDIO prints nothing / exits">
+Don't pass `-t` to `docker exec`. In cloud mode forward the key
+(`docker exec -i -e STAQLY_API_KEY …`). Run `docker exec -i staqly-api mcp-stdio` by hand —
+errors go to stderr.
+</Accordion>
+<Accordion title="Port already in use">
+Set `API_PORT` / `WEB_PORT` in `.env`. If you change `API_PORT`, also update `PUBLIC_API_URL`
+and your MCP client URLs.
+</Accordion>
+<Accordion title="Upload rejected with 415">
+Only common image, video, audio, PDF, text, CSV, Markdown, JSON and ZIP files are accepted;
+SVG and HTML are refused because they can carry script. Raise the size limit with
+`MAX_UPLOAD_MB`.
+</Accordion>
+<Accordion title="database is locked">
+Shouldn't happen with the bundled configuration (immediate transactions and a 10 s busy
+timeout). Make sure only one `server` process uses a data directory.
+</Accordion>
+</Accordions>
+
+## Logs
+
+```bash
+docker compose logs -f api
+```
+
+JSON lines; request paths are logged, headers and query strings are not. Set `LOG_LEVEL=debug`
+for more.

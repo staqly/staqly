@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 120,
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "AGENTS.md",
+    "README.md",
+    "CHANGELOG.md",
+    "package-lock.json",
+    ".next/**",
+    "out/**",
+    ".source/**",
+    "content/**",
+    "next-env.d.ts"
+  ]
+}

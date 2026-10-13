@@ -1,0 +1,24 @@
+---
+title: Activity
+description: The immutable log of everything that happened — by you, your agents and the system.
+---
+
+**Activity** shows every event in the workspace, newest first: items created, edited,
+approved and rejected; actions run; collections changed; rules applied; webhooks tested.
+
+## Filters
+
+- **Event type** — common types such as `item.created`, `item.updated`, `item.status_changed`,
+  `item.approved`, `item.rejected`, `item.deleted`, or an exact custom type such as
+  `item.publish_requested`.
+- **Actor** — `local` (you, in local mode), `session` (a signed-in browser), `api_key` (an
+  agent or automation) or `system` (rules, watchers, expiry).
+- **Collection**.
+
+## Immutable by design
+
+Events cannot be edited: a database trigger forbids updates. They are the same records that
+webhooks deliver, so what you see here is exactly what your automations received.
+
+API: `GET /v1/events?type=…&actor_type=…&collection_id=…&item_id=…` with cursor pagination.
+See [Event types](/docs/api/events).

@@ -1,0 +1,44 @@
+{
+  "name": "@staqly/docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "staq.ly user documentation (Fumadocs, static export)",
+  "scripts": {
+    "dev": "next dev -p 8090",
+    "build": "next build && node scripts/check-links.mjs",
+    "preview": "npx serve@latest out -l 8090",
+    "check-links": "node scripts/check-links.mjs",
+    "lint": "oxlint --deny-warnings",
+    "typecheck": "next typegen && tsc --noEmit",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "cn": "^0.4.0",
+    "fumadocs-core": "16.17.2",
+    "fumadocs-mdx": "15.4.7",
+    "fumadocs-openapi": "^12.4.2",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.17.2",
+    "geist": "^1.7.2",
+    "lucide-react": "^1.50.0",
+    "mermaid": "^12.2.0",
+    "next": "^16.4.0",
+    "next-themes": "^0.4.6",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "shiki": "^4.5.0",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/mdx": "^2.0.14",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  }
+}

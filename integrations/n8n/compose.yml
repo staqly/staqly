@@ -1,0 +1,33 @@
+# Example: run n8n next to staq.ly. This is only a starting point — any n8n
+# (desktop app, npx, your own container or server) works the same way.
+#
+#   docker compose up -d                                   # staq.ly first (repo root)
+#   docker compose -f integrations/n8n/compose.yml up -d   # then this
+#
+# Joining the staq.ly network lets both sides use service names:
+#   n8n → staq.ly API:   http://api:3333
+#   staq.ly → n8n:       http://n8n:5678/webhook/...
+name: staqly-n8n
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      N8N_SECURE_COOKIE: "false"            # plain http on localhost
+      WEBHOOK_URL: http://localhost:5678/
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto   # webhook signature check in the demo workflow
+    ports:
+      - "5678:5678"                         # change/limit as you like, e.g. "127.0.0.1:5678:5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./:/workflows:ro                    # instagram-avatar-demo.json importable via CLI
+    networks: [default, staqly]
+
+networks:
+  staqly:
+    name: staqly_default                    # created by the staq.ly compose project
+    external: true
+
+volumes:
+  n8n-data:

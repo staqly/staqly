@@ -1,0 +1,75 @@
+---
+title: Media uploads
+description: Upload images, videos and files — in one request with the item, or separately.
+---
+
+## In one request
+
+Send `multipart/form-data` to the create-item endpoint with a **`file`** part and an optional
+**`item`** part containing the JSON fields. The type is inferred from the file (`image`,
+`video` or `file`).
+
+```bash
+curl -s -X POST "http://localhost:3333/v1/collections/Instagram%20Avatar/items" \
+  -F file=@avatar.png \
+  -F 'item={"title":"Avatar #1","content":"caption","metadata":{"seed":42},"source":"n8n"}'
+```
+
+```ts
+const item = await staqly.createItemWithFile('Instagram Avatar', blob, 'avatar.png', {
+  title: 'Avatar #1',
+  metadata: { seed: 42 },
+});
+```
+
+## Separately
+
+Upload first, then reference the media ID — useful when one file belongs to several items:
+
+```bash
+curl -s -X POST http://localhost:3333/v1/media -F file=@clip.mp4
+# → {"id":"med_…","mime_type":"video/mp4","size_bytes":…,"original_name":"clip.mp4","url":"http://localhost:3333/v1/media/med_…","sha256":"…"}
+
+curl -s -X POST "http://localhost:3333/v1/collections/Instagram%20Avatar/items" \
+  -H 'Content-Type: application/json' -d '{"title":"Reel","media_id":"med_…"}'
+```
+
+`media_id: ""` in an update removes the media from an item.
+
+## From an agent (MCP)
+
+`create_item` accepts **`media_base64`** (plus `media_filename`, e.g. `avatar.png`) and
+uploads it in the same call. Alternatively pass an external `url` — staq.ly never fetches
+external URLs itself; the item just references them.
+
+## Allowed types
+
+The type is **sniffed from the content**, not taken from the file name or header:
+
+| Kind | Types |
+|---|---|
+| Images | PNG, JPEG, GIF, WebP, AVIF |
+| Video | MP4, WebM, QuickTime (MOV) |
+| Audio | MP3, WAV, Ogg |
+| Documents & data | PDF, plain text, CSV, Markdown, JSON, ZIP |
+
+**SVG and HTML are refused** (`415 unsupported_media_type`) because they can carry script
+when served inline.
+
+## Limits
+
+- `MAX_UPLOAD_MB` (default **100**) on every install; `413 too_large` above it.
+- Cloud plans add a per-file maximum (25 MB / 100 MB / 500 MB) and a storage quota — both
+  return [`402 plan_limit_exceeded`](/docs/api/errors#402-plan_limit_exceeded).
+
+## Downloading
+
+`GET /v1/media/{id}` (scope `items:read`) serves the file after authorization, with the stored
+MIME type, `X-Content-Type-Options: nosniff`, a sandboxing Content-Security-Policy and
+**Range** support (video seeking). Add `?download=1` to force a download. The `url` field in
+API responses and webhooks is absolute, built from `PUBLIC_API_URL`, and still requires
+authentication in cloud mode.
+
+`DELETE /v1/media/{id}` deletes the file; items referencing it lose their media.
+
+Files are stored under `/data/uploads` with random names and are never modified after upload.

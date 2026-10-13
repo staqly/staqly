@@ -1,0 +1,39 @@
+---
+title: Item details & history
+description: Everything about one item — preview, metadata, edits, the event timeline and every previous version.
+---
+
+Click an item anywhere (or press <Kbd>o</Kbd> in the Inbox) to open its page at
+`/items/<id>`. It shows the preview, status, collection, source and creation time, plus the
+actions available right now.
+
+## Tabs
+
+| Tab | What you see |
+|---|---|
+| **Details** | The content, the **Metadata** (every key of the JSON object) and **Properties** — ID, type, source, external ref, version, timestamps, feedback. |
+| **Edit** | Change title, content, URL and metadata. Saving creates a new version. |
+| **History** | The event timeline: created, edited, approved, rejected, actions run, rules applied — with who did it (you, an API key, an agent, or the system). |
+| **Versions** | A snapshot of the item **before each change**, so nothing is ever lost. |
+
+## Concurrency
+
+Every item has a `version`. Edits made in the dashboard and through the API use an optimistic
+check: if the item changed since you opened it, the save fails with a conflict instead of
+silently overwriting someone else's change. API clients can opt in by sending
+`expected_version`.
+
+## Media
+
+Images and videos are served by the API only after authorization, with the stored MIME type,
+`nosniff`, a sandboxing Content-Security-Policy and Range support, so videos can seek.
+
+## API equivalents
+
+| Dashboard | API |
+|---|---|
+| Details | `GET /v1/items/{id}` |
+| Edit | `PATCH /v1/items/{id}` |
+| History | `GET /v1/items/{id}/events` |
+| Versions | `GET /v1/items/{id}/versions` |
+| Available actions | `GET /v1/items/{id}/actions` |

@@ -1,0 +1,41 @@
+---
+title: Search
+description: Full-text search over titles, content and metadata — prefix matching, diacritics folding, ranked by relevance.
+---
+
+Search is built on SQLite **FTS5**. It looks at an item's **title**, **content** and
+**metadata**, and is available in the dashboard, the REST API (`q`) and MCP (`search_items`).
+
+## What matches
+
+- **Prefix matching** — `sun` finds *sunset* and *Sunday*.
+- **Diacritics folding** — `slonca` finds *słońca*, `cafe` finds *café*.
+- **Every word must match** — your text is turned into quoted prefix terms, so search
+  operators cannot be injected and punctuation is safe.
+- **Ranked by relevance** (BM25, title weighted highest) whenever there is a query.
+
+## In the dashboard
+
+Use the search box at the top of a collection. While a query is active, results sort by
+**Best match**; switch to another sort order at any time. Combine search with the status and
+type filters.
+
+## Through the API
+
+```bash
+# everything mentioning "golden hour", best match first
+curl -s "http://localhost:3333/v1/items?q=golden%20hour"
+
+# combine with filters and a date range
+curl -s "http://localhost:3333/v1/items?q=avatar&status=approved&type=image&decided_after=2026-10-12&decided_before=2026-10-13"
+```
+
+`sort` defaults to `relevance` when `q` is set and to `created_desc` otherwise. Details:
+[Pagination & search](/docs/api/pagination-and-search).
+
+## From an agent
+
+> *“Find the images I approved yesterday.”*
+
+The agent calls `search_items` with `status=approved`, `type=image`, `decided_after` and
+`decided_before`. See the [cookbook recipe](/docs/cookbook/approved-yesterday).
