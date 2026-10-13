@@ -16,7 +16,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: dependencies (cached unless package-lock.json changes)
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /docs
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: build the static export (next build → out/) and check links
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /docs
 ENV NEXT_TELEMETRY_DISABLED=1
 
