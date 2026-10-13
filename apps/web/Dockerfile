@@ -11,7 +11,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: dependencies (exactly what package-lock.json says)
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 
 # libc6-compat: some native optional deps expect glibc symbols on Alpine.
@@ -23,7 +23,7 @@ RUN npm ci --no-audit --no-fund
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: build the standalone server
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 
 # Where the dashboard proxies /api/* (baked into the build).
@@ -42,7 +42,7 @@ RUN npm run build
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 3: runtime (no node_modules, no sources — just the standalone output)
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production \
