@@ -38,7 +38,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: runtime
 # ─────────────────────────────────────────────────────────────────────────────
-FROM alpine:3.22
+FROM alpine:3.24
 
 # ca-certificates: HTTPS for webhooks and watchers
 # tzdata:          correct local times in logs if TZ is set
