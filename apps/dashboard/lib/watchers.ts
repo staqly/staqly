@@ -23,23 +23,6 @@ export const INTERVAL_OPTIONS: IntervalOption[] = [
   { every: '168h', seconds: 168 * 3600, label: 'Once a week' },
 ]
 
-/** Parse a Go duration ("30m", "1h0m0s", "1h30m") into seconds; NaN when invalid. */
-export function parseDuration(s: string): number {
-  const re = /(\d+(?:\.\d+)?)(h|m|s)/g
-
-  if (!/^(\d+(?:\.\d+)?(h|m|s))+$/.test(s.trim())) {
-    return NaN
-  }
-
-  let total = 0
-
-  for (const m of s.trim().matchAll(re)) {
-    total += Number(m[1]) * (m[2] === 'h' ? 3600 : m[2] === 'm' ? 60 : 1)
-  }
-
-  return total
-}
-
 /** Option for a number of seconds (falls back to a synthetic option for odd intervals). */
 export function intervalOption(seconds: number): IntervalOption {
   return (

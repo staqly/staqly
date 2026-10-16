@@ -22,10 +22,6 @@ export function usageMeter(used: number, max: number | null | undefined): { leve
   return { level: pct > 80 ? 'warn' : 'ok', pct }
 }
 
-export function meterLevel(used: number, max: number | null | undefined): MeterLevel {
-  return usageMeter(used, max).level
-}
-
 const LEVEL_TONE: Record<Exclude<MeterLevel, 'unlimited'>, Tone> = { ok: 'success', warn: 'warning', full: 'danger' }
 
 /** The tone classes of a meter level (unlimited meters have no fill). */
