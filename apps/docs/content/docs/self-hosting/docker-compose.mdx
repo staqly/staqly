@@ -62,7 +62,8 @@ Compared with `compose.yml` alone it:
 - lets webhooks, watchers and notifications reach private addresses (`WEBHOOK_ALLOW_PRIVATE`,
   `WATCHER_ALLOW_PRIVATE`, `NOTIFY_ALLOW_PRIVATE` default to `true`), so they can reach mailpit,
   n8n or your own receivers on the Docker network,
-- sets `COOKIE_SECURE=false` and `PUBLIC_DASHBOARD_URL=http://localhost:8080` by default,
+- sets `COOKIE_SECURE=false` and `PUBLIC_DASHBOARD_URL=http://localhost:8080` (or your
+  `DASHBOARD_PORT`) by default,
 - has no AI CLI inside, so [summaries and auto-tags](/self-hosting/configuration#auto-tags-and-summaries)
   need `TAGGER_URL` (with `TAGGER_MODEL`, `TAGGER_API_KEY`) in `.env`, e.g. OpenAI,
 - adds **mailpit** (`staqly-mailpit`), which catches every email-channel message. Open its inbox

@@ -34,7 +34,7 @@ services:
       # Who you are in the activity log of a local install (default: your login name).
       LOCAL_USER_NAME: ${LOCAL_USER_NAME:-${USER:-}}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}   # cloud: browser origins allowed with an API key (default https://docs.staqly.ai)
-      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3333}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:${API_PORT:-3333}}
       PUBLIC_DASHBOARD_URL: ${PUBLIC_DASHBOARD_URL:-}
       SETUP_TOKEN: ${SETUP_TOKEN:-}
       TRUST_PROXY: ${TRUST_PROXY:-false}

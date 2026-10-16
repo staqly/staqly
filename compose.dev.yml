@@ -22,7 +22,7 @@ services:
       WATCHER_ALLOW_PRIVATE: ${WATCHER_ALLOW_PRIVATE:-true}
       NOTIFY_ALLOW_PRIVATE: ${NOTIFY_ALLOW_PRIVATE:-true}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      PUBLIC_DASHBOARD_URL: ${PUBLIC_DASHBOARD_URL:-http://localhost:8080}
+      PUBLIC_DASHBOARD_URL: ${PUBLIC_DASHBOARD_URL:-http://localhost:${DASHBOARD_PORT:-8080}}
 
   mailpit:
     image: axllent/mailpit:v1.31
