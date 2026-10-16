@@ -191,8 +191,9 @@ staqly service uninstall            # your data is kept
 Installs `staqly serve` as a background service of your user: a macOS
 LaunchAgent (started at login) or a Linux systemd user unit (started at boot),
 restarted if it stops. `STAQLY_*`, `TAGGER_*`, `PUBLIC_*`, `LOG_*`...
-settings in the environment at install time are kept. Running `install` again
-replaces it.
+settings in the environment at install time are kept, and so is `PATH`, so
+the service finds your `claude` or `codex` for summaries. Running `install`
+again replaces it.
 
 ### status
 

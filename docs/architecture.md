@@ -192,7 +192,7 @@ public (rate-limited) unless `SETUP_TOKEN` is set.
 | Credential | Stored as | Used for |
 |---|---|---|
 | API key `stk_...` (256-bit) | SHA-256 hash + 6-char display prefix | REST + MCP, scoped |
-| Session cookie (256-bit) | SHA-256 hash | Dashboard; HttpOnly, SameSite=Lax, `Secure` (`COOKIE_SECURE`, default `true` in cloud mode), 30-day expiry, revocable |
+| Session cookie (256-bit) | SHA-256 hash | Dashboard; HttpOnly, SameSite=Lax, `Secure` (`COOKIE_SECURE`, default `true` in cloud mode), 30-day expiry (`SESSION_TTL`), revocable |
 | CSRF token | per session | Required in `X-CSRF-Token` for cookie-authenticated unsafe requests |
 | Recovery key (200-bit) | SHA-256 hash | Only `POST /v1/sessions/recover`; rotated from a dashboard session or `server recovery-key` on the host. Recovering or rotating signs out every other session |
 
@@ -208,7 +208,9 @@ the type is sniffed from content (allowlist: common images, video, audio, PDF,
 text, CSV, JSON, ZIP; SVG/HTML/JS rejected). Files are served only through
 `GET /v1/media/{id}` after authorization, with the stored MIME type,
 `nosniff`, a sandboxing CSP and Range support for video seeking. The backend
-never fetches external URLs; items may reference them.
+never downloads an item's external `url`; items may reference them (outgoing
+requests are only webhooks, watchers, notification channels and the summary
+model).
 
 Thumbnails: `GET /v1/media/{id}?w=160|320|640|1280` (other widths: 422; non-
 images: 422). They are made on first request with pure-Go `x/image/draw`

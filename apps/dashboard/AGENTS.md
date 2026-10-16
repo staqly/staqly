@@ -81,13 +81,14 @@ pnpm gen               # regenerate lib/api-types.ts from ../api/openapi.yaml
 
 ## Security headers & untrusted data
 
-* `next.config.ts` `headers()` sends CSP, `X-Frame-Options: DENY`,
-  `Referrer-Policy: no-referrer`, `nosniff` and a `Permissions-Policy` on every
-  non-`/api` route. The CSP allows inline scripts/styles (Next bootstrap,
-  next-themes; no nonces so pages stay static) and `'unsafe-eval'` in dev only;
-  images/media may come from any http(s) host (external item URLs). If a
-  feature needs another source, extend the CSP there and check the browser
-  console in dev and prod.
+* The Go web server (`securityHeaders` in `apps/api/internal/web/web.go`)
+  sends CSP, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `nosniff` and a `Permissions-Policy` on every non-`/api` response; a static
+  export can't set headers itself, and `pnpm dev` sends none. The CSP allows
+  inline scripts/styles (Next bootstrap, next-themes; no nonces so pages stay
+  static); images/media may come from any http(s) host (external item URLs).
+  If a feature needs another source, extend the CSP there and check the
+  browser console against `staqly serve` or the image.
 * `/api` responses carry the API's own headers.
 * Values from the API or the URL go through `lib/safe.ts`: `safeNextPath` for
   `?next=` redirects (same origin only), `safeHttpUrl` before any `href`/`src`
@@ -122,7 +123,7 @@ pnpm gen               # regenerate lib/api-types.ts from ../api/openapi.yaml
 * Use shadcn/ui primitives from `components/ui`; feature components live in
   `components/<feature>`; pages in `app/(app)/...`. Settings sections:
   General, Plan & usage, Notifications (`components/notifications`), Data &
-  privacy, System.
+  privacy, Backups, System.
 * Notification channel secrets come back masked (`••••abcd`): show "•••• set"
   with Replace/Remove, never prefill them, and leave unchanged secrets out of
   PATCH bodies (`lib/channels.ts`).
@@ -152,15 +153,15 @@ re-render only the component it concerns.
   it is a new object on every render, so take out `refetch`,
   `fetchNextPage`, `mutate`, `isPending` instead. JSX inside `?:`/`&&` is
   memoised as one block, so give big page sections (toolbar, filters, list,
-  preview, dialogs) their own `const x = (<…/>)` statements.
+  preview, dialogs) their own `const x = (<Toolbar />)` statements.
 * Vitest compiles app code with the React Compiler too (`vitest.config.ts`),
   and `tests/render-perf.test.tsx` counts renders per component
   (`tests/render-count.ts`, a DevTools hook) for inbox j/k/x/approve, the
   collection item sheet, the activity feed and shell navigation, with upper
   bounds. If it fails, a change made some component render that shouldn't.
 * The compiler does not memoise per item inside `.map()`. List rows and cards
-  are `memo()` components (`InboxRow`, `QueueRow`, `GalleryCard`,
-  `TableItemRow`, `ListRow`, `AuditEventRow`, sidebar `NavCollectionItem`). Pass them primitives, the item object and
+  are `memo()` components (`InboxRow`, `QueueRow`, `TableItemRow`,
+  `TableCard`, `AuditEventRow`, `WatcherCard`, sidebar `NavCollectionItem`). Pass them primitives, the item object and
   **stable callbacks** (setState, or a callback that reads the latest URL
   params from a ref; see `CollectionPage.open`), never inline arrows or
   per-render closures over `useSearchParams()`.
@@ -180,7 +181,7 @@ re-render only the component it concerns.
   layout and paint. This made virtualisation unnecessary at 3000 cards. It
   doesn't apply to `<tr>`.
 * Heavy per-row children (dialogs, popovers) mount on first use, not per row
-  (see `QuickReview`).
+  (see `JsonBlock`, `useItemOptions` and `useLazyDialog` in the app shell).
 
 ## Tests
 

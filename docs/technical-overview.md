@@ -51,13 +51,15 @@ API key and no password. Agents, n8n and scripts on your machine call the API
   credential-less requests only from loopback/Docker peers whose `Host` is a
   local name and whose `Origin` (if any) is local, so a website you visit
   cannot drive your staqly (no cross-site requests, no DNS rebinding).
-* **Dashboard — reachable from your network, one-time sign-in per browser.**
-  It listens on `:8080` so phones and tablets can use it; each browser signs in
-  once with a one-time link (`staqly serve connect-link` or
-  `docker exec staqly server connect-link` prints one, phones scan a QR from
-  *Connect a device*). Sessions last 30 days.
+* **Dashboard — on this computer, or on your network with a sign-in.**
+  `staqly serve` keeps it on `127.0.0.1:8080` with no sign-in. The Docker
+  image and `staqly serve --expose` publish it on `:8080` so phones and
+  tablets can use it; then each browser signs in once with a one-time link
+  (`staqly serve connect-link` or `docker exec staqly server connect-link`
+  prints one, phones scan a QR from *Connect a device*). Sessions last 30 days.
 
-Optional demo data: `scripts/seed.sh` (`make seed` from a checkout).
+Optional demo data from a checkout: `make seed` (`scripts/seed.sh`, against
+`STAQLY_API_URL`, default `http://localhost:3333`).
 
 ### Cloud mode: hosted, many workspaces, plans
 
@@ -83,8 +85,9 @@ Details, deployment and moving local data: [docs/cloud.md](cloud.md).
 The dashboard works on phones and tablets. **Connect a device** shows a QR
 code; scanning it opens staqly on the phone already signed in. The link
 works once, expires in 5 minutes, and the device appears under
-*Settings → Devices*, where you can revoke it. For phones on your Wi-Fi add
-`PUBLIC_DASHBOARD_URL=http://<LAN IP>:8080` to `.env` (see
+*Settings → Devices*, where you can revoke it. For phones on your Wi-Fi set
+`PUBLIC_DASHBOARD_URL=http://<LAN IP>:8080` (`-e` on `docker run`, or in the
+environment of `staqly serve --expose`; see
 [docs/cloud.md](cloud.md#connect-a-device-qr)).
 
 ## Concepts
@@ -114,6 +117,13 @@ works once, expires in 5 minutes, and the device appears under
   (RSS/Atom entries become pending items) or `url_diff` (an item when the page
   text changes; JSON endpoints too). robots.txt is respected for both. No
   built-in source catalog; push sources post to `POST /v1/items` instead.
+- **Summaries and auto-tags** — every new item gets a one-line `summary`
+  (and 1-3 tags if it came without any) from a background queue. `staqly serve`
+  uses your own AI CLI (`claude -p --model haiku`, else `codex exec`, or
+  `TAGGER_COMMAND`; `off` disables it); the Docker image and cloud mode use an
+  OpenAI-compatible endpoint (`TAGGER_URL`, `TAGGER_MODEL` default
+  `gpt-4o-mini`, `TAGGER_API_KEY`, `TAGGER_CONCURRENCY` default 2). Ask for a
+  new one with `POST /v1/items/{id}/summarize`; `item.summarized` records it.
 - **Notifications** — Telegram, Slack, Discord, ntfy and email channels with
   approve/reject buttons or one-tap links ([docs/notifications.md](notifications.md)).
 - **Events** — immutable activity log (DB trigger forbids updates). Each event
@@ -320,7 +330,7 @@ Operational docs: [monitoring](observability.md) (`/livez`, `/readyz`,
 ```bash
 make test        # unit and integration tests of every package (pnpm turbo run test)
 make check       # formatting, lint, types and tests of every package
-make test-api    # one package: test-api, test-cli, test-dashboard, test-sdk, test-sdk-python, test-docs
+make test-api    # one package: test-api, test-cli, test-dashboard, test-sdk, test-sdk-python
 make test-e2e    # full Docker end-to-end run (e2e/ package, compose.e2e.yml)
 make lint-openapi
 make gen         # regenerate sqlc queries, dashboard API types and the TypeScript SDK schema

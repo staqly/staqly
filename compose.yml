@@ -51,7 +51,8 @@ services:
       WEBHOOK_RETRY_BASE: ${WEBHOOK_RETRY_BASE:-15s}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
-      # Optional settings documented in .env.example are passed through as-is.
+      # Optional settings from .env.example, passed through as-is (the ones it
+      # marks [not in compose.yml] need a line here first).
       METRICS_TOKEN: ${METRICS_TOKEN:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}

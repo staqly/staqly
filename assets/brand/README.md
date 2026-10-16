@@ -31,8 +31,10 @@ source, the gradient stops were sampled from it, and the wordmark is an outline 
 | `brand-preview.png` | Every variant on dark and light backgrounds. |
 
 The apps use copies: `apps/dashboard/app/{icon.svg,favicon.ico,apple-icon.png,opengraph-image.png}`,
-`apps/dashboard/public/brand/` (marks + manifest icons) and the same set in `apps/docs`. The dashboard
-and docs `<Logo>` components inline the wordmark path and show the light/dark mark by theme.
+`apps/dashboard/public/brand/` (marks + manifest icons), the app icons and the dark mark in `apps/docs`, and the dark mark in `apps/web`.
+The shared `<Logo>` (`@staqly/brand/logo`, `packages/brand/src/logo.tsx`) inlines the wordmark path
+and loads the mark from each app's `public/brand/`: by theme in the dashboard, the dark colourway in
+the dark-only docs and landing page.
 
 ### Using it in a GitHub README
 
@@ -59,7 +61,7 @@ and docs `<Logo>` components inline the wordmark path and show the light/dark ma
 The light variant of the mark deepens the top layer (`#A6E85F` → `#63DA73` → `#22C77A`) and the
 shadow layers so the mark keeps its shape on white.
 
-### UI tokens (apps/dashboard `globals.css`, apps/docs `global.css`)
+### UI tokens (`packages/brand/tokens.css`, shared by the dashboard, docs and staqly.ai)
 
 | Token | Light | Dark |
 |---|---|---|
@@ -71,8 +73,8 @@ shadow layers so the mark keeps its shape on white.
 | `--brand-gradient` ("Most popular", Pro badge, upgrade buttons) | `#C9FB93 → #63F08E → #1ED27B`, always with dark text `#052817` | same |
 
 The brightest lime is never used for text on white; in light mode text and links use the deep
-green. Neutrals stay graphite (`oklch(... 0.004–0.014 260–265)`). The status "approved" badge and
-Approve buttons use **teal**, so they don't read as the brand accent.
+green. Neutrals and `--ring` stay in each app (graphite, `oklch(... 0.004–0.014 260–265)`). The status "approved" badge and
+Approve buttons use **emerald** (Tailwind, `apps/dashboard/lib/tones.ts`), not the brand tokens.
 
 ## Usage
 

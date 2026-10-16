@@ -12,7 +12,7 @@ built as a **static export** (`out/`). It is *not* part of the root
 | Search | Fumadocs built-in static Orama search (index exported to `/api/search`, searched in the browser) |
 | Diagrams | ` ```mermaid ` fences → `<Mermaid>` (client-side, themed; nothing rendered at build time) |
 | Tooling | TypeScript 7 (native compiler), **oxlint** (`.oxlintrc.json`: react, nextjs, typescript, import, jsx-a11y, unicorn, oxc plugins; warnings fail `pnpm lint`). **oxfmt** (`.oxfmtrc.json`): printWidth 120, single quotes (double in JSX attributes), no semicolons, trailing commas, imports grouped (builtin → external → internal → relative) with a blank line between groups; `pnpm format` / `format:check`. |
-| Node | 24 (Dockerfile `node:24-alpine`; keep `@types/node` on 24.x to match) |
+| Node | 24 (root `.nvmrc`; keep `@types/node` on 24.x to match) |
 
 ## Commands
 
@@ -107,9 +107,9 @@ flowchart LR
 ## Style rules (UI)
 
 * Colours come from the theme tokens in `app/global.css` (graphite neutrals,
-  one ember accent: `--brand`, `text-brand`, `bg-brand-soft`); Fumadocs
-  colours via `fd-*` utilities. Keep it in sync with the dashboard.
-* Must look right at 390 px, 820 px and 1440 px, light and dark, with no
+  one green accent from `@staqly/brand`: `--brand`, `text-brand`, `bg-brand-soft`); Fumadocs
+  colours via `fd-*` utilities. Change brand tokens in `packages/brand/tokens.css` (shared with the dashboard and staqly.ai).
+* Must look right at 390 px, 820 px and 1440 px (dark only), with no
   horizontal page overflow (tables and diagrams scroll inside themselves).
 * Don't add runtime services: the output must stay plain static files.
 

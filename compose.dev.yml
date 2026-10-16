@@ -11,7 +11,7 @@
 #     Set in .env: STAQLY_MODE=cloud, STRIPE_SECRET_KEY (an sk_test_ key),
 #     STRIPE_PRICE_PRO, COMPOSE_PROFILES=stripe, and the secret from
 #     `make stripe-secret` as STRIPE_WEBHOOK_SECRET.
-# Production and `make up` use compose.yml alone.
+# `make up` uses compose.yml alone; cloud servers add compose.cloud.yml (`make cloud`).
 
 services:
   staqly:

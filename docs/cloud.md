@@ -6,7 +6,7 @@
 | Workspaces | one, created automatically | many — anyone can create one ("no card, no email"), or only `SETUP_TOKEN` holders |
 | Plan | **Unlocked** (no limits) | 7-day **Pro** trial, then Pro (paid) or **Free** |
 | Agents / n8n / scripts | no credentials (this machine only) | API key `stk_...` — the key decides which workspace you work in |
-| Dashboard | opens directly on this computer | session cookie + CSRF; recovery key for lost sessions |
+| Dashboard | opens directly with `staqly serve`; with `--expose` or the Docker image each browser signs in once with a one-time link | session cookie + CSRF; recovery key for lost sessions |
 | Phones / tablets | **Connect a device** QR (needs LAN access, see below) | **Connect a device** QR |
 | MCP | `http://localhost:3333/mcp` or `docker exec -i staqly mcp-stdio` | `https://<host>/mcp` + `Authorization: Bearer {API_KEY}` |
 
@@ -145,7 +145,9 @@ to type.
 * The QR grants full access to the workspace: scan it only with your own
   device and don't share screenshots.
 
-**Signing in (local mode):** the dashboard is published on your network so
+**Signing in (local mode):** `staqly serve` keeps the dashboard on
+`127.0.0.1`, so this computer needs no sign-in. With the Docker image or
+`staqly serve --expose` the dashboard is published on your network so
 phones and tablets can use it, which means **every browser signs in once**,
 including the one on this computer: Docker Desktop hides the real client
 address and a `Host` header can be forged, so the dashboard cannot tell "this
@@ -177,7 +179,8 @@ workspace (the count is printed on stderr; stdout is only the key).
 
 ## Why local mode is safe without keys
 
-* Published ports bind to `127.0.0.1`.
+* The API port is published on `127.0.0.1` only (the dashboard, which is
+  published on the network, requires a sign-in).
 * Run outside Docker, the server listens on `127.0.0.1:3333` by default.
 * Credential-less requests must come from a loopback peer or one inside
   `LOCAL_TRUSTED_PEERS` (compose sets

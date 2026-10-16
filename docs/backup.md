@@ -56,7 +56,7 @@ docker run --rm --volumes-from staqly:ro -v "$PWD":/out alpine \
 docker cp staqly:/data/notify_secret.key .   # only if it exists (notification channels without NOTIFY_SECRET_KEY)
 ```
 
-Restore (from the folder with both files):
+Restore (from the folder with the backup files):
 
 ```bash
 docker stop staqly
@@ -65,6 +65,7 @@ docker run --rm --volumes-from staqly -v "$PWD":/backup:ro alpine sh -ec '
   cp /backup/staqly-backup.db /data/workspace.db
   rm -rf /data/uploads
   tar xzf /backup/staqly-uploads.tar.gz -C /data
+  if [ -f /backup/notify_secret.key ]; then cp /backup/notify_secret.key /data/; fi
   chown -R 10001:10001 /data
   chmod 600 /data/workspace.db'
 docker start staqly
