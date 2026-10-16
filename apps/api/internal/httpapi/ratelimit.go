@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"crypto/subtle"
 	"net"
 	"net/http"
 	"net/netip"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/staqly/staqly/apps/api/internal/web"
 )
 
 // rateLimiter is a sliding-window counter per key.
@@ -84,7 +87,7 @@ func (l *rateLimiter) evict(now time.Time) {
 // by your own proxy; anything to its left is client-controlled). IPv6
 // clients are keyed by their /64, since one host typically owns a whole /64.
 func (s *Server) clientIP(r *http.Request) string {
-	if s.cfg.TrustProxy {
+	if s.cfg.TrustProxy || s.fromRelay(r) {
 		if xff := r.Header.Values("X-Forwarded-For"); len(xff) > 0 {
 			parts := strings.Split(xff[len(xff)-1], ",")
 			if ip, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1])); err == nil {
@@ -109,4 +112,11 @@ func rateKeyIP(ip netip.Addr) string {
 		return p.String()
 	}
 	return ip.String()
+}
+
+// fromRelay reports whether r was relayed by the embedded dashboard (which replaced X-Forwarded-For with the
+// browser's address).
+func (s *Server) fromRelay(r *http.Request) bool {
+	got := r.Header.Get(web.RelayHeader)
+	return s.cfg.RelayToken != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.RelayToken)) == 1
 }

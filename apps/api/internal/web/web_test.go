@@ -35,7 +35,7 @@ func do(h http.Handler, method, target string, body io.Reader, hdr map[string]st
 }
 
 func TestFiles(t *testing.T) {
-	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false)
+	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "")
 	for path, want := range map[string]string{
 		"/": "home", "/inbox": "inbox", "/inbox.txt": "inbox-rsc",
 		"/items/itm_1": "item-shell", "/items/itm_1.txt": "item-rsc",
@@ -63,7 +63,7 @@ func TestFiles(t *testing.T) {
 	if w := do(h, "POST", "/inbox", nil, nil); w.Code != 405 {
 		t.Errorf("POST page: %d", w.Code)
 	}
-	if w := do(Handler(fstest.MapFS{}, nowhere, slog.New(slog.DiscardHandler), false), "GET", "/", nil, nil); w.Code != 503 {
+	if w := do(Handler(fstest.MapFS{}, nowhere, slog.New(slog.DiscardHandler), false, ""), "GET", "/", nil, nil); w.Code != 503 {
 		t.Errorf("unbuilt dashboard: %d", w.Code)
 	}
 }
@@ -82,7 +82,7 @@ func TestAPIProxy(t *testing.T) {
 	}))
 	defer upstream.Close()
 	u, _ := url.Parse(upstream.URL)
-	h := Handler(site, u, slog.New(slog.DiscardHandler), false)
+	h := Handler(site, u, slog.New(slog.DiscardHandler), false, "")
 
 	w := do(h, "POST", "http://phone.lan:8080/api/v1/items?x=1", strings.NewReader("payload"), map[string]string{
 		"X-Forwarded-For": "1.2.3.4", "X-Forwarded-Host": "localhost", "Forwarded": "for=1.2.3.4", "X-Real-Ip": "1.2.3.4",
@@ -99,10 +99,20 @@ func TestAPIProxy(t *testing.T) {
 		t.Fatalf("forwarding headers: %v", got.Header)
 	}
 	// Behind your own proxy (TRUST_PROXY) the browser is its right-most X-Forwarded-For entry.
-	behind := Handler(site, u, slog.New(slog.DiscardHandler), true)
+	behind := Handler(site, u, slog.New(slog.DiscardHandler), true, "")
 	do(behind, "GET", "/api/v1/items", nil, map[string]string{"X-Forwarded-For": "6.6.6.6, 1.2.3.4"})
 	if xff := got.Header.Values("X-Forwarded-For"); len(xff) != 1 || xff[0] != "1.2.3.4" {
 		t.Fatalf("trusted proxy: X-Forwarded-For %v", xff)
+	}
+	// The relay secret is the dashboard's own: a browser's copy is dropped, and only a configured token is sent.
+	do(h, "GET", "/api/v1/items", nil, map[string]string{RelayHeader: "forged"})
+	if v := got.Header.Values(RelayHeader); len(v) != 0 {
+		t.Fatalf("browser relay header passed on: %v", v)
+	}
+	relayed := Handler(site, u, slog.New(slog.DiscardHandler), false, "s3cret")
+	do(relayed, "GET", "/api/v1/items", nil, map[string]string{RelayHeader: "forged"})
+	if v := got.Header.Values(RelayHeader); len(v) != 1 || v[0] != "s3cret" {
+		t.Fatalf("relay header: %v", v)
 	}
 	if w := do(h, "GET", "/api", nil, nil); w.Code != 201 || got.URL.Path != "/" {
 		t.Fatalf("/api → %q (%d)", got.URL.Path, w.Code)
@@ -116,7 +126,7 @@ func TestAPIProxy(t *testing.T) {
 		t.Fatalf("declared oversize body: %d", rec.Code)
 	}
 
-	down := Handler(site, nowhere, slog.New(slog.DiscardHandler), false)
+	down := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "")
 	if w := do(down, "GET", "/api/health", nil, nil); w.Code != 502 || !strings.Contains(w.Body.String(), "bad_gateway") {
 		t.Fatalf("API down: %d %s", w.Code, w.Body.String())
 	}

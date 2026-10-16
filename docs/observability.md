@@ -221,5 +221,7 @@ header (seconds) and this body:
 | `TRUST_PROXY` | `false` | Take the client IP from the **right-most** `X-Forwarded-For` entry (the one your proxy appends; entries to its left are client-controlled). Turn this on only behind your own proxy. IPv6 clients are rate-limited per /64 |
 
 Behind a proxy with `TRUST_PROXY=false`, all clients share the proxy's IP and
-therefore one sensitive-endpoint bucket.
+therefore one sensitive-endpoint bucket. The dashboard built into the same process (`staqly serve`, the
+image) is not such a proxy: it passes each browser's address to the API with a per-process
+secret, so browsers keep their own buckets without `TRUST_PROXY`.
 

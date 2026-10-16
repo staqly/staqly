@@ -48,13 +48,18 @@ var securityHeaders = map[string]string{
 // Pages with an [id] segment are exported once, as id "_".
 var idRoutes = map[string]bool{"items": true, "collections": true}
 
+// RelayHeader carries relayToken on every proxied request: the API in the same process (staqly serve, the
+// image) takes the browser's address from X-Forwarded-For only on requests that bear it.
+const RelayHeader = "X-Staqly-Relay"
+
 // Handler serves files from site (the root of the static export) and proxies
 // /api/* to the API at upstream (e.g. http://api:3333). trustProxy (TRUST_PROXY)
 // takes the browser's address from the right-most X-Forwarded-For entry set by
-// your own reverse proxy instead of the TCP peer.
-func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool) http.Handler {
+// your own reverse proxy instead of the TCP peer. relayToken ("" = none) is a
+// secret shared with an API in the same process, sent as RelayHeader.
+func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken string) http.Handler {
 	mux := http.NewServeMux()
-	api := apiProxy(upstream, log, trustProxy)
+	api := apiProxy(upstream, log, trustProxy, relayToken)
 	mux.Handle("/api/", api)
 	mux.Handle("/api", api)
 	mux.Handle("/", files(site))
@@ -94,7 +99,7 @@ func ClientIP(r *http.Request, trustProxy bool) string {
 	return ""
 }
 
-func apiProxy(upstream *url.URL, log *slog.Logger, trustProxy bool) http.Handler {
+func apiProxy(upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken string) http.Handler {
 	rp := &httputil.ReverseProxy{
 		// Rewrite (unlike Director) already drops the client's X-Forwarded-*
 		// and hop-by-hop headers.
@@ -125,6 +130,10 @@ func apiProxy(upstream *url.URL, log *slog.Logger, trustProxy bool) http.Handler
 			// proxy's entry), never copied from what the browser sent.
 			if ip := ClientIP(pr.In, trustProxy); ip != "" {
 				pr.Out.Header.Set("X-Forwarded-For", ip)
+			}
+			pr.Out.Header.Del(RelayHeader) // never the browser's
+			if relayToken != "" {
+				pr.Out.Header.Set(RelayHeader, relayToken)
 			}
 		},
 		FlushInterval: -1, // long-polls, MCP streams and downloads go out as they come
