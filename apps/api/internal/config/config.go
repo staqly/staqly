@@ -223,11 +223,14 @@ func taggerCommand(local bool, url, cmd string, lookPath func(string) (string, e
 	if url != "" {
 		return nil
 	}
+	// The prompt carries untrusted item content, so the CLI gets no way to act on it: Claude Code with no
+	// tools, MCP servers or skills; Codex in its read-only sandbox (no writes, no network). Neither keeps the
+	// run as a session.
 	if p, err := lookPath("claude"); err == nil {
-		return []string{p, "-p", "--model", "haiku"}
+		return []string{p, "-p", "--model", "haiku", "--tools=", "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"}
 	}
 	if p, err := lookPath("codex"); err == nil {
-		return []string{p, "exec", "--skip-git-repo-check", "-"}
+		return []string{p, "exec", "--skip-git-repo-check", "--sandbox", "read-only", "--ephemeral", "-"}
 	}
 	return nil
 }

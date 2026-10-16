@@ -126,7 +126,7 @@ service finds your Claude Code or Codex for [summaries](/self-hosting/configurat
 For example, a specific AI command:
 
 ```bash
-TAGGER_COMMAND="codex exec --skip-git-repo-check -m gpt-5-mini -" staqly service install
+TAGGER_COMMAND="codex exec --skip-git-repo-check --sandbox read-only -m gpt-5-mini -" staqly service install
 ```
 
 Run `staqly service install` again after an upgrade or to change flags or settings: it replaces

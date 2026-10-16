@@ -420,6 +420,12 @@ func TestWorkspaceExportZipLifecycle(t *testing.T) {
 	e.svc.Now = func() time.Time { return time.Now().Add(25 * time.Hour) }
 	defer func() { e.svc.Now = time.Now }()
 	e.do(e.browser, "GET", job.DownloadURL, "", nil, 410, nil)
+	// Before the worker runs, GET already reports it expired, without a download link (like the list).
+	var stale app.WorkspaceExport
+	e.do(e.browser, "GET", "/v1/workspace/exports/"+job.ID, "", nil, 200, &stale)
+	if stale.Status != "expired" || stale.DownloadURL != "" {
+		t.Fatalf("expired export offered: %+v", stale)
+	}
 	e.svc.ProcessExports(context.Background())
 	if _, err := os.Stat(filepath.Join(dataDir, "exports", job.ID+".zip")); !os.IsNotExist(err) {
 		t.Fatalf("expired zip should be deleted: %v", err)

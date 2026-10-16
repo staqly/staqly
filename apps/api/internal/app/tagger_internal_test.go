@@ -1,11 +1,28 @@
 package app
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
+
+// A CLI that leaves a child holding its stdout must not keep the worker past the timeout: Wait gives up
+// shortly after the process is killed.
+func TestRunTaggerCommandTimeout(t *testing.T) {
+	s := &Service{Cfg: Config{Tagger: TaggerConfig{Command: []string{"/bin/sh", "-c", "sleep 30 & sleep 30"}}}}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := s.runTaggerCommand(ctx, "hi"); err == nil {
+		t.Fatal("no error after the timeout")
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Fatalf("waited %s for the command", d)
+	}
+}
 
 func TestParseSuggestion(t *testing.T) {
 	summary, tags := parseSuggestion("Here you go:\n```json\n{\"summary\": \"  Spring sale  post \", \"tags\": [\"Marketing\"]}\n```")
@@ -31,6 +48,21 @@ func TestClipKeepsUTF8(t *testing.T) {
 	}
 	if clip("abc", 5) != "abc" || clip("abcdef", 3) != "abc" {
 		t.Fatal("ascii")
+	}
+}
+
+// Length limits count characters, not bytes: non-ASCII words and tags within the limit are kept.
+func TestLimitsCountCharacters(t *testing.T) {
+	word := strings.Repeat("ż", 60) // 60 characters, 120 bytes
+	if got, err := cleanWords([]string{word}, "keywords"); err != nil || len(got) != 1 {
+		t.Fatalf("cleanWords: %v %v", got, err)
+	}
+	if _, err := cleanWords([]string{strings.Repeat("ż", 101)}, "keywords"); err == nil {
+		t.Fatal("cleanWords: 101 characters accepted")
+	}
+	tag := strings.Repeat("ż", 30)
+	if got := parseTags(`["` + tag + `"]`); !slices.Equal(got, []string{tag}) {
+		t.Fatalf("parseTags: %q", got)
 	}
 }
 

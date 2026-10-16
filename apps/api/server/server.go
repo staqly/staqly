@@ -6,6 +6,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -109,8 +111,19 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 		log.Info("summaries and tags are off (turned on by TAGGER_URL, TAGGER_COMMAND, or locally Claude Code / Codex on PATH)")
 	}
 
+	// The embedded dashboard proves its relayed requests with a per-process secret, so the API keeps each
+	// browser's own address for its per-IP limits (else every browser shares the loopback peer and one of
+	// them can use up sign-up, recovery and connect-link limits for all).
+	relay := ""
+	if cfg.DashboardAddr != "" {
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			return err
+		}
+		relay = hex.EncodeToString(b)
+	}
 	handler := httpapi.New(svc, log, httpapi.Config{
-		CookieSecure: cfg.CookieSecure, TrustProxy: cfg.TrustProxy, OpenAPISpec: api.OpenAPI, Version: version,
+		CookieSecure: cfg.CookieSecure, TrustProxy: cfg.TrustProxy, RelayToken: relay, OpenAPISpec: api.OpenAPI, Version: version,
 		MCP: mcpserver.HTTPHandler(svc, version), CORSOrigins: cfg.CORSOrigins,
 	})
 	// No WriteTimeout on purpose: long-polls (/items/{id}/wait), MCP streams
@@ -148,7 +161,7 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 		// Same path as the staqly-dashboard container: the dashboard reaches the API
 		// over its listener, so the API's local-mode checks are unchanged.
 		site, _ := fs.Sub(api.Web, "web")
-		dash := &http.Server{Handler: web.Handler(site, web.DialURL(ln.Addr().String()), log, cfg.TrustProxy),
+		dash := &http.Server{Handler: web.Handler(site, web.DialURL(ln.Addr().String()), log, cfg.TrustProxy, relay),
 			ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Minute, IdleTimeout: 120 * time.Second}
 		servers = append(servers, dash)
 		go func() {

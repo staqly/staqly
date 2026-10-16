@@ -32,9 +32,12 @@ const sessionCookie = "staqly_session"
 type Config struct {
 	CookieSecure bool
 	TrustProxy   bool // take the client IP from X-Forwarded-For (only behind your own proxy)
-	OpenAPISpec  []byte
-	MCP          http.Handler // mounted at /mcp behind API-key auth
-	Version      string
+	// RelayToken: the embedded dashboard's secret (web.RelayHeader); requests bearing it name the browser in
+	// X-Forwarded-For, which the dashboard set itself. "" = no embedded dashboard.
+	RelayToken  string
+	OpenAPISpec []byte
+	MCP         http.Handler // mounted at /mcp behind API-key auth
+	Version     string
 	// CORSOrigins may call the API from a browser with an API key (cloud mode
 	// only, e.g. the docs playground). Never with cookies.
 	CORSOrigins []string

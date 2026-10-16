@@ -42,7 +42,7 @@ func main() {
 	}
 	site, _ := fs.Sub(api.Web, "web")
 	// No WriteTimeout: long-polls, MCP streams and downloads pass through.
-	srv := &http.Server{Addr: env("ADDR", ":8080"), Handler: web.Handler(site, upstream, log, env("TRUST_PROXY", "") == "true"),
+	srv := &http.Server{Addr: env("ADDR", ":8080"), Handler: web.Handler(site, upstream, log, env("TRUST_PROXY", "") == "true", ""),
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Minute, IdleTimeout: 120 * time.Second}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

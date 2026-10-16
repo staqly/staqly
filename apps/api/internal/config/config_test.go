@@ -184,4 +184,11 @@ func TestTaggerCommand(t *testing.T) {
 			t.Errorf("%s: %q, want prefix %q", c.name, got, c.wantPrefix)
 		}
 	}
+	// Item content reaches the prompt: the detected CLIs must run without tools / in a read-only sandbox.
+	if got := strings.Join(taggerCommand(true, "", "", found("claude")), " "); !strings.Contains(got, "--tools= ") || !strings.Contains(got, "--strict-mcp-config") {
+		t.Errorf("claude runs with tools: %q", got)
+	}
+	if got := strings.Join(taggerCommand(true, "", "", found("codex")), " "); !strings.Contains(got, "--sandbox read-only") {
+		t.Errorf("codex runs outside the read-only sandbox: %q", got)
+	}
 }
