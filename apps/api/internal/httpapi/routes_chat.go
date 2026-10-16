@@ -174,7 +174,8 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request, tok string) {
 			page.Heading = "Reject this item?"
 		}
 		if !page.Form {
-			page.Message = "This item is already " + v.Status + "."
+			// Decided elsewhere (the sibling link, chat, dashboard): no "Approve this item?" over a decided item.
+			page.Heading, page.Message = "Already decided", "This item is already "+v.Status+"."
 		}
 		s.renderDecide(w, r, 200, page)
 	case http.MethodPost:

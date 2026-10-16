@@ -595,6 +595,10 @@ func TestDecisionLinks(t *testing.T) {
 	if code, _, _ := get(approve); code != 410 {
 		t.Fatalf("used link GET: %d", code)
 	}
+	if code, page, _ := get(reject); code != 200 || !strings.Contains(page, "Already decided") || strings.Contains(page, "Reject this item?") ||
+		strings.Contains(page, `<form method="post">`) {
+		t.Fatalf("sibling link page: %d %s", code, page)
+	}
 	if code, page := post(reject, nil); code != 409 || !strings.Contains(page, "already approved") {
 		t.Fatalf("sibling link: %d %s", code, page)
 	}
