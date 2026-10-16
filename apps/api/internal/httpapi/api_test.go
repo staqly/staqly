@@ -860,6 +860,21 @@ func isToolError(out map[string]any) bool {
 	return res == nil || res["isError"] == true
 }
 
+// Codex (OpenAI models) sends unset optional parameters as null; they count as omitted.
+func TestMCPNullArgumentsAreOmitted(t *testing.T) {
+	e := newEnv(t)
+	e.collection("Drafts")
+	_, out := mcpCall(e, e.key, "create_item", map[string]any{"collection": "Drafts", "title": "from codex", "content": "hi",
+		"media_base64": nil, "url": nil, "metadata": nil, "tags": nil, "expires_in": nil})
+	if isToolError(out) {
+		t.Fatalf("create_item with nulls: %v", out)
+	}
+	item := out["result"].(map[string]any)["structuredContent"].(map[string]any)
+	if item["type"] != "text" || item["title"] != "from codex" {
+		t.Fatalf("created item: %v", item)
+	}
+}
+
 func TestMCPHTTPAuthorization(t *testing.T) {
 	e := newEnv(t)
 	c := e.collection("Instagram Avatar")

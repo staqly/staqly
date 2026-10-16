@@ -88,6 +88,31 @@ func seenAgent(t *tools) mcp.Middleware {
 	}
 }
 
+// dropNullArgs removes top-level arguments that are null before the input schema is checked. Clients
+// such as Codex (OpenAI models) send every optional parameter, unset ones as null, which the schema of a
+// string or object field rejects; an omitted field means the same thing.
+func dropNullArgs(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		if p, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok && method == "tools/call" && len(p.Arguments) > 0 {
+			var args map[string]json.RawMessage
+			if json.Unmarshal(p.Arguments, &args) == nil {
+				n := len(args)
+				for k, v := range args {
+					if string(v) == "null" {
+						delete(args, k)
+					}
+				}
+				if len(args) != n {
+					if raw, err := json.Marshal(args); err == nil {
+						p.Arguments = raw
+					}
+				}
+			}
+		}
+		return next(ctx, method, req)
+	}
+}
+
 // writeGuard: like the REST API, a suspended workspace (unpaid Pro) may only
 // call read-only tools; the others answer with the plan_expired error.
 func writeGuard(t *tools) mcp.Middleware {
@@ -171,7 +196,7 @@ func newServer(t *tools, version string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "staqly", Title: "staqly Agent Workspace", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
 	t.readOnly = map[string]bool{}
-	s.AddReceivingMiddleware(writeGuard(t), seenAgent(t))
+	s.AddReceivingMiddleware(writeGuard(t), seenAgent(t), dropNullArgs)
 	f := false
 
 	add(s, t, &mcp.Tool{Name: "list_collections", Description: "List collections with item counts per status.", Annotations: ro()}, t.listCollections)
