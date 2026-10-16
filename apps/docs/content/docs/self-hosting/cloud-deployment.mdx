@@ -61,8 +61,8 @@ make cloud     # = docker compose -f compose.yml -f compose.cloud.yml up -d --wa
 ```
 
 This pulls `ghcr.io/staqly/staqly` (tag `STAQLY_VERSION`) and `caddy`, and starts both. Caddy
-(`deploy/Caddyfile`) gets the certificate, routes `/v1`, `/mcp`, `/openapi.yaml`, `/health` and `/readyz`
-to the API and everything else to the dashboard. Only Caddy publishes ports; staqly's stay inside
+(`deploy/Caddyfile`) gets the certificate, routes `/v1`, `/mcp`, `/openapi.yaml`, the probes (`/health`,
+`/livez`, `/readyz`) and `/metrics` (only with `METRICS_TOKEN`) to the API and everything else to the dashboard. Only Caddy publishes ports; staqly's stay inside
 the Docker network.
 
 </Step>
