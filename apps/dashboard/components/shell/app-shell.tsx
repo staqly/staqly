@@ -73,6 +73,7 @@ import { toastApiError } from '@/lib/notify'
 import { useCollections, useMode, useSession, useUsage } from '@/lib/queries'
 import { safeCssColor } from '@/lib/safe'
 import { rememberApiKey } from '@/lib/session-key'
+import { TONES } from '@/lib/tones'
 import { meterTone, usageMeter } from '@/lib/usage'
 import { cn } from '@/lib/utils'
 
@@ -343,12 +344,12 @@ const NavCollectionItem = memo(function NavCollectionItem({
           <span className="truncate">{c.name}</span>
         </Link>
       </SidebarMenuButton>
-      {/* Always the item count; an amber clock when some wait for review. */}
+      {/* Always the item count; a warning-tone clock when some wait for review. */}
       <SidebarMenuBadge
         className="gap-1 text-muted-foreground/70 in-data-[mobile=true]:top-2.5"
         title={pending ? `${c.item_count} items, ${pending} waiting for review` : `${c.item_count} items`}
       >
-        {pending > 0 && <Clock aria-label={`${pending} pending`} className="size-3 text-amber-500" />}
+        {pending > 0 && <Clock aria-label={`${pending} pending`} className={cn('size-3', TONES.warning.text)} />}
         {c.item_count}
       </SidebarMenuBadge>
     </SidebarMenuItem>

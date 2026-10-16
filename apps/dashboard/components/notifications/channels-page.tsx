@@ -150,7 +150,7 @@ function DeliveriesSheet({
                       </Link>
                     )}
                   </div>
-                  {d.last_error && <p className="text-xs break-words text-red-600 dark:text-red-400">{d.last_error}</p>}
+                  {d.last_error && <p className={cn('text-xs break-words', TONES.danger.text)}>{d.last_error}</p>}
                 </li>
               ))}
             </ul>

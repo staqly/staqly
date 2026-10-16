@@ -8,9 +8,15 @@ import { Button } from '@/components/ui/button'
 import { api, type Agent } from '@/lib/api'
 import { formatDateTime, parseDate, timeAgo } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
+import { TONES, type Tone } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 const ACTIVE_MS = 2 * 60 * 1000
+const ACTIVITY_TONE: Record<ReturnType<typeof agentActivity>, Tone> = {
+  active: 'success',
+  recent: 'warning',
+  idle: 'neutral',
+}
 
 /** Active (talked in the last 2 minutes), Recent (today), or Idle. */
 export function agentActivity(a: Pick<Agent, 'last_seen_at'>, now = Date.now()) {
@@ -73,12 +79,7 @@ function AgentRow({
         </span>
       </button>
       <div className="flex items-center gap-1.5 text-xs" title={formatDateTime(a.last_seen_at)}>
-        <span
-          className={cn(
-            'size-2 rounded-full',
-            activity === 'active' ? 'bg-emerald-500' : activity === 'recent' ? 'bg-amber-500' : 'bg-slate-400',
-          )}
-        />
+        <span aria-hidden className={cn('size-2 rounded-full', TONES[ACTIVITY_TONE[activity]].dot)} />
         {activity === 'active' ? 'Active now' : `Last seen ${timeAgo(a.last_seen_at)}`}
       </div>
       <div className="w-24 text-right text-xs text-muted-foreground tabular-nums">

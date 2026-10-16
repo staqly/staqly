@@ -45,6 +45,8 @@ import { focusFirstInvalid, formApiError } from '@/lib/form-errors'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { qk, useMode, useSession } from '@/lib/queries'
+import { TONES } from '@/lib/tones'
+import { cn } from '@/lib/utils'
 
 import { SettingsCard } from './settings-card'
 import { SettingsNav } from './settings-nav'
@@ -153,12 +155,12 @@ function WorkspaceExportCard() {
               </div>
             )}
             {x.status === 'failed' && (
-              <p className="text-red-600 dark:text-red-400">The export failed{x.error ? `: ${x.error}` : '.'}</p>
+              <p className={TONES.danger.text}>The export failed{x.error ? `: ${x.error}` : '.'}</p>
             )}
             {x.status === 'expired' && <p className="text-muted-foreground">This export expired. Start a new one.</p>}
           </div>
         )}
-        {job.error && !gone && <p className="text-sm text-red-600">{errorMessage(job.error)}</p>}
+        {job.error && !gone && <p className={cn('text-sm', TONES.danger.text)}>{errorMessage(job.error)}</p>}
         <div className="flex flex-wrap items-center gap-3">
           <Button
             variant={x?.status === 'ready' ? 'outline' : 'default'}
@@ -340,7 +342,7 @@ export function DataPrivacyPage() {
             </p>
           </div>
         </SettingsCard>
-        <h2 className="mt-4 text-sm font-semibold text-red-600 dark:text-red-400">Danger zone</h2>
+        <h2 className={cn('mt-4 text-sm font-semibold', TONES.danger.text)}>Danger zone</h2>
         {isCloud ? <DeleteWorkspaceCard /> : <LocalDeleteCard />}
       </div>
     </PageContainer>

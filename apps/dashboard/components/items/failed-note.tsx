@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { Item } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { CANCELED_ERROR } from '@/lib/status'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 /** The processing timeout writes this into metadata.error (apps/api/internal/app/processing.go). */
@@ -25,10 +26,7 @@ export function FailedNote({ item }: { item: Item }) {
     <div
       role={canceled ? 'status' : 'alert'}
       // Text only (the status badge above has the icon); a run stopped by hand is neutral, not an error.
-      className={cn(
-        'rounded-xl border px-3 py-2.5',
-        canceled ? 'border-border bg-muted/40' : 'border-red-500/40 bg-red-500/5',
-      )}
+      className={cn('rounded-xl border px-3 py-2.5', canceled ? 'border-border bg-muted/40' : TONES.danger.callout)}
       data-testid="failed-note"
     >
       <div className="min-w-0 text-sm">

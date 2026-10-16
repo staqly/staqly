@@ -148,7 +148,7 @@ function useWaiting(item: Item) {
 function WaitBar({ waited, limit, className }: { waited: number; limit: number; className?: string }) {
   return (
     <div
-      className={cn('h-1 overflow-hidden rounded-full bg-blue-500/15', className)}
+      className={cn('h-1 overflow-hidden rounded-full', TONES.info.chip, className)}
       role="progressbar"
       aria-label="Time waited of the processing limit"
       aria-valuemin={0}
@@ -224,7 +224,7 @@ export function ProcessingNote({ item }: { item: Item }) {
 
   return (
     <div
-      className="grid basis-full gap-2 rounded-xl border border-blue-500/30 bg-blue-500/5 px-3 py-2.5"
+      className={cn('grid basis-full gap-2 rounded-xl border px-3 py-2.5', TONES.info.callout)}
       data-testid="processing-note"
     >
       <div className="flex flex-wrap items-center gap-3">

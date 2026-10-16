@@ -4,6 +4,7 @@ import { Plus, X } from 'lucide-react'
 import { useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 /**
@@ -83,7 +84,7 @@ export function ChipsInput({
           data-testid="chip"
           className={cn(
             'inline-flex h-6 max-w-full items-center gap-0.5 rounded-md py-0.5 pr-0.5 pl-2 text-xs font-medium pointer-coarse:h-8',
-            tone === 'exclude' ? 'bg-red-500/10 text-red-700 dark:text-red-300' : 'bg-muted text-foreground',
+            tone === 'exclude' ? TONES.danger.badge : 'bg-muted text-foreground',
           )}
         >
           <span className="truncate">{v}</span>

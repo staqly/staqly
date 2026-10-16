@@ -28,6 +28,7 @@ import { api, type Collection } from '@/lib/api'
 import { fieldsOf, focusFirstInvalid, formApiError, setFormApiError } from '@/lib/form-errors'
 import { namedToast, toastApiError } from '@/lib/notify'
 import { qk } from '@/lib/queries'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 import { ActionsEditor } from './actions-editor'
@@ -60,18 +61,13 @@ function Section({
     <section
       className={cn(
         'grid gap-3',
-        danger && 'rounded-xl border border-red-500/40 p-4',
-        archive && 'rounded-xl border border-orange-500/40 p-4',
+        (danger || archive) && 'rounded-xl border p-4',
+        danger && TONES.danger.border,
+        archive && TONES.attention.border,
       )}
     >
       <div>
-        <h3
-          className={cn(
-            'text-sm font-semibold',
-            danger && 'text-red-600 dark:text-red-400',
-            archive && 'text-orange-600 dark:text-orange-400',
-          )}
-        >
+        <h3 className={cn('text-sm font-semibold', danger && TONES.danger.text, archive && TONES.attention.text)}>
           {title}
         </h3>
         {description && <p className="text-xs text-muted-foreground">{description}</p>}

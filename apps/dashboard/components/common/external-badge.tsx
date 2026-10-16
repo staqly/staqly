@@ -2,6 +2,7 @@ import { Globe } from 'lucide-react'
 
 import type { Item } from '@/lib/api'
 import { hostOf } from '@/lib/format'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 import { isUntrusted, watcherMeta } from '@/lib/watchers'
 
@@ -33,7 +34,8 @@ export function ExternalContentBadge({
       title={title}
       aria-label={compact ? 'External content' : undefined}
       className={cn(
-        'inline-flex h-5 shrink-0 items-center gap-1 rounded-md bg-blue-500/8 px-1.5 text-[11px] font-medium whitespace-nowrap text-blue-700 ring-1 ring-blue-500/20 ring-inset dark:text-blue-300',
+        'inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium whitespace-nowrap ring-1 ring-inset',
+        TONES.info.badge,
         compact && 'px-1',
         className,
       )}

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { api, ApiError, errorMessage, setCsrfToken } from '@/lib/api'
 import { rememberApiKey } from '@/lib/session-key'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 type State =
@@ -131,7 +132,12 @@ export function ConnectDevice() {
             <div className="relative mx-auto">
               <LogoMark className={cn('size-16', state.kind === 'working' && 'animate-pulse')} />
               {state.kind === 'done' && (
-                <span className="absolute -right-1.5 -bottom-1.5 flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white ring-4 ring-card">
+                <span
+                  className={cn(
+                    'absolute -right-1.5 -bottom-1.5 flex size-7 items-center justify-center rounded-full text-white ring-4 ring-card',
+                    TONES.success.dot,
+                  )}
+                >
                   <Check className="size-4" strokeWidth={3} />
                 </span>
               )}
@@ -148,7 +154,7 @@ export function ConnectDevice() {
           </>
         ) : state.kind === 'expired' ? (
           <>
-            <span className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-amber-500/12 text-amber-600 dark:text-amber-400">
+            <span className={cn('mx-auto flex size-16 items-center justify-center rounded-2xl', TONES.warning.chip)}>
               {state.reason === 'missing' ? <QrCode className="size-8" /> : <Clock className="size-8" />}
             </span>
             <div>
@@ -184,7 +190,7 @@ export function ConnectDevice() {
           </>
         ) : (
           <>
-            <span className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-red-500/12 text-red-600">
+            <span className={cn('mx-auto flex size-16 items-center justify-center rounded-2xl', TONES.danger.chip)}>
               <RefreshCw className="size-8" />
             </span>
             <div>
