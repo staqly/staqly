@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
@@ -23,6 +23,25 @@ describe('item rendering by type', () => {
 
     expect(img).toHaveAttribute('src', '/api/v1/media/med_1?w=1280')
     expect(img).toHaveAttribute('srcset', '/api/v1/media/med_1?w=640 640w, /api/v1/media/med_1?w=1280 1280w')
+  })
+
+  it('opens the original image full size, scaling a tiny one up crisply', async () => {
+    renderWithProviders(<ItemPreview item={item()} scaled />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Open Avatar v1 full size' }))
+    const full = within(await screen.findByRole('dialog', { name: 'Avatar v1' })).getByRole('img')
+
+    expect(full).toHaveAttribute('src', '/api/v1/media/med_1')
+    expect(full.className).not.toContain('pixelated')
+
+    for (const [w, h, tiny] of [
+      [16, 16, true],
+      [40, 2000, false],
+    ] as const) {
+      Object.defineProperty(full, 'naturalWidth', { value: w, configurable: true })
+      Object.defineProperty(full, 'naturalHeight', { value: h, configurable: true })
+      fireEvent.load(full)
+      expect(full.className.includes('pixelated')).toBe(tiny)
+    }
   })
 
   it('loads external image URLs only after a click', async () => {
