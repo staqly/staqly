@@ -50,6 +50,7 @@ import { Input } from '@/components/ui/input'
 import { Kbd } from '@/components/ui/kbd'
 import { Textarea } from '@/components/ui/textarea'
 import { api, ApiError, type ActionBody, type ActionDef, type Item, type ItemFields } from '@/lib/api'
+import { charCount } from '@/lib/chars'
 import { env } from '@/lib/env'
 import { focusFirstInvalid, useFormErrors } from '@/lib/form-errors'
 import { prettyJSON } from '@/lib/format'
@@ -242,6 +243,12 @@ export const undoDelay = { ms: env.isTest ? 0 : 10_000 }
 type RunVars = { item: Item; action: string; body?: ActionBody; deferred?: boolean }
 
 /**
+ * Approvals still waiting for Undo, by item id (shared by every useRunAction). Another action on the item
+ * (Publish, Archive... offered because it shows as approved) sends its approval first instead of failing.
+ */
+const pendingApprovals = new Map<string, () => Promise<Item>>()
+
+/**
  * Mutation that runs approve/reject/custom actions with consistent cache updates & errors. An approval is
  * shown at once (onDone gets the item as approved) but sent after undoDelay, unless Undo in its toast is
  * clicked: then the item is put back and onUndo runs.
@@ -284,7 +291,7 @@ export function useRunAction(opts?: {
       toastApiError(err)
     },
   })
-  const { mutate } = mutation
+  const { mutate, mutateAsync } = mutation
   // The latest callbacks, so `run` stays stable for memoised rows and a deferred approval calls current ones.
   const latest = useRef({ onDone, onUndo })
 
@@ -295,13 +302,40 @@ export function useRunAction(opts?: {
   const run = useCallback(
     (v: RunVars, options?: Parameters<typeof mutate>[1]) => {
       if (v.action !== 'approve') {
-        mutate(v, options)
+        const flush = pendingApprovals.get(v.item.id)
+
+        if (!flush) {
+          mutate(v, options)
+
+          return
+        }
+
+        // The approval goes out now; the action then expects the version it produced.
+        flush()
+          .then((approved) => {
+            const body =
+              v.body?.expected_version === undefined ? v.body : { ...v.body, expected_version: approved.version }
+
+            mutate({ ...v, item: approved, body }, options)
+          })
+          .catch(() => {})
 
         return
       }
 
       // ponytail: a pending approval lives in this tab only; closing the tab before it is sent drops it.
-      const timer = setTimeout(() => mutate({ ...v, deferred: true }), undoDelay.ms)
+      const send = () => {
+        pendingApprovals.delete(v.item.id)
+
+        return mutateAsync({ ...v, deferred: true })
+      }
+      const timer = setTimeout(() => void send().catch(() => {}), undoDelay.ms)
+
+      pendingApprovals.set(v.item.id, () => {
+        clearTimeout(timer)
+
+        return send()
+      })
       const shown: Item = { ...v.item, status: 'approved', decision: 'approved', decided_at: new Date().toISOString() }
 
       latest.current.onDone?.(shown, 'approve')
@@ -314,6 +348,7 @@ export function useRunAction(opts?: {
               label: 'Undo',
               onClick: () => {
                 clearTimeout(timer)
+                pendingApprovals.delete(v.item.id)
                 syncItemInCache(qc, v.item)
                 latest.current.onUndo?.(v.item)
               },
@@ -321,7 +356,7 @@ export function useRunAction(opts?: {
           : undefined,
       })
     },
-    [mutate, qc],
+    [mutate, mutateAsync, qc],
   )
 
   return { ...mutation, mutate: run }
@@ -576,7 +611,7 @@ function EditItemForm({
 
   if (!title.trim()) {
     clientErrors.title = 'Title is required'
-  } else if (title.length > 500) {
+  } else if (charCount(title) > 500) {
     clientErrors.title = 'At most 500 characters'
   }
 

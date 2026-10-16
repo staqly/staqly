@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ItemActionBar } from '@/components/items/item-actions'
+import { ItemActionBar, undoDelay, useRunAction } from '@/components/items/item-actions'
 import type { ActionDef, Item } from '@/lib/api'
 
 import { APPROVE, REGENERATE, REJECT, item } from './fixtures'
@@ -311,5 +311,40 @@ describe('item action bar', () => {
     renderWithProviders(<ItemActionBar item={itm} compact />, { mode: 'cloud' })
     await waitFor(() => expect(document.querySelector('.animate-pulse')).toBeNull())
     expect(screen.queryByTestId('item-actions-compact')).not.toBeInTheDocument()
+  })
+
+  it('another action during the Undo window sends the approval first, then the action on its version', async () => {
+    const itm = item({ version: 3 })
+    const api = mockApi({
+      'GET /v1/collections': { data: [] },
+      'POST /v1/items/itm_1/actions/approve': { ...itm, status: 'approved', version: 4 },
+      'POST /v1/items/itm_1/actions/publish': { ...itm, status: 'processing', version: 5 },
+    })
+    const user = userEvent.setup()
+
+    function Harness() {
+      const { mutate } = useRunAction({ silent: true })
+
+      return (
+        <>
+          <button onClick={() => mutate({ item: itm, action: 'approve', body: { expected_version: 3 } })}>a</button>
+          <button onClick={() => mutate({ item: itm, action: 'publish', body: { expected_version: 3 } })}>p</button>
+        </>
+      )
+    }
+
+    undoDelay.ms = 60_000
+
+    try {
+      renderWithProviders(<Harness />, { mode: 'cloud' })
+      await user.click(screen.getByRole('button', { name: 'a' }))
+      expect(api.find('POST', '/v1/items/itm_1/actions/approve')).toHaveLength(0)
+      await user.click(screen.getByRole('button', { name: 'p' }))
+      await waitFor(() => expect(api.find('POST', '/v1/items/itm_1/actions/publish')).toHaveLength(1))
+      expect(api.find('POST', '/v1/items/itm_1/actions/approve')).toHaveLength(1)
+      expect(api.find('POST', '/v1/items/itm_1/actions/publish')[0].body).toEqual({ expected_version: 4 })
+    } finally {
+      undoDelay.ms = 0
+    }
   })
 })
