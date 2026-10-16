@@ -96,6 +96,13 @@ export class Exports extends APIResource {
     return this.http.request({ method: 'POST', path: '/v1/workspace/export', options })
   }
 
+  /** The workspace's latest exports (backups), newest first, at most 20 (admin). */
+  async listWorkspaceExports(options?: RequestOptions): Promise<WorkspaceExport[]> {
+    return (
+      await this.http.request<{ data: WorkspaceExport[] }>({ method: 'GET', path: '/v1/workspace/exports', options })
+    ).data
+  }
+
   getWorkspaceExport(id: string, options?: RequestOptions): Promise<WorkspaceExport> {
     return this.http.request({ method: 'GET', path: `/v1/workspace/exports/${enc(id)}`, options })
   }

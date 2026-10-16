@@ -1,4 +1,5 @@
 import type {
+  Agent,
   APIKey,
   APIKeyCreateInput,
   Plan,
@@ -40,6 +41,16 @@ export class WorkspaceResource extends APIResource {
    * Issues a new recovery key (shown once) and signs out every other session.
    * Dashboard sessions only: API keys get `PermissionDeniedError` (403).
    */
+  /** Agents (MCP clients) and API connections seen in this workspace, most recently active first (admin). */
+  async agents(options?: RequestOptions): Promise<Agent[]> {
+    return (await this.http.request<{ data: Agent[] }>({ method: 'GET', path: '/v1/agents', options })).data
+  }
+
+  /** Removes an agent from the list; it comes back if it talks to the workspace again (admin). */
+  async forgetAgent(id: string, options?: RequestOptions): Promise<void> {
+    await this.http.request({ method: 'DELETE', path: `/v1/agents/${enc(id)}`, options })
+  }
+
   rotateRecoveryKey(options?: RequestOptions): Promise<RecoveryKey> {
     return this.http.request({ method: 'POST', path: '/v1/recovery-key/rotate', options })
   }

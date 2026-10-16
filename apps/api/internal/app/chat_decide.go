@@ -68,6 +68,10 @@ func (s *Service) decideBound(ctx context.Context, p Principal, itemID, action, 
 	if err := s.CheckWritable(ctx, p.WorkspaceID); err != nil {
 		return Item{}, err
 	}
+	// A reject always tells the agent why. Chat buttons and links without a reason say who rejected it where.
+	if action == "reject" && strings.TrimSpace(feedback) == "" {
+		feedback = "Rejected by " + actorDisplay(p.Name) + " without a reason."
+	}
 	in := ActionInput{Feedback: feedback}
 	if version > 0 {
 		if cur, err := s.Q.GetItem(ctx, db.GetItemParams{WorkspaceID: p.WorkspaceID, ID: itemID}); err == nil && cur.Status == "pending" {

@@ -18,6 +18,7 @@ export const PLANS: Plan[] = [
       watchers: 3,
       min_watcher_interval_seconds: 900,
       notification_channels: 2,
+      data_export: false,
     },
     features: [
       '50 approvals / month',
@@ -43,6 +44,7 @@ export const PLANS: Plan[] = [
       watchers: -1,
       min_watcher_interval_seconds: 60,
       notification_channels: -1,
+      data_export: true,
     },
     features: [
       'Unlimited approvals',
@@ -69,6 +71,7 @@ export const UNLOCKED: Plan = {
     watchers: -1,
     min_watcher_interval_seconds: 60,
     notification_channels: -1,
+    data_export: true,
   },
   features: ['Local install', 'No limits'],
 }

@@ -44,7 +44,7 @@ import { browser } from '@/lib/browser'
 import { focusFirstInvalid, formApiError, useFormErrors } from '@/lib/form-errors'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
-import { qk, useMode, useSession } from '@/lib/queries'
+import { qk, useBackupAccess, useMode, useSession } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
@@ -317,14 +317,30 @@ function LocalDeleteCard() {
 
 export function DataPrivacyPage() {
   const { isCloud } = useMode()
+  const exportAccess = useBackupAccess()
 
   return (
     <PageContainer>
       <SettingsHeader />
       <SettingsNav className="mt-4" />
       <div className="mt-6 grid gap-4">
-        <ActivityExportCard />
-        <WorkspaceExportCard />
+        {/* Exports are a paid feature in the cloud (the API answers 402 on Free); local installs always have them. */}
+        {exportAccess === 'free' ? (
+          <SettingsCard
+            title="Data export"
+            icon={<Download />}
+            description="Exporting the activity log and the whole workspace (ZIP) comes with the paid plans."
+          >
+            <Button asChild variant="outline" size="sm" className="w-fit">
+              <Link href="/settings/plan">See plans</Link>
+            </Button>
+          </SettingsCard>
+        ) : exportAccess ? (
+          <>
+            <ActivityExportCard />
+            <WorkspaceExportCard />
+          </>
+        ) : null}
         <SettingsCard title="Retention & single items" icon={<Eraser />}>
           <div className="grid gap-2 text-sm text-muted-foreground">
             <p>

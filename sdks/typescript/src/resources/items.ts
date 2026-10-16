@@ -246,6 +246,14 @@ export class Items extends APIResource {
   unarchive(id: string, options?: RequestOptions): Promise<Item> {
     return this.http.request({ method: 'POST', path: `/v1/items/${enc(id)}/unarchive`, options })
   }
+
+  /**
+   * Writes the item's AI summary again now (tags too, if it has none), with optional extra context (at most 500
+   * characters). Waits for the model; 409 `not_configured` when no AI is set up.
+   */
+  summarize(id: string, input: { context?: string } = {}, options?: RequestOptions): Promise<Item> {
+    return this.http.request({ method: 'POST', path: `/v1/items/${enc(id)}/summarize`, body: input, options })
+  }
 }
 
 const list = (v?: string | string[]) => (Array.isArray(v) ? v.join(',') || undefined : v)

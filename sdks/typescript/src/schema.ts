@@ -1600,6 +1600,8 @@ export interface components {
                 watchers: number;
                 min_watcher_interval_seconds: number;
                 notification_channels: number;
+                /** @description Workspace exports (backups) and event exports; false on Free */
+                data_export: boolean;
             };
             features: string[];
         };

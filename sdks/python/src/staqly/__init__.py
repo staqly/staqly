@@ -105,6 +105,7 @@ __all__ = [
     "WebhookEvent",
     "WebhookVerificationError",
     "Workspace",
+    "Agent",
     "WorkspaceExport",
     "__version__",
     "compute_signature",

@@ -175,7 +175,7 @@ Actions are what a reviewer — or an agent — can *do* with an item.
 | Action | Result | Event |
 |---|---|---|
 | `approve` | `approved`; optional `edits` are applied first ("edit & approve") | `item.approved` |
-| `reject` | `rejected`, with feedback | `item.rejected` |
+| `reject` | `rejected`; `feedback` is required (422 without it), so the agent always learns why. Chat buttons and email links without a reason record "Rejected by ... without a reason." | `item.rejected` |
 
 **Custom actions** are configured per collection, without code. New collections get four
 defaults:

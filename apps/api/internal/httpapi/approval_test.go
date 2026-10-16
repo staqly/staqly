@@ -731,3 +731,18 @@ func TestTagsEventBulkFollowUpAndMCPTools(t *testing.T) {
 		t.Fatalf("MCP reject + follow_up: run %s", got.Run)
 	}
 }
+
+// A reject always carries a reason for the agent: REST, MCP and CLI must send feedback; chat buttons and
+// one-tap links without a reason record who rejected it.
+func TestRejectNeedsFeedback(t *testing.T) {
+	e := newEnv(t)
+	col := e.collection("Posts")
+	it := e.item(col.ID, map[string]any{"title": "Draft", "content": "x"})
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/reject", e.key, map[string]any{}, 422, nil)
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/reject", e.key, map[string]any{"feedback": "   "}, 422, nil)
+	var got app.Item
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/reject", e.key, map[string]any{"feedback": "Too long"}, 200, &got)
+	if got.Status != "rejected" || got.Feedback != "Too long" {
+		t.Fatalf("rejected: %+v", got)
+	}
+}

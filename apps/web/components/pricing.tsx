@@ -73,8 +73,8 @@ export function PricingCards() {
         ))}
       </div>
       <p className="mx-auto mt-8 max-w-3xl text-center text-sm leading-relaxed text-muted-foreground">
-        An approval is one decision on an item. Items, collections, MCP, full history and data export are unlimited on
-        every plan.
+        An approval is one decision on an item. Items, collections, MCP and full history are unlimited on every plan;
+        backups and data export come with Pro.
         <br />
         Rather run it yourself?{' '}
         <a href={SELF_HOST} className="font-medium text-foreground underline-offset-4 hover:underline">

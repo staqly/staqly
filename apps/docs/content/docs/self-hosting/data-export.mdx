@@ -8,6 +8,9 @@ audit or a GDPR request), want staqly to clean up old data on its own, or must e
 for good. All of it works the same with the binary and with Docker. For a restorable copy of
 the whole installation, use [Backup & restore](/self-hosting/backup-and-restore) instead.
 
+In cloud mode, exports are a Pro feature (trial included): on Free, `GET /v1/events/export` and
+`POST /v1/workspace/export` answer `402 plan_limit_exceeded`. Local installs always can export.
+
 ## Export the activity log
 
 Download the activity log as NDJSON or CSV in one streamed request:

@@ -56,6 +56,7 @@ export type NotificationDelivery = Schemas['NotificationDelivery']
 export type NotificationTestResult = JSONResponse<'/v1/notification-channels/{id}/test', 'post'>
 
 export type WorkspaceExport = Schemas['WorkspaceExport']
+export type Agent = Schemas['Agent']
 export type PurgeResult = Schemas['PurgeResult']
 export type Readiness = Schemas['Readiness']
 

@@ -47,6 +47,7 @@ __all__ = [
     "PurgeResult",
     "Readiness",
     "RecoveryKey",
+    "Agent",
     "WorkspaceExport",
     "Plan",
     "PlanLimits",
@@ -122,6 +123,8 @@ class PlanLimits(StaqlyModel):
     watchers: int
     min_watcher_interval_seconds: int
     notification_channels: int = -1
+    #: Workspace exports (backups) and event exports; ``False`` on Free.
+    data_export: bool = True
 
 
 class Plan(StaqlyModel):
@@ -590,6 +593,22 @@ class NotificationDelivery(StaqlyModel):
 class NotificationTestResult(StaqlyModel):
     ok: bool
     error: str | None = None
+
+
+class Agent(StaqlyModel):
+    """An MCP client or REST client seen talking to the workspace, per credential."""
+
+    id: str
+    kind: str
+    """mcp or api."""
+    name: str
+    version: str = ""
+    principal_id: str
+    principal_name: str = ""
+    first_seen_at: datetime
+    last_seen_at: datetime
+    requests: int = 0
+    items_created: int = 0
 
 
 class WorkspaceExport(StaqlyModel):

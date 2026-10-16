@@ -35,6 +35,7 @@ from ._http import (
 from .errors import ExportFailedError, RejectedError, WaitTimeoutError
 from .models import (
     ActionDef,
+    Agent,
     APIKey,
     Billing,
     BillingURL,
@@ -823,6 +824,21 @@ class AsyncItems(_Resource):
         )
         return _model(Item, r)
 
+    async def summarize(
+        self, item_id: str, *, context: str | None = None, request_options: RequestOptions | None = None
+    ) -> Item:
+        """Writes the item's AI summary again now (tags too, if it has none), with optional extra ``context``
+        (at most 500 characters). Waits for the model; 409 ``not_configured`` when no AI is set up."""
+        r = await self._http.request(
+            RequestSpec(
+                "POST",
+                f"/v1/items/{_q(item_id)}/summarize",
+                json=clean({"context": context}),
+                options=_opts(request_options),
+            )
+        )
+        return _model(Item, r)
+
 
 # ---------------------------------------------------------------------- media
 
@@ -1191,6 +1207,17 @@ class AsyncWorkspaceResource(_Resource):
     async def get(self, *, request_options: RequestOptions | None = None) -> Workspace:
         r = await self._http.request(RequestSpec("GET", "/v1/workspace", options=_opts(request_options)))
         return _model(Workspace, r)
+
+    async def agents(self, *, request_options: RequestOptions | None = None) -> builtins.list[Agent]:
+        """Agents (MCP clients) and API connections seen in this workspace, latest first (admin)."""
+        r = await self._http.request(RequestSpec("GET", "/v1/agents", options=_opts(request_options)))
+        return _models(Agent, r)
+
+    async def forget_agent(self, agent_id: str, *, request_options: RequestOptions | None = None) -> None:
+        """Removes an agent from the list; it comes back if it talks to the workspace again (admin)."""
+        await self._http.request(
+            RequestSpec("DELETE", f"/v1/agents/{_q(agent_id)}", options=_opts(request_options))
+        )
 
     async def rename(self, name: str, *, request_options: RequestOptions | None = None) -> Workspace:
         """Renames the workspace (needs the ``admin`` scope)."""
@@ -1659,6 +1686,15 @@ class AsyncExports(_Resource):
             RequestSpec("POST", "/v1/workspace/export", options=_opts(request_options))
         )
         return _model(WorkspaceExport, r)
+
+    async def list_workspace_exports(
+        self, *, request_options: RequestOptions | None = None
+    ) -> builtins.list[WorkspaceExport]:
+        """The workspace's latest exports (backups), newest first, at most 20 (admin)."""
+        r = await self._http.request(
+            RequestSpec("GET", "/v1/workspace/exports", options=_opts(request_options))
+        )
+        return _models(WorkspaceExport, r)
 
     async def get_workspace_export(
         self, export_id: str, *, request_options: RequestOptions | None = None

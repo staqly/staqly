@@ -1574,6 +1574,7 @@ paths:
               schema: { $ref: "#/components/schemas/Event" }
             text/csv:
               schema: { type: string }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
@@ -1595,6 +1596,7 @@ paths:
         - { $ref: "#/components/parameters/idempotencyKey" }
       responses:
         "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceExport" } } } }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -1891,7 +1893,7 @@ paths:
       description: >
         Consumes the link and runs the action through the normal action path as
         actor "Link: <channel name>". Accepts an empty body, a form or JSON with an
-        optional `feedback` (reject only). Returns HTML, or JSON (DecisionResult)
+        optional `feedback` (reject only; without one the item records "Rejected by <channel> without a reason."). Returns HTML, or JSON (DecisionResult)
         when `Accept: application/json` without text/html. 409 when the item was
         already decided, or (the item changed since the message was sent) because
         links are bound to the item version they showed; the link is consumed either
@@ -2241,7 +2243,7 @@ components:
         highlight: { type: boolean }
         limits:
           type: object
-          required: [items_per_month, decisions_per_month, webhooks, api_keys, storage_bytes, max_upload_bytes, watchers, min_watcher_interval_seconds, notification_channels]
+          required: [items_per_month, decisions_per_month, webhooks, api_keys, storage_bytes, max_upload_bytes, watchers, min_watcher_interval_seconds, notification_channels, data_export]
           properties:
             items_per_month: { type: integer }
             decisions_per_month: { type: integer, description: "Approvals and rejections per calendar month (people, chat and bulk); -1 = unlimited" }
@@ -2252,6 +2254,7 @@ components:
             watchers: { type: integer }
             min_watcher_interval_seconds: { type: integer }
             notification_channels: { type: integer }
+            data_export: { type: boolean, description: "Workspace exports (backups) and event exports; false on Free" }
         features: { type: array, items: { type: string } }
 
     Workspace:

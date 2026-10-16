@@ -48,6 +48,9 @@ func (s *Service) PrepareEventExport(ctx context.Context, p Principal, f EventEx
 	if err := p.require(ScopeItemsRead); err != nil {
 		return nil, err
 	}
+	if err := s.requireDataExport(ctx, p.WorkspaceID); err != nil {
+		return nil, err
+	}
 	switch f.Format {
 	case "":
 		f.Format = "ndjson"
@@ -178,6 +181,9 @@ func (s *Service) exportWake() chan struct{} {
 // workspace may be pending or running at a time.
 func (s *Service) RequestWorkspaceExport(ctx context.Context, p Principal) (WorkspaceExport, error) {
 	if err := p.require(ScopeAdmin); err != nil {
+		return WorkspaceExport{}, err
+	}
+	if err := s.requireDataExport(ctx, p.WorkspaceID); err != nil {
 		return WorkspaceExport{}, err
 	}
 	now := s.Now().UTC()

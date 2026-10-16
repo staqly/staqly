@@ -127,6 +127,9 @@ export function isShortcutExempt(el: EventTarget | null, key?: string) {
 
 const NO_ACTIONS: ActionDef[] = []
 
+/** Ids per bulk request (the API's limit). */
+const BULK_BATCH = 100
+
 /** Actions column width per tab, as narrow as its buttons: Reject + Approve, one main action, or the "..." menu. */
 function actionsWidth(stepId: string) {
   return stepId === 'review' ? 'lg:w-48' : stepId === 'processing' ? 'lg:w-12' : 'lg:w-32'
@@ -549,7 +552,18 @@ export function Inbox() {
   })
 
   const { mutate: bulkMutate, isPending: bulkPending } = useMutation({
-    mutationFn: (v: { ids: string[]; action: string; feedback?: string; follow_up?: string }) => api.bulkAction(v),
+    // The API takes at most 100 ids per call: larger selections go in batches, one after another.
+    mutationFn: async (v: { ids: string[]; action: string; feedback?: string; follow_up?: string }) => {
+      const data: NonNullable<Awaited<ReturnType<typeof api.bulkAction>>['data']> = []
+
+      for (let i = 0; i < v.ids.length; i += BULK_BATCH) {
+        const res = await api.bulkAction({ ...v, ids: v.ids.slice(i, i + BULK_BATCH) })
+
+        data.push(...(res.data ?? []))
+      }
+
+      return { data }
+    },
     onSuccess: (res, v) => {
       const results = res.data ?? []
       const ok = results.filter((r) => r.ok)
@@ -791,11 +805,11 @@ export function Inbox() {
       }
     }
 
-    setConfirmBulkApprove(ids.slice(0, 100))
+    setConfirmBulkApprove(ids)
   }
 
   function runBulk(a: ActionDef) {
-    const ids = [...selected].slice(0, 100)
+    const ids = [...selected]
 
     if (needsFeedback(a)) {
       setFeedbackFor({ action: a, ids })
@@ -806,7 +820,7 @@ export function Inbox() {
 
   function bulkReject() {
     if (!busy) {
-      setFeedbackFor({ action: REJECT_ACTION, ids: [...selected].slice(0, 100) })
+      setFeedbackFor({ action: REJECT_ACTION, ids: [...selected] })
     }
   }
 

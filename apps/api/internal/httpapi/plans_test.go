@@ -17,7 +17,7 @@ func TestPlanLimitValues(t *testing.T) {
 			Watchers: 3, MinWatcherIntervalSeconds: 900, NotificationChannels: 2},
 		"pro": {ItemsPerMonth: app.Unlimited, DecisionsPerMonth: app.Unlimited, Webhooks: app.Unlimited, APIKeys: app.Unlimited, StorageBytes: 100 * gb,
 			MaxUploadBytes: 100 * mb, Watchers: app.Unlimited, MinWatcherIntervalSeconds: 60,
-			NotificationChannels: app.Unlimited},
+			NotificationChannels: app.Unlimited, DataExport: true},
 	}
 	for id, limits := range want {
 		p, ok := app.PlanByID(id)
@@ -25,8 +25,11 @@ func TestPlanLimitValues(t *testing.T) {
 			t.Errorf("plan %s: %+v, want %+v", id, p.Limits, limits)
 		}
 	}
-	// Local installs: every count is unlimited (a zero would block everything).
+	// Local installs: every count is unlimited (a zero would block everything), and exports are on.
 	u := app.UnlockedPlan.Limits
+	if !u.DataExport {
+		t.Error("local installs must be able to export")
+	}
 	for name, v := range map[string]int64{"items": u.ItemsPerMonth, "decisions": u.DecisionsPerMonth, "webhooks": u.Webhooks,
 		"api_keys": u.APIKeys, "storage": u.StorageBytes, "upload": u.MaxUploadBytes, "watchers": u.Watchers,
 		"channels": u.NotificationChannels} {
@@ -105,4 +108,16 @@ func TestProTrialAndSuspension(t *testing.T) {
 		t.Fatalf("after switching to free: %+v", u)
 	}
 	e.do(nil, "POST", "/v1/collections/"+c.ID+"/items", e.key, map[string]any{"title": "on free"}, 201, nil)
+}
+
+// Data export (workspace backups and event exports) is a paid feature: Free gets 402, Pro (and the trial) can.
+func TestDataExportNeedsPaidPlan(t *testing.T) {
+	e := newEnv(t)
+	csrf := []string{"X-CSRF-Token", e.csrf}
+	e.free()
+	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 402, nil, csrf...)
+	e.do(nil, "GET", "/v1/events/export", e.key, nil, 402, nil)
+	e.paid()
+	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 202, nil, csrf...)
+	e.do(nil, "GET", "/v1/events/export", e.key, nil, 200, nil)
 }

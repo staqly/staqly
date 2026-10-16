@@ -50,7 +50,7 @@ func (d ActionDef) allowedFrom(status string) bool {
 // Built-in review actions; they need items:review rather than actions:execute.
 var builtinActions = []ActionDef{
 	{Name: "approve", Label: "Approve", Event: "item.approved", SetStatus: "approved", AllowedStatuses: []string{"pending"}, Builtin: true},
-	{Name: "reject", Label: "Reject", Event: "item.rejected", SetStatus: "rejected", AllowedStatuses: []string{"pending"}, Builtin: true},
+	{Name: "reject", Label: "Reject", Event: "item.rejected", RequiresFeedback: true, SetStatus: "rejected", AllowedStatuses: []string{"pending"}, Builtin: true},
 }
 
 // DefaultActions are attached to new collections when none are supplied.

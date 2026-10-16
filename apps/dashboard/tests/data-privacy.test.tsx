@@ -13,6 +13,7 @@ import { browser } from '@/lib/browser'
 
 import { APPROVE, REJECT, collection, item } from './fixtures'
 import { nav } from './navigation'
+import { PLANS, usage } from './plans-fixtures'
 import { mockApi, renderWithProviders } from './utils'
 
 function exportJob(over: Partial<WorkspaceExport> = {}): WorkspaceExport {
@@ -91,7 +92,7 @@ describe('data & privacy', () => {
 
     renderWithProviders(<DataPrivacyPage />, { mode: 'local' })
     expect(screen.getByTestId('export-all-csv')).toHaveAttribute('href', '/api/v1/events/export?format=csv')
-    await user.click(screen.getByRole('button', { name: /export workspace/i }))
+    await user.click(await screen.findByRole('button', { name: /export workspace/i }))
     await waitFor(() => expect(api.find('POST', '/v1/workspace/export')).toHaveLength(1))
     const link = await screen.findByRole('link', { name: /download zip/i })
 
@@ -102,6 +103,7 @@ describe('data & privacy', () => {
 
   it('shows the export that is already running on 409', async () => {
     mockApi({
+      'GET /v1/workspace/usage': usage(PLANS[1]),
       'POST /v1/workspace/export': {
         status: 409,
         body: { error: { code: 'conflict', message: 'an export is already running', details: { export_id: 'exp_9' } } },
@@ -115,7 +117,7 @@ describe('data & privacy', () => {
     const user = userEvent.setup()
 
     renderWithProviders(<DataPrivacyPage />, { mode: 'cloud' })
-    await user.click(screen.getByRole('button', { name: /export workspace/i }))
+    await user.click(await screen.findByRole('button', { name: /export workspace/i }))
     expect(await screen.findByText('An export is already running')).toBeInTheDocument()
     expect(await screen.findByText(/Building your archive/)).toBeInTheDocument()
     expect(screen.getByTestId('export-status')).toHaveAttribute('data-status', 'running')
@@ -123,7 +125,10 @@ describe('data & privacy', () => {
   })
 
   it('cloud: deletes the workspace only after typing its name, then goes to /setup', async () => {
-    const api = mockApi({ 'DELETE /v1/workspace': { status: 204 } })
+    const api = mockApi({
+      'GET /v1/workspace/usage': usage(PLANS[1]),
+      'DELETE /v1/workspace': { status: 204 },
+    })
     const assign = vi.spyOn(browser, 'assign').mockImplementation(() => {})
     const user = userEvent.setup()
 
@@ -154,6 +159,7 @@ describe('data & privacy', () => {
 
   it('cloud: a server error on the confirmation shows under the field until it changes', async () => {
     const api = mockApi({
+      'GET /v1/workspace/usage': usage(PLANS[1]),
       'DELETE /v1/workspace': {
         status: 422,
         body: { error: { code: 'validation_failed', message: 'x', fields: { confirm: 'does not match' } } },
@@ -249,5 +255,12 @@ describe('rejected step', () => {
       expect(api.find('GET', '/v1/items').some((c) => c.query.get('decision') === 'rejected')).toBe(true),
     )
     expect((await screen.findAllByText('Nothing rejected')).length).toBeGreaterThan(0)
+  })
+
+  it('cloud Free: no exports, a pointer to the plans instead', async () => {
+    mockApi({ 'GET /v1/workspace/usage': usage(PLANS[0]) })
+    renderWithProviders(<DataPrivacyPage />, { mode: 'cloud' })
+    expect(await screen.findByRole('link', { name: 'See plans' })).toHaveAttribute('href', '/settings/plan')
+    expect(screen.queryByRole('button', { name: /export workspace/i })).not.toBeInTheDocument()
   })
 })
