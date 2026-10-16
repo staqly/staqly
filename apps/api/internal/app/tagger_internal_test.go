@@ -1,11 +1,28 @@
 package app
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
+
+// A CLI that leaves a child holding its stdout must not keep the worker past the timeout: Wait gives up
+// shortly after the process is killed.
+func TestRunTaggerCommandTimeout(t *testing.T) {
+	s := &Service{Cfg: Config{Tagger: TaggerConfig{Command: []string{"/bin/sh", "-c", "sleep 30 & sleep 30"}}}}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := s.runTaggerCommand(ctx, "hi"); err == nil {
+		t.Fatal("no error after the timeout")
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Fatalf("waited %s for the command", d)
+	}
+}
 
 func TestParseSuggestion(t *testing.T) {
 	summary, tags := parseSuggestion("Here you go:\n```json\n{\"summary\": \"  Spring sale  post \", \"tags\": [\"Marketing\"]}\n```")

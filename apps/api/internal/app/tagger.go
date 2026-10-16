@@ -272,6 +272,9 @@ func (s *Service) runTaggerCommand(ctx context.Context, prompt string) (string, 
 	cmd.Stdin = strings.NewReader(prompt)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &limitedWriter{w: &out, n: maxModelReply}, &limitedWriter{w: &errb, n: 4096}
+	// The timeout kills only the CLI itself: a child it started may still hold stdout open, and Wait would
+	// block on it (and the worker slot with it) until that child ends.
+	cmd.WaitDelay = 5 * time.Second
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("%s: %v: %s", cfg.Command[0], err, clip(strings.TrimSpace(errb.String()), 300))
 	}
