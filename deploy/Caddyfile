@@ -1,9 +1,9 @@
 # staqly cloud behind Caddy (compose.cloud.yml): automatic HTTPS for STAQLY_DOMAIN.
-# Agents call the API directly (REST, MCP, OpenAPI, health); everything else is the
+# Agents call the API directly (REST, MCP, OpenAPI, probes, /metrics with METRICS_TOKEN); everything else is the
 # dashboard, which streams /api/* to the API itself.
 {$STAQLY_DOMAIN} {
 	encode zstd gzip
-	@api path /v1/* /mcp /mcp/* /openapi.yaml /health /readyz
+	@api path /v1/* /mcp /mcp/* /openapi.yaml /health /livez /readyz /metrics
 	reverse_proxy @api staqly:3333
 	reverse_proxy staqly:8080
 }
