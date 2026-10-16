@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { api, ApiError, type Item, type UpdateItemInput } from '@/lib/api'
+import { charCount } from '@/lib/chars'
 import { setFormApiError } from '@/lib/form-errors'
 import { formatBytes, prettyJSON } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
@@ -37,7 +38,11 @@ function isJSONObject(s: string) {
 
 const schema = z
   .object({
-    title: z.string().trim().min(1, 'Title is required').max(500, 'At most 500 characters'),
+    title: z
+      .string()
+      .trim()
+      .min(1, 'Title is required')
+      .refine((v) => charCount(v) <= 500, 'At most 500 characters'),
     type: z.string(),
     content: z.string().max(1_048_576, 'At most 1 MiB'),
     url: z

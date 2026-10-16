@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { api, type CreateItemInput, type Item } from '@/lib/api'
+import { charCount } from '@/lib/chars'
 import { focusFirstInvalid, formApiError, useFormErrors } from '@/lib/form-errors'
 import { formatBytes } from '@/lib/format'
 import { namedToast } from '@/lib/notify'
@@ -92,7 +93,7 @@ function validate(d: Draft): { errors: Partial<Record<ErrorKey, string>>; input:
 
   if (!d.title.trim()) {
     errors.title = 'Title is required'
-  } else if (d.title.trim().length > 500) {
+  } else if (charCount(d.title.trim()) > 500) {
     errors.title = 'At most 500 characters'
   } else {
     input.title = d.title.trim()
