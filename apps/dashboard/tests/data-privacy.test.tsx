@@ -152,6 +152,30 @@ describe('data & privacy', () => {
     assign.mockRestore()
   })
 
+  it('cloud: a server error on the confirmation shows under the field until it changes', async () => {
+    const api = mockApi({
+      'DELETE /v1/workspace': {
+        status: 422,
+        body: { error: { code: 'validation_failed', message: 'x', fields: { confirm: 'does not match' } } },
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<DataPrivacyPage />, { mode: 'cloud' })
+    await user.click(within(screen.getByTestId('danger-zone')).getByRole('button', { name: /delete workspace/i }))
+    const dialog = await screen.findByRole('dialog')
+    const box = within(dialog).getByLabelText(/to confirm/)
+
+    await user.type(box, 'Test WS')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete workspace' }))
+    await waitFor(() => expect(api.find('DELETE', '/v1/workspace')).toHaveLength(1))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Does not match')
+    await user.type(box, ' ')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Type “Test WS” exactly to confirm')
+    await user.type(box, '{Backspace}')
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('local: explains deleting the data (staqly serve or the Docker image) instead of offering a delete button', async () => {
     mockApi({})
     renderWithProviders(<DataPrivacyPage />, { mode: 'local' })
