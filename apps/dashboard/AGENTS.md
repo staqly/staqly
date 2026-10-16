@@ -159,8 +159,8 @@ re-render only the component it concerns.
   collection item sheet, the activity feed and shell navigation, with upper
   bounds. If it fails, a change made some component render that shouldn't.
 * The compiler does not memoise per item inside `.map()`. List rows and cards
-  are `memo()` components (`InboxRow`, `QueueRow`, `GalleryCard`,
-  `TableItemRow`, `ListRow`, `AuditEventRow`, sidebar `NavCollectionItem`). Pass them primitives, the item object and
+  are `memo()` components (`InboxRow`, `QueueRow`, `TableItemRow`, `TableCard`,
+  `AuditEventRow`, `WatcherCard`, sidebar `NavCollectionItem`). Pass them primitives, the item object and
   **stable callbacks** (setState, or a callback that reads the latest URL
   params from a ref; see `CollectionPage.open`), never inline arrows or
   per-render closures over `useSearchParams()`.
@@ -179,8 +179,8 @@ re-render only the component it concerns.
   `[contain-intrinsic-size:auto_<row height>]`, so off-screen rows skip
   layout and paint. This made virtualisation unnecessary at 3000 cards. It
   doesn't apply to `<tr>`.
-* Heavy per-row children (dialogs, popovers) mount on first use, not per row
-  (see `QuickReview`).
+* Heavy children (dialogs, popovers) mount on first use, not with every row or
+  block (see `JsonBlock` and `ImageZoom`: `{open && <Dialog open ...>}`).
 
 ## Tests
 
