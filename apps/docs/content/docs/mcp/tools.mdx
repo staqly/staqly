@@ -409,7 +409,7 @@ entries become pending items. ·
 | `name` | string | <Required /> | Watcher name |
 | `kind` | string | No | `rss` (RSS/Atom feed) or `url_diff` (page or JSON changes); left out, detected from the URL |
 | `url` | string | <Required /> | Feed or page URL, e.g. `https://blog.example.com/feed.xml` |
-| `collection` | string | <Required /> | ID or name that receives new entries (or pass `collections`) |
+| `collection` | string | No | ID or name that receives new entries; pass this or `collections` |
 | `collections` | string[] | No | IDs or names; each new entry is added to every one of them |
 | `keywords` | string[] | No | Only entries whose title or summary contains one of these words (case-insensitive) |
 | `exclude_keywords` | string[] | No | Skip entries containing any of these words |
@@ -527,6 +527,7 @@ Delivery attempts with status, response code and error, newest first. *Read-only
 |---|---|---|---|
 | `webhook_id` | string | No | Only deliveries of this webhook |
 | `status` | string | No | `pending`, `succeeded` or `failed` |
+| `item_id` | string | No | Only deliveries of events about this item |
 | `limit` | integer | No | Default 50, max 200 |
 
 ### `retry_webhook_delivery`
@@ -658,11 +659,12 @@ The workspace's ID, name and plan. *Read-only* · no scope needed
 No inputs.
 
 ### `rename_workspace`
-Rename the workspace. · `admin`
+Rename the workspace and/or set how long items may stay `processing` before they fail. · `admin`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `name` | string | <Required /> | New workspace name |
+| `name` | string | No | New workspace name |
+| `processing_timeout_seconds` | integer | No | How long an item may stay `processing` before it fails, 60 to 86400 seconds |
 
 ### `delete_workspace`
 Permanently delete the workspace and everything in it (cloud mode only; local mode answers with a conflict). As in REST, this

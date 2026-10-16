@@ -77,6 +77,10 @@ STDIO against a cloud-mode container on the same host forwards the key into the 
 codex mcp add staqly --env STAQLY_API_KEY=$STAQLY_API_KEY -- docker exec -i -e STAQLY_API_KEY staqly mcp-stdio
 ```
 
+`await_decision` waits 45 s per call by default, under Codex's 60 s tool timeout, and returns
+`decided: false` when nobody has decided yet. To let one call wait longer (up to 300 s), raise
+`tool_timeout_sec` in the server's `[mcp_servers.staqly]` block.
+
 <Callout title="Verified">
 With Codex CLI 0.162.1, `codex exec` called `staqly/create_item` (with a bearer key) and
 `staqly/list_pending_approvals` (keyless) successfully.
