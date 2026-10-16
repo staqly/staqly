@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/logctx"
@@ -68,7 +69,7 @@ func (s *Service) PrepareEventExport(ctx context.Context, p Principal, f EventEx
 	}
 	for field, v := range map[string]string{"type": f.Type, "type_prefix": f.TypePrefix, "actor_id": f.ActorID,
 		"collection_id": f.CollectionID, "item_id": f.ItemID} {
-		if len(v) > 200 {
+		if utf8.RuneCountInString(v) > 200 {
 			return nil, invalid(field, "must be at most 200 characters")
 		}
 	}
@@ -221,7 +222,16 @@ func (s *Service) GetWorkspaceExport(ctx context.Context, p Principal, id string
 	if err != nil {
 		return WorkspaceExport{}, err
 	}
-	return toWorkspaceExport(x), nil
+	return s.liveExport(x), nil
+}
+
+// liveExport reports a ready export past its expiry as expired (the worker deletes the file soon): never
+// offer its download.
+func (s *Service) liveExport(x db.WorkspaceExport) WorkspaceExport {
+	if x.Status == "ready" && x.ExpiresAt <= s.now() {
+		x.Status = "expired"
+	}
+	return toWorkspaceExport(x)
 }
 
 // ListWorkspaceExports lists the workspace's latest exports (backups), newest first.
@@ -232,10 +242,7 @@ func (s *Service) ListWorkspaceExports(ctx context.Context, p Principal) ([]Work
 	rows, err := s.Q.ListWorkspaceExports(ctx, p.WorkspaceID)
 	out := make([]WorkspaceExport, 0, len(rows))
 	for _, x := range rows {
-		if x.Status == "ready" && x.ExpiresAt <= s.now() {
-			x.Status = "expired" // the worker deletes the file soon; never offer it
-		}
-		out = append(out, toWorkspaceExport(x))
+		out = append(out, s.liveExport(x))
 	}
 	return out, err
 }
@@ -247,7 +254,7 @@ func (s *Service) OpenWorkspaceExport(ctx context.Context, p Principal, id strin
 		return nil, x, err
 	}
 	switch {
-	case x.Status == "expired" || (x.Status == "ready" && x.ExpiresAt <= s.now()):
+	case x.Status == "expired":
 		return nil, x, &Error{Code: "gone", Status: 410, Message: "this export has expired; request a new one"}
 	case x.Status != "ready":
 		return nil, x, conflict("export is " + x.Status)
