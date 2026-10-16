@@ -23,7 +23,7 @@ export const allCases: UseCase[] = [
       'Generators are fast and inconsistent. One post in ten is off-brand, wrong or just weird, and you only notice after it is live. Reviewing in a spreadsheet or a shared folder does not scale, and the publisher has no idea what you decided.',
     steps: [
       'The workflow generates an image and caption and creates an item in the “Instagram Avatar” collection.',
-      'It lands in your Inbox as a gallery card, with the prompt and seed in its metadata.',
+      'It lands in your Inbox with an image preview, and the prompt and seed in its metadata.',
       'You approve, reject with feedback, edit the caption first, or ask for a regeneration.',
       'A signed webhook tells n8n what you decided. Approved items get published; the post ID is written back to the item.',
       'Rejected items keep your feedback, so the next generation can use it.',
@@ -38,6 +38,7 @@ $ curl -X POST "$API/v1/collections/Instagram%20Avatar/items" \\
 
 # after publishing, record what happened
 $ curl -X PATCH $API/v1/items/itm_8f2... \\
+    -H 'Content-Type: application/json' \\
     -d '{"status":"completed","metadata_patch":{"instagram_post_id":"1790..."}}'`,
     },
     result:
@@ -134,7 +135,7 @@ report_result {"item_id":"itm_...",
       'Create a bot (for Telegram, via @BotFather) and add it as a notification channel.',
       'staqly messages you about every new pending item.',
       'Tap Approve or Reject in the chat; the decision reaches agents and webhooks like any other.',
-      'Works the same in a hosted workspace and on a self-hosted laptop with no public URL.',
+      'Telegram works the same in a hosted workspace and on a self-hosted laptop with no public URL; Slack and Discord buttons need a public HTTPS URL.',
     ],
     code: {
       title: 'Terminal',
@@ -171,12 +172,13 @@ $ curl -X POST $API/v1/notification-channels/$CHANNEL_ID/test
     ],
     code: {
       title: 'Terminal',
-      body: `# follow a tool's releases, checked every hour, skipping previews
-$ curl -X POST $API/v1/watchers -d '{
-    "name": "Ollama releases", "kind": "rss",
-    "url": "https://github.com/ollama/ollama/releases.atom",
+      body: `# follow a tool's releases, checked every hour, skipping alphas
+$ curl -X POST $API/v1/watchers \\
+    -H 'Content-Type: application/json' -d '{
+    "name": "Codex releases", "kind": "rss",
+    "url": "https://github.com/openai/codex/releases.atom",
     "collection": "AI Radar", "every": "1h",
-    "exclude_keywords": ["preview"]}'`,
+    "exclude_keywords": ["alpha"]}'`,
     },
     result: 'One Inbox instead of ten tabs, with the noise filtered out before it reaches you.',
     docs: [
