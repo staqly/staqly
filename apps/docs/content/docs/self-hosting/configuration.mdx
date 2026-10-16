@@ -121,10 +121,11 @@ while only delays them. A failed call is retried up to 5 times with backoff. Ite
 up are summarized once it is. Tags set by the agent or a person are never replaced.
 
 **Local (`staqly serve`, `staqly service`)**: staqly uses **your own AI**. If [Claude Code](https://claude.com/claude-code)
-(`claude`) is installed it runs `claude -p --model haiku`; otherwise, if [Codex](https://developers.openai.com/codex)
-(`codex`) is installed, `codex exec`. The prompt goes in on stdin, in a scratch folder, so it never reads your
-projects. Nothing to configure, and it uses your existing subscription. To use another command set
-`TAGGER_COMMAND` (it reads the prompt on stdin and prints the reply); `TAGGER_COMMAND=off` turns summaries off.
+(`claude`) is installed it runs `claude -p --model haiku` with no tools; otherwise, if [Codex](https://developers.openai.com/codex)
+(`codex`) is installed, `codex exec` in its read-only sandbox. The prompt goes in on stdin, in a scratch folder,
+so it never reads your projects, and an item's content can't make the AI run commands or change files. Nothing to configure, and it uses your existing subscription. To use another command set
+`TAGGER_COMMAND` (it reads the prompt on stdin and prints the reply; the prompt includes item content, so
+keep its tools off); `TAGGER_COMMAND=off` turns summaries off.
 The Docker image has no AI CLI inside: use `TAGGER_URL` there.
 
 **Cloud**: the operator sets an OpenAI-compatible endpoint (`TAGGER_URL`, `TAGGER_MODEL`, `TAGGER_API_KEY`),
@@ -132,7 +133,7 @@ e.g. OpenAI. Cloud mode never runs a command. Item content is sent to that provi
 
 | Variable | Default | Description |
 |---|---|---|
-| `TAGGER_COMMAND` | `claude`, else `codex`, if installed | Local mode only: the AI CLI and its arguments, e.g. `claude -p --model haiku` or `codex exec --skip-git-repo-check -`. `off` disables. |
+| `TAGGER_COMMAND` | `claude`, else `codex`, if installed | Local mode only: the AI CLI and its arguments, e.g. `claude -p --model haiku --tools= --strict-mcp-config` or `codex exec --skip-git-repo-check --sandbox read-only -`. `off` disables. |
 | `TAGGER_URL` | | OpenAI-compatible base URL, e.g. `https://api.openai.com/v1`. When set (and no `TAGGER_COMMAND`), used instead of a local AI CLI. |
 | `TAGGER_MODEL` | `gpt-4o-mini` | Model at `TAGGER_URL`. |
 | `TAGGER_API_KEY` | | Bearer token for `TAGGER_URL`. |
