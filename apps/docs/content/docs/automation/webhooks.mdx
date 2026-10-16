@@ -114,8 +114,8 @@ This queues a `webhook.test` event for that webhook only. Then check the
 <Callout title="Receiver on the same machine or in Docker?">
 staqly blocks loopback targets such as `http://localhost:5678` by default. If staqly runs
 directly on your machine (not in Docker) and the receiver listens on `localhost`, set
-`WEBHOOK_ALLOW_LOOPBACK=true`. If staqly runs in Docker, `localhost` is the API container
-itself: use `host.docker.internal` or a compose service name instead. For example, with the
+`WEBHOOK_ALLOW_LOOPBACK=true`. If staqly runs in Docker, `localhost` is the staqly container
+itself: use `host.docker.internal` or the receiver's container name on a shared Docker network instead. For example, with the
 bundled n8n compose file the URL is `http://n8n:5678/webhook/staqly-demo` (Docker only). See
 [Network policy](#network-policy-ssrf-guard) and [n8n](/integrations/n8n).
 </Callout>
@@ -306,8 +306,8 @@ Webhook URLs are user input, so the worker restricts where it connects:
   `true` in local and `false` in cloud mode).
 - **Loopback** (`127.0.0.1`) is blocked by default. Enable it with
   `WEBHOOK_ALLOW_LOOPBACK=true` only when the API runs outside Docker and the receiver listens
-  on localhost. Inside Docker, `localhost` is the API container itself: use
-  `host.docker.internal` or a compose service name.
+  on localhost. Inside Docker, `localhost` is the staqly container itself: use
+  `host.docker.internal` or the receiver's container name on a shared Docker network.
 - The check runs on the **resolved IP at connect time**, so DNS rebinding cannot sneak past
   it. **Redirects are not followed** and no proxy is taken from the environment.
 

@@ -47,17 +47,18 @@ revoked key returns `401 unauthorized`; a key without the needed scope returns
 In local mode (the default) requests without credentials get a full-access `local`
 principal — **if** they provably come from this machine:
 
-- the TCP peer is loopback or inside `LOCAL_TRUSTED_PEERS` — compose sets the private ranges
-  because Docker forwards published ports from its bridge network; outside Docker only
-  loopback counts (and the server listens on `127.0.0.1:3333`),
+- the TCP peer is loopback or inside `LOCAL_TRUSTED_PEERS` — the [Docker setup](/self-hosting/docker)
+  sets the private ranges because Docker forwards published ports from its bridge network; with
+  `staqly serve` only loopback counts (and the server listens on `127.0.0.1:3333`),
 - the `Host` header is a local name: `localhost`, `127.0.0.1`, `::1`, `api`,
   `host.docker.internal`, anything ending in `.localhost`, plus `LOCAL_ALLOWED_HOSTS`
-  (compose adds the container name `staqly`),
+  (the repository's `compose.yml` adds the container name `staqly`),
 - any `Origin` header is the dashboard's own (`localhost`, `127.0.0.1` or `[::1]` on
   `DASHBOARD_PORT`, or the origin of `PUBLIC_DASHBOARD_URL`) or listed in `LOCAL_ALLOWED_ORIGINS` — this
   blocks web pages on other sites and on other localhost ports,
-- the request does not come through the dashboard proxy (`DASHBOARD_EXPOSED=true` in compose)
-  — browsers use sessions.
+- the request does not come through the dashboard proxy while the dashboard is open to the
+  network (`DASHBOARD_EXPOSED`, on with Docker and `staqly serve --expose`) — browsers then use
+  sessions.
 
 Otherwise the API answers `403 not_local` with the reason. Bearer keys and session cookies
 are honored in local mode too.

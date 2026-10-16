@@ -22,14 +22,14 @@ first.
 
 **Filter** narrows any step by collection, source (the agent, n8n, a watcher), tags and type.
 
-On wide screens each row shows the title with one small line under it (the item's AI summary, or the start of
-its content until there is one), then columns: **Tags**, **Collection** (the source as a small badge under it),
+On wide screens each row shows the title with the item's one-line AI summary under it (nothing until there is
+one; see [Summaries](/dashboard/items#ai-summary)), then columns: **Tags**, **Collection** (the source as a small badge under it),
 the time (**Added** while reviewing, **Waiting** on Processing, **Decided** elsewhere, with a `v2` badge for
 later versions), **Status** and **Actions**. Outside Review, a row's button is its collection's main action
 (Publish, Retry...); the rest are in the item's side panel.
 
 Ticked rows get a bar at the bottom: Reject and Approve while reviewing, the collection actions that apply
-elsewhere, **Unarchive** on Archived, and **Delete** everywhere. Archived rows have an **Unarchive** button: the
+elsewhere, **Unarchive** on Archived, and **Delete** everywhere (it asks *Delete 3 items?* first). Archived rows have an **Unarchive** button: the
 item goes back to where it was. An item archived while it waited for review goes back to **Review**; otherwise
 it returns to its run, else its decision (`POST /v1/items/{id}/unarchive`).
 
@@ -40,8 +40,8 @@ it returns to its run, else its decision (`POST /v1/items/{id}/unarchive`).
 
 ### Pick an item
 
-The Inbox lists pending items oldest first, each with its title, the start of its content, the collection,
-the agent that added it and when. Most items can be decided right from the list with **Reject** and
+The Inbox lists pending items oldest first, each with its title, its summary, the collection, the agent that
+added it and when. Most items can be decided right from the list with **Reject** and
 **Approve** on the row. Click a row (or move with <Kbd>j</Kbd> / <Kbd>k</Kbd> and press <Kbd>o</Kbd>) to open
 the whole item in a side panel: preview, details, edit, history and every action.
 
