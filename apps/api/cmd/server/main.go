@@ -1,5 +1,5 @@
-// Command server runs the REST API, MCP and background workers (the
-// staqly-api image). See package server.
+// Command server runs the REST API, MCP and background workers, plus the
+// dashboard with DASHBOARD_ADDR (the ghcr.io/staqly/staqly image). See package server.
 package main
 
 import (

@@ -226,7 +226,7 @@ func (s *Service) DeleteWorkspace(ctx context.Context, p Principal, confirm stri
 		return ErrUnauthorized
 	}
 	if s.Cfg.Mode != ModeCloud {
-		return conflict("local mode has a single workspace and cannot delete it; to remove all data, stop the server and delete its data volume (e.g. `docker compose down -v`)")
+		return conflict("local mode has a single workspace and cannot delete it; to remove all data, stop staqly and delete its data: `docker rm -f staqly && docker volume rm staqly-data` for the image, the data directory (default ~/.local/share/staqly) for staqly serve; Settings -> Data & privacy shows the steps")
 	}
 	if p.Kind != PrincipalSession {
 		return &Error{Code: "forbidden", Status: 403, Message: "deleting a workspace requires a signed-in dashboard session (API keys cannot do this)"}

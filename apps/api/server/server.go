@@ -130,7 +130,7 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 	}()
 	servers := []*http.Server{srv}
 	if dln != nil {
-		// Same path as the staqly-dashboard container: the dashboard reaches the API
+		// Same path as the standalone dashboard (cmd/dashboard): it reaches the API
 		// over its listener, so the API's local-mode checks are unchanged.
 		site, _ := fs.Sub(api.Web, "web")
 		dash := &http.Server{Handler: web.Handler(site, web.DialURL(ln.Addr().String()), log, cfg.TrustProxy),

@@ -78,7 +78,7 @@ func serviceCommand() *Command {
 			fmt.Fprintln(c.Out, "  `staqly service status` checks it, `staqly service logs` shows its log, `staqly service uninstall` removes it.")
 			return nil
 		}
-	}, "staqly service install", "staqly service install --expose", "TAGGER_URL=http://localhost:11434/v1 staqly service install")
+	}, "staqly service install", "staqly service install --expose", "TAGGER_COMMAND=off staqly service install")
 	install.Long = `Install staqly serve as a background service of your user:
 macOS: a LaunchAgent (~/Library/LaunchAgents/` + launchdLabel + `.plist), started at login.
 Linux: a systemd user unit (~/.config/systemd/user/` + systemdUnit + `), with lingering
