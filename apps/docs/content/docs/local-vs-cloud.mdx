@@ -22,6 +22,8 @@ Set the mode with the `STAQLY_MODE` environment variable before starting staqly.
 | Dashboard | No sign-in on this computer (`staqly serve`); exposed to the network (`--expose`, Docker), each browser signs in once with a one-time link | Session cookie + CSRF token; recovery key for lost sessions |
 | Phones and tablets | **Connect a device** QR (with `--expose` or Docker; set `PUBLIC_DASHBOARD_URL` to your LAN address) | **Connect a device** QR |
 | MCP | `http://localhost:3333/mcp`, or `docker exec -i staqly mcp-stdio` (Docker only) | `https://<host>/mcp` + `Authorization: Bearer {API_KEY}` |
+| Summaries and auto-tags | Your own Claude Code or Codex with `staqly serve`; `TAGGER_URL` with the Docker image | The operator's OpenAI-compatible endpoint (`TAGGER_URL`) |
+| Backups | Commands in **Settings → Backups**, run on this computer | ZIP backups to download in **Settings → Backups** on Pro |
 
 `STAQLY_MODE` is trimmed and case-insensitive; any value other than `local` or `cloud` refuses
 to start, so a typo never silently picks a mode.

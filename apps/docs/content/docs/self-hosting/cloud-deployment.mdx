@@ -42,6 +42,7 @@ STAQLY_DOMAIN=staqly.example.com   # Caddy gets a certificate for it
 # SETUP_TOKEN=change-me            # set to make signup private
 # STAQLY_VERSION=v0.1.0            # pin an image tag (default latest)
 # STRIPE_SECRET_KEY=sk_live_...  STRIPE_WEBHOOK_SECRET=whsec_...  STRIPE_PRICE_PRO=price_...   # card payments, see Billing
+# TAGGER_URL=https://api.openai.com/v1  TAGGER_API_KEY=sk-...   # item summaries and auto-tags (TAGGER_MODEL defaults to gpt-4o-mini)
 ```
 
 `compose.cloud.yml` sets the rest: `STAQLY_MODE=cloud`, `PUBLIC_API_URL` and
@@ -50,6 +51,10 @@ Cloud mode also keeps webhooks off private addresses (`WEBHOOK_ALLOW_PRIVATE=fal
 and notification channels are public-internet-only in both modes. See
 [Local vs cloud](/local-vs-cloud#defaults-that-depend-on-the-mode) and
 [Configuration](/self-hosting/configuration).
+
+Cloud mode never runs an AI CLI: [summaries and auto-tags](/self-hosting/configuration#auto-tags-and-summaries)
+are on only when you set `TAGGER_URL` (an OpenAI-compatible endpoint), and item content is then
+sent to that provider.
 
 </Step>
 <Step>
@@ -83,7 +88,8 @@ ends unpaid, the workspace becomes read-only until it pays or switches to Free.
   are reachable from the Docker network only.
 - Using your own reverse proxy instead of Caddy: run `compose.yml` alone (API on
   `127.0.0.1:3333`, dashboard on `:8080`; firewall `8080` so only the proxy reaches it) and route
-  `/v1/*`, `/mcp`, `/openapi.yaml`, `/health` to `:3333`, everything else to `:8080`.
+  `/v1/*`, `/mcp`, `/openapi.yaml`, `/health` and `/readyz` to `:3333`, everything else to `:8080`
+  (the dashboard relays its own `/api/*` calls to the API).
 
 ## Signup, plans and rate limits
 

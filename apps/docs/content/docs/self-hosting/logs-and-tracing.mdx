@@ -80,8 +80,8 @@ otherwise. `/health`, `/livez` and `/readyz` are not logged at `info`.
 An unexpected error (HTTP 500) also logs `msg` = `internal error` with `err` and the request
 fields above.
 
-Background workers add `worker` (`webhooks`, `watchers`, `notifications`, `telegram-poller`,
-`exports`, `retention`, `expiry`, `obs-heartbeat`) and, where known, `workspace_id` plus the
+Background workers add `worker` (`webhooks`, `watchers`, `summaries`, `notifications`,
+`telegram-poller`, `exports`, `retention`, `expiry`, `processing-timeout`, `obs-heartbeat`) and, where known, `workspace_id` plus the
 entity: `delivery_id` / `webhook_id`, `watcher_id`, `channel_id`, `export_id`, `item_id`.
 
 ```json
@@ -138,10 +138,13 @@ Behind Cloudflare (proxy or Containers), keep `LOG_FORMAT=json` and ship stdout:
 Set `SENTRY_DSN` to get an alert for every error instead of reading logs. Off by default; with
 no DSN, nothing is sent anywhere.
 
-```bash title=".env"
-SENTRY_DSN=https://<key>@o0.ingest.sentry.io/<project>
+```bash
+SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0
 SENTRY_ENVIRONMENT=production   # default
 ```
+
+Pass them like any other [setting](/self-hosting/configuration#how-to-change-a-setting):
+`-e` with Docker, the environment of `staqly serve` with the binary.
 
 Every log line at level `ERROR` becomes a Sentry event: internal server errors (5xx), panics
 (with the stack trace), and failures in background workers (webhooks, watchers, notifications). Errors you cause as a client (4xx) are not reported.

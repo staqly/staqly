@@ -15,8 +15,10 @@ the EU/EEA, the GDPR.
 If you run staqly yourself (`staqly serve` or Docker), your data stays on your machine. The
 software has **no telemetry** and sends nothing to us. Outgoing requests happen only to
 services you configure yourself: webhooks, notification channels (Telegram, Slack, Discord,
-ntfy, email), watcher sources and, if you set `TAGGER_URL`, the model endpoint that writes item
-summaries and tags. The rest of this policy is about staqly cloud.
+ntfy, email) and watcher sources. Item summaries and tags are written by your own AI: with
+`staqly serve`, the Claude Code or Codex CLI installed on your computer (so the item text goes to
+that provider under your own account), or the model endpoint you set in `TAGGER_URL`. Set
+`TAGGER_COMMAND=off` to turn this off. The rest of this policy is about staqly cloud.
 
 ## Who is responsible
 

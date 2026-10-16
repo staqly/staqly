@@ -117,8 +117,11 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 After a new item is saved, AI writes its `summary` (one line, at most 120 characters, shown under the
 title in the inbox) and, if it arrived without tags, gives it 1 to 3 tags. It never delays the request: new
 items wait in a queue stored in the database, so a bulk import, a restart or an AI that is unavailable for a
-while only delays them. A failed call is retried up to 5 times with backoff. Items created before AI was set
-up are summarized once it is. Tags set by the agent or a person are never replaced.
+while only delays them. Each item is tried up to 5 times, with backoff between tries. Items created before AI was set
+up are summarized once it is. Tags set by the agent or a person are never replaced. Every stored summary emits
+an `item.summarized` event. To write one item's summary again now, with optional extra context, use
+**Regenerate** on the item in the dashboard or `POST /v1/items/{id}/summarize`; without any AI set up it
+answers `409 not_configured`.
 
 **Local (`staqly serve`, `staqly service`)**: staqly uses **your own AI**. If [Claude Code](https://claude.com/claude-code)
 (`claude`) is installed it runs `claude -p --model haiku`; otherwise, if [Codex](https://developers.openai.com/codex)

@@ -32,6 +32,8 @@ waits until it is healthy and opens the dashboard in your browser, already signe
 | `make seed` | Loads demo data through the API (`scripts/seed.sh`) |
 | `make backup` / `make restore BACKUP=backups/<timestamp>` | `scripts/backup.sh` / `scripts/restore.sh`: the [Docker backup and restore](/self-hosting/backup-and-restore) steps for the Compose volume |
 | `make mcp-stdio`, `make workspaces`, `make set-plan`, `make recovery-key` | `docker exec staqly ...` shortcuts for the [operator commands](/self-hosting/operator-cli) |
+| `make stripe-secret` | Prints the webhook signing secret of the development stack's Stripe CLI — see [Billing](/self-hosting/billing#test-locally) |
+| `make site` | Runs the landing page (`http://localhost:8070`) and these docs (`http://localhost:8090`) from your checkout, with hot reload. They are static sites and never run in Docker |
 | `make cloud` | Cloud mode in production behind Caddy — see [Cloud deployment](/self-hosting/cloud-deployment) |
 | `make help` | Lists every target |
 
