@@ -25,8 +25,10 @@ preview. The latest reviewer feedback is shown under **Details** when there is s
 
 ### Open the Edit tab
 
-Change the title, content, URL, metadata, collection, source or external ref. The URL
-field appears for links, images, videos and files. The Edit tab is there only while the content can change
+Change the title, content, URL, metadata, collection, source or external ref. For images, videos and files
+the content field is an optional **Description**. An uploaded file is shown (name, type and size) but not
+replaced here; the **URL** field appears for links (where it is required) and for media items without an
+upload. The Edit tab is there only while the content can change
 (see [Editing after a decision](#editing-after-a-decision)); tags are edited from
 [Details → Properties](#tags).
 
@@ -62,7 +64,7 @@ The toast after a purge says how many events were erased. API:
 
 | Tab | What you see |
 |---|---|
-| **Details** | **Properties** (ID, collection, tags, decision, run, source, external ref, URL or file, timestamps and version), the **Metadata** (every key of the JSON object), the latest feedback and, once decided, [what happened next](#what-happened-next). |
+| **Details** | **Properties** (ID, collection, tags, decision, run, source, external ref, URL or file, timestamps and version), the **Metadata** as JSON (with Copy and full screen), the latest feedback and, once decided, [what happened next](#what-happened-next). |
 | **Edit** | A form for the title, content, URL, metadata, collection, source and external ref. Saving creates a new version. Hidden once the content is locked. |
 | **History** | The event timeline: created, edited, approved, rejected, actions run. Each entry says who did it: you, an API key, an agent or the system. |
 | **Versions** | A snapshot of the item **before each change**, so nothing is ever lost. |
@@ -73,6 +75,14 @@ Every item has a `version` number. Edits made in the dashboard and through the A
 optimistic check: if the item changed since you opened it, the save fails with a conflict
 instead of silently overwriting someone else's change. API clients opt in by sending
 `expected_version`.
+
+## Preview
+
+- **Images**: click the image to open it at full size in a dialog.
+- **Videos**: a tile with a play button, the file name and size; the video plays in a dialog only after you
+  click it.
+- **JSON**: pretty-printed, with a button to open it full screen.
+- **Links** and **files**: the address or file name with **Open** or **Download**.
 
 ## Images and videos
 

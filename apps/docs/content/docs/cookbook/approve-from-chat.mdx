@@ -23,7 +23,7 @@ Telegram itself (polling mode).
 ### Create a bot
 
 The bot is what sends you messages. In Telegram open **@BotFather**, send `/newbot`, pick a
-name and copy the **bot token** (`123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`). Then open a chat with your new bot and send
+name and copy the **bot token** (`123456789:AAH_your-bot-token`). Then open a chat with your new bot and send
 `/start`, so the bot is allowed to message you.
 
 </Step>
@@ -51,7 +51,7 @@ CHANNEL_ID=$(curl -s -X POST http://localhost:3333/v1/notification-channels \
   -H 'Content-Type: application/json' -d '{
   "name": "My phone",
   "type": "telegram",
-  "config": { "bot_token": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "chat_id": "123456789" }
+  "config": { "bot_token": "123456789:AAH_your-bot-token", "chat_id": "123456789" }
 }' | jq -r .id)
 ```
 

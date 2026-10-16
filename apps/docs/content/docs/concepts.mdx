@@ -70,8 +70,8 @@ An item is one output from an agent or automation.
 | `source` | Who produced it, e.g. `n8n`, `mcp:Claude`, `watcher:HN`. Without one, staqly names the client that sent it (see [Agents](/dashboard/agents)). |
 | `external_ref` | Your own reference ID; filterable. |
 | `status` | See the [lifecycle](#status-lifecycle). |
-| `tags` | Labels such as `client-a` or `urgent` (up to 20). Items saved without tags get a few from the [auto-tagger](/self-hosting/configuration#auto-tags-and-summaries), if one is set up. |
-| `summary` | One line (up to 120 characters) on what the item is, written by the auto-tagger's model after the item is saved. Empty until then, or without a model. |
+| `tags` | Labels such as `client-a` or `urgent` (up to 20). Each tag is up to 40 characters, without commas. Items saved without tags get 1 to 3 from the [auto-tagger](/self-hosting/configuration#auto-tags-and-summaries), if one is set up. |
+| `summary` | One line (up to 120 characters) on what the item is, written after the item is saved by your own AI CLI (Claude Code or Codex) or the configured model endpoint. Empty until then, or when none is set up. `POST /v1/items/{id}/summarize` writes it again (event `item.summarized`). |
 | `feedback` | The latest review or action feedback. |
 | `version` | Incremented on every change; a snapshot is stored before each change. |
 | `decided_at` | When the item was approved, rejected or expired. |

@@ -60,7 +60,7 @@ same volume from local to cloud mode, and `08-signup-and-plans` needs that.
 | `04-mcp` | Streamable HTTP: initialize, tool count, `create_item`; STDIO via `docker exec -i staqly-e2e mcp-stdio`; `await_decision` returns when a human approves concurrently |
 | `05-search-and-devices` | Prefix full-text search; a phone on the LAN (non-local Host) is refused, redeems a QR link, reads and acts; the link works once (410) |
 | `06-persistence` | Items and media survive `compose restart` and `up --force-recreate` |
-| `07-cloud-mode` | Re-creates the api with `STAQLY_MODE=cloud`: credentials required (401); recovery key from `server recovery-key` opens a session; CSRF enforced; scoped API key sees the local data; a creator key cannot review over REST or MCP; keyless MCP refused |
+| `07-cloud-mode` | Re-creates the container with `STAQLY_MODE=cloud`: credentials required (401); recovery key from `server recovery-key` opens a session; CSRF enforced; scoped API key sees the local data; a creator key cannot review over REST or MCP; keyless MCP refused |
 | `08-signup-and-plans` | Signup needs `SETUP_TOKEN`; a new isolated workspace starts on a Pro trial; on Free, items are unlimited but the 51st approval gets 402 `decisions_per_month`; `server set-plan ... pro` lifts it |
 
 When MCP tools are added or removed, update `TOOL_COUNT` in

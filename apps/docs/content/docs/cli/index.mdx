@@ -122,8 +122,8 @@ staqly serve --data ~/staqly-data --port 4333 --dashboard-port 9090
 | `--expose` | off | Serve the dashboard on all network interfaces; each browser signs in once with a link from `staqly serve connect-link` |
 
 With a subcommand, `staqly serve` runs an operator task against the same data instead:
-`connect-link`, `backup <file>`, `workspaces`, `recovery-key` and `set-plan`. See
-[Without Docker](/self-hosting/binary) and [Operator commands](/self-hosting/operator-cli).
+`connect-link`, `backup <file>`, `workspaces`, `stats`, `recovery-key` and `set-plan`. See
+[Run the binary](/self-hosting/binary) and [Operator CLI](/self-hosting/operator-cli).
 
 ## Connect to a server
 
@@ -215,6 +215,6 @@ When the server can't be reached, the error names the URL it tried.
 <Cards>
   <Card title="Commands" href="/cli/commands">Every command with its flags and examples.</Card>
   <Card title="Scripting recipes" href="/cli/scripting">CI gates, closing the loop, shell loops.</Card>
-  <Card title="Without Docker" href="/self-hosting/binary">Run `staqly serve` as a long-lived service.</Card>
+  <Card title="Run the binary" href="/self-hosting/binary">Run `staqly serve` as a background service.</Card>
   <Card title="Connect an agent" href="/agents">Let Claude Code, Codex or n8n use staqly.</Card>
 </Cards>

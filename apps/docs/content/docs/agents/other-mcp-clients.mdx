@@ -40,7 +40,7 @@ curl -s http://localhost:3333/mcp \
 
 ## STDIO details
 
-`mcp-stdio` is a second binary in the API image. Run it **inside** the running container so
+`mcp-stdio` is a second binary in the `ghcr.io/staqly/staqly` image. Run it **inside** the running container so
 it opens the same SQLite database (WAL mode handles several processes on one host). Webhook
 deliveries it queues are sent by the server's worker.
 

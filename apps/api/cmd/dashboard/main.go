@@ -1,4 +1,4 @@
-// Command dashboard serves the dashboard on its own (the staqly-dashboard image): the
+// Command dashboard serves the dashboard on its own in front of a remote API (API_INTERNAL_URL): the
 // embedded static export of apps/dashboard, with /api/* streamed to the API.
 //
 //	ADDR              listen address (default :8080)
@@ -26,7 +26,7 @@ import (
 var version = "dev"
 
 func main() {
-	// `web health` is the image's HEALTHCHECK (no wget/curl in it).
+	// `dashboard health`: a health check for container setups without wget/curl.
 	if len(os.Args) > 1 && os.Args[1] == "health" {
 		res, err := http.Get("http://127.0.0.1" + port(env("ADDR", ":8080")) + "/login")
 		if err != nil || res.StatusCode != http.StatusOK {

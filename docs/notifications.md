@@ -114,8 +114,10 @@ proxy, `PUBLIC_DASHBOARD_URL` + `/api` (the API itself listens on 127.0.0.1, pho
 reach only the dashboard), or `PUBLIC_API_URL` when `PUBLIC_DASHBOARD_URL` is unset.
 The address must be reachable from the device where you tap the link.
 
-* Local install: set `PUBLIC_DASHBOARD_URL=http://<this computer's LAN IP>:8080`
-  and links work on any device on your Wi-Fi.
+* Local install: with the Docker image or `staqly serve --expose`, set
+  `PUBLIC_DASHBOARD_URL=http://<this computer's LAN IP>:8080` and links work on
+  any device on your Wi-Fi (plain `staqly serve` keeps the dashboard on this
+  computer, so links only open here).
 * Cloud: set `PUBLIC_DASHBOARD_URL=https://your-domain` (or `NOTIFY_PUBLIC_API_URL`
   to your public API URL).
 

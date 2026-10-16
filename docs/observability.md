@@ -20,7 +20,7 @@ protocol channel) at `warn` unless `LOG_LEVEL` / `LOG_FORMAT` say otherwise.
 | Env | Default | Meaning |
 |---|---|---|
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` (case-insensitive). Anything else refuses to start |
-| `LOG_FORMAT` | `json` | `json` or `text` (for reading in a terminal) |
+| `LOG_FORMAT` | `json` (`text` with `staqly serve`) | `json` or `text` (for reading in a terminal) |
 
 Never logged: query strings, request/response headers and bodies, API keys,
 session tokens, decision-link tokens (the path shows `/v1/decide/{token}`),
@@ -59,7 +59,8 @@ plus the request fields above, so it can be found by `request_id` or
 `trace_id`.
 
 Background workers add `worker` (`webhooks`, `watchers`, `notifications`,
-`telegram-poller`, `exports`, `retention`, `expiry`, `obs-heartbeat`) and,
+`telegram-poller`, `exports`, `retention`, `expiry`, `processing-timeout`,
+`summaries`, `obs-heartbeat`) and,
 where known, `workspace_id` plus the entity: `delivery_id`/`webhook_id`,
 `watcher_id`, `channel_id`, `export_id`, `item_id`.
 
@@ -105,7 +106,8 @@ address (Cloudflare appends it to `X-Forwarded-For`) rather than the edge's.
   down. `not_started` does not count as a failure: it covers processes that
   serve HTTP without background workers, such as tests.
 
-Docker Compose healthcheck example:
+The image's own `HEALTHCHECK` calls `/health` and the dashboard's `/login`.
+A Compose healthcheck on readiness instead:
 
 ```yaml
 healthcheck:
@@ -213,7 +215,7 @@ header (seconds) and this body:
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `RATE_LIMIT_DISABLED` | `false` | Turn off all WP-5 limits (the signup cap stays) |
+| `RATE_LIMIT_DISABLED` | `false` | Turn off these limits (the signup cap stays) |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Sensitive endpoints, per IP |
 | `RATE_LIMIT_BURST` | = per-minute | Sensitive endpoints burst |
 | `RATE_LIMIT_AUTH_PER_MINUTE` | `600` | Authenticated API, per principal |

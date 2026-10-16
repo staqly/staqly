@@ -25,6 +25,9 @@ mid-write can be torn. Use the backup command below.
 
 ## Back up
 
+**Settings → Backups** in the dashboard shows the backup commands for your install (binary or
+Docker), ready to copy. On [cloud](#cloud-workspaces) it lists the workspace's backups instead.
+
 <Tabs items={["Binary", "Docker"]}>
 <Tab value="Binary">
 
@@ -42,7 +45,8 @@ staqly serve backup ~/staqly-backups/2026-10-13/workspace.db
 ```
 
 This works while `staqly serve` is running. Add `--data` (e.g.
-`staqly serve --data ~/staqly-data backup ./backups`) if you don't use the default data directory.
+`staqly serve --data ~/staqly-data backup ~/staqly-backups/2026-10-13/workspace.db`) if you don't use
+the default data directory.
 
 </Step>
 <Step>
@@ -295,6 +299,15 @@ API keys and sessions, and encrypted notification-channel secrets; `notify_secre
 decrypts them. Run the backup commands with `umask 077` as above, so only you can read the
 copies, and keep it that way: store backups encrypted, and don't commit them or put them on
 shared drives.
+
+## Cloud workspaces
+
+On a cloud instance, workspace admins on a paid plan get backups in **Settings → Backups**:
+**Create backup** builds a ZIP of the whole workspace (collections, items with their versions,
+events and media), and each ready backup has a **Download** button for 24 hours. These are the
+workspace exports from [Data export & privacy](/self-hosting/data-export)
+(`POST /v1/workspace/export`, `GET /v1/workspace/exports`). On the Free plan the tab is hidden.
+The operator still backs up the whole instance with the commands above.
 
 ## From a checkout (Compose)
 

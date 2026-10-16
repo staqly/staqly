@@ -132,8 +132,18 @@ watchers, notification channels, API keys, sessions and exports — and signs ev
 - With [billing](/self-hosting/billing) on, a live Stripe subscription is canceled right away.
 
 **Local mode** returns `409`: the installation has exactly one workspace. To remove all data,
-stop staqly and delete its data: the data directory with the binary (`~/.local/share/staqly`
-or your `--data`), or the data volume with Docker (`docker rm -f staqly && docker volume rm staqly-data`).
+stop staqly and delete its data, as the **Delete all data** card in **Settings → Data & privacy**
+shows:
+
+```bash tab="Binary"
+staqly service uninstall          # only if you installed the background service
+rm -rf ~/.local/share/staqly      # or your --data directory
+```
+
+```bash tab="Docker"
+docker rm -f staqly
+docker volume rm staqly-data
+```
 
 ## Next steps
 

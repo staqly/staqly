@@ -12,6 +12,12 @@ n8n talks to staqly in two directions:
 
 Inside a container, `localhost` is the container itself, not your machine.
 
+The table is for staqly in Docker (the image or the Compose setup). With
+`staqly serve` the API listens on `127.0.0.1` only, so run n8n on the host
+too: n8n calls `http://localhost:3333`, and the webhook goes to
+`http://localhost:5678/webhook/staqly-demo`, which needs
+`WEBHOOK_ALLOW_LOOPBACK=true` in the environment of `staqly serve`.
+
 | n8n runs... | n8n → staqly API URL | staqly webhook URL (→ n8n) |
 |---|---|---|
 | on the staqly Docker network (e.g. [`integrations/n8n/compose.yml`](../integrations/n8n/compose.yml)) | `http://api:3333` | `http://n8n:5678/webhook/staqly-demo` |
@@ -25,14 +31,15 @@ Notes:
   built in. If n8n reaches staqly under another name, add it to
   `LOCAL_ALLOWED_HOSTS`.
 * `host.docker.internal` works on Docker Desktop; on Linux the compose file
-  maps it via `extra_hosts: host-gateway` for the API container. For another
-  n8n container on Linux add the same `extra_hosts` entry to it.
+  maps it via `extra_hosts: host-gateway` for the staqly container (with
+  `docker run`, add `--add-host host.docker.internal:host-gateway`). For
+  another n8n container on Linux add the same entry to it.
 * To share a network with an existing n8n container:
   `docker network connect staqly_default <n8n-container>`.
 * Webhook targets on private networks are allowed by default
   (`WEBHOOK_ALLOW_PRIVATE=true`); loopback targets are not
-  (`WEBHOOK_ALLOW_LOOPBACK=false`) — only relevant when running the API
-  outside Docker with n8n on `localhost`.
+  (`WEBHOOK_ALLOW_LOOPBACK=false`) — only relevant with `staqly serve` and
+  n8n on `localhost`.
 * Media URLs inside webhook payloads use `PUBLIC_API_URL`. If n8n should
   download images from those URLs, set `PUBLIC_API_URL` to the address n8n can
   reach (e.g. `http://api:3333`) and send the API key header.

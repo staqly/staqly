@@ -367,7 +367,7 @@ const ch = await staqly.notificationChannels.create({
   name: "My phone",
   type: "ntfy",                                   // telegram | slack | discord | ntfy | email
   config: { topic: "acme-reviews" },              // type-specific settings
-  events: ["item.created", "item.escalated"],     // the default
+  events: ["item.created"],                       // the default
   collection_ids: [col.id],
   digest_window_seconds: 300,                     // batch messages (0 = immediately)
 });

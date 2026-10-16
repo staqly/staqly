@@ -4,7 +4,7 @@ description: Find the cause and the fix for common staqly errors, from startup f
 ---
 
 Look up the error or symptom you see below; each entry says what it means and how to fix it.
-Where the fix differs, it covers both the binary (`staqly serve`) and Docker Compose. If your
+Where the fix differs, it covers both the binary (`staqly serve`) and the Docker image. If your
 problem isn't here, [check the logs](#check-the-logs) for the request's `request_id`.
 
 ## Common problems
@@ -128,9 +128,19 @@ errors go to stderr.
 </Accordion>
 <Accordion title="Port already in use">
 Another program (or a second staqly) uses port 3333 or 8080. Binary: start with other ports,
-e.g. `staqly serve --port 4333 --dashboard-port 9090`. Docker: set `API_PORT` / `DASHBOARD_PORT` in `.env`;
-if you change `API_PORT`, also update `PUBLIC_API_URL`. In both cases update your MCP client
+e.g. `staqly serve --port 4333 --dashboard-port 9090`. Docker: recreate the container with other
+host ports (`-p 127.0.0.1:4333:3333 -p 9090:8080 -e PUBLIC_API_URL=http://localhost:4333 -e DASHBOARD_PORT=9090`,
+see [Other ports](/self-hosting/docker#other-ports)). In both cases update your MCP client
 URLs. Don't run the binary and the Docker setup at the same time on the default ports.
+</Accordion>
+<Accordion title="Items get no summary or tags">
+Summaries and auto-tags need an AI. With the binary, staqly uses Claude Code (`claude`) or Codex
+(`codex`) if one is on the `PATH` of `staqly serve` (a background service keeps the `PATH` from
+`staqly service install`; install again after installing the CLI). Otherwise set
+`TAGGER_COMMAND`, or `TAGGER_URL` with `TAGGER_API_KEY`. The Docker image and cloud mode only use
+`TAGGER_URL`. **Regenerate** on an item (or `POST /v1/items/{id}/summarize`) answers
+`409 not_configured` when nothing is set up and `502 model_failed` when the AI failed (locally with
+the reason). See [Auto-tags and summaries](/self-hosting/configuration#auto-tags-and-summaries).
 </Accordion>
 <Accordion title="Upload rejected with 415">
 Only common image, video, audio, PDF, text, CSV, Markdown, JSON and ZIP files are accepted;

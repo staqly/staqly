@@ -46,7 +46,7 @@ func itemsCommand() *Command {
 func itemsListCommand() *Command {
 	return leaf("list", "", "List or search items across collections", 0, 0, func(fs *flag.FlagSet) runFunc {
 		coll := fs.String("collection", "", "collection ID or name")
-		status := fs.String("status", "", "draft, pending, approved, rejected, processing, completed, failed, archived")
+		status := fs.String("status", "", "draft, pending, approved, rejected, expired, processing, completed, failed, archived")
 		typ := fs.String("type", "", "image, video, text, link, json or file")
 		q := fs.String("q", "", "full-text search over title, content and metadata")
 		source := fs.String("source", "", "filter by source")

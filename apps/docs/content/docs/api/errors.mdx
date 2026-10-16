@@ -86,7 +86,7 @@ matching log lines — see [Logs & tracing](/self-hosting/logs-and-tracing#follo
 | 409 | `conflict` | State conflict — see below |
 | 409 | `item_changed` | A decision link or chat button was for an older version of the item — see below |
 | 409 | `not_available` | Billing is not enabled on this instance (`/v1/billing*`), or plans were asked for on a local install |
-| 409 | `not_configured` | `POST /v1/items/{id}/summarize` on an instance without a model for summaries (`TAGGER_URL`) |
+| 409 | `not_configured` | `POST /v1/items/{id}/summarize` on an instance without AI for summaries (no Claude Code or Codex on the computer running `staqly serve`, `TAGGER_COMMAND=off`, or no `TAGGER_URL` in Docker and cloud mode) |
 | 409 | `idempotency_in_progress` | A request with the same `Idempotency-Key` is still running |
 | 410 | `link_used` / `link_expired` | A device link was already used / is older than 5 minutes |
 | 410 | `gone` | A one-tap decision link was used or expired; a workspace export is no longer available |
@@ -99,7 +99,7 @@ matching log lines — see [Logs & tracing](/self-hosting/logs-and-tracing#follo
 | 429 | `rate_limited` | Too many requests — see [rate limits](/self-hosting/monitoring#rate-limits). The `Retry-After` header says how many seconds to wait |
 | 500 | `internal` | Unexpected server error (logged server-side with the `request_id`) |
 | 502 | `payment_provider_error` | Stripe rejected a checkout or portal request — retry later; the operator sees the reason in the logs |
-| 502 | `model_failed` | `POST /v1/items/{id}/summarize`: the summary model did not answer (within a minute) |
+| 502 | `model_failed` | `POST /v1/items/{id}/summarize`: the summary model did not answer (within 2 minutes) |
 | 502 | `bad_gateway` | The dashboard's `/api` proxy can't reach the API |
 | 503 | `timeout` | An item listing without `q` ran longer than 5 seconds — retry, or add filters |
 | 503 | `busy` | The database was locked by another process (e.g. a backup) — retry after `Retry-After` (1 s) |

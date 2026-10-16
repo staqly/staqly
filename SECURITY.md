@@ -1,6 +1,6 @@
 # Security policy
 
-Staqly stores content your agents produce and credentials for chat
+staqly stores content your agents produce and credentials for chat
 platforms, so we take security reports seriously.
 
 ## Reporting a vulnerability

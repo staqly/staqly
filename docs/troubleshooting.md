@@ -70,7 +70,8 @@ setup key intentionally lacks `admin`.
 
 **Webhook deliveries fail with `private destination ... is not allowed` /
 `loopback destination ...`.** Adjust `WEBHOOK_ALLOW_PRIVATE` /
-`WEBHOOK_ALLOW_LOOPBACK` in `.env`. `WEBHOOK_ALLOW_PRIVATE` defaults to `true`
+`WEBHOOK_ALLOW_LOOPBACK` (`-e` on `docker run`, the environment of
+`staqly serve`, or `.env` for Compose). `WEBHOOK_ALLOW_PRIVATE` defaults to `true`
 in local mode and `false` in cloud mode. In cloud mode the delivery log keeps
 only the status code and a short reason, never the response body. Inside Docker, `localhost` is the API
 container itself — use `host.docker.internal` or a compose service name (see
@@ -79,7 +80,7 @@ container itself — use `host.docker.internal` or a compose service name (see
 **Webhook deliveries `connection refused` from n8n on the host (Linux).** Make
 n8n listen on all interfaces (or the docker bridge), and use
 `http://host.docker.internal:5678/...`; the compose file maps it to the host
-gateway.
+gateway (with `docker run`, add `--add-host host.docker.internal:host-gateway`).
 
 **n8n Code node: `Cannot find module 'crypto'`.** Set
 `NODE_FUNCTION_ALLOW_BUILTIN=crypto` on n8n, or leave the demo's
@@ -90,8 +91,18 @@ cloud mode `STAQLY_API_KEY` must be forwarded (`docker exec -i -e
 STAQLY_API_KEY ...`). Run `docker exec -i staqly mcp-stdio` manually —
 errors go to stderr.
 
-**Port already in use.** Set `API_PORT` / `DASHBOARD_PORT` in `.env`. If you change
-`API_PORT`, also update `PUBLIC_API_URL` and your MCP client URLs.
+**Port already in use.** `staqly serve --port 4333 --dashboard-port 9090`;
+with `docker run`, change the host side of `-p` (e.g. `-p 127.0.0.1:4333:3333`)
+and set `-e PUBLIC_API_URL=http://localhost:4333`; with Compose, `API_PORT` /
+`DASHBOARD_PORT` in `.env`. After moving the API, also update your MCP client
+URLs.
+
+**Items get no summary or tags.** `staqly serve` uses `claude` (else `codex`)
+from its `PATH`; install one, or set `TAGGER_COMMAND`. The Docker image has no
+AI CLI: set `TAGGER_URL` (OpenAI-compatible, e.g.
+`https://api.openai.com/v1`), `TAGGER_API_KEY` and optionally `TAGGER_MODEL`
+(default `gpt-4o-mini`). Failures are logged as `summary failed`; each item is tried up to 5
+times. `TAGGER_COMMAND=off` turns summaries off.
 
 **Upload rejected with 415.** Only common image/video/audio/PDF/text/CSV/JSON/
 ZIP files are accepted; SVG and HTML are refused because they can carry script.
@@ -104,8 +115,10 @@ process uses a data directory.
 **`429` from a webhook/channel "test" button.** Test sends are limited per
 API key or session (burst 5, then 10 per minute).
 
-**Logs.** `docker logs -f staqly` (`staqly service logs -f` for the binary) — JSON lines on stdout (`LOG_FORMAT=text`
-for a terminal, `LOG_LEVEL=debug` for more); request paths are logged,
+**Logs.** `docker logs -f staqly` — JSON lines on stdout (`LOG_FORMAT=text`
+for a terminal); `staqly serve` prints text to the terminal, and
+`staqly service logs -f` shows the background service's. `LOG_LEVEL=debug`
+gives more; request paths are logged,
 headers and query strings are not. Find everything about one failed request by
 the `request_id` (or `trace_id`) from the error body — see
 [observability.md](observability.md#logs).

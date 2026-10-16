@@ -107,7 +107,7 @@ Prefer code? Use the [TypeScript SDK](sdks/typescript), the [Python SDK](sdks/py
 - 📥 **Review inbox** — approve (with Undo), reject with feedback, or edit before approving; keyboard-first on desktop, swipe-friendly on phones
 - ✨ **Summaries and tags** — your own Claude Code or Codex (locally) or an OpenAI-compatible endpoint (cloud) gives new items a one-line summary and tags
 - 🤝 **Human-in-the-loop for agents** — agents wait for your decision (`await_decision`) and only act on what you approved
-- 🗂️ **Collections** — images, video, text, links and JSON in gallery, table or list views, with full-text search
+- 🗂️ **Collections** — images, video, text, links, files and JSON in one sortable table (cards on phones), with full-text search
 - ⏳ **Expiry** — give a request a deadline (`expires_in`); if nobody decides in time it turns `expired`
 - 👀 **Watchers** — pull in fresh content from RSS/Atom feeds and changes on any web page
 - 🔔 **Notifications** — approve straight from Telegram, Slack, Discord, ntfy or email

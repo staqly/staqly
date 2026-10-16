@@ -1,6 +1,6 @@
-// Command mcp-stdio serves the Staqly MCP tools over STDIO for local agents
+// Command mcp-stdio serves the staqly MCP tools over STDIO for local agents
 // (Claude Code, Codex). It opens the same SQLite database as the server,
-// typically via `docker exec -i staqly-api mcp-stdio`. In local mode no key
+// typically via `docker exec -i staqly mcp-stdio`. In local mode no key
 // is needed; in cloud mode it authenticates with STAQLY_API_KEY.
 // Webhook deliveries it queues are sent by the server's worker.
 package main

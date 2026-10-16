@@ -85,6 +85,10 @@ it, reject it, or it **expires**.
 |---|---|---|
 | Wait | `await_decision` (up to 300 s per call) | `GET /v1/items/{id}/wait?timeout=60` (up to 60 s per call) |
 
+`await_decision` waits 45 s by default (`timeout_seconds`, max 300). Many MCP clients give up on a tool call
+after 60 s, so keep it under your client's limit and call again, or raise the limit first (see
+[MCP tools](/mcp/tools#wait-for-the-decision-await_decision)).
+
 </Step>
 <Step>
 

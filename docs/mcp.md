@@ -40,6 +40,11 @@ the data volume instead) and `choose_free_plan` with `not_available`.
 compatibility only; the dashboard always shows a collection as a table.
 `test_webhook` and `test_notification_channel` are rate-limited per caller.
 
+`await_decision` waits up to `timeout_seconds` (default 45, max 300) and
+returns `decided=false` when the time is up; the agent calls it again to keep
+waiting. Keep the value under your client's tool-call timeout (often 60 s);
+raise that timeout in the client before passing a longer wait.
+
 ## Local mode
 
 ### Streamable HTTP (recommended)
@@ -64,8 +69,9 @@ url = "http://localhost:3333/mcp"
 
 ### STDIO
 
-The `mcp-stdio` binary ships in the API image. Run it inside the running
-container so it uses the same database (use `-i`, never `-t`):
+The `mcp-stdio` binary ships in the `ghcr.io/staqly/staqly` image. Run it
+inside the running container so it uses the same database (use `-i`, never
+`-t`):
 
 ```bash
 claude mcp add staqly -- docker exec -i staqly mcp-stdio

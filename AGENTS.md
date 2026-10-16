@@ -27,7 +27,7 @@ code that requires attribution.
 ```bash
 pnpm install       # once: the whole workspace (Turborepo + pnpm; Go and Python packages have package.json wrappers)
 pnpm check         # format:check, lint, typecheck, test of every package (turbo, cached)
-pnpm turbo run test --filter=@staqly/api   # one package (api, cli, dashboard, docs, web, sdk, sdk-python, e2e)
+pnpm turbo run test --filter=@staqly/api   # one package (api, cli, dashboard, sdk, sdk-python; docs and web have no tests)
 pnpm gen           # sqlc queries, dashboard API types, TypeScript SDK schema
 pnpm test:e2e      # Docker end-to-end suite (e2e/, compose.e2e.yml)
 make up            # compose.yml alone with the released image, open a signed-in browser (users run `docker run`, not this)

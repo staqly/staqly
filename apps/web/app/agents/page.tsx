@@ -55,7 +55,7 @@ Header  Authorization: Bearer stk_...`,
 // From apps/docs/content/docs/mcp/tools.mdx (71 tools); the ones an agent reaches for most.
 const tools: [string, string][] = [
   ['create_item', 'Store what the agent made, or the action it wants to take, as a pending item'],
-  ['await_decision', 'Block until a human approves, rejects or edits it (or the timeout passes)'],
+  ['await_decision', 'Wait for a human to approve (with or without edits) or reject; 45 s per call by default'],
   ['report_result', 'Record what happened after acting: completed or failed, with details'],
   ['list_pending_approvals', 'See what is still waiting for a human'],
   ['search_items', 'Full-text search with status and decision-date filters'],
@@ -142,7 +142,7 @@ export default function AgentsPage() {
           <ol className="mt-6 space-y-3 text-sm leading-relaxed">
             {[
               'The agent proposes: create_item with what it made or wants to do.',
-              'It waits: await_decision blocks until you approve, reject or edit.',
+              'It waits: await_decision returns once you approve (maybe with edits) or reject; on a timeout it calls again.',
               'It acts on exactly what you approved, including your edits.',
               'It reports: report_result closes the loop and lands in the history.',
             ].map((s, i) => (

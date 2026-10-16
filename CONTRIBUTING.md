@@ -1,4 +1,4 @@
-# Contributing to Staqly
+# Contributing to staqly
 
 Thanks for helping! Issues and pull requests are welcome. Please follow our
 [Code of Conduct](CODE_OF_CONDUCT.md).
@@ -11,8 +11,8 @@ Thanks for helping! Issues and pull requests are welcome. Please follow our
 ## Development setup
 
 The repo is a Turborepo with pnpm workspaces (`pnpm-workspace.yaml`,
-`turbo.json`). Every package has the same scripts (`format`, `format:check`,
-`lint`, `typecheck`, `test`, `build`, `gen`); the Go API, the CLI and the
+`turbo.json`). Packages share the same script names (`format`, `format:check`,
+`lint`, `typecheck`, `test`, `build`, `gen`) where they apply; the Go API, the CLI and the
 Python SDK wrap their toolchains (go, uv) in a small `package.json`, so one
 command covers everything and turbo caches unchanged packages. Requires Node
 (see `.nvmrc`), pnpm (`corepack enable`), Go and uv.
@@ -60,7 +60,10 @@ the same for your account); `make dev` then forwards test-mode events to
 
 Run without Docker: `cd apps/api && go run ./cmd/server` (data in `./data`;
 add `WEBHOOK_ALLOW_LOOPBACK=true` for receivers on localhost) and
-`cd apps/dashboard && pnpm install && pnpm dev`.
+`cd apps/dashboard && pnpm dev` (http://localhost:3000, hot reload, `/api/*`
+rewritten to the API). To try `staqly serve` from the checkout, run
+`make dashboard` first (it embeds the dashboard's static export), then
+`cd apps/cli && go run ./cmd/staqly serve`.
 
 ```
 apps/api            Go backend: chi REST, MCP (stdio + HTTP), webhook worker

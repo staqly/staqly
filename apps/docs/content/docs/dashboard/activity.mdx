@@ -97,7 +97,7 @@ curl -s "http://localhost:3333/v1/events?actor_id=key_ozcbqlxbqgyp3qnkbgjr&from=
 curl -s "http://localhost:3333/v1/events?type_prefix=webhook."
 ```
 
-`GET /v1/events` accepts `type`, `type_prefix` (a literal prefix such as `item.` or `webhook.`), `actor_type`, `actor_id`, `collection_id`,
+`GET /v1/events` accepts `type`, `type_prefix` (a literal prefix such as `item.` or `webhook.`), `actor_type`, `actor_id`, `agent` (an [agent](/dashboard/agents) name such as `claude-code`), `collection_id`,
 `item_id`, `from` (inclusive) and `to` (exclusive), with cursor pagination.
 `GET /v1/events/export` takes the same filters plus `format=ndjson|csv`. See
 [Event types](/api/events).

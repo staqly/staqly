@@ -214,7 +214,7 @@ const features: { icon: ReactNode; title: string; body: string; href: string }[]
   {
     icon: <Sparkles />,
     title: 'Summaries and tags',
-    body: 'Your own Claude Code or Codex writes a one-line summary and up to three tags for each new item, so the inbox reads at a glance. Hosted: done for you.',
+    body: 'Each new item gets a one-line summary, plus up to three tags if it came without any, so the inbox reads at a glance. Self-hosted, your own Claude Code or Codex writes them, or any OpenAI-compatible endpoint; hosted, it is done for you.',
     href: '/self-hosting/configuration#auto-tags-and-summaries',
   },
   {
@@ -308,7 +308,7 @@ $ codex mcp add staqly --url ${MCP_URL} \\
     --bearer-token-env-var STAQLY_API_KEY
 
 # or plain REST, from anything
-$ curl -X POST ${APP}/v1/collections/Drafts/items \\
+$ curl -X POST ${APP}/v1/collections/Default/items \\
     -H "Authorization: Bearer $STAQLY_API_KEY" \\
     -F file=@avatar.png -F 'item={"title":"Avatar #1"}'
 → 201 {"id":"itm_8f2...","status":"pending"}`}

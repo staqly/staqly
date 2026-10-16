@@ -44,15 +44,12 @@ Log format, fields and correlation with Cloudflare are in
 or `503` with `"status":"unavailable"`. `migrations` can be `pending (N < M)`; `workers` is
 `stale` when the heartbeat (every 5 s) is older than 30 s, or `stopped` after shutdown.
 
-The `staqly` image already has a Docker health check on `/health`. To use `/readyz` instead
-in your own compose file:
+The `staqly` image already has a Docker health check on `/health` and the dashboard. To use
+`/readyz` instead, add these flags to your `docker run` command:
 
-```yaml
-healthcheck:
-  test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3333/readyz"]
-  interval: 15s
-  timeout: 3s
-  retries: 3
+```bash
+--health-cmd "wget -qO- http://127.0.0.1:3333/readyz || exit 1" \
+  --health-interval 15s --health-timeout 3s --health-retries 3
 ```
 
 ## Prometheus metrics
@@ -77,8 +74,10 @@ scrape_configs:
 </Tab>
 <Tab value="Docker">
 
-Prometheus in Docker reaches the API over the bridge network, which doesn't count as direct
-from this machine — set `METRICS_TOKEN` in `.env` and send it:
+Prometheus in Docker reaches the API over a Docker network, which doesn't count as direct
+from this machine. Start staqly with `-e METRICS_TOKEN=...` (a long random value), put
+Prometheus on the same network as the `staqly` container (`docker network create monitoring`,
+`docker network connect monitoring staqly`) and send the token:
 
 ```yaml title="prometheus.yml"
 scrape_configs:
@@ -89,7 +88,7 @@ scrape_configs:
       type: Bearer
       credentials_file: /etc/prometheus/staqly_metrics_token   # contains METRICS_TOKEN
     static_configs:
-      - targets: ["api:3333"]
+      - targets: ["staqly:3333"]
 ```
 
 </Tab>

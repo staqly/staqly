@@ -1,6 +1,6 @@
 # Progress and status
 
-Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs updates 2026-10-14).
+Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs updates through 2026-10-16).
 
 ## What's in
 
@@ -8,11 +8,11 @@ Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs up
 |---|---|
 | Core: collections, items (image/video/text/link/json/file), media, versions, immutable events | ✅ |
 | Items: decision and run as separate fields and badges (filters for both), tags (`?tag=`, `/v1/tags`), content locked after a decision, actions with their own run names, live updates without a reload, MCP `list_requested_work` and `list_tags` | ✅ |
-| Agents page: every MCP client (by clientInfo) and API client (by User-Agent) seen, per credential, with last seen, items added and requests (`GET /v1/agents`) | ✅ |
+| Agents: every MCP client (by clientInfo) and API client (by User-Agent) seen, per credential, with last seen, items added and requests (`GET /v1/agents`, `DELETE /v1/agents/{id}`; shown in Integrations); agents not seen for `RETENTION_AGENTS_DAYS` (default 30) are removed | ✅ |
 | Cloud in production: `make cloud` = `compose.yml` + `compose.cloud.yml`, the pre-built image behind Caddy (automatic HTTPS for `STAQLY_DOMAIN`, only 80/443 published) | ✅ |
-| `staqly service install|status|logs|uninstall`: `staqly serve` in the background at login (macOS LaunchAgent) or boot (Linux systemd --user + linger), restarted if it stops; no Docker needed locally | ✅ |
+| `staqly service install` / `status` / `logs` / `uninstall`: `staqly serve` in the background at login (macOS LaunchAgent) or boot (Linux systemd --user + linger), restarted if it stops; no Docker needed locally | ✅ |
 | Auto-tags and summaries: every new item gets a one-line `summary` (max 120 chars, under the title in the inbox) and untagged ones 1-3 tags, from a durable queue (`summary_next_at`, `TAGGER_CONCURRENCY` at a time, 5 tries with backoff). Local: the user's own AI CLI (`claude -p --model haiku` with no tools, else `codex exec` in the read-only sandbox, or `TAGGER_COMMAND`); cloud/Docker: an OpenAI-compatible `TAGGER_URL`. Regenerate with context: `POST /v1/items/{id}/summarize`, `item.summarized` | ✅ |
-| Inbox steps: Review | Approved, Rejected | Processing | Completed, Failed | Expired | Archived as tabs with counts; one Filter button (collection, source, tags, type); replaces the separate Flow page | ✅ |
+| Inbox steps: Review · Approved, Rejected · Processing · Completed, Failed · Expired, Archived as tabs with counts; one Filter button (collection, source, tags, type); replaces the separate Flow page. Rows show the summary as the only subtitle and a Status column | ✅ |
 | Default collection per workspace (listed first, can be renamed, cannot be archived or deleted); processing items fail after the workspace's processing timeout (Settings, 1 minute to 24 hours; default `PROCESSING_TIMEOUT`, 1h), and the item shows how long it has waited of that limit | ✅ |
 | Review: inbox, approve/reject with feedback, edit before approve (`editable` whitelist + diff), bulk, expiry (`expires_in`, `expired`), custom actions | ✅ |
 | Review safety (2026-10-16): approve waits 10 s with Undo in its toast; bulk approve and bulk reject ask first; collection actions (Publish, Regenerate...) are confirmed in a dialog; Shift+P runs a row's main action outside Review; runs end as Completed / Failed / Canceled (Canceled = stopped by hand in the dashboard, stored as failed); unarchiving an item archived while pending puts it back in Review; reviewer feedback in the dashboard is capped at 750 characters | ✅ |
@@ -23,8 +23,8 @@ Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs up
 | Watchers add to several collections (2026-10-15): `collections` (IDs or names, 1-20) on create/update in REST, MCP, CLI (`--collection` repeatable) and both SDKs, `collection_ids` on watchers (`collection_id` is the first); each new entry becomes an item in every one. Migration `00015_watcher_collections`; deleting a watcher's first collection moves it to the next one instead of deleting the watcher. Known ceiling: the seen mark commits with the first collection's item, so a failure creating the others (quota) skips the entry there. Dashboard: collections multi-select, keyword filters under Advanced with an explanation | ✅ |
 | Webhooks: transactional outbox, HMAC, retries, delivery history, SSRF guard | ✅ |
 | Notifications: Telegram (long-polling or webhook), Slack, Discord, ntfy, email; chat buttons, one-tap decision links, digests, auto-disable | ✅ |
-| MCP: 71 tools (every REST operation except browser-only flows and recovery key rotation, including billing: `get_billing`, `start_billing_checkout`, `open_billing_portal`), STDIO + Streamable HTTP; verified with Claude Code, Codex, OpenCode; `staqly mcp config` + docs for | Agents live in Integrations (2026-10-15): the separate Agents page is gone (`/agents` redirects); Integrations lists the agents, and its Recent activity shows every agent, or only the selected one. Events record the agent that caused them (`actor.agent`, migration `00014_event_agent`), and `GET /v1/events?agent=<name>` (repeatable) filters by it. Settings, Collections and Activity headers got icons like the other pages | ✅ |
-Cursor and Windsurf (not yet verified in the apps) | ✅ |
+| MCP: 71 tools (every REST operation except browser-only flows and recovery key rotation, including billing: `get_billing`, `start_billing_checkout`, `open_billing_portal`), STDIO + Streamable HTTP; verified with Claude Code, Codex, OpenCode; `staqly mcp config` + docs for Cursor and Windsurf (not yet verified in the apps). `await_decision` waits 45 s by default (max 300), under the usual 60 s client tool timeout; call it again to keep waiting | ✅ |
+| Agents live in Integrations (2026-10-15): the separate Agents page is gone (`/agents` redirects); Integrations lists the agents, and its Recent activity shows every agent, or only the selected one. Events record the agent that caused them (`actor.agent`, migration `00014_event_agent`), and `GET /v1/events?agent=<name>` (repeatable) filters by it. Settings, Collections and Activity headers got icons like the other pages | ✅ |
 | REST API: OpenAPI 3.2.1 contract enforced by a contract test; idempotency keys; full-text search (FTS5) + keyset pagination | ✅ |
 | Local mode (keyless, this machine only) and cloud mode (multi-workspace, scoped keys, sessions + CSRF, recovery keys, plans Free/Pro with 402 limits) | ✅ |
 | Dashboard: all screens, phones/tablets, Connect-a-device QR, watchers, notifications, data & privacy, system | ✅ |
@@ -33,6 +33,8 @@ Cursor and Windsurf (not yet verified in the apps) | ✅ |
 | Audit trail of admin changes: `webhook.*`, `watcher.*` (incl. degraded / paused / recovered), `notification_channel.*`, `session.revoked`, `api_key.rotated`, `workspace.updated`, `workspace.plan_changed` (operator, Stripe, self-service switch to Free); `webhook.*` events are audit-only, never delivered to webhooks | ✅ |
 | No repeated states: setting a state that is already set (archive an archived collection or item, pause a paused watcher, enable an enabled webhook / channel, revoke a revoked key or session, report a result twice, run an action whose `set_status` is the current status, choose the current plan) answers 409 "... is already ..." with no version, event or webhook; bulk actions report it per item; the dashboard only offers the opposite transition and locks toggles while a change is in flight | ✅ |
 | Data: events export (NDJSON/CSV), workspace ZIP export, retention, workspace delete, item purge, backup/restore | ✅ |
+| Settings → Backups (2026-10-16): locally the backup commands for `staqly serve` and Docker; in cloud on paid plans the workspace's ZIP exports with Download (`GET /v1/workspace/exports`), hidden on Free. Data & privacy on a local install: a Delete all data card with the commands for the binary and the container (one workspace, so no delete button). `GET /v1/setup` reports `billing_enabled`; new cloud workspaces are told about the 7-day Pro trial | ✅ |
+| Item details (2026-10-16): video as a play tile that opens a dialog, images zoom on click, JSON content and metadata shown as JSON with a full-screen view and Copy; the edit form also covers media items (title, description, metadata, collection, source; the file itself stays). Length limits are counted in characters (Unicode code points) by the API, matching the dashboard's `maxLength` | ✅ |
 | Observability: `/livez`, `/readyz`, `/metrics` (HTTP, decisions + time to decide, webhooks, watchers, notifications), request IDs, rate limits, optional Sentry error reporting (`SENTRY_DSN`) | ✅ |
 | CLI `staqly`, TypeScript SDK, Python SDK, docs site (`apps/docs`) | ✅ |
 | n8n: example compose + Instagram Avatar demo workflow (verified on a real n8n) | ✅ |
@@ -54,7 +56,7 @@ Cursor and Windsurf (not yet verified in the apps) | ✅ |
 | Performance: image thumbnails (`GET /v1/media/{id}?w=`, cached on disk), in-process write serialisation (no `SQLITE_BUSY` under parallel writers; residual busy = 503 + `Retry-After`), lazy-loaded command palette / dialogs, locally derived item actions, one-page revisits of long lists | ✅ |
 | Backend security audit fixes: loopback-only local mode by default (`LOCAL_TRUSTED_PEERS`, `LOCAL_ALLOWED_ORIGINS`), mode-dependent safe defaults, hardened SSRF policy, version-bound decisions, post-approval write rules, bounded search, missing indexes, idempotency/rate-limit hardening | ✅ |
 | Second backend audit: the dashboard relay names each browser in `X-Forwarded-For` (per-browser sign-up/recovery/connect limits behind Caddy), model replies bounded and model address hidden from cloud tenants, `summarize` rate-limited, unarchive back to review survives edits made while archived, PATCH with tags + a stale `expected_version` applies nothing, summary queue writes scoped by workspace, `staqly service` units owner-only | ✅ |
-| CLI covers the REST surface: notification channels, media upload/download, item delete/purge/bulk/versions, events export, workspace get/rename/usage/export, plans + switch to Free, sessions, connect links, key rotation, watchers/webhooks get + update (not in the CLI by design: workspace delete and recovery-key rotation, which the API only allows from a dashboard session) | ✅ |
+| CLI covers the REST surface: notification channels, media upload/download, item delete/purge/bulk/versions, events export, workspace get/rename/usage/export, plans + switch to Free, sessions, connect links, key rotation, watchers get/pause/resume, webhooks get + update (not in the CLI: editing a watcher, `PATCH /v1/watchers/{id}`; by design: workspace delete and recovery-key rotation, which the API only allows from a dashboard session) | ✅ |
 
 ## Verification (executed)
 
@@ -88,7 +90,7 @@ Cursor and Windsurf (not yet verified in the apps) | ✅ |
   leases); fine for SQLite's single-writer model.
 * Billing with Stripe is tested against a fake Stripe API in the Go tests;
   live payments haven't been exercised. Without Stripe settings, plans are
-  changed by the operator (`make set-plan`).
+  changed by the operator (`server set-plan`, e.g. `docker exec staqly server set-plan ws_... pro`).
 * No per-item `callback_url` (use webhooks or `/wait`).
 * The TypeScript code generator (openapi-typescript) still needs the TS 5.9
   compiler API, so `gen` scripts run it via `npx` with TS 5.9; everything else
@@ -105,5 +107,5 @@ Cursor and Windsurf (not yet verified in the apps) | ✅ |
 1. Web push (PWA) notifications.
 2. Slack Socket Mode / reason modal; Telegram `/start <code>` pairing.
 3. LangChain / CrewAI / Claude Agent SDK helpers on top of the SDKs.
-4. Point-in-time workspace export snapshots; Litestream replication.
+4. Point-in-time workspace export snapshots.
 5. Litestream replication to R2 for the hosted version.

@@ -101,6 +101,10 @@ Ask Claude in plain language:
 
 More in [Example prompts](/mcp/prompts).
 
+`await_decision` waits 45 s per call by default and returns `decided: false` when nobody has
+decided yet; Claude calls it again. To let one call wait longer (up to 300 s), start Claude Code
+with a higher tool timeout, e.g. `MCP_TOOL_TIMEOUT=360000 claude`.
+
 <Callout title="Verified">
 `claude mcp list` reported ✔ Connected for the HTTP and STDIO configurations, keyless (local
 mode) and with a bearer key; a `claude -p` prompt created a collection and listed pending

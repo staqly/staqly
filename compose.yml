@@ -52,7 +52,8 @@ services:
       WEBHOOK_RETRY_MAX: ${WEBHOOK_RETRY_MAX:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
-      # Optional settings documented in .env.example are passed through as-is.
+      # Optional settings from .env.example, passed through as-is (the ones it
+      # marks [not in compose.yml] need a line here first).
       METRICS_TOKEN: ${METRICS_TOKEN:-}
       SESSION_TTL: ${SESSION_TTL:-}
       PROCESSING_TIMEOUT: ${PROCESSING_TIMEOUT:-}

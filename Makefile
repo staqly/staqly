@@ -14,7 +14,7 @@ dev: ## Build from this checkout with the dev stack (debug logs, mailpit :8025, 
 	$(DEV) up -d --build --wait
 	@$(MAKE) --no-print-directory open
 
-pull: ## Download the released images (STAQLY_VERSION=v0.2.0 for a specific release)
+pull: ## Download the released image (STAQLY_VERSION=v0.2.0 for a specific release)
 	docker compose pull staqly
 
 
@@ -63,7 +63,7 @@ check: ## Formatting, lint, types and unit tests of every package (turbo)
 test: ## Unit and integration tests of every package (turbo)
 	pnpm turbo run test
 
-test-%: ## Tests of one package: test-api, test-cli, test-dashboard, test-sdk, test-sdk-python, test-docs
+test-%: ## Tests of one package: test-api, test-cli, test-dashboard, test-sdk, test-sdk-python
 	pnpm turbo run test --filter=@staqly/$*
 
 test-e2e: ## Full Docker end-to-end test (compose.e2e.yml + e2e/)
@@ -96,6 +96,6 @@ connect: ## Print a one-time sign-in link for another browser: make connect [WS=
 workspaces: ## List workspaces and their plans (cloud operator)
 	docker exec staqly server workspaces
 
-set-plan: ## Change a plan (no payments yet): make set-plan WS=ws_... PLAN=pro
+set-plan: ## Change a workspace's plan by hand (cloud operator): make set-plan WS=ws_... PLAN=pro
 	docker exec staqly server set-plan $(WS) $(PLAN)
 

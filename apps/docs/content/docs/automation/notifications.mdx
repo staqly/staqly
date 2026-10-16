@@ -125,7 +125,7 @@ use the group's (negative) ID.
 ### Create the Telegram channel
 
 ```json
-{ "name": "Telegram", "type": "telegram", "config": { "bot_token": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "chat_id": "123456789" } }
+{ "name": "Telegram", "type": "telegram", "config": { "bot_token": "123456789:AA...", "chat_id": "123456789" } }
 ```
 
 </Step>
@@ -196,7 +196,7 @@ the item version the message showed. Needs a public HTTPS URL.
 
 ```json
 { "name": "Phone", "type": "ntfy",
-  "config": { "topic": "staqly-7f3k9q2", "server_url": "https://ntfy.sh", "access_token": "tk_pi7lo56pz5t4w73umr46", "priority": 4 } }
+  "config": { "topic": "staqly-7f3k9q2", "server_url": "https://ntfy.sh", "access_token": "tk_...", "priority": 4 } }
 ```
 
 Install the ntfy app and subscribe to the topic. Notifications get **Approve** and **Reject**
@@ -351,9 +351,8 @@ ntfy, an SMTP relay); `NOTIFY_ALLOW_LOOPBACK=true` a target on the same host.
 | `TELEGRAM_POLL_INTERVAL` | `3s` | `getUpdates` interval in polling mode |
 | `TELEGRAM_API_BASE`, `SLACK_API_BASE`, `DISCORD_API_BASE` | official APIs | Overrides (tests, proxies) |
 
-With Docker Compose, `compose.yml` passes through `NOTIFY_SECRET_KEY`,
-`NOTIFY_PUBLIC_API_URL` and `NOTIFY_ALLOW_PRIVATE`; add others to the `staqly` service's
-`environment` if you need them.
+Set them in the environment of `staqly serve`, or with `-e NAME=value` on `docker run` (see
+[How to change a setting](/self-hosting/configuration#how-to-change-a-setting)).
 
 ## Security
 

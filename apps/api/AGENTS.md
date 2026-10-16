@@ -9,6 +9,8 @@ Go (module `github.com/staqly/staqly/apps/api`), chi, `modernc.org/sqlite`
 | Path | Role |
 |---|---|
 | `cmd/server` | REST + `/mcp` + background workers (webhooks, watchers, notifications, summaries / auto-tags), plus the dashboard with `DASHBOARD_ADDR`. Subcommands: `backup <file>`, `workspaces`, `recovery-key [ws]`, `set-plan <ws> <plan>`, `stats`, `connect-link [ws]` |
+| `server` | `server.Main`: what `cmd/server`, the image and `staqly serve` (apps/cli) run |
+| `internal/web` | Dashboard web server: embedded static export (`web/`, filled by `make dashboard`), security headers, `/api/*` proxy |
 | `cmd/dashboard` | The dashboard alone in front of a remote API (`API_INTERNAL_URL`); the image and `staqly serve` embed it in `server` instead |
 | `cmd/mcp-stdio` | MCP over STDIO against the same DB (keyless locally, `STAQLY_API_KEY` in cloud) |
 | `internal/app` | **Domain services + authorization.** Every exported method takes a `Principal` and checks scopes |

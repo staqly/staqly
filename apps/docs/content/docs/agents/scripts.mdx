@@ -62,15 +62,24 @@ Quickstart.
 
 ## Calling staqly from inside Docker
 
-A script running in a container uses the API's service name on the staqly network
-(`http://api:3333`) or `http://host.docker.internal:3333`. Both are recognized as local
-names. Any other host name must be added to `LOCAL_ALLOWED_HOSTS`, otherwise keyless requests
-get `403 not_local`.
+With the [Docker image](/self-hosting/docker), put the script's container on a network with the
+`staqly` container and give it the alias `api`:
+
+```bash
+docker network create staqly-net
+docker network connect --alias api staqly-net staqly
+docker run --rm --network staqly-net curlimages/curl -s http://api:3333/v1/collections
+```
+
+`api` and `host.docker.internal` are recognized as local names; any other host name must be
+added to `LOCAL_ALLOWED_HOSTS`, otherwise keyless requests get `403 not_local`. Containers count
+as this machine only through the `LOCAL_TRUSTED_PEERS` setting of the
+[`docker run` command](/self-hosting/docker).
 
 ## Loading demo data
 
-`scripts/seed.sh` in the repository (`make seed` from a checkout) loads three collections and a
-handful of items through the public API, so events and webhooks fire as usual. It calls
+With a checkout of the [repository](https://github.com/staqly/staqly), `scripts/seed.sh` loads
+three collections and a handful of items through the public API, so events and webhooks fire as usual. It calls
 `http://localhost:3333`, so it works with `staqly serve` and Docker alike. In
 cloud mode:
 `STAQLY_API_URL=https://staqly.example.com STAQLY_API_KEY=stk_... scripts/seed.sh`.

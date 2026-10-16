@@ -14,14 +14,17 @@ from **Settings** at the bottom of the sidebar or from the command palette
   device** in the workspace menu. See
   [Phones & tablets](/dashboard/phones-and-tablets).
 - **Sign out a lost device**: find it under **Devices** and sign it out.
-- **Back up your data**: run `staqly serve backup <file>` (with `staqly serve`) or
-  `docker exec staqly server backup /data/backups/<file>` (with Docker). See [Backup & restore](/self-hosting/backup-and-restore).
+- **Back up your data**: **Settings → Backups** shows the commands for a local install
+  (`staqly serve backup <file>`, or `docker exec staqly server backup /data/backups/<file>` with
+  Docker); on a paid cloud plan it creates and lists downloadable backups. See
+  [Backup & restore](/self-hosting/backup-and-restore).
 - **Download everything**: **Settings → Data & privacy → Export workspace**.
 - **Connect an agent**: open **Integrations** in the sidebar for copy-ready setup steps.
 
 ## Settings tabs
 
-Settings has five tabs.
+Settings has six tabs: **General**, **Plan & usage**, **Notifications**, **Data & privacy**,
+**Backups** and **System**. In cloud mode **Backups** is hidden on the Free plan.
 
 ### General
 
@@ -32,7 +35,6 @@ Settings has five tabs.
 | **Appearance** | Light, dark or system theme. |
 | **Devices** | Browsers and phones signed in to this workspace, with when each was last seen. **Sign out** any of them (it loses access at once and has to be connected again); **Connect a device** creates a new QR code. Signing a browser in again with a new link replaces its old entry, so each browser is listed once. |
 | **Recovery key** <Badge>cloud</Badge> | Rotate the recovery key, the only way to regain admin access if every browser session is lost. The new key is shown once; store it somewhere safe. |
-| **Backup & restore** (local) / **Backups** (cloud) | Local: the commands for a consistent snapshot of the database and an archive of the uploads (`staqly serve backup <file>`, or `docker exec staqly server backup` plus `docker cp` with Docker). Cloud, paid plans: **Create backup** builds a ZIP of the whole workspace (collections, items with versions, events, media), listed with **Download** for 24 hours; hidden on Free. |
 | **Sign out** <Badge>cloud</Badge> | **Log out** ends the session in this browser. |
 
 With `staqly serve` on this computer only, nothing needs to sign in, so **Devices** may be
@@ -55,11 +57,28 @@ you can often decide right from the message. See
 |---|---|
 | **Activity log** | Download every event, oldest first, as NDJSON (the full event shape) or CSV. For a filtered slice, use **Export** on the [Activity](/dashboard/activity) page. |
 | **Export workspace** | Build a ZIP with collections, items (with every version), events, media files, webhooks and watchers. The card shows the progress; download it within 24 hours. API keys, sessions and the recovery key are never included; webhook secrets are redacted. |
-| **Retention & single items** | A pointer to **Delete item** › **Also erase its history** in an item's **...** menu, which erases one item together with its history (see [Item details](/dashboard/items#delete-or-purge-an-item)), and to server-side retention. |
+| **Retention & single items** | A pointer to **Delete item** › **Also erase its history** in an item's **...** menu, which erases one item together with its history (see [Item details](/dashboard/items#delete-or-purge-an-item)), and to server-side retention of old events, deliveries and archived items. |
 | **Delete workspace** <Badge>cloud</Badge> | Permanently delete the workspace and everything in it, and sign out every device. Only a signed-in dashboard session can do this, and you confirm by typing the workspace name. Earlier backups still contain the data. |
 | **Delete all data** <Badge>local</Badge> | A local install has one workspace, so there is no delete button. The card shows how to remove the data instead: `staqly service uninstall` and `rm -rf ~/.local/share/staqly` with the binary, or `docker rm -f staqly` and `docker volume rm staqly-data` with Docker. |
 
 See [Data export](/self-hosting/data-export).
+
+### Backups
+
+On a local install, the **Backup & restore** card shows the commands for a consistent copy of
+the database and the uploads, in two tabs:
+
+- **staqly serve**: `staqly serve backup ~/staqly-backup.db` (pass the same `--data` you run
+  staqly with), then copy the `uploads` folder of the data directory.
+- **Docker**: `docker exec staqly server backup /data/backups/staqly-backup.db`, `docker cp` to
+  copy it out, and a `tar` of the uploads from the data volume.
+
+In cloud mode on a paid plan, the **Backups** card lists the workspace's backups
+(`GET /v1/workspace/exports`). **Create backup** builds a ZIP of the whole workspace
+(collections, items with their versions, events and media); when it is ready, **Download**
+works for 24 hours. The tab is hidden on Free.
+
+See [Backup & restore](/self-hosting/backup-and-restore).
 
 ### System
 

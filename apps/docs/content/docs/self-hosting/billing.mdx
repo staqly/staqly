@@ -8,6 +8,12 @@ Pro**, pay on Stripe's checkout page, and the workspace moves to Pro as soon as 
 the payment. Without Stripe settings, billing stays off and you change plans with
 [`set-plan`](/self-hosting/operator-cli).
 
+Every new cloud workspace starts on a **7-day Pro trial**, with or without billing. When the trial
+ends unpaid the workspace becomes read-only until it pays or switches to Free in
+**Settings → Plan & usage**. `GET /v1/setup` reports `billing_enabled`, and the sign-up page words
+its pricing by it: with billing on it offers the upgrade after the trial, without it the choice is
+Free.
+
 Local installs have no plans and no billing.
 
 ## Set it up
@@ -42,11 +48,11 @@ Copy its signing secret (`whsec_` followed by random characters).
 STRIPE_SECRET_KEY=sk_test_51ExampleKey
 STRIPE_WEBHOOK_SECRET=whsec_from_the_stripe_webhook_endpoint
 STRIPE_PRICE_PRO=price_1Pro30UsdMonthly
-PUBLIC_DASHBOARD_URL=https://app.staqly.example.com   # Stripe sends people back here
+PUBLIC_DASHBOARD_URL=https://staqly.example.com   # Stripe sends people back here (make cloud sets it from STAQLY_DOMAIN)
 ```
 
 Billing is on only in cloud mode (`STAQLY_MODE=cloud`) and only when all three `STRIPE_`
-variables are set. Restart the API.
+variables are set. Restart staqly (`make cloud` again recreates the container with the new `.env`).
 
 After checkout or the portal, Stripe sends people back to the **Plan** page:
 `PUBLIC_DASHBOARD_URL` (else `PUBLIC_API_URL`) + `/settings/plan`, with `?checkout=success` or

@@ -10,7 +10,7 @@ You don't need to configure anything for these defaults to apply.
 
 ## Network exposure
 
-| Port | Binary (`staqly serve`) | Docker Compose |
+| Port | Binary (`staqly serve`) | Docker image |
 |---|---|---|
 | **API + MCP** (`3333`) | `127.0.0.1` only | Published on `127.0.0.1` only |
 | **Dashboard** (`8080`) | `127.0.0.1` only, no sign-in; with `--expose` on all interfaces and every browser signs in | Published on all interfaces; every browser signs in (`DASHBOARD_EXPOSED=true`) |
@@ -23,9 +23,9 @@ You don't need to configure anything for these defaults to apply.
 
 Credential-less requests are accepted only when:
 
-- the TCP peer is loopback or inside `LOCAL_TRUSTED_PEERS` (compose sets the private ranges
-  because Docker forwards published ports from its bridge network; the binary trusts loopback
-  only),
+- the TCP peer is loopback or inside `LOCAL_TRUSTED_PEERS` (the [`docker run` command](/self-hosting/docker)
+  sets the private ranges because Docker forwards published ports from its bridge network; the
+  binary trusts loopback only),
 - the `Host` header is a local name (defeats DNS rebinding),
 - any `Origin` is the dashboard's own origin or listed in `LOCAL_ALLOWED_ORIGINS` (defeats
   cross-site requests from websites you visit, including pages on other localhost ports),
@@ -166,6 +166,10 @@ filesystem, no Linux capabilities, `no-new-privileges` and memory / process limi
   loopback and link-local always refused, every redirect hop re-checked, `robots.txt`
   respected, size and time limits. Fetched content is marked `untrusted` — agents are told to
   treat it as data, never instructions.
+- **Summaries and auto-tags**: locally the item's text goes to your own AI CLI (`claude` or
+  `codex`, run without a shell in a scratch folder); with `TAGGER_URL` it goes to that
+  OpenAI-compatible provider. Nothing is sent when neither is set up. See
+  [Auto-tags and summaries](/self-hosting/configuration#auto-tags-and-summaries).
 
 ## Next steps
 

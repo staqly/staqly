@@ -49,9 +49,9 @@ type Plan struct {
 
 const gb = 1 << 30
 
-// Plans is the single source of truth for cloud packages. Payments are not
-// integrated yet: a workspace's plan is changed by the operator
-// (`server set-plan <workspace> <plan>`).
+// Plans is the single source of truth for cloud packages. With Stripe
+// configured, Pro is bought through billing checkout; the operator can also
+// change a plan (`server set-plan <workspace> <plan>`).
 var Plans = []Plan{
 	{ID: "free", Name: "Free", PriceUSDMonth: 0,
 		Limits: PlanLimits{ItemsPerMonth: Unlimited, DecisionsPerMonth: 50, Webhooks: 3, APIKeys: 1, StorageBytes: 1 * gb, MaxUploadBytes: 5 << 20,

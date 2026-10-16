@@ -37,8 +37,13 @@ curl -H "Authorization: Bearer $KEY" \
    `download_url`.
 3. `GET /v1/workspace/exports/{id}/download` returns the ZIP.
 
-A background worker builds the archive in `DATA_DIR/exports` (default
-`./data/exports`). The archive is deleted 24 hours after it is finished; after
+`GET /v1/workspace/exports` lists the latest exports (at most 20, newest
+first); in cloud mode on paid plans the dashboard shows them under
+*Settings → Backups* with a Download button.
+
+A background worker builds the archive in `DATA_DIR/exports`
+(`~/.local/share/staqly/exports` with `staqly serve`, `/data/exports` in the
+image). The archive is deleted 24 hours after it is finished; after
 that the download returns `410`. A server restart re-queues interrupted jobs.
 `workspace.export_requested` and `workspace.exported` events are recorded.
 
@@ -73,6 +78,7 @@ every 24 hours. Set the limits with environment variables:
 | `RETENTION_ARCHIVED_ITEMS_DAYS` | `0` (never) | Items with status `archived` that have not changed for N days. Their versions go with them; their events stay as history. One `retention.items_pruned` event per batch of up to 1000 items lists the `item_ids` |
 | `RETENTION_NOTIFICATIONS_DAYS` | `30` | Notification outbox rows that were `sent`, `skipped` or `failed` more than N days ago, plus pending rows of channels disabled for that long. `0` keeps them forever |
 | `RETENTION_EVENTS_DAYS` | `0` (keep forever) | Events older than N days. One `retention.events_pruned` event per workspace records the count |
+| `RETENTION_AGENTS_DAYS` | `30` | Agents and API connections (Integrations, `GET /v1/agents`) not seen for N days. Their events keep the history. `0` keeps them forever |
 
 Notes:
 

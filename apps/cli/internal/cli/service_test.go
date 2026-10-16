@@ -10,10 +10,10 @@ import (
 
 func TestServiceUnitFiles(t *testing.T) {
 	spec := serviceSpec{Exe: "/opt/my apps/staqly", Args: []string{"--port", "3333", "--expose"},
-		Env: map[string]string{"TAGGER_URL": "http://localhost:11434/v1", "STAQLY_X": `a"b&c`}, Log: "/tmp/s.log"}
+		Env: map[string]string{"TAGGER_URL": "https://api.openai.com/v1", "STAQLY_X": `a"b&c`}, Log: "/tmp/s.log"}
 	plist := launchdPlist(spec)
 	for _, want := range []string{"<string>/opt/my apps/staqly</string>", "<string>serve</string>", "<string>--expose</string>",
-		"<key>TAGGER_URL</key><string>http://localhost:11434/v1</string>", "a&#34;b&amp;c", "<key>KeepAlive</key><true/>", "<key>RunAtLoad</key><true/>"} {
+		"<key>TAGGER_URL</key><string>https://api.openai.com/v1</string>", "a&#34;b&amp;c", "<key>KeepAlive</key><true/>", "<key>RunAtLoad</key><true/>"} {
 		if !strings.Contains(plist, want) {
 			t.Errorf("plist lacks %q:\n%s", want, plist)
 		}
