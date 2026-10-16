@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -92,6 +93,20 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 	}
 	if cfg.App.Mode == app.ModeCloud && !cfg.CookieSecure {
 		log.Warn("cloud mode with COOKIE_SECURE=false: session cookies are sent over plain HTTP")
+	}
+	// Which AI writes summaries and tags: the first thing to check when they don't appear (a background
+	// service may not find claude/codex on its PATH).
+	switch t := cfg.App.Tagger; {
+	case len(t.Command) > 0:
+		log.Info("summaries and tags", "command", t.Command[0])
+	case t.URL != "":
+		host := "(invalid TAGGER_URL)"
+		if u, err := url.Parse(t.URL); err == nil && u.Host != "" {
+			host = u.Scheme + "://" + u.Host // never the path or credentials
+		}
+		log.Info("summaries and tags", "url", host, "model", t.Model)
+	default:
+		log.Info("summaries and tags are off (turned on by TAGGER_URL, TAGGER_COMMAND, or locally Claude Code / Codex on PATH)")
 	}
 
 	handler := httpapi.New(svc, log, httpapi.Config{
