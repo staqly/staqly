@@ -231,26 +231,21 @@ function ItemEditFormInner({ latest }: { latest: Item }) {
         </Callout>
       )}
       {locked && (
-        <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm" data-testid="content-locked">
-          <Lock className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <Callout tone="neutral" icon={Lock} data-testid="content-locked">
           <p className="text-muted-foreground">
             The content of a{item.status === 'approved' || item.status === 'archived' ? 'n' : ''} {item.status} item is
             locked: what was approved stays as it was. Metadata, source and collection can still change here, tags under
             Properties. To change the content, regenerate it or add a new item.
           </p>
-        </div>
+        </Callout>
       )}
       {resubmits && (
-        <div
-          className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm"
-          data-testid="content-resubmits"
-        >
-          <RotateCcw className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <Callout tone="neutral" icon={RotateCcw} data-testid="content-resubmits">
           <p className="text-muted-foreground">
             Fixing the title or content sends it back to <strong className="text-foreground">Pending</strong> for a new
             review.
           </p>
-        </div>
+        </Callout>
       )}
       <FieldGroup className="gap-4">
         <Field data-invalid={!!formState.errors.title}>
