@@ -10,7 +10,7 @@ import { z } from 'zod'
 
 import { Callout } from '@/components/common/callout'
 import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldTitle } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -20,8 +20,8 @@ import { formatBytes, prettyJSON } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
 import { invalidateAfterItemChange, qk, syncItemInCache, useCollections } from '@/lib/queries'
 
-/** Statuses that can be set directly; approved/rejected go through review actions. */
-// Mirrors the API (apps/api/internal/app/items.go): processing is locked here too, an automation is working on it.
+// Statuses whose content is locked (status itself changes only through actions). Mirrors the API
+// (apps/api/internal/app/items.go): processing is locked here too, an automation is working on it.
 const LOCKED = new Set(['approved', 'processing', 'completed', 'archived'])
 const RESUBMITS = new Set(['rejected', 'failed', 'expired'])
 
@@ -270,7 +270,7 @@ function ItemEditFormInner({ latest }: { latest: Item }) {
             (required only for links). */}
         {item.media && (
           <Field>
-            <FieldLabel>File</FieldLabel>
+            <FieldTitle>File</FieldTitle>
             <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
               <span className="font-medium">{item.media.original_name}</span>
               <span className="text-muted-foreground">

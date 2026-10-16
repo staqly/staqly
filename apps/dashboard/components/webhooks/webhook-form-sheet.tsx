@@ -259,8 +259,9 @@ function WebhookForm({
           <FieldError>{errors.events}</FieldError>
         </Field>
         <Field data-invalid={!!errors.collection_ids}>
-          <FieldLabel>Collections</FieldLabel>
+          <FieldLabel htmlFor="wh-collections">Collections</FieldLabel>
           <MultiSelect
+            id="wh-collections"
             label="Collections"
             className="w-full"
             anyLabel="All collections, including new ones"

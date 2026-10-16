@@ -12,10 +12,12 @@ export function MetadataCard({ metadata, defaultOpen = true }: { metadata: Item[
     return null
   }
 
+  const json = JSON.stringify(metadata, null, 2)
+
   return (
     <DisclosureCard
       label="Metadata"
-      copy={JSON.stringify(metadata, null, 2)}
+      copy={json}
       defaultOpen={defaultOpen}
       bodyTestId="metadata-body"
       header={
@@ -28,11 +30,7 @@ export function MetadataCard({ metadata, defaultOpen = true }: { metadata: Item[
       meta={<span>{entries.length}</span>}
     >
       {/* Metadata is a JSON object: shown as JSON, nested values included. */}
-      <JsonBlock
-        json={JSON.stringify(metadata, null, 2)}
-        title="Metadata"
-        className="scrollbar-thin max-h-80 overflow-auto px-3 py-2.5"
-      />
+      <JsonBlock json={json} title="Metadata" className="scrollbar-thin max-h-80 overflow-auto px-3 py-2.5" />
     </DisclosureCard>
   )
 }

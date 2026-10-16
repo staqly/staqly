@@ -13,7 +13,7 @@ import { MultiSelect, type MultiOption } from '@/components/common/multi-select'
 import { NativeSelect } from '@/components/common/native-select'
 import { ToggleChip } from '@/components/common/toggle-chip'
 import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldLabel, FieldTitle } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { RequiredMark } from '@/components/ui/label'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -761,7 +761,7 @@ function ChannelForm({ channel, onDone }: { channel: NotificationChannel | null;
 
           {channel?.integration_url && (
             <Field>
-              <FieldLabel>Integration URL</FieldLabel>
+              <FieldTitle>Integration URL</FieldTitle>
               <div className="flex min-w-0 items-center gap-1 rounded-lg border bg-muted/40 py-1 pr-1 pl-2.5">
                 <code className="min-w-0 flex-1 truncate font-mono text-xs">{channel.integration_url}</code>
                 <CopyButton value={channel.integration_url} label="Copy integration URL" />

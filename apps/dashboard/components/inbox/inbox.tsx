@@ -729,9 +729,10 @@ export function Inbox() {
       return
     }
 
+    // Only items still under review can be edited here; Approve being offered is the sign of that.
     if (!available.some((x) => x.name === 'approve')) {
       if (!actions.isLoading) {
-        toast.info(`Can't approve an item that is ${active.status}`)
+        toast.info(`Can't edit an item that is ${active.status}`)
       }
 
       return
