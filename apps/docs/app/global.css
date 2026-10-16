@@ -1,0 +1,333 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/shadcn.css';
+@import 'fumadocs-ui/css/preset.css';
+@import 'fumadocs-openapi/css/preset.css';
+@import '@staqly/brand/tokens.css';
+@import '@staqly/brand/site.css';
+
+/*
+ * staqly identity: the brand green (tokens), hero backdrop, rainbow button, arrow links and hero demo come
+ * from @staqly/brand (packages/brand), shared with the dashboard and staqly.ai. Below: graphite neutrals with
+ * a slight cool cast, which the shadcn preset above maps onto Fumadocs' --color-fd-*.
+ */
+:root {
+  --background: oklch(0.993 0.002 260);
+  --foreground: oklch(0.2 0.012 265);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.012 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.012 265);
+  --primary: oklch(0.52 0.13 152);
+  --primary-foreground: oklch(0.99 0.01 150);
+  --secondary: oklch(0.962 0.004 260);
+  --secondary-foreground: oklch(0.24 0.014 265);
+  --muted: oklch(0.965 0.004 260);
+  --muted-foreground: oklch(0.5 0.014 262);
+  --accent: oklch(0.955 0.005 260);
+  --accent-foreground: oklch(0.24 0.014 265);
+  --destructive: oklch(0.577 0.215 27);
+  --border: oklch(0.915 0.005 260);
+  --ring: oklch(0.62 0.16 150 / 55%);
+  --sidebar: oklch(0.982 0.003 260);
+  --sidebar-foreground: oklch(0.3 0.012 265);
+  --sidebar-accent: oklch(0.94 0.006 260);
+  --sidebar-accent-foreground: oklch(0.2 0.012 265);
+  --sidebar-border: oklch(0.915 0.005 260);
+  --sidebar-ring: oklch(0.62 0.16 150 / 55%);
+  --sidebar-primary-foreground: oklch(0.99 0.01 150);
+}
+
+.dark {
+  --background: oklch(0.165 0.006 265);
+  --foreground: oklch(0.955 0.004 260);
+  --card: oklch(0.195 0.007 265);
+  --card-foreground: oklch(0.955 0.004 260);
+  --popover: oklch(0.205 0.008 265);
+  --popover-foreground: oklch(0.955 0.004 260);
+  --primary: oklch(0.82 0.19 148);
+  --primary-foreground: oklch(0.24 0.05 155);
+  --secondary: oklch(0.235 0.008 265);
+  --secondary-foreground: oklch(0.955 0.004 260);
+  --muted: oklch(0.225 0.008 265);
+  --muted-foreground: oklch(0.7 0.012 262);
+  --accent: oklch(0.255 0.009 265);
+  --accent-foreground: oklch(0.955 0.004 260);
+  --destructive: oklch(0.68 0.19 24);
+  --border: oklch(1 0 0 / 9%);
+  --ring: oklch(0.8 0.18 148 / 55%);
+  --sidebar: oklch(0.15 0.006 265);
+  --sidebar-foreground: oklch(0.86 0.006 260);
+  --sidebar-accent: oklch(0.225 0.008 265);
+  --sidebar-accent-foreground: oklch(0.97 0.004 260);
+  --sidebar-border: oklch(1 0 0 / 7%);
+  --sidebar-ring: oklch(0.8 0.18 148 / 55%);
+  --sidebar-primary-foreground: oklch(0.24 0.05 155);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html {
+  scrollbar-gutter: stable;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+body {
+  font-feature-settings: 'cv11', 'ss01';
+  overflow-x: clip;
+}
+
+::selection {
+  background: color-mix(in oklch, var(--brand) 22%, transparent);
+}
+
+/* ── Typography polish ─────────────────────────────────────────────────── */
+
+.prose {
+  --tw-prose-links: var(--color-fd-foreground);
+  --tw-prose-headings: var(--color-fd-foreground);
+}
+
+.prose :where(h1, h2, h3, h4):not(:where(.not-prose *)) {
+  letter-spacing: -0.02em;
+}
+
+.prose :where(h2):not(:where(.not-prose *)) {
+  margin-top: 2.4em;
+}
+
+.prose :where(a):not(:where(.not-prose *)) {
+  text-decoration-color: color-mix(in oklch, var(--brand) 55%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  font-weight: 500;
+  transition:
+    text-decoration-color 150ms,
+    color 150ms;
+}
+
+.prose :where(a):not(:where(.not-prose *)):hover {
+  color: var(--brand-strong);
+  text-decoration-color: var(--brand);
+}
+
+.prose :where(:not(pre) > code):not(:where(.not-prose *)) {
+  border-radius: 0.375rem;
+  padding: 0.12em 0.36em;
+  font-size: 0.86em;
+  background: var(--color-fd-muted);
+  border: 1px solid var(--color-fd-border);
+}
+
+#nd-page .prose > :first-child {
+  margin-top: 0;
+}
+
+/* Tables fill the card; Fumadocs' wrapper (overflow-auto) scrolls wide ones on phones. */
+.prose :where(table):not(:where(.not-prose *)) {
+  width: 100%;
+  font-size: 0.9em;
+}
+
+.prose :where(td, th) code {
+  white-space: nowrap;
+}
+
+/* ── Small MDX helpers (components/mdx/bits.tsx) ───────────────────────── */
+
+.sq-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.4rem;
+  letter-spacing: 0.01em;
+  vertical-align: middle;
+  border: 1px solid var(--color-fd-border);
+  background: var(--color-fd-muted);
+  color: var(--color-fd-muted-foreground);
+  white-space: nowrap;
+}
+
+.sq-badge-brand {
+  background: var(--brand-soft);
+  border-color: color-mix(in oklch, var(--brand) 35%, transparent);
+  color: var(--brand-strong);
+}
+
+.sq-badge-success {
+  background: color-mix(in oklch, var(--color-fd-success) 12%, transparent);
+  border-color: color-mix(in oklch, var(--color-fd-success) 35%, transparent);
+  color: color-mix(in oklch, var(--color-fd-success) 75%, var(--foreground));
+}
+
+.sq-badge-warn {
+  background: color-mix(in oklch, var(--color-fd-warning) 14%, transparent);
+  border-color: color-mix(in oklch, var(--color-fd-warning) 40%, transparent);
+  color: color-mix(in oklch, var(--color-fd-warning) 60%, var(--foreground));
+}
+
+.sq-kbd {
+  display: inline-flex;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  border: 1px solid var(--color-fd-border);
+  border-bottom-width: 2px;
+  background: var(--color-fd-card);
+  padding: 0 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-fd-foreground);
+}
+
+.sq-endpoint {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+
+.sq-endpoint code {
+  overflow-wrap: anywhere;
+}
+
+.sq-method {
+  border-radius: 0.375rem;
+  padding: 0.1rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.sq-method-get {
+  color: oklch(0.55 0.13 160);
+  background: oklch(0.6 0.13 160 / 12%);
+}
+.sq-method-post {
+  color: oklch(0.55 0.15 250);
+  background: oklch(0.6 0.15 250 / 12%);
+}
+.sq-method-patch,
+.sq-method-put {
+  color: oklch(0.6 0.14 75);
+  background: oklch(0.7 0.14 75 / 14%);
+}
+.sq-method-delete {
+  color: oklch(0.58 0.19 27);
+  background: oklch(0.6 0.19 27 / 12%);
+}
+.dark .sq-method-get {
+  color: oklch(0.78 0.13 160);
+}
+.dark .sq-method-post {
+  color: oklch(0.78 0.12 250);
+}
+.dark .sq-method-patch,
+.dark .sq-method-put {
+  color: oklch(0.82 0.13 80);
+}
+.dark .sq-method-delete {
+  color: oklch(0.75 0.15 27);
+}
+
+.sq-coming-soon {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+  border-radius: 1rem;
+  border: 1px dashed color-mix(in oklch, var(--brand) 45%, transparent);
+  background: radial-gradient(120% 120% at 0% 0%, var(--brand-soft), transparent 60%), var(--color-fd-card);
+  padding: 1.25rem 1.25rem;
+}
+
+.sq-coming-soon .sq-badge {
+  align-self: flex-start;
+}
+
+/* ── Mermaid ───────────────────────────────────────────────────────────── */
+
+.sq-mermaid {
+  margin: 1.5rem 0;
+  border-radius: 0.9rem;
+  border: 1px solid var(--color-fd-border);
+  background-color: var(--color-fd-card);
+  padding: 1.25rem 0.75rem;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.sq-mermaid > svg {
+  display: block;
+  margin-inline: auto;
+  height: auto;
+}
+
+/* Phones: keep diagrams legible and let them scroll sideways inside the frame. */
+@media (max-width: 640px) {
+  .sq-mermaid {
+    justify-content: flex-start;
+  }
+  .sq-mermaid > svg {
+    min-width: 540px;
+  }
+}
+
+.sq-mermaid-placeholder {
+  min-height: 12rem;
+}
+
+/* ── Layout: full width ────────────────────────────────────────────────── */
+
+/* The docs grid spans the whole window instead of a centred 97rem column. */
+:root {
+  --fd-layout-width: 100vw;
+}
+
+/* API reference (full pages: description + code side by side) uses all of it;
+   prose pages stay at a readable line length. */
+#nd-page[data-full='true'] {
+  max-width: none;
+}
+
+#nd-page:not([data-full='true']) {
+  max-width: 1040px;
+}
+
+/* ── Sidebar: section headings ─────────────────────────────────────────── */
+
+/* Separators (`---Section---` in meta.json) render as <p>; make them read as
+   headings, not as one more link. */
+#nd-sidebar p {
+  margin-top: 1.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-fd-border);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fd-foreground);
+}
+
+#nd-sidebar p:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}

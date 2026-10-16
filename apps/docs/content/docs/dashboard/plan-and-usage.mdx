@@ -1,0 +1,63 @@
+---
+title: Plan & usage
+description: Check which plan your workspace is on and how much of its limits you have used this month.
+---
+
+**Plan & usage** shows which plan your workspace is on and how close you are to its limits.
+Check it when something stops working with a "limit reached" error (HTTP `402`), or before
+adding more webhooks, watchers or API keys. On a local install there are no limits: the plan
+is always *Unlocked*.
+
+## Check your usage
+
+Open **Settings → Plan & usage**, or search for *Plan & usage* in the command palette
+(<Kbd>⌘</Kbd> <Kbd>K</Kbd>). The page shows:
+
+- the workspace's **current plan** and its monthly price: *Unlocked* on local installs; *Free*
+  or *Pro* in cloud mode;
+- in cloud mode, a banner about the paid period when there is one (see the table below);
+- **usage this period** (calendar month, UTC), one meter each: *Approvals this month* (approve
+  and reject; resets on the 1st), *Items this month*, *Webhooks*, *API keys*,
+  *Storage*, *Watchers* (active, not paused) and *Notification channels*, each against
+  its limit (∞ when unlimited). A meter shows *Almost full* above 80 % and *Limit reached* at the
+  limit. On paid plans the page also shows the largest file you can upload;
+- in cloud mode, the **Plans** section with every plan's price, limits and a button to switch.
+
+| Banner | What it means | Buttons |
+|---|---|---|
+| *Pro trial: N days left* | New cloud workspaces start with a 7-day Pro trial. | **Upgrade to Pro**, **Switch to Free** |
+| *Pro: paid through* a date | A Stripe subscription is active. | **Manage billing** |
+| *Payment failed: Pro stays active until* a date | Stripe could not charge the card; Pro runs until the end of the paid period. | **Manage billing** |
+| *Your Pro plan has ended: this workspace is read-only* | The trial or paid period ended unpaid. You can still read and export everything. | **Upgrade to Pro**, **Switch to Free** |
+
+## Change plan
+
+| Where | How |
+|---|---|
+| **Upgrade to Pro** | Opens Stripe Checkout. After paying you come back to this page; the plan changes as soon as Stripe confirms the payment (a toast says *Payment received*). Shown only when the operator has set up [billing with Stripe](/self-hosting/billing). |
+| **Manage billing** | Opens the Stripe customer portal: change the card, download invoices or cancel. Shown once the workspace has a Stripe customer. |
+| **Switch to Free** | Moves the workspace to Free right away and lifts the read-only state after an unpaid Pro period. Needs an admin (a dashboard session or a key with `admin`). Not possible while a Stripe subscription is live: cancel it in the billing portal first, and the workspace moves to Free when it ends. API: `POST /v1/workspace/plan` with `{"plan":"free"}`. |
+| *Upgrade: ask the operator* | Shown when the instance has no Stripe settings. The operator changes the plan with `docker exec staqly server set-plan` (Docker) or `staqly serve set-plan` (binary). See [Operator commands](/self-hosting/operator-cli). |
+
+See [Plans & limits](/plans) for what each plan includes.
+
+## Usage through the API
+
+```bash
+curl -s http://localhost:3333/v1/workspace/usage
+```
+
+```json
+{
+  "plan": { "id": "unlocked", "name": "Unlocked", "limits": { "decisions_per_month": -1, "items_per_month": -1, "webhooks": -1 } },
+  "period": "2026-10",
+  "usage": { "decisions_per_month": 17, "items_per_month": 42, "webhooks": 1, "api_keys": 0, "storage_bytes": 1048576, "watchers": 1, "notification_channels": 0 }
+}
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Plans & limits" href="/plans">What each plan includes.</Card>
+  <Card title="Local vs cloud" href="/local-vs-cloud">Why local installs have no limits.</Card>
+</Cards>

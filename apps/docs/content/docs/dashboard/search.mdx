@@ -1,0 +1,73 @@
+---
+title: Search
+description: Find items by words in their title, content or metadata, in the dashboard, the API or from an agent.
+---
+
+Search finds items by the words in their **title**, **content** and **metadata**. Use it when
+a collection has grown past what you can scroll through, or when you remember a word from an
+item but not where it is. The same search works in the dashboard, the REST API (`q`) and MCP
+(`search_items`).
+
+## Search in the dashboard
+
+<Steps>
+<Step>
+
+### Open a collection
+
+Search works within one collection. Open it from **Collections** in the sidebar.
+
+</Step>
+<Step>
+
+### Type in the search box
+
+Use the search box at the top. Results sort by **Best match** while a query is active.
+
+</Step>
+<Step>
+
+### Narrow it down
+
+Combine the query with the **Decision**, **Run**, **Tags** and **type** filters, or switch to another sort
+order at any time.
+
+</Step>
+</Steps>
+
+## Ask an agent
+
+> *"Find the images I approved yesterday."*
+
+The agent calls `search_items` with `status=approved`, `type=image`, `decided_after` and
+`decided_before`. See the [cookbook recipe](/cookbook/approved-yesterday).
+
+## Search through the API
+
+```bash
+# everything mentioning "golden hour", best match first
+curl -s "http://localhost:3333/v1/items?q=golden%20hour"
+
+# combine with filters and a date range
+curl -s "http://localhost:3333/v1/items?q=avatar&status=approved&type=image&decided_after=2026-10-12&decided_before=2026-10-13"
+```
+
+`sort` defaults to `relevance` when `q` is set and to `created_desc` otherwise. Details:
+[Pagination & search](/api/pagination-and-search).
+
+## What matches
+
+Search is built on SQLite **FTS5**:
+
+- **Prefix matching**: `sun` finds *sunset* and *Sunday*.
+- **Accents are ignored**: `slonca` finds *słońca*, `cafe` finds *café*.
+- **Every word must match**: your text is turned into quoted prefix terms, so search
+  operators cannot be injected and punctuation is safe.
+- **Ranked by relevance** (BM25, title weighted highest) whenever there is a query.
+
+## Next steps
+
+<Cards>
+  <Card title="Collections" href="/dashboard/collections">The items table, filters and sort orders.</Card>
+  <Card title="Pagination & search" href="/api/pagination-and-search">Every query parameter of the API.</Card>
+</Cards>

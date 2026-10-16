@@ -1,0 +1,158 @@
+'use client'
+
+import { ChevronDown } from 'lucide-react'
+import { useState } from 'react'
+
+import { Button } from '@/components/ui/button'
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
+
+export interface MultiOption {
+  value: string
+  label: string
+  /** Small coloured dot (a status tone), optional. */
+  dot?: string
+  /** Second line under the label, optional. */
+  hint?: string
+  /** Options with the same group are listed under that heading. */
+  group?: string
+  /** Shown ticked and locked: covered by another pick (e.g. a wildcard). */
+  implied?: boolean
+}
+
+function byGroup(options: MultiOption[]) {
+  const groups = new Map<string | undefined, MultiOption[]>()
+
+  for (const o of options) {
+    groups.set(o.group, [...(groups.get(o.group) ?? []), o])
+  }
+
+  return [...groups]
+}
+
+/**
+ * Pick any number of options from a dropdown. With `anyLabel`, nothing picked
+ * is a choice of its own ("All collections"); without it, `placeholder` shows.
+ */
+export function MultiSelect({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  anyLabel,
+  placeholder = 'Choose...',
+  invalid,
+  summary,
+  mono,
+  size = 'default',
+  className,
+}: {
+  id?: string
+  label: string
+  value: string[]
+  onChange: (v: string[]) => void
+  options: MultiOption[]
+  anyLabel?: string
+  placeholder?: string
+  invalid?: boolean
+  /** Replaces the trigger's text, e.g. "Every event" when a wildcard covers everything. */
+  summary?: React.ReactNode
+  /** Labels are identifiers (event names): monospace. */
+  mono?: boolean
+  size?: 'sm' | 'default'
+  className?: string
+}) {
+  const [open, setOpen] = useState(false)
+  // Picks covered by another pick (implied, e.g. under a wildcard) are not counted twice.
+  const picked = options.filter((o) => value.includes(o.value) && !o.implied)
+  const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v])
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          size={size}
+          aria-label={label}
+          aria-invalid={invalid}
+          className={cn('justify-between gap-1.5 font-normal', className)}
+        >
+          <span className="flex min-w-0 items-center gap-1.5 truncate">
+            {summary ? (
+              summary
+            ) : picked.length === 0 ? (
+              <span className="text-muted-foreground">{anyLabel ?? placeholder}</span>
+            ) : picked.length > 2 ? (
+              `${picked.length} selected`
+            ) : (
+              picked.map((o) => (
+                <span key={o.value} className={cn('inline-flex items-center gap-1', mono && 'font-mono text-xs')}>
+                  {o.dot && <span aria-hidden className={cn('size-1.5 rounded-full', o.dot)} />}
+                  {o.label}
+                </span>
+              ))
+            )}
+          </span>
+          <ChevronDown className="shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-56 p-0">
+        <Command>
+          {/* Long lists (collections) get a search box. */}
+          {options.length > 8 && <CommandInput placeholder="Search..." />}
+          <CommandList>
+            {anyLabel && (
+              <>
+                <CommandGroup>
+                  {/* "Any" is a choice like the others: ticked when nothing narrows the list. */}
+                  <CommandItem
+                    value={`__any ${anyLabel}`}
+                    data-checked={value.length === 0}
+                    onSelect={() => onChange([])}
+                  >
+                    {anyLabel}
+                  </CommandItem>
+                </CommandGroup>
+                <CommandSeparator />
+              </>
+            )}
+            {byGroup(options).map(([group, opts]) => (
+              <CommandGroup key={group ?? ''} heading={group}>
+                {opts.map((o) => (
+                  <CommandItem
+                    key={o.value}
+                    value={`${o.label} ${o.value} ${o.hint ?? ''}`}
+                    data-checked={o.implied || value.includes(o.value)}
+                    disabled={o.implied}
+                    onSelect={() => toggle(o.value)}
+                  >
+                    {o.dot && <span aria-hidden className={cn('size-2 rounded-full', o.dot)} />}
+                    {o.hint ? (
+                      <span className="grid min-w-0">
+                        <span className={cn(mono && 'font-mono text-xs')}>{o.label}</span>
+                        <span className="text-xs text-muted-foreground">{o.hint}</span>
+                      </span>
+                    ) : (
+                      <span className={cn(mono && 'font-mono text-xs')}>{o.label}</span>
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}

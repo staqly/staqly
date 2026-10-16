@@ -1,0 +1,123 @@
+---
+title: Media uploads
+description: Attach images, videos and other files to items, and download them or their thumbnails.
+---
+
+Use media uploads when an item is more than text: a generated image, a video clip, a PDF
+report. The file is stored by staqly and shown in the dashboard next to the item. You can
+upload it **together with the item** (most common) or **separately** and reference it.
+
+## Upload a file with an item
+
+<Steps>
+<Step>
+### Send one multipart request
+
+Post `multipart/form-data` to the create-item endpoint with a **`file`** part and an optional
+**`item`** part holding the JSON fields:
+
+```bash
+curl -s -X POST "http://localhost:3333/v1/collections/Instagram%20Avatar/items" \
+  -F file=@avatar.png \
+  -F 'item={"title":"Avatar #1","content":"caption","metadata":{"seed":42},"source":"n8n"}'
+```
+
+In cloud mode, add `-H "Authorization: Bearer stk_..."` (scope `items:write`).
+</Step>
+<Step>
+### Check the result
+
+The item's type is inferred from the file (`image`, `video` or `file`), and the response
+includes the media with an absolute `url`. The item now shows up in the Inbox with a preview.
+</Step>
+</Steps>
+
+The same with the [TypeScript SDK](/sdk/typescript):
+
+```ts
+const item = await staqly.items.upload('Instagram Avatar', blob, {
+  filename: 'avatar.png',
+  title: 'Avatar #1',
+  metadata: { seed: 42 },
+})
+```
+
+## Upload separately
+
+Upload first, then reference the media ID — useful when one file belongs to several items:
+
+```bash
+curl -s -X POST http://localhost:3333/v1/media -F file=@clip.mp4
+# → {"id":"med_mcpa5bl3cokiuijxrs4x","mime_type":"video/mp4","size_bytes":1843202,"original_name":"clip.mp4","url":"http://localhost:3333/v1/media/med_mcpa5bl3cokiuijxrs4x","sha256":"9f2c4e1b7a5d3f8e0c6b2a9d4e7f1c3b5a8d0e2f4c6b8a1d3e5f7c9b0a2d4e6f"}
+
+curl -s -X POST "http://localhost:3333/v1/collections/Instagram%20Avatar/items" \
+  -H 'Content-Type: application/json' -d '{"title":"Reel","media_id":"med_mcpa5bl3cokiuijxrs4x"}'
+```
+
+`media_id: ""` in an update removes the media from an item.
+
+## Upload from an agent (MCP)
+
+The [`create_item`](/mcp/tools#create_item) tool accepts **`media_base64`** (plus
+`media_filename`, e.g. `avatar.png`) and uploads it in the same call. Alternatively pass an
+external `url` — staqly never fetches external URLs itself; the item just references them.
+
+## Allowed file types
+
+The type is **sniffed from the content**, not taken from the file name or header:
+
+| Kind | Types |
+|---|---|
+| Images | PNG, JPEG, GIF, WebP, AVIF |
+| Video | MP4, WebM, QuickTime (MOV) |
+| Audio | MP3, WAV, Ogg |
+| Documents & data | PDF, plain text, CSV, Markdown, JSON, ZIP |
+
+**SVG and HTML are refused** (`415 unsupported_media_type`) because they can carry script
+when served inline.
+
+## Size limits
+
+- `MAX_UPLOAD_MB` (default **100**) on every install; `413 too_large` above it.
+- Cloud plans add a per-file maximum (Free 5 MB / Pro 100 MB) and a storage quota — both
+  return [`402 plan_limit_exceeded`](/api/errors#402-plan_limit_exceeded).
+
+## Downloading
+
+`GET /v1/media/{id}` (scope `items:read`) serves the file after authorization, with the stored
+MIME type, `X-Content-Type-Options: nosniff`, a sandboxing Content-Security-Policy and
+**Range** support (video seeking). Add `?download=1` to force a download. The `url` field in
+API responses and webhooks is absolute, built from `PUBLIC_API_URL`, and still requires
+authentication in cloud mode.
+
+## Thumbnails
+
+Add `?w=160`, `320`, `640` or `1280` to get an image at most that many pixels wide instead of
+the original — handy for galleries and previews:
+
+```bash
+curl -s "http://localhost:3333/v1/media/med_mcpa5bl3cokiuijxrs4x?w=320" -o thumb.jpg
+```
+
+- Works for PNG, JPEG, GIF (first frame) and WebP. The thumbnail is JPEG for opaque images and
+  PNG when there is transparency; EXIF orientation is applied.
+- Generated on the first request and cached on disk. Responses carry an `ETag` and
+  `Cache-Control: private, max-age=31536000, immutable` (a media ID never changes content);
+  `If-None-Match` gets `304`.
+- Images are never upscaled: when the original isn't wider than `w`, it is returned as is — as
+  are AVIF images and images over 50 megapixels, which aren't decoded on the server.
+- Other widths, and other file types (video, PDF), answer `422 validation_failed`.
+
+## Deleting
+
+`DELETE /v1/media/{id}` deletes the file; items referencing it lose their media.
+
+Files are stored in the `uploads` folder of the data directory (`/data/uploads` in Docker;
+`UPLOAD_DIR` overrides it) with random names and are never modified after upload.
+
+## Next steps
+
+<Cards>
+  <Card title="Media reference" href="/api/reference/media">Request and response schemas.</Card>
+  <Card title="Instagram avatar pipeline" href="/cookbook/instagram-avatar">Generate, review and publish images end to end.</Card>
+</Cards>

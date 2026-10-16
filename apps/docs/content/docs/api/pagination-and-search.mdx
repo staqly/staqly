@@ -1,0 +1,153 @@
+---
+title: Pagination & search
+description: Filter, sort, search and page through items and events with the REST API.
+---
+
+Use these parameters whenever you need more than one item back: an export script that walks
+every approved image, a report of what was decided yesterday, or a search for one phrase across
+all collections. All list endpoints use the same cursor scheme.
+
+## Find and page through items
+
+<Steps>
+<Step>
+### Filter the list
+
+`GET /v1/items` lists all collections; `GET /v1/collections/{id}/items` lists one. Add
+[filters](#item-filters) as query parameters:
+
+```bash
+# images approved yesterday
+curl -s "http://localhost:3333/v1/items?status=approved&type=image&decided_after=2026-10-12&decided_before=2026-10-13"
+
+# oldest pending first (how the Inbox orders them)
+curl -s "http://localhost:3333/v1/items?status=pending&sort=created_asc"
+```
+
+In cloud mode, add `-H "Authorization: Bearer stk_..."` (scope `items:read`).
+</Step>
+<Step>
+### Search by text (optional)
+
+Add `q` to search titles, content and metadata — results come back best match first:
+
+```bash
+curl -s "http://localhost:3333/v1/items?q=golden%20hour&status=approved"
+```
+</Step>
+<Step>
+### Follow `next_cursor`
+
+Each response holds one page and, if there is more, a `next_cursor`:
+
+```json
+{ "data": [ { "id": "itm_oalirbz67y4m4cqxq5dw" } ], "next_cursor": "eyJjIjoiMjAyNi0xMC0xMyJ9" }
+```
+
+Repeat the request with `&cursor=eyJjIjoiMjAyNi0xMC0xMyJ9` and the **same filters and sort**. Stop when
+`next_cursor` is absent. The SDK does this for you:
+
+```ts
+for await (const item of staqly.items.iterate({ status: 'approved' })) {
+  console.log(item.id)
+}
+```
+</Step>
+</Steps>
+
+## How cursors work
+
+- Cursors are **opaque** — don't parse or build them.
+- Pagination is keyset-based (sort value + ID), so pages don't shift or repeat when new items
+  arrive while you page through.
+- `limit` defaults to 50 and is capped at 200.
+
+## Item filters
+
+Both item list endpoints need `items:read`.
+
+| Parameter | Description |
+|---|---|
+| `collection_id` | Only this collection (on `GET /v1/items`) |
+| `status` | `draft`, `pending`, `approved`, `rejected`, `expired`, `processing`, `completed`, `failed`, `archived` |
+| `type` | `image`, `video`, `text`, `link`, `json`, `file` |
+| `decision` | Comma-separated: `pending`, `approved`, `rejected`, `expired` (archived items left out), or `archived` |
+| `run` | Comma-separated: `none`, `processing`, `completed`, `failed` |
+| `run_action` | Items whose current run was started by this action, e.g. `publish` (`none` for runs no action started) |
+| `archived` | `false` leaves archived items out, `true` lists only them (default: both) |
+| `tag` | Comma-separated; items carrying any of these tags |
+| `source` | Exact source, e.g. `n8n` |
+| `external_ref` | Exact external reference |
+| `created_after`, `created_before` | Creation time range — RFC 3339 or `YYYY-MM-DD`; *after* is inclusive, *before* exclusive |
+| `decided_after`, `decided_before` | Decision time range (approved / rejected / expired) |
+| `q` | Full-text search, see below |
+| `sort` | `relevance`, `created_desc`, `created_asc`, `updated_desc`, `updated_asc`, `decided_desc`, `title_asc` |
+| `limit`, `cursor` | Paging |
+
+`sort` defaults to **`relevance`** when `q` is set and to **`created_desc`** otherwise.
+
+## Full-text search
+
+`q` searches **title, content and metadata** with SQLite FTS5:
+
+- every word must match, as a **prefix** — `gold hou` finds *golden hour*;
+- **diacritics are folded** — `slonca` finds *słońca*;
+- your text is quoted term by term, so FTS operators can't be injected;
+- results are ranked by **BM25** with the title weighted highest (`sort=relevance`).
+
+### Limits
+
+- Search text is limited to **16 distinct words** and **256 bytes** of word text; anything
+  beyond is ignored. One-letter words match exactly, not as a prefix.
+- A listing or search runs for at most **5 seconds**. A full-text search (`q`) that takes
+  longer returns `422 search_too_broad` — add more specific words or filters (collection,
+  status, dates). A plain listing returns `503 timeout` — retry, or narrow it with filters.
+
+```json
+{ "error": { "code": "search_too_broad", "message": "search too broad: it took too long; add more specific words or filters", "fields": { "q": "too broad" } } }
+```
+
+## Listing events
+
+`GET /v1/events` pages the activity log newest first with the same cursor scheme (`limit`
+defaults to 50, capped at 200). It needs `items:read`; audit events are listed for admins only
+(see [Audit events](/api/events#audit-events)).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | No | Only events about this item |
+| `collection_id` | string | No | Only events in this collection |
+| `type` | string | No | Exact event type, e.g. `item.approved` |
+| `type_prefix` | string | No | Literal type prefix, e.g. `item.` or `webhook.` |
+| `actor_type` | string | No | `local`, `session`, `api_key` or `system` |
+| `actor_id` | string | No | One actor, e.g. an API key ID (`key_r7zq2m4xk3pw6ta5ned2`), a session ID or a watcher ID |
+| `agent` | string | No | Agent name as listed by `GET /v1/agents` (e.g. `claude-code`, `n8n`); repeat it for any of several (`?agent=claude-code&agent=n8n`). Each event names its agent in `actor.agent` |
+| `from` | string | No | Created at or after (inclusive); RFC 3339 or `YYYY-MM-DD` |
+| `to` | string | No | Created before (exclusive); RFC 3339 or `YYYY-MM-DD` |
+| `limit` | integer | No | Page size, 1 to 200 (default 50) |
+| `cursor` | string | No | `next_cursor` from the previous page |
+
+```bash
+# everything the "n8n" key did on 12 October
+curl -s "http://localhost:3333/v1/events?actor_id=key_r7zq2m4xk3pw6ta5ned2&from=2026-10-12&to=2026-10-13"
+
+# webhook configuration changes only
+curl -s "http://localhost:3333/v1/events?type_prefix=webhook."
+```
+
+`GET /v1/events/export` accepts the same filters (except `limit` and `cursor`) plus
+`format=ndjson|csv` and streams every match oldest first. The event types are listed in
+[Event types](/api/events).
+
+## Listing webhook deliveries
+
+`GET /v1/webhook-deliveries` returns the latest deliveries (filter by `webhook_id` and
+`status`: `pending`, `succeeded`, `failed`; `limit` up to 200). It has no cursor.
+
+## Next steps
+
+<Cards>
+  <Card title="Items reference" href="/api/reference/items">Every item endpoint and its parameters.</Card>
+  <Card title="Event types" href="/api/events">What the activity log records.</Card>
+  <Card title="Find what was approved yesterday" href="/cookbook/approved-yesterday">A ready-made recipe.</Card>
+</Cards>

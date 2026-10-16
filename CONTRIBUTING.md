@@ -1,0 +1,103 @@
+# Contributing to Staqly
+
+Thanks for helping! Issues and pull requests are welcome. Please follow our
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+* **Bugs / ideas:** open an issue using the templates (search for duplicates first).
+* **Security issues:** never in public issues — see [SECURITY.md](SECURITY.md).
+* **Pull requests:** keep them focused, describe what and why, and follow the
+  checklist in the PR template. CI must be green.
+
+## Development setup
+
+The repo is a Turborepo with pnpm workspaces (`pnpm-workspace.yaml`,
+`turbo.json`). Every package has the same scripts (`format`, `format:check`,
+`lint`, `typecheck`, `test`, `build`, `gen`); the Go API, the CLI and the
+Python SDK wrap their toolchains (go, uv) in a small `package.json`, so one
+command covers everything and turbo caches unchanged packages. Requires Node
+(see `.nvmrc`), pnpm (`corepack enable`), Go and uv.
+
+```bash
+pnpm install
+pnpm check                                   # every package: format:check, lint, typecheck, test
+pnpm turbo run test --filter=@staqly/dashboard
+pnpm gen                                     # after editing queries or openapi.yaml
+pnpm test:e2e                                # Docker end-to-end suite, see e2e/README.md
+```
+
+CI (`.github/workflows/ci.yml`) runs the same turbo tasks per package, checks
+generated code is up to date, builds the Docker image and runs the e2e suite
+against it. `openapi.yaml` is the hand-written contract; a
+Go contract test fails if a route is undocumented or a real response doesn't
+match its schema.
+
+### Dev stack (`compose.dev.yml`)
+
+`make dev` runs `compose.yml` plus `compose.dev.yml`: the image built from this
+checkout, debug text logs, private destinations allowed (so webhooks,
+watchers and channels can reach containers; summaries need `TAGGER_URL` in
+`.env`, since the container has no AI CLI), and **mailpit**, which catches every email-channel message at
+http://localhost:8025 (channel config: host `mailpit`, port `1025`, `tls`
+`none`). `make dev-down` stops it.
+
+`make site` runs the landing page (http://localhost:8070) and the docs
+(http://localhost:8090) from this checkout, linked to each other and to the
+dev dashboard.
+
+To work on billing, run the Stripe CLI in the stack. In `.env`:
+
+```bash
+STAQLY_MODE=cloud
+COMPOSE_PROFILES=stripe
+STRIPE_SECRET_KEY=sk_test_51ExampleKey          # Stripe dashboard, test mode
+STRIPE_PRICE_PRO=price_1Pro30UsdMonthly         # a recurring test price
+STRIPE_WEBHOOK_SECRET=whsec_printed_by_make_stripe_secret
+```
+
+`make stripe-secret` prints the signing secret the Stripe CLI uses (it stays
+the same for your account); `make dev` then forwards test-mode events to
+`/v1/billing/webhook`. Pay with the test card `4242 4242 4242 4242`.
+
+Run without Docker: `cd apps/api && go run ./cmd/server` (data in `./data`;
+add `WEBHOOK_ALLOW_LOOPBACK=true` for receivers on localhost) and
+`cd apps/dashboard && pnpm install && pnpm dev`.
+
+```
+apps/api            Go backend: chi REST, MCP (stdio + HTTP), webhook worker
+  cmd/server          REST + /mcp + workers; operator commands (backup, workspaces, recovery-key, set-plan, stats, connect-link)
+  cmd/mcp-stdio       MCP over STDIO (keyless locally; STAQLY_API_KEY in cloud mode)
+  cmd/dashboard       serves the dashboard's static export + /api proxy (standalone; the staqly image embeds the dashboard in server)
+  internal/app        domain services + authorization (shared by REST and MCP)
+  internal/httpapi    HTTP handlers, auth/CSRF/idempotency middleware, tests
+  internal/mcpserver  MCP tool definitions
+  internal/store      SQLite open/migrate/backup
+  internal/db         sqlc-generated queries
+  db/migrations       goose migrations (embedded; append-only)
+  openapi.yaml        OpenAPI 3.2 contract
+apps/dashboard      Next.js dashboard (static export)
+apps/cli            `staqly` CLI and `staqly serve` (Go)
+apps/docs           documentation site (Fumadocs), docs.staqly.ai
+apps/web            landing page, staqly.ai
+sdks/typescript     TypeScript SDK (types generated from OpenAPI)
+sdks/python         Python SDK
+integrations/       n8n example + workflow, Claude Code, Codex, OpenCode configs
+scripts/            install, backup, restore, seed
+e2e/                Docker end-to-end suite; fixtures/ for seed and e2e
+docs/               architecture, cloud, MCP, n8n, notifications, export, observability, CLI, backup, troubleshooting
+```
+
+More: [architecture](docs/architecture.md) · [progress & limitations](docs/PROGRESS.md) ·
+[security policy](SECURITY.md).
+
+## Conventions
+
+* Read [AGENTS.md](AGENTS.md) and the `AGENTS.md` of the project you touch —
+  they list commands, conventions and the product rules the code must keep.
+* API changes start in `apps/api/openapi.yaml` (the contract test fails if the
+  code and the spec disagree); regenerate client types afterwards.
+* Schema changes are new migrations in `apps/api/db/migrations` + `sqlc generate`.
+* TypeScript/JavaScript: oxfmt formatting (single quotes, no semicolons, grouped
+  imports) and oxlint — run `pnpm format` and `pnpm lint`. Go: `gofmt`.
+  Python: `ruff format` + `ruff check` + `mypy --strict`.
+* By contributing you agree that your contributions are licensed under the
+  Apache License 2.0.

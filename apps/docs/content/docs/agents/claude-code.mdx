@@ -1,0 +1,115 @@
+---
+title: Claude Code
+description: Add staqly to Claude Code so it can save its output for your review.
+---
+
+Connect Claude Code to staqly as an MCP server, and Claude can create collections, save
+images and drafts as items, and check what you approved, just from your prompts. Do this once
+per machine, or once per repository with a shared `.mcp.json`.
+
+## Connect to local staqly
+
+<Steps>
+<Step>
+
+### Start staqly
+
+Run `staqly serve` (or the [Docker image](/self-hosting/docker)). See the [Quickstart](/quickstart).
+
+</Step>
+<Step>
+
+### Add the MCP server
+
+In local mode, no key is needed:
+
+```bash
+claude mcp add --transport http staqly http://localhost:3333/mcp
+```
+
+</Step>
+<Step>
+
+### Check the connection
+
+```bash
+claude mcp list        # → staqly: http://localhost:3333/mcp (HTTP) - ✔ Connected
+```
+
+</Step>
+</Steps>
+
+Tip: `staqly mcp config claude` prints this command and a `.mcp.json` snippet for your current
+[CLI](/cli/commands) profile.
+
+### Share it with your team: project `.mcp.json`
+
+Commit this to your repository so everyone working in it gets staqly:
+
+```json title=".mcp.json"
+{ "mcpServers": { "staqly": { "type": "http", "url": "http://localhost:3333/mcp" } } }
+```
+
+### STDIO (Docker only)
+
+If you run staqly with Docker, you can use STDIO instead of HTTP. It runs `mcp-stdio` inside
+the `staqly` container, so it does not work with `staqly serve`:
+
+```bash
+claude mcp add staqly -- docker exec -i staqly mcp-stdio
+```
+
+## Connect to a cloud instance
+
+Create a key per agent under **API keys** in the sidebar, e.g. a *Reviewer agent* key with
+`collections:read items:read items:review`, and pass it as a header:
+
+```bash
+export STAQLY_API_KEY=stk_...
+claude mcp add --transport http staqly https://staqly.example.com/mcp \
+  --header "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+Or in `.mcp.json`. Claude Code expands `${STAQLY_API_KEY}` from the environment, so the key
+stays out of git:
+
+```json title=".mcp.json"
+{
+  "mcpServers": {
+    "staqly": {
+      "type": "http",
+      "url": "https://staqly.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${STAQLY_API_KEY}" }
+    }
+  }
+}
+```
+
+STDIO against a cloud-mode container on the same host forwards the key into the container:
+
+```bash
+claude mcp add staqly -e STAQLY_API_KEY=stk_... -- docker exec -i -e STAQLY_API_KEY staqly mcp-stdio
+```
+
+## Try it
+
+Ask Claude in plain language:
+
+> *“Create a collection called Instagram Avatar.”*
+> *“Show me all pending images.”*
+> *“Reject itm_oalirbz67y4m4cqxq5dw with feedback: the lighting is too harsh.”*
+
+More in [Example prompts](/mcp/prompts).
+
+<Callout title="Verified">
+`claude mcp list` reported ✔ Connected for the HTTP and STDIO configurations, keyless (local
+mode) and with a bearer key; a `claude -p` prompt created a collection and listed pending
+images over MCP.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="MCP tools" href="/mcp/tools">Every tool Claude can call, and the scope it needs.</Card>
+  <Card title="Approval gate" href="/cookbook/approval-gate">Make Claude wait for your approval before a risky step.</Card>
+</Cards>

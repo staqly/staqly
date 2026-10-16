@@ -1,0 +1,50 @@
+# Publishes the documentation site (apps/docs, static export) to GitHub Pages
+# on every push to main that touches it. Settings → Pages → Source: GitHub Actions.
+#
+# Served from the custom domain https://docs.staqly.ai (Settings → Pages), so
+# from the domain root. Without a custom domain the site would live under
+# /staqly: set DOCS_BASE_PATH=/staqly for that.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/docs/**', 'packages/brand/**', 'packages/check-links/**', 'apps/api/openapi.yaml', 'pnpm-lock.yaml', '.github/workflows/docs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push cancels the build still running: only the latest docs get deployed.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    env:
+      SITE_URL: https://docs.staqly.ai
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/docs..." }
+      - name: Build (static export + link check)
+        run: pnpm turbo run build --filter=@staqly/docs
+      - uses: actions/upload-pages-artifact@v5
+        with: { path: apps/docs/out }
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

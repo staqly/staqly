@@ -1,0 +1,29 @@
+# Monthly dependency updates, grouped per ecosystem to keep PRs few.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories: ["/apps/api", "/apps/cli"]
+    schedule: { interval: monthly }
+    groups: { go: { patterns: ["*"] } }
+  - package-ecosystem: npm
+    directories: ["/apps/dashboard", "/apps/docs", "/apps/web", "/sdks/typescript"]
+    schedule: { interval: monthly }
+    groups: { npm: { patterns: ["*"], update-types: [minor, patch] } }
+    ignore:
+      # @types/node follows the Node major we run (LTS), bumped deliberately.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+  - package-ecosystem: uv
+    directory: /sdks/python
+    schedule: { interval: monthly }
+  - package-ecosystem: docker
+    directories: ["/apps/api", "/apps/dashboard"]
+    schedule: { interval: monthly }
+    ignore:
+      # Stay on the current Node LTS; odd/non-LTS majors (25, 26 before LTS) are skipped.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+    groups: { actions: { patterns: ["*"] } }

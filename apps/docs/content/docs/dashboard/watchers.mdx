@@ -1,0 +1,71 @@
+---
+title: Watchers
+description: Create and manage watchers from the dashboard.
+---
+
+**Watchers** bring new content in: they check a feed or web page and add new entries to a
+collection for you to review.
+
+They have their own entry in the sidebar under *Automation*, and in the command palette
+(<Kbd>⌘</Kbd> <Kbd>K</Kbd>). How they behave is explained in
+[Watchers](/automation/watchers).
+
+## Add a watcher
+
+<Steps>
+<Step>
+
+### Open Watchers and click **Add a watcher**
+
+One form opens. Give the watcher a **Name** and paste the **URL** of an RSS/Atom feed or
+of a web page, for example `https://github.com/golang/go/releases.atom` or
+`https://example.com/pricing`.
+
+</Step>
+<Step>
+
+### staqly picks the mode
+
+There is nothing to choose: staqly reads the URL when you save. An RSS/Atom feed is watched
+as a **Feed** (every new entry becomes an item); any other page or JSON endpoint as a
+**Page change** (an item when its content changes). The confirmation says which one it is,
+and the watcher card shows it.
+
+</Step>
+<Step>
+
+### Choose where entries go
+
+Pick the **Collections** new entries are added to (required, marked with `*`; pick several
+and each entry is added to every one of them) and how often to **Check**. The fastest
+interval depends on the plan (every minute on local installs). Missing required fields turn
+red when you save.
+
+To keep only some entries, open **Advanced: filter entries**. Keywords are matched in each
+entry's title and summary (for a page change: the page text), ignoring case. With **Only with
+keywords** set, an entry needs at least one of them; any **Skip keywords** word drops it.
+Entries left out are not added later.
+
+</Step>
+</Steps>
+
+Items created by watchers carry an **External content** badge everywhere in the dashboard.
+Treat their text and links as untrusted.
+
+## Manage watchers
+
+**Watchers** shows each watcher with its status (*Active*, *Degraded* or *Paused*), how often
+it checks, when it last checked, how many items it created, and *Last check failed* with the
+error if a check failed. For each watcher you can:
+
+- **Check now**, without waiting for the next scheduled check;
+- **Pause** or **Resume** it;
+- **Edit** (name, URL, interval, collections, keywords) or **Delete** it. Items it already
+  created are kept.
+
+## Next steps
+
+<Cards>
+  <Card title="How watchers work" href="/automation/watchers">Modes, schedules, fetching rules and limits.</Card>
+  <Card title="Notifications" href="/automation/notifications">Get pinged when new items arrive.</Card>
+</Cards>

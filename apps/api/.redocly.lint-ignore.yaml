@@ -1,0 +1,12 @@
+# This file instructs Redocly's linter to ignore the rules contained for specific parts of your API.
+# See https://redocly.com/docs/cli/ for more information.
+# - servers/1 is the real local URL (http://localhost:3333).
+# - Probes and the document itself have no client errors (no auth, no input).
+openapi.yaml:
+  no-server-example.com:
+    - '#/servers/1/url'
+  operation-4xx-response:
+    - '#/paths/~1health/get/responses'
+    - '#/paths/~1openapi.yaml/get/responses'
+    - '#/paths/~1livez/get/responses'
+    - '#/paths/~1readyz/get/responses'

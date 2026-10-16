@@ -1,0 +1,86 @@
+---
+title: '"Find what I approved yesterday"'
+description: Ask your agent in plain language to find items you approved or rejected in a given time range.
+---
+
+After a few days of reviewing, you'll want to find things again: "the images I approved
+yesterday", "what I rejected this week". In this recipe you just ask your agent in plain
+language, and it turns the question into a staqly search with decision-date filters. It's for
+anyone who already has staqly connected to a coding agent.
+
+## What you need
+
+- staqly running: `staqly serve` ([install](/quickstart)) or the
+  [Docker image](/self-hosting/docker).
+- An agent connected to staqly over MCP: [Claude Code](/agents/claude-code),
+  [Codex](/agents/codex), [OpenCode](/agents/opencode) or
+  [another MCP client](/agents/other-mcp-clients).
+- A few items you've already approved or rejected.
+
+## Try it
+
+<Steps>
+<Step>
+
+### Ask your agent
+
+> *"Find the images I approved yesterday."*
+
+No special wording is needed. staqly's MCP server instructions tell the model about the
+date filters.
+
+</Step>
+<Step>
+
+### Check what it searched for
+
+The agent calls the `search_items` tool. If today is October 13, 2026, the call looks like this:
+
+```json
+{
+  "status": "approved",
+  "type": "image",
+  "decided_after": "2026-10-12",
+  "decided_before": "2026-10-13"
+}
+```
+
+`decided_after` is inclusive and `decided_before` exclusive. Both accept `YYYY-MM-DD` or
+RFC 3339, so this is exactly "yesterday" in UTC.
+
+</Step>
+<Step>
+
+### Refine in the same conversation
+
+Follow up in plain language and the agent adjusts the filters. See the variations below.
+
+</Step>
+</Steps>
+
+## Variations
+
+| Ask | Tool call |
+|---|---|
+| *"And only the ones about golden hour"* | add `"query": "golden hour"` (ranked by relevance) |
+| *"What did I reject this week, and why?"* | `status: rejected`, `decided_after: <Monday>`; the agent reads each item's `feedback` |
+| *"Which Instagram Avatar posts created today are already published?"* | `collection: "Instagram Avatar"`, `status: completed`, `created_after: <today>` |
+| *"Show me everything still waiting for me."* | `list_pending_approvals` |
+
+## The same without an agent
+
+The REST API takes the same filters (the text search parameter is `q` here):
+
+```bash
+curl -s "http://localhost:3333/v1/items?status=approved&type=image&decided_after=2026-10-12&decided_before=2026-10-13"
+```
+
+Long results come in pages: follow `next_cursor`, as described in
+[Pagination & search](/api/pagination-and-search).
+
+## Reference
+
+<Cards>
+  <Card title="MCP tools" href="/mcp/tools">`search_items`, `list_pending_approvals`</Card>
+  <Card title="Pagination & search" href="/api/pagination-and-search">Filters, sorting and cursors</Card>
+</Cards>

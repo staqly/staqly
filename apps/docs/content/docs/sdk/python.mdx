@@ -1,0 +1,642 @@
+---
+title: Python SDK
+description: Send AI output to staqly for review and act on the decision from Python code, sync or async.
+---
+
+`staqly` is the official Python client for staqly. Use it when your agent, script or web app is
+written in Python and should store its output for review, wait for a human decision, or react to
+webhooks. For shell scripts and CI pick the [CLI](/cli), for AI agents that speak MCP use the
+[MCP server](/mcp), and in TS/JS use the [TypeScript SDK](/sdk/typescript).
+
+It offers a sync `Staqly` and an async `AsyncStaqly` client with identical APIs, built on
+`httpx`, with typed pydantic v2 models checked against the API's OpenAPI contract. Requires
+Python 3.10 or newer.
+
+## Get started
+
+<Steps>
+<Step>
+### Install the package
+
+```bash
+pip install staqly        # or: uv add staqly
+```
+
+</Step>
+<Step>
+### Start staqly
+
+Run a server on your computer with [`staqly serve`](/cli#run-the-server) (or Docker). In local
+mode the SDK needs no key.
+
+</Step>
+<Step>
+### Create an item and wait for the decision
+
+```python title="review.py"
+from staqly import Staqly
+
+with Staqly() as staqly:  # http://localhost:3333, no key
+    staqly.collections.create("Blog drafts")
+
+    item = staqly.items.create(
+        "Blog drafts",
+        title="Why local-first?",
+        content="# Draft\nFirst paragraph.",
+        metadata={"model": "gpt-x", "score": 0.82},
+    )
+
+    decided = staqly.items.wait_for_decision(item.id)  # blocks until a human decides
+
+    if decided.status == "approved":
+        print("Approved:", decided.content)  # includes the reviewer's edits
+    else:
+        print("Not approved:", decided.status, decided.feedback)
+```
+
+</Step>
+<Step>
+### Approve it
+
+Open the dashboard at `http://localhost:8080` and approve or reject the item. The script prints
+the result and exits.
+
+</Step>
+</Steps>
+
+## Configure the client
+
+```python
+import httpx
+from staqly import Staqly
+
+staqly = Staqly(
+    base_url="https://staqly.example.com",  # default: $STAQLY_API_URL, then http://localhost:3333
+    api_key="stk_...",  # default: $STAQLY_API_KEY; "" = ignore the env var
+    timeout=60.0,  # seconds per request (or an httpx.Timeout)
+    max_retries=2,  # retries for 408/429/5xx/network errors
+    default_headers={"X-Team": "growth"},
+    user_agent="my-agent/1.0",  # appended to "staqly-sdk-python/<version>"
+    http_client=httpx.Client(proxy="http://proxy:8080"),  # your own client/transport
+)
+```
+
+You only need `api_key` in [cloud mode](/local-vs-cloud). Use the client as a context manager
+(`with Staqly() as staqly:`), or call `staqly.close()`, to release connections.
+
+Every method accepts `request_options=` for per-request overrides:
+
+```python
+staqly.items.list(status="pending", request_options={"timeout": 5, "max_retries": 0})
+staqly.items.create("Posts", title="x", request_options={"idempotency_key": f"job-{job_id}"})
+```
+
+`staqly.health()` checks liveness, `staqly.ready()` checks readiness, and `staqly.whoami()`
+returns the server mode, the workspace and the calling principal with its scopes. The
+[reference](#reference) below lists every resource and method.
+
+## Work with collections and items
+
+```python
+from datetime import date
+
+col = staqly.collections.create("Instagram", description="Avatar candidates")
+staqly.collections.get("Instagram")  # ID or exact name
+
+item = staqly.items.create(
+    "Instagram",  # collection ID or name
+    title="Caption idea",
+    content="Golden hour",  # str or any JSON value
+    metadata={"score": 0.91},
+    source="caption-agent",
+    external_ref="job-123",
+    expires_in="24h",  # undecided items become "expired"
+    editable=["content", "metadata.caption"],  # what reviewers may change before approving
+)
+
+# upload a file and create the item in one request: path, bytes or binary file object
+staqly.items.upload("Instagram", "avatar.png", title="New avatar")
+
+# decisions (need the items:review scope)
+staqly.items.approve(item.id, feedback="Ship it", edits={"title": "Better title"})
+staqly.items.reject(item.id, feedback="Too dark, brighten it")
+staqly.items.action(item.id, "publish", payload={"channel": "ig"})  # custom action
+
+# after acting on an approved item, record the outcome
+staqly.items.report_result(item.id, status="completed", result={"post_url": "https://instagram.com/p/C9xYz"})
+staqly.items.reject(item.id, feedback="Too dark", follow_up="regenerate")  # reject and ask for a new version
+staqly.items.update(item.id, tags=["client-a"])  # labels, any status
+staqly.items.unarchive(item.id)  # back to review, its run or its decision
+
+# list, search and page through everything
+staqly.items.search("golden hour", status="approved")
+for it in staqly.items.iterate(status="pending", created_after=date(2026, 10, 1)):
+    print(it.title)
+```
+
+The client also covers `media`, `events`, `webhooks`, `watchers`,
+`notification_channels`, `exports`, `workspace`, `workspaces`, `plans`, `billing`, `api_keys`,
+`sessions`, `device_links` and `decision_links`; see the [reference](#reference). The low-level
+`staqly.request("GET", "/v1/plans")` calls any endpoint with the same auth, retries and error
+handling.
+
+## Wait for a human decision
+
+```python
+from staqly import WaitTimeoutError
+
+try:
+    item = staqly.items.wait_for_decision(item_id, timeout=30 * 60)  # seconds, default 600
+except WaitTimeoutError as e:
+    print("still pending", e.item)
+else:
+    match item.status:
+        case "approved":
+            ...
+        case "rejected":
+            print(item.feedback)  # why it was rejected
+        case "expired":
+            ...  # nobody answered within expires_in
+```
+
+`wait_for_decision` uses the server's long-poll endpoint (`GET /v1/items/{id}/wait`, up to 60 s
+per round) and repeats it until the item leaves `pending`, so it does not busy-poll. Pass
+`on_poll=callback` to log progress. `items.wait(id, timeout=30)` runs a single round.
+
+For long-running services, push beats waiting: subscribe a [webhook](/automation/webhooks) to
+`item.approved`, `item.rejected` and `item.expired`.
+
+## Gate an action on approval
+
+`request_approval` creates an item, waits for the decision and returns a `Decision`. It never
+raises on a rejection:
+
+```python
+d = staqly.request_approval(
+    "Outbox",
+    title="Send the October newsletter?",
+    content=draft,
+    expires_in="4h",
+    editable=["content"],
+)
+
+if d.approved:
+    send(d.item.content)  # the reviewer's edited version
+elif d.expired:
+    print("no answer in time")
+else:
+    print("rejected:", d.feedback)
+```
+
+The `@requires_approval` decorator makes every call ask a human first. The function runs only
+after approval. The item is then reported `completed` (with the return value as `result`) or
+`failed` if the function raises. A rejection or expiry raises `RejectedError`:
+
+```python
+from staqly import RejectedError, Staqly
+
+staqly = Staqly()
+
+
+@staqly.requires_approval(
+    "Outbox",
+    title=lambda to, subject, **_: f"Email {to}: {subject}",
+    metadata=lambda to, **_: {"recipient": to},
+    expires_in="1h",
+)
+def send_email(to: str, subject: str, body: str) -> str:
+    return mailer.send(to, subject, body)
+
+
+try:
+    send_email("ceo@example.com", "Q3 numbers", body)
+except RejectedError as e:
+    print("blocked:", e.feedback)
+```
+
+`title`, `content` and `metadata` may be callables that receive the function's arguments;
+`content` defaults to the arguments as JSON. Pass `report=False` to skip reporting the outcome.
+With `AsyncStaqly`, decorate `async def` functions the same way.
+
+## Verify webhooks
+
+Every webhook delivery is signed with the webhook's secret (`whsec_...`). `verify_webhook` checks
+the `X-Staqly-Signature` and `X-Staqly-Timestamp` headers with a constant-time comparison, rejects
+timestamps more than 5 minutes off, and returns a typed `WebhookEvent`. It raises
+`WebhookVerificationError` otherwise.
+
+```python tab="FastAPI"
+from fastapi import FastAPI, HTTPException, Request
+from staqly import WebhookVerificationError, verify_webhook
+
+app = FastAPI()
+
+
+@app.post("/staqly")
+async def staqly_webhook(request: Request) -> dict[str, bool]:
+    try:
+        event = verify_webhook(SECRET, await request.body(), request.headers)
+    except WebhookVerificationError:
+        raise HTTPException(status_code=400, detail="invalid signature")
+
+    if event.type == "item.approved" and event.item:
+        await publish(event.item)  # a typed Item
+
+    return {"ok": True}
+```
+
+```python tab="Flask"
+from flask import Flask, abort, request
+from staqly import WebhookVerificationError, verify_webhook
+
+app = Flask(__name__)
+
+
+@app.post("/staqly")
+def staqly_webhook():
+    try:
+        event = verify_webhook(SECRET, request.get_data(), request.headers)
+    except WebhookVerificationError:
+        abort(400)
+
+    print(event.type, event.data)
+    return "", 204
+```
+
+- Always pass the **raw** request body.
+- `tolerance=` changes the time window in seconds (`0` or `None` disables it).
+- Deliveries are at-least-once: de-duplicate on `event.id` (also sent as `X-Staqly-Event-Id`).
+- `is_valid_webhook()` returns a boolean instead of raising; `compute_signature(secret, ts, body)`
+  helps you test your handler.
+
+## Handle errors
+
+Every error subclasses `staqly.StaqlyError`. HTTP errors subclass `APIError` and carry `status`,
+`code`, `message`, `fields`, `details`, `request_id`, `body` and `response`. `request_id` is the
+server's `X-Request-Id`; include it in bug reports.
+
+| Class | When |
+|---|---|
+| `BadRequestError` | 400 |
+| `AuthenticationError` | 401 missing, invalid or revoked key |
+| `PlanLimitError` | 402 `plan_limit_exceeded`, with `.limit`, `.max`, `.used`, `.plan` |
+| `PermissionDeniedError` | 403 missing scope; `.is_not_local` when a local server refused a non-local caller |
+| `NotFoundError` | 404 |
+| `ConflictError` | 409, e.g. the item was already decided or the version changed |
+| `GoneError` | 410 |
+| `PayloadTooLargeError` / `UnsupportedMediaTypeError` | 413 / 415 |
+| `ValidationError` | 422, with `.fields` (code `not_editable` for edits outside `editable`) |
+| `RateLimitError` | 429, with `.retry_after` |
+| `InternalServerError` | 5xx |
+| `APIConnectionError` / `TimeoutError` | no response / request timed out (`TimeoutError` is also the built-in `TimeoutError`) |
+| `WaitTimeoutError` | `wait_for_decision` or `wait_for_workspace_export` gave up (`.item_id`, `.waited`, `.item`); also a built-in `TimeoutError` |
+| `ExportFailedError` | a workspace export ended `failed` or `expired` (`.job`) |
+| `RejectedError` | a `@requires_approval` call was rejected or expired (`.item`, `.status`, `.feedback`) |
+| `WebhookVerificationError` | bad signature or timestamp |
+
+```python
+from staqly import ConflictError
+
+try:
+    staqly.items.approve(item_id)
+except ConflictError:
+    pass  # someone else decided first
+```
+
+## Retries, timeouts and idempotency
+
+- Requests that fail with 408, 429, 500, 502, 503, 504, a network error or a timeout are retried
+  up to `max_retries` times (default 2) with exponential backoff and jitter. A `Retry-After` of
+  60 s or less is honored; a longer one raises `RateLimitError` right away.
+- Every `POST`, `PATCH` or `DELETE` with a JSON body gets an automatic `Idempotency-Key`, reused
+  across its retries, so a retry never applies the request twice. Set
+  `request_options={"idempotency_key": "avatar-3"}` to choose the key yourself.
+- Multipart uploads are retried only on 429.
+- `timeout` (default 60 s) applies to each attempt; `items.wait` raises it automatically to
+  outlast the server's long poll.
+
+## Use the async client
+
+`AsyncStaqly` has the same API. Await the methods, use `async for` on iterators, and use
+`async with AsyncStaqly()` or `await staqly.aclose()` instead of `close()`:
+
+```python
+import asyncio
+
+from staqly import AsyncStaqly
+
+
+async def main() -> None:
+    async with AsyncStaqly() as staqly:
+        item = await staqly.items.create("Drafts", title="Hello")
+        decided = await staqly.items.wait_for_decision(item.id)
+        print(decided.status)
+
+        async for it in staqly.items.iterate(status="approved"):
+            print(it.title)
+
+
+asyncio.run(main())
+```
+
+## Reference
+
+Every method below exists on both `Staqly` and `AsyncStaqly` (await it on the async client) and
+accepts `request_options=`. List endpoints that page return `ItemPage` or `EventPage` (`.data`,
+`.next_cursor`); the others return a plain `list`. Methods that answer `204` return `None`.
+
+### Client
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `health()` | `GET /health` | `Health` |
+| `live()` | `GET /livez` | `Liveness` |
+| `ready()` | `GET /readyz` | `Readiness` (not retried; not ready raises `InternalServerError`) |
+| `setup()` | `GET /v1/setup` | `SetupStatus` |
+| `whoami()` | `GET /v1/session` | `Whoami` |
+| `metrics(token=None)` | `GET /metrics` | `str` (Prometheus text) |
+| `openapi()` | `GET /openapi.yaml` | `str` (YAML) |
+| `request(method, path, params=None, json=None)` | any | decoded JSON or `None` |
+| `request_approval(collection, title=, content=, metadata=, url=, media_id=, type=, source=, external_ref=, expires_in=, editable=, timeout=600)` | create + long-poll | `Decision` |
+| `requires_approval(collection, title=, content=, metadata=, expires_in=, editable=, timeout=600, report=True)` | decorator | wrapped function |
+
+```python
+staqly.setup()  # SetupStatus(initialized=True, mode="local", signup_open=False, setup_token_required=False)
+staqly.live().status  # "ok"
+text = staqly.metrics(token="mtk_9pcv2rd7xq4wz8hn")  # token only needed off this machine
+spec = staqly.openapi()
+```
+
+`health()`, `live()`, `ready()`, `setup()`, `metrics()` and `openapi()` never send the API key.
+
+### Collections
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `list(include_archived=False)` | `GET /v1/collections` | `list[Collection]` |
+| `get(id_or_name)` | `GET /v1/collections/{id}` | `Collection` |
+| `create(name, description=, icon=, color=, default_view=, actions=)` | `POST /v1/collections` | `Collection` |
+| `update(collection_id, name=, description=, icon=, color=, default_view=, actions=, archived=)` | `PATCH /v1/collections/{id}` | `Collection` |
+
+`default_view` (`gallery`, `table` or `list`) is still accepted and stored for compatibility, but the
+dashboard always shows a collection as a table.
+| `set_actions(collection_id, actions)` / `archive(collection_id)` / `unarchive(collection_id)` | `PATCH /v1/collections/{id}` | `Collection` |
+| `delete(collection_id, confirm=)` | `DELETE /v1/collections/{id}` | `None` |
+| `list_items(collection_id, status=, type=, q=, sort=, limit=, cursor=)` | `GET /v1/collections/{id}/items` | `ItemPage` |
+| `resolve_id(id_or_name)` | `GET /v1/collections/{id}` (skipped for IDs) | `str` |
+
+```python
+from staqly.models import ActionDef
+
+staqly.collections.update(
+    "col_oalirbz67y4m4cqxq5dw",
+    color="#e1306c",
+    actions=[ActionDef(name="publish", label="Publish", set_status="processing", allowed_statuses=["approved"])],
+)
+page = staqly.collections.list_items("col_oalirbz67y4m4cqxq5dw", status="pending", limit=50)
+staqly.collections.archive("col_oalirbz67y4m4cqxq5dw")
+staqly.collections.delete("col_oalirbz67y4m4cqxq5dw", confirm="Instagram")  # permanent; the name must match
+```
+
+### Items
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `list(collection=, collection_id=, status=, type=, q=, source=, external_ref=, created_after=, created_before=, decided_after=, decided_before=, sort=, limit=, cursor=)` | `GET /v1/items` | `ItemPage` |
+| `search(q, collection=, collection_id=, status=, type=, sort=, limit=, cursor=)` | `GET /v1/items?q=` | `ItemPage` |
+| `iterate()` with the filters of `list()` | `GET /v1/items` (every page) | iterator of `Item` |
+| `get(item_id)` | `GET /v1/items/{id}` | `Item` |
+| `create(collection, title=, content=, url=, media_id=, metadata=, type=, status=, source=, external_ref=, expires_in=, editable=)` | `POST /v1/collections/{id}/items` | `Item` |
+| `upload(collection, file, filename=, content_type=)` plus the fields of `create()` except `media_id` | `POST /v1/collections/{id}/items` (multipart) | `Item` |
+| `update(item_id, title=, content=, url=, media_id=, metadata=, metadata_patch=, status=, source=, external_ref=, collection_id=, expected_version=)` | `PATCH /v1/items/{id}` | `Item` |
+| `delete(item_id)` | `DELETE /v1/items/{id}` | `None` |
+| `purge(item_id)` | `POST /v1/items/{id}/purge` | `PurgeResult` |
+| `approve(item_id, feedback=, edits=, payload=, expected_version=)` / `reject()` with the same arguments | `POST /v1/items/{id}/actions/{action}` | `Item` |
+| `action(item_id, name, feedback=, edits=, payload=, expected_version=)` | `POST /v1/items/{id}/actions/{action}` | `Item` |
+| `list_actions(item_id)` | `GET /v1/items/{id}/actions` | `list[ActionDef]` |
+| `bulk_action(ids, action, feedback=, edits=, payload=)` | `POST /v1/items/bulk-actions` | `list[BulkActionResult]` |
+| `history(item_id, limit=, cursor=)` | `GET /v1/items/{id}/events` | `EventPage` |
+| `versions(item_id)` | `GET /v1/items/{id}/versions` | `list[ItemVersion]` |
+| `wait(item_id, timeout=)` | `GET /v1/items/{id}/wait` | `ItemWaitResult` |
+| `wait_for_decision(item_id, timeout=600, on_poll=)` | `GET /v1/items/{id}/wait` (repeated) | `Item` |
+| `report_result(item_id, status=, result=, error=)` | `POST /v1/items/{id}/result` | `Item` |
+
+```python
+staqly.items.update("itm_oalirbz67y4m4cqxq5dw", metadata_patch={"score": 0.95, "draft": None}, expected_version=3)
+staqly.items.bulk_action(["itm_oalirbz67y4m4cqxq5dw", "itm_qjuybkx6355nz4no6pqk"], "approve")
+staqly.items.history("itm_oalirbz67y4m4cqxq5dw", limit=20)
+staqly.items.versions("itm_oalirbz67y4m4cqxq5dw")
+staqly.items.purge("itm_oalirbz67y4m4cqxq5dw")  # admin: deletes the history too
+```
+
+### Media
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `upload(file, filename=, content_type=)` | `POST /v1/media` | `Media` |
+| `download(media_id)` | `GET /v1/media/{id}` | `bytes` |
+| `url(media_id)` | none (builds the URL) | `str` |
+| `delete(media_id)` | `DELETE /v1/media/{id}` | `None` |
+
+```python
+m = staqly.media.upload("avatar.png")  # path, bytes or binary file object
+staqly.items.create("Instagram", title="New avatar", media_id=m.id)
+data = staqly.media.download("med_mcpa5bl3cokiuijxrs4x")
+```
+
+### Events
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `list(item_id=, collection_id=, type=, type_prefix=, actor_type=, actor_id=, from_=, to=, limit=, cursor=)` | `GET /v1/events` | `EventPage` |
+| `iterate()` with the filters of `list()` | `GET /v1/events` (every page) | iterator of `Event` |
+
+```python
+for ev in staqly.events.iterate(type="item.approved", collection_id="col_oalirbz67y4m4cqxq5dw"):
+    print(ev.id, ev.actor.name)
+
+# everything one API key did to items in the first half of October
+page = staqly.events.list(type_prefix="item.", actor_id="key_r7y65khtqa23kj4btvur", from_="2026-10-01", to="2026-10-15")
+```
+
+`type_prefix` is a literal prefix such as `item.` or `webhook.`. `actor_id` is one actor, for example an
+API key ID or a session ID. `from_` (sent as `from`, because `from` is a Python keyword) and `to`
+take RFC 3339 or `YYYY-MM-DD`; `from_` is inclusive, `to` exclusive.
+
+### Webhooks
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `list()` | `GET /v1/webhooks` | `list[Webhook]` |
+| `get(webhook_id)` | `GET /v1/webhooks/{id}` | `Webhook` |
+| `create(url, events=, description=, collection_ids=, active=, timeout_ms=, max_attempts=)` | `POST /v1/webhooks` | `Webhook` (with `secret`) |
+| `update(webhook_id, url=, events=, description=, collection_ids=, active=, timeout_ms=, max_attempts=, rotate_secret=)` | `PATCH /v1/webhooks/{id}` | `Webhook` |
+| `rotate_secret(webhook_id)` | `PATCH /v1/webhooks/{id}` | `Webhook` |
+| `delete(webhook_id)` | `DELETE /v1/webhooks/{id}` | `None` |
+| `test(webhook_id)` | `POST /v1/webhooks/{id}/test` | `Delivery` |
+| `deliveries.list(webhook_id=, status=, limit=)` | `GET /v1/webhook-deliveries` | `list[Delivery]` |
+| `deliveries.retry(delivery_id)` | `POST /v1/webhook-deliveries/{id}/retry` | `Delivery` |
+
+```python
+hook = staqly.webhooks.create("https://example.com/staqly", events=["item.approved", "item.rejected"])
+staqly.webhooks.test("wh_lv5rc7rttjnfwnnsn4ny")
+staqly.webhooks.deliveries.list(webhook_id="wh_lv5rc7rttjnfwnnsn4ny", status="failed")
+staqly.webhooks.deliveries.retry("dlv_bgx4s2p4xnzimajdkoki")
+```
+
+### Watchers
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `list()` | `GET /v1/watchers` | `list[Watcher]` |
+| `get(watcher_id)` | `GET /v1/watchers/{id}` | `Watcher` |
+| `create(name, kind=, url=, collection=, keywords=, exclude_keywords=, every=)` | `POST /v1/watchers` | `Watcher` |
+| `update(watcher_id, name=, kind=, url=, collection=, keywords=, exclude_keywords=, every=, status=)` | `PATCH /v1/watchers/{id}` | `Watcher` |
+| `pause(watcher_id)` / `resume(watcher_id)` | `PATCH /v1/watchers/{id}` | `Watcher` |
+| `delete(watcher_id)` | `DELETE /v1/watchers/{id}` | `None` |
+| `run(watcher_id)` | `POST /v1/watchers/{id}/run` | `WatcherRunResult` |
+
+`kind` is `rss` or `url_diff`; left out, staqly reads the URL once and picks it. `collection` is
+an ID or name, or a list: each new entry is added to every one.
+
+```python
+staqly.watchers.create("Go releases", url="https://github.com/golang/go/releases.atom", collection="Releases", every="1h")
+staqly.watchers.create("Go news", url="https://go.dev/blog/feed.atom", collection=["Releases", "Reading"])
+staqly.watchers.run("wat_okkhldgfahmrv25yx45d")
+```
+
+### Notification channels
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `list()` | `GET /v1/notification-channels` | `list[NotificationChannel]` |
+| `get(channel_id)` | `GET /v1/notification-channels/{id}` | `NotificationChannel` |
+| `create(name, type=, config=, events=, collection_ids=, digest_window_seconds=, enabled=)` | `POST /v1/notification-channels` | `NotificationChannel` |
+| `update(channel_id, name=, config=, events=, collection_ids=, digest_window_seconds=, enabled=)` | `PATCH /v1/notification-channels/{id}` | `NotificationChannel` |
+| `enable(channel_id)` / `disable(channel_id)` | `PATCH /v1/notification-channels/{id}` | `NotificationChannel` |
+| `delete(channel_id)` | `DELETE /v1/notification-channels/{id}` | `None` |
+| `test(channel_id)` | `POST /v1/notification-channels/{id}/test` | `NotificationTestResult` |
+| `deliveries(channel_id, limit=)` | `GET /v1/notification-channels/{id}/deliveries` | `list[NotificationDelivery]` |
+
+```python
+ch = staqly.notification_channels.create("Phone", type="ntfy", config={"topic": "staqly-reviews-4kz7"})
+staqly.notification_channels.test("nch_ce3g6qaygtlxifq4bdmv")
+```
+
+### Decision links
+
+One-tap links from notification messages. They are public (the token is the credential) and
+single use.
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `decision_links.preview(token)` | `GET /v1/decide/{token}` | `str` (HTML; does not decide) |
+| `decision_links.decide(token, feedback=)` | `POST /v1/decide/{token}` | `DecisionResult` (not retried; `feedback` is used by reject only) |
+
+```python
+res = staqly.decision_links.decide("dl_tiptzca7tyr7yzgxiuqh", feedback="Off-brand colors")
+res.status, res.item_id  # ("rejected", "itm_oalirbz67y4m4cqxq5dw")
+```
+
+### Exports
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `events(from_=, to=, type=, type_prefix=, actor_type=, actor_id=, collection_id=, item_id=)` | `GET /v1/events/export` (NDJSON) | iterator of `Event` |
+| `save_events(path, format="ndjson")` plus the filters of `events()` | `GET /v1/events/export` | `Path` |
+| `create_workspace_export()` | `POST /v1/workspace/export` | `WorkspaceExport` |
+| `get_workspace_export(export_id)` | `GET /v1/workspace/exports/{id}` | `WorkspaceExport` |
+| `wait_for_workspace_export(export_id, timeout=600, poll_interval=1)` | `GET /v1/workspace/exports/{id}` (polled) | `WorkspaceExport` |
+| `download_workspace_export(export_id)` | `GET /v1/workspace/exports/{id}/download` | `bytes` |
+| `save_workspace_export(export_id, path)` | `GET /v1/workspace/exports/{id}/download` | `Path` |
+| `export_workspace(path=None, timeout=600, poll_interval=1)` | create, wait, save | `WorkspaceExport` |
+
+```python
+staqly.exports.save_events("events.csv", format="csv", from_="2026-10-01")
+staqly.exports.export_workspace("workspace.zip")  # admin
+staqly.exports.save_workspace_export("exp_zxj2lzvmh32poxxq2kgp", "backup.zip")
+```
+
+### Workspace, plans, billing and API keys
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `workspace.get()` | `GET /v1/workspace` | `Workspace` |
+| `workspace.rename(name)` | `PATCH /v1/workspace` | `Workspace` |
+| `workspace.usage()` | `GET /v1/workspace/usage` | `WorkspaceUsage` |
+| `workspace.set_plan(plan="free")` | `POST /v1/workspace/plan` | `WorkspaceUsage` |
+| `workspace.delete(confirm=)` | `DELETE /v1/workspace` | `None` |
+| `workspace.rotate_recovery_key()` | `POST /v1/recovery-key/rotate` | `RecoveryKey` |
+| `workspaces.create(name=, setup_token=)` | `POST /v1/workspaces` | `WorkspaceCreated` |
+| `plans.list()` | `GET /v1/plans` | `list[Plan]` |
+| `billing.get()` | `GET /v1/billing` | `Billing` |
+| `billing.checkout()` | `POST /v1/billing/checkout` | `BillingURL` |
+| `billing.portal()` | `POST /v1/billing/portal` | `BillingURL` |
+| `api_keys.list()` | `GET /v1/api-keys` | `list[APIKey]` |
+| `api_keys.create(name, scopes=, expires_at=)` | `POST /v1/api-keys` | `APIKey` (with `key`) |
+| `api_keys.rotate(key_id)` | `POST /v1/api-keys/{id}/rotate` | `APIKey` (with `key`) |
+| `api_keys.revoke(key_id)` | `DELETE /v1/api-keys/{id}` | `None` |
+
+```python
+staqly.workspace.rename("Acme agents")  # admin
+staqly.workspace.set_plan("free")  # cloud, admin: also lifts a suspension after the Pro trial
+key = staqly.api_keys.create("n8n", scopes=["items:read", "items:write"], expires_at="2027-01-01")
+key.key  # stk_..., shown once
+staqly.api_keys.revoke("key_r7y65khtqa23kj4btvur")
+
+b = staqly.billing.get()  # Billing(enabled=True, plan="free", subscription_status=None, has_customer=False)
+url = staqly.billing.checkout().url  # https://checkout.stripe.com/c/pay/cs_test_a1b2c3, open it to pay
+staqly.billing.portal().url  # payment method, invoices, cancel (after the first checkout)
+```
+
+`set_plan()` accepts only `"free"`; any other plan raises `PlanLimitError` (402), so upgrade with
+`billing.checkout()`. While a Pro subscription is live, `set_plan()` raises `ConflictError`:
+cancel it in the billing portal first. `billing` methods need `admin` in cloud mode; `checkout()`
+and `portal()` raise `ConflictError` when billing is off, a subscription is already live
+(`checkout()`), or no checkout has happened yet (`portal()`). The plan changes once Stripe
+confirms the payment. `delete()` and
+`rotate_recovery_key()` need a dashboard session: API keys get `PermissionDeniedError`, and
+deleting a local workspace raises `ConflictError`.
+
+### Sessions and device links
+
+These endpoints back the dashboard sign-in. Listing and revoking sessions needs `admin`;
+creating a device link needs a dashboard session or a local caller.
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `sessions.current()` | `GET /v1/session` | `Whoami` (same as `whoami()`, with `csrf_token`) |
+| `sessions.list()` | `GET /v1/sessions` | `list[Session]` |
+| `sessions.revoke(session_id)` | `DELETE /v1/sessions/{id}` | `None` |
+| `sessions.logout()` | `DELETE /v1/session` | `None` |
+| `sessions.recover(recovery_key)` | `POST /v1/sessions/recover` | `SessionCreated` |
+| `device_links.create()` | `POST /v1/device-links` | `DeviceLink` |
+| `device_links.redeem(token)` | `POST /v1/device-links/redeem` | `SessionCreated` |
+
+```python
+for s in staqly.sessions.list():
+    print(s.id, s.user_agent, "(this one)" if s.current else "")
+staqly.sessions.revoke("ses_q2vbm4kz7xw3dn5hjr6c")
+
+link = staqly.device_links.create()  # local mode: no key needed
+print(link.url, link.expires_at, link.reachable)  # single use, valid for 5 minutes
+```
+
+`recover()` and `redeem()` are sent without credentials and store the new session cookie in the
+client's cookie jar. Requests that change data on a session also need the CSRF token, for
+example `Staqly(default_headers={"X-CSRF-Token": created.csrf_token})`. A used or expired device
+link raises `GoneError`.
+
+The inbound chat callbacks (`/v1/integrations/telegram/{channel_id}`,
+`/v1/integrations/slack/interactions`, `/v1/integrations/discord/interactions`), the Stripe
+webhook (`/v1/billing/webhook`) and the `/mcp` endpoint are called by Telegram, Slack, Discord,
+Stripe and MCP clients, so the SDK does not wrap them.
+
+## Next steps
+
+<Cards>
+  <Card title="TypeScript SDK" href="/sdk/typescript">The same client for TypeScript and JavaScript.</Card>
+  <Card title="Webhooks" href="/automation/webhooks">Events, payloads, retries and signatures.</Card>
+  <Card title="Approval gate" href="/cookbook/approval-gate">A complete human-in-the-loop flow.</Card>
+  <Card title="API overview" href="/api">Errors, pagination and idempotency in detail.</Card>
+</Cards>

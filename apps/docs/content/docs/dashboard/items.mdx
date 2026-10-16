@@ -1,0 +1,141 @@
+---
+title: Item details & history
+description: Look at one item in depth, edit it, and see everything that happened to it, including every earlier version.
+---
+
+An **item** is one thing an agent made: an image, video, text, link, JSON document or file.
+Its page shows everything about it in one place. Open it when you need more than the Inbox
+shows: the full metadata, who changed what and when, or an earlier version you want back.
+
+## Open an item
+
+- In a collection, click an item to open it in a side panel.
+- In the Inbox, press <Kbd>o</Kbd> (or <Kbd>Enter</Kbd>) to open the active item's page.
+- Every item also has its own page at `/items/itm_oalirbz67y4m4cqxq5dw`, so you can bookmark or share the link.
+
+The top of the page shows the status, collection, source and creation time, plus the
+actions available right now (approve, reject, custom actions). Below them come the **AI summary** and the
+preview. The latest reviewer feedback is shown under **Details** when there is some. The **...** menu (*More item options*) has
+**Download file** (for uploaded files), **Unarchive** (for archived items) and **Delete item**.
+
+## Edit an item
+
+<Steps>
+<Step>
+
+### Open the Edit tab
+
+Change the title, content, URL, metadata, collection, source or external ref. The URL
+field appears for links, images, videos and files. The Edit tab is there only while the content can change
+(see [Editing after a decision](#editing-after-a-decision)); tags are edited from
+[Details → Properties](#tags).
+
+</Step>
+<Step>
+
+### Save
+
+Saving creates a new version. The previous state is kept under **Versions**, and the change
+appears under **History**.
+
+</Step>
+</Steps>
+
+If someone else changed the item since you opened it, the save fails with a conflict instead
+of silently overwriting their change: *Someone else changed this item*. Click
+**Reload latest** to load their version, then re-apply your edits. See
+[Concurrency](#concurrency).
+
+## Delete or purge an item
+
+**Delete item** asks once:
+
+| Choice | What happens |
+|---|---|
+| **Delete item** | Removes the item from its collection. Its event history is kept. |
+| **Also erase its history** (ticked) | Also **erases its history** (a purge): every event about the item disappears from the activity log, pending webhook deliveries about it are dropped, its file is deleted unless another item uses it, and finished workspace exports expire. Use it to remove personal data. It cannot be undone, and systems that already received the data are not affected. Needs an admin (local mode, a dashboard session or a key with `admin`). |
+
+The toast after a purge says how many events were erased. API:
+`DELETE /v1/items/{id}` and `POST /v1/items/{id}/purge`.
+
+## What each tab shows
+
+| Tab | What you see |
+|---|---|
+| **Details** | **Properties** (ID, collection, tags, decision, run, source, external ref, URL or file, timestamps and version), the **Metadata** (every key of the JSON object), the latest feedback and, once decided, [what happened next](#what-happened-next). |
+| **Edit** | A form for the title, content, URL, metadata, collection, source and external ref. Saving creates a new version. Hidden once the content is locked. |
+| **History** | The event timeline: created, edited, approved, rejected, actions run. Each entry says who did it: you, an API key, an agent or the system. |
+| **Versions** | A snapshot of the item **before each change**, so nothing is ever lost. |
+
+## Concurrency
+
+Every item has a `version` number. Edits made in the dashboard and through the API use an
+optimistic check: if the item changed since you opened it, the save fails with a conflict
+instead of silently overwriting someone else's change. API clients opt in by sending
+`expected_version`.
+
+## Images and videos
+
+Images and videos are served by the API only after authorization, with the stored MIME type,
+`nosniff`, a sandboxing Content-Security-Policy and Range support, so videos can seek.
+
+**External media is click-to-load.** An image or video item that only points to another
+website (its `url`, no upload) shows a placeholder, such as *External image from
+example.com*, with a **Load image** or **Load video** button. Loading it tells that website
+who is looking, so nothing is fetched until you click. List thumbnails never load external
+media.
+
+## AI summary
+
+When the workspace has a model set up for [auto-tags and summaries](/self-hosting/configuration#auto-tags-and-summaries),
+each item gets a one-line summary (up to 120 characters) shortly after it is saved. It is marked **AI summary**
+above the preview and shown under the title in the Inbox. **Regenerate** (or **Summarize with AI** while there
+is none) writes it again; add optional **Extra context** (up to 500 characters, for example *A caption for our
+sneaker shop's Instagram*) to help the model. Regenerating also adds tags if the item has none, and records
+`item.summarized`. Without a model it answers `409 not_configured`.
+
+## API equivalents
+
+| Dashboard | API |
+|---|---|
+| Details | `GET /v1/items/{id}` |
+| Edit | `PATCH /v1/items/{id}` |
+| History | `GET /v1/items/{id}/events` |
+| Versions | `GET /v1/items/{id}/versions` |
+| Available actions | `GET /v1/items/{id}/actions` |
+| AI summary › Regenerate | `POST /v1/items/{id}/summarize` |
+| Delete item | `DELETE /v1/items/{id}` |
+| Delete › Also erase its history | `POST /v1/items/{id}/purge` |
+
+## Next steps
+
+<Cards>
+  <Card title="Concepts" href="/concepts">Statuses, actions and events explained.</Card>
+  <Card title="Activity" href="/dashboard/activity">See what happened across the whole workspace.</Card>
+  <Card title="Media" href="/api/media">Upload and serve images, videos and files.</Card>
+</Cards>
+
+## Editing after a decision
+
+- **Draft, Pending:** title, content and metadata can change.
+- **Rejected, Failed, Expired:** fixing the title or content sends the item back to **Pending** for a new review.
+- **Approved, Processing, Completed, Archived:** the content is locked (the API answers 409), so what was
+  approved stays as it was. Metadata, source and collection can still change. To change the content,
+  regenerate it or add a new item.
+
+The status itself changes only through actions (Approve, Reject, Publish, Archive...), not in the edit form.
+
+## What happened next
+
+Decided items show the webhook deliveries of their events: which webhook was told, whether it answered (and
+with which status code), or that no webhook was notified. `GET /v1/webhook-deliveries?item_id=itm_...` returns
+the same list.
+
+## Tags
+
+Tags are short labels on an item (up to 20, each up to 40 characters), for example a client or a campaign.
+Agents set them when they create an item (`tags` in the API, `create_item` over MCP); you add or remove them
+with the pencil next to **Details → Properties → Tags**, in any status: a label is not reviewed content, so a change
+saves at once without a new version (the event is `item.tags_changed`). The inbox and every
+collection filter by tag (any of the picked tags). `GET /v1/tags` and the MCP tool `list_tags` list the
+workspace's tags, most used first; `GET /v1/items?tag=client-a,urgent` filters.

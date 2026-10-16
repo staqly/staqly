@@ -1,0 +1,17 @@
+# pnpm + Node (from .nvmrc) with the pnpm store cached, then install the
+# workspace slice a job needs (pnpm --filter "<pkg>..." = the package and its
+# workspace dependencies).
+name: Setup pnpm workspace
+description: Install pnpm, Node and the dependencies of the given packages
+inputs:
+  filter:
+    description: pnpm filter, e.g. "@staqly/dashboard..."; empty = whole workspace
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v6
+    - uses: actions/setup-node@v7
+      with: { node-version-file: .nvmrc, cache: pnpm }
+    - shell: bash
+      run: pnpm install --frozen-lockfile ${{ inputs.filter && format('--filter "{0}" --filter staqly', inputs.filter) || '' }}

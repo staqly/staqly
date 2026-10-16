@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest an idea or improvement for staqly
+labels: [feature-request]
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched [existing issues](https://github.com/staqly/staqly/issues) and this is not a duplicate
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the workflow and where staqly gets in the way. E.g. "My agent generates ... and I always have to ..."
+    validations: { required: true }
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to happen?
+      description: The behaviour you'd like — API, MCP tool, dashboard, CLI, integration...
+    validations: { required: true }
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Workarounds today (rules, webhooks, n8n, scripts...) and why they fall short.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options: [Dashboard, REST API, MCP, Webhooks, Rules, Watchers, Notifications, CLI, SDKs, Integrations, Self-hosting, Cloud / plans, Docs]
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Mockups, examples, links.

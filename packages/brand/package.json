@@ -1,0 +1,38 @@
+{
+  "name": "@staqly/brand",
+  "version": "0.1.0",
+  "private": true,
+  "description": "staqly brand pieces shared by the dashboard, docs and landing page: logo, hero demo, brand CSS (source only, transpiled by each Next app)",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    "./logo": "./src/logo.tsx",
+    "./hero-demo": "./src/hero-demo.tsx",
+    "./tokens.css": "./tokens.css",
+    "./site.css": "./site.css"
+  },
+  "scripts": {
+    "lint": "oxlint --deny-warnings",
+    "typecheck": "tsc --noEmit",
+    "format": "oxlint --fix --quiet; oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "cn": "^0.4.0"
+  },
+  "peerDependencies": {
+    "lucide-react": ">=1.50.0",
+    "react": "^19.3.0"
+  },
+  "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/react": "^19.3.0",
+    "lucide-react": "^1.56.0",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0",
+    "react": "19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

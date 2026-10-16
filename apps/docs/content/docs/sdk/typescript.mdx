@@ -1,0 +1,557 @@
+---
+title: TypeScript SDK
+description: Send AI output to staqly for review and act on the decision from TypeScript or JavaScript code.
+---
+
+`@staqly/sdk` is the typed client for staqly in TypeScript and JavaScript. Use it when your
+agent or app is written in TS/JS and should store its output for review, wait for a human
+decision, or react to webhooks. For shell scripts and CI pick the [CLI](/cli), for AI agents
+that speak MCP use the [MCP server](/mcp), and from other languages call the [REST API](/api)
+or use the [Python SDK](/sdk/python).
+
+The SDK has **no runtime dependencies** (only `fetch` and Web Crypto) and runs on Node 20.19+,
+Bun, Deno, browsers and edge runtimes. Its types are generated from the API's OpenAPI contract.
+
+## Get started
+
+<Steps>
+<Step>
+### Install the package
+
+```bash
+npm install @staqly/sdk
+```
+
+The package is ESM-only. CommonJS code can still `require('@staqly/sdk')` on Node 20.19+ or
+22.12+.
+
+</Step>
+<Step>
+### Start staqly
+
+Run a server on your computer with [`staqly serve`](/cli#run-the-server) (or Docker). In local
+mode the SDK needs no key.
+
+</Step>
+<Step>
+### Create an item and wait for the decision
+
+```ts title="review.ts"
+import { Staqly } from '@staqly/sdk'
+
+const staqly = new Staqly() // http://localhost:3333, no key
+
+await staqly.collections.create({ name: 'Blog drafts' })
+
+const item = await staqly.items.create('Blog drafts', {
+  title: 'Why local-first?',
+  content: '# Draft\nFirst paragraph.',
+  metadata: { model: 'gpt-x', score: 0.82 },
+})
+
+const decided = await staqly.items.waitForDecision(item.id) // blocks until a human decides
+
+if (decided.status === 'approved') {
+  console.log('Approved:', decided.content) // includes the reviewer's edits
+} else {
+  console.log('Not approved:', decided.status, decided.feedback)
+}
+```
+
+</Step>
+<Step>
+### Approve it
+
+Open the dashboard at `http://localhost:8080` and approve or reject the item. The script prints
+the result and exits.
+
+</Step>
+</Steps>
+
+## Configure the client
+
+```ts
+import { Staqly } from '@staqly/sdk'
+
+const staqly = new Staqly({
+  baseUrl: 'https://staqly.example.com', // default: $STAQLY_API_URL, then http://localhost:3333
+  apiKey: process.env.STAQLY_API_KEY, // default: $STAQLY_API_KEY; null = ignore the env var
+  timeout: 60_000, // per-request timeout in ms
+  maxRetries: 2, // retries for 408/429/5xx/network errors
+  fetch: myFetch, // custom fetch (tests, proxies, tracing)
+  defaultHeaders: { 'X-Team': 'growth' },
+  userAgent: 'my-agent/1.0', // appended to "staqly-sdk-ts/<version>"
+})
+```
+
+You only need `apiKey` in [cloud mode](/local-vs-cloud) (keys look like `stk_...`). From a
+container on the staqly Docker network, use `baseUrl: 'http://api:3333'`.
+
+Every method takes an optional last argument with per-request overrides:
+
+```ts
+await staqly.items.list({ status: 'pending' }, { timeout: 5_000, maxRetries: 0, signal })
+await staqly.items.create('Posts', { title: 'x' }, { idempotencyKey: `job-${jobId}` })
+```
+
+Request bodies and query parameters use the API's `snake_case` names (`expires_in`,
+`metadata_patch`), exactly as in the REST docs. SDK options such as `timeout` and
+`idempotencyKey` are `camelCase`.
+
+`staqly.health()` checks liveness, `staqly.ready()` checks readiness, and `staqly.whoami()`
+returns the server mode, the workspace and the calling principal with its scopes. The
+[reference](#reference) lists every method.
+
+## Work with collections and items
+
+```ts
+const col = await staqly.collections.create({ name: 'Instagram', description: 'Avatar candidates' })
+await staqly.collections.get('Instagram') // ID or exact name
+
+const item = await staqly.items.create('Instagram', {
+  title: 'Caption idea',
+  content: 'Golden hour', // a string or any JSON value
+  metadata: { score: 0.91 },
+  source: 'caption-agent',
+  external_ref: 'job-123',
+  expires_in: '24h', // undecided items become "expired"
+  editable: ['content', 'metadata.caption'], // what reviewers may change before approving
+})
+
+// upload a file and create the item in one request
+import { fileFromPath } from '@staqly/sdk/node' // Node, Bun, Deno only
+
+await staqly.items.upload('Instagram', await fileFromPath('avatar.png'), { title: 'New avatar' })
+
+// decisions (need the items:review scope)
+await staqly.items.approve(item.id, { feedback: 'Ship it', edits: { title: 'Better title' } })
+await staqly.items.reject(item.id, { feedback: 'Too dark, brighten it' })
+await staqly.items.action(item.id, 'publish', { payload: { channel: 'ig' } }) // custom action
+
+// after acting on an approved item, record the outcome
+await staqly.items.reportResult(item.id, { status: 'completed', result: { post_url: 'https://instagram.com/p/C9xYz' } })
+await staqly.items.reject(item.id, { feedback: 'Too dark', follow_up: 'regenerate' }) // reject and ask for a new version
+await staqly.items.update(item.id, { tags: ['client-a'] }) // labels, any status
+await staqly.items.unarchive(item.id) // back to review, its run or its decision
+
+// list, search and page through everything
+await staqly.items.search('golden hour', { status: 'approved' })
+
+for await (const it of staqly.items.iterate({ status: 'pending' })) {
+  console.log(it.title)
+}
+```
+
+The client also covers `media`, `events`, `webhooks`, `watchers`,
+`notificationChannels`, `exports`, `workspace`, `plans`, `apiKeys`, `billing`, `sessions`, `deviceLinks`
+and `decisionLinks`; see the [reference](#reference). `staqly.http.request({ method, path, body })`
+sends any other request with the client's auth, retries and error mapping.
+
+## Wait for a human decision
+
+```ts
+import { WaitTimeoutError } from '@staqly/sdk'
+
+try {
+  const item = await staqly.items.waitForDecision(id, { timeout: 30 * 60_000 }) // ms, default 10 min
+
+  switch (item.status) {
+    case 'approved':
+      break
+    case 'rejected':
+      console.log(item.feedback) // why it was rejected
+      break
+    case 'expired':
+      break // nobody answered within expires_in
+  }
+} catch (e) {
+  if (e instanceof WaitTimeoutError) {
+    console.log('still pending', e.item)
+  }
+}
+```
+
+`waitForDecision` uses the server's long-poll endpoint (`GET /v1/items/{id}/wait`, up to 60 s per
+round) and repeats it until the item leaves `pending`, so it does not busy-poll. Pass `signal` to
+cancel or `onPoll` to log progress. `items.wait(id, { timeout })` runs a single round (seconds).
+
+For long-running services, push beats waiting: subscribe a [webhook](/automation/webhooks) to
+`item.approved`, `item.rejected` and `item.expired`.
+
+## Gate an action on approval
+
+`requestApproval` creates an item, waits for the decision and returns a `Decision`. It never
+throws on a rejection:
+
+```ts
+const d = await staqly.requestApproval('Outbox', {
+  title: 'Send the October newsletter?',
+  content: draft,
+  expires_in: '4h',
+  editable: ['content'],
+})
+
+if (d.approved) {
+  await send(d.item.content) // the reviewer's edited version
+} else if (d.expired) {
+  console.log('no answer in time')
+} else {
+  console.log('rejected:', d.feedback)
+}
+```
+
+`requiresApproval` wraps a function so that every call asks a human first. The function runs only
+after approval. The item is then reported `completed` (with the return value as `result`) or
+`failed` if the function throws. A rejection or expiry throws `RejectedError`:
+
+```ts
+const publish = staqly.requiresApproval(postToInstagram, {
+  collection: 'Instagram',
+  title: (post) => `Publish "${post.caption}"?`,
+  content: (post) => post, // default: the arguments as JSON
+  metadata: (post) => ({ account: post.account }),
+  expires_in: '24h',
+})
+
+await publish({ caption: 'Hello', account: '@acme' }) // waits for a human, then posts
+```
+
+## Verify webhooks
+
+Every webhook delivery is signed with the webhook's secret (`whsec_...`). `verifyWebhook` checks the
+`X-Staqly-Signature` and `X-Staqly-Timestamp` headers, rejects timestamps more than 300 s away,
+and returns the parsed event. It throws `WebhookVerificationError` otherwise.
+
+```ts title="app/api/staqly/route.ts"
+import { verifyWebhook, WebhookVerificationError, type ItemEventData } from '@staqly/sdk/webhooks'
+
+export async function POST(req: Request) {
+  const body = await req.text() // the raw body, exactly as received
+
+  try {
+    const event = await verifyWebhook<ItemEventData>(process.env.STAQLY_WEBHOOK_SECRET!, body, req.headers)
+
+    if (event.type === 'item.approved') {
+      await publish(event.data.item)
+    }
+
+    return new Response('ok')
+  } catch (e) {
+    if (e instanceof WebhookVerificationError) {
+      return new Response('invalid signature', { status: 400 })
+    }
+
+    throw e
+  }
+}
+```
+
+- Always pass the **raw** body. JSON that was parsed and serialized again will not match.
+- `headers` can be a `Headers` object or a plain object (Express `req.headers` works with
+  `express.raw({ type: 'application/json' })`).
+- A fourth argument `{ tolerance }` changes the time window in seconds (`0` disables it).
+- Deliveries are at-least-once: de-duplicate on `event.id` (also sent as `X-Staqly-Event-Id`).
+- `isValidWebhook()` returns a boolean instead of throwing; `computeWebhookSignature()` helps you
+  test your handler.
+
+`@staqly/sdk/webhooks` is a small standalone entry point, handy for edge functions.
+
+## Handle errors
+
+Every error extends `StaqlyError`. HTTP errors extend `APIError` and carry `status`, `code`,
+`message`, `fields`, `details`, `requestId`, `headers` and `body`.
+
+| Class | When |
+|---|---|
+| `BadRequestError` | 400 malformed request |
+| `AuthenticationError` | 401 missing, invalid or revoked key |
+| `PlanLimitError` | 402 `plan_limit_exceeded`, with `limit`, `max`, `used`, `plan` |
+| `PermissionDeniedError` | 403 missing scope; `isNotLocal` when a local server refused a non-local caller |
+| `NotFoundError` | 404 |
+| `ConflictError` | 409, e.g. the item was already decided or the version changed |
+| `GoneError` | 410 |
+| `PayloadTooLargeError` / `UnsupportedMediaTypeError` | 413 / 415 uploads |
+| `ValidationError` | 422, with `fields` (code `not_editable` for edits outside `editable`) |
+| `RateLimitError` | 429, with `retryAfter` (seconds) |
+| `InternalServerError` | 5xx |
+| `APIConnectionError` / `TimeoutError` | no response / request timed out |
+| `APIUserAbortError` | your `AbortSignal` fired |
+| `WaitTimeoutError` | `waitForDecision` or `waitForWorkspaceExport` gave up (`itemId`, `waited` in seconds, `item`) |
+| `ExportFailedError` | a workspace export ended `failed` or `expired` (`job`) |
+| `RejectedError` | a `requiresApproval` call was rejected or expired |
+| `WebhookVerificationError` | bad signature or timestamp |
+
+```ts
+import { ConflictError } from '@staqly/sdk'
+
+try {
+  await staqly.items.approve(id)
+} catch (e) {
+  if (e instanceof ConflictError) {
+    // someone else decided first
+  } else {
+    throw e
+  }
+}
+```
+
+## Retries, timeouts and idempotency
+
+- Requests that fail with 408, 429, 500, 502, 503, 504, a network error or a timeout are retried
+  up to `maxRetries` times (default 2) with exponential backoff and jitter. A `Retry-After` of
+  60 s or less is honored; a longer one throws `RateLimitError` right away.
+- Every `POST`, `PATCH` or `DELETE` with a JSON body gets an automatic `Idempotency-Key`, reused
+  across its retries, so a retry never applies the request twice. Pass `{ idempotencyKey }` to
+  choose the key yourself, for example to de-duplicate across process restarts.
+- Uploads (`items.upload`, `media.upload`) are retried only on 429.
+- `timeout` (default 60 s) applies to each attempt; `items.wait` raises it automatically to
+  outlast the server's long poll.
+
+## Types
+
+All models come from the OpenAPI contract and are exported: `Item`, `Collection`, `Event`,
+`Webhook`, `Delivery`, `Watcher`, `Workspace`, `APIKey`, `Plan` and more. Webhook
+payloads are typed by `WebhookEvent<D>` and `ItemEventData`.
+
+## Reference
+
+Every method takes `RequestOptions` (`timeout`, `maxRetries`, `idempotencyKey`, `headers`,
+`signal`) as its last argument. Methods that return a list resolve to an array; methods named
+`list` on paginated endpoints (`items`, `events`) resolve to a page `{ data, next_cursor }`.
+
+### Client
+
+| Method | Description |
+|---|---|
+| `health()` | Liveness and database check (`GET /health`, no auth) |
+| `live()` | Liveness probe that does not touch the database (`GET /livez`, no auth) |
+| `ready()` | Readiness of the database, migrations and workers (`GET /readyz`); a not-ready server throws `InternalServerError` (503) |
+| `setup()` | Server mode, whether the workspace exists, whether signup is open (`GET /v1/setup`, no auth) |
+| `whoami()` | Server mode, workspace and the calling principal with its scopes (`GET /v1/session`) |
+| `openapi()` | The server's OpenAPI document as YAML text |
+| `metrics({ token })` | Prometheus metrics as text; allowed from the server's machine or with the operator's `METRICS_TOKEN` (never the API key) |
+| `requestApproval(collection, input, wait)` | Create an item and wait for the decision; resolves with a `Decision` |
+| `requiresApproval(fn, options)` | Wrap a function so every call waits for approval and reports the result |
+
+```ts
+const { mode, initialized, signup_open } = await staqly.setup()
+const yaml = await staqly.openapi()
+const text = await staqly.metrics({ token: process.env.METRICS_TOKEN })
+```
+
+### `collections`
+
+| Method | Description |
+|---|---|
+| `list({ include_archived })` | List collections |
+| `get(idOrName)` | Get a collection by ID or exact name |
+| `create(input)` | Create a collection (`name` is required) |
+| `update(id, input)` | Rename, describe, recolour, archive or replace the custom actions. `default_view` is still accepted for compatibility, but the dashboard always shows collections as a table |
+| `setActions(id, actions)` | Replace the custom actions (approve and reject are built in) |
+| `archive(id)` / `unarchive(id)` | Archive or restore a collection |
+| `delete(id, confirmName)` | Delete a collection and its items; `confirmName` must equal its name |
+| `listItems(idOrName, params)` | One page of the collection's items (`GET /v1/collections/{id}/items`), same filters as `items.list` |
+| `resolveId(idOrName)` | Return the collection ID (no request when given an ID) |
+
+```ts
+const page = await staqly.collections.listItems('col_oalirbz67y4m4cqxq5dw', { status: 'pending', limit: 20 })
+```
+
+### `items`
+
+| Method | Description |
+|---|---|
+| `list(params)` | One page of items across collections; filter by `collection`, `status`, `type`, `q`, `source`, `external_ref`, dates, `sort` |
+| `search(q, params)` | Full-text search, best match first |
+| `iterate(params)` | Async iterator over every matching item |
+| `get(id)` | Get an item |
+| `create(collection, input)` | Create an item in a collection (ID or name) |
+| `upload(collection, file, input)` | Upload a file and create the item in one request |
+| `update(id, input)` | Update fields, move the item or change its status (not to approved or rejected) |
+| `delete(id)` | Delete the item; its history is kept |
+| `purge(id)` | Delete the item and its history (`admin`) |
+| `approve(id, input)` / `reject(id, input)` | Decide a pending item (`items:review`), optionally with `feedback` and `edits` |
+| `action(id, name, input)` | Run approve, reject or a custom action |
+| `listActions(id)` | Actions the caller may run on the item now |
+| `bulkAction(ids, action, input)` | Run one action on up to 100 items; each succeeds or fails on its own |
+| `history(id, params)` | The item's activity, newest first |
+| `versions(id)` | Snapshots of the item before each change |
+| `wait(id, { timeout })` | One long-poll round (seconds, max 60) |
+| `waitForDecision(id, options)` | Wait until the item leaves `pending` |
+| `reportResult(id, input)` | Report `completed` (with `result`) or `failed` (with `error`) after acting on an approved item |
+
+### `media`
+
+| Method | Description |
+|---|---|
+| `upload(file, { filename, contentType })` | Upload a file; the type is detected from the content |
+| `download(id)` | Download a file as bytes |
+| `downloadResponse(id)` | Download a file as a streaming `Response` |
+| `url(id)` | The absolute download URL (no request) |
+| `delete(id)` | Delete a file; items that reference it lose their media |
+
+### `events`
+
+| Method | Description |
+|---|---|
+| `list(params)` | One page of the activity log, newest first; filter by `item_id`, `collection_id`, `type`, `type_prefix`, `actor_type`, `actor_id`, `from`, `to` (plus `limit`, `cursor`) |
+| `iterate(params)` | Async iterator over every matching event |
+
+`type_prefix` is a literal prefix such as `item.` or `webhook.`. `actor_id` is one actor, for example an API key ID (`key_r7y65khtqa23kj4btvur`) or a session ID. `from` and `to` take RFC 3339 or `YYYY-MM-DD`; `from` is inclusive, `to` exclusive.
+
+```ts
+const page = await staqly.events.list({
+  type_prefix: 'item.',
+  actor_id: 'key_r7y65khtqa23kj4btvur',
+  from: '2026-10-01',
+  to: '2026-10-15',
+})
+```
+
+### `webhooks`
+
+| Method | Description |
+|---|---|
+| `list()` | List webhooks |
+| `get(id)` | Get a webhook |
+| `create(input)` | Create a webhook; the response holds the signing secret |
+| `update(id, input)` | Update the URL, events, collections or status |
+| `rotateSecret(id)` | Issue a new signing secret |
+| `delete(id)` | Delete a webhook |
+| `test(id)` | Queue a `webhook.test` delivery |
+| `deliveries.list({ webhook_id, status, limit })` | Delivery history |
+| `deliveries.retry(id)` | Queue a finished delivery again |
+
+### `watchers`
+
+| Method | Description |
+|---|---|
+| `list()` | List watchers |
+| `get(id)` | Get a watcher |
+| `create(input)` | Create a watcher; `kind` (`rss` or `url_diff`) is detected from the URL when left out, `collections` adds each new entry to several collections |
+| `update(id, input)` | Update a watcher |
+| `pause(id)` / `resume(id)` | Stop or restart checks |
+| `run(id)` | Check the source now |
+| `delete(id)` | Delete a watcher |
+
+### `notificationChannels`
+
+| Method | Description |
+|---|---|
+| `list()` | List notification channels |
+| `get(id)` | Get a channel |
+| `create(input)` | Create a channel (`name` and `type` are required) |
+| `update(id, input)` | Update a channel |
+| `enable(id)` / `disable(id)` | Turn a channel on or off |
+| `test(id)` | Send a test message now; problems come back as `{ ok, error }` |
+| `deliveries(id, { limit })` | Recent notifications for a channel |
+| `delete(id)` | Delete a channel |
+
+### `decisionLinks`
+
+| Method | Description |
+|---|---|
+| `decide(token, { feedback })` | Perform a one-tap decision link's action (approve or reject; `feedback` is used by reject only). The token is the credential, so no API key is sent; links are single use and the call is not retried |
+
+### `exports`
+
+| Method | Description |
+|---|---|
+| `events(params)` | Async iterator over the activity log export (NDJSON), oldest first; filters `from`, `to`, `type`, `type_prefix`, `actor_type`, `actor_id`, `collection_id`, `item_id` |
+| `eventsResponse({ format })` | The raw export `Response`; `format` is `ndjson` (default) or `csv`, with the same filters as `events` |
+| `createWorkspaceExport()` | Start a full workspace export (`admin`) |
+| `getWorkspaceExport(id)` | Export job status |
+| `waitForWorkspaceExport(id, { timeout, pollInterval, signal })` | Poll until the job is ready (default timeout 10 minutes, poll every 1000 ms); throws `ExportFailedError` (with `job`) if it fails or expires, `WaitTimeoutError` on timeout |
+| `downloadWorkspaceExport(id)` | Download a finished export as bytes |
+| `workspaceExportResponse(id)` | Download a finished export as a streaming `Response` |
+| `exportWorkspace(options)` | Create, wait and return the finished job (same options as `waitForWorkspaceExport`) |
+
+To write an export to disk without holding it in memory, use `saveResponse` from `@staqly/sdk/node`:
+
+```ts
+import { saveResponse } from '@staqly/sdk/node'
+
+const job = await staqly.exports.exportWorkspace()
+await saveResponse(await staqly.exports.workspaceExportResponse(job.id), 'workspace.zip')
+await saveResponse(await staqly.exports.eventsResponse({ format: 'csv', from: '2026-10-01' }), 'events.csv')
+```
+
+### `workspace`, `workspaces` and `plans`
+
+| Method | Description |
+|---|---|
+| `workspace.get()` | Get the workspace |
+| `workspace.rename(name)` | Rename the workspace (`admin`) |
+| `workspace.usage()` | Current plan, billing period and usage |
+| `workspace.setPlan('free')` | Switch to the Free plan (`admin`, cloud). Other plans need a payment and throw `PlanLimitError` (402) |
+| `workspace.rotateRecoveryKey()` | Issue a new recovery key, shown once, and sign out every other session (dashboard session only) |
+| `workspace.delete(confirmName)` | Permanently delete the workspace and all its data (cloud, dashboard session only); `confirmName` must equal the workspace name |
+| `workspaces.create({ name, setup_token })` | Sign up for a cloud workspace; returns the first API key and the recovery key (no auth) |
+| `plans.list()` | Cloud plans and their limits (`-1` means unlimited) |
+
+### `billing`
+
+Cloud workspaces on an instance with Stripe configured. All methods need `admin`.
+
+| Method | Description |
+|---|---|
+| `get()` | Whether billing is enabled, the plan, Stripe's subscription status, the end of the trial or paid period, and whether the workspace is suspended |
+| `checkout()` | Start a Stripe Checkout for Pro; returns `{ url }` to open in a browser. The plan changes when Stripe confirms the payment. `ConflictError` (409) when billing is off or a subscription is already live |
+| `portal()` | Returns `{ url }` of the Stripe customer portal (payment method, invoices, cancellation). `ConflictError` (409) before the first checkout |
+
+```ts
+const billing = await staqly.billing.get()
+
+if (billing.enabled && billing.plan !== 'pro') {
+  const { url } = await staqly.billing.checkout() // e.g. https://checkout.stripe.com/c/pay/cs_test_a1b2c3
+  console.log('Pay here:', url)
+}
+```
+
+### `apiKeys`
+
+| Method | Description |
+|---|---|
+| `list()` | List API keys (`admin`) |
+| `create({ name, scopes, expires_at })` | Create a scoped key; `key` is returned once |
+| `rotate(id)` | Revoke a key and issue a replacement with the same name and scopes |
+| `revoke(id)` | Revoke a key |
+
+### `sessions` and `deviceLinks`
+
+Browser sessions are cookies. `sessions.recover` and `deviceLinks.redeem` set one on the
+response, which only a cookie-aware `fetch` keeps (a browser with credentials, or a custom
+`fetch` with a cookie jar). Methods marked "dashboard session" answer 403 to API keys.
+
+| Method | Description |
+|---|---|
+| `sessions.current()` | Current principal, workspace and CSRF token (same request as `whoami()`) |
+| `sessions.list()` | Active browser sessions (`admin`); `current` marks the caller's own |
+| `sessions.revoke(id)` | Sign out a session (`admin`) |
+| `sessions.logout()` | Revoke the session the request carries |
+| `sessions.recover(recoveryKey)` | Exchange the recovery key for a new session and sign out every other one (no auth) |
+| `deviceLinks.create()` | Create a one-time sign-in link, valid for 5 minutes (dashboard session or local mode) |
+| `deviceLinks.redeem(token)` | Exchange the token from a link's `#` fragment for a session (no auth) |
+
+```ts
+for (const s of await staqly.sessions.list()) {
+  if (!s.current) {
+    await staqly.sessions.revoke(s.id) // e.g. ses_q2vbm4kz7xw3dn5hjr6c
+  }
+}
+
+await staqly.sessions.recover('staqly-recovery-K7QX2-MB4ZD-W9PLT-R3HVN-6YCJE-A5FUG-T2KWS-8NDQB')
+```
+
+The chat integration callbacks (Telegram, Slack, Discord), the Stripe webhook
+(`POST /v1/billing/webhook`), the MCP endpoint and the HTML confirmation page of decision links
+(`GET /v1/decide/{token}`) are called by those services, MCP clients and browsers, not by your code, so the SDK does not wrap them.
+
+## Next steps
+
+<Cards>
+  <Card title="Python SDK" href="/sdk/python">The same client for Python, sync and async.</Card>
+  <Card title="Webhooks" href="/automation/webhooks">Events, payloads, retries and signatures.</Card>
+  <Card title="Approval gate" href="/cookbook/approval-gate">A complete human-in-the-loop flow.</Card>
+  <Card title="API overview" href="/api">Errors, pagination and idempotency in detail.</Card>
+</Cards>

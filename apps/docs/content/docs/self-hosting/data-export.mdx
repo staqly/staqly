@@ -1,0 +1,144 @@
+---
+title: Data export & privacy
+description: Get your data out of staqly, decide how long it keeps old data, and permanently remove items or workspaces.
+---
+
+Use this page when you need a copy of your data in a portable format (for a spreadsheet, an
+audit or a GDPR request), want staqly to clean up old data on its own, or must erase something
+for good. All of it works the same with the binary and with Docker. For a restorable copy of
+the whole installation, use [Backup & restore](/self-hosting/backup-and-restore) instead.
+
+## Export the activity log
+
+Download the activity log as NDJSON or CSV in one streamed request:
+
+```bash
+curl -s "http://localhost:3333/v1/events/export?format=csv&type_prefix=item.&from=2026-01-01" -o events.csv
+```
+
+All parameters:
+
+```text
+GET /v1/events/export?format=ndjson|csv&from=&to=&type=&type_prefix=&actor_type=&actor_id=&collection_id=&item_id=
+```
+
+- Scope `items:read` (dashboard sessions work too). Events come **oldest first** and the
+  response is streamed, so a log of any size exports without paging.
+- `from` is inclusive, `to` exclusive (RFC 3339 or `YYYY-MM-DD`). `type` is an exact match;
+  `type_prefix` a literal prefix such as `item.`.
+- **NDJSON**: one event per line, the same shape as `GET /v1/events`.
+- **CSV** columns: `created_at,id,type,actor_type,actor_id,actor_name,collection_id,item_id,data`
+  (`data` is the event's JSON). RFC 4180 quoting with CRLF line endings; cells starting with
+  `=`, `+`, `-`, `@`, tab or CR get a leading `'` so spreadsheets don't run them as formulas.
+
+## Export the whole workspace
+
+For data portability (GDPR) — a ZIP of everything in the workspace:
+
+<Steps>
+<Step>
+
+### Start an export
+
+`POST /v1/workspace/export` (scope `admin`; dashboard sessions and local mode have it) →
+`202` with a job `{"id":"exp_zxj2lzvmh32poxxq2kgp","status":"pending","created_at":"2026-10-13T09:12:44.512031Z"}`. Only one export per workspace can be
+pending or running; a second request gets `409` with `details.export_id`.
+
+</Step>
+<Step>
+
+### Wait until it is ready
+
+`GET /v1/workspace/exports/{id}` → `pending`, `running`, `ready`, `failed` or `expired`. When
+`ready` it includes `download_url`.
+
+</Step>
+<Step>
+
+### Download the ZIP
+
+`GET /v1/workspace/exports/{id}/download` → the ZIP. Archives are deleted **24 hours** after
+they finish; afterwards the download returns `410`.
+
+</Step>
+</Steps>
+
+| File | Content |
+|---|---|
+| `workspace.json` | Workspace, export format version, export time, record counts |
+| `collections.ndjson` | All collections, including archived ones |
+| `items.ndjson` | All items, each with `versions` (full edit history) and `media_file` (path in the archive) |
+| `events.ndjson` | The activity log, oldest first |
+| `media.ndjson` | Every upload: id, type, size, SHA-256 and `file` |
+| `media/` | The uploaded files under their original names |
+| `webhooks.json` | Webhook endpoints, signing secrets replaced by `[redacted]` |
+| `watchers.json` | Watchers |
+| `README.txt` | A description of the files |
+
+API keys, sessions and the recovery key are never exported. The archive is built from live data
+page by page, not as one snapshot — for a point-in-time copy take a
+[backup](/self-hosting/backup-and-restore). `workspace.export_requested` and
+`workspace.exported` events are recorded.
+
+## Retention
+
+To have staqly delete old data automatically, set these [environment
+variables](/self-hosting/configuration#how-to-change-a-setting). A daily worker (first run one minute after start) deletes old data:
+
+| Variable | Default | Deletes |
+|---|---|---|
+| `RETENTION_DELIVERIES_DAYS` | `30` | Webhook deliveries that succeeded or failed more than N days ago. Pending deliveries are never deleted. `0` keeps them forever |
+| `RETENTION_ARCHIVED_ITEMS_DAYS` | `0` (never) | Items with status `archived` unchanged for N days, with their versions; their events stay. A `retention.items_pruned` event lists the IDs (per batch of up to 1,000) |
+| `RETENTION_AGENTS_DAYS` | `30` | Agents and API connections in Integrations not seen for N days (their events stay). `0` keeps them forever |
+| `RETENTION_NOTIFICATIONS_DAYS` | `30` | Notification outbox rows that were `sent`, `skipped` or `failed` more than N days ago, plus pending rows of channels disabled for that long. `0` keeps them forever |
+| `RETENTION_EVENTS_DAYS` | `0` (forever) | Events older than N days. A `retention.events_pruned` event per workspace records the count |
+
+- Events can't be changed (a trigger blocks `UPDATE`); retention only deletes whole events. An
+  event with a still-pending delivery is kept until it finishes, so webhooks stay at-least-once.
+- Retention removes item records, not their media — delete media with `DELETE /v1/media/{id}`
+  or purge the item.
+
+## Purge an item
+
+`DELETE /v1/items/{id}` removes the item, but its events — which hold snapshots of it — stay.
+`POST /v1/items/{id}/purge` (scope `admin`) removes the history too:
+
+- the item and its versions;
+- every event about it and their webhook deliveries, **even pending ones**;
+- its media file, unless another item uses it;
+- cached idempotent responses containing it; finished workspace exports are expired.
+
+```json
+{ "item_id": "itm_oalirbz67y4m4cqxq5dw", "events_deleted": 2, "media_deleted": false }
+```
+
+A single `item.purged` event with only IDs and counts is recorded.
+
+<Callout type="warn" title="Trade-off">
+The activity log loses that item's history. Data other systems already received — webhook
+receivers, earlier downloads, older backups — is out of staqly's reach.
+</Callout>
+
+## Delete a workspace (cloud)
+
+`DELETE /v1/workspace` with `{"confirm": "<exact workspace name>"}` permanently deletes the
+workspace and everything in it — collections, items, media files, events, webhooks,
+watchers, notification channels, API keys, sessions and exports — and signs every session out.
+
+- Only a **signed-in dashboard session** can do it. API keys get `403`, even with `admin`, so a
+  leaked automation key can't destroy a workspace.
+- A wrong or missing `confirm` returns `422`. Other workspaces are unaffected. Earlier database
+  backups still contain the data.
+- With [billing](/self-hosting/billing) on, a live Stripe subscription is canceled right away.
+
+**Local mode** returns `409`: the installation has exactly one workspace. To remove all data,
+stop staqly and delete its data: the data directory with the binary (`~/.local/share/staqly`
+or your `--data`), or the data volume with Docker (`docker rm -f staqly && docker volume rm staqly-data`).
+
+## Next steps
+
+<Cards>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">A restorable copy of everything.</Card>
+  <Card title="Events" href="/api/events">What the activity log records.</Card>
+  <Card title="Security model" href="/self-hosting/security">How secrets and exports are protected.</Card>
+</Cards>

@@ -1,0 +1,78 @@
+import { cn } from 'cn'
+import type { ReactNode } from 'react'
+
+/**
+ * Which artwork to load: `theme` swaps the light and dark colourways with the `dark` variant (the dashboard),
+ * `dark` loads only the colourway for dark backgrounds (the dark-only docs and landing page).
+ */
+export type LogoColorway = 'theme' | 'dark'
+
+type MarkProps = {
+  className?: string
+  /** Path prefix of the app's public/ files (the docs' base path); the app serves /brand/staqly-mark-*.svg. */
+  basePath?: string
+  colorway?: LogoColorway
+}
+
+/**
+ * staqly mark: the isometric "S" folded from three stacked layers (assets/brand). The light colourway deepens
+ * the lime top so it holds up on white. <img> keeps each copy's gradients self-contained (inline SVG gradient
+ * ids clash between copies).
+ */
+export function LogoMark({ className, basePath = '', colorway = 'theme' }: MarkProps) {
+  const themed = colorway === 'theme'
+
+  return (
+    <span data-logo className={cn('relative inline-block size-7 shrink-0', className)} aria-hidden>
+      {themed && (
+        <img
+          src={`${basePath}/brand/staqly-mark-light.svg`}
+          alt=""
+          width={64}
+          height={64}
+          className="size-full dark:hidden"
+        />
+      )}
+      <img
+        src={`${basePath}/brand/staqly-mark-dark.svg`}
+        alt=""
+        width={64}
+        height={64}
+        className={themed ? 'hidden size-full dark:block' : 'size-full'}
+      />
+    </span>
+  )
+}
+
+/** The "staqly" wordmark outlined from the logo; inherits the text colour and scales with font size. */
+function Wordmark({ className }: { className?: string }) {
+  return (
+    <span className={cn('inline-flex shrink-0 items-center', className)}>
+      <svg viewBox="0 0 429 130.2" aria-hidden className="h-[1.05em] w-auto translate-y-[0.12em] fill-current">
+        <path fillRule="evenodd" clipRule="evenodd" d={WORDMARK_PATH} />
+      </svg>
+      <span className="sr-only">staqly</span>
+    </span>
+  )
+}
+
+type LogoProps = MarkProps & {
+  markClassName?: string
+  wordmarkClassName?: string
+  /** Shown after the wordmark, e.g. the docs badge. */
+  children?: ReactNode
+}
+
+/** Mark + wordmark. */
+export function Logo({ className, markClassName, wordmarkClassName, basePath, colorway, children }: LogoProps) {
+  return (
+    <span className={cn('inline-flex items-center gap-2', className)}>
+      <LogoMark className={markClassName} basePath={basePath} colorway={colorway} />
+      <Wordmark className={wordmarkClassName} />
+      {children}
+    </span>
+  )
+}
+
+const WORDMARK_PATH =
+  'M316.7 0.2C316.5 0.3 316.4 11.2 316.5 50.2L316.5 100.1 327.2 100.1L337.9 100.1 337.9 50.1L337.9 0.1 327.5 0C321.8 0 316.9 0.1 316.7 0.2M86.4 4C86.1 4.3 86.2 72 86.6 74.9C88 88 95.2 96.3 107.6 99.3C110.5 100 110.7 100 123.1 100.1C133.9 100.2 135.8 100.2 136.1 99.9C136.3 99.6 136.4 97.1 136.3 90.2L136.3 80.9 126.4 80.8C117.3 80.6 116.4 80.6 114.8 80C112.2 79.1 110.3 77.6 109.2 75.3C107.7 72.4 107.6 70.6 107.7 57.3L107.8 45.8 122.7 45.7L137.6 45.6 137.6 36.2L137.6 26.9 123 26.9C112.8 26.8 108.3 26.7 108 26.5C107.7 26.2 107.6 23.9 107.6 15.1L107.5 3.9 97.1 3.8C91.3 3.8 86.5 3.9 86.4 4M33.5 25C19.8 26.8 10.5 32.8 7.3 42.1C6.1 45.3 6 51.7 7 54.9C9.8 63.8 17.6 68.1 35.4 70.6C38.8 71.1 43.7 71.8 46.5 72.1C53 73.1 54.7 73.6 56.3 75.2C57.4 76.3 57.5 76.4 57.5 78C57.5 82.1 52.3 84.5 43.2 84.4C32.4 84.4 23.8 80.6 21 74.7C20.5 73.8 20.1 73.1 20 73.1C19.9 73.1 17.9 73.7 15.4 74.4C13 75.2 8.9 76.4 6.2 77.2C3.5 78 1.2 78.8 1 78.9C0 79.5 3.5 86.3 6.6 89.7C13.6 97.3 26.3 101.6 41.9 101.6C60 101.7 72.5 95.9 77.3 85.4C78.6 82.5 79 80.4 79 76.1C79 70.8 77.7 67.3 74.6 63.8C69.7 58.4 63.5 56.1 48.8 54.2C35.1 52.4 32.7 52 30.7 50.9C27.4 49.3 27.4 45.8 30.5 43.8C32.9 42.3 35.7 41.7 40.9 41.8C49.4 41.8 55.1 43.7 61.4 48.8C62.7 49.8 63.9 50.6 64.1 50.6C65 50.6 77.9 38.8 77.7 38.2C77.5 37.6 73 33.8 71 32.5C61.7 26.3 46.6 23.3 33.5 25M172.8 25C155.6 27.5 143 39.5 140.1 55.8C137 73.8 145 90.4 160.3 97.9C173.2 104.2 188.3 102.9 197.8 94.7C198.7 94 199.4 93.5 199.5 93.6C199.6 93.7 199.6 95.1 199.7 96.8C199.7 98.5 199.8 99.9 199.9 100C200 100.1 204.8 100.2 210.5 100.2L220.9 100.1 220.9 78.2C220.9 54.5 220.9 54.3 219.4 49.1C216.5 39.3 207.4 30.6 196.3 27C189.6 24.9 179.7 24 172.8 25M259 24.8C242.6 26.9 230 38.8 226.4 55.3C225.6 58.9 225.7 68.2 226.5 71.7C227.8 77.2 230.1 82.7 232.9 86.6C239.8 96.1 251.3 101.9 263.5 101.9C271.7 101.9 278.1 99.7 284.1 94.7C284.8 94.1 285.5 93.6 285.5 93.6C285.6 93.6 285.7 100.9 285.7 109.8C285.7 123.1 285.8 126 286.1 126.2C286.4 126.4 289.4 126.5 296.8 126.5L307.2 126.4 307.3 76.6L307.4 26.8 296.6 26.9L285.9 26.9 285.8 29.7C285.7 33.3 285.6 33.4 284.4 32.2C280.5 28.5 275.5 26 269.7 25C267.4 24.6 261.2 24.5 259 24.8M341.6 27.1C341.6 27.3 341.7 27.6 341.8 27.8C342.1 28 345.5 35.3 347.6 40.1C348.2 41.4 349.3 43.9 350.1 45.5C350.8 47.1 351.5 48.5 351.5 48.6C351.5 48.7 351.9 49.6 352.4 50.7C353.7 53.5 354.8 55.8 356.1 58.9C356.8 60.3 358 62.9 358.8 64.6C359.6 66.3 360.2 67.7 360.2 67.8C360.2 67.8 360.6 68.7 361.1 69.7C361.6 70.8 362.7 73.2 363.5 75.2C364.4 77.2 365.6 79.8 366.2 81.1C366.8 82.3 367.5 83.9 367.8 84.6C368.2 85.3 369.6 88.4 371 91.5C374.9 99.9 374.6 99 373.9 100.8C371.9 105.7 369.2 108.7 365.7 110C363.1 111 360.4 111.2 353.8 111L347.6 110.8 347.6 115.3C347.6 117.8 347.5 122.2 347.5 125L347.5 130.2 357.1 130.2C367.7 130.2 370 130 374.3 128.4C378.4 126.9 382.9 123.9 385.6 121C389.5 116.6 391 113.8 399.6 93.9C400.4 92 401.5 89.7 401.9 88.7C402.4 87.7 403.4 85.6 404.1 83.9C404.8 82.3 405.8 79.9 406.4 78.7C407 77.5 407.9 75.4 408.5 73.9C409.1 72.5 410.1 70.3 410.7 69C411.3 67.7 412 66.1 412.3 65.3C412.6 64.6 413.1 63.4 413.4 62.8C413.9 61.6 414.6 60.2 415.6 57.8C415.9 57.1 416.5 55.9 416.8 55.1C417.2 54.3 417.5 53.6 417.5 53.5C417.5 53.4 417.9 52.5 418.3 51.5C420.2 47.5 420.5 46.8 421.6 44.2C422.2 42.7 423.1 40.8 423.4 40C423.8 39.2 424.1 38.5 424.1 38.5C424.1 38.4 424.6 37.3 425.2 36C425.8 34.7 426.3 33.6 426.3 33.5C426.3 33.4 426.9 32 427.6 30.4C428.4 28.7 429 27.2 429 27.1C429 26.9 425.3 26.8 417.4 26.9L405.9 26.9 403.9 31.9C402.8 34.6 400 41.4 397.7 47.1C395.5 52.7 393.3 58.1 392.8 59.1C391.9 61.4 386.9 73.6 386.7 74.3C386.6 74.5 386.4 74.7 386.3 74.7C386.1 74.7 385.9 74.5 385.8 74.3C385.7 74 385 72.4 384.3 70.7C383.5 69 382.4 66.3 381.8 64.8C381.1 63.3 380 60.6 379.3 59C377.4 54.7 375.3 49.8 374.9 48.9C374.7 48.4 373 44.5 371.2 40.2C369.4 35.9 367.8 32.2 367.6 31.9C367.5 31.6 366.9 30.3 366.4 29.1L365.5 26.9 353.5 26.9C343.8 26.8 341.6 26.9 341.6 27.1M177.9 43.5C170.4 44.4 163.9 49.8 161.6 57.1C160.7 60 160.6 66.2 161.4 68.9C163 73.9 166.8 78.6 171.2 80.7C177.2 83.6 183.4 83.7 189.4 80.8C199 76.3 202.9 63.8 197.8 53.7C194.3 46.8 185.9 42.5 177.9 43.5M263.8 43.5C253.5 45.1 246.6 53.8 247.2 64.5C247.8 77 259.7 85.5 271.9 82.3C282.6 79.4 288.6 68.4 285.5 57.3C282.9 48.2 273.1 42 263.8 43.5'

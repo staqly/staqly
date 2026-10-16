@@ -1,0 +1,189 @@
+---
+title: Inbox
+description: Review what your agents made, and approve, reject, edit or run actions on it, mostly from the keyboard.
+---
+
+The Inbox is where you review your agents' work. Every **pending** item (anything an agent
+saved that still needs a decision) lands here, from every
+[collection](/concepts). Open the Inbox whenever you want to work through that
+queue.
+
+It is the dashboard's start page: open **http://localhost:8080** (or
+**http://localhost:8080/inbox**).
+
+## Steps
+
+The bar on top follows an item through its life, left to right: **Review** (waiting for you), **Approved** or
+**Rejected** (nothing has run yet), **Processing** (your automation works on it, named after the action:
+Publishing, Regenerating), then **Completed** or **Failed**. **Expired** (nobody decided before the item's
+expiry) and **Archived** sit at the end. Each step shows how many items are there; click one to list them.
+Review is the default and keeps the shortcuts and oldest-first order; the other steps list the newest changes
+first.
+
+**Filter** narrows any step by collection, source (the agent, n8n, a watcher), tags and type.
+
+On wide screens each row shows the title with one small line under it (the item's AI summary, or the start of
+its content until there is one), then columns: **Tags**, **Collection** (the source as a small badge under it),
+the time (**Added** while reviewing, **Waiting** on Processing, **Decided** elsewhere, with a `v2` badge for
+later versions), **Status** and **Actions**. Outside Review, a row's button is its collection's main action
+(Publish, Retry...); the rest are in the item's side panel.
+
+Ticked rows get a bar at the bottom: Reject and Approve while reviewing, the collection actions that apply
+elsewhere, **Unarchive** on Archived, and **Delete** everywhere. Archived rows have an **Unarchive** button: the
+item goes back to where it was. An item archived while it waited for review goes back to **Review**; otherwise
+it returns to its run, else its decision (`POST /v1/items/{id}/unarchive`).
+
+## Review your queue
+
+<Steps>
+<Step>
+
+### Pick an item
+
+The Inbox lists pending items oldest first, each with its title, the start of its content, the collection,
+the agent that added it and when. Most items can be decided right from the list with **Reject** and
+**Approve** on the row. Click a row (or move with <Kbd>j</Kbd> / <Kbd>k</Kbd> and press <Kbd>o</Kbd>) to open
+the whole item in a side panel: preview, details, edit, history and every action.
+
+</Step>
+<Step>
+
+### Approve it
+
+Press <Kbd>⇧</Kbd> <Kbd>A</Kbd> or click **Approve**. The item leaves the list at once and a toast offers
+**Undo** for 10 seconds; only then is the approval sent, the item becomes `approved` and webhooks receive
+`item.approved`. Undo puts the item back in the list as if nothing happened. The approval waits in that browser
+tab, so closing the tab within those 10 seconds drops it.
+
+To fix something first, press <Kbd>⇧</Kbd> <Kbd>E</Kbd> (**Edit & approve**): change the title, the
+content (or the JSON) or the URL, add an optional note, then approve. The edit and the
+decision are saved as one change.
+
+</Step>
+<Step>
+
+### Or reject it with feedback
+
+Press <Kbd>⇧</Kbd> <Kbd>R</Kbd> or click **Reject** and say what is wrong ("too dark", "wrong
+product"). Feedback is required (up to 750 characters). It is stored on the item and sent to your automations, so an
+agent can regenerate the item. Tick **Ask the agent to regenerate with this feedback** to start the
+collection's Regenerate right away.
+
+</Step>
+<Step>
+
+### Or run a custom action
+
+Items can also offer [custom actions](/automation/custom-actions) such as *Publish*,
+*Regenerate* or *Archive*. Which ones appear depends on what the item's collection defines for
+its current status. Actions that start a run (Publish, Regenerate) come after a decision: on an
+item waiting for review you approve or reject first. They ask for confirmation in a dialog (*Publish "Summer
+sale"?*) that says which event your automation receives; actions that need feedback (Regenerate) ask for it
+instead, and Archive runs right away.
+
+</Step>
+</Steps>
+
+When two people (or agents) decide the same item at the same moment, exactly one decision
+wins. The other one sees a conflict instead of silently overwriting it.
+
+## Try it without an agent: send a test approval
+
+When nothing is pending, the Inbox shows *Inbox zero* with two buttons:
+
+- **Send a test approval** adds a sample text item titled *Test approval* (source
+  `staqly-local-test`, or `staqly-cloud-test` on a cloud instance, metadata `{"sample": true}`) to the workspace's **Default** collection
+  and opens it. Approve or reject it to see
+  how decisions, history and webhooks work. It counts as a normal item, so webhooks see it too.
+- **Connect an agent** opens [Integrations](/dashboard/settings#integrations).
+
+## Decide many items at once
+
+1. Select items with <Kbd>x</Kbd> or their checkboxes. <Kbd>Shift</Kbd>-click a checkbox to
+   select every item between it and the last one you clicked, like in Gmail. The checkbox in
+   the list header selects or clears all loaded items, and the header shows the count
+   (*3 to review*, or *2 of 3 selected*).
+2. In the bar at the bottom click **Approve** (or press <Kbd>⇧</Kbd> <Kbd>A</Kbd>), or **Reject**
+   (<Kbd>⇧</Kbd> <Kbd>R</Kbd>) to reject them all with the same feedback. <Kbd>Esc</Kbd> clears
+   the selection.
+3. Confirm. Approving several items asks *Approve 3 items?* first, and the reject dialog says how many items
+   it rejects. Neither has an Undo: to edit an item before approving it, open it on its own.
+
+On the other steps you can select items too: the bar then offers the collection actions those
+items allow (for example **Publish** or **Archive**), **Unarchive** on Archived, and
+**Delete**, never approve or reject.
+
+Up to 100 items are processed per request, and each one succeeds or fails on its own. If
+someone else already decided an item, it is reported and the rest go through.
+
+## Decision and run
+
+Every item shows two separate things, never mixed in one badge:
+
+- **Decision** (outlined badge): what the reviewer decided: *Pending*, *Approved*, *Rejected* or *Expired*.
+- **Run** (tinted badge, only when something ran): what your automation did after it: *Processing* (spinning
+  while it works), *Completed*, *Failed* or *Canceled*. A new decision starts without a run.
+
+On **Processing**, each row shows how long the item has waited of its processing limit (a bar; the time it
+fails on its own on hover). When your automation never reports back, report the result by hand from the row's
+small menu: **Completed**, **Failed** or **Canceled**. Canceled is stored as a failed run with the error
+*Canceled in the dashboard* and shown as *Canceled*.
+
+*Archived* is a third, separate mark. The API returns the same as `decision`, `run` and `archived_at` next to
+the older single `status`, and `GET /v1/items?decision=approved&run=processing,failed` filters by both.
+
+## Filter the list
+
+| Filter | Options |
+|---|---|
+| **Step** (the bar on top) | *Review* by default (oldest first, with review shortcuts), *Approved*, *Rejected*, *Processing*, *Completed*, *Failed*, *Expired*, *Archived* |
+| **Collection** (Filter) | All collections, or one |
+| **Source** (Filter) | The agent, n8n or watcher that added the item |
+| **Tags** (Filter) | Items with any of the picked tags |
+| **Type** (Filter) | `image`, `video`, `text`, `link`, `json`, `file` |
+
+Filters live in the URL (`?step=failed&collection=col_oalirbz67y4m4cqxq5dw&type=image`), so you can bookmark a
+view such as "failed images in Instagram Avatar". The list refreshes on its own every few seconds.
+
+## Keyboard shortcuts
+
+| Keys | Action |
+|---|---|
+| <Kbd>j</Kbd> or <Kbd>↓</Kbd> | Next item |
+| <Kbd>k</Kbd> or <Kbd>↑</Kbd> | Previous item |
+| <Kbd>⇧</Kbd> <Kbd>A</Kbd> | Approve the selected items, or the current one |
+| <Kbd>⇧</Kbd> <Kbd>R</Kbd> | Reject with feedback (the selection, or the current item) |
+| <Kbd>⇧</Kbd> <Kbd>E</Kbd> | Edit, then approve |
+| <Kbd>⇧</Kbd> <Kbd>P</Kbd> | Outside Review: run the row's main action (Publish, Regenerate, Retry...), through the same dialog as its button |
+| <Kbd>x</Kbd> | Toggle selection |
+| <Kbd>⇧</Kbd> + click | Select a range |
+| <Kbd>o</Kbd> or <Kbd>Enter</Kbd> | Open the item in the side panel |
+| <Kbd>Esc</Kbd> | Clear selection |
+| <Kbd>?</Kbd> | Show shortcuts |
+| <Kbd>⌘</Kbd> <Kbd>K</Kbd> / <Kbd>Ctrl</Kbd> <Kbd>K</Kbd> | Command palette (anywhere) |
+
+Decisions always need <Kbd>Shift</Kbd>, so a stray key never approves or rejects anything.
+On the steps other than Review the decision shortcuts give way to <Kbd>⇧</Kbd> <Kbd>P</Kbd>, and the
+legend lists only what applies. Shortcuts are ignored while you type in a field or while a dialog is open. In the feedback
+box, <Kbd>Enter</Kbd> submits and <Kbd>Shift</Kbd> + <Kbd>Enter</Kbd> adds a new line.
+
+## Review on a phone
+
+On small screens the Inbox shows **one large card at a time**. Swipe left and right (or tap
+the arrows) to move between items, and use the action bar at the bottom: *Reject*,
+*Approve*, and a menu for custom actions. Filters sit behind the **Filters** button. To
+connect your phone, see [Phones & tablets](/dashboard/phones-and-tablets).
+
+## Content from the internet
+
+Items created by [watchers](/automation/watchers) carry `metadata.untrusted = true` and
+show an **External content** badge. Treat their text and links as untrusted.
+
+## Next steps
+
+<Cards>
+  <Card title="Item details & history" href="/dashboard/items">See every edit, decision and earlier version of an item.</Card>
+  <Card title="Custom actions" href="/automation/custom-actions">Add buttons like Regenerate or Publish.</Card>
+  <Card title="Notifications" href="/automation/notifications">Get new items on your phone or in chat.</Card>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">Review from the couch.</Card>
+</Cards>

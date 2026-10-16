@@ -1,0 +1,116 @@
+---
+title: Phones & tablets
+description: Connect your phone or tablet to staqly with a QR code and review items on the go.
+---
+
+The dashboard works on phones and tablets as well as desktops, so you can approve and reject
+from the couch. To use it, your phone needs to reach the computer running staqly, and each
+new browser signs in once by scanning a **QR code**. No key or password to type.
+
+On a small screen you get a bottom tab bar (*Inbox*, *Collections*, *Activity*, *Webhooks*),
+one-card-at-a-time review with swipe gestures, and touch targets of at least 44 px.
+
+## Before you start: open the dashboard to your network
+
+By default the dashboard only answers on the computer running staqly. To reach it from a phone
+on the same Wi-Fi, open it to your network and tell staqly your computer's LAN address (for
+example `192.168.1.23`), so QR codes point somewhere the phone can reach.
+
+```bash tab="staqly serve"
+PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose
+```
+
+```bash tab="Docker"
+# -p 8080:8080 already publishes the dashboard on your network; recreate the container with the URL
+docker rm -f staqly
+docker run -d --name staqly ... -e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 ghcr.io/staqly/staqly:latest
+```
+
+With Docker, use your full `docker run` command from [Run with Docker](/self-hosting/docker) and add
+the `-e` line; the data stays in the volume.
+
+Without `PUBLIC_DASHBOARD_URL`, the QR code uses the address you opened the dashboard at. If that is
+`localhost`, the code only works on the computer itself; the dialog tells you so and shows a
+hint.
+
+## Connect your phone
+
+<Steps>
+<Step>
+
+### Show the QR code
+
+In the dashboard on your computer, open **Connect a device**: in **Settings → Devices**, the
+workspace menu, or the command palette (<Kbd>⌘</Kbd> <Kbd>K</Kbd>).
+
+</Step>
+<Step>
+
+### Scan it
+
+Scan the QR code with your phone's camera. staqly opens on the phone, already signed in.
+
+</Step>
+<Step>
+
+### Start reviewing
+
+Open the **Inbox** tab. See [Review on a phone](/dashboard/inbox#review-on-a-phone).
+
+</Step>
+</Steps>
+
+You can also sign in a browser with a link instead of a QR code: run
+`staqly serve connect-link` (or `docker exec staqly server connect-link` with Docker) on the computer and open the
+printed link in that browser.
+
+<Callout type="warn">
+The QR code grants full access to the workspace. Scan it only with your own device and don't
+share screenshots of it.
+</Callout>
+
+## How sign-in links work
+
+- The token is in the URL **fragment** (`/connect#<token>`), so it never reaches server logs,
+  proxies or `Referer` headers. It is stored hashed.
+- It **expires after 5 minutes** and **works once**.
+- The phone gets its own browser session (30 days). It appears under
+  **Settings → Devices**, where you can revoke it.
+- Only the dashboard can create links. API keys cannot create browser sessions.
+
+## Who has to sign in
+
+| How you run staqly | Dashboard reachable from | Sign-in |
+|---|---|---|
+| `staqly serve` | This computer only | None |
+| `staqly serve --expose` | Your network | Every browser signs in once, this computer included |
+| Docker (`docker run`, `-p 8080:8080`) | Your network | Every browser signs in once, this computer included |
+
+Once the dashboard is open to the network, staqly cannot safely tell "this computer" from
+"someone on the Wi-Fi" (Docker Desktop hides the real client address, and a `Host` header can
+be forged), so every browser signs in, this computer's included: open the link from
+`docker exec staqly server connect-link`.
+
+Either way, the **API stays on `127.0.0.1`**: agents, MCP and scripts on this computer keep
+working without keys, and nothing on the network can call the API directly.
+
+## Troubleshooting
+
+**The browser shows "Sign in this browser"**: it isn't connected yet. Use *Connect a device*
+in a browser that is already signed in and scan the QR code, or open a link from
+`staqly serve connect-link` / `docker exec staqly server connect-link`.
+
+**The phone can't open the link**: check that `PUBLIC_DASHBOARD_URL` uses the computer's LAN IP (not
+`localhost`), that the dashboard is open to the network (`--expose` or Docker), that both
+devices are on the same network, and that no firewall blocks port `8080`.
+
+**The link says it was already used or expired**: each link signs in exactly one browser
+within 5 minutes. Create a new QR code.
+
+## Next steps
+
+<Cards>
+  <Card title="Review on your phone" href="/cookbook/review-on-your-phone">The whole setup as a short recipe.</Card>
+  <Card title="Inbox" href="/dashboard/inbox">Shortcuts, filters and bulk decisions.</Card>
+  <Card title="Run the binary" href="/self-hosting/binary">All `staqly serve` options.</Card>
+</Cards>

@@ -1,0 +1,127 @@
+---
+title: Plans & limits
+description: See what the Free and Pro plans allow in cloud mode, how the 7-day Pro trial works and what happens when a workspace hits a limit.
+---
+
+Plans set how much each workspace may use on a **cloud-mode** instance: approvals per month,
+watchers, storage and so on. Items and collections are unlimited on every plan. If you run staqly on your own computer (local mode), plans
+don't apply to you: local installs are always **Unlocked**, with no limits (usage is still
+shown for information).
+
+## Plan comparison
+
+| Limit | Free | Pro: $30/mo |
+|---|---|---|
+| Approvals / month (approve + reject) | 50 | Unlimited |
+| Items and collections | Unlimited | Unlimited |
+| Watchers (active) | 3 | Unlimited |
+| Fastest watcher interval | every 15 min | every minute |
+| Notification channels | 2 | Unlimited |
+| Webhooks | 3 | Unlimited |
+| Active API keys | 1 | Unlimited |
+| Storage | 1 GB | 100 GB |
+| Max file size | 5 MB | 100 MB |
+
+Signed webhooks, MCP, full history and backups are on every plan. File sizes are also capped
+by the operator's `MAX_UPLOAD_MB` (default 100 MB). On Free the one API key is the setup key
+you get when the workspace is created.
+
+## The Pro trial
+
+1. Every new cloud workspace starts on **Pro for 7 days**, with no card.
+2. Before the trial ends, upgrade ([with a card](#changing-a-workspaces-plan) when billing is enabled), or switch to Free (**Settings → Plan & usage → Switch to Free**,
+   or `POST /v1/workspace/plan` with `{"plan":"free"}`, admin scope).
+3. If the trial ends and the workspace was neither paid nor switched to Free, it is
+   **suspended**:
+   - you can still **read and export** everything (dashboard, `GET` requests, read-only MCP
+     tools, the workspace export);
+   - every change (new items, decisions, webhooks, watchers and so on) answers
+     **402 `plan_expired`**, decision links and chat buttons stop working, and watchers pause;
+   - your data stays; switching to Free or paying lifts the suspension right away.
+
+The same applies when a paid Pro period ends unpaid. `GET /v1/workspace/usage` shows
+`plan_expires_at` (end of the trial or paid period, `null` = no end) and `suspended`.
+
+## How limits are counted
+
+- Limits apply **per workspace**: every API key of a workspace shares its plan.
+- **Approvals / month** counts every decision per calendar month (UTC): each approve and
+  each reject, whether made in the dashboard, through the API or MCP, from a chat button or
+  decision link, or as a bulk action.
+  Creating an item that is already `approved` or `rejected` counts too. Undoing or deleting
+  does not refund it.
+- When the month's approvals are used up, a decision answers `402` and items stay
+  **pending** in the Inbox. Creating items keeps working.
+- **Watchers** count only active ones: a paused watcher frees its slot, and resuming it
+  checks the limit again.
+- Webhooks, API keys, notification channels and storage are counted from what currently exists.
+
+## Checking usage
+
+- Dashboard: **Settings → Plan & usage** ([details](/dashboard/plan-and-usage)).
+- API: `GET /v1/plans` lists plans and limits (`-1` = unlimited); `GET /v1/workspace/usage`
+  returns the current plan, the period (`2026-10`) and usage.
+
+## What happens when you hit a limit
+
+A request over a limit fails with **HTTP 402** and machine-readable `details`:
+
+```json
+{
+  "error": {
+    "code": "plan_limit_exceeded",
+    "message": "The Free plan allows 50 approvals per month; upgrade the workspace plan to continue.",
+    "details": { "limit": "decisions_per_month", "max": 50, "used": 50, "plan": "free" }
+  }
+}
+```
+
+`details.limit` is one of `decisions_per_month`, `webhooks`, `api_keys`, `storage_bytes`,
+`max_upload_bytes`, `watchers`, `notification_channels` or
+`min_watcher_interval_seconds` (a watcher asked to check more often than the plan allows).
+
+## Changing a workspace's plan
+
+There are three ways a workspace changes plan:
+
+- **Upgrade with a card** (when the operator has set up [billing with Stripe](/self-hosting/billing)):
+  **Settings → Plan & usage → Upgrade to Pro** opens Stripe Checkout (`POST /v1/billing/checkout`,
+  admin scope). When Stripe confirms the payment, the workspace moves to Pro until the end of the
+  paid period plus 3 days of grace. **Manage billing** opens the Stripe customer portal
+  (`POST /v1/billing/portal`) to change the card, download invoices or cancel. When a subscription
+  is canceled or stays unpaid, Pro ends and the workspace is suspended until it pays again or
+  switches to Free. `GET /v1/billing` shows the subscription status.
+- **Switch to Free** yourself: **Settings → Plan & usage → Switch to Free**, or
+  `POST /v1/workspace/plan` with `{"plan":"free"}` (admin scope). With a live Stripe subscription,
+  cancel it in the billing portal first (`409 conflict` otherwise). Asking this endpoint for
+  `pro` answers `402 payment_required`.
+- **The operator sets the plan** on the server. Without `--until` the plan has no end date (this
+  also ends a trial or a suspension); with `--until` the plan is comped until that date, after
+  which the workspace is suspended like an unpaid one.
+
+```bash tab="Docker"
+docker exec staqly server workspaces            # id, plan, plan ends, created, name
+docker exec staqly server set-plan ws_h2c5vq7nzk4mtr6pxw3e pro
+docker exec staqly server set-plan ws_h2c5vq7nzk4mtr6pxw3e pro --until 2026-12-31
+```
+
+```bash tab="staqly serve"
+staqly serve workspaces                         # id, plan, plan ends, created, name
+staqly serve set-plan ws_h2c5vq7nzk4mtr6pxw3e pro                    # free | pro
+staqly serve set-plan ws_h2c5vq7nzk4mtr6pxw3e pro --until 2026-12-31 # comp until a date
+```
+
+Every plan change is recorded as a `workspace.plan_changed` [event](/api/events#other-events)
+with the reason (`stripe:active`, `operator`, `operator_comp`, `self_service`). See
+[Operator CLI](/self-hosting/operator-cli) for the other server commands.
+
+The plan table lives in `apps/api/internal/app/plans.go`, the single source of truth for
+limits and for the pricing shown in the dashboard.
+
+## Next steps
+
+<Cards>
+  <Card title="Plan & usage" href="/dashboard/plan-and-usage">Check usage in the dashboard.</Card>
+  <Card title="Local vs cloud" href="/local-vs-cloud">When plans apply and when they don't.</Card>
+  <Card title="Errors" href="/api/errors">Every error code the API returns.</Card>
+</Cards>

@@ -1,0 +1,35 @@
+# Cloud mode in production: the pre-built staqly image behind Caddy (HTTPS).
+#   docker compose -f compose.yml -f compose.cloud.yml up -d --wait     (or: make cloud)
+# Needs STAQLY_DOMAIN in .env (DNS pointing at this server, ports 80 and 443 open).
+# Only Caddy is published; the staqly ports stay inside the Docker network.
+services:
+  staqly:
+    environment:
+      STAQLY_MODE: cloud
+      PUBLIC_API_URL: https://${STAQLY_DOMAIN:?set STAQLY_DOMAIN in .env}
+      PUBLIC_DASHBOARD_URL: https://${STAQLY_DOMAIN}
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: "true"
+    ports: !reset []
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    container_name: staqly-caddy
+    restart: unless-stopped
+    environment:
+      STAQLY_DOMAIN: ${STAQLY_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      staqly:
+        condition: service_healthy
+
+volumes:
+  caddy-data:
+  caddy-config:

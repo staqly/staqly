@@ -1,0 +1,176 @@
+---
+title: Security model
+description: Understand who can reach your staqly, how secrets are stored, and what stops an agent from approving its own work.
+---
+
+This page explains the protections built into staqly: what is reachable from the network, why
+local mode is safe without keys, how secrets are stored, and how reviews stay honest. Read it
+before you expose the dashboard to your network, run cloud mode, or give an agent an API key.
+You don't need to configure anything for these defaults to apply.
+
+## Network exposure
+
+| Port | Binary (`staqly serve`) | Docker Compose |
+|---|---|---|
+| **API + MCP** (`3333`) | `127.0.0.1` only | Published on `127.0.0.1` only |
+| **Dashboard** (`8080`) | `127.0.0.1` only, no sign-in; with `--expose` on all interfaces and every browser signs in | Published on all interfaces; every browser signs in (`DASHBOARD_EXPOSED=true`) |
+
+- The API is never reachable from the network. Cloud setups put a reverse proxy in front.
+- Whenever the dashboard is reachable from other devices, it requires a session for **every**
+  browser, including on this computer — see [Phones & tablets](/dashboard/phones-and-tablets).
+
+## Local mode without keys
+
+Credential-less requests are accepted only when:
+
+- the TCP peer is loopback or inside `LOCAL_TRUSTED_PEERS` (compose sets the private ranges
+  because Docker forwards published ports from its bridge network; the binary trusts loopback
+  only),
+- the `Host` header is a local name (defeats DNS rebinding),
+- any `Origin` is the dashboard's own origin or listed in `LOCAL_ALLOWED_ORIGINS` (defeats
+  cross-site requests from websites you visit, including pages on other localhost ports),
+- and the request doesn't come through an exposed dashboard.
+
+Every local process has full access — for per-agent permissions run cloud mode on localhost.
+Details: [Authentication](/api/authentication#local-mode-no-credentials).
+
+## Secrets
+
+| Secret | Stored as |
+|---|---|
+| API keys `stk_...` (256-bit) | SHA-256 hash + 6-character display prefix |
+| Session tokens (256-bit) | SHA-256 hash; HttpOnly, SameSite=Lax cookie, `Secure` by default in cloud mode (`COOKIE_SECURE`) |
+| Recovery keys (200-bit) | SHA-256 hash |
+| Device-link tokens | SHA-256 hash; 5-minute, single-use, carried in the URL fragment |
+| Webhook secrets | **Plain text** — needed to sign deliveries. Returned in full only when created or rotated, masked (`whsec_****x7qa`) everywhere else. Protect the data volume. |
+
+High-entropy random secrets make a plain SHA-256 an adequate verifier. Raw keys are shown
+once, and responses that carry a secret are never stored for
+[`Idempotency-Key`](/api/idempotency) replay. Logs never contain headers, query strings,
+bodies, keys or tokens — see [Logs & tracing](/self-hosting/logs-and-tracing).
+
+Using or rotating the recovery key — from the dashboard or with the
+[`recovery-key` operator command](/self-hosting/operator-cli) on the host — signs out every
+other session of the workspace.
+
+## Least privilege
+
+- API keys are scoped. Creating content (`items:write`) is separate from deciding on it
+  (`items:review`), so a generator agent cannot approve its own output.
+- The review stays honest after the decision: with `items:write` alone, the content of an
+  approved or rejected item is frozen and only lifecycle status changes are allowed. See
+  [Review integrity](#review-integrity).
+- `admin` and `channels:manage` (notification channels hold secrets) are not in the default
+  key.
+- REST and MCP call the **same** domain services, which check scopes themselves — no transport
+  can bypass authorization. Every query is scoped by workspace.
+- Cookie-authenticated unsafe requests need a CSRF token. `/mcp` never accepts cookies.
+- Credential audit events (`api_key.*`, `session.*`, `recovery_key.*`, `device.*`,
+  `device_link.*`) are listed only for admins (dashboard sessions, local mode, keys with
+  `admin`).
+
+## Decisions
+
+Approve/reject are atomic: a single write transaction checks status and version, stores a
+version snapshot, writes the event and queues webhooks. Concurrent decisions yield exactly one
+winner. Events are immutable.
+
+### Review integrity
+
+| Change | `items:write` | Needs `items:review` |
+|---|---|---|
+| Edit title, content, URL, media or metadata of a `draft`, `pending`, `processing` or custom-status item | ✅ | — |
+| Edit the content of an **approved** or **rejected** item | `metadata_patch` only | everything else |
+| Approve / reject (built-in actions, or creating an item as decided) | — | ✅ |
+| Status changes listed below | ✅ | — |
+| Any other status change (e.g. `pending → completed`, `approved → pending`) | — | ✅ |
+
+Status changes `items:write` may make on its own:
+
+| From | To |
+|---|---|
+| `draft` | `pending` |
+| `pending` | `draft` |
+| `approved` | `processing`, `completed`, `failed` |
+| `processing` | `completed`, `failed` |
+| `failed` | `processing`, `pending` |
+| `rejected`, `expired` | `pending` |
+| any | `archived` |
+
+`approved` and `rejected` can never be set with a status change — only by the approve /
+reject actions. Custom actions can't set them either, can't emit events staqly emits itself
+(such as `item.approved` or `item.created`), and edits made while running one need `items:write`.
+
+Decision links and chat buttons are **bound to the item version** the message showed. If the
+agent changed the item since, nothing is decided and the reviewer gets `409 item_changed`
+("item changed since this message — open it in staqly").
+
+## Uploads
+
+Types are sniffed from content against an allowlist; **SVG and HTML are refused**. Files are
+served only after authorization, with `nosniff`, a sandboxing Content-Security-Policy and the
+stored MIME type. The server never fetches URLs that items reference.
+
+## Dashboard
+
+- Every page is served with a Content-Security-Policy (`default-src 'self'`, no plugins, no
+  framing, `form-action 'self'`), `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `nosniff` and a restrictive `Permissions-Policy`.
+- **External media is click-to-load**: an image or video item that only references another
+  host (`url`) shows a placeholder naming the host, and loads only when you click **Load image**
+  / **Load video** — opening an item doesn't tell a third party you looked. List thumbnails
+  never load external media.
+- The `/api` proxy strips client-supplied forwarding headers (`X-Forwarded-*`, `Forwarded`,
+  `X-Real-Ip`) before it relays a request, so a browser can't pretend to be local.
+
+## Notifications
+
+Channel secrets (bot tokens, SMTP passwords) are encrypted at rest with `NOTIFY_SECRET_KEY`
+(at least 32 bytes, or a generated key file in the data directory — back it up), masked in
+responses and never logged. Pointing a channel somewhere else requires re-entering its secret,
+so someone who can manage channels but can't read secrets can't redirect them. Chat buttons
+are HMAC-signed per channel, bound to the item version and only count from the approver
+allowlist; Slack, Discord and Telegram callbacks are verified. One-tap links are single-use,
+expire, and decide only on POST from a confirmation page. Details:
+[Notifications](/automation/notifications#security).
+
+## Workspace deletion and export
+
+Deleting a workspace requires a signed-in dashboard session — API keys get `403` even with
+`admin`. Exports never include API keys, sessions or the recovery key, and webhook secrets are
+redacted. See [Data export & privacy](/self-hosting/data-export).
+
+## Backups
+
+Backups contain secrets: webhook signing secrets in plain text, hashed keys and sessions, the
+encrypted channel secrets and `notify_secret.key`, which decrypts them. Keep them owner-only
+(the commands in the backup guide run with `umask 077`). With the binary, the data directory is created owner-only (`0700`). See [Backup & restore](/self-hosting/backup-and-restore).
+
+## Containers
+
+The documented `docker run` command (and `compose.yml`) runs the `staqly` container with a read-only root
+filesystem, no Linux capabilities, `no-new-privileges` and memory / process limits, as a non-root user
+(uid 10001). The API port is published on `127.0.0.1` only. See
+[Run with Docker](/self-hosting/docker#what-the-flags-do).
+
+## Outbound requests
+
+- **Webhooks**: the IP policy is enforced on the resolved address at connect time; link-local
+  (cloud metadata), multicast, unspecified and reserved addresses are always blocked, and IPv6
+  forms that embed an IPv4 address are checked as that address. Private targets are allowed
+  by default only in local mode; loopback is off by default; redirects are not followed. In
+  cloud mode response bodies are not stored.
+- **Notification channels**: public internet only by default in both modes
+  (`NOTIFY_ALLOW_PRIVATE=false`); cloud metadata and link-local addresses are always blocked.
+- **Watchers**: public internet only by default in both modes (`WATCHER_ALLOW_PRIVATE=false`),
+  loopback and link-local always refused, every redirect hop re-checked, `robots.txt`
+  respected, size and time limits. Fetched content is marked `untrusted` — agents are told to
+  treat it as data, never instructions.
+
+## Next steps
+
+<Cards>
+  <Card title="Authentication" href="/api/authentication">API keys, scopes and sessions.</Card>
+  <Card title="Cloud deployment" href="/self-hosting/cloud-deployment">Run staqly for a team.</Card>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Back up safely, secrets included.</Card>
+</Cards>

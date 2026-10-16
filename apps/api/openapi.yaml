@@ -1,0 +1,2703 @@
+openapi: 3.2.1
+info:
+  title: staqly API
+  version: 1.0.0
+  license: { name: Apache-2.0, identifier: Apache-2.0 }
+  description: |
+    Local-first workspace for AI agent output.
+
+    **Local mode** (default, `STAQLY_MODE=local`): no credentials. Requests
+    are accepted only from this machine (loopback/Docker peers, local Host
+    names, local or absent Origin).
+
+    **Cloud mode** (`STAQLY_MODE=cloud`, hosted, many workspaces): anyone can
+    create a workspace (unless SETUP_TOKEN restricts signup); it starts with a
+    7-day Pro trial. When a Pro trial or paid period ends unpaid, the workspace
+    is suspended: read-only, other changes return **402** `plan_expired` until
+    it is paid or switched to Free (`POST /v1/workspace/plan`).
+    Every API key and session belongs to one workspace. Authenticate
+    automations with `Authorization: Bearer {API_KEY}`. The dashboard uses an
+    HttpOnly session cookie and must send `X-CSRF-Token` on unsafe requests.
+    Plan limits are enforced per workspace; exceeding one returns **402**
+    `plan_limit_exceeded` with `details`.
+
+    Other devices (phones) join a workspace through one-time "connect a
+    device" links (`/v1/device-links`), in both modes.
+
+    Unsafe requests accept an `Idempotency-Key` header; repeating the same key
+    with the same method, path, query string and body replays the original
+    response for 24 hours. Responses that carry a secret (new API keys,
+    recovery keys, device links, webhook signing secrets) and responses over
+    1 MiB are never stored: repeating such a request runs it again.
+
+    Any request may answer **503** `busy` with `Retry-After` when the
+    database stays locked by another process for too long; retry it.
+
+    A state that is already set cannot be set again: archiving an archived
+    collection or item, pausing a paused watcher, enabling an enabled channel,
+    webhook or notification channel, revoking a revoked API key or session,
+    reporting the result an item already has, approving an approved item or
+    choosing the plan the workspace is on answers **409** `conflict` (e.g.
+    "collection is already archived") and changes nothing. A PATCH that
+    changes other fields too is accepted; the unchanged state is ignored.
+servers:
+  # First: the docs' API playground sends requests from the browser, which only
+  # cloud mode allows (CORS for docs.staqly.ai, Authorization: Bearer <API key>).
+  - url: https://{host}
+    description: Your staqly cloud instance (API key required)
+    variables:
+      host: { default: staqly.example.com, description: Host name of your cloud instance }
+  - url: http://localhost:3333
+    description: Local (staqly serve or Docker), no key
+security:
+  - {}            # local mode
+  - bearer: []    # cloud mode: API key
+  - session: []   # cloud mode: dashboard session cookie (+ X-CSRF-Token on unsafe requests)
+tags:
+  - name: setup
+    description: Instance status, signup and plans
+  - name: auth
+    description: Sessions, devices, API keys, the workspace, its plan and exports
+  - name: collections
+    description: Collections of items and their custom actions
+  - name: items
+    description: Items, review actions, history and long-polling
+  - name: media
+    description: Uploaded files and thumbnails
+  - name: events
+    description: The workspace activity log
+  - name: webhooks
+    description: Outgoing webhooks and their deliveries
+  - name: watchers
+    description: RSS and page-change watchers that create items
+  - name: notifications
+    description: Notification channels (Telegram, Slack, Discord, ntfy, email) and one-tap decision links
+  - name: billing
+    description: Pro subscription through Stripe (cloud mode)
+  - name: integrations
+    description: Callbacks from chat platforms (signature-verified, no API key)
+  - name: system
+    description: Health, readiness and metrics
+
+paths:
+  /health:
+    get:
+      operationId: health
+      tags: [setup]
+      security: []
+      summary: Liveness and database check
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [status, version], properties: { status: { type: string, const: ok }, version: { type: string } } } } } }
+        "503": { description: The database is unreachable, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, const: unavailable } } } } } }
+
+  /openapi.yaml:
+    get:
+      operationId: getOpenAPI
+      tags: [setup]
+      security: [{}]
+      summary: This OpenAPI document
+      responses:
+        "200": { description: OpenAPI 3.2 YAML, content: { application/yaml: { schema: { type: string } } } }
+
+  /v1/setup:
+    get:
+      operationId: getSetupStatus
+      tags: [setup]
+      security: []
+      summary: Whether the workspace has been created
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [initialized, mode, signup_open, setup_token_required, billing_enabled, public_api_url]
+                properties:
+                  initialized: { type: boolean, description: Local mode only }
+                  mode: { type: string, enum: [local, cloud] }
+                  signup_open: { type: boolean, description: "Cloud: anyone may create a workspace" }
+                  setup_token_required: { type: boolean }
+                  billing_enabled: { type: boolean, description: "Cloud with Stripe configured: paid plans can be bought (Settings → Plan & usage)" }
+                  public_api_url: { type: string, description: "PUBLIC_API_URL: the API's base URL for agents and tools (shown in dashboard snippets)" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/workspaces:
+    post:
+      operationId: createWorkspace
+      tags: [setup]
+      security: []
+      summary: Create a cloud workspace (starts a 7-day Pro trial)
+      description: Cloud mode only; each call creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, a default API key, a recovery key and a browser session cookie. Secrets are returned only in this response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 100, description: Workspace name (defaults to "My Workspace") }
+                setup_token: { type: string, description: Required when the server sets SETUP_TOKEN }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace, api_key, recovery_key, csrf_token]
+                properties:
+                  workspace: { $ref: "#/components/schemas/Workspace" }
+                  api_key: { $ref: "#/components/schemas/APIKey" }
+                  recovery_key: { type: string }
+                  csrf_token: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/plans:
+    get:
+      operationId: listPlans
+      tags: [setup]
+      security: [{}]
+      summary: Cloud plans and their limits (-1 = unlimited)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Plan" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/workspace/usage:
+    get:
+      operationId: getWorkspaceUsage
+      tags: [auth]
+      summary: Current plan and usage (local installs report the unlocked plan)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plan, period, usage, plan_expires_at, suspended]
+                properties:
+                  plan: { $ref: "#/components/schemas/Plan" }
+                  period: { type: string, examples: ["2026-10"] }
+                  usage:
+                    type: object
+                    required: [items_per_month, decisions_per_month, webhooks, api_keys, storage_bytes, watchers, notification_channels]
+                    properties:
+                      items_per_month: { type: integer }
+                      decisions_per_month: { type: integer, description: Approvals and rejections this month }
+                      webhooks: { type: integer }
+                      api_keys: { type: integer }
+                      storage_bytes: { type: integer }
+                      watchers: { type: integer, description: Active (not paused) watchers }
+                      notification_channels: { type: integer }
+                  plan_expires_at:
+                    type: [string, "null"]
+                    format: date-time
+                    description: End of the Pro trial (7 days from signup) or paid period; null = no end.
+                  suspended:
+                    type: boolean
+                    description: |
+                      The Pro trial or paid period ended unpaid. The workspace is read-only:
+                      reads and exports work, other changes answer 402 `plan_expired` until it is
+                      paid or switched to Free (`POST /v1/workspace/plan`).
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/workspace/plan:
+    post:
+      operationId: changePlan
+      tags: [auth]
+      summary: Switch the workspace to the Free plan (admin; cloud mode)
+      description: |
+        Moves the workspace to Free, which also lifts a suspension after the Pro trial.
+        Any other plan answers 402 `payment_required`: upgrade with
+        `POST /v1/billing/checkout`. While a Pro subscription is live this answers 409;
+        cancel it in the billing portal first.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan]
+              properties:
+                plan: { type: string, enum: [free] }
+      responses:
+        "200":
+          description: The new plan and usage (same shape as GET /v1/workspace/usage)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Usage" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/billing:
+    get:
+      operationId: getBilling
+      tags: [billing]
+      summary: Subscription status (admin)
+      description: |
+        Whether billing is enabled on this instance (cloud mode with Stripe configured), the
+        plan, Stripe's subscription status and the end of the trial or paid period.
+      responses:
+        "200":
+          description: Billing status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Billing" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/billing/checkout:
+    post:
+      operationId: createCheckoutSession
+      tags: [billing]
+      summary: Start a Stripe Checkout for Pro (admin)
+      description: |
+        Returns a Stripe Checkout URL; open it in a browser to pay. Stripe redirects back to
+        `<PUBLIC_DASHBOARD_URL>/settings/plan?checkout=success`, and the plan changes when Stripe's
+        webhook arrives. Allowed while suspended. 409 when billing is off or a subscription
+        is already live.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "200":
+          description: Checkout URL
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BillingURL" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
+  /v1/billing/portal:
+    post:
+      operationId: createPortalSession
+      tags: [billing]
+      summary: Open the Stripe customer portal (admin)
+      description: Returns a portal URL to change the payment method, see invoices or cancel. 409 before the first checkout.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "200":
+          description: Portal URL
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BillingURL" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
+  /v1/billing/webhook:
+    post:
+      operationId: stripeWebhook
+      tags: [billing]
+      summary: Stripe webhook endpoint
+      description: |
+        Called by Stripe, not by clients. Verified with the `Stripe-Signature` header and
+        `STRIPE_WEBHOOK_SECRET`; each event is applied once. Handles
+        `checkout.session.completed` and `customer.subscription.*`.
+      security: []
+      parameters:
+        - { name: Stripe-Signature, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Received
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received: { type: boolean }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
+  /v1/device-links:
+    post:
+      operationId: createDeviceLink
+      tags: [auth]
+      summary: Create a one-time "connect a device" link (QR code)
+      description: Dashboard only (session or local principal). The token is in the URL fragment, valid for 5 minutes, single use.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expires_at, reachable]
+                properties:
+                  url: { type: string, examples: ["https://staqly.example.com/connect#abc..."] }
+                  expires_at: { type: string, format: date-time }
+                  reachable: { type: boolean, description: false when the URL points at localhost }
+                  hint: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/device-links/redeem:
+    post:
+      operationId: redeemDeviceLink
+      tags: [auth]
+      security: [{}]
+      summary: Exchange a device-link token for a session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      responses:
+        "201": { description: Session cookie set, content: { application/json: { schema: { type: object, required: [csrf_token], properties: { csrf_token: { type: string } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/sessions/recover:
+    post:
+      operationId: recoverSession
+      tags: [auth]
+      security: []
+      summary: Exchange the recovery key for a new browser session
+      description: Every other session of the workspace is signed out.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [recovery_key], properties: { recovery_key: { type: string } } }
+      responses:
+        "201": { description: Session cookie set, content: { application/json: { schema: { type: object, required: [csrf_token], properties: { csrf_token: { type: string } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/session:
+    get:
+      operationId: getSession
+      tags: [auth]
+      summary: Current principal, workspace and CSRF token
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mode, workspace, principal, csrf_token]
+                properties:
+                  mode: { type: string, enum: [local, cloud] }
+                  workspace: { $ref: "#/components/schemas/Workspace" }
+                  principal:
+                    type: object
+                    required: [type, id, name, scopes]
+                    properties:
+                      type: { type: string, enum: [local, session, api_key] }
+                      id: { type: string }
+                      name: { type: string }
+                      scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+                  csrf_token: { type: string, description: Empty for API-key callers }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: logout
+      tags: [auth]
+      summary: Log out (revoke the current session)
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "204": { description: Logged out }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/sessions:
+    get:
+      operationId: listSessions
+      tags: [auth]
+      summary: List active browser sessions (admin)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Session" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/sessions/{id}:
+    delete:
+      operationId: revokeSession
+      tags: [auth]
+      summary: Revoke a session (admin)
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "204": { description: Revoked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/workspace:
+    get:
+      operationId: getWorkspace
+      tags: [auth]
+      summary: Get the workspace
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Workspace" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      operationId: updateWorkspace
+      tags: [auth]
+      summary: Rename the workspace or set its processing timeout (admin)
+      description: |
+        Send `name`, `processing_timeout_seconds` or both. The processing timeout is how long an
+        item may stay `processing` before it fails (60 to 86400 seconds, 1 minute to 24 hours);
+        until it is set, the server's `PROCESSING_TIMEOUT` applies (default 1h).
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                processing_timeout_seconds: { type: integer, minimum: 60, maximum: 86400 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Workspace" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: deleteWorkspace
+      tags: [auth]
+      summary: Permanently delete this workspace and all its data (cloud, dashboard session only)
+      description: |
+        Deletes collections, items, versions, media files, events, webhooks,
+        deliveries, watchers, API keys, sessions and exports. Requires a
+        session (API keys get 403) and `confirm` equal to the workspace name.
+        Local mode returns 409: delete the data volume instead.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm: { type: string, description: The exact workspace name }
+      responses:
+        "204": { description: Deleted; the session cookie is cleared }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
+
+  /v1/recovery-key/rotate:
+    post:
+      operationId: rotateRecoveryKey
+      tags: [auth]
+      summary: Issue a new recovery key (dashboard sessions only)
+      description: Every other session of the workspace is signed out.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "200": { description: "The new key, shown once", content: { application/json: { schema: { type: object, required: [recovery_key], properties: { recovery_key: { type: string } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/api-keys:
+    get:
+      operationId: listAPIKeys
+      tags: [auth]
+      summary: List API keys (admin)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, available_scopes]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/APIKey" } }
+                  available_scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      operationId: createAPIKey
+      tags: [auth]
+      summary: Create a scoped API key (admin). The raw key is returned once.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scopes]
+              properties:
+                name: { type: string }
+                scopes: { type: array, minItems: 1, items: { $ref: "#/components/schemas/Scope" } }
+                expires_at: { type: string, description: "RFC3339 or YYYY-MM-DD; omit for a key that never expires" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/APIKey" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/api-keys/{id}:
+    delete:
+      operationId: revokeAPIKey
+      tags: [auth]
+      summary: Revoke an API key (admin)
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "204": { description: Revoked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/api-keys/{id}/rotate:
+    post:
+      operationId: rotateAPIKey
+      tags: [auth]
+      summary: Revoke a key and issue a replacement with the same name and scopes (admin)
+      parameters:
+        - { $ref: "#/components/parameters/id" }
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "201": { description: New key, content: { application/json: { schema: { $ref: "#/components/schemas/APIKey" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/collections:
+    get:
+      operationId: listCollections
+      tags: [collections]
+      summary: List collections (collections:read)
+      parameters:
+        - { name: include_archived, in: query, schema: { type: boolean } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Collection" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      operationId: createCollection
+      tags: [collections]
+      summary: Create a collection (collections:write)
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody: { required: true, content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/CollectionInput" }, { required: [name] }] } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Collection" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/collections/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getCollection
+      tags: [collections]
+      summary: Get a collection
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Collection" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      operationId: updateCollection
+      tags: [collections]
+      summary: Update (rename, archive, configure actions/default view)
+      description: Archiving the Default collection (`is_default`) answers 409.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CollectionInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Collection" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: deleteCollection
+      tags: [collections]
+      summary: Permanently delete a collection and its items
+      description: The Default collection (`is_default`) cannot be deleted (409).
+      parameters:
+        - { name: confirm, in: query, required: true, description: Must equal the collection name, schema: { type: string } }
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/collections/{id}/items:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: listCollectionItems
+      tags: [items]
+      summary: List / search items in one collection (items:read)
+      description: |
+        A query runs for at most 5 seconds. A full-text search (`q`) that
+        exceeds it returns 422 `search_too_broad` (add words or filters); a
+        plain listing returns 503 `timeout`. Search text is limited to 16
+        distinct words / 256 bytes; one-letter words match exactly.
+      parameters:
+        - { $ref: "#/components/parameters/itemStatus" }
+        - { $ref: "#/components/parameters/itemDecision" }
+        - { $ref: "#/components/parameters/itemRun" }
+        - { $ref: "#/components/parameters/itemTag" }
+        - { name: archived, in: query, description: "false leaves archived items out, true lists only them (default: both)", schema: { type: string, enum: ["true", "false"] } }
+        - { name: run_action, in: query, description: Items whose current run was started by this action (e.g. publish); none for runs no action started, schema: { type: string } }
+        - { $ref: "#/components/parameters/itemType" }
+        - { $ref: "#/components/parameters/q" }
+        - { $ref: "#/components/parameters/source" }
+        - { $ref: "#/components/parameters/externalRef" }
+        - { $ref: "#/components/parameters/createdAfter" }
+        - { $ref: "#/components/parameters/createdBefore" }
+        - { $ref: "#/components/parameters/decidedAfter" }
+        - { $ref: "#/components/parameters/decidedBefore" }
+        - { $ref: "#/components/parameters/itemSort" }
+        - { $ref: "#/components/parameters/limit" }
+        - { $ref: "#/components/parameters/cursor" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ItemPage" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    post:
+      operationId: createItem
+      tags: [items]
+      summary: Create an item (items:write)
+      description: |
+        JSON body, or `multipart/form-data` with one `file` part (uploaded as media;
+        more than one is 400, and the upload is deleted again if the item can't
+        be created) and an optional `item` part containing the JSON fields. The
+        `{id}` may also be the collection's exact name.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/CreateItemInput" } }
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                item: { type: string, description: JSON-encoded CreateItemInput }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/flow:
+    get:
+      operationId: getFlow
+      tags: [items]
+      summary: Items per state and events per type in the last 24 hours (the counts behind the inbox steps)
+      parameters:
+        - { name: collection_id, in: query, description: One collection (default every collection), schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sources, states, events, since]
+                properties:
+                  sources:
+                    type: array
+                    description: Who adds items (the item's source), most recent first
+                    items:
+                      type: object
+                      required: [source, items, last_created_at]
+                      properties:
+                        source: { type: string, description: 'e.g. n8n, claude-code, watcher:<name>; "" when not set' }
+                        items: { type: integer }
+                        last_created_at: { type: string, format: date-time }
+                  states:
+                    type: array
+                    items:
+                      type: object
+                      required: [decision, run, run_action, archived, items]
+                      properties:
+                        decision: { type: string, description: 'pending, approved, rejected, expired, or "" for drafts' }
+                        run: { type: string, enum: [none, processing, completed, failed] }
+                        run_action: { type: string, description: The action that started the run ("" when none) }
+                        archived: { type: boolean }
+                        items: { type: integer }
+                  events:
+                    type: object
+                    additionalProperties: { type: integer }
+                    description: Event type to count since `since`
+                  since: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/agents:
+    get:
+      operationId: listAgents
+      tags: [items]
+      summary: Agents seen talking to the workspace, most recently active first
+      description: >-
+        Recorded automatically: MCP clients by their clientInfo (Claude Code, Codex, Cursor...), REST clients by
+        their User-Agent (an SDK's appended user agent names the agent), per credential. Browsers are not agents.
+        Needs admin: it names the API keys agents use. At most 200 agents are kept per workspace.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Agent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/agents/{id}:
+    delete:
+      operationId: forgetAgent
+      tags: [items]
+      summary: Remove an agent from the list (it comes back when it talks to the workspace again)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/tags:
+    get:
+      operationId: listTags
+      tags: [items]
+      summary: List the workspace's item tags, most used first
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [tag, items]
+                      properties:
+                        tag: { type: string }
+                        items: { type: integer, description: How many items carry it }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/items:
+    get:
+      operationId: listItems
+      tags: [items]
+      summary: List / search items across collections (items:read)
+      parameters:
+        - { name: collection_id, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/itemStatus" }
+        - { $ref: "#/components/parameters/itemDecision" }
+        - { $ref: "#/components/parameters/itemRun" }
+        - { $ref: "#/components/parameters/itemTag" }
+        - { name: archived, in: query, description: "false leaves archived items out, true lists only them (default: both)", schema: { type: string, enum: ["true", "false"] } }
+        - { name: run_action, in: query, description: Items whose current run was started by this action (e.g. publish); none for runs no action started, schema: { type: string } }
+        - { $ref: "#/components/parameters/itemType" }
+        - { $ref: "#/components/parameters/q" }
+        - { $ref: "#/components/parameters/source" }
+        - { $ref: "#/components/parameters/externalRef" }
+        - { $ref: "#/components/parameters/createdAfter" }
+        - { $ref: "#/components/parameters/createdBefore" }
+        - { $ref: "#/components/parameters/decidedAfter" }
+        - { $ref: "#/components/parameters/decidedBefore" }
+        - { $ref: "#/components/parameters/itemSort" }
+        - { $ref: "#/components/parameters/limit" }
+        - { $ref: "#/components/parameters/cursor" }
+      description: |
+        A query runs for at most 5 seconds. A full-text search (`q`) that
+        exceeds it returns 422 `search_too_broad` (add words or filters); a
+        plain listing returns 503 `timeout`. Search text is limited to 16
+        distinct words / 256 bytes; one-letter words match exactly.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ItemPage" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /v1/items/bulk-actions:
+    post:
+      operationId: bulkItemAction
+      tags: [items]
+      summary: Run one action on up to 100 items; each item succeeds or fails independently
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, action]
+              properties:
+                ids: { type: array, minItems: 1, maxItems: 100, items: { type: string } }
+                action: { type: string, description: "approve, reject or a collection action" }
+                feedback: { type: string }
+                edits: { $ref: "#/components/schemas/ItemFields" }
+                payload: { description: Arbitrary JSON forwarded in each event/webhook }
+                expected_version: { type: integer, description: "Ignored: bulk actions never check versions" }
+                follow_up: { type: string, description: "After reject only: run this action next with the same feedback, e.g. regenerate" }
+      responses:
+        "200":
+          description: Per-item results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, ok]
+                      properties:
+                        id: { type: string }
+                        ok: { type: boolean }
+                        error: { $ref: "#/components/schemas/ErrorBody" }
+                        item: { $ref: "#/components/schemas/Item" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/items/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getItem
+      tags: [items]
+      summary: Get an item
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      operationId: updateItem
+      tags: [items]
+      summary: Update an item (items:write). Status may not be set to approved/rejected here.
+      description: |
+        With items:write alone: content (title, content, url, media_id,
+        metadata) of an approved or rejected item can't change (metadata_patch
+        can), and only these status changes are allowed: draft↔pending,
+        any→archived, approved→processing|completed|failed,
+        processing→completed|failed, failed→processing|pending,
+        rejected→pending, expired→pending. Anything else needs items:review (403).
+        Sending only the item's current status answers 409 ("item is already
+        archived"); alongside other changes an unchanged status is ignored.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateItemInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: deleteItem
+      tags: [items]
+      summary: Delete an item (history is kept)
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/items/{id}/actions:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: listItemActions
+      tags: [items]
+      summary: Actions the caller may run on the item in its current status
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/ActionDef" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/items/{id}/actions/{action}:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+      - { name: action, in: path, required: true, schema: { type: string }, description: "approve, reject (items:review) or a collection action (actions:execute)" }
+    post:
+      operationId: runItemAction
+      tags: [items]
+      summary: Approve, reject or run a custom action
+      description: Atomic; concurrent decisions on the same item yield exactly one success, others get 409.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                feedback: { type: string }
+                edits: { $ref: "#/components/schemas/ItemFields" }
+                payload: { description: Arbitrary JSON forwarded in the event/webhook }
+                expected_version: { type: integer }
+                follow_up: { type: string, description: "After reject only: run this action next with the same feedback, e.g. regenerate" }
+      responses:
+        "200": { description: Updated item, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/items/{id}/events:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: listItemEvents
+      tags: [items]
+      summary: Item activity history, newest first
+      parameters:
+        - { $ref: "#/components/parameters/limit" }
+        - { $ref: "#/components/parameters/eventCursor" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EventPage" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/items/{id}/wait:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: waitForItemDecision
+      tags: [items]
+      summary: Long-poll until the item is decided (leaves pending) or the timeout passes
+      parameters:
+        - { name: timeout, in: query, description: "Seconds to wait (default 30, max 60)", schema: { type: integer, maximum: 60 } }
+      responses:
+        "200":
+          description: Current item; decided=false means the timeout passed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decided, item]
+                properties:
+                  decided: { type: boolean }
+                  item: { $ref: "#/components/schemas/Item" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/items/{id}/unarchive:
+    post:
+      operationId: unarchiveItem
+      tags: [items]
+      summary: Bring an archived item back where it was - pending, its run or its decision (event item.unarchived)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The item, no longer archived
+          content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/items/{id}/summarize:
+    post:
+      operationId: summarizeItem
+      tags: [items]
+      summary: Write the item's summary again with the model, with optional extra context (event item.summarized)
+      description: >-
+        Waits for the model (TAGGER_URL). Tags are added too if the item has none. 409 not_configured without a
+        model, 502 model_failed when it does not answer, 429 after 10 calls in a row (then 20 a minute) per caller. Requires items:write.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                context: { type: string, maxLength: 500, description: "Extra context for the model, e.g. what the item is for" }
+      responses:
+        "200":
+          description: The item with its new summary
+          content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { description: The model did not answer, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /v1/items/{id}/result:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: reportItemResult
+      tags: [items]
+      summary: Report the outcome after acting on an approved item (completed or failed)
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [completed, failed] }
+                result: { description: "Any JSON, stored in metadata.result" }
+                error: { type: string, description: Stored in metadata.error }
+      responses:
+        "200": { description: Updated item, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/items/{id}/versions:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: listItemVersions
+      tags: [items]
+      summary: Snapshots of the item before each change
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [version, snapshot, actor, created_at]
+                      properties:
+                        version: { type: integer }
+                        snapshot: { $ref: "#/components/schemas/Item" }
+                        actor: { type: string }
+                        created_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/media:
+    post:
+      operationId: uploadMedia
+      tags: [media]
+      summary: Upload a file (items:write). Type is detected from content; SVG/HTML are rejected.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        "201": { description: Uploaded, content: { application/json: { schema: { $ref: "#/components/schemas/Media" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/media/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getMedia
+      tags: [media]
+      summary: Download/preview a file (items:read). Supports Range requests.
+      description: >
+        With `w`, returns a thumbnail at most `w` pixels wide instead of the
+        original (PNG, JPEG, GIF first frame, WebP). Thumbnails are generated
+        on first request and cached on disk; JPEG for opaque images, PNG when
+        there is transparency; EXIF orientation is applied. Images are never
+        upscaled: when the original is not wider than `w`, it is returned
+        as is, as it is for AVIF and for images over 50 megapixels (not
+        decoded server-side). Thumbnail responses carry an `ETag` and
+        `Cache-Control: private, max-age=31536000, immutable` (a media id
+        never changes content). Other file types answer 422 when `w` is set.
+      parameters:
+        - { name: download, in: query, schema: { type: string }, description: Force attachment disposition }
+        - { name: w, in: query, schema: { type: integer, enum: [160, 320, 640, 1280] }, description: "Thumbnail width in pixels (images only)" }
+      responses:
+        "200": { description: "File bytes (or the thumbnail), with the stored MIME type", content: { "*/*": { schema: { type: string, format: binary } } } }
+        "206": { description: Partial content (Range request), content: { "*/*": { schema: { type: string, format: binary } } } }
+        "304": { description: Not modified (If-None-Match / If-Modified-Since) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "416": { description: Range not satisfiable }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: deleteMedia
+      tags: [media]
+      summary: Delete a file (items referencing it lose their media)
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/events:
+    get:
+      operationId: listEvents
+      tags: [events]
+      summary: Workspace activity log, newest first (items:read)
+      description: >
+        Credential and session audit events (api_key.*, session.*,
+        recovery_key.*, device.*, device_link.*) are only listed for admin
+        principals (dashboard sessions, local mode, keys with the admin scope).
+      parameters:
+        - { name: item_id, in: query, schema: { type: string } }
+        - { name: collection_id, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: actor_type, in: query, schema: { type: string, enum: [local, session, api_key, system] } }
+        - { name: actor_id, in: query, description: "One actor, e.g. an API key id (key_...) or a session id", schema: { type: string } }
+        - { name: agent, in: query, description: "Agent name as listed by /v1/agents (e.g. claude-code, n8n); repeat for any of several", schema: { type: array, items: { type: string } }, style: form, explode: true }
+        - { name: type_prefix, in: query, description: "Literal type prefix, e.g. `item.` or `webhook.`", schema: { type: string } }
+        - { name: from, in: query, description: "created_at >= (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+        - { name: to, in: query, description: "created_at < (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+        - { $ref: "#/components/parameters/limit" }
+        - { $ref: "#/components/parameters/eventCursor" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EventPage" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/webhooks:
+    get:
+      operationId: listWebhooks
+      tags: [webhooks]
+      summary: List webhooks (webhooks:manage)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Webhook" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      operationId: createWebhook
+      tags: [webhooks]
+      summary: Create a webhook. A signing secret is generated.
+      description: The response is the only one that shows the signing secret in full (besides rotate_secret); store it now.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody: { required: true, content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/WebhookInput" }, { required: [url] }] } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/webhooks/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getWebhook
+      tags: [webhooks]
+      summary: Get a webhook
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      operationId: updateWebhook
+      tags: [webhooks]
+      summary: Update a webhook (set rotate_secret to issue a new secret)
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: deleteWebhook
+      tags: [webhooks]
+      summary: Delete a webhook
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/webhooks/{id}/test:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: testWebhook
+      tags: [webhooks]
+      summary: Queue a webhook.test delivery
+      description: Rate-limited per principal (burst 5, then 10 per minute).
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "202": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/Delivery" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/webhook-deliveries:
+    get:
+      operationId: listWebhookDeliveries
+      tags: [webhooks]
+      summary: Delivery history
+      parameters:
+        - { name: webhook_id, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, succeeded, failed] } }
+        - { name: item_id, in: query, description: Only deliveries of events about this item, schema: { type: string } }
+        - { $ref: "#/components/parameters/limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Delivery" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/webhook-deliveries/{id}/retry:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: retryWebhookDelivery
+      tags: [webhooks]
+      summary: Re-queue a finished delivery
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "202": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/Delivery" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/watchers:
+    get:
+      operationId: listWatchers
+      tags: [watchers]
+      summary: List watchers (watchers:manage)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Watcher" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      operationId: createWatcher
+      tags: [watchers]
+      summary: Create a watcher (polls any URL over HTTP; rss reads RSS/Atom entries, url_diff fires when the page changes)
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody: { required: true, content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/WatcherInput" }, { required: [name, url] }, { anyOf: [{ required: [collection] }, { required: [collections] }] }] } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Watcher" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/watchers/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getWatcher
+      tags: [watchers]
+      summary: Get a watcher
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Watcher" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      operationId: updateWatcher
+      tags: [watchers]
+      summary: Update, pause (status=paused) or resume (status=active) a watcher
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WatcherInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Watcher" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: deleteWatcher
+      tags: [watchers]
+      summary: Delete a watcher
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/watchers/{id}/run:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: runWatcher
+      tags: [watchers]
+      summary: Check the source now
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "200":
+          description: Run result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, new_items, entries_seen, baseline]
+                properties:
+                  status: { type: string, enum: [ok, error] }
+                  new_items: { type: integer }
+                  entries_seen: { type: integer }
+                  baseline: { type: boolean, description: First run only records existing entries }
+                  error: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/events/export:
+    get:
+      operationId: exportEvents
+      tags: [events]
+      summary: Export the activity log as NDJSON or CSV, oldest first (items:read)
+      description: |
+        Streams every matching event (chunked; no page size). CSV columns:
+        `created_at,id,type,actor_type,actor_id,actor_name,collection_id,item_id,data`
+        where `data` is the event's JSON. CSV cells starting with `=`, `+`, `-`,
+        `@`, tab or CR are prefixed with `'` (spreadsheet formula injection).
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [ndjson, csv], default: ndjson } }
+        - { name: from, in: query, description: "created_at >= (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+        - { name: to, in: query, description: "created_at < (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+        - { name: type, in: query, description: Exact event type, schema: { type: string } }
+        - { name: type_prefix, in: query, description: "Literal prefix, e.g. `item.`", schema: { type: string } }
+        - { name: actor_type, in: query, schema: { type: string, enum: [session, api_key, local, system] } }
+        - { name: actor_id, in: query, schema: { type: string } }
+        - { name: collection_id, in: query, schema: { type: string } }
+        - { name: item_id, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Event stream (attachment)
+          content:
+            application/x-ndjson:
+              schema: { $ref: "#/components/schemas/Event" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/workspace/export:
+    post:
+      operationId: createWorkspaceExport
+      tags: [auth]
+      summary: Start a full workspace export (admin; GDPR data portability)
+      description: |
+        Queues a background job that builds a ZIP (workspace.json,
+        collections.ndjson, items.ndjson with versions, events.ndjson,
+        media.ndjson, media/ files under their original names, webhooks.json
+        with secrets redacted, watchers.json, README.txt).
+        Only one export per workspace may be pending or running (409 with
+        `details.export_id`). Finished archives are deleted after 24 hours.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceExport" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/workspace/exports:
+    get:
+      operationId: listWorkspaceExports
+      tags: [auth]
+      summary: The workspace's latest exports (backups), newest first, at most 20 (admin)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/WorkspaceExport" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/workspace/exports/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getWorkspaceExport
+      tags: [auth]
+      summary: Export job status (admin)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceExport" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/workspace/exports/{id}/download:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: downloadWorkspaceExport
+      tags: [auth]
+      summary: Download a finished export (admin)
+      responses:
+        "200": { description: ZIP archive (attachment), content: { application/zip: { schema: { type: string, contentMediaType: application/zip } } } }
+        "206": { description: Partial content (Range request), content: { application/zip: { schema: { type: string, contentMediaType: application/zip } } } }
+        "304": { description: Not modified (If-Modified-Since) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "416": { description: Range not satisfiable }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/items/{id}/purge:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: purgeItem
+      tags: [items]
+      summary: Delete an item and its history, including every event about it (admin)
+      description: |
+        Unlike DELETE /v1/items/{id} (which keeps the item's events as
+        history), purge also deletes the item's events and their webhook
+        deliveries (including pending ones), its media when no other item uses
+        it, and cached idempotent responses containing it. One content-free
+        `item.purged` event is recorded. Finished workspace exports are expired.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurgeResult" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /livez:
+    get:
+      operationId: livez
+      tags: [system]
+      summary: Liveness probe
+      description: 200 while the process can serve HTTP. Does not touch the database.
+      security: []
+      responses:
+        "200":
+          description: Alive
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+
+  /readyz:
+    get:
+      operationId: readyz
+      tags: [system]
+      summary: Readiness probe
+      description: |
+        Checks the database (ping), that every embedded migration is applied,
+        and that the background workers are running (heartbeat newer than 30s).
+        `workers` is `not_started` (not a failure) when the process runs no
+        background workers.
+      security: []
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+        "503":
+          description: Not ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+
+  /metrics:
+    get:
+      operationId: metrics
+      tags: [system]
+      summary: Prometheus metrics (text exposition format 0.0.4)
+      description: |
+        Allowed for direct requests from this machine (loopback peer, local
+        Host, no proxy/Origin headers) or with `Authorization: Bearer
+        <METRICS_TOKEN>`. Everything else gets 404.
+      security:
+        - {}
+        - metricsToken: []
+      responses:
+        "200":
+          description: Metrics
+          content:
+            text/plain:
+              schema: { type: string }
+        "404":
+          description: Not allowed (endpoint hidden)
+
+  /v1/notification-channels:
+    get:
+      operationId: listNotificationChannels
+      tags: [notifications]
+      summary: List notification channels (scope channels:manage)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/NotificationChannel" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      operationId: createNotificationChannel
+      tags: [notifications]
+      summary: Create a notification channel
+      description: >
+        Secrets in `config` (bot_token, webhook_url, signing_secret, access_token,
+        password) are encrypted at rest and always returned masked. Plan limit
+        `notification_channels` (402).
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/NotificationChannelInput" }, { required: [name, type, config] }] } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannel" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/notification-channels/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getNotificationChannel
+      tags: [notifications]
+      summary: Get a notification channel
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannel" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      operationId: updateNotificationChannel
+      tags: [notifications]
+      summary: Update a notification channel
+      description: >
+        `config` keys are merged into the stored config; `null` removes a key and a
+        masked secret value (as returned by GET) keeps the stored secret.
+        Changing a destination (telegram chat_id, slack/discord channel, ntfy
+        server_url, email host/port/tls/username) requires re-entering the
+        stored secret it would be sent with (bot_token, access_token, password)
+        in the same request, else 422. Disabling a channel revokes its
+        one-tap decision links. Setting `enabled: true` resets the failure
+        counter. `type` cannot change.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannelInput" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannel" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: deleteNotificationChannel
+      tags: [notifications]
+      summary: Delete a notification channel
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/notification-channels/{id}/test:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: testNotificationChannel
+      tags: [notifications]
+      summary: Send a test message now
+      description: Rate-limited per principal (burst 5, then 10 per minute).
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      responses:
+        "200":
+          description: Result of the attempt (delivery errors are reported, not raised)
+          content: { application/json: { schema: { type: object, required: [ok], properties: { ok: { type: boolean }, error: { type: string } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/notification-channels/{id}/deliveries:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: listNotificationDeliveries
+      tags: [notifications]
+      summary: Recent notification outbox rows for a channel
+      parameters:
+        - { $ref: "#/components/parameters/limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/NotificationDelivery" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/decide/{token}:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string }, description: Single-use decision token from a notification }
+    get:
+      operationId: getDecisionLink
+      tags: [notifications]
+      summary: One-tap decision confirmation page (HTML)
+      description: >
+        Shows the item and a confirmation form. Does not decide (safe for
+        link-preview bots). Public; the token is the credential. Links of
+        deleted or disabled channels no longer work; a pending item that
+        changed since the message was sent answers 409. Returns HTML, or
+        JSON (DecisionResult, `status` empty) when `Accept: application/json`
+        without text/html. Rate-limited per client IP.
+      security: [{}]
+      responses:
+        "200": { $ref: "#/components/responses/DecisionPage" }
+        "404": { $ref: "#/components/responses/DecisionPage" }
+        "409": { $ref: "#/components/responses/DecisionPage" }
+        "410": { $ref: "#/components/responses/DecisionPage" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      operationId: useDecisionLink
+      tags: [notifications]
+      summary: Perform the link's action (approve or reject)
+      description: >
+        Consumes the link and runs the action through the normal action path as
+        actor "Link: <channel name>". Accepts an empty body, a form or JSON with an
+        optional `feedback` (reject only). Returns HTML, or JSON (DecisionResult)
+        when `Accept: application/json` without text/html. 409 when the item was
+        already decided, or (the item changed since the message was sent) because
+        links are bound to the item version they showed; the link is consumed either
+        way. Errors of the action itself (e.g. 402 plan limits) keep their status.
+        Rate-limited per client IP.
+      security: [{}]
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded: { schema: { type: object, properties: { feedback: { type: string, maxLength: 5000 } } } }
+          application/json: { schema: { type: object, properties: { feedback: { type: string, maxLength: 5000 } } } }
+      responses:
+        "200": { $ref: "#/components/responses/DecisionPage" }
+        "400": { $ref: "#/components/responses/DecisionPage" }
+        "402": { $ref: "#/components/responses/DecisionPage" }
+        "404": { $ref: "#/components/responses/DecisionPage" }
+        "409": { $ref: "#/components/responses/DecisionPage" }
+        "410": { $ref: "#/components/responses/DecisionPage" }
+        "422": { $ref: "#/components/responses/DecisionPage" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/integrations/telegram/{channel_id}:
+    parameters:
+      - { name: channel_id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: telegramWebhook
+      tags: [integrations]
+      summary: Telegram webhook (webhook mode channels)
+      description: Verified by the `X-Telegram-Bot-Api-Secret-Token` header (registered automatically via setWebhook).
+      security: [{}]
+      parameters:
+        - { name: X-Telegram-Bot-Api-Secret-Token, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: Telegram Update } } } }
+      responses:
+        "200": { description: Handled, content: { application/json: { schema: { type: object, required: [ok], properties: { ok: { type: boolean, const: true } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/integrations/slack/interactions:
+    post:
+      operationId: slackInteractions
+      tags: [integrations]
+      summary: Slack interactivity request URL
+      description: Verified with `X-Slack-Signature` / `X-Slack-Request-Timestamp` (v0 HMAC-SHA256 with the channel's signing secret, 5-minute window).
+      security: [{}]
+      parameters:
+        - { name: X-Slack-Signature, in: header, required: true, schema: { type: string } }
+        - { name: X-Slack-Request-Timestamp, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/x-www-form-urlencoded: { schema: { type: object, properties: { payload: { type: string } } } } } }
+      responses:
+        "200": { description: Acknowledged (empty body) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/integrations/discord/interactions:
+    post:
+      operationId: discordInteractions
+      tags: [integrations]
+      summary: Discord interactions endpoint URL
+      description: Verified with `X-Signature-Ed25519` / `X-Signature-Timestamp` against the application public key. Answers PING, buttons and the reject-reason modal.
+      security: [{}]
+      parameters:
+        - { name: X-Signature-Ed25519, in: header, required: true, schema: { type: string } }
+        - { name: X-Signature-Timestamp, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: Discord Interaction } } } }
+      responses:
+        "200": { description: Interaction response, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /mcp:
+    post:
+      operationId: mcp
+      tags: [setup]
+      summary: MCP Streamable HTTP endpoint (stateless; keyless in local mode, bearer API key in cloud mode)
+      responses:
+        "200": { description: JSON-RPC response }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, description: "API key: stk_..." }
+    session: { type: apiKey, in: cookie, name: staqly_session }
+
+    metricsToken:
+      type: http
+      scheme: bearer
+      description: The METRICS_TOKEN environment value (not an API key).
+
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: string } }
+    limit: { name: limit, in: query, description: "Page size (default 50, at most 200)", schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    cursor: { name: cursor, in: query, description: Opaque keyset cursor (the previous page's next_cursor), schema: { type: string } }
+    eventCursor: { name: cursor, in: query, description: "The previous page's next_cursor (an event seq)", schema: { type: string, pattern: "^[0-9]+$" } }
+    itemStatus: { name: status, in: query, schema: { $ref: "#/components/schemas/ItemStatus" } }
+    itemDecision:
+      name: decision
+      in: query
+      description: Comma-separated, any of pending, approved, rejected, expired (archived items are left out), or archived for the archive.
+      schema: { type: string, example: "approved,rejected" }
+    itemTag:
+      name: tag
+      in: query
+      description: Comma-separated; items carrying any of these tags.
+      schema: { type: string, example: "client-a,urgent" }
+    itemRun:
+      name: run
+      in: query
+      description: Comma-separated, any of none, processing, completed, failed.
+      schema: { type: string, example: "processing,failed" }
+    itemType: { name: type, in: query, schema: { $ref: "#/components/schemas/ItemType" } }
+    q: { name: q, in: query, description: "Full-text search (prefix match, diacritics-insensitive) over title, content and metadata", schema: { type: string } }
+    source: { name: source, in: query, description: Exact item source, schema: { type: string } }
+    externalRef: { name: external_ref, in: query, description: Exact external_ref, schema: { type: string } }
+    createdAfter: { name: created_after, in: query, description: "created_at >= (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+    createdBefore: { name: created_before, in: query, description: "created_at < (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+    decidedAfter: { name: decided_after, in: query, description: "decided_at >= (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+    decidedBefore: { name: decided_before, in: query, description: "decided_at < (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+    itemSort: { name: sort, in: query, description: "Defaults to relevance when q is set, otherwise created_desc", schema: { type: string, enum: [relevance, created_desc, created_asc, updated_desc, updated_asc, decided_desc, title_asc] } }
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: |
+        Replays the stored response when the same key is repeated with the same method, path,
+        query string and body within 24 hours (422 `idempotency_mismatch` with a different
+        request, 409 `idempotency_in_progress` while the first one runs). Not applied to
+        multipart uploads or to responses that carry a secret.
+      schema: { type: string, maxLength: 200 }
+
+  responses:
+    BadRequest:
+      description: The body is not valid JSON or has unknown fields (`bad_request`)
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    Unauthorized:
+      description: |
+        Missing, invalid, expired or revoked credentials (`unauthorized`). In cloud mode every
+        /v1 request except the public ones needs an API key or a session; a malformed or
+        unknown `Authorization` header is refused on every /v1 endpoint.
+      headers:
+        WWW-Authenticate: { schema: { type: string }, description: "Bearer realm=\"staqly\"" }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    PaymentRequired:
+      description: |
+        `plan_limit_exceeded` (a plan limit; `details` has limit, max, used, plan),
+        `plan_expired` (the workspace is suspended and read-only) or `payment_required`.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    Forbidden:
+      description: |
+        `forbidden` (the API key lacks a scope, or the action needs a dashboard session),
+        `csrf_failed` (session request without a valid `X-CSRF-Token`) or `not_local`
+        (local mode: the request does not provably come from this machine).
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    NotFound:
+      description: Not found in this workspace (`not_found`)
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    Conflict:
+      description: |
+        `conflict` (state or version conflict, including re-applying the current state,
+        e.g. "watcher is already paused"), or `idempotency_in_progress` when a request
+        with the same `Idempotency-Key` is still running.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    Gone:
+      description: Used, expired or deleted (`gone`, `link_used`, `link_expired`)
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    PayloadTooLarge:
+      description: Body over the size limit (`too_large`; JSON bodies 2 MiB, uploads MAX_UPLOAD_BYTES)
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    UnsupportedMediaType:
+      description: |
+        A file type that may not be uploaded (`unsupported_media_type`). A request body that
+        is neither JSON nor multipart/form-data also gets 415 (empty body).
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    ValidationFailed:
+      description: |
+        `validation_failed` (`fields` maps each invalid field to a message), or
+        `idempotency_mismatch` when an `Idempotency-Key` is reused with a different request.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    RateLimited:
+      description: |
+        Too many requests (`error.code` = `rate_limited`). Unauthenticated
+        sensitive endpoints (POST /v1/sessions/recover, POST
+        /v1/device-links/redeem, POST /v1/workspaces, /v1/decide/*) are
+        limited per client IP; other /v1 and /mcp requests in cloud mode are
+        limited per API key / session.
+      headers:
+        Retry-After: { $ref: "#/components/headers/Retry-After" }
+        X-Request-Id: { $ref: "#/components/headers/X-Request-Id" }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    DecisionPage:
+      description: "An HTML page, or DecisionResult JSON when `Accept: application/json` is sent without text/html"
+      content:
+        text/html: { schema: { type: string } }
+        application/json: { schema: { $ref: "#/components/schemas/DecisionResult" } }
+    BadGateway:
+      description: The payment provider (Stripe) refused or failed the request (`payment_provider_error`)
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    Unavailable:
+      description: |
+        `timeout` (the query ran longer than 5 seconds) or `busy` (the database stayed
+        locked; retry after `Retry-After`).
+      headers:
+        Retry-After: { $ref: "#/components/headers/Retry-After" }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  schemas:
+    Agent:
+      type: object
+      required: [id, kind, name, version, principal_id, principal_name, first_seen_at, last_seen_at, requests, items_created]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [mcp, api] }
+        name: { type: string, description: "e.g. claude-code, my-agent, n8n" }
+        version: { type: string }
+        principal_id: { type: string, description: "The API key it uses, or local for keyless local requests" }
+        principal_name: { type: string }
+        first_seen_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        requests: { type: integer, description: "Requests recorded (written at most once a minute)" }
+        items_created: { type: integer }
+    Usage:
+      description: Plan, monthly usage and trial/suspension state (also returned inline by GET /v1/workspace/usage)
+      type: object
+      required: [plan, period, usage, plan_expires_at, suspended]
+      properties:
+        plan: { $ref: "#/components/schemas/Plan" }
+        period: { type: string, examples: ["2026-10"] }
+        usage:
+          type: object
+          required: [items_per_month, decisions_per_month, webhooks, api_keys, storage_bytes, watchers, notification_channels]
+          properties:
+            items_per_month: { type: integer }
+            decisions_per_month: { type: integer, description: Approvals and rejections this month }
+            webhooks: { type: integer }
+            api_keys: { type: integer }
+            storage_bytes: { type: integer }
+            watchers: { type: integer, description: Active (not paused) watchers }
+            notification_channels: { type: integer }
+        plan_expires_at:
+          type: [string, "null"]
+          format: date-time
+          description: End of the Pro trial (7 days from signup) or paid period; null = no end.
+        suspended:
+          type: boolean
+          description: |
+            The Pro trial or paid period ended unpaid. The workspace is read-only:
+            reads and exports work, other changes answer 402 `plan_expired` until it is
+            paid or switched to Free (`POST /v1/workspace/plan`).
+    Billing:
+      type: object
+      required: [enabled, plan, subscription_status, plan_expires_at, suspended, has_customer]
+      properties:
+        enabled: { type: boolean, description: Billing is configured on this instance }
+        plan: { type: string, enum: [free, pro, unlocked] }
+        subscription_status:
+          type: [string, "null"]
+          description: Stripe's status (active, trialing, past_due, canceled, unpaid, incomplete); null when never subscribed
+          examples: [active]
+        plan_expires_at: { type: [string, "null"], description: End of the trial or paid period (null = no end) }
+        suspended: { type: boolean, description: The period ended unpaid; the workspace is read-only }
+        has_customer: { type: boolean, description: A Stripe customer exists (the portal is available) }
+    BillingURL:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, examples: ["https://checkout.stripe.com/c/pay/cs_test_a1b2c3"] }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/ErrorBody" }
+        request_id: { type: string, description: Same as the X-Request-Id response header }
+        trace_id: { type: string, description: "W3C trace id from the request's traceparent header, when one was sent (for correlating with logs)" }
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable code; new codes may be added.
+          examples: [bad_request, unauthorized, invalid_link, forbidden, csrf_failed, not_local, not_found, conflict, not_available, idempotency_in_progress, item_changed, gone, link_used, link_expired, plan_limit_exceeded, plan_expired, payment_required, too_large, unsupported_media_type, validation_failed, not_editable, search_too_broad, idempotency_mismatch, rate_limited, payment_provider_error, timeout, busy, internal]
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+        details: { type: object, additionalProperties: true, description: "plan_limit_exceeded: limit, max, used, plan" }
+
+    Scope:
+      type: string
+      enum: ["collections:read", "collections:write", "items:read", "items:write", "items:review", "actions:execute", "webhooks:manage", "watchers:manage", "channels:manage", admin]
+
+    ItemStatus:
+      type: string
+      enum: [draft, pending, approved, rejected, expired, processing, completed, failed, archived]
+
+    ItemType:
+      type: string
+      enum: [image, video, text, link, json, file]
+
+    Watcher:
+      type: object
+      required: [id, name, kind, url, collection_id, collection_ids, keywords, exclude_keywords, every, every_seconds, status, last_error, last_run_at, next_run_at, items_created, fail_count, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string, enum: [rss, url_diff] }
+        url: { type: string }
+        collection_id: { type: string, description: The first of collection_ids }
+        collection_ids: { type: array, items: { type: string }, description: Every collection new entries are added to }
+        keywords: { type: array, items: { type: string } }
+        exclude_keywords: { type: array, items: { type: string } }
+        every: { type: string, examples: ["1h0m0s"] }
+        every_seconds: { type: integer }
+        status: { type: string, enum: [active, degraded, paused] }
+        last_error: { type: string }
+        last_run_at: { type: [string, "null"] }
+        next_run_at: { type: string }
+        items_created: { type: integer }
+        fail_count: { type: integer }
+        created_at: { type: string }
+        updated_at: { type: string }
+    WatcherInput:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [rss, url_diff], description: "Left out on create: staqly reads the URL once and picks rss for an RSS/Atom feed, url_diff for anything else" }
+        url: { type: string }
+        collection: { type: string, description: Collection ID or name (one collection; same as collections with one entry) }
+        collections: { type: array, items: { type: string }, minItems: 1, maxItems: 20, description: "Collection IDs or names: each new entry is added to every one of them. Replaces the watcher's list." }
+        keywords: { type: array, items: { type: string }, description: "Only entries whose title or summary (for url_diff: the changed page text) contains at least one of these, case-insensitive" }
+        exclude_keywords: { type: array, items: { type: string }, description: "Skip entries whose title or summary contains any of these, case-insensitive" }
+        every: { type: string, examples: ["15m", "6h"] }
+        status: { type: string, enum: [active, paused] }
+    Plan:
+      type: object
+      required: [id, name, price_usd_month, highlight, limits, features]
+      properties:
+        id: { type: string, enum: [free, pro, unlocked] }
+        name: { type: string }
+        price_usd_month: { type: integer }
+        highlight: { type: boolean }
+        limits:
+          type: object
+          required: [items_per_month, decisions_per_month, webhooks, api_keys, storage_bytes, max_upload_bytes, watchers, min_watcher_interval_seconds, notification_channels]
+          properties:
+            items_per_month: { type: integer }
+            decisions_per_month: { type: integer, description: "Approvals and rejections per calendar month (people, chat and bulk); -1 = unlimited" }
+            webhooks: { type: integer }
+            api_keys: { type: integer }
+            storage_bytes: { type: integer }
+            max_upload_bytes: { type: integer }
+            watchers: { type: integer }
+            min_watcher_interval_seconds: { type: integer }
+            notification_channels: { type: integer }
+        features: { type: array, items: { type: string } }
+
+    Workspace:
+      type: object
+      required: [id, name, plan, recovery_rotated_at, created_at, processing_timeout_seconds]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        plan: { type: string, enum: [free, pro, unlocked] }
+        recovery_rotated_at: { type: string }
+        created_at: { type: string }
+        processing_timeout_seconds:
+          type: integer
+          description: How long an item may stay processing before it fails, in seconds (0 = never).
+
+    APIKey:
+      type: object
+      required: [id, name, prefix, scopes, created_at, last_used_at, expires_at, revoked_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string }
+        scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+        created_at: { type: string }
+        last_used_at: { type: [string, "null"] }
+        expires_at: { type: [string, "null"] }
+        revoked_at: { type: [string, "null"] }
+        key: { type: string, description: Raw secret; only in create/rotate responses }
+
+    Session:
+      type: object
+      required: [id, user_agent, created_at, last_seen_at, expires_at, current]
+      properties:
+        id: { type: string }
+        user_agent: { type: string }
+        created_at: { type: string }
+        last_seen_at: { type: string }
+        expires_at: { type: string }
+        current: { type: boolean }
+
+    ActionDef:
+      type: object
+      required: [name, label, event, requires_feedback]
+      properties:
+        name: { type: string, pattern: "^[a-z][a-z0-9_]{0,39}$" }
+        label: { type: string }
+        event: { type: string, description: "Event emitted, e.g. item.regenerate_requested. Reserved names emitted by staqly itself (item.created, item.updated, item.deleted, item.approved, item.rejected, item.escalated, item.expired, item.status_changed, item.rule_applied, item.completed, item.failed, item.purged, item.tags_changed, item.summarized, item.unarchived) are refused; item.archived is allowed." }
+        requires_feedback: { type: boolean }
+        set_status: { $ref: "#/components/schemas/ItemStatus" }
+        allowed_statuses: { type: array, items: { $ref: "#/components/schemas/ItemStatus" } }
+        builtin: { type: boolean }
+        run_labels:
+          type: object
+          description: For an action that starts a run (set_status processing), what to call it, e.g. Publishing / Published / Publish failed. Empty labels read Processing / Completed / Failed.
+          properties:
+            running: { type: string, maxLength: 40 }
+            done: { type: string, maxLength: 40 }
+            failed: { type: string, maxLength: 40 }
+
+    Collection:
+      type: object
+      required: [id, name, description, icon, color, default_view, actions, is_default, archived, archived_at, created_at, updated_at, item_count, status_counts]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        icon: { type: string }
+        color: { type: string }
+        default_view: { type: string, enum: [gallery, table, list] }
+        actions: { type: array, items: { $ref: "#/components/schemas/ActionDef" } }
+        is_default:
+          type: boolean
+          description: The workspace's Default collection. Every workspace has exactly one; it can be renamed but not archived or deleted (409).
+        archived: { type: boolean }
+        archived_at: { type: [string, "null"] }
+        created_at: { type: string }
+        updated_at: { type: string }
+        item_count: { type: integer }
+        status_counts: { type: object, additionalProperties: { type: integer } }
+        cover:
+          type: object
+          properties:
+            media_id: { type: string }
+            url: { type: string }
+
+    CollectionInput:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        icon: { type: string }
+        color: { type: string }
+        default_view: { type: string, enum: [gallery, table, list] }
+        actions: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/ActionDefInput" }, description: Replaces the custom actions }
+        archived: { type: boolean }
+
+    ActionDefInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, pattern: "^[a-z][a-z0-9_]{0,39}$", description: "Not approve or reject (built in)" }
+        label: { type: string, description: "Defaults to the name, capitalized" }
+        event: { type: string, pattern: '^item\.[a-z0-9_.]{1,60}$', description: "Defaults to item.<name>_requested; names staqly emits itself are refused (see ActionDef.event)" }
+        requires_feedback: { type: boolean }
+        set_status: { $ref: "#/components/schemas/ItemStatus", description: Not approved or rejected }
+        allowed_statuses: { type: array, items: { $ref: "#/components/schemas/ItemStatus" } }
+        builtin: { type: boolean, description: Ignored }
+        run_labels:
+          type: object
+          description: Only for set_status processing; see ActionDef.run_labels.
+          properties:
+            running: { type: string, maxLength: 40 }
+            done: { type: string, maxLength: 40 }
+            failed: { type: string, maxLength: 40 }
+
+    MediaRef:
+      type: object
+      required: [id, mime_type, size_bytes, original_name, url]
+      properties:
+        id: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+        original_name: { type: string }
+        url: { type: string, description: Absolute URL (PUBLIC_API_URL); requires authentication }
+
+    Media:
+      type: object
+      description: An uploaded file (MediaRef plus its hash and upload time)
+      required: [id, mime_type, size_bytes, original_name, url, sha256, created_at]
+      properties:
+        id: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+        original_name: { type: string }
+        url: { type: string, description: Absolute URL (PUBLIC_API_URL); requires authentication }
+        sha256: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Item:
+      type: object
+      required: [id, collection_id, title, type, content, url, media, metadata, status, source, external_ref, feedback, version, decided_at, expires_at, decision, run, archived_at, run_action, summary, tags, processing_timeout_seconds, editable, created_at, updated_at]
+      properties:
+        id: { type: string }
+        collection_id: { type: string }
+        title: { type: string }
+        type: { $ref: "#/components/schemas/ItemType" }
+        content: { type: string }
+        url: { type: string }
+        media: { oneOf: [{ $ref: "#/components/schemas/MediaRef" }, { type: "null" }] }
+        metadata: { type: object, additionalProperties: true }
+        status: { $ref: "#/components/schemas/ItemStatus" }
+        source: { type: string }
+        external_ref: { type: string }
+        feedback: { type: string, description: Latest review/action feedback }
+        version: { type: integer }
+        decided_at: { type: [string, "null"] }
+        expires_at: { type: [string, "null"], description: Pending items become expired after this time }
+        decision:
+          type: [string, "null"]
+          enum: [pending, approved, rejected, expired, null]
+          description: What the reviewer decided (or expiry); null = draft, not submitted for review yet.
+        run:
+          type: string
+          enum: [none, processing, completed, failed]
+          description: What the automation did after the decision. A new decision resets it to none.
+        archived_at:
+          type: [string, "null"]
+          description: When the item was archived; null = not archived. `status` is the older single summary of all three.
+        run_action:
+          type: [string, "null"]
+          description: The collection action that started the current run (its `run_labels` name it, e.g. Publishing).
+        summary:
+          type: string
+          maxLength: 120
+          description: One short line on what the item is, written by the auto-tagger's model after the item is saved (`TAGGER_URL`); empty until then, or without one.
+        tags:
+          type: array
+          items: { type: string }
+          description: Labels on the item; filter with `?tag=`. Items created without tags get a few from the auto-tagger's model, if one is set up.
+        processing_timeout_seconds:
+          type: [integer, "null"]
+          description: This item's own processing limit in seconds; null uses the workspace's.
+        editable: { type: array, items: { type: string }, description: Fields a reviewer may edit before approving (empty = all) }
+        created_at: { type: string }
+        updated_at: { type: string }
+
+    ItemFields:
+      type: object
+      properties:
+        title: { type: string }
+        content: { description: "String, or any JSON value (stored compacted)" }
+        url: { type: string }
+        media_id: { type: string, description: Empty string clears }
+        metadata: { type: object, additionalProperties: true, description: Replaces metadata }
+        metadata_patch: { type: object, additionalProperties: true, description: Merges top-level keys; null removes a key }
+
+    CreateItemInput:
+      type: object
+      description: ItemFields plus the item's type, initial status, origin and review options.
+      properties:
+        title: { type: string }
+        content: { description: "String, or any JSON value (stored compacted)" }
+        url: { type: string }
+        media_id: { type: string, description: Empty string clears }
+        metadata: { type: object, additionalProperties: true, description: Replaces metadata }
+        metadata_patch: { type: object, additionalProperties: true, description: Merges top-level keys; null removes a key }
+        type: { $ref: "#/components/schemas/ItemType" }
+        status: { $ref: "#/components/schemas/ItemStatus" }
+        source: { type: string }
+        external_ref: { type: string }
+        expires_in: { oneOf: [{ type: integer, minimum: 60 }, { type: string, examples: ["24h"] }], description: Undecided pending items expire after this (60 s – 90 days) }
+        editable: { type: array, items: { type: string }, description: "title, content, url, media_id, metadata or metadata.<key>" }
+        tags: { type: array, items: { type: string, maxLength: 40 }, maxItems: 20, description: Labels on the item }
+
+    UpdateItemInput:
+      type: object
+      description: ItemFields plus status, origin, a move to another collection and an optimistic version check.
+      properties:
+        title: { type: string }
+        content: { description: "String, or any JSON value (stored compacted)" }
+        url: { type: string }
+        media_id: { type: string, description: Empty string clears }
+        metadata: { type: object, additionalProperties: true, description: Replaces metadata }
+        metadata_patch: { type: object, additionalProperties: true, description: Merges top-level keys; null removes a key }
+        status: { $ref: "#/components/schemas/ItemStatus" }
+        source: { type: string }
+        external_ref: { type: string }
+        collection_id: { type: string, description: Move the item to this collection }
+        tags:
+          type: array
+          items: { type: string, maxLength: 40 }
+          maxItems: 20
+          description: Replaces the item's tags; allowed in any status (a label is not reviewed content).
+        processing_timeout_seconds:
+          type: integer
+          description: This item's own processing limit in seconds (60-86400); 0 goes back to the workspace's. Does not create a version or restart the clock.
+        expected_version: { type: integer, description: 409 when the item's version differs }
+
+    ItemPage:
+      type: object
+      required: [data]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Item" } }
+        next_cursor: { type: string }
+
+    Event:
+      type: object
+      required: [id, seq, type, collection_id, item_id, actor, data, created_at]
+      properties:
+        id: { type: string }
+        seq: { type: integer }
+        type: { type: string, examples: [item.created, item.approved, item.rejected, item.regenerate_requested, item.status_changed] }
+        collection_id: { type: [string, "null"] }
+        item_id: { type: [string, "null"] }
+        actor:
+          type: object
+          required: [type, id, name]
+          properties:
+            type: { type: string, enum: [local, session, api_key, system] }
+            id: { type: string }
+            name: { type: string }
+            agent: { type: string, description: "The MCP or REST client that acted (as listed by /v1/agents), when known" }
+        data: { type: object, additionalProperties: true }
+        created_at: { type: string }
+
+    EventPage:
+      type: object
+      required: [data]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Event" } }
+        next_cursor: { type: string }
+
+    Webhook:
+      type: object
+      required: [id, url, description, secret, events, collection_ids, active, timeout_ms, max_attempts, created_at, updated_at]
+      properties:
+        id: { type: string }
+        url: { type: string }
+        description: { type: string }
+        secret: { type: string, description: "HMAC key; X-Staqly-Signature = sha256=hex(HMAC_SHA256(secret, timestamp + '.' + body)). Shown in full only in the create response and after rotate_secret; elsewhere masked as whsec_****<last 4>." }
+        events: { type: array, items: { type: string }, description: 'Exact names or globs: "*", "item.*"' }
+        collection_ids: { type: array, items: { type: string }, description: Empty means all collections }
+        active: { type: boolean }
+        timeout_ms: { type: integer }
+        max_attempts: { type: integer }
+        created_at: { type: string }
+        updated_at: { type: string }
+
+    WebhookInput:
+      type: object
+      properties:
+        url: { type: string }
+        description: { type: string }
+        events: { type: array, items: { type: string } }
+        collection_ids: { type: array, items: { type: string } }
+        active: { type: boolean }
+        timeout_ms: { type: integer, minimum: 1000, maximum: 60000 }
+        max_attempts: { type: integer, minimum: 1, maximum: 20 }
+        rotate_secret: { type: boolean }
+
+    Delivery:
+      type: object
+      required: [id, webhook_id, event_id, event_type, status, attempts, next_attempt_at, last_status_code, last_error, last_response, last_attempt_at, delivered_at, created_at]
+      properties:
+        id: { type: string }
+        webhook_id: { type: string }
+        event_id: { type: string }
+        event_type: { type: string }
+        status: { type: string, enum: [pending, succeeded, failed] }
+        attempts: { type: integer }
+        next_attempt_at: { type: [string, "null"] }
+        last_status_code: { type: [integer, "null"] }
+        last_error: { type: string }
+        last_response: { type: string, description: "First 2 KB of the receiver's response body (local mode only; always empty in cloud mode)" }
+        last_attempt_at: { type: [string, "null"] }
+        delivered_at: { type: [string, "null"] }
+        created_at: { type: string }
+
+    WorkspaceExport:
+      type: object
+      required: [id, status, size_bytes, created_at, started_at, finished_at, expires_at]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [pending, running, ready, failed, expired] }
+        size_bytes: { type: integer }
+        error: { type: string }
+        created_at: { type: string, format: date-time }
+        started_at: { type: [string, "null"], format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        expires_at: { type: string, format: date-time }
+        download_url: { type: string, description: "Relative URL, present when status is ready" }
+
+    PurgeResult:
+      type: object
+      required: [item_id, events_deleted, media_deleted]
+      properties:
+        item_id: { type: string }
+        events_deleted: { type: integer }
+        media_deleted: { type: boolean }
+
+    Readiness:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+        checks:
+          type: object
+          properties:
+            database: { type: string, enum: [ok, unavailable] }
+            migrations: { type: string, description: "ok, unknown, or pending (applied < embedded)" }
+            workers: { type: string, enum: [ok, not_started, stale, stopped] }
+
+    NotificationChannelConfig:
+      type: object
+      additionalProperties: false
+      description: >
+        Type-specific settings. Secret fields are write-only (returned masked, e.g. "••••abcd").
+        telegram: bot_token*, chat_id*, mode (polling|webhook), approver_user_ids.
+        slack: webhook_url* or bot_token*+channel*, signing_secret (enables buttons), approver_user_ids.
+        discord: webhook_url* or bot_token*+channel*; application_id + public_key enable buttons; approver_user_ids.
+        ntfy: topic*, server_url (default https://ntfy.sh), access_token, priority.
+        email: host*, port, username, password, from*, to*, tls (starttls|tls|none).
+        On update, keys are merged into the stored config and `null` removes a key.
+      properties:
+        bot_token: { type: [string, "null"], writeOnly: true, description: Secret (Telegram/Slack/Discord bot token) }
+        chat_id: { type: [string, "null"] }
+        mode: { type: [string, "null"], enum: [polling, webhook, null] }
+        webhook_url: { type: [string, "null"], format: uri, description: Secret (Slack/Discord webhook URL) }
+        channel: { type: [string, "null"], description: Slack channel ID or Discord channel ID (bot mode) }
+        signing_secret: { type: [string, "null"], description: Secret (Slack app signing secret) }
+        application_id: { type: [string, "null"] }
+        public_key: { type: [string, "null"], description: Discord application public key (hex) }
+        approver_user_ids: { type: [array, "null"], items: { type: [string, integer] }, description: Platform user IDs allowed to decide from chat (strings or numbers) }
+        server_url: { type: [string, "null"], format: uri }
+        topic: { type: [string, "null"] }
+        access_token: { type: [string, "null"], description: Secret (ntfy token) }
+        priority: { type: [integer, "null"], minimum: 1, maximum: 5 }
+        host: { type: [string, "null"] }
+        port: { type: [integer, "null"] }
+        username: { type: [string, "null"] }
+        password: { type: [string, "null"], description: Secret (SMTP password) }
+        from: { type: [string, "null"] }
+        to: { type: [array, "null"], items: { type: string, format: email } }
+        tls: { type: [string, "null"], enum: [starttls, tls, none, null] }
+    NotificationChannelInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 100 }
+        type: { type: string, enum: [telegram, slack, discord, ntfy, email], description: Required on create; immutable }
+        enabled: { type: boolean }
+        config: { $ref: "#/components/schemas/NotificationChannelConfig" }
+        events:
+          type: array
+          items: { type: string }
+          description: 'Event patterns (glob, "*"). Default ["item.created"]; item.created only fires for pending items.'
+        collection_ids: { type: array, items: { type: string } }
+        digest_window_seconds: { type: integer, minimum: 0, maximum: 86400, description: Batch events within this window into one message (0 = immediately) }
+    NotificationChannel:
+      type: object
+      required: [id, name, type, enabled, config, events, collection_ids, digest_window_seconds, fail_count, last_error, disabled_reason, last_sent_at, interactive, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [telegram, slack, discord, ntfy, email] }
+        enabled: { type: boolean }
+        config: { type: object, additionalProperties: true, description: Settings with secrets masked }
+        events: { type: array, items: { type: string } }
+        collection_ids: { type: array, items: { type: string } }
+        digest_window_seconds: { type: integer }
+        fail_count: { type: integer, description: Consecutive failed sends; the channel is disabled at NOTIFY_MAX_FAILS }
+        last_error: { type: string }
+        disabled_reason: { type: string }
+        last_sent_at: { type: [string, "null"], format: date-time }
+        interactive: { type: boolean, description: Approve/Reject buttons in chat (otherwise one-tap links) }
+        integration_url: { type: string, description: URL to configure in Slack/Discord (or registered with Telegram in webhook mode) }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NotificationDelivery:
+      type: object
+      required: [id, channel_id, event_id, event_type, item_id, status, attempts, next_attempt_at, last_error, sent_at, created_at]
+      properties:
+        id: { type: string }
+        channel_id: { type: string }
+        event_id: { type: string }
+        event_type: { type: string }
+        item_id: { type: [string, "null"] }
+        status: { type: string, enum: [pending, sent, failed, skipped] }
+        attempts: { type: integer }
+        next_attempt_at: { type: [string, "null"], format: date-time }
+        last_error: { type: string }
+        sent_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    DecisionResult:
+      type: object
+      required: [message, status]
+      properties:
+        message: { type: string }
+        status: { type: string, enum: [approved, rejected, ""] }
+        item_id: { type: string }
+        action: { type: string, enum: [approve, reject] }
+
+  headers:
+    X-Request-Id:
+      description: Request id (the caller's X-Request-Id if sent, else generated). Present on every response.
+      schema: { type: string }
+    Retry-After:
+      description: Seconds until a retry may succeed (sent with 429, and with 503 `busy`).
+      schema: { type: integer, minimum: 1 }

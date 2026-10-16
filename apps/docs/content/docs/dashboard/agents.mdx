@@ -1,0 +1,25 @@
+---
+title: Agents
+description: See every agent that talks to your workspace, how it connects, when it was last active and how many items it added.
+---
+
+The **Integrations** page lists everything that has talked to this workspace, most recently active first, in
+two groups: **Agents** (MCP clients) and **API connections** (REST clients such as n8n, SDK scripts or curl). Click one to narrow **Recent activity** below it to that agent's events (each event
+records its agent; `GET /v1/events?agent=claude-code` does the same through the API).
+staqly records them on its own; there is nothing to register:
+
+- an **MCP** client by the name it gives when it connects (Claude Code, Codex, Cursor...);
+- an **API** client by its `User-Agent`. With the SDKs, pass your agent's name (`user_agent="my-agent/1.2"` in
+  Python, `userAgent: 'my-agent/1.2'` in TypeScript) and it shows up as **my-agent**; n8n, curl and other tools
+  show up under their own name.
+
+An item saved over REST without a `source` gets the client's name as its source (`my-agent`, `n8n`, `curl`),
+so the Inbox shows who made it; MCP `create_item` uses `mcp:` and the API key's name (on a local install, your
+name), and the dashboard uses `dashboard`.
+
+Each agent is listed per credential: the API key it uses, or **No key (this machine)** for keyless local
+requests. A green dot means it talked to the workspace in the last 2 minutes, amber today, grey earlier. You
+also see how many items it added and how many requests it made (written at most once a minute).
+
+People signed in to the dashboard are not agents and are not listed. The list needs admin (it names API keys) and keeps up to 200 agents. The bin icon removes an agent from the
+list; it comes back the next time it calls. The list comes from `GET /v1/agents`.

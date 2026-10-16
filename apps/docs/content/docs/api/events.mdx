@@ -1,0 +1,194 @@
+---
+title: Event types
+description: Look up every event staqly records, so you can read the activity log or subscribe a webhook to the right ones.
+---
+
+Every change in staqly — an item created, approved, rejected, a webhook added — is recorded as an
+**event**. The same events feed the activity log, item history and [webhooks](/automation/webhooks).
+Use this page to pick the event types your automation should react to.
+
+## Read and subscribe to events
+
+<Steps>
+<Step>
+### See what happened
+
+List recent events, newest first (scope `items:read` in cloud mode):
+
+```bash
+curl -s "http://localhost:3333/v1/events?type=item.approved"
+```
+
+Narrow the list with filters, for example everything one API key did in the last week:
+
+```bash
+curl -s "http://localhost:3333/v1/events?actor_type=api_key&actor_id=key_r7zq2m4xk3pw6ta5ned2&from=2026-10-06&to=2026-10-13"
+```
+
+All filters are listed in [Pagination & search](/api/pagination-and-search#listing-events). To
+download the whole log as NDJSON or CSV, use `GET /v1/events/export` with the same filters
+(see [Data export](/self-hosting/data-export)).
+</Step>
+<Step>
+### Subscribe a webhook
+
+To be told about events as they happen, create a webhook with the event patterns you want
+(scope `webhooks:manage` in cloud mode):
+
+```bash
+curl -s -X POST http://localhost:3333/v1/webhooks -H 'Content-Type: application/json' \
+  -d '{"url":"https://example.com/hooks/staqly","events":["item.approved","item.rejected"]}'
+```
+
+Setup, signatures and retries are covered in [Webhooks](/automation/webhooks).
+</Step>
+</Steps>
+
+## Event shape
+
+Events are immutable. Each one has these fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Event ID, e.g. `evt_looiyqe5kfkjh4xedcnd` |
+| `seq` | integer | Monotonically increasing sequence number; the events cursor is based on it |
+| `type` | string | Event type, e.g. `item.approved` (tables below) |
+| `collection_id` | string or `null` | The collection the event belongs to, if any |
+| `item_id` | string or `null` | The item the event is about, if any |
+| `actor` | object | Who caused it: `type`, `id` and `name` (see [Actors](#actors)) |
+| `data` | object | Type-specific details (tables below) |
+| `created_at` | string | ISO-8601 UTC timestamp |
+
+```json
+{
+  "id": "evt_looiyqe5kfkjh4xedcnd",
+  "seq": 1042,
+  "type": "item.approved",
+  "collection_id": "col_qjuybkx6355nz4no6pqk",
+  "item_id": "itm_oalirbz67y4m4cqxq5dw",
+  "actor": { "type": "session", "id": "ses_d3k2m7q4xw5tz6pa6hbn", "name": "Dashboard" },
+  "data": {
+    "item": { "id": "itm_oalirbz67y4m4cqxq5dw", "status": "approved", "title": "Caption draft" },
+    "collection": { "id": "col_qjuybkx6355nz4no6pqk", "name": "Instagram Avatar" },
+    "action": "approve",
+    "previous_status": "pending"
+  },
+  "created_at": "2026-10-13T09:41:07Z"
+}
+```
+
+The entity an event is about is in `item_id` / `collection_id`, or, for events about other
+objects, in `data` (for example `data.webhook`, `data.watcher_id`). Item events carry
+a snapshot: `data.item` (the item after the change; before the deletion for `item.deleted`) and
+`data.collection` (`id`, `name`).
+
+## Item events
+
+| Type | When | Extra `data` |
+|---|---|---|
+| `item.created` | An item was created (by anyone, including watchers) | — |
+| `item.updated` | Fields changed via `PATCH` | `previous_status` |
+| `item.tags_changed` | Tags replaced (no new version) | `tags` |
+| `item.summarized` | The model wrote the item's summary (and tags, if it had none); no new version | `summary`, `tags` |
+| `item.unarchived` | An archived item was brought back | `status` |
+| `item.status_changed` | Status changed via `PATCH` | `previous_status` |
+| `item.approved` | Approved — by a person or an agent | `action`, `feedback`, `edited`, `diff` (when edited) |
+| `item.rejected` | Rejected — with feedback | `action`, `feedback` |
+| `item.expired` | A pending item passed its `expires_at` | `feedback` (*"Expired before review"*) |
+| `item.completed` | Outcome reported with `/result` (or `report_result`) | `result`, `error` |
+| `item.failed` | Failure reported with `/result`, or the item stayed in `processing` longer than the workspace's processing timeout (default 1 hour, up to 24 hours). A person who marks a processing item **Failed** or **Canceled** in the dashboard reports it the same way, with `error` `Marked as failed in the dashboard` or `Canceled in the dashboard` | `result`, `error`; `timeout: true` after a processing timeout |
+| `item.regenerate_requested` | *Regenerate* action ran | `action`, `feedback`, `payload` |
+| `item.publish_requested` | *Publish* action ran | `action`, `feedback`, `payload` |
+| `item.retry_requested` | *Retry* action ran | `action`, `feedback`, `payload` |
+| `item.archived` | *Archive* action ran | `action` |
+| `item.<name>_requested` | Any other custom action (or the event name you configured) | `action`, `feedback`, `payload` |
+| `item.deleted` | An item was deleted (its history is kept) | — |
+| `item.purged` | An item and its history were [purged](/self-hosting/data-export#purge-an-item) | IDs and counts only |
+
+Every status-changing item event also includes `previous_status`.
+
+The item events staqly emits itself are **reserved**: a [custom action](/automation/custom-actions)
+can't use them as its `event`, so a webhook receiver can trust that `item.approved` really is
+an approval.
+
+## Other events
+
+| Type | When | `data` |
+|---|---|---|
+| `collection.created`, `collection.updated`, `collection.deleted` | A collection was created, changed or deleted | `collection` |
+| `collection.archived` | A collection was archived (an update that set `archived`) | `collection` |
+| `watcher.created`, `watcher.updated` | A [watcher](/automation/watchers) was created or changed | `watcher` |
+| `watcher.deleted` | A watcher was deleted | `watcher_id` |
+| `watcher.degraded`, `watcher.paused`, `watcher.recovered` | A watcher's health changed after a run (failing, paused after repeated failures, working again) | `watcher_id`, `name`, `from`, `to`, `error` |
+| `webhook.created`, `webhook.updated` | A webhook was created or changed (the secret is never included) | `webhook`; `secret_rotated` on update |
+| `webhook.deleted` | A webhook was deleted | `webhook_id` |
+| `webhook.test` | *Send test* on a webhook (delivered to that webhook only) | Test payload |
+| `notification_channel.created`, `notification_channel.updated` | A [notification channel](/automation/notifications) was created or changed (secrets masked) | `channel` |
+| `notification_channel.deleted` | A notification channel was deleted | `channel_id`, `type` |
+| `workspace.created` | The workspace was set up | `workspace` |
+| `workspace.updated` | The workspace was renamed | `name` |
+| `workspace.plan_changed` | The [plan](/plans) changed: Stripe subscription, operator `set-plan`, or switching back to Free | `from`, `to`, `expires_at`, `reason` (`stripe:<status>`, `operator`, `operator_comp`, `self_service`) |
+| `workspace.export_requested` | A [workspace export](/self-hosting/data-export) was requested | `export_id` |
+| `workspace.exported` | A workspace export finished | `export_id`, `size_bytes` |
+| `retention.items_pruned` | The [retention](/self-hosting/data-export#retention) worker deleted old archived items | `count`, `older_than_days`, `item_ids` |
+| `retention.events_pruned` | The retention worker deleted old events | `count`, `older_than_days`, `before` |
+| `api_key.created` | An API key was created (cloud) | `api_key` (no secret) |
+| `api_key.rotated` | An API key was rotated | `old_key_id`, `new_key_id`, `name` |
+| `api_key.revoked` | An API key was revoked | `api_key_id` |
+| `session.recovered` | Someone signed in with the recovery key | `user_agent`, `sessions_revoked` |
+| `session.revoked` | A browser session signed out or was revoked | `session_id`, `reason` (`logout` or `revoked`) |
+| `recovery_key.rotated` | The recovery key was rotated (other sessions were signed out) | `sessions_revoked`; `via: "cli"` when rotated with `server recovery-key` |
+| `device_link.created` | A *Connect a device* link was created | `expires_at` |
+| `device.connected` | A *Connect a device* link was redeemed | `user_agent` |
+
+`webhook.*` events are recorded in the activity log but are **not delivered to webhooks**
+(except `webhook.test`, which goes only to the webhook being tested), so changing a webhook
+can't loop back to its receiver.
+
+### Audit events
+
+The credential events above (`api_key.*`, `session.*`, `recovery_key.*`, `device.*`,
+`device_link.*`) are **audit events**: `GET /v1/events` and `GET /v1/events/export` list them only
+for admins: dashboard sessions, local mode and keys with the `admin` scope. Other keys don't see
+them.
+
+## Matching events in webhooks
+
+Webhooks match `events` patterns against the type: exact names, `"*"`, or globs such as
+`"item.*"` and `"item.*_requested"`. Optionally restrict to `collection_ids`. See
+[Webhooks](/automation/webhooks).
+
+## Actors
+
+The `actor` field says who caused the event. Filter by it with `actor_type` and `actor_id`.
+
+| `actor.type` | Who | `actor.id` | `actor.name` |
+|---|---|---|---|
+| `local` | Anyone on this machine in local mode (agents, scripts, the CLI) | `local` | `Local` |
+| `session` | A signed-in browser | The session ID (`ses_d3k2m7q4xw5tz6pa6hbn`) | `Dashboard` |
+| `api_key` | An API key | The key ID (`key_r7zq2m4xk3pw6ta5ned2`) | The key's name |
+| `system` | staqly itself, acting on its own or for someone outside staqly | See below | See below |
+
+System actors:
+
+| `actor.id` | `actor.name` | What it does |
+|---|---|---|
+| The watcher ID (`wat_okkhldgfahmrv25yx45d`) | `Watcher: <name>` | A [watcher](/automation/watchers) created an item |
+| `watcher` | `Watcher` | A watcher's health changed |
+| `expiry` | `Expiry` | A pending item passed `expires_at` |
+| `processing-timeout` | `Processing timeout` | An item stayed in `processing` too long and was marked failed |
+| `retention` | `Retention` | The retention worker pruned data |
+| `setup`, `local` | `Setup`, `Local setup` | The workspace was created (cloud signup, first local start) |
+| `recovery` | `Recovery key` | Sign-in with the recovery key |
+| `device-link` | `Connect a device` | A device link was redeemed |
+| `cli` | `Server CLI` | `server recovery-key` on the server |
+| `operator` | `Operator` | `server set-plan` on the server |
+| `stripe` | `Stripe` | A Stripe subscription change |
+| Chat user or `link:<channel ID>` | `Telegram: @name`, `Slack: name`, `Discord: name`, `Link: <channel>` | A decision from a [notification](/automation/notifications) |
+
+## Next steps
+
+<Cards>
+  <Card title="Webhooks" href="/automation/webhooks">Deliver events to your own endpoint.</Card>
+  <Card title="Activity" href="/dashboard/activity">Browse the activity log in the dashboard.</Card>
+</Cards>

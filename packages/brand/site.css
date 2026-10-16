@@ -1,0 +1,127 @@
+/*
+ * Marketing pieces shared by the landing page and the docs home: hero backdrop, gradient text, the primary
+ * "rainbow" button, arrow links and the hero demo (src/hero-demo.tsx). Import after tokens.css. Every motion
+ * is off with prefers-reduced-motion.
+ */
+
+@source './src';
+
+/* The neutrals the hero demo uses, mapped from the app's shadcn-style variables. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+}
+
+.sq-grid-bg {
+  --grid-line: color-mix(in oklch, var(--foreground) 5%, transparent);
+
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, black 30%, transparent 75%);
+}
+
+.dark .sq-grid-bg {
+  --grid-line: oklch(1 0 0 / 5%);
+}
+
+.sq-glow {
+  background: radial-gradient(closest-side, color-mix(in oklch, var(--brand-glow) 24%, transparent), transparent);
+  filter: blur(10px);
+}
+
+/* Logo gradient for text: the bright lime ramp. */
+.sq-gradient-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Primary buttons: the logo greens drifting across, rainbow-button style. */
+.sq-rainbow {
+  background: linear-gradient(90deg, #c9fb93, #63f08e, #1ed27b, #63f08e, #c9fb93) 0 0 / 200% 100%;
+  color: var(--brand-gradient-foreground);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sq-rainbow {
+    animation: sq-rainbow 6s linear infinite;
+  }
+
+  /* Arrow links: the → nudges right and back while the link (or its card) is hovered. */
+  a:hover .lucide-arrow-right {
+    animation: sq-nudge 0.9s ease-in-out infinite;
+  }
+
+  /* Hero demo */
+  .sq-demo-card {
+    animation: sq-card-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .sq-demo-in {
+    animation: sq-fade-up 0.35s ease-out both;
+  }
+
+  .sq-dots {
+    animation: sq-blink 1s steps(1) infinite;
+  }
+
+  /* A glow that fills while the autoplay is about to approve. */
+  .sq-demo-press {
+    animation: sq-press linear both;
+  }
+}
+
+@keyframes sq-rainbow {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes sq-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes sq-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes sq-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes sq-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes sq-press {
+  0%,
+  70% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--brand) 0%, transparent);
+  }
+
+  100% {
+    box-shadow: 0 0 0 6px color-mix(in oklch, var(--brand) 35%, transparent);
+  }
+}

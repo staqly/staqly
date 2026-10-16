@@ -1,0 +1,110 @@
+---
+title: Activity
+description: See everything that happened in your workspace, filter it, and export it.
+---
+
+**Activity** is the log of everything that happened in your workspace, newest first: items
+created, edited, approved and rejected; actions run; collections changed;
+webhooks tested. Each entry is an **event** (see [Concepts](/concepts)). Open it when you want
+to know who did what and when, or to check what your automations were sent.
+
+## Find what happened
+
+<Steps>
+<Step>
+
+### Open Activity
+
+Click **Activity** in the sidebar (or in the bottom tab bar on a phone).
+
+</Step>
+<Step>
+
+### Filter
+
+One bar holds the filters. Type an event type (suggestions appear as you type, any exact
+type works, <Kbd>Enter</Kbd> applies it), pick a date range, or use **Add filter** to choose
+an actor, a collection, an actor ID or an entity (item) ID. Each active filter shows as a chip
+below the bar; its **×** removes it and **Clear all** resets them. Filters are combined and
+kept in the URL, so you can bookmark or share a filtered view.
+
+</Step>
+<Step>
+
+### Open an event's data
+
+Click **Data** under an event to see the full JSON payload it carries (the same `data` that
+webhooks receive), with the event ID, its sequence number and a **Copy data** button.
+
+</Step>
+<Step>
+
+### Load more
+
+Scroll to the end and click **Load older events** to go further back. **Refresh** reloads the
+list.
+
+</Step>
+</Steps>
+
+## What each event shows
+
+| Part | What you see |
+|---|---|
+| **Title and type** | A readable label such as *Approved*, the raw type (`item.approved`) and, when the status changed, the old and new status (*Pending → Approved*). *(with edits)* marks a decision that also changed the item. |
+| **Feedback or note** | The reviewer's feedback or note, when the event has one. |
+| **Actor** | Who did it: *Dashboard* (a signed-in browser) with its device name, *API key* with the key's name, *Local* (you and local agents, in local mode) or *System*. Session and API key actors show their ID with a copy button. Automations are named: *Watcher* with the watcher's name, or *Automation* with *Expiry timer*. |
+| **Entity** | What the event is about, with its name, its ID (with a copy button) and a link: an *Item* (and its collection), a *Collection*, *Webhook*, *Watcher*, notification *Channel*, *API key*, *Session*, workspace *Export* or the *Workspace*. |
+| **Time** | The date and time; hover for "how long ago". |
+
+## Filters
+
+| Filter | Options | Query parameter |
+|---|---|---|
+| **Event type** | *All event types*, one of the common types (`item.created`, `item.updated`, `item.status_changed`, `item.approved`, `item.rejected`, `item.deleted`, `item.regenerate_requested`, `item.publish_requested`, `item.retry_requested`, `item.archived`, `item.expired`, `item.purged`, `watcher.created`, `collection.*`, `api_key.created`, `api_key.revoked`, `recovery_key.rotated`, `session.recovered`, `workspace.export_requested`, `workspace.exported`), or any exact type typed into the box next to it, such as `item.publish_requested` | `type` |
+| **Actor type** | *All actors*, *Local (you & local agents)* (local mode only), *Dashboard sessions*, *API keys (agents)* or *System* | `actor_type` |
+| **Actor ID** | One actor, such as an API key (`key_ozcbqlxbqgyp3qnkbgjr`) or a session (`ses_q2vbm4kz7xw3dn5hjr6c`). Applied when you press <Kbd>Enter</Kbd> or leave the field. | `actor_id` |
+| **Collection** | *All collections*, or one (archived ones included) | `collection` |
+| **Entity ID** | One item (`itm_oalirbz67y4m4cqxq5dw`): its whole history | `item` |
+| **From** / **To** | A date range. Both days are included and use your browser's time zone. | `from`, `to` (`YYYY-MM-DD`) |
+
+Credential events (API keys created, rotated or revoked; recovery-key sign-ins and rotations;
+sessions revoked; devices connected and sign-in links created: types starting with `api_key.`,
+`session.`, `recovery_key.`, `device.` or `device_link.`) are audit events. Only admins see
+them: local mode, dashboard sessions and keys with the `admin` scope.
+
+## Export the log
+
+Click **Export** and choose **NDJSON** (the full event shape) or **CSV** (opens in a
+spreadsheet). The file contains the events that match your current filters (or all events
+when no filter is set), oldest first. To download the whole log, use
+**Settings → Data & privacy**. See [Settings](/dashboard/settings).
+
+## Why events can't be changed
+
+Events cannot be edited: a database trigger forbids updates. They are the same records that
+webhooks deliver, so what you see here is exactly what your automations received. The only
+way to remove events is to purge an item (which erases every event about it; see
+[Item details](/dashboard/items#delete-or-purge-an-item)) or server-side retention.
+
+## API
+
+```bash
+# what one API key did on 12 October 2026 (from inclusive, to exclusive)
+curl -s "http://localhost:3333/v1/events?actor_id=key_ozcbqlxbqgyp3qnkbgjr&from=2026-10-12T00:00:00Z&to=2026-10-13T00:00:00Z"
+
+# every webhook change
+curl -s "http://localhost:3333/v1/events?type_prefix=webhook."
+```
+
+`GET /v1/events` accepts `type`, `type_prefix` (a literal prefix such as `item.` or `webhook.`), `actor_type`, `actor_id`, `collection_id`,
+`item_id`, `from` (inclusive) and `to` (exclusive), with cursor pagination.
+`GET /v1/events/export` takes the same filters plus `format=ndjson|csv`. See
+[Event types](/api/events).
+
+## Next steps
+
+<Cards>
+  <Card title="Event types" href="/api/events">Every event and its payload.</Card>
+  <Card title="Webhooks" href="/automation/webhooks">Send these events to your own tools.</Card>
+</Cards>

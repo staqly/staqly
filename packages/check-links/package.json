@@ -1,0 +1,23 @@
+{
+  "name": "@staqly/check-links",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Link check for the static exports of the docs and the landing page (every internal link and #anchor must resolve)",
+  "type": "module",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "scripts": {
+    "lint": "oxlint --deny-warnings",
+    "format": "oxlint --fix --quiet; oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

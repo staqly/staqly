@@ -1,0 +1,125 @@
+---
+title: REST API overview
+description: Learn how to call the staqly REST API from scripts, workflows and your own apps.
+---
+
+The REST API is the plain-HTTP way into staqly. Use it from shell scripts, n8n, CI jobs or any
+language with an HTTP client. Everything else is built on top of it: the dashboard, the CLI,
+the TypeScript SDK and the MCP server all go through the same services and permission checks.
+
+| You are | Use this |
+|---|---|
+| An AI agent in Claude Code, Codex, OpenCode or another MCP client | [MCP](/mcp) — no HTTP code needed |
+| A person or shell script in a terminal | The [CLI](/cli) (`staqly items create Drafts --title "Hello"`) |
+| A TypeScript / JavaScript app | The [TypeScript SDK](/sdk/typescript) — typed, with paging helpers |
+| Anything else: n8n, Python, Go, CI, curl | **This REST API** |
+
+## Make your first requests
+
+<Steps>
+<Step>
+### Start staqly and check it's up
+
+Run `staqly serve` (one binary, API and MCP on `127.0.0.1:3333`) or the
+[Docker image](/self-hosting/docker). Then:
+
+```bash
+curl -s http://localhost:3333/health
+# → {"status":"ok","version":"v0.1.0"}
+```
+
+In local mode (the default) requests from this machine need no credentials. In cloud mode,
+add `-H "Authorization: Bearer stk_..."` to every request — see [Authentication](/api/authentication).
+</Step>
+<Step>
+### Store an item for review
+
+Post to a collection by name (or `col_qjuybkx6355nz4no6pqk` ID). The `Idempotency-Key` makes a retry safe:
+
+```bash
+API=http://localhost:3333
+
+curl -s -X POST "$API/v1/collections/Instagram%20Avatar/items" \
+  -H 'Content-Type: application/json' -H 'Idempotency-Key: gen-42' \
+  -d '{"title":"Caption draft","content":"Golden hour","metadata":{"seed":42},"source":"n8n"}'
+# → {"id":"itm_oalirbz67y4m4cqxq5dw","status":"pending","version":1}
+```
+
+The item lands in the dashboard Inbox as `pending`. Leave out `source` and staqly names the client
+from its `User-Agent` instead (`curl`, or the agent name an SDK appends).
+</Step>
+<Step>
+### Wait for the decision
+
+A person approves or rejects it in the Inbox. Either subscribe a
+[webhook](/automation/webhooks) to `item.approved`, or long-poll (up to 60 seconds per call):
+
+```bash
+curl -s "$API/v1/items/$ITEM/wait?timeout=60"
+# → {"decided":true,"item":{"id":"itm_oalirbz67y4m4cqxq5dw","status":"approved"}}
+```
+</Step>
+<Step>
+### Report the outcome
+
+After you acted on the approved item (published it, for example), record what happened:
+
+```bash
+curl -s -X POST $API/v1/items/$ITEM/result -H 'Content-Type: application/json' \
+  -d '{"status":"completed","result":{"instagram_post_id":"17901234567890123"}}'
+```
+</Step>
+</Steps>
+
+## Conventions
+
+The contract is an **OpenAPI 3.2** document: `apps/api/openapi.yaml` in the repository,
+served live at `http://localhost:3333/openapi.yaml`, and rendered in the
+[API reference](/api/reference).
+
+| Convention | Value |
+|---|---|
+| Base URL | `http://localhost:3333` (local) · `https://<your host>` (cloud) |
+| Versioning | Everything lives under `/v1` |
+| Formats | JSON request and response bodies; `multipart/form-data` for uploads. Other content types are rejected. Unknown JSON fields are rejected (`400`). |
+| Auth | None in local mode; `Authorization: Bearer stk_...` in cloud mode — [Authentication](/api/authentication) |
+| Errors | `{"error":{"code","message","fields","details"}}` — [Errors](/api/errors) |
+| Lists | `{"data":[],"next_cursor":"eyJjIjoiMjAyNi0xMC0xMyJ9"}` with opaque keyset cursors — [Pagination & search](/api/pagination-and-search) |
+| Retries | `Idempotency-Key` header, 24 h replay window — [Idempotency](/api/idempotency) |
+| Timestamps | ISO-8601 UTC strings; filters accept RFC 3339 or `YYYY-MM-DD` |
+| IDs | Prefixed: `col_qjuybkx6355nz4no6pqk`, `itm_oalirbz67y4m4cqxq5dw`, `evt_looiyqe5kfkjh4xedcnd`, `wh_lv5rc7rttjnfwnnsn4ny`, `dlv_bgx4s2p4xnzimajdkoki`, `wat_okkhldgfahmrv25yx45d`, `nch_ce3g6qaygtlxifq4bdmv`, `exp_zxj2lzvmh32poxxq2kgp`, `med_t4w6pz2kqm7xr3nb5vya`, `key_r7zq2m4xk3pw6ta5ned2`, `ws_h2c5vq7nzk4mtr6pxw3e` |
+| Request IDs | Every response has `X-Request-Id`; errors include `request_id` |
+
+Every response also carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+`X-Frame-Options: DENY` and `Cache-Control: no-store`. Request logs contain paths only, never
+headers or query strings.
+
+## Endpoints by area
+
+| Area | Endpoints |
+|---|---|
+| Setup | `GET /v1/setup`, `POST /v1/workspaces` (cloud signup), `GET /v1/plans` |
+| Collections | `/v1/collections`, `/v1/collections/{id}` — `{id}` may also be the exact name |
+| Items | `/v1/items`, `/v1/collections/{id}/items`, `/v1/items/{id}`, `/actions/{action}`, `/events`, `/versions`, `/wait`, `/result`, `/unarchive`, `/summarize`, `/v1/items/bulk-actions` |
+| Tags, agents & flow | `GET /v1/tags`, `GET /v1/agents`, `DELETE /v1/agents/{id}`, `GET /v1/flow` (items per state, events per type in the last 24 hours) |
+| Media | `/v1/media`, `/v1/media/{id}` — [Media uploads](/api/media) |
+| Events | `/v1/events` (filters `type`, `type_prefix`, `actor_type`, `actor_id`, `agent`, `from`, `to`, ...) — [Event types](/api/events) |
+| Webhooks | `/v1/webhooks`, `/v1/webhooks/{id}/test`, `/v1/webhook-deliveries`, `/v1/webhook-deliveries/{id}/retry` — [Webhooks](/automation/webhooks) |
+| Watchers | `/v1/watchers`, `/v1/watchers/{id}/run` — [Watchers](/automation/watchers) |
+| Notifications | `/v1/notification-channels`, `/test`, `/deliveries`, `/v1/decide/{token}`, `/v1/integrations/{telegram,slack,discord}` — [Notifications](/automation/notifications) |
+| Export & privacy | `/v1/events/export`, `/v1/workspace/export`, `/v1/workspace/exports/{id}`, `/v1/workspace/exports/{id}/download`, `/v1/items/{id}/purge`, `DELETE /v1/workspace` (cloud, dashboard session only) — [Data export](/self-hosting/data-export) |
+| Workspace & auth | `/v1/session`, `/v1/sessions`, `/v1/sessions/{id}`, `/v1/sessions/recover`, `/v1/workspace`, `/v1/workspace/usage`, `/v1/api-keys`, `/v1/api-keys/{id}/rotate`, `/v1/device-links`, `/v1/device-links/redeem`, `/v1/recovery-key/rotate` |
+| Plan & billing | `POST /v1/workspace/plan` (switch to Free), `/v1/billing`, `/v1/billing/checkout`, `/v1/billing/portal`, `/v1/billing/webhook` (Stripe) — [Plans](/plans), [Billing](/self-hosting/billing) |
+| Health & metrics | `GET /health`, `/livez`, `/readyz`, `/metrics`, `/openapi.yaml` — [Monitoring](/self-hosting/monitoring) |
+| MCP | `POST /mcp` — Streamable HTTP, see [MCP](/mcp) |
+
+Request and response schemas for each endpoint are in the [API reference](/api/reference).
+
+## Next steps
+
+<Cards>
+  <Card title="Authentication & scopes" href="/api/authentication">Local mode, API keys and which scope each call needs.</Card>
+  <Card title="Errors" href="/api/errors">Every error code and what to do about it.</Card>
+  <Card title="Media uploads" href="/api/media">Attach images, videos and files to items.</Card>
+  <Card title="API reference" href="/api/reference">Every endpoint, generated from OpenAPI.</Card>
+</Cards>

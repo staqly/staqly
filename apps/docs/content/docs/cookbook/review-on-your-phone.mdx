@@ -1,0 +1,123 @@
+---
+title: Review on your phone
+description: Connect your phone to the staqly dashboard with a QR code so you can approve and reject from anywhere in the house.
+---
+
+Agents keep producing while you're away from your desk. In this recipe you open the staqly
+dashboard to your Wi-Fi and connect your phone with a QR code, so you can approve and reject
+from the couch. It takes about a minute, and the phone signs in without a password.
+
+## What you need
+
+- staqly on your computer: `staqly serve` ([install](/quickstart)) or the
+  [Docker image](/self-hosting/docker).
+- A phone on the same Wi-Fi as that computer.
+
+## Set it up
+
+<Steps>
+<Step>
+
+### Find your computer's LAN address
+
+Your phone needs an address it can reach. Look up your computer's IP on the Wi-Fi, for example
+`192.168.1.23`:
+
+```bash
+ipconfig getifaddr en0    # macOS
+hostname -I               # Linux
+```
+
+</Step>
+<Step>
+
+### Open the dashboard to your network
+
+By default the dashboard only listens on your computer. Open it to the network and tell staqly
+its public address, so the QR code points somewhere your phone can reach:
+
+```bash tab="staqly serve"
+PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose
+```
+
+```bash tab="Docker"
+# -p 8080:8080 already publishes the dashboard on your network; recreate the container with the URL
+docker rm -f staqly
+docker run -d --name staqly ... -e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 ghcr.io/staqly/staqly:latest
+```
+
+With Docker, use your full command from [Run with Docker](/self-hosting/docker) and add the `-e`
+line; the data stays in the volume.
+
+</Step>
+<Step>
+
+### Sign in on your computer
+
+Once the dashboard is on the network, **every browser signs in once**, including the one on
+your computer. Create a one-time sign-in link and open it in your browser:
+
+```bash tab="staqly serve"
+staqly serve connect-link
+```
+
+```bash tab="Docker"
+docker exec staqly server connect-link
+```
+
+The link works once and expires after 5 minutes.
+
+</Step>
+<Step>
+
+### Show the QR code
+
+In the dashboard open **Connect a device**: **Settings → Devices**, or <Kbd>⌘</Kbd> <Kbd>K</Kbd>
+→ *Connect a device*.
+
+</Step>
+<Step>
+
+### Scan it
+
+Point your phone's camera at the code. staqly opens already signed in. Like the link above,
+the QR code works once and expires after 5 minutes.
+
+</Step>
+<Step>
+
+### Review
+
+The phone Inbox shows **one large card at a time**. Swipe left and right to move between
+items; the sticky bar at the bottom has **Reject**, **Approve** and a menu with the actions that
+apply (Regenerate, for example, once an item is rejected). After **Approve**, the toast offers **Undo** for
+10 seconds before the approval is sent.
+
+</Step>
+</Steps>
+
+## How it works
+
+- The phone gets its own browser session. It appears under **Settings → Devices**; revoke it
+  there if you lose the phone.
+- The API itself stays on `127.0.0.1`. The phone talks only to the dashboard, and agents on
+  your computer keep working without keys.
+
+## Troubleshooting
+
+- **The QR code points at `localhost`:** `PUBLIC_DASHBOARD_URL` isn't set. The dialog shows a hint
+  when this happens.
+- **The phone can't open the link:** check `PUBLIC_DASHBOARD_URL` uses your computer's LAN IP, that
+  both devices are on the same network, and that no firewall blocks port `8080`.
+- **"Already used or expired":** each link signs in one browser within 5 minutes. Create a new
+  QR code.
+- **Away from home?** Run staqly in [cloud mode](/self-hosting/cloud-deployment) behind HTTPS
+  and connect your phone the same way. Or skip the dashboard and
+  [approve from Telegram](/cookbook/approve-from-chat).
+
+## Reference
+
+<Cards>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">How device links and sessions work</Card>
+  <Card title="Without Docker" href="/self-hosting/binary">`staqly serve` options and operator commands</Card>
+</Cards>

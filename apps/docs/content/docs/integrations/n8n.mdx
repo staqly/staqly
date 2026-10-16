@@ -1,0 +1,138 @@
+---
+title: n8n
+description: Send items from n8n workflows to staqly and react to your review decisions with signed webhooks.
+---
+
+[n8n](https://n8n.io) is a workflow automation tool. Connect it to staqly when a workflow
+generates something (a post, an image, a report) that a human should approve before the
+workflow continues. n8n talks to staqly in two directions:
+
+- **n8n → staqly**: HTTP Request nodes call the REST API to create items. No credentials in
+  local mode; in cloud mode add a *Header Auth* credential (`Authorization: Bearer {API_KEY}`).
+- **staqly → n8n**: a staqly [webhook](/automation/webhooks) posts review events (approved,
+  rejected, custom actions) to an n8n *Webhook* trigger, signed with HMAC.
+
+The quickest way to see it working is the demo workflow below.
+
+## Try the Instagram Avatar demo
+
+An importable workflow, `integrations/n8n/instagram-avatar-demo.json`, runs the full
+generate → review → publish loop with local mocks and no external accounts. Run it from a
+checkout of the repository. The example n8n container joins the Docker network `staqly_default`
+that the Compose setup creates; with the [Docker image](/self-hosting/docker) (`docker run`),
+create it once and attach the `staqly` container as `api`:
+
+```bash
+docker network create staqly_default                         # only with docker run
+docker network connect --alias api staqly_default staqly     # only with docker run
+docker compose -f integrations/n8n/compose.yml up -d    # n8n at http://127.0.0.1:5678 (this machine only)
+./integrations/n8n/setup-demo.sh                         # collection + webhook; prints the signing secret and a demo token
+```
+
+The workflow **fails closed**: it rejects every staqly event until you paste the webhook
+secret, and its HTTP generate trigger runs only for requests with the demo token in an
+`X-Demo-Token` header. The step-by-step walkthrough is in the
+[Instagram Avatar cookbook](/cookbook/instagram-avatar).
+
+## Build your own flow
+
+<Steps>
+<Step>
+
+### Create items
+
+Add an HTTP Request node that calls `POST /v1/collections/{id or name}/items`, either JSON or
+multipart with a `file` (binary) part and an `item` part holding the JSON fields. Send an
+`Idempotency-Key` header (JSON requests) so n8n retries don't create duplicates.
+
+</Step>
+<Step>
+
+### React to decisions
+
+Create a staqly webhook that points at an n8n *Webhook* trigger, subscribed to
+`item.approved`, `item.rejected` and `item.*_requested` (custom actions), optionally filtered
+by collection. Verify the [signature](/automation/webhooks#verifying-signatures) in a Code
+node.
+
+</Step>
+<Step>
+
+### Report progress
+
+When the workflow acts on a decision, tell staqly how it went: `PATCH /v1/items/{id}` with
+`status` (`processing` / `completed` / `failed`) and `metadata_patch`, e.g.
+`{"status":"completed","metadata_patch":{"instagram_post_id":"17901234567890123"}}`.
+
+</Step>
+</Steps>
+
+Deliveries are at-least-once: use `event.id` (or the `X-Staqly-Event-Id` header) to
+deduplicate side effects that must not repeat.
+
+## Wait inside one workflow
+
+Webhooks suit long waits. When the decision usually comes within minutes, a single workflow
+can wait for it instead, with four nodes:
+
+| Node | Setting |
+|---|---|
+| **HTTP Request** (propose) | `POST http://localhost:3333/v1/collections/Approvals/items` with `title`, `content`, `metadata` and `expires_in` |
+| **HTTP Request** (wait) | `GET http://localhost:3333/v1/items/{{ $json.id }}/wait?timeout=60`; the call returns after a decision or 60 s |
+| **IF** | `{{ $json.decided }}` is true; the false branch loops back to the wait node |
+| **Switch**, then your action | Branch on `{{ $json.item.status }}`: act only on `approved`, using `$json.item` (reviewer edits included) |
+
+After the action, report the outcome with `POST /v1/items/{id}/result`
+(`{"status":"completed","result":{"post_id":"17901234567890123"}}`). The
+[how-to guide](/how-to-add-human-approval) explains the pattern.
+
+## Networking — pick your setup
+
+Inside a container, `localhost` is the container itself, not your machine. Use the row that
+matches where n8n and staqly run:
+
+| Where n8n runs | n8n → staqly API URL | staqly webhook URL (→ n8n) |
+|---|---|---|
+| **On the staqly Docker network** (e.g. `integrations/n8n/compose.yml`) | `http://api:3333` | `http://n8n:5678/webhook/staqly-demo` |
+| **On the host** (`npx n8n`, desktop app), staqly in Docker | `http://localhost:3333` | `http://host.docker.internal:5678/webhook/staqly-demo` |
+| **In another container / compose project** | `http://host.docker.internal:3333`, or attach n8n to `staqly_default` and use `http://api:3333` | `http://host.docker.internal:5678/webhook/staqly`, or on a shared network `http://<n8n-container>:5678/webhook/staqly` |
+| **On the host**, staqly via `staqly serve` | `http://localhost:3333` | `http://localhost:5678/webhook/staqly-demo`, with `WEBHOOK_ALLOW_LOOPBACK=true` (see below) |
+
+- In local mode staqly only accepts keyless requests whose `Host` is a local name. `api`,
+  `localhost` and `host.docker.internal` are built in (Compose also adds the container name
+  `staqly`). If n8n reaches
+  staqly under another name, add it to `LOCAL_ALLOWED_HOSTS`.
+- Keyless requests must also come from a trusted peer. The `docker run` command and Compose trust the private ranges
+  (`LOCAL_TRUSTED_PEERS`), which covers n8n on the Docker network or on the host. If you
+  narrowed `LOCAL_TRUSTED_PEERS`, keep n8n's network in it.
+- `host.docker.internal` works on Docker Desktop. On Linux, start the staqly container with
+  `--add-host host.docker.internal:host-gateway` (staqly's compose file maps it already); for
+  another n8n container on Linux, add the same
+  `extra_hosts: ["host.docker.internal:host-gateway"]` entry.
+- To share a network with an existing n8n container:
+  `docker network connect staqly_default <n8n-container>` (with `docker run`, create the network
+  and attach staqly first, as in the demo above).
+- Webhook targets on private networks are allowed by default in local mode
+  (`WEBHOOK_ALLOW_PRIVATE=true`; cloud mode defaults to `false`); loopback targets are not
+  (`WEBHOOK_ALLOW_LOOPBACK=false`). That only matters when the API runs outside Docker
+  (`staqly serve`) and n8n listens on `localhost`.
+- Media URLs inside webhook payloads use `PUBLIC_API_URL`. If n8n should download images from
+  those URLs, set `PUBLIC_API_URL` to an address n8n can reach (e.g. `http://api:3333`).
+
+## Troubleshooting
+
+<Callout title="Code node: Cannot find module 'crypto'">
+Signature verification uses Node's `crypto`, which n8n only allows in Code nodes with
+`NODE_FUNCTION_ALLOW_BUILTIN=crypto` (already set in `integrations/n8n/compose.yml`).
+</Callout>
+
+A keyless request that fails the local checks gets `403 not_local`: check the `Host` name and
+`LOCAL_TRUSTED_PEERS` notes above.
+
+## Next steps
+
+<Cards>
+  <Card title="Instagram Avatar cookbook" href="/cookbook/instagram-avatar">The demo workflow, step by step.</Card>
+  <Card title="Webhooks" href="/automation/webhooks">Payloads, signatures, retries and the network policy.</Card>
+  <Card title="Custom actions" href="/automation/custom-actions">Add buttons like regenerate or publish that trigger n8n.</Card>
+</Cards>

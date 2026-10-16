@@ -1,0 +1,71 @@
+---
+title: Overview
+description: Look up any REST endpoint with its parameters, request body and response schema.
+---
+
+This is the complete, endpoint-by-endpoint reference. Come here when you know what you want
+to do and need the exact path, fields or response shape. New to the API? Start with the
+[REST API overview](/api) and its four-step walkthrough.
+
+## Find an endpoint
+
+<Steps>
+<Step>
+### Pick the area
+
+Endpoints are grouped by tag — items, collections, webhooks and so on (see the cards below).
+</Step>
+<Step>
+### Read the operation
+
+Each operation shows its parameters, request body, responses and generated code samples.
+</Step>
+<Step>
+### Add authentication
+
+**Local mode** needs no credentials. **Cloud mode** expects `Authorization: Bearer stk_...`; the
+scope each operation needs is listed in [Authentication & scopes](/api/authentication#scopes).
+</Step>
+</Steps>
+
+## Areas
+
+<Cards>
+  <Card title="Setup" href="/api/reference/setup">Health, mode, signup, plans, MCP endpoint.</Card>
+  <Card title="Auth" href="/api/reference/auth">Session, workspace, usage, API keys, devices, recovery.</Card>
+  <Card title="Billing" href="/api/reference/billing">Billing status, Stripe checkout and portal, Stripe webhook.</Card>
+  <Card title="Collections" href="/api/reference/collections">Create, configure, archive, delete.</Card>
+  <Card title="Items" href="/api/reference/items">Create, list, search, decide, wait, report results, history.</Card>
+  <Card title="Media" href="/api/reference/media">Upload and download files.</Card>
+  <Card title="Events" href="/api/reference/events">The activity log.</Card>
+  <Card title="Webhooks" href="/api/reference/webhooks">Endpoints, deliveries, retries, tests.</Card>
+  <Card title="Watchers" href="/api/reference/watchers">RSS/Atom feeds and page-change monitors.</Card>
+  <Card title="Notifications" href="/api/reference/notifications">Channels, deliveries, one-tap decision links.</Card>
+  <Card title="Integrations" href="/api/reference/integrations">Telegram, Slack and Discord callbacks.</Card>
+  <Card title="System" href="/api/reference/system">Liveness, readiness, metrics.</Card>
+</Cards>
+
+## Where it comes from
+
+These pages are generated at build time from
+[`apps/api/openapi.yaml`](https://github.com/staqly/staqly/blob/main/apps/api/openapi.yaml) — the
+same OpenAPI 3.2 contract the dashboard and the TypeScript SDK are typed from. A running
+instance serves it at `http://localhost:3333/openapi.yaml`; this site has a copy at
+[/openapi.yaml](/openapi.yaml). Load it into your own tools (code generators, HTTP clients) to
+get the whole API at once.
+
+## Try a request
+
+Every endpoint has a **Send** button that calls **your cloud instance** straight from your
+browser:
+
+1. In the server field, pick `https://{host}` and enter your instance's host name.
+2. Under authorization, paste an API key (`stk_...`) from **API keys** in the sidebar. Use a key
+   with only the scopes you want to try; it is kept in this browser.
+3. Fill in the parameters and press **Send**.
+
+This works because cloud mode allows browser calls with an API key from this site
+(`CORS_ALLOWED_ORIGINS`, default `https://docs.staqly.ai`; see
+[Configuration](/self-hosting/configuration)). It does not work against `localhost`: local mode
+needs no key, so it refuses requests from other websites on purpose. For your local install, use
+curl, the [CLI](/cli) or an [SDK](/sdk/typescript).

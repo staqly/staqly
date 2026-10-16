@@ -1,0 +1,380 @@
+---
+title: Notifications
+description: Get a message on Telegram, Slack, Discord, ntfy or email when something needs review, and approve or reject right from it.
+---
+
+Notifications tell **a person** that something is waiting for them. When an agent creates an
+item that needs review, staqly sends a message to your phone or
+team chat, and for most channel types you can **approve or reject right from the message**
+without opening the dashboard.
+
+Use a [webhook](/automation/webhooks) instead when **code** should react to an event, and
+`staqly push` / `--wait` or the `await_decision` MCP tool when the agent that created the
+item should simply wait for the decision.
+
+| Type | Delivery | Decide from the message |
+|---|---|---|
+| `telegram` | Bot API message (images uploaded as photos) | Inline **Approve / Reject / Reject with reason** buttons |
+| `slack` | Incoming webhook or `chat.postMessage` (Block Kit) | Buttons with a Slack app (signing secret); one-tap links otherwise |
+| `discord` | Channel webhook (images attached) or a bot message | Buttons and a reason form with a Discord application; one-tap links otherwise |
+| `ntfy` | ntfy publish (ntfy.sh or self-hosted) | **Approve / Reject** notification actions |
+| `email` | SMTP (STARTTLS by default), HTML + text | Approve / Reject links |
+
+Decisions made from chat or a link go through **the same path as the dashboard**: version
+checks, `item.approved` / `item.rejected` events and your webhooks all fire as usual. The
+actor is recorded as `Telegram: @name`, `Slack: name`, `Discord: name` or `Link: <channel name>`.
+
+## Setting up your first channel
+
+ntfy is the quickest to try: it needs no account. Install the
+[ntfy app](https://ntfy.sh) on your phone first.
+
+<Steps>
+<Step>
+
+### Create the channel
+
+<Tabs items={["Dashboard", "curl"]}>
+<Tab value="Dashboard">
+
+Open **Settings → Notifications** (also **Notifications** in the sidebar) and click
+**New channel**. Pick the type, fill in its settings and save. The form includes a setup
+guide for each type.
+
+</Tab>
+<Tab value="curl">
+
+```bash
+curl -s -X POST http://localhost:3333/v1/notification-channels \
+  -H 'Content-Type: application/json' -d '{
+  "name": "My phone",
+  "type": "ntfy",
+  "config": { "topic": "staqly-7f3k9q2", "server_url": "https://ntfy.sh" },
+  "events": ["item.created"],
+  "collection_ids": [],
+  "digest_window_seconds": 0
+}'
+```
+
+Use a long, random topic name: on ntfy.sh anyone who knows it can read it.
+
+</Tab>
+</Tabs>
+
+</Step>
+<Step>
+
+### Subscribe on your phone
+
+In the ntfy app, subscribe to the same topic (`staqly-7f3k9q2` in the example). For other
+types, follow the setup for [Telegram](#telegram), [Slack](#slack), [Discord](#discord) or
+[email](#email-smtp) below.
+
+</Step>
+<Step>
+
+### Send a test message
+
+Click **Send test** on the channel, or call
+`POST /v1/notification-channels/{id}/test`. The response is `{"ok": true}` or
+`{"ok": false, "error": "Bad Request: chat not found"}`.
+
+</Step>
+<Step>
+
+### Tap Approve on a real item
+
+Create a pending item (or let an agent do it). The notification arrives with **Approve** and
+**Reject** actions. If your phone is not the machine running staqly, read
+[One-tap decision links](#one-tap-decision-links) first: the links must point to an address
+your phone can reach.
+
+</Step>
+</Steps>
+
+## Telegram
+
+<Steps>
+<Step>
+
+### Create a bot
+
+In Telegram, open **@BotFather**, send `/newbot`, choose a name and copy the **bot token**
+(`123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`).
+
+</Step>
+<Step>
+
+### Start a chat with it
+
+Open a chat with your new bot and send `/start`.
+
+</Step>
+<Step>
+
+### Find your chat ID
+
+Open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and read
+`message.chat.id`. Or create the channel with any chat ID and send `/chatid` to the bot,
+which replies with the chat ID and your user ID. For a group, add the bot to the group and
+use the group's (negative) ID.
+
+</Step>
+<Step>
+
+### Create the Telegram channel
+
+```json
+{ "name": "Telegram", "type": "telegram", "config": { "bot_token": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "chat_id": "123456789" } }
+```
+
+</Step>
+</Steps>
+
+- **Buttons**: **Approve** / **Reject** decide immediately and are replaced by the result
+  ("Approved by @you"). **Reject with reason** asks you to *reply* with the reason; your
+  reply rejects the item and becomes its feedback. The prompt is bound to the item version the
+  original message showed: if the agent changed the item meanwhile, the reply gets "item changed
+  since this message — open it in staqly" and nothing is decided.
+- **Who may decide**: by default only the user whose private chat is `chat_id`. For groups set
+  `approver_user_ids` (numeric Telegram user IDs); everyone else gets "You are not on this
+  channel's approver list".
+- **`mode: "polling"`** (default): staqly long-polls Telegram (`getUpdates`, every
+  `TELEGRAM_POLL_INTERVAL`). **Works on a laptop with no public URL.** Use one channel per bot:
+  two pollers on one bot steal each other's updates.
+- **`mode: "webhook"`** (cloud): when the channel is saved, staqly calls `setWebhook` with
+  `NOTIFY_PUBLIC_API_URL/v1/integrations/telegram/{channel_id}` and a random secret token, so
+  Telegram must reach your API over HTTPS. Switching back to polling calls `deleteWebhook`.
+
+Walkthrough: [Approve from chat](/cookbook/approve-from-chat).
+
+## Slack
+
+**Simplest: messages with link buttons.** Create an app at api.slack.com/apps, enable
+**Incoming Webhooks**, choose *Add New Webhook to Workspace*, pick a channel and copy the URL:
+
+```json
+{ "name": "Slack", "type": "slack", "config": { "webhook_url": "https://hooks.slack.com/services/YOUR/WEBHOOK/PATH" } }
+```
+
+**Interactive buttons (decide inside Slack).** In the same app, enable **Interactivity &
+Shortcuts** with the Request URL `https://<your-api>/v1/integrations/slack/interactions` (the
+channel's `integration_url` shows it), copy the **Signing Secret**, and set `signing_secret`
+and `approver_user_ids` (Slack member IDs such as `U024BE7LH`).
+
+- Requests are verified with `X-Slack-Signature` and must be at most 5 minutes old; presses
+  from anyone not on the list are refused.
+- Both are required: without the signing secret **and** an approver list, messages fall back
+  to one-tap link buttons.
+- Interactive messages never contain one-tap links, because anyone who can read the Slack
+  channel could use those.
+- *Reject with reason...* opens the item in the dashboard, where you can reject with a reason.
+
+Instead of a webhook you can use `bot_token` (`xoxb-` token, scope `chat:write`) plus `channel` (a
+channel ID). Interactive buttons need a public HTTPS URL; Socket Mode isn't supported.
+
+## Discord
+
+**Simplest: a channel webhook** (*Server Settings → Integrations → Webhooks → New Webhook*):
+
+```json
+{ "name": "Discord", "type": "discord", "config": { "webhook_url": "https://discord.com/api/webhooks/123456789012345678/your-webhook-token" } }
+```
+
+Messages are embeds with **Approve... / Reject...** links; images are attached; `@everyone` and
+other mentions are neutralized.
+
+**Buttons (decide inside Discord).** Create an application, add a bot (copy its **token**,
+invite it with *Send Messages*), copy the **Application ID** and **Public Key**, and create
+the channel with `bot_token`, `channel`, `application_id`, `public_key` and
+`approver_user_ids`. Set the **Interactions Endpoint URL** to
+`https://<your-api>/v1/integrations/discord/interactions`. Requests are verified with Ed25519
+(`X-Signature-Ed25519`) within 5 minutes; *Reject with reason* opens a Discord form, bound to
+the item version the message showed. Needs a public HTTPS URL.
+
+## ntfy
+
+```json
+{ "name": "Phone", "type": "ntfy",
+  "config": { "topic": "staqly-7f3k9q2", "server_url": "https://ntfy.sh", "access_token": "tk_pi7lo56pz5t4w73umr46", "priority": 4 } }
+```
+
+Install the ntfy app and subscribe to the topic. Notifications get **Approve** and **Reject**
+actions (they POST the one-tap link) and **Reject with reason** (opens the confirmation page);
+tapping the notification opens the item in the dashboard.
+
+<Callout type="warn">
+On ntfy.sh **anyone who knows the topic name can read it**. Use a long random topic, or a
+protected topic with an `access_token` (sent as `Authorization: Bearer`).
+</Callout>
+
+## Email (SMTP)
+
+```json
+{ "name": "Inbox mail", "type": "email",
+  "config": { "host": "smtp.example.com", "port": 587, "username": "apikey", "password": "smtp-password",
+              "from": "staqly <bot@example.com>", "to": ["me@example.com"], "tls": "starttls" } }
+```
+
+`tls` is `starttls` (default, port 587, required), `tls` (implicit TLS, port 465) or `none`
+(plaintext, only for a trusted local relay; credentials are never sent over plaintext except
+to localhost). Messages are multipart text + HTML with Approve / Reject links and a dashboard
+link; up to 20 recipients.
+
+## Managing channels
+
+Channels can be managed in the dashboard (**Settings → Notifications**) or with the API.
+
+In the dashboard each channel card shows its health (*Active*, *Paused*, *Failing* or
+*Disabled after failures*), its type and destination, whether decisions come back as
+*Buttons in chat* or *One-tap links*, the digest window and when it last sent. The switch
+pauses or enables it (**Re-enable** after automatic disabling), **Send test** sends a test
+message, **Deliveries** opens its delivery history, and the menu has **Edit** and **Delete**.
+In the form, required fields are marked with `*`, and invalid fields turn red (*Check the
+highlighted fields*). Stored secrets are never shown again: leave them as they are, or
+replace them.
+Over an API key this needs the **`channels:manage`** scope (or `admin`). It is **not** part
+of the default key, because channels hold secrets. Dashboard sessions and local mode have it
+implicitly.
+
+<Method m="GET" path="/v1/notification-channels" /> ·
+<Method m="POST" path="/v1/notification-channels" /> ·
+<Method m="GET" path="/v1/notification-channels/{id}" /> ·
+<Method m="PATCH" path="/v1/notification-channels/{id}" /> ·
+<Method m="DELETE" path="/v1/notification-channels/{id}" />
+
+| Field | Description |
+|---|---|
+| `events` | Glob patterns. Default: a new item waiting for review (`item.created`, only notified when the new item is `pending`). Add others such as `item.approved`, `item.rejected` or `item.*`. |
+| `collection_ids` | Only these collections; empty = all. |
+| `digest_window_seconds` | Collect everything within the window into one message (e.g. `300` = at most one message per 5 minutes; 0 – 86,400). Digests keep per-item buttons for the first 10 items (5 on Discord). |
+| `config` | Type-specific settings; see the sections for each type above. |
+| `enabled` | `false` pauses the channel. |
+
+- **Test**: `POST /v1/notification-channels/{id}/test` sends a test message now and returns
+  `{"ok": true}` or `{"ok": false, "error": "Bad Request: chat not found"}`. It is rate-limited per API key or session
+  (burst 5, then 10 per minute; `429`). Test messages are sent directly and don't appear in
+  the delivery history.
+- **History**: `GET /v1/notification-channels/{id}/deliveries` lists recent notifications
+  with status `pending`, `sent`, `failed` or `skipped`.
+- **Secrets** (`bot_token`, `webhook_url`, `signing_secret`, `access_token`, `password`) are
+  encrypted at rest and always come back **masked** (`••••abcd`). To keep a secret on update,
+  send the masked value back or omit the key; send `null` to remove it.
+- **Changing the destination needs the secret again.** When an update changes where a channel
+  sends (Telegram `chat_id`, Slack / Discord `channel`, ntfy `server_url`, email `host` /
+  `port` / `tls` / `username`), the stored secret that would be sent there (`bot_token`,
+  `access_token`, `password`) must be re-entered in the same request (a masked echo doesn't
+  count), otherwise `422`. Someone who can manage channels but can't read secrets can't point a
+  channel at their own server to collect them.
+- **Retries and failures**: sending is retried with backoff. After `NOTIFY_MAX_FAILS`
+  consecutive failures (default 10) the channel is **disabled** (`enabled=false`,
+  `disabled_reason` says why). Fix the cause and `PATCH {"enabled": true}`.
+- **Disabled channels**: messages queued for a disabled channel (by hand or automatically) stay
+  `pending`. Re-enabling it within `NOTIFY_DISABLED_GRACE` (default 24 h) delivers them; after
+  that, the daily retention run marks them `skipped` ("channel disabled") and re-enabling no
+  longer sends them. The grace period restarts every time the channel is disabled. Disabling or
+  deleting a channel also revokes the one-tap decision links it sent.
+- **Delivery**: up to `NOTIFY_CONCURRENCY` channels (default 4) are sent in parallel, so one
+  slow SMTP server doesn't hold up the rest.
+- **Stale items are skipped**: if an item is no longer pending when its notification is sent
+  (e.g. someone already decided it), the notification is `skipped`.
+- **Plan limits** (cloud): Free 2 channels, Pro unlimited. Over the limit:
+  `402 plan_limit_exceeded` with `details.limit = "notification_channels"`. See
+  [Plans](/plans).
+
+## One-tap decision links
+
+ntfy, email, Slack without an app and Discord webhooks get **Approve / Reject links** like
+`https://<api>/v1/decide/dl_tiptzca7tyr7yzgxiuqh`:
+
+- Each link is **single-use**, expires after 7 days (`NOTIFY_LINK_TTL`), and only a SHA-256
+  hash of its token is stored.
+- Opening a link (**GET**) shows a **confirmation page** with the item; only **POST** (the
+  button on that page) decides. Link-preview bots and mail scanners can't approve anything by
+  fetching the URL. ntfy's action buttons POST directly.
+- The reject page has an optional **reason** field.
+- An item someone already decided shows a friendly "already approved" message (`409`); a used
+  or expired link returns `410`, and so does a link whose channel was disabled; links of
+  deleted channels are gone (`404`).
+- **You approve what you saw.** A link (and every chat button) is bound to the item version
+  shown in the message. If the agent changed the item since, the link answers "item changed
+  since this message — open it in staqly" (`409 item_changed`) and nothing is decided.
+- Links are **bearer credentials**: anyone with the message can use them. Send them only to
+  private destinations.
+
+### Where the links point
+
+Links point to **`NOTIFY_PUBLIC_API_URL`**, which must be reachable from the device where you
+tap. By default that is the dashboard proxy, `PUBLIC_DASHBOARD_URL` + `/api` (the API itself listens
+on `127.0.0.1`; phones reach only the dashboard), or `PUBLIC_API_URL` when `PUBLIC_DASHBOARD_URL` is
+unset:
+
+| Setup | What to set |
+|---|---|
+| Laptop, tapping on the same laptop | nothing (`http://localhost:3333`) |
+| Laptop, tapping on your phone (same Wi-Fi) | `PUBLIC_DASHBOARD_URL=http://<LAN IP>:8080`; links go through the dashboard, which proxies `/api/*` to the API |
+| Cloud | `PUBLIC_DASHBOARD_URL=https://staqly.example.com`, or `NOTIFY_PUBLIC_API_URL` to your public API URL |
+
+"Open in dashboard" links use `PUBLIC_DASHBOARD_URL` (`<PUBLIC_DASHBOARD_URL>/items/{id}`).
+
+## Local vs cloud
+
+| Feature | Laptop (local mode) | Cloud / public URL |
+|---|---|---|
+| Telegram buttons | Yes, in polling mode | Yes, polling or webhook |
+| Slack / Discord messages | Yes | Yes |
+| Slack / Discord buttons | No, needs a public HTTPS URL | Yes |
+| One-tap links (ntfy, email) | Only where `NOTIFY_PUBLIC_API_URL` is reachable | Yes |
+
+**Network policy**: outbound requests are SSRF-guarded: public internet only by default (in
+both modes); cloud metadata, link-local and reserved addresses are always blocked, as are IPv6
+forms that embed such an IPv4 address. Carrier-grade NAT space (`100.64.0.0/10`, also used by
+Tailscale) counts as private. `NOTIFY_ALLOW_PRIVATE=true` allows a LAN target (self-hosted
+ntfy, an SMTP relay); `NOTIFY_ALLOW_LOOPBACK=true` a target on the same host.
+
+## Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `NOTIFY_SECRET_KEY` | — | Key material for encrypting channel secrets (AES-256-GCM); **at least 32 bytes** (e.g. `openssl rand -hex 32`); shorter values refuse to start. If unset, a random key is generated once into `DATA_DIR/notify_secret.key` (mode 0600). **Back it up with the database**: without it, stored secrets must be re-entered. |
+| `NOTIFY_PUBLIC_API_URL` | `PUBLIC_DASHBOARD_URL` + `/api`, else `PUBLIC_API_URL` | Base URL for decision links and the Telegram webhook |
+| `NOTIFY_MAX_FAILS` | `10` | Consecutive failures before a channel is disabled |
+| `NOTIFY_MAX_ATTEMPTS` | `5` | Attempts per queued notification |
+| `NOTIFY_RETRY_BASE` | `30s` | First retry delay (doubles, capped at 30 min) |
+| `NOTIFY_POLL_INTERVAL` | `2s` | Notification outbox worker interval |
+| `NOTIFY_CONCURRENCY` | `4` | Channels sent in parallel per pass |
+| `NOTIFY_DISABLED_GRACE` | `24h` | How long a disabled channel keeps its queued messages; after that they are marked `skipped` |
+| `RETENTION_NOTIFICATIONS_DAYS` | `30` | Finished outbox rows are pruned after N days; `0` keeps them |
+| `NOTIFY_LINK_TTL` | `168h` | Decision link lifetime |
+| `NOTIFY_ALLOW_PRIVATE` / `NOTIFY_ALLOW_LOOPBACK` | `false` | SSRF policy for channel targets |
+| `NOTIFY_TELEGRAM_AUTOREGISTER` | `true` | Call `setWebhook` / `deleteWebhook` when a Telegram channel is saved |
+| `TELEGRAM_POLL_INTERVAL` | `3s` | `getUpdates` interval in polling mode |
+| `TELEGRAM_API_BASE`, `SLACK_API_BASE`, `DISCORD_API_BASE` | official APIs | Overrides (tests, proxies) |
+
+With Docker Compose, `compose.yml` passes through `NOTIFY_SECRET_KEY`,
+`NOTIFY_PUBLIC_API_URL` and `NOTIFY_ALLOW_PRIVATE`; add others to the `staqly` service's
+`environment` if you need them.
+
+## Security
+
+- Channel secrets are encrypted at rest, masked in every response and never logged.
+- Every chat button carries an HMAC with a per-channel key, so a modified client can't forge
+  decisions for other items or actions. Approve, Reject and Reject-with-reason payloads
+  (including the Telegram reason prompt and the Discord reason form) also carry the item
+  version shown, so a stale button can't decide content that changed after the message.
+- Chat decisions apply only to items in the channel's workspace, and only from users on the
+  approver allowlist.
+- Telegram webhooks are verified with the secret token, Slack with an HMAC signature, Discord
+  with Ed25519 (the last two within 5 minutes).
+- The confirmation page has no JavaScript and a strict Content-Security-Policy; tokens stay out
+  of request logs; per-IP [rate limits](/self-hosting/monitoring#rate-limits) apply.
+- Item text is escaped for every target (Telegram HTML, Slack mrkdwn, Discord markdown and
+  mentions, email HTML).
+
+## Next steps
+
+<Cards>
+  <Card title="Approve from chat" href="/cookbook/approve-from-chat">Set up a Telegram bot and decide with one tap.</Card>
+  <Card title="Review on your phone" href="/cookbook/review-on-your-phone">Open the full dashboard on your phone.</Card>
+  <Card title="Webhooks" href="/automation/webhooks">Let your code react to the same events.</Card>
+</Cards>

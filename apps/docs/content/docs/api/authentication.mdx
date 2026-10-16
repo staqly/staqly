@@ -1,0 +1,143 @@
+---
+title: Authentication & scopes
+description: Find out when you need credentials, how to create a scoped API key, and which scope each call needs.
+---
+
+How you authenticate depends on the [mode](/local-vs-cloud). On your own machine (local mode,
+the default) agents and scripts need **no credentials at all**. On a hosted server (cloud mode)
+every automation sends a **scoped API key**, and browsers sign in with a session.
+
+## Authenticate an automation
+
+<Steps>
+<Step>
+### Local mode: just call the API
+
+Run your script on the same machine as staqly and send no credentials:
+
+```bash
+curl -s http://localhost:3333/v1/items
+```
+
+If the API answers `403 not_local`, the request didn't look local — see the
+[checks below](#local-mode-no-credentials).
+</Step>
+<Step>
+### Cloud mode: create a key
+
+In the dashboard, open **API keys** in the sidebar, give the key a name and tick only the
+[scopes](#scopes) the automation needs. Copy the key (`stk_...`) right away: it is shown
+**once**.
+</Step>
+<Step>
+### Send it as a bearer token
+
+```bash
+curl -s https://staqly.example.com/v1/items -H "Authorization: Bearer stk_..."
+```
+
+Store the key in a secret or environment variable, never in code. An invalid, expired or
+revoked key returns `401 unauthorized`; a key without the needed scope returns
+`403 forbidden`.
+</Step>
+</Steps>
+
+## Local mode: no credentials
+
+In local mode (the default) requests without credentials get a full-access `local`
+principal — **if** they provably come from this machine:
+
+- the TCP peer is loopback or inside `LOCAL_TRUSTED_PEERS` — compose sets the private ranges
+  because Docker forwards published ports from its bridge network; outside Docker only
+  loopback counts (and the server listens on `127.0.0.1:3333`),
+- the `Host` header is a local name: `localhost`, `127.0.0.1`, `::1`, `api`,
+  `host.docker.internal`, anything ending in `.localhost`, plus `LOCAL_ALLOWED_HOSTS`
+  (compose adds the container name `staqly`),
+- any `Origin` header is the dashboard's own (`localhost`, `127.0.0.1` or `[::1]` on
+  `DASHBOARD_PORT`, or the origin of `PUBLIC_DASHBOARD_URL`) or listed in `LOCAL_ALLOWED_ORIGINS` — this
+  blocks web pages on other sites and on other localhost ports,
+- the request does not come through the dashboard proxy (`DASHBOARD_EXPOSED=true` in compose)
+  — browsers use sessions.
+
+Otherwise the API answers `403 not_local` with the reason. Bearer keys and session cookies
+are honored in local mode too.
+
+## Cloud mode: API keys
+
+- Keys look like `stk_...` (256 bits of randomness). Only a SHA-256 hash and a 6-character
+  display prefix are stored; the raw key is shown **once**, when created or rotated.
+- Each key belongs to one workspace — the key decides which workspace you work in.
+- Keys can expire (`expires_at`, RFC 3339 or `YYYY-MM-DD`), be **rotated** (revoke + new key
+  with the same name and scopes) and **revoked**. `last_used_at` shows when a key was last
+  used.
+- Manage keys in **API keys** in the sidebar or via `/v1/api-keys` (needs `admin`).
+
+## Scopes
+
+| Scope | Allows |
+|---|---|
+| `collections:read` | List and read collections |
+| `collections:write` | Create, update, archive and delete collections |
+| `items:read` | List, search and read items, history, versions, media, events; wait for decisions |
+| `items:write` | Create, update, delete and unarchive items; edit tags; write a new summary; upload media; report results; agent lifecycle status changes |
+| `items:review` | **Approve and reject** (and create items directly as approved/rejected); edit the content of decided items; any other status change |
+| `actions:execute` | Run custom collection actions |
+| `webhooks:manage` | Manage webhooks and their deliveries |
+| `watchers:manage` | Manage [watchers](/automation/watchers) |
+| `channels:manage` | Manage [notification channels](/automation/notifications) (they hold secrets such as bot tokens) |
+| `admin` | Everything, including API keys, sessions, device links, renaming the workspace, the [workspace export](/self-hosting/data-export), item purge, billing and plan changes, and seeing [audit events](/api/events#audit-events) in the activity log |
+
+A call without the needed scope returns `403 forbidden` — *"missing required scope
+items:review"*. The same check applies over [MCP](/mcp).
+
+### Why creating and reviewing are separate
+
+Creating content (`items:write`) is separate from deciding on it (`items:review`), so a
+generator agent cannot approve its own output — nor change it after you approved it: with
+`items:write` alone, an approved or rejected item's content is frozen (`metadata_patch` still
+works) and only lifecycle status changes are allowed. The exact list is in
+[Security model](/self-hosting/security#review-integrity).
+
+The key created at signup has every scope **except `admin` and `channels:manage`** — key
+management stays in the dashboard and channels hold secrets, so grant those deliberately.
+
+### Suggested keys
+
+| Agent | Scopes |
+|---|---|
+| Generator (n8n, a script) | `collections:read items:read items:write` |
+| Reviewer agent | `collections:read items:read items:review` |
+| Publisher | `items:read items:write actions:execute` |
+| Read-only dashboard/report | `collections:read items:read` |
+
+## Browser sessions
+
+The dashboard uses an HttpOnly session cookie (`staqly_session`, SameSite=Lax, 30-day expiry,
+revocable). It is `Secure` by default in cloud mode (`COOKIE_SECURE`, default `true` in cloud,
+`false` in local). Sessions hold every scope — the dashboard is the workspace owner.
+
+- Cookie-authenticated **unsafe** requests (POST/PATCH/DELETE) must send the session's CSRF
+  token in `X-CSRF-Token`; otherwise `403 csrf_failed`. `GET /v1/session` returns the token.
+- Scripts should never use cookies — use a bearer key (no CSRF needed).
+- `/mcp` accepts only bearer keys, never cookies.
+- New sessions come from cloud signup, the recovery key, or a one-time **device link**
+  (`/v1/device-links`, dashboard only — API keys cannot mint browser sessions).
+
+## Recovery key
+
+In cloud mode each workspace has a **recovery key** (`staqly-recovery-` followed by 40 characters, 200 bits) — the
+only way back in when every browser session is lost.
+
+- It is accepted only by `POST /v1/sessions/recover` (the `/login` page) and stored hashed.
+- Rotate it from a dashboard session (**Settings → Recovery key**) or on the server with
+  `docker exec staqly server recovery-key` (`staqly serve recovery-key` with the binary).
+- Signing in with it or rotating it signs out every other session of the workspace.
+- MCP never accepts or exposes it.
+
+## Next steps
+
+<Cards>
+  <Card title="Errors" href="/api/errors">What `401`, `403` and the other codes mean.</Card>
+  <Card title="Local vs cloud" href="/local-vs-cloud">Choose the mode that fits your setup.</Card>
+  <Card title="Security model" href="/self-hosting/security">How staqly protects review integrity and secrets.</Card>
+</Cards>

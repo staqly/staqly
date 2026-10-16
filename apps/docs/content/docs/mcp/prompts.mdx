@@ -1,0 +1,71 @@
+---
+title: Example prompts
+description: Copy prompts that get Claude Code, Codex or OpenCode working with staqly, and see which tools they trigger.
+---
+
+Once staqly is [connected](/mcp), you talk to your agent in plain language and it picks the
+right [tools](/mcp/tools). Use these prompts as a starting point; the arrow shows which tool
+the agent will call.
+
+## Try your first prompt
+
+<Steps>
+<Step>
+### Check the connection
+
+Ask *"List my staqly collections."* The agent should call `list_collections`. If it says it
+has no such tool, revisit the setup for [Claude Code](/agents/claude-code) or
+[other clients](/agents/other-mcp-clients).
+</Step>
+<Step>
+### Store something
+
+Ask *"Create a collection called Instagram Avatar and add a caption draft to it."*
+</Step>
+<Step>
+### Review it
+
+Open the Inbox at `http://localhost:8080` and approve or reject the new item. Then ask
+*"What did I decide about the caption draft?"*
+</Step>
+</Steps>
+
+## Storing output
+
+- *“Create a collection called Instagram Avatar.”* → `create_collection`
+- *“Add this generated image to my Instagram Avatar collection.”* → `create_item` with
+  `media_base64` (or an external `url`)
+- *“Save this research summary to AI Research with the sources in metadata.”* → `create_item`
+
+## Finding things
+
+- *“Show me all pending images.”* → `list_pending_approvals` with `type=image`
+- *“Find the images I approved yesterday.”* → `search_items` with `status=approved`,
+  `type=image`, `decided_after`, `decided_before`
+- *“What happened to itm_oalirbz67y4m4cqxq5dw?”* → `get_item_history`
+- *“Search everything about golden hour.”* → `search_items` with `query`
+
+## Deciding
+
+- *“Reject itm_oalirbz67y4m4cqxq5dw with feedback: the lighting is too harsh.”* → `reject_item`
+- *“Approve itm_oalirbz67y4m4cqxq5dw but fix the typo in the caption first.”* → `approve_item` with `content`
+- *“Regenerate itm_oalirbz67y4m4cqxq5dw with feedback: make her smile.”* → `execute_custom_action`
+
+## Asking for permission
+
+- *“Before you run the migration, ask me for approval in staqly and wait for my answer.”* →
+  `create_item` → `await_decision` → (act) → `report_result`.
+  See [Gate a risky agent action on human approval](/cookbook/approval-gate).
+
+## Automating
+
+- *“Watch https://example.com/feed.xml and put new posts into my Inspiration collection every hour.”* →
+  `create_watcher`
+- *“Are any of my watchers failing?”* → `list_watchers`
+
+## Next steps
+
+<Cards>
+  <Card title="Tools reference" href="/mcp/tools">Every tool and its inputs.</Card>
+  <Card title="Gate an action on approval" href="/cookbook/approval-gate">Make an agent ask before it acts.</Card>
+</Cards>

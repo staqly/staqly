@@ -1,0 +1,738 @@
+---
+title: Tools reference
+description: Look up each of the 71 MCP tools, its inputs and the scope it needs in cloud mode.
+---
+
+These are the tools an agent sees once staqly is [connected over MCP](/mcp). You rarely call
+them by hand — the agent picks them from your request — but this page tells you what each one
+can do, which inputs it takes, and which [scope](/api/authentication#scopes) an API key needs
+for it in cloud mode.
+
+## Example: gate an action on approval
+
+The most common sequence, with the arguments an agent sends:
+
+<Steps>
+<Step>
+### Store the proposal: `create_item`
+
+```json
+{ "collection": "Deploys", "title": "Run the users migration", "content": "ALTER TABLE users ADD COLUMN last_seen_at timestamptz", "expires_in": "24h" }
+```
+
+The item is created as `pending` and shows up in the Inbox.
+</Step>
+<Step>
+### Wait for the decision: `await_decision`
+
+```json
+{ "item_id": "itm_oalirbz67y4m4cqxq5dw" }
+```
+
+Returns `decided: false` on timeout — call it again to keep waiting. Act only when the item's
+status is `approved`. Many clients give up on a tool call after 60 seconds (Claude Code and Codex
+by default), so keep `timeout_seconds` under that (the default is 45) and call again, or raise the
+client's limit first (Claude Code: `MCP_TOOL_TIMEOUT=360000`; Codex: `tool_timeout_sec` on the
+server).
+</Step>
+<Step>
+### Record what happened: `report_result`
+
+```json
+{ "item_id": "itm_oalirbz67y4m4cqxq5dw", "status": "completed", "result": { "rows": 1200 } }
+```
+</Step>
+</Steps>
+
+A full walkthrough: [Gate a risky agent action on human approval](/cookbook/approval-gate).
+
+## Conventions
+
+- Scopes only matter in **cloud mode** (with an API key); in local mode every tool is
+  available.
+- Tools marked *read-only* are annotated as such for clients that care.
+- Collection inputs accept an ID (`col_qjuybkx6355nz4no6pqk`) **or** the exact name.
+- Every REST operation has a tool, and both go through the same authorization checks. Only
+  the browser flows (sign-in, sign-out, setup, redeeming a device link, decision links),
+  recovery key rotation (dashboard session only), the agent list (`/v1/agents`) and writing a
+  new summary (`POST /v1/items/{id}/summarize`) have none.
+- Tools marked *destructive* delete or invalidate something (data, a key, a secret).
+- A suspended workspace (unpaid Pro period) can call read-only tools plus `revoke_session`,
+  `revoke_api_key`, `create_device_link`, `start_workspace_export`, `choose_free_plan`,
+  `start_billing_checkout`, `open_billing_portal`, `delete_workspace` and `purge_item`; other tools answer with `plan_expired`, like REST.
+
+## Collections
+
+### `list_collections`
+List collections with item counts per status. *Read-only* · `collections:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `include_archived` | boolean | No | Include archived collections |
+
+### `get_collection`
+Get a collection by ID or name, including its configured actions. *Read-only* · `collections:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | <Required /> | ID or exact name |
+
+### `create_collection`
+Create a collection (e.g. "Instagram Avatar"). New collections get the default actions
+*regenerate, publish, retry, archive*. · `collections:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | <Required /> | Collection name, shown in the dashboard sidebar |
+| `description` | string | No | Short description shown under the name |
+| `default_view` | string | No | `gallery`, `table` or `list`. Kept for API compatibility only: the dashboard always shows a collection as a table |
+
+### `update_collection`
+Update a collection's name, description, icon, color, default view or actions, or archive or unarchive it.
+Omitted inputs stay unchanged; archiving an archived collection (or unarchiving an active one) is a conflict. · `collections:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | <Required /> | ID or exact name |
+| `name` | string | No | New name |
+| `description` | string | No | New description |
+| `icon` | string | No | Icon name shown in the sidebar |
+| `color` | string | No | Accent color, e.g. `#7c3aed` |
+| `default_view` | string | No | `gallery`, `table` or `list`. Kept for API compatibility only; the dashboard ignores it |
+| `actions` | object[] | No | Replaces the custom actions: `name`, `label`, `event`, `requires_feedback`, `set_status`, `allowed_statuses` |
+| `archived` | boolean | No | `true` archives the collection, `false` restores it |
+
+### `delete_collection`
+Permanently delete a collection and all its items. *Destructive* · `collections:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | <Required /> | ID or exact name |
+| `confirm` | string | <Required /> | Must be exactly the collection name, e.g. `Deploys` |
+
+## Items
+
+### `list_items`
+List items, optionally filtered; newest first. *Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | No | ID or name |
+| `status` | string | No | `draft`, `pending`, `approved`, `rejected`, `expired`, `processing`, `completed`, `failed`, `archived` |
+| `type` | string | No | `image`, `video`, `text`, `link`, `json`, `file` |
+| `decision` | string[] | No | Any of `pending`, `approved`, `rejected`, `expired` (archived items are left out), or `archived` |
+| `run` | string[] | No | Any of `none`, `processing`, `completed`, `failed` |
+| `tag` | string[] | No | Items carrying any of these tags |
+| `sort` | string | No | `created_desc` (default), `created_asc`, `updated_desc`, `decided_desc`, `title_asc` |
+| `limit` | integer | No | Default 50, max 200 |
+| `cursor` | string | No | `next_cursor` from a previous call |
+
+### `get_item`
+One item with content, metadata, media and status. *Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | `itm_oalirbz67y4m4cqxq5dw` |
+
+### `create_item`
+Add an item to a collection. Items default to `pending` so they show up for review. ·
+`items:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | <Required /> | ID or exact name |
+| `title` | string | No | Short title shown in the Inbox |
+| `type` | string | No | Inferred when omitted |
+| `content` | string | No | Text body, caption, or a JSON string |
+| `url` | string | No | External http(s) URL (a link or externally hosted media) |
+| `media_base64` | string | No | Base64-encoded file to upload (image, video, PDF or any other file) |
+| `media_filename` | string | No | File name for `media_base64`, e.g. `avatar.png` |
+| `metadata` | object | No | Arbitrary JSON: prompt, model, seed, score |
+| `status` | string | No | Initial status: `pending` (default), `draft`, or `approved`/`rejected` with `items:review` |
+| `tags` | string[] | No | Labels, up to 20 |
+| `source` | string | No | Producer identifier; defaults to the MCP client's name (e.g. `Claude Code`) |
+| `external_ref` | string | No | Your own reference ID |
+| `expires_in` | string | No | Undecided items expire after this duration, e.g. `24h` |
+| `editable` | string[] | No | Fields a reviewer may edit before approving: `title`, `content`, `url`, `metadata`, `metadata.<key>` |
+
+### `update_item`
+Update fields or status (e.g. `processing`, `completed`, `failed`). Approve/reject must use
+`approve_item` / `reject_item`. · `items:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID (for example `itm_oalirbz67y4m4cqxq5dw`) |
+| `title` | string | No | New title; omitted fields stay unchanged |
+| `content` | string | No | New text body, caption or JSON string |
+| `url` | string | No | New external http(s) URL |
+| `external_ref` | string | No | New reference ID of your own |
+| `metadata_patch` | object | No | Keys to set; a `null` value removes the key |
+| `tags` | string[] | No | Replaces the item's tags, in any status (no new version) |
+| `status` | string | No | `draft`, `pending`, `processing`, `completed`, `failed`, `archived` (a run only after a decision) |
+| `expected_version` | integer | No | Fail with a conflict if the item changed since this version |
+
+### `search_items`
+Full-text search over title, content and metadata with optional filters — e.g. images approved
+yesterday. *Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `query` | string | No | Text to find |
+| `collection` | string | No | Collection ID or exact name |
+| `status` | string | No | Item status, e.g. `approved` |
+| `type` | string | No | `image`, `video`, `text`, `link`, `json` or `file` |
+| `created_after` | string | No | `YYYY-MM-DD` or RFC 3339, inclusive |
+| `created_before` | string | No | `YYYY-MM-DD` or RFC 3339, exclusive |
+| `decided_after` | string | No | Lower bound of the approval or rejection time, inclusive |
+| `decided_before` | string | No | Upper bound of the approval or rejection time, exclusive |
+| `limit` | integer | No | Maximum results (default 50, max 200) |
+
+### `get_item_history`
+The event history (decisions, edits, actions) and prior versions of an item. *Read-only* ·
+`items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID |
+
+### `get_item_versions`
+The prior versions (snapshots) of an item, newest first. *Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID, e.g. `itm_oalirbz67y4m4cqxq5dw` |
+
+### `delete_item`
+Delete an item. Its events stay in the activity log; use `purge_item` to erase them too.
+*Destructive* · `items:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID |
+
+### `purge_item`
+Erase an item together with its versions, events, pending webhook deliveries and media no
+other item uses, e.g. to remove personal data. One content-free `item.purged` event records
+it. *Destructive* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID |
+
+## Review
+
+### `list_pending_approvals`
+Items waiting for review across all collections, oldest first. *Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | No | Collection ID or name; omit for all collections |
+| `type` | string | No | e.g. `image` |
+| `limit` | integer | No | Maximum results (default 50, max 200) |
+
+### `approve_item`
+Approve a pending item, optionally editing title/content first. · `items:review`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID |
+| `feedback` | string | No | Optional note stored with the decision |
+| `title` | string | No | New title, applied before approving (subject to the item's `editable` list) |
+| `content` | string | No | New content or caption, applied before approving (subject to the item's `editable` list) |
+
+### `reject_item`
+Reject a pending item with feedback explaining why. · `items:review`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID |
+| `feedback` | string | <Required /> | Sent to automations so they can regenerate |
+| `follow_up` | string | No | Run this action next with the same feedback, e.g. `regenerate` |
+
+### `list_available_actions`
+Actions the caller can run on an item in its current status. *Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID |
+
+### `execute_custom_action`
+Run a collection action such as *regenerate* or *publish*. It records an event and notifies
+webhooks; external automations do the actual work. · `actions:execute`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID |
+| `action` | string | <Required /> | From `list_available_actions` |
+| `feedback` | string | No | Required by some actions (e.g. regenerate) |
+| `payload` | object | No | Extra JSON passed to webhook receivers |
+
+### `execute_bulk_action`
+Run one action on up to 100 items. Each item succeeds or fails on its own; the result lists
+`ok`, `error` and the updated item per ID. · `items:review` for `approve` / `reject`,
+`actions:execute` for custom actions
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_ids` | string[] | <Required /> | 1 to 100 item IDs, e.g. `["itm_oalirbz67y4m4cqxq5dw"]` |
+| `action` | string | <Required /> | `approve`, `reject` or a custom action such as `publish` |
+| `feedback` | string | No | Note stored with each decision; required by some custom actions (e.g. `regenerate`) and expected with `reject` |
+| `payload` | object | No | Extra JSON passed to webhook receivers |
+
+## Media
+
+### `upload_media`
+Upload a file without creating an item; reference the returned media ID later. · `items:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `media_base64` | string | <Required /> | Base64-encoded file (image, video, PDF or any other file) |
+| `filename` | string | <Required /> | File name with extension, e.g. `avatar.png` |
+
+### `get_media`
+A media file's metadata (type, size, original name, SHA-256, URL), optionally with its content.
+*Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `media_id` | string | <Required /> | Media ID, e.g. `med_4f2kq7xw3nbvd5yhzm6a` |
+| `include_content` | boolean | No | Also return the file as `content_base64`. Files over 4 MiB answer with `too_large`; download them from the returned `url` instead |
+
+### `delete_media`
+Delete a media file; items that reference it lose their media. *Destructive* · `items:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `media_id` | string | <Required /> | Media ID |
+
+## Activity log
+
+### `list_events`
+The activity log (items created, approved, rejected, actions run, settings changed), newest
+first. *Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | No | Only events about this item |
+| `collection` | string | No | Collection ID or name |
+| `type` | string | No | Event type, e.g. `item.approved` |
+| `actor_type` | string | No | `session`, `api_key`, `local` or `system` |
+| `actor_id` | string | No | Only events by this actor, e.g. an API key ID (`key_r7y65khtqa23kj4btvur`) |
+| `type_prefix` | string | No | Event type prefix, e.g. `webhook.` |
+| `from` | string | No | `YYYY-MM-DD` or RFC 3339, inclusive |
+| `to` | string | No | `YYYY-MM-DD` or RFC 3339, exclusive |
+| `limit` | integer | No | Default 50, max 200 |
+| `cursor` | string | No | `next_cursor` from a previous call |
+
+### `export_events`
+Export the activity log as NDJSON or CSV text, oldest first. The output is capped at 1 MiB;
+when `truncated` is `true`, narrow `from` / `to` to get the rest. *Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `format` | string | No | `ndjson` (default) or `csv` |
+| `from` | string | No | `YYYY-MM-DD` or RFC 3339, inclusive |
+| `to` | string | No | `YYYY-MM-DD` or RFC 3339, exclusive |
+| `type` | string | No | Exact event type, e.g. `item.approved` |
+| `type_prefix` | string | No | Event type prefix, e.g. `item.` |
+| `actor_type` | string | No | `session`, `api_key`, `local` or `system` |
+| `actor_id` | string | No | Actor ID, e.g. an API key ID like `key_7dq2m5vxk3pzr8hn4wty` |
+| `collection` | string | No | Collection ID or name |
+| `item_id` | string | No | Only events about this item |
+
+Returns `format`, the number of `events`, `truncated` and the export text in `content`, one
+event per line.
+
+## Approval gate
+
+### `await_decision`
+Wait until a human approves or rejects an item (or it expires). Returns `decided: false` on
+timeout — call again to keep waiting. *Read-only* · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Item ID to wait for |
+| `timeout_seconds` | integer | No | Default 45, max 300. Keep it under your client's tool timeout (often 60 s) |
+
+Returns `{ "decided": true, "item": { "id": "itm_oalirbz67y4m4cqxq5dw", "status": "approved" } }`.
+
+### `report_result`
+After an approved item was acted on (e.g. published), record the outcome. · `items:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `item_id` | string | <Required /> | Must be `approved` or `processing` |
+| `status` | string | <Required /> | `completed` or `failed` |
+| `result` | object | No | Outcome details, stored in `metadata.result` (e.g. `{"post_url": "https://instagram.com/p/C9xYz"}`) |
+| `error` | string | No | Failure reason, stored in `metadata.error` |
+
+See [Gate a risky agent action on human approval](/cookbook/approval-gate).
+
+### `unarchive_item`
+Bring an archived item back where it was: back to review (`pending`) if it was archived while waiting for a
+decision, else its run (published, failed...) if one ran, else its decision. Bringing back `approved` or
+`rejected` also needs `items:review`. `item_id`. · `items:write`
+
+### `get_flow`
+Where items are and how they moved: item counts per state (decision, run, the action that started it, archived)
+and event counts per type in the last 24 hours. Optional `collection`. · `items:read`
+
+### `list_tags`
+The workspace's item tags with how many items carry each, most used first. Use them with `list_items` (`tag`)
+or `update_item` (`tags`). · `items:read`
+
+### `list_requested_work`
+Items a person asked your automation to work on (Publish, Regenerate, Retry...) that wait for a result: their
+`run` is `processing` and `run_action` says what was asked. Without webhooks, poll this, do the work, then call
+`report_result`. Oldest first. · `items:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | No | Collection ID or name |
+| `action` | string | No | Only work started by this action, e.g. `publish` |
+| `limit` | integer | No | Default 50, max 200 |
+
+## Watchers
+
+### `list_watchers`
+Watchers with their status, last run and errors. *Read-only* · `watchers:manage`
+
+No inputs.
+
+### `create_watcher`
+Watch any RSS/Atom feed (`rss`) or a web page or JSON endpoint for changes (`url_diff`); new
+entries become pending items. ·
+`watchers:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | <Required /> | Watcher name |
+| `kind` | string | No | `rss` (RSS/Atom feed) or `url_diff` (page or JSON changes); left out, detected from the URL |
+| `url` | string | <Required /> | Feed or page URL, e.g. `https://blog.example.com/feed.xml` |
+| `collection` | string | <Required /> | ID or name that receives new entries (or pass `collections`) |
+| `collections` | string[] | No | IDs or names; each new entry is added to every one of them |
+| `keywords` | string[] | No | Only entries whose title or summary contains one of these words (case-insensitive) |
+| `exclude_keywords` | string[] | No | Skip entries containing any of these words |
+| `every` | string | No | Check interval, e.g. `30m` or `6h` |
+
+### `get_watcher`
+One watcher with its status, last run and errors. *Read-only* · `watchers:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `watcher_id` | string | <Required /> | Watcher ID, e.g. `wat_5k2nq8rx7bvm3dz4hcye` |
+
+### `update_watcher`
+Update a watcher, or pause and resume it; omitted inputs stay unchanged. Pausing a paused watcher or resuming an active one is a conflict. · `watchers:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `watcher_id` | string | <Required /> | Watcher ID |
+| `name` | string | No | New name |
+| `url` | string | No | New feed or page URL |
+| `collection` | string | No | ID or name that receives new entries |
+| `collections` | string[] | No | IDs or names; replaces the list of collections |
+| `status` | string | No | `active` (resume) or `paused` |
+| `keywords` | string[] | No | Only entries containing one of these words |
+| `exclude_keywords` | string[] | No | Skip entries containing any of these words |
+| `every` | string | No | Check interval, e.g. `30m` |
+
+### `delete_watcher`
+Delete a watcher; items it created stay. *Destructive* · `watchers:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `watcher_id` | string | <Required /> | Watcher ID |
+
+### `run_watcher`
+Check a watcher's source now instead of waiting for the next interval. Returns the run's
+status, new items and entries seen. · `watchers:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `watcher_id` | string | <Required /> | Watcher ID |
+
+Details: [Watchers](/automation/watchers).
+
+## Webhooks
+
+### `list_webhooks`
+Webhooks with their URL, events, collection filter and state. *Read-only* · `webhooks:manage`
+
+No inputs.
+
+### `get_webhook`
+One webhook. *Read-only* · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | <Required /> | Webhook ID, e.g. `wh_h3x7kq2mz5vb8nd4rtwc` |
+
+### `create_webhook`
+Create a webhook that receives signed event POSTs. The response contains the signing
+`secret` once. · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | <Required /> | Receiver URL, e.g. `https://n8n.example.com/webhook/staqly` |
+| `description` | string | No | What the receiver does, shown in the dashboard |
+| `events` | string[] | No | Event types to send, e.g. `["item.approved"]`; `["*"]` (default) sends all |
+| `collection_ids` | string[] | No | Only events from these collections; empty sends all |
+| `active` | boolean | No | `false` pauses deliveries |
+| `timeout_ms` | integer | No | Per-attempt timeout in milliseconds |
+| `max_attempts` | integer | No | Delivery attempts before giving up |
+
+### `update_webhook`
+Update a webhook; omitted inputs stay unchanged. · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | <Required /> | Webhook ID |
+| `url` | string | No | New receiver URL |
+| `description` | string | No | What the receiver does |
+| `events` | string[] | No | Event types to send; `["*"]` sends all |
+| `collection_ids` | string[] | No | Only events from these collections; empty sends all |
+| `active` | boolean | No | `false` pauses deliveries, `true` resumes them |
+| `timeout_ms` | integer | No | Per-attempt timeout in milliseconds |
+| `max_attempts` | integer | No | Delivery attempts before giving up |
+
+### `delete_webhook`
+Delete a webhook and stop its deliveries. *Destructive* · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | <Required /> | Webhook ID |
+
+### `rotate_webhook_secret`
+Replace the signing secret. The new `secret` is returned once; the old one stops working.
+*Destructive* · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | <Required /> | Webhook ID |
+
+### `test_webhook`
+Queue a `webhook.test` delivery to this webhook only. Rate-limited per caller. ·
+`webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | <Required /> | Webhook ID |
+
+### `list_webhook_deliveries`
+Delivery attempts with status, response code and error, newest first. *Read-only* ·
+`webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | No | Only deliveries of this webhook |
+| `status` | string | No | `pending`, `succeeded` or `failed` |
+| `limit` | integer | No | Default 50, max 200 |
+
+### `retry_webhook_delivery`
+Re-queue a finished (succeeded or failed) delivery. · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `delivery_id` | string | <Required /> | Delivery ID, e.g. `dlv_r8m3kz6qx2nb7vd5hcwt` |
+
+Details: [Webhooks](/automation/webhooks).
+
+## Notification channels
+
+### `list_notification_channels`
+Telegram, Slack, Discord, ntfy and email channels. Secrets are masked. *Read-only* ·
+`channels:manage`
+
+No inputs.
+
+### `get_notification_channel`
+One notification channel; secrets are masked. *Read-only* · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID, e.g. `nch_t4w9kx2mq7bz5nd3rvhc` |
+
+### `create_notification_channel`
+Create a channel that tells reviewers about new pending items. · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | <Required /> | Channel name |
+| `type` | string | <Required /> | `telegram`, `slack`, `discord`, `ntfy` or `email` |
+| `config` | object | No | Type-specific settings, e.g. `{"webhook_url": "https://hooks.slack.com/services/T000/B000/XXXX"}` for Slack or `{"topic": "staqly-reviews"}` for ntfy |
+| `enabled` | boolean | No | `false` pauses the channel |
+| `events` | string[] | No | Event types to notify about, e.g. `["item.created"]` |
+| `collection_ids` | string[] | No | Only events from these collections; empty notifies for all |
+| `digest_window_seconds` | integer | No | Group notifications within this many seconds into one message; `0` sends each |
+
+### `update_notification_channel`
+Update a channel; omitted inputs stay unchanged and the type cannot change. ·
+`channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID |
+| `name` | string | No | New name |
+| `config` | object | No | Type-specific settings, as in `create_notification_channel` |
+| `enabled` | boolean | No | `false` pauses the channel |
+| `events` | string[] | No | Event types to notify about |
+| `collection_ids` | string[] | No | Only events from these collections; empty notifies for all |
+| `digest_window_seconds` | integer | No | Group notifications within this many seconds into one message; `0` sends each |
+
+### `delete_notification_channel`
+Delete a channel. *Destructive* · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID |
+
+### `test_notification_channel`
+Send a test message through the channel right away; returns `ok` and any error.
+Rate-limited per caller. · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID |
+
+### `list_notification_deliveries`
+Recent notifications sent (or failed) through a channel, newest first. *Read-only* ·
+`channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID |
+| `limit` | integer | No | Default 50, max 200 |
+
+Details: [Notifications](/automation/notifications).
+
+## API keys and sessions
+
+### `list_api_keys`
+API keys with prefix, scopes, last use, expiry and revocation, plus the available scopes.
+*Read-only* · `admin`
+
+No inputs.
+
+### `create_api_key`
+Create an API key. The raw `key` is returned once. · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | <Required /> | Key name, e.g. the agent that uses it |
+| `scopes` | string[] | <Required /> | Scopes to grant, e.g. `["collections:read", "items:read", "items:write"]` |
+| `expires_at` | string | No | RFC 3339 expiry, e.g. `2026-12-31T00:00:00Z`; omit for a key that does not expire |
+
+### `revoke_api_key`
+Revoke an API key; it stops working immediately. *Destructive* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `key_id` | string | <Required /> | Key ID, e.g. `key_7dq2m5vxk3pzr8hn4wty` |
+
+### `rotate_api_key`
+Replace a key with a new one with the same name and scopes; the old key stops working and
+the new raw `key` is returned once. *Destructive* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `key_id` | string | <Required /> | Key ID |
+
+### `list_sessions`
+Signed-in dashboard sessions (browser, created, last seen, expiry). *Read-only* · `admin`
+
+No inputs.
+
+### `revoke_session`
+Sign out a dashboard session. *Destructive* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | <Required /> | Session ID, e.g. `ses_b6n2xq8kz4mv7rd3hcwt` |
+
+## Workspace and plan
+
+### `get_workspace`
+The workspace's ID, name and plan. *Read-only* · no scope needed
+
+No inputs.
+
+### `rename_workspace`
+Rename the workspace. · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | <Required /> | New workspace name |
+
+### `delete_workspace`
+Permanently delete the workspace and everything in it (cloud mode only; local mode answers with a conflict). As in REST, this
+needs a signed-in dashboard session, so API keys get a `forbidden` error. *Destructive*
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `confirm` | string | <Required /> | Must be exactly the workspace name |
+
+### `start_workspace_export`
+Start a ZIP export of the whole workspace (items, media, events). Poll
+`get_workspace_export` until the status is `ready`. · `admin`
+
+No inputs.
+
+### `get_workspace_export`
+An export's status (`pending`, `running`, `ready`, `failed`, `expired`) and, once ready, its
+`download_url` (download it with the same API key). *Read-only* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `export_id` | string | <Required /> | Export ID from `start_workspace_export`, e.g. `exp_c5v8kq3mx2nz7bd4hrwt` |
+
+### `list_plans`
+The cloud plans with their limits and prices. *Read-only* · no scope needed
+
+No inputs.
+
+### `get_usage`
+The workspace's plan, usage this period against its limits, and whether it is suspended.
+*Read-only* · no scope needed
+
+No inputs.
+
+### `choose_free_plan`
+Switch the workspace to Free (cloud mode only; local mode answers `not_available`). This
+lifts a suspension after an unpaid Pro period. Refused while a Pro subscription is live: cancel it in the billing portal first. ·
+`admin`
+
+No inputs.
+
+### `get_billing`
+Billing status: whether Stripe billing is enabled on this instance, the plan, the subscription
+status (`active`, `past_due`, `canceled` and so on), the end of the trial or paid period, and
+whether the workspace is suspended. *Read-only* · `admin`
+
+No inputs.
+
+### `start_billing_checkout`
+Start a Stripe Checkout for Pro and return `{"url": "https://checkout.stripe.com/c/pay/cs_test_a1b2c3"}`.
+A person opens the URL and pays; the plan changes when Stripe confirms. Works while suspended. ·
+`admin`
+
+No inputs.
+
+### `open_billing_portal`
+Return the Stripe customer portal URL, where a person changes the payment method, downloads
+invoices or cancels. Works while suspended. · `admin`
+
+No inputs.
+
+### `create_device_link`
+Create a one-time link, valid for 5 minutes, that signs another browser into the dashboard.
+Works for keyless local-mode agents; API keys get a `forbidden` error.
+
+No inputs.
+
+## Next steps
+
+<Cards>
+  <Card title="Example prompts" href="/mcp/prompts">Things to ask your agent.</Card>
+  <Card title="Authentication & scopes" href="/api/authentication#scopes">Pick scopes for an agent's API key.</Card>
+</Cards>

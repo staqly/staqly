@@ -1,0 +1,107 @@
+---
+title: Approve from chat
+description: Set up a Telegram bot that messages you about every new item and lets you approve or reject it with one tap.
+---
+
+You don't want to keep the dashboard open just to catch new items. In this recipe you connect
+a Telegram bot to staqly: every new pending item arrives as a message with **Approve** and
+**Reject** buttons, so you can decide from your phone wherever you are. It works even when
+staqly runs on your laptop with no public URL, because staqly fetches the button presses from
+Telegram itself (polling mode).
+
+## What you need
+
+- staqly running: `staqly serve` ([install](/quickstart)) or the
+  [Docker image](/self-hosting/docker). The API is at `http://localhost:3333`.
+- A Telegram account, and `curl` and `jq` on the computer running staqly.
+
+## Build it
+
+<Steps>
+<Step>
+
+### Create a bot
+
+The bot is what sends you messages. In Telegram open **@BotFather**, send `/newbot`, pick a
+name and copy the **bot token** (`123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`). Then open a chat with your new bot and send
+`/start`, so the bot is allowed to message you.
+
+</Step>
+<Step>
+
+### Find your chat ID
+
+staqly needs to know which chat to post to. Open
+`https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser (with your token in place of
+`<TOKEN>`) and copy `message.chat.id`.
+
+Alternatively, create the channel in the next step with any chat ID, then send `/chatid` to the
+bot. It replies with the right one.
+
+</Step>
+<Step>
+
+### Create the notification channel
+
+A notification channel tells staqly where to send messages. Create one with your token and
+chat ID:
+
+```bash
+CHANNEL_ID=$(curl -s -X POST http://localhost:3333/v1/notification-channels \
+  -H 'Content-Type: application/json' -d '{
+  "name": "My phone",
+  "type": "telegram",
+  "config": { "bot_token": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "chat_id": "123456789" }
+}' | jq -r .id)
+```
+
+By default it notifies you about new pending items (`item.created`). Send a test message to check it works:
+
+```bash
+curl -s -X POST http://localhost:3333/v1/notification-channels/$CHANNEL_ID/test
+# → {"ok":true}
+```
+
+</Step>
+<Step>
+
+### Review from Telegram
+
+Create an item, or let an agent do it, and the bot sends it to you, with the image if it has
+one:
+
+- **Approve** and **Reject** decide immediately; the buttons are replaced by the result
+  ("Approved by @you").
+- **Reject with reason** asks you to reply. Your reply rejects the item and becomes its
+  feedback, which your automation receives in the `item.rejected` webhook (e.g. to
+  regenerate).
+
+</Step>
+</Steps>
+
+## Variations
+
+- **Too many messages?** Set `"digest_window_seconds": 300` to get at most one message every
+  5 minutes, with buttons for the first 10 items.
+- **Only some collections?** Set `collection_ids`.
+- **A team group:** add the bot to a group, use the group's (negative) chat ID and list who may
+  decide in `config.approver_user_ids` (numeric Telegram user IDs).
+- **Combine with an approval gate:** an agent waiting in `await_decision` continues the moment
+  you tap Approve in Telegram. See [Gate a risky agent action](/cookbook/approval-gate).
+
+## Troubleshooting
+
+- **No message arrives:** check you sent `/start` to the bot and that the chat ID is right
+  (`/chatid` tells you). The `test` call returns `{"ok":false,"error":"Bad Request: chat not found"}` with Telegram's reason.
+- **Button presses are ignored or flaky:** keep one channel per bot. Two pollers on the same bot
+  steal each other's updates.
+
+Slack, Discord, ntfy and email work the same way; their setup is in
+[Notifications](/automation/notifications).
+
+## Reference
+
+<Cards>
+  <Card title="Notifications" href="/automation/notifications">All channel types and options</Card>
+  <Card title="Webhooks" href="/automation/webhooks">React to `item.rejected` and other events</Card>
+</Cards>

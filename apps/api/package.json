@@ -1,0 +1,17 @@
+{
+  "name": "@staqly/api",
+  "private": true,
+  "description": "Go backend (REST, MCP, workers). Scripts wrap the Go toolchain for turbo.",
+  "scripts": {
+    "build": "go build ./...",
+    "test": "go test -race ./...",
+    "lint": "go vet ./... && pnpm run lint:openapi",
+    "lint:openapi": "redocly lint openapi.yaml",
+    "format": "gofmt -w cmd internal server *.go",
+    "format:check": "test -z \"$(gofmt -l cmd internal server *.go)\"",
+    "gen": "go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.63.0"
+  }
+}

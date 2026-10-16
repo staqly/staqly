@@ -1,0 +1,522 @@
+---
+title: Commands
+description: Look up every staqly command and its flags, from running the server to reviewing, automating and connecting agents.
+---
+
+This page lists every `staqly` command with its flags and an example. Use it when you know what
+you want to do and need the exact syntax. New to the CLI? Start with the
+[CLI overview](/cli), which covers installing and connecting to a server.
+
+Run `staqly <command> --help` for the full flag list with examples. Wherever a command takes a
+collection, you can pass its **name or its ID**.
+
+Every command also accepts the global flags `--api-url` (alias `--url`), `--key`, `--profile`,
+`--json`, `--no-color` and `--help`; see [Connect to a server](/cli#connect-to-a-server).
+
+Most command groups have short aliases:
+
+| Command | Aliases |
+|---|---|
+| `items` | `item` |
+| `collections` | `collection`, `cols` |
+| `media` | `files` |
+| `webhooks` | `webhook`, `hooks` |
+| `channels` | `channel`, `notification-channels`, `notifications` |
+| `watchers` | `watcher`, `watch` |
+| `workspace` | `ws` |
+| `plans` | `plan` |
+| `keys` | `key`, `api-keys` |
+| `sessions` | `session` |
+| `profiles` | `profile` |
+
+## A typical session
+
+<Steps>
+<Step>
+### Check the connection
+
+```bash
+staqly status
+```
+
+Shows server health and version, mode, workspace, who you are, the masked key, your plan, usage
+against limits and the number of pending items.
+
+</Step>
+<Step>
+### Create a collection and push an item
+
+```bash
+staqly collections create "Blog posts"
+staqly push "Blog posts" --title "Launch post" --content @post.md
+```
+
+</Step>
+<Step>
+### Review it
+
+```bash
+staqly inbox
+```
+
+</Step>
+</Steps>
+
+## Run the server: `serve`
+
+```bash
+staqly serve [--data DIR] [--port 3333] [--dashboard-port 8080] [--expose]
+staqly serve connect-link [ws_id] | backup <file> | workspaces | stats | recovery-key [ws_id] | set-plan <ws_id> <free|pro> [--until YYYY-MM-DD]
+```
+
+Runs the API, MCP endpoint and dashboard in one process, without Docker. Data lives in
+`~/.local/share/staqly` unless you pass `--data` (or set `STAQLY_DATA_DIR`). `--expose` opens
+the dashboard to your network. Server environment variables such as `STAQLY_MODE`, `LOG_LEVEL`
+and `PUBLIC_DASHBOARD_URL` still apply; `serve` defaults `PUBLIC_API_URL` to
+`http://localhost:<port>` and `LOG_FORMAT` to `text`.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--data` | path | No | Folder for the SQLite database and uploads (default `~/.local/share/staqly`, or `STAQLY_DATA_DIR`) |
+| `--port` | integer | No | API and MCP port, always bound to `127.0.0.1` (default `3333`) |
+| `--dashboard-port` | integer | No | Dashboard port (default `8080`) |
+| `--expose` | boolean | No | Serve the dashboard on all network interfaces; each browser then signs in once with a link |
+
+With a subcommand it runs an [operator command](/self-hosting/operator-cli) against the same
+data instead, and exits:
+
+| Subcommand | What it does |
+|---|---|
+| `connect-link [ws_id]` | Prints a one-time sign-in link (5 minutes, single use) for the local workspace or the given one |
+| `backup <file>` | Writes a consistent copy of the database while the server runs |
+| `workspaces` | Lists workspaces: ID, plan, plan end, creation date and name |
+| `stats` | Prints operator statistics as JSON |
+| `recovery-key [ws_id]` | Prints a new recovery key and signs out every browser session of the workspace |
+| `set-plan <ws_id> <free\|pro> [--until YYYY-MM-DD]` | Changes a workspace's plan; `--until` gives it the plan until that date |
+
+See [Without Docker](/self-hosting/binary).
+
+## Run it in the background: `service`
+
+```bash
+staqly service install [--data DIR] [--port 3333] [--dashboard-port 8080] [--expose]
+staqly service status | logs [-f] | uninstall
+```
+
+Installs `staqly serve` as a background service of your user (macOS LaunchAgent, started at
+login; Linux systemd user unit, started at boot), restarted if it stops. Environment settings
+(`STAQLY_*`, `TAGGER_*`, `PUBLIC_*`, `LOG_*`...) at install time are kept. Running `install`
+again replaces it. See [Run it in the background](/self-hosting/binary#run-it-in-the-background).
+
+## Check the connection: `status`
+
+```bash
+staqly status         # health + version, mode, workspace, principal, masked key, plan, usage vs limits, pending count
+staqly status --json
+```
+
+## Ask for a decision: `push`
+
+`push` creates an item and waits until a human decides. It is `items create <collection> --wait` under a
+shorter name.
+
+```bash
+staqly push "Blog posts" --title "Launch post" --content @post.md
+echo "Delete 3 stale branches?" | staqly push Ops --title "Branch cleanup" --stdin
+staqly push Avatars --file avatar.png --meta prompt="smiling" --meta seed=42
+staqly push Deploys --title "Deploy v1.4" --external-ref "$GITHUB_SHA" --timeout 1h
+staqly push Deploys --title "FYI" --no-wait
+staqly push Ops --title "Drop table?" --expires-in 24h --editable title,metadata.sql
+```
+
+- Long-polls `GET /v1/items/{id}/wait` (up to 60 s per request) until the item leaves
+  `pending` or `--timeout` passes (default `30m`). No busy polling.
+- Retries network errors, `5xx` and `429` (honoring `Retry-After`). Falls back to polling on
+  servers without `/wait`.
+- Prints the decision and the reviewer's feedback, then exits `0` (approved), `2` (rejected),
+  `3` (timed out or expired) or `4` (other status). See [exit codes](/cli#exit-codes). With
+  `--json` it prints the final item.
+- `push` accepts every flag of `items create` below.
+
+## Work with items: `items`
+
+```bash
+staqly items list [--collection C] [--status pending] [--type image] [--q text] [--source s] [--sort created_asc] [--limit 50] [--cursor X] [--all]
+staqly items get itm_123                  # fields, metadata, content, available actions
+staqly items create <collection> [--title --content TEXT|-|@file --stdin --file PATH --url --type --metadata '{json}' --meta k=v --source --external-ref --status --idempotency-key --expires-in 24h --editable title,content] [--wait [--timeout 30m]]
+staqly items approve itm_1 [itm_2 itm_3] [--feedback "<text>"|-m "<text>"] [--expected-version N]
+staqly items reject  itm_1 [itm_2 itm_3] [--feedback "<text>"]
+staqly items action  itm_1 regenerate [--feedback "make her smile"] [--payload '{"n":2}']
+staqly items update  itm_1 [--status completed] [--metadata-patch '{"url":"https://example.com","old":null}'] [--metadata '{"seed":42}'] [--title] [--content] [--url] [--collection] [--external-ref] [--expected-version]
+staqly items history itm_1                # activity, oldest first
+staqly items versions itm_1               # snapshots before each change
+staqly items result  itm_1 --status completed|failed [--result '{"url":"https://example.com/post/1"}'] [--error "<text>"]
+staqly items bulk <action> itm_1 itm_2 [--stdin] [--feedback "<text>"] [--payload '{"n":2}']
+staqly items delete itm_1 [itm_2 itm_3]   # history is kept
+staqly items purge itm_1 [--yes]          # item, its events and unused media (admin)
+```
+
+### Creating items
+
+| Flag | What it does |
+|---|---|
+| `--content TEXT` | Text content. `--content @path` reads a file; `--content -` or `--stdin` reads stdin |
+| `--file PATH` | Uploads the file as the item's media (image, video, PDF or any other file) |
+| `--url` | The item's external link (not the API address) |
+| `--type` | `image`, `video`, `text`, `link`, `json` or `file`; inferred when omitted |
+| `--metadata '{json}'` | Metadata as a JSON object |
+| `--meta k=v` | One metadata key, repeatable. Values that parse as JSON keep their type: `seed=42` is a number, `tags=["a"]` an array |
+| `--source` | Label shown to reviewers (default `cli`) |
+| `--external-ref` | Your own reference, e.g. a commit SHA or PR number |
+| `--expires-in` | Expire the item if nobody decides in time: a duration (`24h`) or seconds (60 s to 90 days) |
+| `--editable` | What a reviewer may change before approving: `title`, `content`, `url`, `media_id`, `metadata`, `metadata.<key>` |
+| `--idempotency-key` | Makes retries safe: the same key returns the same item. JSON creates send an automatic key when you don't set one |
+| `--wait`, `--timeout` | Wait for a decision, like `push` |
+
+### Acting on items
+
+- `approve` and `reject` take one or more IDs. `--feedback` (or `-m`) tells the agent what to fix.
+- `action` runs a [custom action](/automation/custom-actions) such as `regenerate`.
+- `update` cannot set `approved` or `rejected`; use `approve` / `reject`.
+- `--expected-version N` fails with `409` unless the item is still at that version.
+- `result` reports what happened after you acted on an approved item (stored in
+  `metadata.result` / `metadata.error`).
+- `update --media-id med_oalirbz67y4m4cqxq5dw` attaches a file uploaded with
+  [`media upload`](#upload-files-media); `--media-id ""` removes the item's media.
+- `versions` lists the snapshots the server keeps before each change; `--json` includes the full
+  snapshot of every version.
+
+### Bulk actions, delete and purge
+
+`bulk` runs one action on many items through `POST /v1/items/bulk-actions`, 100 IDs per request.
+Each item succeeds or fails on its own; the command exits `1` when any item failed. IDs come from
+the arguments, from stdin with `--stdin`, or both:
+
+```bash
+staqly items bulk approve itm_oalirbz67y4m4cqxq5dw itm_q2w8n5k7r3t9y4u6i1o0 -m "ship it"
+staqly items list --status pending --q "typo fix" --all --json | jq -r '.data[].id' | staqly items bulk approve --stdin
+```
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `<action>` | string | <Required /> | `approve`, `reject` or a custom collection action such as `regenerate` |
+| `--stdin` | boolean | No | Also read item IDs from stdin, separated by spaces or newlines |
+| `--feedback`, `-m` | string | No | Feedback for the agent, applied to every item |
+| `--payload` | JSON | No | Any JSON forwarded in each event and webhook |
+
+`delete` removes items but keeps their events in the activity log. `purge` also deletes every
+event about the item, their webhook deliveries and its media when no other item uses it. It needs
+the `admin` scope and asks you to type the item ID unless you pass `--yes` (without `--yes` it
+refuses when stdin is not a terminal).
+
+## Upload files: `media`
+
+```bash
+staqly media upload cover.png                                   # prints the media ID
+staqly media get med_oalirbz67y4m4cqxq5dw -o cover.png
+staqly media get med_oalirbz67y4m4cqxq5dw --width 320 -o thumb.jpg
+staqly media get med_oalirbz67y4m4cqxq5dw | file -              # piped: bytes go to stdout
+staqly media delete med_oalirbz67y4m4cqxq5dw                    # items using it lose their media
+```
+
+Attach an uploaded file to an item with `staqly items update <item-id> --media-id <media-id>`.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--output`, `-o` | path | No | `get`: file to write; `-` writes to stdout. Without it the bytes go to stdout when it is piped, otherwise to a new file named after the original in the current directory |
+| `--width` | integer | No | `get`: thumbnail width for images, `160`, `320`, `640` or `1280` |
+
+The CLI never writes binary data to a terminal and never overwrites a file it named itself.
+
+## Review in the terminal: `inbox`
+
+```bash
+staqly inbox                              # interactive on a terminal
+staqly inbox --collection "Blog posts"
+staqly inbox --no-interactive             # plain table
+staqly inbox --watch                      # keep printing new pending items
+staqly inbox --watch --json               # NDJSON stream
+```
+
+| Key | Action |
+|---|---|
+| <Kbd>j</Kbd> / <Kbd>k</Kbd> or <Kbd>↑</Kbd> / <Kbd>↓</Kbd> | Move |
+| <Kbd>Enter</Kbd>, <Kbd>Space</Kbd> or <Kbd>o</Kbd> | Show details |
+| <Kbd>a</Kbd> | Approve |
+| <Kbd>r</Kbd> | Reject: type feedback, <Kbd>Enter</Kbd> to send, <Kbd>Esc</Kbd> to cancel |
+| <Kbd>g</Kbd> or <Kbd>R</Kbd> | Refresh |
+| <Kbd>q</Kbd>, <Kbd>Ctrl</Kbd>+<Kbd>D</Kbd> or <Kbd>Ctrl</Kbd>+<Kbd>C</Kbd> | Quit |
+
+The list refreshes every `--interval` (default `5s`) and shows up to `--limit` items (default
+`100`).
+
+## Organize collections: `collections`
+
+```bash
+staqly collections list [--archived]
+staqly collections create "Instagram Avatar" [--description <text>] [--icon <emoji or name>] [--color "#3b82f6"]
+staqly collections get "Instagram Avatar"
+staqly collections rename "Instagram Avatar" "Avatars"
+staqly collections archive Avatars [--undo]
+staqly collections delete Avatars [--yes]   # without --yes: type the name to confirm
+```
+
+`delete` permanently removes the collection and all its items.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--description` | string | No | `create`: description shown under the name |
+| `--icon` | string | No | `create`: an emoji or icon name |
+| `--color` | string | No | `create`: colour of the collection's dot in the dashboard, e.g. `#3b82f6`. The dashboard offers green `#22c55e`, blue `#3b82f6`, violet `#8b5cf6`, pink `#ec4899`, red `#ef4444`, orange `#f97316`, yellow `#eab308` and teal `#14b8a6` |
+| `--view` | string | No | `create`: `gallery`, `table` or `list`. Kept for compatibility only: the dashboard always shows a collection as a table |
+| `--archived` | boolean | No | `list`: include archived collections |
+| `--undo` | boolean | No | `archive`: unarchive instead |
+| `--yes` | boolean | No | `delete`: skip the confirmation; required when stdin is not a terminal |
+
+## Follow the activity log: `events`
+
+```bash
+staqly events tail                          # last 20 events, oldest first
+staqly events tail --follow --type 'item.*' # poll for new events (--interval 2s)
+staqly events tail -f --json | jq -c 'select(.type=="item.rejected")'
+staqly events tail --item itm_1 --collection Avatars --actor-type api_key --limit 100
+staqly events tail --actor-id key_r7y65khtqa23kj4btvur --from 2026-10-01 --to 2026-10-14
+```
+
+`--follow` tracks the highest `seq` printed and pages back so no event is missed. An exact
+`--type` is filtered by the server; a glob such as `item.*` by the CLI, after the server returns
+the last `--limit` events, so a glob can print fewer than `--limit` lines.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--follow`, `-f` | boolean | No | Keep polling for new events |
+| `--interval` | duration | No | Poll interval with `--follow` (default `2s`, minimum `500ms`) |
+| `--limit` | integer | No | How many recent events to print first (default `20`, max `200`) |
+| `--type` | string | No | Exact event type such as `item.approved`, or a glob such as `item.*` |
+| `--actor-type` | string | No | `local`, `session`, `api_key` or `system` |
+| `--actor-id` | string | No | Only events by this actor, e.g. an API key ID such as `key_r7y65khtqa23kj4btvur` |
+| `--from` | time | No | Events created at or after this time, RFC3339 or `YYYY-MM-DD` |
+| `--to` | time | No | Events created before this time, RFC3339 or `YYYY-MM-DD` |
+| `--collection` | string | No | Collection name or ID |
+| `--item` | string | No | Item ID, e.g. `itm_oalirbz67y4m4cqxq5dw` |
+
+### Export the log
+
+```bash
+staqly events export > events.ndjson
+staqly events export --format csv --from 2026-10-01 --to 2026-11-01 -o october.csv
+staqly events export --type 'item.*' --collection "Blog posts" | jq -c 'select(.type=="item.rejected")'
+```
+
+`export` streams every matching event, oldest first, with no page size. CSV columns are
+`created_at,id,type,actor_type,actor_id,actor_name,collection_id,item_id,data`.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--format` | string | No | `ndjson` (default, one JSON event per line) or `csv` |
+| `--from` | time | No | Events created at or after this time, RFC3339 or `YYYY-MM-DD` |
+| `--to` | time | No | Events created before this time, RFC3339 or `YYYY-MM-DD` |
+| `--type` | string | No | Exact event type, or a prefix ending in `*` such as `item.*` (sent to the server as `type_prefix=item.`; can't be combined with `--type-prefix`) |
+| `--type-prefix` | string | No | Literal type prefix, e.g. `item.` |
+| `--actor-type` | string | No | `local`, `session`, `api_key` or `system` |
+| `--actor-id` | string | No | Only events by this actor, e.g. an API key ID |
+| `--collection` | string | No | Collection name or ID |
+| `--item` | string | No | Item ID, e.g. `itm_oalirbz67y4m4cqxq5dw` |
+| `--output`, `-o` | path | No | Write to this file instead of stdout |
+
+## Notify other systems: `webhooks`
+
+```bash
+staqly webhooks list                         # secrets masked
+staqly webhooks create --url https://example.com/hook --events item.approved,item.rejected [--collection Avatars] [--description <text>] [--timeout-ms 10000] [--max-attempts 8] [--inactive]
+staqly webhooks get wh_123                   # secret masked
+staqly webhooks update wh_123 [--url <url>] [--events 'item.*'] [--collection Avatars | --all-collections] [--description <text>] [--timeout-ms 10000] [--max-attempts 8] [--enable | --disable] [--rotate-secret]
+staqly webhooks test wh_123
+staqly webhooks deliveries [--webhook wh_123] [--status pending|succeeded|failed] [--limit 50]
+staqly webhooks retry dlv_123
+staqly webhooks delete wh_123
+```
+
+`create` prints the signing secret once. `--events` defaults to `*` (all events). See
+[Webhooks](/automation/webhooks).
+
+`update` changes only the fields you pass:
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--url` | string | No | New receiver URL (with this command, set the API address with `--api-url`) |
+| `--events` | string list | No | Replaces the event names or globs, comma-separated or repeated |
+| `--collection` | string list | No | Replaces the collection filter (names or IDs, repeatable) |
+| `--all-collections` | boolean | No | Deliver events of every collection again |
+| `--description` | string | No | New description; `--description ""` clears it |
+| `--timeout-ms` | integer | No | Delivery timeout, 1000 to 60000 ms |
+| `--max-attempts` | integer | No | Delivery attempts, 1 to 20 |
+| `--enable`, `--disable` | boolean | No | Activate or deactivate the webhook |
+| `--rotate-secret` | boolean | No | Issue a new signing secret. It is printed once, and the old secret stops verifying deliveries |
+
+## Send notifications: `channels`
+
+```bash
+staqly channels list
+staqly channels get nch_oalirbz67y4m4cqxq5dw                # settings, secrets masked
+staqly channels create --type ntfy --name Phone --config topic=staqly-alerts-7f3k
+echo '{"webhook_url":"https://hooks.slack.com/services/T000/B000/XXXX"}' | staqly channels create --type slack --name Reviews --config-json -
+staqly channels create --type email --name Ops --config host=smtp.example.com --config port=587 --config from=staqly@example.com --config to=ops@example.com --events 'item.*' --digest 10m
+staqly channels update nch_oalirbz67y4m4cqxq5dw [--name <text>] [--config key=value] [--config-json <json>] [--events <patterns>] [--collection C | --all-collections] [--digest 5m] [--enable | --disable]
+staqly channels test nch_oalirbz67y4m4cqxq5dw               # exit 1 if the message failed
+staqly channels deliveries nch_oalirbz67y4m4cqxq5dw [--limit 50]
+staqly channels delete nch_oalirbz67y4m4cqxq5dw
+```
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--type` | string | <Required /> | `create` only: `telegram`, `slack`, `discord`, `ntfy` or `email`; it can't change later |
+| `--name` | string | <Required /> | Channel name (required for `create`, optional for `update`) |
+| `--config` | `key=value` | No | One setting, repeatable. `port` and `priority` are numbers, `to` and `approver_user_ids` comma lists; `key=null` removes a setting on `update` |
+| `--config-json` | JSON | No | Settings as a JSON object; `-` reads stdin and `@path` a file, which keeps secrets out of your shell history. `--config` values are merged on top |
+| `--events` | string list | No | Event patterns; default `item.created` |
+| `--collection` | string list | No | Only these collections (names or IDs, repeatable) |
+| `--all-collections` | boolean | No | `update` only: notify for every collection again |
+| `--digest` | duration | No | Batch events within this window into one message, e.g. `5m`; `0` sends immediately |
+| `--disabled` | boolean | No | `create` only: create the channel disabled |
+| `--enable`, `--disable` | boolean | No | `update` only: enabling resets the failure counter, disabling revokes one-tap decision links |
+| `--limit` | integer | No | `deliveries` only: how many recent notifications to show (default 50, max 200) |
+
+`create` needs at least one setting. Required settings per type: Telegram `bot_token` and
+`chat_id`; Slack `webhook_url`, or `bot_token` and `channel`; Discord the same as Slack; ntfy
+`topic`; email `host`, `from` and `to`. On `update`, settings merge into the stored ones. Secrets
+are stored encrypted and always shown masked. Managing channels needs the `channels:manage` scope.
+See [Notifications](/automation/notifications).
+
+## Pull in content on a schedule: `watchers`
+
+```bash
+staqly watchers create --url https://github.com/golang/go/releases.atom --collection Releases [--every 2h] [--name <text>] [--paused]
+staqly watchers create --url https://blog.example.com/feed.xml --collection Reading --collection Social --keyword AI --exclude crypto
+staqly watchers create --url https://example.com/feed.xml --collection Competitors --kind url_diff   # default: detected from the URL
+staqly watchers list
+staqly watchers get wat_123
+staqly watchers run wat_123        # check now; exit 1 if the source errored
+staqly watchers pause wat_123
+staqly watchers resume wat_123
+staqly watchers delete wat_123
+```
+
+Repeat `--collection` to add each new entry to several collections. Without `--kind`, staqly
+reads the URL once and picks `rss` for a feed, `url_diff` for anything else. See
+[Watchers](/automation/watchers).
+
+## Manage API keys: `keys`
+
+```bash
+staqly keys list
+staqly keys create --name "CI gate" --scope items:read,items:write [--expires 2027-01-01]   # printed once
+staqly keys rotate key_123                   # revoke + new key with the same name and scopes, printed once
+staqly keys revoke key_123
+```
+
+API keys are a cloud-mode feature; a local server accepts them but doesn't need them. Managing
+keys needs the `admin` scope. `create` and `rotate` print the new key once; store it right away.
+
+## Manage the workspace: `workspace`, `plans`
+
+```bash
+staqly workspace get
+staqly workspace rename "Acme content"                     # admin
+staqly workspace usage                                     # plan, usage vs limits, trial end, suspension
+staqly workspace export start [--wait] [--output staqly-export.zip] [--timeout 30m]
+staqly workspace export status exp_oalirbz67y4m4cqxq5dw
+staqly workspace export download exp_oalirbz67y4m4cqxq5dw [-o backup.zip]
+staqly plans list                                          # cloud plans and their limits
+staqly plans free [--yes]                                  # switch to Free (admin, cloud mode)
+```
+
+The export is a ZIP with collections, items and their versions, events, media files, webhooks
+(secrets redacted) and watchers. Only one export runs at a time, and finished archives are
+deleted after 24 hours. Exports need the `admin` scope.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--wait` | boolean | No | `export start`: poll until the export is ready; exits `1` if it failed and `3` on timeout |
+| `--output`, `-o` | path | No | `export start`: download the finished ZIP to this file (implies `--wait`). `export download`: file to write, `-` for stdout; without it the ZIP goes to stdout when piped, else to the server's file name in the current directory |
+| `--timeout` | duration | No | `export start`: how long `--wait` waits (default `30m`) |
+| `--interval` | duration | No | `export start`: poll interval (default `2s`) |
+| `--yes` | boolean | No | `plans free`: skip the confirmation prompt; required when stdin is not a terminal |
+
+`plans free` moves the workspace to the Free plan, which also lifts a suspension after the Pro
+trial. `staqly plan free` works too.
+
+Deleting the workspace and rotating the recovery key are not CLI commands: the API only allows
+them from a signed-in dashboard session, not with an API key or the local principal.
+
+## Pay for Pro: `billing`
+
+Cloud workspaces with Stripe billing enabled (admin key):
+
+```bash
+staqly billing status        # plan, subscription status, paid-through date, suspended
+staqly billing checkout      # prints a Stripe Checkout link to pay for Pro
+staqly billing portal        # prints a link to change the card, get invoices or cancel
+```
+
+The links are for a person to open in a browser; the plan changes when Stripe confirms the
+payment.
+
+## Sign in other browsers: `connect`, `sessions`
+
+```bash
+staqly connect                                   # one-time sign-in link, valid 5 minutes (local mode)
+staqly sessions list                             # signed-in browsers (admin)
+staqly sessions revoke ses_oalirbz67y4m4cqxq5dw
+```
+
+`connect` prints a link that signs one browser in once, for example a phone on your network. The
+link is a credential: open it only on your own device. The server issues these links only to the
+dashboard or a local-mode principal, so a cloud server answers `403` to an API key. When the link
+points at `localhost`, the CLI warns that other devices can't open it; set `PUBLIC_DASHBOARD_URL` on the
+server.
+
+## Manage profiles: `login`, `logout`, `profiles`
+
+```bash
+staqly login --url https://staqly.example.com --key stk_... --profile work [--no-verify]
+staqly profiles
+staqly profiles use work
+staqly logout --profile work
+```
+
+See [Save servers as profiles](/cli#save-servers-as-profiles).
+
+## Connect an agent: `mcp config`
+
+Prints a ready-to-use MCP configuration for an agent client, pointing at the current profile's
+server (`<url>/mcp`):
+
+```bash
+staqly mcp config claude                     # `claude mcp add` command + .mcp.json snippet
+staqly mcp config codex                      # `codex mcp add` command + ~/.codex/config.toml
+staqly mcp config opencode --stdio           # opencode.json for docker exec -i staqly mcp-stdio
+staqly mcp config cursor --snippet > .cursor/mcp.json
+staqly mcp config windsurf                   # ~/.codeium/windsurf/mcp_config.json snippet
+```
+
+When a key is configured, snippets reference `$STAQLY_API_KEY`; the key itself is never
+printed. `--snippet` prints only the config file snippet, and `--container` changes the
+container name used with `--stdio` (default `staqly`).
+
+## Other commands
+
+```bash
+staqly version [--json]
+staqly completion bash|zsh|fish
+staqly --help
+staqly <command> --help
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Scripting recipes" href="/cli/scripting">Put these commands to work in CI and shell scripts.</Card>
+  <Card title="CLI overview" href="/cli">Install, connect, output formats and exit codes.</Card>
+  <Card title="Watchers" href="/automation/watchers">Pull new posts from feeds and web pages into a collection.</Card>
+</Cards>

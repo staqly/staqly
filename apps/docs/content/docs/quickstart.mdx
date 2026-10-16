@@ -1,0 +1,168 @@
+---
+title: Quickstart
+description: Install staqly on your computer, create your first item and connect an AI agent in about five minutes.
+---
+
+This guide gets staqly running on your computer and walks you through the core loop: an
+agent or script saves something, and you review it in the dashboard. You need no account and
+no API key. You only need macOS or Linux for the install script, or Docker on any system.
+
+<Steps>
+<Step>
+
+### Start staqly
+
+The install script is the recommended way: one binary runs the API, the MCP endpoint and the
+dashboard. Docker is the alternative if you prefer containers.
+
+```bash tab="Install script (recommended)"
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh
+staqly serve   # API + MCP + dashboard in one process; Ctrl-C stops it
+```
+
+```bash tab="Docker"
+docker run -d --name staqly --restart unless-stopped \
+  -p 127.0.0.1:3333:3333 -p 8080:8080 \
+  -v staqly-data:/data \
+  -e LOCAL_TRUSTED_PEERS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7 \
+  --read-only --tmpfs /tmp:size=64m,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges:true \
+  --memory 640m --pids-limit 256 \
+  ghcr.io/staqly/staqly:latest
+docker exec staqly server connect-link   # prints a one-time sign-in link for the dashboard
+```
+
+The install script puts `staqly` in `~/.local/bin` after checking the release checksum.
+On Windows, download the `.zip` from the [releases](https://github.com/staqly/staqly/releases).
+Your data lives in `~/.local/share/staqly`. To keep staqly running in the background and start it
+with your computer, run `staqly service install`. More in [Run the binary](/self-hosting/binary).
+
+With Docker, one container runs the pre-built image `ghcr.io/staqly/staqly` with its data in the
+volume `staqly-data`; what each flag does is in [Run with Docker](/self-hosting/docker).
+
+Either way, staqly is now running here:
+
+| What | URL | Reachable from |
+|---|---|---|
+| Dashboard | http://localhost:8080 | this computer (`staqly serve`); your network with `--expose` or Docker |
+| REST API | http://localhost:3333 (contract at `/openapi.yaml`) | this computer only (`127.0.0.1`) |
+| MCP (Streamable HTTP) | http://localhost:3333/mcp | this computer only |
+
+The workspace is created automatically on first start.
+
+</Step>
+<Step>
+
+### Open the dashboard
+
+Open **http://localhost:8080**. There is no sign-up and no password:
+
+- `staqly serve` keeps the dashboard on this computer, so it opens straight away.
+- When the dashboard is reachable from your network (`staqly serve --expose`, or Docker, so
+  phones can use it), each browser signs in once with a **one-time link**: run
+  `staqly serve connect-link` or `docker exec staqly server connect-link` and open the link.
+- Links work once and expire after 5 minutes; sessions last 30 days.
+- To review from your phone, see [Phones & tablets](/dashboard/phones-and-tablets).
+
+</Step>
+<Step>
+
+### Create your first item
+
+An **item** is one piece of output, such as an image or a caption. Items live in
+**collections**, which group related output. See [Concepts](/concepts) for the full picture.
+
+Scripts and agents on this machine call the API without credentials. Create a collection,
+then add an item to it. You can refer to a collection by its ID *or by its exact name*:
+
+```bash
+API=http://localhost:3333
+
+curl -s -X POST $API/v1/collections -H 'Content-Type: application/json' \
+  -d '{"name":"Instagram Avatar","description":"Avatar captions to review"}'
+
+curl -s -X POST "$API/v1/collections/Instagram%20Avatar/items" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Caption draft","content":"Golden hour ☀️","metadata":{"prompt":"rooftop, sunset","seed":42},"source":"quickstart"}'
+```
+
+The response is the new item. It starts as `pending`, which means it is waiting in your Inbox:
+
+```json
+{
+  "id": "itm_oalirbz67y4m4cqxq5dw",
+  "collection_id": "col_qjuybkx6355nz4no6pqk",
+  "title": "Caption draft",
+  "type": "text",
+  "content": "Golden hour ☀️",
+  "metadata": { "prompt": "rooftop, sunset", "seed": 42 },
+  "status": "pending",
+  "source": "quickstart",
+  "version": 1,
+  "decided_at": null
+}
+```
+
+To upload an image instead, send one multipart request:
+
+```bash
+curl -s -X POST "$API/v1/collections/Instagram%20Avatar/items" \
+  -F file=@avatar.png \
+  -F 'item={"title":"Avatar #1","content":"caption","metadata":{"seed":42}}'
+```
+
+</Step>
+<Step>
+
+### Connect your agent
+
+Add staqly to your coding agent as an MCP server. In local mode, no key is needed:
+
+```bash tab="Claude Code"
+claude mcp add --transport http staqly http://localhost:3333/mcp
+claude mcp list        # → staqly: http://localhost:3333/mcp (HTTP) - ✔ Connected
+```
+
+```bash tab="Codex"
+codex mcp add staqly --url http://localhost:3333/mcp
+```
+
+```json tab="OpenCode (opencode.json)"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "staqly": { "type": "remote", "url": "http://localhost:3333/mcp", "enabled": true }
+  }
+}
+```
+
+Then ask your agent in plain language:
+
+> *“Create a collection called AI Research.”*
+> *“Show me all pending images.”*
+> *“Find the images I approved yesterday.”*
+
+Other clients and options: [Connect agents](/agents).
+
+</Step>
+<Step>
+
+### Review it
+
+Back in the Inbox, use <Kbd>j</Kbd> / <Kbd>k</Kbd> to move, <Kbd>⇧</Kbd> <Kbd>A</Kbd> to approve and
+<Kbd>⇧</Kbd> <Kbd>R</Kbd> to reject with feedback. An approval waits 10 seconds with **Undo** in its
+toast before it is saved. Every decision is recorded as an event and can be
+delivered to your automations as a [signed webhook](/automation/webhooks).
+
+</Step>
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Concepts" href="/concepts">How collections, items, statuses and actions fit together.</Card>
+  <Card title="Connect agents" href="/agents">Claude Code, Codex, OpenCode, other MCP clients, n8n and scripts.</Card>
+  <Card title="n8n" href="/integrations/n8n">Import the Instagram Avatar demo workflow.</Card>
+  <Card title="Watchers" href="/automation/watchers">Pull new posts from feeds and web pages into a collection.</Card>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">Review from your phone with a QR code.</Card>
+</Cards>

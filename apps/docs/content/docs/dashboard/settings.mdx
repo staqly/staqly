@@ -1,0 +1,140 @@
+---
+title: Settings
+description: Rename your workspace, change the theme, manage signed-in devices, and find backups, exports, integrations and webhooks.
+---
+
+**Settings** is where you manage the workspace itself, rather than its content: its name and
+look, which browsers and phones can sign in, notifications, exports and backups. Open it
+from **Settings** at the bottom of the sidebar or from the command palette
+(<Kbd>⌘</Kbd> <Kbd>K</Kbd>).
+
+## Common tasks
+
+- **Connect your phone**: **Settings → General → Devices → Connect a device**, or **Connect a
+  device** in the workspace menu. See
+  [Phones & tablets](/dashboard/phones-and-tablets).
+- **Sign out a lost device**: find it under **Devices** and sign it out.
+- **Back up your data**: run `staqly serve backup <file>` (with `staqly serve`) or
+  `docker exec staqly server backup /data/backups/<file>` (with Docker). See [Backup & restore](/self-hosting/backup-and-restore).
+- **Download everything**: **Settings → Data & privacy → Export workspace**.
+- **Connect an agent**: open **Integrations** in the sidebar for copy-ready setup steps.
+
+## Settings tabs
+
+Settings has five tabs.
+
+### General
+
+| Section | What it does |
+|---|---|
+| **Workspace** | Rename the workspace. |
+| **Processing timeout** | How long an item may stay *processing* (after Publish, Regenerate or any action that sets it) before it fails with "No result reported": 15 minutes to 1 day, default 1 hour. While an item waits, its page shows how long it has waited of this limit and when it will fail. A single item can get its own limit with **Change the limit** in its waiting box (`PATCH /v1/items/{id}` `processing_timeout_seconds`; 0 returns to the workspace's). Such an item shows **Timed out** (its status stays `failed`, the webhook `item.failed` carries `timeout: true`) and can be retried. This is not *Expired*, which means nobody decided a pending item in time. |
+| **Appearance** | Light, dark or system theme. |
+| **Devices** | Browsers and phones signed in to this workspace, with when each was last seen. **Sign out** any of them (it loses access at once and has to be connected again); **Connect a device** creates a new QR code. Signing a browser in again with a new link replaces its old entry, so each browser is listed once. |
+| **Recovery key** <Badge>cloud</Badge> | Rotate the recovery key, the only way to regain admin access if every browser session is lost. The new key is shown once; store it somewhere safe. |
+| **Backup & restore** (local) / **Backups** (cloud) | Local: the commands for a consistent snapshot of the database and an archive of the uploads (`staqly serve backup <file>`, or `docker exec staqly server backup` plus `docker cp` with Docker). Cloud, paid plans: **Create backup** builds a ZIP of the whole workspace (collections, items with versions, events, media), listed with **Download** for 24 hours; hidden on Free. |
+| **Sign out** <Badge>cloud</Badge> | **Log out** ends the session in this browser. |
+
+With `staqly serve` on this computer only, nothing needs to sign in, so **Devices** may be
+empty. Once the dashboard is open to your network (`staqly serve --expose` or Docker), every
+browser that signed in appears there, this computer included.
+
+### Plan & usage
+
+The workspace's plan and this month's usage. See [Plan & usage](/dashboard/plan-and-usage).
+
+### Notifications
+
+Channels (Telegram, Slack, Discord, ntfy, email) that tell you when an item needs review, so
+you can often decide right from the message. See
+[Notifications](/automation/notifications).
+
+### Data & privacy
+
+| Section | What it does |
+|---|---|
+| **Activity log** | Download every event, oldest first, as NDJSON (the full event shape) or CSV. For a filtered slice, use **Export** on the [Activity](/dashboard/activity) page. |
+| **Export workspace** | Build a ZIP with collections, items (with every version), events, media files, webhooks and watchers. The card shows the progress; download it within 24 hours. API keys, sessions and the recovery key are never included; webhook secrets are redacted. |
+| **Retention & single items** | A pointer to **Delete item** › **Also erase its history** in an item's **...** menu, which erases one item together with its history (see [Item details](/dashboard/items#delete-or-purge-an-item)), and to server-side retention. |
+| **Delete workspace** <Badge>cloud</Badge> | Permanently delete the workspace and everything in it, and sign out every device. Only a signed-in dashboard session can do this, and you confirm by typing the workspace name. Earlier backups still contain the data. |
+| **Delete all data** <Badge>local</Badge> | A local install has one workspace, so there is no delete button. The card shows how to remove the data instead: `staqly service uninstall` and `rm -rf ~/.local/share/staqly` with the binary, or `docker rm -f staqly` and `docker volume rm staqly-data` with Docker. |
+
+See [Data export](/self-hosting/data-export).
+
+### System
+
+| Section | What it does |
+|---|---|
+| **Health** | Live readiness of the staqly API (*Ready* or *Not ready*, the version, and each check: database, migrations, background workers), refreshed every 30 seconds, with a **Check now** button. |
+| **Monitoring** | The monitoring endpoints with your instance's API URL: `/livez`, `/readyz` and `/metrics` (Prometheus; needs `METRICS_TOKEN` except for `curl` on the same machine in local mode). |
+
+See [Monitoring](/self-hosting/monitoring).
+
+## Integrations
+
+**Integrations** in the sidebar is one page for connecting an agent:
+
+- **Connection**: your instance's agent URL and a **Test connection** button (it checks
+  `/health` and your session through the dashboard proxy and shows the version, workspace
+  and who you are signed in as). A local install only ever points agents at this computer,
+  keyless (choose **Docker** or **staqly serve**); cloud mode points them at its own address
+  with an API key. A local install never uses cloud API keys.
+- **Agents** (MCP clients) and **API connections** (REST clients): everything that talked to this
+  workspace (see [Agents](/dashboard/agents)).
+- **Recent activity**: the latest agent events (in cloud mode: events triggered with API
+  keys). Select one to see only its events; **Show all** goes back.
+  **View all** opens [Activity](/dashboard/activity).
+- Tabs **Claude Code**, **Codex**, **OpenCode**, **n8n** and **REST & MCP**, each with a
+  copy-ready snippet using your instance's real URL (and, in cloud mode, the API key you
+  just created) and a **Full guide** link to these docs. `?tab=codex` opens a tab directly.
+
+In cloud mode **API keys** sits right under it in the sidebar.
+
+**API keys** <Badge>cloud</Badge>:
+
+- **Create API key**: a name (required), a set of [scopes](/api/authentication#scopes) and an
+  optional expiry. Presets fill in the scopes for you:
+
+  | Preset | Scopes |
+  |---|---|
+  | **Automation (n8n)** (default) | `collections:read`, `collections:write`, `items:read`, `items:write`, `actions:execute` |
+  | **Read-only agent** | `collections:read`, `items:read` |
+  | **Reviewer agent** | `collections:read`, `items:read`, `items:review`, `actions:execute` |
+  | **Full access** | Every scope, including `admin` |
+
+  The raw key is shown **once**.
+- Each key shows its state: *Active*, *Expired* or *Revoked*.
+- **Rotate** a key: revoke it and issue a replacement with the same name and scopes; the new
+  key is shown once.
+- **Revoke** a key.
+
+Snippets on the integration pages include the key you just created. It is kept only in memory
+in that browser tab, never in local storage.
+
+## Webhooks
+
+**Webhooks** has its own sidebar entry: create, edit, test and delete endpoints, and browse
+the delivery history with manual retry. Each webhook is one row that starts with its
+**Active** / **Paused** switch (a paused webhook sends nothing; events in the meantime are
+skipped). The timeout is set in seconds. Click a delivery to see its full error and the
+receiver's response. See [Webhooks](/automation/webhooks).
+
+## Forms and messages
+
+These conventions hold across the dashboard (collections, webhooks, watchers,
+notification channels, API keys):
+
+- **Required fields** are marked with a red `*` after their label.
+- **Invalid fields** turn red, with the message right under the field. Server-side errors
+  (for example a name that is already taken) appear on the field they belong to.
+- **Messages** (toasts such as *Webhook created* or an error) appear at the bottom right and
+  close on their own; each has a close button (**×**) to dismiss it right away. After an approval the
+  toast offers **Undo** for 10 seconds (see [Inbox](/dashboard/inbox#review-your-queue)).
+
+## Next steps
+
+<Cards>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">Connect a phone with a QR code.</Card>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Snapshots and how to restore them.</Card>
+  <Card title="Connect agents" href="/agents">Claude Code, Codex, n8n and scripts.</Card>
+</Cards>

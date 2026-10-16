@@ -1,0 +1,25 @@
+{
+  "name": "@staqly/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end tests against the real Docker stack (compose.yml + compose.e2e.yml).",
+  "type": "module",
+  "scripts": {
+    "test:e2e": "vitest run",
+    "lint": "oxlint --deny-warnings",
+    "typecheck": "tsc --noEmit",
+    "format": "oxlint --fix --quiet; oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "@staqly/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^24.19.2",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.4"
+  }
+}

@@ -1,0 +1,98 @@
+---
+title: Operator CLI
+description: Run server-side admin tasks — backups, sign-in links, recovery keys, workspaces and plans — from the machine staqly runs on.
+---
+
+Some tasks have no button in the dashboard because they need someone with access to the
+server: printing a sign-in link for a new browser, resetting a lost recovery key, taking a
+backup, or changing a workspace's plan. The operator commands do these. They run against the
+data directory directly, so they need no API key — whoever can run them already controls the
+data — and there is no remote equivalent.
+
+## Run a command
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+Add the command after `staqly serve`. It runs against the same data directory instead of
+starting the server:
+
+```bash
+staqly serve connect-link
+staqly serve backup ~/staqly-backup.db
+staqly serve workspaces
+staqly serve recovery-key
+staqly serve set-plan ws_4uvnnzgy5vvpo4hnqnco pro
+```
+
+If you start staqly with `--data` or `--dashboard-port`, pass the same flags before the command, e.g.
+`staqly serve --data ~/staqly-data connect-link`.
+
+</Tab>
+<Tab value="Docker">
+
+Call the `server` binary in the `staqly` container:
+
+```bash
+docker exec staqly server connect-link
+docker exec staqly server backup /data/backups/staqly-backup.db
+docker exec staqly server workspaces
+docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco
+docker exec staqly server set-plan ws_4uvnnzgy5vvpo4hnqnco pro
+```
+
+From a checkout, the Makefile has shortcuts for the same commands (`make connect`,
+`make workspaces`, `make recovery-key WS=...`, `make set-plan WS=... PLAN=...`).
+
+</Tab>
+</Tabs>
+
+## Commands
+
+| Command | Binary | Docker | Does |
+|---|---|---|---|
+| `connect-link [ws]` | `staqly serve connect-link` | `docker exec staqly server connect-link` | Print a one-time browser sign-in link (5 minutes, single use). Default: the local workspace |
+| `backup <file>` | `staqly serve backup <file>` | `docker exec staqly server backup /data/backups/<file>` | Consistent online database backup (`VACUUM INTO`); refuses to overwrite an existing file. Back up `uploads/` too — see [Backup & restore](/self-hosting/backup-and-restore) |
+| `workspaces` | `staqly serve workspaces` | `docker exec staqly server workspaces` | List workspaces: id, plan, plan end (trial or paid period, `-` = none), created, name |
+| `set-plan <ws> <plan> [--until DATE]` | `staqly serve set-plan <ws> <plan>` | `docker exec staqly server set-plan <ws> <plan>` | Change a workspace's plan: `free` or `pro`. Without `--until` it has no end date (ends a trial or suspension); with `--until 2026-12-31` the plan is comped until then and the workspace is suspended afterwards unless it pays. Recorded as `workspace.plan_changed` |
+| `stats` | `staqly serve stats` | `docker exec staqly server stats` | JSON overview: workspaces by plan, active trials, suspended workspaces, signups in the last 7 and 30 days, and this month's usage per metric |
+| `recovery-key [ws]` | `staqly serve recovery-key` | `docker exec staqly server recovery-key` | Print a **new** recovery key (the old one stops working) and sign out every browser session of the workspace. Default: the local workspace |
+| — | — | `docker exec -i staqly mcp-stdio` | MCP over STDIO in the `staqly` container |
+
+`workspaces` and `set-plan` matter in [cloud mode](/self-hosting/cloud-deployment); local mode
+has a single workspace.
+
+## Lost every session and the recovery key?
+
+On the server, print a fresh recovery key and sign in at `/login` with it:
+
+```bash tab="Binary"
+staqly serve recovery-key
+```
+
+```bash tab="Docker"
+docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco
+```
+
+This needs shell access to the server — there is no remote backdoor. Like a rotation from the
+dashboard, it **signs out every browser session** of the workspace.
+
+The key is the only thing printed on stdout, so scripts can capture it; the number of revoked
+sessions goes to stderr:
+
+```bash
+key=$(docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco)   # stderr: Revoked 2 browser session(s) of this workspace.
+```
+
+## Running from source
+
+From `apps/api`, `go run ./cmd/server <command>` runs the same commands with the `DATA_DIR`
+you start the server with.
+
+## Next steps
+
+<Cards>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Full backup and restore steps.</Card>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">Sign in other devices with a link or QR code.</Card>
+  <Card title="Plans & limits" href="/plans">What `set-plan` changes.</Card>
+</Cards>

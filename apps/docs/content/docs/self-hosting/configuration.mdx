@@ -1,0 +1,251 @@
+---
+title: Configuration reference
+description: Change how staqly runs with environment variables, and look up every setting and its default.
+---
+
+staqly works without any configuration. Come here when you need to change something — a port,
+the public URL for phones, cloud mode, log level or retention. All settings are environment
+variables; how you pass them depends on how you run staqly.
+
+## How to change a setting
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+Set the variable in the environment of `staqly serve`. The binary does not read a `.env` file.
+
+```bash
+LOG_LEVEL=debug PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose
+```
+
+For a long-running install, put them in your service definition (for systemd:
+`Environment=LOG_LEVEL=debug`). See [Run the binary](/self-hosting/binary).
+
+`staqly serve` sets a few variables itself, from its flags:
+
+| Variable | Set by `staqly serve` to |
+|---|---|
+| `DATA_DIR` | `--data`, else `$STAQLY_DATA_DIR`, else `~/.local/share/staqly` |
+| `ADDR` | `127.0.0.1:<--port>` (default `3333`) |
+| `DASHBOARD_ADDR` | `127.0.0.1:<--dashboard-port>`, or all interfaces with `--expose` |
+| `PUBLIC_API_URL` | `http://localhost:<--port>`, unless you set `PUBLIC_API_URL` |
+| `LOG_FORMAT` | `text`, unless you set `LOG_FORMAT` |
+
+Setting `DATA_DIR`, `ADDR` or `DASHBOARD_ADDR` yourself has no effect — use the flags.
+
+</Tab>
+<Tab value="Docker">
+
+Pass each variable to `docker run` with `-e NAME=value`, or put them in a file and add
+`--env-file staqly.env`:
+
+```bash title="staqly.env"
+LOG_LEVEL=debug
+PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080
+```
+
+A container keeps the settings it was created with. To change one, remove the container and run
+it again with the new value; the data stays in the volume:
+
+```bash
+docker rm -f staqly
+docker run -d --name staqly ... --env-file staqly.env ghcr.io/staqly/staqly:latest   # your full command
+```
+
+See [Run with Docker](/self-hosting/docker#settings).
+
+Developing from a checkout with [Docker Compose](/self-hosting/docker-compose)? Put the variables in
+`.env` in the repository root and run `docker compose up -d`. `compose.yml` passes most of them
+through; the ones marked "not passed through by `compose.yml`" below need a line in the
+`staqly` service's `environment:` first.
+
+</Tab>
+</Tabs>
+
+Invalid values refuse to start instead of falling back silently: staqly exits with a
+`config: <reason>` error (see [Troubleshooting](/self-hosting/troubleshooting)).
+
+## Mode and access
+
+| Variable | Default | Description |
+|---|---|---|
+| `STAQLY_MODE` | `local` | `local`: keyless, one workspace, no limits, API for this machine only. `cloud`: many workspaces, API keys, sessions, plans. Trimmed and case-insensitive; any other value refuses to start. See [Local vs cloud](/local-vs-cloud). |
+| `SETUP_TOKEN` | — | Cloud: when set, only holders of this token can create workspaces (signup is otherwise public). |
+| `LOCAL_TRUSTED_PEERS` | empty (loopback only) | Local mode: peer addresses (CIDRs or single IPs, comma- or space-separated) treated as "this machine" for keyless access. The [`docker run` command](/self-hosting/docker) and Compose set `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7` because Docker forwards published ports from its bridge network (the port itself stays on `127.0.0.1`). Narrow it if other containers on private networks must not be keyless. An entry that isn't a CIDR or IP refuses to start. |
+| `LOCAL_ALLOWED_HOSTS` | — | Extra `Host` names treated as local in local mode, comma- or space-separated (e.g. `my-host.lan`). Compose always adds `staqly`. |
+| `LOCAL_ALLOWED_ORIGINS` | — | Local mode: extra browser origins (the `Origin` header) accepted for credential-less requests, comma-separated — e.g. a browser tool on another port such as the MCP Inspector. The dashboard's own origins are always accepted. |
+| `CORS_ALLOWED_ORIGINS` | `https://docs.staqly.ai` (cloud); ignored in local mode | Cloud mode: browser origins that may call the API with an API key (`Authorization: Bearer stk_...`, never cookies), comma-separated, or `none`. The default lets the [API playground](/api/reference#try-a-request) on this site reach your instance. |
+| `COOKIE_SECURE` | `false` local, `true` cloud | Mark session cookies `Secure`. Set `false` in cloud mode only for plain-HTTP testing (staqly warns at startup). |
+| `TRUST_PROXY` | `false` | Take the client IP from the right-most `X-Forwarded-For` entry (rate limits, logs). Only behind your own reverse proxy. |
+| `LOCAL_USER_NAME` | your login name with the binary (compose passes `$USER`), else `Local` (the Docker image without `-e LOCAL_USER_NAME="$USER"`) | Local mode: the name shown for you in the activity log. |
+| `SESSION_TTL` | `720h` | Browser session lifetime (Go duration). |
+| `DASHBOARD_ADDR` | — | Also serve the dashboard from the API process on this address. `staqly serve` sets it; the Docker image sets `:8080`. |
+| `DASHBOARD_EXPOSED` | `true` if `DASHBOARD_ADDR` is not loopback, else `false`; `true` in the Docker image | Requests that come through the dashboard are never treated as local, so every browser needs a session. With the binary this follows `--expose`. |
+
+## URLs and ports
+
+| Variable | Default | Description |
+|---|---|---|
+| `API_PORT` | `3333` | Compose only: host port for the API (bound to `127.0.0.1`). With `docker run` change the `-p` mapping and `PUBLIC_API_URL`; with the binary use `--port`. |
+| `DASHBOARD_PORT` | `8080` | Dashboard port. Docker: the published host port (set it when you map the dashboard to another host port). Binary: follows `--dashboard-port`. Also part of the dashboard origins accepted in local mode and of sign-in links. |
+| `PUBLIC_API_URL` | `http://localhost:3333` | Base of absolute media URLs in API responses and webhook payloads. Set it to what receivers can reach (e.g. `http://api:3333` for n8n on the Docker network, or your public URL). The dashboard reads it from the API at runtime, so changing it needs only a restart. With the binary it is always `http://localhost:<--port>`. |
+| `PUBLIC_DASHBOARD_URL` | — | Dashboard URL used in *Connect a device* QR codes, sign-in links and notification links — your LAN IP (`http://192.168.1.23:8080`) or domain. Its origin is accepted as local. Without it, links point at `localhost`. |
+| `ADDR` | `127.0.0.1:3333` local, `:3333` cloud | Listen address of the API. The Docker image sets `ADDR=:3333` (publish the port on `127.0.0.1` only); `staqly serve` sets `127.0.0.1:<--port>`. Local mode warns at startup when it listens beyond loopback without `LOCAL_TRUSTED_PEERS`. |
+
+## Storage and limits
+
+| Variable | Default | Description |
+|---|---|---|
+| `DATA_DIR` | `./data`; `/data` in Docker; `~/.local/share/staqly` with the binary | Data directory. With the binary use `--data` or `STAQLY_DATA_DIR`. |
+| `DATABASE_PATH` | `$DATA_DIR/workspace.db` | SQLite database file. |
+| `UPLOAD_DIR` | `$DATA_DIR/uploads` | Media files. |
+| `MAX_UPLOAD_MB` | `100` | Maximum upload size. Cloud plans can be stricter, never larger. |
+| `PROCESSING_TIMEOUT` | `1h` | Server default for how long an item may stay in `processing` (for example after a custom action) before it is marked `failed` with *"No result reported within 1h"* and an `item.failed` event (`timeout: true`). A Go duration such as `30m` or `6h`; `0` turns it off. An invalid value also turns it off. Each workspace can set its own value in **Settings → General → Processing timeout** (1 minute to 24 hours, `PATCH /v1/workspace` `processing_timeout_seconds`), which wins over this default. Editing the item restarts the clock. Not passed through by `compose.yml`. |
+
+## Webhooks and watchers
+
+| Variable | Default | Description |
+|---|---|---|
+| `WEBHOOK_ALLOW_PRIVATE` | `true` local, `false` cloud | Allow webhook deliveries to private addresses (LAN, Docker networks — e.g. n8n). In cloud mode tenants must not reach your network. |
+| `WEBHOOK_ALLOW_LOOPBACK` | `false` | Allow deliveries to `127.0.0.1` / `::1`. Useful with the binary when a receiver (e.g. n8n) runs on the same computer. |
+| `WEBHOOK_RETRY_BASE` | `15s` | First retry delay; doubles per attempt. |
+| `WEBHOOK_RETRY_MAX` | `1h` | Maximum retry delay. Not passed through by `compose.yml`. |
+| `WATCHER_ALLOW_PRIVATE` | `false` | Let [watchers](/automation/watchers) fetch private (LAN) addresses. Keep it `false` in cloud mode. Loopback and link-local are always refused. |
+
+## Auto-tags and summaries
+
+After a new item is saved, AI writes its `summary` (one line, at most 120 characters, shown under the
+title in the inbox) and, if it arrived without tags, gives it 1 to 3 tags. It never delays the request: new
+items wait in a queue stored in the database, so a bulk import, a restart or an AI that is unavailable for a
+while only delays them. A failed call is retried up to 5 times with backoff. Items created before AI was set
+up are summarized once it is. Tags set by the agent or a person are never replaced.
+
+**Local (`staqly serve`, `staqly service`)**: staqly uses **your own AI**. If [Claude Code](https://claude.com/claude-code)
+(`claude`) is installed it runs `claude -p --model haiku`; otherwise, if [Codex](https://developers.openai.com/codex)
+(`codex`) is installed, `codex exec`. The prompt goes in on stdin, in a scratch folder, so it never reads your
+projects. Nothing to configure, and it uses your existing subscription. To use another command set
+`TAGGER_COMMAND` (it reads the prompt on stdin and prints the reply); `TAGGER_COMMAND=off` turns summaries off.
+The Docker image has no AI CLI inside: use `TAGGER_URL` there.
+
+**Cloud**: the operator sets an OpenAI-compatible endpoint (`TAGGER_URL`, `TAGGER_MODEL`, `TAGGER_API_KEY`),
+e.g. OpenAI. Cloud mode never runs a command. Item content is sent to that provider.
+
+| Variable | Default | Description |
+|---|---|---|
+| `TAGGER_COMMAND` | `claude`, else `codex`, if installed | Local mode only: the AI CLI and its arguments, e.g. `claude -p --model haiku` or `codex exec --skip-git-repo-check -`. `off` disables. |
+| `TAGGER_URL` | | OpenAI-compatible base URL, e.g. `https://api.openai.com/v1`. When set (and no `TAGGER_COMMAND`), used instead of a local AI CLI. |
+| `TAGGER_MODEL` | `gpt-4o-mini` | Model at `TAGGER_URL`. |
+| `TAGGER_API_KEY` | | Bearer token for `TAGGER_URL`. |
+| `TAGGER_CONCURRENCY` | `2` | Items summarized at once. |
+
+`staqly service install` keeps your `PATH`, so the background service finds `claude` or `codex` too.
+
+## Notifications
+
+| Variable | Default | Description |
+|---|---|---|
+| `NOTIFY_SECRET_KEY` | — | Encrypts channel secrets; **at least 32 bytes** (e.g. `openssl rand -hex 32`) — shorter values refuse to start. If unset, a key is generated into `DATA_DIR/notify_secret.key` — back it up with the database. |
+| `NOTIFY_PUBLIC_API_URL` | `PUBLIC_DASHBOARD_URL` + `/api`, else `PUBLIC_API_URL` | Base URL of one-tap decision links and the Telegram webhook. |
+| `NOTIFY_ALLOW_PRIVATE` | `false` | Allow channels to post to LAN addresses (self-hosted ntfy, SMTP relay). Keep it `false` in cloud mode. |
+| `NOTIFY_DISABLED_GRACE` | `24h` | How long a disabled channel keeps its queued messages before they are skipped. Not passed through by `compose.yml`. |
+| `NOTIFY_ALLOW_LOOPBACK` | `false` | Allow channels to post to this machine (127.0.0.1), e.g. a local ntfy. |
+| `NOTIFY_MAX_ATTEMPTS` | `5` | Attempts per notification before it is marked failed. |
+| `NOTIFY_RETRY_BASE` | `30s` | First retry delay; doubles with every attempt. |
+| `NOTIFY_MAX_FAILS` | `10` | Consecutive failures after which a channel is disabled automatically. |
+| `NOTIFY_CONCURRENCY` | `4` | Channels sent to in parallel. |
+| `NOTIFY_POLL_INTERVAL` | `2s` | How often the notification worker checks for due messages. |
+| `NOTIFY_LINK_TTL` | `168h` | How long one-tap approve / reject links stay valid (7 days). |
+| `NOTIFY_TELEGRAM_AUTOREGISTER` | `true` | Register the Telegram webhook automatically for channels in webhook mode. |
+| `TELEGRAM_POLL_INTERVAL` | `3s` | How often Telegram channels in polling mode ask for button presses. |
+| `TELEGRAM_API_BASE` | `https://api.telegram.org` | Base URL of the Telegram Bot API. Change it only for a self-hosted Bot API server or tests. |
+| `SLACK_API_BASE` | `https://slack.com/api` | Base URL of the Slack Web API. Change it only for tests. |
+| `DISCORD_API_BASE` | `https://discord.com/api/v10` | Base URL of the Discord API. Change it only for tests. |
+
+Only `NOTIFY_SECRET_KEY`, `NOTIFY_PUBLIC_API_URL` and `NOTIFY_ALLOW_PRIVATE` are passed through by
+`compose.yml`; add the others to the `staqly` service's `environment:` first. More in
+[Notifications → Configuration](/automation/notifications#configuration).
+
+## Observability
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`. Anything else refuses to start. |
+| `LOG_FORMAT` | `json`; `text` with the binary | `json` (one object per line on stdout) or `text`. See [Logs & tracing](/self-hosting/logs-and-tracing). |
+| `METRICS_TOKEN` | — | Bearer token for `/metrics` from outside this machine (e.g. Prometheus in Docker). |
+| `SENTRY_DSN` | — | Send errors (5xx, panics, failing workers) to Sentry. Off when empty. See [Logs & tracing](/self-hosting/logs-and-tracing#sentry). |
+| `SENTRY_ENVIRONMENT` | `production` | Sentry environment name. |
+| `RATE_LIMIT_DISABLED` | `false` | Turn off rate limits (the signup cap stays). |
+| `RATE_LIMIT_PER_MINUTE` | `10` | Sensitive unauthenticated endpoints, per IP. `RATE_LIMIT_BURST` defaults to the same value (not passed through by `compose.yml`). |
+| `RATE_LIMIT_AUTH_PER_MINUTE` | `600` | Cloud: per API key / session. `RATE_LIMIT_AUTH_BURST` defaults to `100` (not passed through by `compose.yml`). |
+
+See [Monitoring](/self-hosting/monitoring).
+
+## Billing
+
+| Variable | Default | Description |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | — | Cloud billing: Stripe secret key (`sk_test_` keys work). Billing is on in cloud mode when all three Stripe variables are set. See [Billing](/self-hosting/billing). |
+| `STRIPE_WEBHOOK_SECRET` | — | Signing secret of the Stripe webhook endpoint pointing at `<PUBLIC_API_URL>/v1/billing/webhook`. |
+| `STRIPE_PRICE_PRO` | — | ID of the recurring Stripe price for Pro, e.g. `price_1Pro30UsdMonthly`. |
+
+See [Billing with Stripe](/self-hosting/billing).
+
+## Retention
+
+| Variable | Default | Description |
+|---|---|---|
+| `RETENTION_DELIVERIES_DAYS` | `30` | Delete finished webhook deliveries after N days (`0` = keep). |
+| `RETENTION_EVENTS_DAYS` | `0` | Delete events older than N days (`0` = keep forever). |
+| `RETENTION_ARCHIVED_ITEMS_DAYS` | `0` | Delete archived items unchanged for N days (`0` = never). |
+| `RETENTION_NOTIFICATIONS_DAYS` | `30` | Delete finished notification outbox rows after N days (`0` = keep). Not passed through by `compose.yml`. |
+| `RETENTION_AGENTS_DAYS` | `30` | Remove agents and API connections (Integrations) not seen for N days; they come back when they talk again (`0` = keep). |
+
+See [Data export & privacy](/self-hosting/data-export#retention).
+
+## Containers and images
+
+With `docker run`, the image tag, memory and process limits are part of the command
+(`ghcr.io/staqly/staqly:v0.2.0`, `--memory 640m`, `--pids-limit 256`); see
+[Run with Docker](/self-hosting/docker#what-the-flags-do). These variables are read by the Compose
+files of a checkout ([Develop with Docker Compose](/self-hosting/docker-compose) and
+[`make cloud`](/self-hosting/cloud-deployment)):
+
+| Variable | Default | Description |
+|---|---|---|
+| `STAQLY_VERSION` | `latest` | Tag of the pre-built image `ghcr.io/staqly/staqly` that `make up` and `make cloud` pull: `latest` or a release such as `v0.2.0`. Pin one to stay on it. |
+| `STAQLY_DOMAIN` | — | `make cloud` only: the domain Caddy serves staqly on, with an automatic HTTPS certificate. See [Cloud deployment](/self-hosting/cloud-deployment). |
+| `STAQLY_MEM_LIMIT` | `640m` | Memory limit of the staqly container. |
+| `STAQLY_PIDS_LIMIT` | `256` | Process limit of the staqly container. |
+| `API_INTERNAL_URL` | `http://localhost:3333` | Development only: where `pnpm --filter @staqly/dashboard dev` proxies `/api/*`. The staqly image serves the dashboard from the same process and does not need it. |
+| `DASHBOARD_HOST` | `dashboard` | API: DNS name of a dashboard running in a separate container. With `DASHBOARD_EXPOSED=true`, requests from its address are never treated as local, even without the `X-Forwarded-Host` header the dashboard proxy always adds. Not needed with the staqly image (one container) and not passed through by `compose.yml`. |
+| `MAILPIT_PORT` | `8025` | Development stack only (`make dev`): host port of the mailpit inbox. See [Docker Compose](/self-hosting/docker-compose#development-stack). |
+| `COMPOSE_PROFILES` | — | Docker Compose setting. `stripe` starts the Stripe CLI container of the development stack. See [Billing](/self-hosting/billing#test-locally). |
+
+## Install script
+
+Read by `scripts/install.sh` (the `curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh` installer), not by staqly itself:
+
+| Variable | Default | Description |
+|---|---|---|
+| `STAQLY_VERSION` | latest release | Release tag to install, e.g. `v0.2.0`. |
+| `STAQLY_INSTALL_DIR` | `~/.local/bin` | Where to put the `staqly` binary. |
+
+## Tools and scripts
+
+| Variable | Used by | Description |
+|---|---|---|
+| `STAQLY_DATA_DIR` | `staqly serve` | Data directory when `--data` isn't given. |
+| `STAQLY_API_KEY` | `staqly` CLI, `mcp-stdio`, `scripts/seed.sh`, `integrations/n8n/setup-demo.sh` | API key for cloud mode. |
+| `STAQLY_API_URL` | `staqly` CLI, `scripts/seed.sh`, `setup-demo.sh` | API base URL (default `http://localhost:3333`). |
+| `STAQLY_CONTAINER` | `scripts/backup.sh`, `scripts/restore.sh` | Container name (default `staqly`). |
+| `STAQLY_VOLUME` | `scripts/backup.sh`, `scripts/restore.sh` | Data volume (default `staqly_staqly-data`). |
+| `FORCE=1` | `scripts/restore.sh` (`make restore`) | Skip the confirmation prompt. |
+| `STAQLY_PROFILE`, `STAQLY_CONFIG`, `NO_COLOR` | `staqly` CLI | Profile, config file and colours of the CLI. See [CLI](/cli). |
+
+## Next steps
+
+<Cards>
+  <Card title="Cloud deployment" href="/self-hosting/cloud-deployment">Settings for a hosted, multi-workspace service.</Card>
+  <Card title="Security model" href="/self-hosting/security">What the access settings protect against.</Card>
+  <Card title="Troubleshooting" href="/self-hosting/troubleshooting">When staqly refuses to start.</Card>
+</Cards>

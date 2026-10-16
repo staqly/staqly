@@ -1,0 +1,142 @@
+---
+title: Run the binary
+description: Install staqly as one program and run the API, MCP endpoint and dashboard with a single command.
+---
+
+The recommended way to run staqly on your own computer. One binary, `staqly serve`, starts the
+REST API, the MCP endpoint, the background workers and the dashboard — no Docker, no
+containers. Use the [Docker image](/self-hosting/docker) instead if you already run
+everything in Docker or want the hardened container setup.
+
+## Install and start
+
+<Steps>
+<Step>
+
+### Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh
+```
+
+The script detects macOS or Linux (amd64, arm64), downloads the latest release, checks it
+against the release's `checksums.txt` and puts `staqly` in `~/.local/bin`. If that folder isn't
+on your `PATH`, it prints the line to add. On Windows, download the `.zip` from the
+[releases](https://github.com/staqly/staqly/releases).
+
+</Step>
+<Step>
+
+### Start staqly
+
+```bash
+staqly serve
+```
+
+It prints where everything is and stays in the foreground. Stop it with Ctrl-C.
+
+</Step>
+<Step>
+
+### Open the dashboard
+
+Go to `http://localhost:8080`. On this computer there is nothing to sign in to. Then
+[connect an agent](/agents) to `http://localhost:3333/mcp`.
+
+</Step>
+</Steps>
+
+`staqly` is also the [CLI](/cli), so one install gives you both.
+
+## What runs where
+
+| What | Address | Reachable from |
+|---|---|---|
+| REST API + MCP | `127.0.0.1:3333` (MCP at `/mcp`) | this computer only, no keys needed |
+| Dashboard | `127.0.0.1:8080` | this computer only, no sign-in |
+| Data | `~/.local/share/staqly` | SQLite database (`workspace.db`), `uploads/`, `notify_secret.key` |
+
+## Options
+
+```bash
+staqly serve --data ~/staqly-data          # another data directory (or STAQLY_DATA_DIR)
+staqly serve --port 4333 --dashboard-port 9090   # other ports for the API and the dashboard
+staqly serve --expose                      # dashboard on all interfaces, for phones and tablets
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--data` | `$STAQLY_DATA_DIR`, else `~/.local/share/staqly` | Data directory. Created if missing. |
+| `--port` | `3333` | API and MCP port. Always bound to `127.0.0.1`. |
+| `--dashboard-port` | `8080` | Dashboard port. |
+| `--expose` | off | Serve the dashboard on all interfaces instead of `127.0.0.1`. |
+
+Every other [setting](/self-hosting/configuration) comes from environment variables, for
+example `LOG_LEVEL=debug staqly serve`. The binary does not read a `.env` file.
+
+## Use it from your phone
+
+With `--expose`, other devices on your network can open the dashboard, so every browser signs
+in once with a one-time link:
+
+```bash
+PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose
+staqly serve connect-link    # in another terminal: prints a one-time sign-in link
+```
+
+Or scan the QR code from **Connect a device** in the dashboard. Set `PUBLIC_DASHBOARD_URL` to your
+computer's LAN address so QR codes and links point somewhere phones can reach. See
+[Phones & tablets](/dashboard/phones-and-tablets).
+
+## Operator commands
+
+`staqly serve` followed by a command runs an [operator command](/self-hosting/operator-cli)
+against the same data directory instead of starting the server:
+
+```bash
+staqly serve connect-link                # one-time sign-in link for a browser
+staqly serve backup ~/staqly-backup.db   # consistent database backup, works while staqly runs
+staqly serve recovery-key                # new recovery key; signs out every browser
+```
+
+Pass the same `--data` (and `--dashboard-port`) you start the server with.
+
+## Run it in the background
+
+`staqly service install` runs `staqly serve` as a background service of your user, so staqly
+keeps running after you close the terminal, starts again with your computer and restarts if it
+stops. No root, no Docker.
+
+```bash
+staqly service install              # same flags as serve: --port, --dashboard-port, --data, --expose
+staqly service status               # installed? running?
+staqly service logs -f              # follow its log
+staqly service uninstall            # stop and remove it (your data is kept)
+```
+
+| | macOS | Linux |
+|---|---|---|
+| Runs as | LaunchAgent `~/Library/LaunchAgents/ai.staqly.serve.plist` | systemd user unit `~/.config/systemd/user/staqly.service` |
+| Starts | at login | at boot (lingering is turned on; if that needs root, run `sudo loginctl enable-linger $USER`) |
+| Log | `~/Library/Logs/staqly/staqly.log` | `journalctl --user -u staqly` |
+
+Settings from your environment when you install are kept in the service (`STAQLY_*`,
+`TAGGER_*`, `PUBLIC_*`, `LOG_*`, `NOTIFY_*`, `WEBHOOK_*`...), and so is your `PATH`, so the
+service finds your Claude Code or Codex for [summaries](/self-hosting/configuration#auto-tags-and-summaries).
+For example, a specific AI command:
+
+```bash
+TAGGER_COMMAND="codex exec --skip-git-repo-check -m gpt-5-mini -" staqly service install
+```
+
+Run `staqly service install` again after an upgrade or to change flags or settings: it replaces
+the service. On Windows, start `staqly serve` from Task Scheduler.
+
+## Next steps
+
+<Cards>
+  <Card title="Configuration" href="/self-hosting/configuration">All environment variables and their defaults.</Card>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Back up the database and uploads.</Card>
+  <Card title="Upgrades" href="/self-hosting/upgrades">Install a new release.</Card>
+  <Card title="Connect an agent" href="/agents">Claude Code, Codex, n8n and more.</Card>
+</Cards>

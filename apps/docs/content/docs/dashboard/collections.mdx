@@ -1,0 +1,147 @@
+---
+title: Collections
+description: Organize your agents' output into collections, browse each one as a table, and configure its colour and actions.
+---
+
+A **collection** is a named group of related items, like a folder: *Instagram Avatar*,
+*Blog posts*, *AI Research*. Use collections to keep each agent's or project's output
+together, browse everything it ever produced (not just what is pending), and choose which
+buttons reviewers see. See [Concepts](/concepts) for how collections, items and statuses fit
+together.
+
+**Collections** in the sidebar opens a table of every collection:
+
+| Column | What it shows |
+|---|---|
+| **Name** | The collection's colour dot, its name (with a *Default* badge on the Default collection), its description and an *Archived* label for archived collections |
+| **Items** | How many items it holds |
+| **Updated** | When the collection last changed |
+
+Where the items are (to review, approved, failed...) is shown by the [Inbox](/dashboard/inbox) steps and on
+each collection's page.
+
+Click a row to open the collection. Turn on **Show archived** to include archived collections
+(they are dimmed). On a phone each collection is a card with the same information.
+
+The sidebar also lists every collection that is not archived, with its colour dot and a
+count: the number of pending items when there are some (in amber), otherwise the total.
+
+## Create a collection
+
+<Steps>
+<Step>
+
+### Open the dialog
+
+Click **New collection** on the Collections page, the **+** next to *Collections* in the
+sidebar, or use the command palette (<Kbd>⌘</Kbd> <Kbd>K</Kbd>).
+
+</Step>
+<Step>
+
+### Name it
+
+Give it a **Name** (required, marked with `*`, up to 100 characters), an optional
+**Description** (up to 2,000 characters) and an optional **Colour**. Names are unique within
+the workspace, so agents can refer to a collection by name: `create_item` with
+`collection: "Instagram Avatar"` just works. If a field is invalid, it turns red and the
+message appears under it.
+
+</Step>
+<Step>
+
+### Adjust its actions later
+
+New collections get *Regenerate*, *Publish*, *Retry* and *Archive* actions. Change them in the
+collection's settings (see [below](#collection-settings)).
+
+</Step>
+</Steps>
+
+Agents can create collections too. Ask *"Create a collection called AI Research"* and the
+agent uses the `create_collection` MCP tool or `POST /v1/collections`.
+
+### Colours
+
+The colour shows as a dot in the sidebar, in the collections table and on chips. Pick one of
+eight colours (green `#22c55e`, blue `#3b82f6`, violet `#8b5cf6`, pink `#ec4899`, red
+`#ef4444`, orange `#f97316`, yellow `#eab308`, teal `#14b8a6`) or *No colour*. Agents and
+scripts can set any hex colour through the API (`"color": "#3b82f6"`).
+
+## Browse a collection
+
+The collection page shows its name, description, item count, the count per status and its ID
+(with a copy button). Items are listed in a **table**:
+
+| Column | What it shows |
+|---|---|
+| (thumbnail) | A preview of images and videos, or the type's icon |
+| **Title** | The item's title, with an **External content** badge for items from [watchers](/automation/watchers) |
+| **Type** | Image, video, text, link, JSON or file |
+| **Decision** | *Pending*, *Approved*, *Rejected* or *Expired* |
+| **Run** | What your automation did after the decision: *Processing*, *Completed*, *Failed* or *Canceled* |
+| **Source** | Where it came from, such as `n8n-avatar-flow` (wide screens) |
+| **Created** | When it was created (hover for the exact time) |
+| **Updated** | When it last changed (very wide screens) |
+
+Click a column header to sort the loaded rows by it; click again to reverse, and a third time
+to go back to the server order. On a phone each item is a card.
+
+<Callout>
+Collections used to offer gallery and list views. The dashboard now always shows a table.
+The API still accepts and returns `default_view` (`gallery`, `table` or `list`) so existing
+scripts keep working, but the dashboard ignores it and creates new collections with
+`table`.
+</Callout>
+
+Above the table you can **search** within the collection and filter by **Decision** (*All but
+archived* by default; pick *Archived* to see the archive), **Run**, **Tags** and **type**. Sort by
+clicking a column header. On a phone these, sorting included, sit behind **Filter & sort**. Click
+**Load more** at the end of the table to load the next page. See [Search](/dashboard/search).
+
+Click an item to open its details in a side panel. See
+[Item details & history](/dashboard/items).
+
+## Add an item by hand
+
+Click **Add item**. The dialog has four tabs, **Upload**, **Text**, **Link** and **JSON**:
+the same kinds of content your agents send through the API.
+
+| Field | Tab | Required | Notes |
+|---|---|---|---|
+| **File** | Upload | <Required /> | The file to upload |
+| **URL** | Link | <Required /> | An absolute `http(s)` URL |
+| **Content** | Text, JSON | <Required /> | Text, or a JSON document |
+| **Title** | All | Yes | Up to 500 characters. (Agents may leave it out over the API; text items then use their first line.) |
+| **Status** | All | No | *Pending review* (default) or *Draft* |
+| **Metadata** | All | No | A JSON object, such as `{"prompt": "a fox at golden hour"}` |
+| **Tags** | All | No | Labels such as `client-a`; left empty, the [auto-tagger](/self-hosting/configuration#auto-tags-and-summaries) may add some |
+
+Items added here get the source `dashboard`.
+
+Required fields are marked with `*`. Archived collections are read-only, so you can't add
+items to them.
+
+## Collection settings
+
+Click **Settings** on the collection page. The settings sheet has four sections:
+
+| Section | What you can do |
+|---|---|
+| **General** | Change the name (required), description and colour, then **Save changes**. |
+| **Actions** | Edit the buttons reviewers and agents can run on items in this collection (see [Custom actions](/automation/custom-actions)). |
+| **Archive** | **Archive collection** hides it from the sidebar and stops new items from being added; existing items are kept. **Unarchive collection** brings it back. |
+| **Danger zone** | Permanently delete the collection and every item in it. You confirm by typing its name. |
+
+The Default collection has no Archive or Danger zone: it can be renamed, but not archived or deleted.
+
+A collection's icon can be set through the API (`PATCH /v1/collections/{id}`), not in this
+sheet.
+
+## Next steps
+
+<Cards>
+  <Card title="Inbox" href="/dashboard/inbox">Review pending items from every collection.</Card>
+  <Card title="Custom actions" href="/automation/custom-actions">Define the buttons a collection offers.</Card>
+  <Card title="Search" href="/dashboard/search">Find items by title, content or metadata.</Card>
+</Cards>

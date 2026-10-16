@@ -1,0 +1,118 @@
+---
+title: Windsurf
+description: Add staqly to Windsurf so Cascade saves its output for your review and waits for your approval.
+---
+
+Connect Windsurf to staqly as an MCP server, and Cascade can create collections, save drafts
+and images as items, and stop to ask for your approval before a risky step. Windsurf keeps MCP
+servers in one file for all projects: `~/.codeium/windsurf/mcp_config.json`.
+
+## Connect to local staqly
+
+<Steps>
+<Step>
+
+### Start staqly
+
+Run `staqly serve` (or the [Docker image](/self-hosting/docker)). See the [Quickstart](/quickstart).
+
+</Step>
+<Step>
+
+### Add the MCP server
+
+In local mode, no key is needed. Open **Windsurf Settings → Cascade → MCP servers → View raw
+config** (or edit the file directly) and add `staqly`:
+
+```json title="~/.codeium/windsurf/mcp_config.json"
+{ "mcpServers": { "staqly": { "serverUrl": "http://localhost:3333/mcp" } } }
+```
+
+`staqly mcp config windsurf` prints this snippet for your current [CLI](/cli/commands)
+profile. Keep any other servers already in the file.
+
+</Step>
+<Step>
+
+### Check the connection
+
+Press **Refresh** in the MCP servers panel. `staqly` should be listed as connected with its
+tools. If it isn't, see [Other MCP clients](/agents/other-mcp-clients#check-the-connection-with-curl)
+to test the endpoint with curl.
+
+</Step>
+</Steps>
+
+### STDIO (Docker only)
+
+If you run staqly with Docker, you can use STDIO instead of HTTP. It runs `mcp-stdio` inside
+the `staqly` container, so it does not work with `staqly serve`:
+
+```json title="~/.codeium/windsurf/mcp_config.json"
+{
+  "mcpServers": {
+    "staqly": { "command": "docker", "args": ["exec", "-i", "staqly", "mcp-stdio"] }
+  }
+}
+```
+
+## Connect to a cloud instance
+
+Create a key for Windsurf under **API keys** in the sidebar, e.g. with
+`collections:read items:read items:write`, and export it. Windsurf expands
+`${env:STAQLY_API_KEY}`, so the key stays out of the file:
+
+```json title="~/.codeium/windsurf/mcp_config.json"
+{
+  "mcpServers": {
+    "staqly": {
+      "serverUrl": "https://staqly.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${env:STAQLY_API_KEY}" }
+    }
+  }
+}
+```
+
+Windsurf reads the variable from the environment it was started in, so start it from that
+shell or set the variable for your login session.
+
+## Ask for approval before acting
+
+Create an **Approvals** collection once (in the dashboard, or ask Cascade), then add a
+workspace rule so Cascade always asks you before doing something that is hard to undo:
+
+```md title=".windsurf/rules/staqly.md"
+---
+trigger: always_on
+---
+
+Before any action with side effects (running a migration, deploying, sending an email or
+message, publishing, deleting data, spending money):
+
+1. Call `create_item` with `collection: "Approvals"`, a short title and, as content, the
+   exact command, diff or text you are about to run or send.
+2. Call `await_decision` with the item id. Repeat while it is still pending.
+3. Continue only if the status is `approved`, and use the item's content (I may have edited it).
+   If it is `rejected`, stop and read the feedback.
+4. After acting, call `report_result` with `completed` or `failed`.
+```
+
+The decision arrives in the staqly Inbox, and on your phone if you set up
+[notifications](/automation/notifications). The full pattern is in
+[Approval gate](/cookbook/approval-gate).
+
+## Try it
+
+Ask Cascade:
+
+> *“Create a collection called Release notes and save this draft there for review.”*
+> *“Show me what I rejected today and why.”*
+
+More in [Example prompts](/mcp/prompts).
+
+## Next steps
+
+<Cards>
+  <Card title="MCP tools" href="/mcp/tools">Every tool Cascade can call, and the scope it needs.</Card>
+  <Card title="Approval gate" href="/cookbook/approval-gate">Make an agent wait for your approval before a risky step.</Card>
+</Cards>

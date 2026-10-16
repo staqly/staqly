@@ -1,0 +1,193 @@
+---
+title: Errors
+description: Understand an error response from staqly and decide whether to fix, retry or give up.
+---
+
+Every error from the REST API uses one JSON shape with a stable `code`. Read this page when you write error handling for an automation, or when a call
+fails and you want to know why.
+
+## Handle an error
+
+<Steps>
+<Step>
+### Read the `code`, not the message
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "title: must be at most 500 characters",
+    "fields": { "title": "must be at most 500 characters" }
+  }
+}
+```
+
+Switch on `error.code`; the `message` is for humans and may change.
+</Step>
+<Step>
+### Decide what to do
+
+| The code is | Do this |
+|---|---|
+| `validation_failed`, `bad_request`, `not_editable` | Fix the request (see `fields`); don't retry as is |
+| `unauthorized`, `forbidden`, `not_local` | Fix the credentials or the key's [scopes](/api/authentication#scopes) |
+| `conflict`, `item_changed` | Reload the item; often someone already handled it |
+| `rate_limited`, `busy`, `timeout`, `idempotency_in_progress` | Wait (`Retry-After` when present) and retry |
+| `plan_limit_exceeded` | Don't retry — the plan or month has to change |
+| `plan_expired`, `payment_required` | Don't retry — the workspace is read-only until it is paid or switched to Free |
+| `not_available`, `not_configured` | Don't retry — the feature is off on this instance |
+| `internal`, `bad_gateway`, `payment_provider_error`, `model_failed` | Retry later; report it with the `request_id` |
+
+The [full list](#error-codes) is below.
+</Step>
+<Step>
+### Keep the `request_id` when reporting a problem
+
+Error responses also carry a top-level `request_id` (the same value as the `X-Request-Id`
+header) and, when the request sent a W3C `traceparent` header, its `trace_id`. They find the
+matching log lines — see [Logs & tracing](/self-hosting/logs-and-tracing#following-one-request).
+
+```json
+{
+  "error": { "code": "not_found", "message": "item not found" },
+  "request_id": "api-1/abc-000042",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+}
+```
+</Step>
+</Steps>
+
+## Error shape
+
+| Field | Meaning |
+|---|---|
+| `error.code` | Stable, machine-readable; switch on this, not on `message` |
+| `error.message` | Human-readable explanation |
+| `error.fields` | Per-field problems (validation errors) |
+| `error.details` | Structured data for some errors (plan limits) |
+| `request_id` | Same as the `X-Request-Id` response header |
+| `trace_id` | Present when the request sent a `traceparent` header |
+
+## Error codes
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `bad_request` | Malformed JSON or unknown fields in the body |
+| 401 | `unauthorized` | Missing, invalid, expired or revoked credentials |
+| 401 | `invalid_link` | Device-link token is not valid |
+| 402 | `plan_limit_exceeded` | Over a cloud plan limit — see below |
+| 402 | `plan_expired` | The Pro trial or paid period ended unpaid: the workspace is read-only (reads and exports still work) until it is paid or switched to Free — see [Plans](/plans#the-pro-trial) |
+| 402 | `payment_required` | `POST /v1/workspace/plan` asked for a paid plan. Upgrade with `POST /v1/billing/checkout` when [billing](/self-hosting/billing) is enabled; otherwise the operator changes the plan |
+| 403 | `forbidden` | The key lacks a scope (*"missing required scope items:review"*), the change needs `items:review` (see below), or the operation isn't available to this caller |
+| 403 | `not_local` | Local mode refused a credential-less request that doesn't provably come from this machine |
+| 403 | `csrf_failed` | A cookie-authenticated unsafe request without a valid `X-CSRF-Token` |
+| 404 | `not_found` | Unknown ID (or one in another workspace) |
+| 405 | `method_not_allowed` | A decision link (`/v1/decide/{token}`) called with a method other than GET / POST |
+| 409 | `conflict` | State conflict — see below |
+| 409 | `item_changed` | A decision link or chat button was for an older version of the item — see below |
+| 409 | `not_available` | Billing is not enabled on this instance (`/v1/billing*`), or plans were asked for on a local install |
+| 409 | `not_configured` | `POST /v1/items/{id}/summarize` on an instance without a model for summaries (`TAGGER_URL`) |
+| 409 | `idempotency_in_progress` | A request with the same `Idempotency-Key` is still running |
+| 410 | `link_used` / `link_expired` | A device link was already used / is older than 5 minutes |
+| 410 | `gone` | A one-tap decision link was used or expired; a workspace export is no longer available |
+| 413 | `too_large` | Body or file over the limit |
+| 415 | `unsupported_media_type` | Upload type not allowed (e.g. SVG, HTML), or a request content type other than JSON / multipart |
+| 422 | `validation_failed` | Invalid input; see `fields` |
+| 422 | `not_editable` | An edit-before-approve touched a field outside the item's `editable` list |
+| 422 | `idempotency_mismatch` | `Idempotency-Key` reused with a different request |
+| 422 | `search_too_broad` | A full-text search (`q`) ran longer than 5 seconds — add words or filters |
+| 429 | `rate_limited` | Too many requests — see [rate limits](/self-hosting/monitoring#rate-limits). The `Retry-After` header says how many seconds to wait |
+| 500 | `internal` | Unexpected server error (logged server-side with the `request_id`) |
+| 502 | `payment_provider_error` | Stripe rejected a checkout or portal request — retry later; the operator sees the reason in the logs |
+| 502 | `model_failed` | `POST /v1/items/{id}/summarize`: the summary model did not answer (within a minute) |
+| 502 | `bad_gateway` | The dashboard's `/api` proxy can't reach the API |
+| 503 | `timeout` | An item listing without `q` ran longer than 5 seconds — retry, or add filters |
+| 503 | `busy` | The database was locked by another process (e.g. a backup) — retry after `Retry-After` (1 s) |
+
+## Common errors in detail
+
+### 402 `plan_limit_exceeded`
+
+Cloud workspaces are limited by their [plan](/plans). The error tells you which limit
+was hit:
+
+```json
+{
+  "error": {
+    "code": "plan_limit_exceeded",
+    "message": "The Free plan allows 50 approvals per month; upgrade the workspace plan to continue.",
+    "details": { "limit": "decisions_per_month", "max": 50, "used": 50, "plan": "free" }
+  }
+}
+```
+
+| `details.limit` | Triggered by |
+|---|---|
+| `decisions_per_month` | Approving or rejecting an item (people, bulk actions, chat buttons; creating an already decided item) |
+| `webhooks` | Creating a webhook |
+| `api_keys` | Creating an API key |
+| `storage_bytes` | Uploading a file |
+| `max_upload_bytes` | Uploading a file larger than the plan allows |
+| `watchers` | Creating or resuming a watcher |
+| `notification_channels` | Creating a notification channel |
+| `min_watcher_interval_seconds` | A watcher `every` faster than the plan allows |
+
+Don't retry a 402 automatically — it won't succeed until the plan changes or the month rolls
+over.
+
+### 403 `not_local`
+
+The message explains which check failed — the peer address, the `Host` header (*"Host evil.example is
+not a local name (add it to LOCAL_ALLOWED_HOSTS)"*), a cross-site `Origin`, or a browser that
+isn't connected. See [Authentication](/api/authentication#local-mode-no-credentials).
+
+### 403 `forbidden` on item changes
+
+Besides a missing scope, a key with `items:write` but not `items:review` gets `403` when it:
+
+- edits the content of an **approved** or **rejected** item (*"editing the content of an
+  approved item requires items:review (metadata_patch is allowed)"*),
+- makes a status change outside the agent lifecycle (*"changing status from pending to
+  completed requires items:review"*),
+- creates an item directly as approved / rejected.
+
+The allowed changes are listed in [Security model](/self-hosting/security#review-integrity).
+
+### 409 `conflict`
+
+| Message | Meaning |
+|---|---|
+| *cannot approve an item that is already approved* | Someone decided it first, or the action would set the status the item already has |
+| *cannot publish an item that is draft (allowed from: approved)* | The action isn't allowed in the current status |
+| *item is already archived*, *collection is already archived*, *watcher is already paused*, *api key is already revoked* | You asked for the state it already has (see below) |
+| *item was modified (version 3, expected 2)* | Your `expected_version` is stale — reload and retry |
+| *a collection with this name already exists* | Collection names are unique per workspace |
+| *collection is archived* | Archived collections are read-only |
+| *results can be reported for approved or processing items* | `POST /v1/items/{id}/result` on an undecided or rejected item |
+| *action publish emits the reserved event item.approved* | A custom action stored before reserved events were enforced; change its `event` in the collection settings |
+
+Concurrent decisions on one item always resolve to exactly one success; everyone else gets
+`409`. Treat it as "already handled", not as a failure to retry blindly.
+
+A state that is already set can't be set again. Archiving an archived collection or item,
+unarchiving an active collection, pausing a paused watcher, resuming an active one, enabling an
+enabled webhook or notification channel (or disabling a disabled one), revoking a revoked
+API key or session, reporting a result for an item that is already `completed` or `failed`,
+running an action whose `set_status` is the current status, and choosing the plan the workspace
+is already on all answer `409` and change nothing: no new version, no event, no webhook. In a
+bulk action such items get a per-item `409` while the rest succeed. A `PATCH` that changes other
+fields as well is accepted; the unchanged state field is then ignored.
+
+### 409 `item_changed`
+
+Decision links and chat buttons are bound to the item version the message showed. If the item
+was changed since, nothing is decided: *"item changed since this message — open it in
+staqly"*. Review the current version in the dashboard. A one-tap link stays used.
+
+## Next steps
+
+<Cards>
+  <Card title="Idempotency" href="/api/idempotency">Retry safely without creating duplicates.</Card>
+  <Card title="Authentication & scopes" href="/api/authentication">Fix `401` and `403` errors.</Card>
+  <Card title="Troubleshooting" href="/self-hosting/troubleshooting">Common problems and their fixes.</Card>
+</Cards>

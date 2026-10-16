@@ -1,0 +1,124 @@
+---
+title: Billing with Stripe
+description: Let cloud workspaces pay for Pro by card, with Stripe Checkout and the customer portal.
+---
+
+In cloud mode, staqly can sell the Pro plan through Stripe. Workspace admins click **Upgrade to
+Pro**, pay on Stripe's checkout page, and the workspace moves to Pro as soon as Stripe confirms
+the payment. Without Stripe settings, billing stays off and you change plans with
+[`set-plan`](/self-hosting/operator-cli).
+
+Local installs have no plans and no billing.
+
+## Set it up
+
+<Steps>
+<Step>
+
+### Create the Pro price
+
+In the Stripe dashboard (test mode first), create a product **staqly Pro** with a recurring
+price of $30 per month. Copy the price ID, e.g. `price_1Pro30UsdMonthly`.
+
+</Step>
+<Step>
+
+### Add the webhook endpoint
+
+Under **Developers → Webhooks**, add an endpoint:
+
+- URL: `https://staqly.example.com/v1/billing/webhook` (your `PUBLIC_API_URL`)
+- Events: `checkout.session.completed`, `customer.subscription.created`,
+  `customer.subscription.updated`, `customer.subscription.deleted`
+
+Copy its signing secret (`whsec_` followed by random characters).
+
+</Step>
+<Step>
+
+### Configure staqly
+
+```bash title=".env"
+STRIPE_SECRET_KEY=sk_test_51ExampleKey
+STRIPE_WEBHOOK_SECRET=whsec_from_the_stripe_webhook_endpoint
+STRIPE_PRICE_PRO=price_1Pro30UsdMonthly
+PUBLIC_DASHBOARD_URL=https://app.staqly.example.com   # Stripe sends people back here
+```
+
+Billing is on only in cloud mode (`STAQLY_MODE=cloud`) and only when all three `STRIPE_`
+variables are set. Restart the API.
+
+After checkout or the portal, Stripe sends people back to the **Plan** page:
+`PUBLIC_DASHBOARD_URL` (else `PUBLIC_API_URL`) + `/settings/plan`, with `?checkout=success` or
+`?checkout=canceled` after checkout.
+
+</Step>
+<Step>
+
+### Turn on the customer portal
+
+In Stripe, under **Settings → Billing → Customer portal**, allow customers to update payment
+methods, see invoices and cancel. **Manage billing** in the dashboard opens this portal.
+
+</Step>
+</Steps>
+
+### Test locally
+
+The development stack (`make dev`, see
+[Docker Compose](/self-hosting/docker-compose#development-stack)) has an opt-in Stripe CLI
+container that forwards test-mode events to the API. Put this in `.env` in the repository root:
+
+```bash title=".env"
+STAQLY_MODE=cloud
+STRIPE_SECRET_KEY=sk_test_51ExampleKey
+STRIPE_PRICE_PRO=price_1Pro30UsdMonthly
+COMPOSE_PROFILES=stripe
+```
+
+Then print the signing secret of the Stripe CLI, add it as `STRIPE_WEBHOOK_SECRET` and start the
+stack:
+
+```bash
+make stripe-secret                  # prints whsec_..., put it in .env as STRIPE_WEBHOOK_SECRET
+make dev
+```
+
+Without Docker, run the Stripe CLI yourself and use the secret it prints:
+
+```bash
+stripe listen --forward-to localhost:3333/v1/billing/webhook
+```
+
+## How plans follow the subscription
+
+| Stripe subscription status | Workspace plan |
+|---|---|
+| `active`, `trialing` | Pro until the end of the paid period plus 3 days of grace |
+| `past_due` (a renewal failed) | Pro until the previously paid end plus grace; then read-only |
+| `canceled`, `unpaid`, `incomplete_expired`, `paused` | Pro ends now: the workspace is read-only until it pays again or switches to Free |
+| `incomplete` (first payment pending) | Unchanged |
+
+- staqly reads `checkout.session.completed` and `customer.subscription.created`, `.updated`,
+  `.deleted`, `.paused` and `.resumed`. Other event types are acknowledged and ignored.
+- Each Stripe event is applied once, even when Stripe retries it.
+- When a workspace replaced its subscription, the old one ending doesn't touch the new one.
+- Every change is recorded in the activity log as `workspace.plan_changed` with
+  `reason: "stripe:<status>"`.
+- A suspended workspace can still open Checkout or the portal to pay.
+- **Switch to Free** is refused while a subscription is live: cancel it in the portal first.
+- Deleting a workspace cancels its subscription right away.
+
+## API
+
+| Endpoint | Description |
+|---|---|
+| <Method m="GET" path="/v1/billing" /> | Billing status: `enabled`, `plan`, `subscription_status`, `plan_expires_at`, `suspended`, `has_customer` |
+| <Method m="POST" path="/v1/billing/checkout" /> | `{"url": "https://checkout.stripe.com/c/pay/cs_test_a1b2c3"}`: open it to pay |
+| <Method m="POST" path="/v1/billing/portal" /> | URL of the Stripe customer portal |
+| <Method m="POST" path="/v1/billing/webhook" /> | Called by Stripe, verified with `Stripe-Signature` |
+
+The first three need an admin key or a dashboard session. When billing is off, checkout and
+portal answer `409 not_available`; the portal answers `409 conflict` until the workspace has
+started a checkout once. A bad `Stripe-Signature` gets `400`. See the
+[API reference](/api/reference) for the full schemas.
