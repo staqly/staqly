@@ -109,6 +109,27 @@ export function useUsage() {
 }
 
 /**
+ * Who gets Settings -> Backups (the tab and the page): every local install (`local`); in the cloud, paid plans
+ * (`paid`) but not Free (`free`). `undefined` while the cloud plan is still loading.
+ */
+export function useBackupAccess(): 'local' | 'paid' | 'free' | undefined {
+  const { isCloud } = useMode()
+  const { data: plan } = useQuery({
+    queryKey: qk.usage,
+    queryFn: api.usage,
+    staleTime: 15_000,
+    enabled: isCloud,
+    select: (u) => u.plan?.id,
+  })
+
+  if (!isCloud) {
+    return 'local'
+  }
+
+  return plan ? (plan === 'free' ? 'free' : 'paid') : undefined
+}
+
+/**
  * The collection list. `select` picks out the part a component shows: it then renders only when that part
  * changes, not on every pending count change (the list is refetched after each decision).
  */

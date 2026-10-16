@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DatabaseBackup, Download, Plus } from 'lucide-react'
+import Link from 'next/link'
 
 import { CodeBlock } from '@/components/common/code-block'
 import { DocsLink } from '@/components/common/docs-link'
@@ -12,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, exportDownloadUrl, type WorkspaceExport } from '@/lib/api'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
-import { qk, useMode, useUsage } from '@/lib/queries'
+import { qk, useBackupAccess } from '@/lib/queries'
 
 import { SettingsCard as Card } from './settings-card'
 import { SettingsNav } from './settings-nav'
@@ -26,14 +27,13 @@ const DOCKER_UPLOADS = `docker run --rm --volumes-from staqly:ro -v "$PWD":/out 
 
 /**
  * Backups. Local: the commands from the backup guide (binary or Docker). Cloud: the workspace's backups (ZIP
- * exports of everything) with Download, on paid plans only; hidden on Free.
+ * exports of everything) with Download, on paid plans only; Free gets a pointer to the plans (the tab is hidden,
+ * but the page can still be opened by its URL).
  */
 export function BackupCard() {
-  const { isCloud } = useMode()
-  const usage = useUsage()
-  const plan = usage.data?.plan?.id
+  const access = useBackupAccess()
 
-  if (!isCloud) {
+  if (access === 'local') {
     return (
       <Card
         title="Backup & restore"
@@ -68,8 +68,22 @@ export function BackupCard() {
     )
   }
 
-  // Free plans have no backups; wait for the plan before showing anything.
-  return plan && plan !== 'free' ? <CloudBackups /> : null
+  if (access === 'free') {
+    return (
+      <Card
+        title="Backups"
+        icon={<DatabaseBackup />}
+        description="ZIP backups of the whole workspace come with the paid plans."
+      >
+        <Button asChild variant="outline" size="sm">
+          <Link href="/settings/plan">See plans</Link>
+        </Button>
+      </Card>
+    )
+  }
+
+  // Wait for the plan before showing anything.
+  return access === 'paid' ? <CloudBackups /> : null
 }
 
 function CloudBackups() {
