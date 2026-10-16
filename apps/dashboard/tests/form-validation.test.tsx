@@ -473,6 +473,22 @@ describe('API key form', () => {
     await waitFor(() => expect(api.find('POST', '/v1/api-keys')).toHaveLength(1))
     expectInvalid(within(dialog).getByLabelText(/^expires/i), 'Must be RFC3339 or YYYY-MM-DD')
   })
+
+  it('shows a server error on a field that passes the client checks', async () => {
+    const user = userEvent.setup()
+    const api = mockApi({ 'POST /v1/api-keys': unprocessable({ name: 'is already taken' }) })
+
+    renderWithProviders(<CreateKeyDialog open onOpenChange={() => {}} availableScopes={[]} onCreated={() => {}} />, {
+      mode: 'cloud',
+    })
+    const dialog = await screen.findByRole('dialog')
+    const name = within(dialog).getByLabelText('Name*')
+
+    await user.type(name, 'Bot')
+    await user.click(within(dialog).getByRole('button', { name: /create key/i }))
+    await waitFor(() => expect(api.find('POST', '/v1/api-keys')).toHaveLength(1))
+    await waitFor(() => expectInvalid(name, 'This field is already taken'))
+  })
 })
 
 describe('workspace settings', () => {

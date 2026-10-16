@@ -125,8 +125,10 @@ export function focusFirstInvalid(root: HTMLElement | null | undefined) {
 export function useFormErrors<K extends string>(clientErrors: FieldErrorMap<K>) {
   const [submitted, setSubmitted] = useState(false)
   const [server, setServer] = useState<FieldErrorMap<K>>({})
-  const errors: FieldErrorMap<K> = submitted ? { ...server, ...clientErrors } : server
-  const valid = Object.values(clientErrors).every((v) => !v)
+  // Only the client errors that are set: `{ name: undefined }` (a field that passes) must not hide its server error.
+  const failing = Object.entries(clientErrors).filter(([, v]) => v) as [K, string][]
+  const errors: FieldErrorMap<K> = submitted ? { ...server, ...Object.fromEntries(failing) } : server
+  const valid = failing.length === 0
 
   return {
     errors,
