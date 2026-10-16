@@ -10,7 +10,7 @@ import { z } from 'zod'
 
 import { Callout } from '@/components/common/callout'
 import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldTitle } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -21,8 +21,8 @@ import { formatBytes, prettyJSON } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
 import { invalidateAfterItemChange, qk, syncItemInCache, useCollections } from '@/lib/queries'
 
-/** Statuses that can be set directly; approved/rejected go through review actions. */
-// Mirrors the API (apps/api/internal/app/items.go): processing is locked here too, an automation is working on it.
+// Statuses whose content is locked (status itself changes only through actions). Mirrors the API
+// (apps/api/internal/app/items.go): processing is locked here too, an automation is working on it.
 const LOCKED = new Set(['approved', 'processing', 'completed', 'archived'])
 const RESUBMITS = new Set(['rejected', 'failed', 'expired'])
 
@@ -236,26 +236,21 @@ function ItemEditFormInner({ latest }: { latest: Item }) {
         </Callout>
       )}
       {locked && (
-        <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm" data-testid="content-locked">
-          <Lock className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <Callout tone="neutral" icon={Lock} data-testid="content-locked">
           <p className="text-muted-foreground">
             The content of a{item.status === 'approved' || item.status === 'archived' ? 'n' : ''} {item.status} item is
             locked: what was approved stays as it was. Metadata, source and collection can still change here, tags under
             Properties. To change the content, regenerate it or add a new item.
           </p>
-        </div>
+        </Callout>
       )}
       {resubmits && (
-        <div
-          className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm"
-          data-testid="content-resubmits"
-        >
-          <RotateCcw className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <Callout tone="neutral" icon={RotateCcw} data-testid="content-resubmits">
           <p className="text-muted-foreground">
             Fixing the title or content sends it back to <strong className="text-foreground">Pending</strong> for a new
             review.
           </p>
-        </div>
+        </Callout>
       )}
       <FieldGroup className="gap-4">
         <Field data-invalid={!!formState.errors.title}>
@@ -275,7 +270,7 @@ function ItemEditFormInner({ latest }: { latest: Item }) {
             (required only for links). */}
         {item.media && (
           <Field>
-            <FieldLabel>File</FieldLabel>
+            <FieldTitle>File</FieldTitle>
             <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
               <span className="font-medium">{item.media.original_name}</span>
               <span className="text-muted-foreground">

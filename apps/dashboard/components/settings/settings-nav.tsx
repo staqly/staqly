@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-import { useMode, useUsage } from '@/lib/queries'
+import { useBackupAccess } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
 const LINKS = [
@@ -14,14 +14,13 @@ const LINKS = [
   { href: '/settings/backups', label: 'Backups' },
   { href: '/settings/system', label: 'System' },
 ]
+const LINKS_WITHOUT_BACKUPS = LINKS.filter((l) => l.href !== '/settings/backups')
 
 export function SettingsNav({ className }: { className?: string }) {
   const pathname = usePathname()
-  const { isCloud } = useMode()
-  const usage = useUsage()
   // Backups are a paid feature in cloud mode: no tab on Free (or until the plan is known).
-  const plan = usage.data?.plan?.id
-  const links = isCloud && (!plan || plan === 'free') ? LINKS.filter((l) => l.href !== '/settings/backups') : LINKS
+  const backups = useBackupAccess()
+  const links = backups === 'local' || backups === 'paid' ? LINKS : LINKS_WITHOUT_BACKUPS
 
   return (
     <nav

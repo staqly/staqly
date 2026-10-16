@@ -18,6 +18,7 @@ import { pluralize, timeAgo } from '@/lib/format'
 import { useCollections } from '@/lib/queries'
 import { safeCssColor } from '@/lib/safe'
 import { STATUS_META } from '@/lib/status'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 // zod + react-hook-form load with the dialog, on first open.
@@ -84,9 +85,7 @@ function Dot({ color }: { color?: string }) {
 
 function ToReview({ n }: { n: number }) {
   return n > 0 ? (
-    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
-      {n} to review
-    </span>
+    <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TONES.warning.badge)}>{n} to review</span>
   ) : null
 }
 
@@ -152,7 +151,12 @@ function CollectionsTable({ collections }: { collections: Collection[] }) {
                     </span>
                     {/* Pinned to the right edge of the column, so archived rows line up. */}
                     {c.archived && (
-                      <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md bg-slate-500/12 px-1.5 py-0.5 text-[11px] font-normal text-slate-600 dark:text-slate-300">
+                      <span
+                        className={cn(
+                          'ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-normal',
+                          TONES.neutral.badge,
+                        )}
+                      >
                         <Archive className="size-3" /> Archived
                       </span>
                     )}

@@ -5,7 +5,6 @@ import {
   BellRing,
   CircleAlert,
   History,
-  Info,
   Link2,
   MoreHorizontal,
   MousePointerClick,
@@ -150,7 +149,7 @@ function DeliveriesSheet({
                       </Link>
                     )}
                   </div>
-                  {d.last_error && <p className="text-xs break-words text-red-600 dark:text-red-400">{d.last_error}</p>}
+                  {d.last_error && <p className={cn('text-xs break-words', TONES.danger.text)}>{d.last_error}</p>}
                 </li>
               ))}
             </ul>
@@ -345,12 +344,9 @@ export function ChannelsPage() {
         </div>
 
         {/* How decisions from a channel behave: a note under the section's subtitle. */}
-        <div className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <p>
-            Decisions from chat or links go through the same path as the dashboard: events and webhooks fire as usual.
-          </p>
-        </div>
+        <Callout tone="neutral" size="xs" className="text-muted-foreground">
+          Decisions from chat or links go through the same path as the dashboard: events and webhooks fire as usual.
+        </Callout>
 
         {channels.isLoading ? (
           <div className="grid gap-3 md:grid-cols-2">

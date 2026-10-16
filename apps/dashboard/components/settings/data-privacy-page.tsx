@@ -41,10 +41,12 @@ import {
   type WorkspaceExport,
 } from '@/lib/api'
 import { browser } from '@/lib/browser'
-import { focusFirstInvalid, formApiError } from '@/lib/form-errors'
+import { focusFirstInvalid, formApiError, useFormErrors } from '@/lib/form-errors'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { qk, useMode, useSession } from '@/lib/queries'
+import { TONES } from '@/lib/tones'
+import { cn } from '@/lib/utils'
 
 import { SettingsCard } from './settings-card'
 import { SettingsNav } from './settings-nav'
@@ -153,12 +155,12 @@ function WorkspaceExportCard() {
               </div>
             )}
             {x.status === 'failed' && (
-              <p className="text-red-600 dark:text-red-400">The export failed{x.error ? `: ${x.error}` : '.'}</p>
+              <p className={TONES.danger.text}>The export failed{x.error ? `: ${x.error}` : '.'}</p>
             )}
             {x.status === 'expired' && <p className="text-muted-foreground">This export expired. Start a new one.</p>}
           </div>
         )}
-        {job.error && !gone && <p className="text-sm text-red-600">{errorMessage(job.error)}</p>}
+        {job.error && !gone && <p className={cn('text-sm', TONES.danger.text)}>{errorMessage(job.error)}</p>}
         <div className="flex flex-wrap items-center gap-3">
           <Button
             variant={x?.status === 'ready' ? 'outline' : 'default'}
@@ -180,9 +182,8 @@ function DeleteWorkspaceCard() {
   const session = useSession()
   const [open, setOpen] = useState(false)
   const [confirm, setConfirm] = useState('')
-  const [tried, setTried] = useState(false)
-  const [serverError, setServerError] = useState<string | undefined>()
   const name = session.data?.workspace.name ?? ''
+  const form = useFormErrors<'confirm'>({ confirm: confirmNameError(confirm, name) })
   const viaSession = session.data?.principal?.type === 'session'
   const del = useMutation({
     mutationFn: () => api.deleteWorkspace(confirm),
@@ -194,9 +195,8 @@ function DeleteWorkspaceCard() {
       browser.assign('/setup')
     },
     onError: (e) =>
-      setServerError(formApiError(e, (k) => (k === 'confirm' ? k : null), 'Could not delete the workspace').confirm),
+      form.setServerErrors(formApiError(e, (k) => (k === 'confirm' ? k : null), 'Could not delete the workspace')),
   })
-  const confirmError = tried ? (confirmNameError(confirm, name) ?? serverError) : undefined
 
   return (
     <SettingsCard
@@ -218,8 +218,7 @@ function DeleteWorkspaceCard() {
             variant="destructive"
             onClick={() => {
               setConfirm('')
-              setTried(false)
-              setServerError(undefined)
+              form.reset()
               setOpen(true)
             }}
             disabled={!viaSession}
@@ -235,10 +234,8 @@ function DeleteWorkspaceCard() {
             noValidate
             onSubmit={(e) => {
               e.preventDefault()
-              setTried(true)
-              setServerError(undefined)
 
-              if (confirmNameError(confirm, name)) {
+              if (!form.submit()) {
                 focusFirstInvalid(e.currentTarget)
 
                 return
@@ -261,9 +258,9 @@ function DeleteWorkspaceCard() {
               value={confirm}
               onChange={(v) => {
                 setConfirm(v)
-                setServerError(undefined)
+                form.touch('confirm')
               }}
-              error={confirmError}
+              error={form.errors.confirm}
             />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={del.isPending}>
@@ -340,7 +337,7 @@ export function DataPrivacyPage() {
             </p>
           </div>
         </SettingsCard>
-        <h2 className="mt-4 text-sm font-semibold text-red-600 dark:text-red-400">Danger zone</h2>
+        <h2 className={cn('mt-4 text-sm font-semibold', TONES.danger.text)}>Danger zone</h2>
         {isCloud ? <DeleteWorkspaceCard /> : <LocalDeleteCard />}
       </div>
     </PageContainer>

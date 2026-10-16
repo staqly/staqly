@@ -324,7 +324,12 @@ export function EventTimeline({ events, showItem = false }: { events: StashEvent
                 </div>
               )}
               {d.note && (
-                <blockquote className="mt-1.5 rounded-md border-l-2 border-amber-500/70 bg-amber-500/8 px-3 py-1.5 text-sm whitespace-pre-wrap">
+                <blockquote
+                  className={cn(
+                    'mt-1.5 rounded-md border-l-2 px-3 py-1.5 text-sm break-words whitespace-pre-wrap',
+                    TONES.warning.callout,
+                  )}
+                >
                   {d.note}
                 </blockquote>
               )}

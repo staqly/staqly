@@ -294,7 +294,8 @@ function ImageZoom({ src, alt, children }: { src: string; alt: string; children:
             <img
               src={src}
               alt={alt}
-              onLoad={(e) => setTiny(e.currentTarget.naturalWidth < 128)}
+              // The longer side decides: a tall thin strip (40 x 2000 px) is not tiny and stays smooth.
+              onLoad={(e) => setTiny(Math.max(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight) < 128)}
               className={cn(
                 'mx-auto max-h-[85vh] max-w-full object-contain',
                 tiny && 'min-h-32 [image-rendering:pixelated]',

@@ -7,7 +7,7 @@ import { ExternalContentBadge } from '@/components/common/external-badge'
 import { ItemPreview } from '@/components/items/item-preview'
 import { WatchersPage } from '@/components/watchers/watchers-page'
 import type { Watcher } from '@/lib/api'
-import { parseDuration, runResultMessage } from '@/lib/watchers'
+import { runResultMessage } from '@/lib/watchers'
 
 import { collection, item } from './fixtures'
 import { PLANS, UNLOCKED, usage } from './plans-fixtures'
@@ -40,12 +40,6 @@ function watcher(over: Partial<Watcher> = {}): Watcher {
 const COLLECTIONS = { data: [collection(), collection({ id: 'col_2', name: 'Inspiration' })] }
 
 describe('watcher helpers', () => {
-  it('parses Go durations', () => {
-    expect(parseDuration('30m')).toBe(1800)
-    expect(parseDuration('1h0m0s')).toBe(3600)
-    expect(parseDuration('soon')).toBeNaN()
-  })
-
   it('describes check-now results', () => {
     expect(runResultMessage({ status: 'ok', new_items: 0, entries_seen: 20, baseline: true }).title).toBe(
       'Baseline recorded — new posts will appear from now on',

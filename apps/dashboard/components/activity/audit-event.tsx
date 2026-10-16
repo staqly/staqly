@@ -13,6 +13,7 @@ import { FeedbackCard } from '@/components/items/feedback-note'
 import type { StashEvent } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { useMode } from '@/lib/queries'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 type Icon = typeof Bot
@@ -301,7 +302,12 @@ export const AuditEventRow = memo(function AuditEventRow({ event: e }: { event: 
           </div>
         )}
         {d.note && (
-          <blockquote className="mt-1.5 rounded-md border-l-2 border-amber-500/70 bg-amber-500/8 px-3 py-1.5 text-sm break-words whitespace-pre-wrap">
+          <blockquote
+            className={cn(
+              'mt-1.5 rounded-md border-l-2 px-3 py-1.5 text-sm break-words whitespace-pre-wrap',
+              TONES.warning.callout,
+            )}
+          >
             {d.note}
           </blockquote>
         )}

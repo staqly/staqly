@@ -90,10 +90,7 @@ export function ItemDeliveries({ item }: { item: Item }) {
                 </p>
               )}
               {d.status === 'failed' && d.last_error && (
-                <p
-                  className="line-clamp-2 w-full text-xs break-words text-red-600 dark:text-red-400"
-                  title={d.last_error}
-                >
+                <p className={cn('line-clamp-2 w-full text-xs break-words', TONES.danger.text)} title={d.last_error}>
                   {d.last_error}
                 </p>
               )}

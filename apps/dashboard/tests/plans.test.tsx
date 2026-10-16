@@ -6,11 +6,13 @@ import { AddItemDialog } from '@/components/collections/add-item-dialog'
 import { PlanUsagePage } from '@/components/settings/plan-usage-page'
 import { WebhookFormSheet } from '@/components/webhooks/webhook-form-sheet'
 import { describePlanLimit } from '@/lib/notify'
-import { meterLevel, usageMeter } from '@/lib/usage'
+import { usageMeter } from '@/lib/usage'
 
 import { nav } from './navigation'
 import { PLANS, UNLOCKED, usage } from './plans-fixtures'
 import { mockApi, renderWithProviders } from './utils'
+
+const meterLevel = (used: number, max: number | null | undefined) => usageMeter(used, max).level
 
 const LIMIT_402 = {
   status: 402,

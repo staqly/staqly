@@ -3,16 +3,17 @@ import { CircleAlert, Info, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
-type CalloutTone = 'info' | 'warning' | 'danger'
+type CalloutTone = 'neutral' | 'info' | 'warning' | 'danger'
 
 const ICONS: Record<CalloutTone, LucideIcon> = {
+  neutral: Info,
   info: Info,
   warning: TriangleAlert,
   danger: CircleAlert,
 }
 
 /**
- * A tinted box with an icon for a warning, an error or a note inside a form, dialog or card. The tone comes
+ * A tinted box with an icon for a warning, an error or a note (`neutral`) inside a form, dialog or card. The tone comes
  * from lib/tones.ts; the text keeps the foreground colour. `size="xs"` for small print in dialogs and cards.
  * Pass `role` ("alert", "status", "note") where the message should be announced.
  */

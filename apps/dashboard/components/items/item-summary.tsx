@@ -10,6 +10,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { api, type Item } from '@/lib/api'
 import { toastApiError } from '@/lib/notify'
 import { invalidateAfterItemChange, syncItemInCache } from '@/lib/queries'
+import { TONES } from '@/lib/tones'
+import { cn } from '@/lib/utils'
 
 /**
  * The model's one-line summary, marked as AI-generated, with Regenerate: optional extra context helps the
@@ -58,13 +60,10 @@ export function ItemSummary({ item }: { item: Item }) {
   )
 
   return (
-    <div
-      className="grid gap-1 rounded-xl border border-violet-500/25 bg-violet-500/5 px-3 py-2"
-      data-testid="item-summary"
-    >
+    <div className={cn('grid gap-1 rounded-xl border px-3 py-2', TONES.accent.callout)} data-testid="item-summary">
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <Sparkles className="size-3.5 text-violet-500" /> AI summary
+          <Sparkles className={cn('size-3.5', TONES.accent.text)} aria-hidden /> AI summary
         </span>
         {regenerate}
       </div>

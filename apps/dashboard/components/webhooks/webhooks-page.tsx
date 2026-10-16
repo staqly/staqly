@@ -120,7 +120,13 @@ function DeliveryDialog({
             {d.last_error && (
               <div className="grid gap-1">
                 <div className="text-xs text-muted-foreground">Error</div>
-                <pre className="max-h-48 overflow-auto rounded-lg border border-red-500/30 bg-red-500/5 p-3 font-mono text-xs break-words whitespace-pre-wrap text-red-700 dark:text-red-300">
+                <pre
+                  className={cn(
+                    'max-h-48 overflow-auto rounded-lg border p-3 font-mono text-xs break-words whitespace-pre-wrap',
+                    TONES.danger.callout,
+                    TONES.danger.text,
+                  )}
+                >
                   {d.last_error}
                 </pre>
               </div>
@@ -225,7 +231,9 @@ function DeliveriesTable({ webhookId }: { webhookId: string }) {
                 </dd>
               </div>
             </dl>
-            {d.last_error && <p className="line-clamp-2 text-xs break-words text-red-600">{d.last_error}</p>}
+            {d.last_error && (
+              <p className={cn('line-clamp-2 text-xs break-words', TONES.danger.text)}>{d.last_error}</p>
+            )}
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -290,7 +298,7 @@ function DeliveriesTable({ webhookId }: { webhookId: string }) {
               </TableCell>
               <TableCell className="max-w-56">
                 {d.last_error ? (
-                  <span className="block truncate text-xs text-red-600">{d.last_error}</span>
+                  <span className={cn('block truncate text-xs', TONES.danger.text)}>{d.last_error}</span>
                 ) : (
                   <span className="text-xs text-muted-foreground">—</span>
                 )}

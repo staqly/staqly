@@ -152,11 +152,7 @@ function Hero() {
             <ArrowRight className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
           </Link>
           <h1 className="text-[2.6rem] leading-[1.04] font-semibold tracking-[-0.045em] text-balance sm:text-6xl lg:text-[4.1rem]">
-            The workspace for everything your{' '}
-            <span className="bg-gradient-to-br from-[#22b35e] via-[#13924f] to-[#0b7a4b] bg-clip-text text-transparent dark:from-[#c9fb93] dark:via-[#63f08e] dark:to-[#1ed27b]">
-              AI agents
-            </span>{' '}
-            create.
+            The workspace for everything your <span className="sq-gradient-text">AI agents</span> create.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-fd-muted-foreground">
             staqly is a local-first, self-hostable workspace where agents store what they generate — and where you
