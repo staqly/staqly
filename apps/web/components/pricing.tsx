@@ -50,7 +50,7 @@ export function PricingCards() {
             }`}
           >
             {p.popular && (
-              <span className="absolute -top-3 left-7 rounded-full bg-gradient-to-br from-[#c9fb93] via-[#63f08e] to-[#1ed27b] px-2.5 py-0.5 text-xs font-semibold text-[#052817]">
+              <span className="absolute -top-3 left-7 rounded-full bg-(image:--brand-gradient) px-2.5 py-0.5 text-xs font-semibold text-(--brand-gradient-foreground)">
                 Most popular
               </span>
             )}
