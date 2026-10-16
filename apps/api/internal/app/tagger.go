@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
 )
@@ -345,7 +346,7 @@ func parseTags(reply string) []string {
 	var out []string
 	for _, t := range raw {
 		t = strings.ToLower(strings.Trim(strings.Join(strings.Fields(t), " "), "#.\"' "))
-		if t == "" || len(t) > 40 || strings.Contains(t, ",") {
+		if t == "" || utf8.RuneCountInString(t) > 40 || strings.Contains(t, ",") {
 			continue
 		}
 		out = append(out, t)

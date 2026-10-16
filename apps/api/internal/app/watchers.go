@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/logctx"
@@ -81,7 +82,7 @@ func cleanWords(in []string, field string) ([]string, error) {
 	out := []string{}
 	for _, w := range in {
 		if w = strings.TrimSpace(w); w != "" {
-			if len(w) > 100 {
+			if utf8.RuneCountInString(w) > 100 {
 				return nil, invalid(field, "words must be at most 100 characters")
 			}
 			out = append(out, w)

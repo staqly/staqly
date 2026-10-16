@@ -51,6 +51,21 @@ func TestClipKeepsUTF8(t *testing.T) {
 	}
 }
 
+// Length limits count characters, not bytes: non-ASCII words and tags within the limit are kept.
+func TestLimitsCountCharacters(t *testing.T) {
+	word := strings.Repeat("ż", 60) // 60 characters, 120 bytes
+	if got, err := cleanWords([]string{word}, "keywords"); err != nil || len(got) != 1 {
+		t.Fatalf("cleanWords: %v %v", got, err)
+	}
+	if _, err := cleanWords([]string{strings.Repeat("ż", 101)}, "keywords"); err == nil {
+		t.Fatal("cleanWords: 101 characters accepted")
+	}
+	tag := strings.Repeat("ż", 30)
+	if got := parseTags(`["` + tag + `"]`); !slices.Equal(got, []string{tag}) {
+		t.Fatalf("parseTags: %q", got)
+	}
+}
+
 func TestParseTags(t *testing.T) {
 	for reply, want := range map[string][]string{
 		`["Social Media", "marketing"]`:                             {"social media", "marketing"},
