@@ -7,6 +7,7 @@ import * as React from 'react'
 
 import { Button } from '@/components/ui/button'
 import { inToast } from '@/components/ui/sonner'
+import { useReturnFocus } from '@/hooks/use-return-focus'
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -51,6 +52,8 @@ function SheetContent({
   /** Sheets close with Esc or the X only, so a stray click never drops unsaved work. Navigation drawers opt in. */
   closeOnOutsideClick?: boolean
 }) {
+  const returnFocus = useReturnFocus(props)
+
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -69,6 +72,7 @@ function SheetContent({
           className,
         )}
         {...props}
+        {...returnFocus}
       >
         {children}
         {showCloseButton && (

@@ -89,11 +89,11 @@ const TableItemRow = memo(function TableItemRow({ item: it, onOpen }: CardProps)
       <TableCell>
         <RunState item={it} />
       </TableCell>
-      <TableCell className="hidden truncate text-muted-foreground md:table-cell">{it.source || '—'}</TableCell>
+      <TableCell className="hidden max-w-32 truncate text-muted-foreground lg:table-cell">{it.source || '—'}</TableCell>
       <TableCell className="hidden text-muted-foreground sm:table-cell" title={formatDateTime(it.created_at)}>
         {timeAgo(it.created_at)}
       </TableCell>
-      <TableCell className="hidden text-muted-foreground lg:table-cell" title={formatDateTime(it.updated_at)}>
+      <TableCell className="hidden text-muted-foreground xl:table-cell" title={formatDateTime(it.updated_at)}>
         {timeAgo(it.updated_at)}
       </TableCell>
     </TableRow>
@@ -124,7 +124,7 @@ export function TableView({ items, onOpen, empty }: ViewProps) {
       <TableHead className={className} aria-sort={active ? (sort!.dir === 1 ? 'ascending' : 'descending') : 'none'}>
         <button
           type="button"
-          className="inline-flex items-center gap-1 hover:text-foreground"
+          className="inline-flex items-center gap-1 hover:text-foreground pointer-coarse:min-h-10"
           onClick={() => setSort((s) => (s?.key !== key ? { key, dir: 1 } : s.dir === 1 ? { key, dir: -1 } : null))}
         >
           {label}
@@ -154,13 +154,15 @@ export function TableView({ items, onOpen, empty }: ViewProps) {
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-12" />
-            {header('title', 'Title')}
+            {/* The title takes what the fixed columns leave, never less than 12rem (the table scrolls instead);
+                Source and Updated join only where there is room for them next to it. */}
+            {header('title', 'Title', 'min-w-48')}
             {header('type', 'Type', 'w-24')}
             {header('decision', 'Decision', 'w-28')}
             {header('run', 'Run', 'w-32')}
-            {header('source', 'Source', 'hidden w-32 md:table-cell')}
-            {header('created_at', 'Created', 'hidden w-36 sm:table-cell')}
-            {header('updated_at', 'Updated', 'hidden w-36 lg:table-cell')}
+            {header('source', 'Source', 'hidden w-32 lg:table-cell')}
+            {header('created_at', 'Created', 'hidden w-28 sm:table-cell')}
+            {header('updated_at', 'Updated', 'hidden w-28 xl:table-cell')}
           </TableRow>
         </TableHeader>
         <TableBody>

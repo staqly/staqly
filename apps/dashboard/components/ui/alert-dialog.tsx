@@ -5,6 +5,7 @@ import { AlertDialog as AlertDialogPrimitive } from 'radix-ui'
 import * as React from 'react'
 
 import { Button } from '@/components/ui/button'
+import { useReturnFocus } from '@/hooks/use-return-focus'
 
 function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
@@ -38,6 +39,8 @@ function AlertDialogContent({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
   size?: 'default' | 'sm'
 }) {
+  const returnFocus = useReturnFocus(props)
+
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -51,6 +54,7 @@ function AlertDialogContent({
           className,
         )}
         {...props}
+        {...returnFocus}
       />
     </AlertDialogPortal>
   )

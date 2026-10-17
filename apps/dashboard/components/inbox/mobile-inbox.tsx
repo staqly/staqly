@@ -36,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useKeepInView } from '@/hooks/use-keep-in-view'
 import { ITEM_TYPES, type ActionDef, type Collection, type Item, type ItemQuery } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { statusMeta } from '@/lib/status'
@@ -140,11 +141,15 @@ export function MobileInbox(p: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const touch = useRef<{ x: number; y: number } | null>(null)
   const top = useRef<HTMLDivElement>(null)
+  const stepsRow = useRef<HTMLDivElement>(null)
   const { items, active, setActiveId } = p
   const canApprove = p.available.some((a) => a.name === 'approve')
   const canReject = p.available.some((a) => a.name === 'reject')
   const activeFilters = (p.collectionId ? 1 : 0) + (p.type ? 1 : 0) + p.narrowedBy
   const showBar = !!active && (canApprove || canReject || p.custom.length > 0)
+
+  // Failed, Rejected and Archived start past the edge of a phone.
+  useKeepInView(stepsRow, `[data-step="${p.step.id}"]`)
 
   function go(delta: number) {
     p.move(delta)
@@ -177,6 +182,7 @@ export function MobileInbox(p: Props) {
           </Button>
         </div>
         <ToggleGroup
+          ref={stepsRow}
           type="single"
           variant="outline"
           value={p.step.id}
@@ -185,7 +191,7 @@ export function MobileInbox(p: Props) {
           className="w-full overflow-x-auto"
         >
           {STEP_TABS.map((t) => (
-            <ToggleGroupItem key={t.value} value={t.value} className={cn('shrink-0 gap-1.5', t.on)}>
+            <ToggleGroupItem key={t.value} value={t.value} data-step={t.value} className={cn('shrink-0 gap-1.5', t.on)}>
               <span aria-hidden className={cn('size-1.5 rounded-full', t.dot)} />
               {t.label}
             </ToggleGroupItem>

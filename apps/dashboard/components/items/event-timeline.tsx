@@ -192,7 +192,7 @@ function ActorLabel({ actor }: { actor: StashEvent['actor'] }) {
     const body = (
       <>
         <Icon className="size-3" />
-        <span className="text-muted-foreground/80">{auto === 'watcher' ? 'Watcher' : 'Automation'}</span>
+        <span className="text-muted-foreground">{auto === 'watcher' ? 'Watcher' : 'Automation'}</span>
         <span className="max-w-48 truncate font-medium text-foreground/80">{name}</span>
       </>
     )
