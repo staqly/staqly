@@ -457,6 +457,7 @@ await staqly.workspace.rotateRecoveryKey(); // session: new recovery key, shown 
 await staqly.workspace.delete("Acme agents"); // session, cloud: deletes everything; the name must match
 
 // One-tap decision links from notification channels (the token is the credential)
+const page = await staqly.decisionLinks.preview(token); // the HTML confirmation page, does not decide
 await staqly.decisionLinks.decide(token, { feedback: "Wrong tone" }); // approve or reject, single use
 ```
 

@@ -13,7 +13,7 @@ import (
 // collection action.
 var knownEventTypes = map[string]bool{
 	"item.created": true, "item.updated": true, "item.deleted": true, "item.approved": true, "item.rejected": true,
-	"item.escalated": true, "item.expired": true, "item.status_changed": true, "item.rule_applied": true,
+	"item.expired": true, "item.status_changed": true,
 	"item.completed": true, "item.failed": true, "item.purged": true, "item.tags_changed": true, "item.summarized": true,
 	"item.unarchived": true, "item.archived": true,
 	"collection.created": true, "collection.updated": true, "collection.deleted": true, "collection.archived": true,

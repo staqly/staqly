@@ -98,6 +98,19 @@ export class DeviceLinks extends APIResource {
 
 /** One-tap decision links sent by notification channels (`/v1/decide/{token}`). */
 export class DecisionLinks extends APIResource {
+  /** Returns the HTML confirmation page for a link (does not decide). Public: no API key is sent. */
+  async preview(token: string, options?: RequestOptions): Promise<string> {
+    const res = await this.http.request<Response>({
+      method: 'GET',
+      path: `/v1/decide/${enc(token)}`,
+      noAuth: true,
+      raw: true,
+      options: { ...options, headers: { Accept: 'text/html', ...options?.headers } },
+    })
+
+    return res.text()
+  }
+
   /**
    * Performs the link's action (approve or reject; `feedback` applies to
    * reject only) and consumes the link. Public: the token is the credential,

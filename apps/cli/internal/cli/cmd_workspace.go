@@ -111,8 +111,12 @@ func workspaceCommand() *Command {
 
 type usageResponse struct {
 	Usage
-	PlanExpiresAt *string `json:"plan_expires_at"`
-	Suspended     bool    `json:"suspended"`
+	PlanExpiresAt *string          `json:"plan_expires_at"`
+	Suspended     bool             `json:"suspended"`
+	ItemsByStatus map[string]int64 `json:"items_by_status"`
+	Deliveries    struct {
+		Queued, Retrying, Failed int64
+	} `json:"webhook_deliveries"`
 }
 
 func printUsage(c *Ctx, u usageResponse) {
@@ -137,6 +141,22 @@ func printUsage(c *Ctx, u usageResponse) {
 		t.row(k, fmtAmount(k, u.Usage.Usage[k]), ls)
 	}
 	t.flush("")
+	if len(u.ItemsByStatus) > 0 {
+		fmt.Fprintln(c.Out)
+		t = c.table("ITEMS THIS PERIOD", "COUNT")
+		statuses := make([]string, 0, len(u.ItemsByStatus))
+		for k := range u.ItemsByStatus {
+			statuses = append(statuses, k)
+		}
+		sort.Strings(statuses)
+		for _, k := range statuses {
+			t.row(k, fmt.Sprint(u.ItemsByStatus[k]))
+		}
+		t.flush("")
+	}
+	fmt.Fprintln(c.Out)
+	c.kv("Webhook deliveries", fmt.Sprintf("%d queued, %d retrying, %d failed",
+		u.Deliveries.Queued, u.Deliveries.Retrying, u.Deliveries.Failed))
 }
 
 func workspaceExportCommand() *Command {

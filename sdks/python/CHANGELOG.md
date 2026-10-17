@@ -29,7 +29,7 @@ First release.
   `history()`, `versions()`, `list_actions()`, `report_result()`, `unarchive()`, `summarize()`;
   `expected_version` on `approve`/`reject`/`action` (409 on a stale version).
 - `workspace.agents()` and `workspace.forget_agent()` (`/v1/agents`, admin); `workspace.usage()`
-  includes `items_by_status` and `webhook_deliveries`; `decision_links.preview()`.
+  includes `items_by_status` and `webhook_deliveries`; `decision_links.preview()`; `webhooks.deliveries.list(item_id=...)`.
 - `items.wait_for_decision()` on the server long-poll; `items.wait()`.
 - `request_approval()` and the `@requires_approval` decorator (support `expires_in`, `editable`).
 - Lazy pagination generators: `items.iterate()`, `events.iterate()` (sync and async).

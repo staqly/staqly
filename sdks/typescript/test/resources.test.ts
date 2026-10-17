@@ -721,6 +721,13 @@ describe('items helpers', () => {
     expect(calls[0]!.path).toBe('/v1/media/med_1')
     expect(c.media.url('med_1')).toBe('http://api.test/v1/media/med_1')
   })
+
+  it('decisionLinks.preview returns the HTML page', async () => {
+    const { c, calls } = client(new Response('<h1>Approve?</h1>', { headers: { 'Content-Type': 'text/html' } }))
+
+    expect(await c.decisionLinks.preview('dl_tok')).toBe('<h1>Approve?</h1>')
+    expect(calls[0]!.path).toBe('/v1/decide/dl_tok')
+  })
 })
 
 describe('collections helpers', () => {

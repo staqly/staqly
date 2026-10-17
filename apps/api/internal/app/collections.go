@@ -78,6 +78,8 @@ func validStatus(s string) bool {
 // reservedEvents are emitted by staqly itself; integrations trust them (e.g.
 // "item.approved" means a reviewer approved), so custom actions may not emit
 // them. item.archived stays allowed: the default archive action uses it.
+// item.escalated and item.rule_applied came from escalation rules (removed);
+// they stay reserved so old events can't be imitated.
 var reservedEvents = map[string]bool{
 	"item.created": true, "item.updated": true, "item.deleted": true, "item.approved": true, "item.rejected": true,
 	"item.escalated": true, "item.expired": true, "item.status_changed": true, "item.rule_applied": true,

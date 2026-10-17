@@ -954,6 +954,7 @@ class Deliveries(_Resource):
         self,
         *,
         webhook_id: str | None = None,
+        item_id: str | None = None,
         status: str | None = None,
         limit: int | None = None,
         request_options: RequestOptions | None = None,
@@ -962,7 +963,7 @@ class Deliveries(_Resource):
             RequestSpec(
                 "GET",
                 "/v1/webhook-deliveries",
-                params={"webhook_id": webhook_id, "status": status, "limit": limit},
+                params={"webhook_id": webhook_id, "item_id": item_id, "status": status, "limit": limit},
                 options=_opts(request_options),
             )
         )

@@ -303,8 +303,6 @@ func eventLabel(e notifyEntry) string {
 	switch e.EventType {
 	case "item.created":
 		return "New item to review"
-	case "item.escalated":
-		return "Escalated"
 	case "item.approved":
 		return "Approved"
 	case "item.rejected":
@@ -318,7 +316,7 @@ func eventLabel(e notifyEntry) string {
 }
 
 func (s *Service) webURL() string {
-	return strings.TrimRight(s.Env("PUBLIC_DASHBOARD_URL", notifyFirst(s.Cfg.PublicDashboardURL, "http://localhost:8080")), "/")
+	return strings.TrimRight(s.Env("PUBLIC_DASHBOARD_URL", notifyFirst(s.Cfg.PublicDashboardURL, "http://localhost:"+notifyFirst(s.Cfg.DashboardPort, "8080"))), "/")
 }
 
 // publicAPIBase is the API URL reachable by chat platforms and phones
@@ -387,8 +385,7 @@ func (s *Service) buildMessage(ctx context.Context, ch *notifyChannel, rows []db
 				skipped = append(skipped, o)
 				continue
 			}
-			review := ev.Type == "item.created" || ev.Type == "item.escalated"
-			if review && cur.Status != "pending" {
+			if ev.Type == "item.created" && cur.Status != "pending" {
 				skipped = append(skipped, o)
 				continue
 			}
@@ -400,10 +397,7 @@ func (s *Service) buildMessage(ctx context.Context, ch *notifyChannel, rows []db
 			if it.Media != nil {
 				e.MediaID, e.MediaMime = it.Media.ID, it.Media.MimeType
 			}
-			if i, ok := byItem[it.ID]; ok {
-				if ev.Type == "item.escalated" {
-					msg.Entries[i].EventType, msg.Entries[i].Note = ev.Type, e.Note
-				}
+			if _, ok := byItem[it.ID]; ok {
 				msg.rows = append(msg.rows, o)
 				continue
 			}

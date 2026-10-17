@@ -442,8 +442,9 @@ type RecoverResult struct {
 
 // Recover is the "lost your key?" path: the recovery key buys a new browser
 // session, a new admin API key and a new recovery key, all in one transaction.
-// The recovery key is single-use (it is rotated out), existing API keys keep
-// working, and every other session is signed out (whoever used the key may be
+// The recovery key is single-use (it is rotated out). On plans with a key limit
+// (Free) the old admin keys are revoked, since the new one takes their slot;
+// other keys keep working. Every other session is signed out (whoever used the key may be
 // locking out an intruder). The recovery key is never accepted anywhere else.
 func (s *Service) Recover(ctx context.Context, recoveryKey, userAgent string) (RecoverResult, error) {
 	// Brute force: 200-bit keys, and the route is rate-limited per IP (sensitiveGroup).

@@ -76,7 +76,7 @@ const SHORTCUTS: { keys: string[]; label: string; pendingOnly?: boolean; decided
   { keys: ['x'], label: 'Toggle selection' },
   { keys: ['⇧', 'Click'], label: 'Select a range' },
   { keys: ['Esc'], label: 'Clear selection' },
-  { keys: ['o'], label: 'Open item page' },
+  { keys: ['o'], label: 'Open item panel' },
   { keys: ['?'], label: 'Show shortcuts' },
 ]
 
