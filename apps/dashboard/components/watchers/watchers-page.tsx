@@ -114,7 +114,7 @@ const WatcherCard = memo(function WatcherCard({
   return (
     <li
       data-testid="watcher-card"
-      className={cn('grid gap-3 rounded-xl border bg-card p-4 shadow-xs', paused && 'bg-muted/30')}
+      className={cn('grid grid-cols-1 gap-3 rounded-xl border bg-card p-4 shadow-xs', paused && 'bg-muted/30')}
     >
       <div className="flex items-start gap-3">
         <SourceIcon kind={w.kind} className={cn(paused && 'opacity-60 grayscale')} />
@@ -196,7 +196,7 @@ const WatcherCard = memo(function WatcherCard({
       {w.status === 'degraded' && (
         <Callout size="xs" role="status">
           <span className="font-medium">{pluralize(w.fail_count, 'failed check')} in a row.</span>{' '}
-          {w.last_error && <span className="text-muted-foreground">{w.last_error}</span>}
+          {w.last_error && <span className="text-muted-foreground wrap-anywhere">{w.last_error}</span>}
         </Callout>
       )}
       {w.status === 'active' && w.fail_count > 0 && w.last_error && (
@@ -283,7 +283,7 @@ export function WatchersPage() {
         }
       />
 
-      <div className="mt-6 grid gap-5">
+      <div className="mt-6 grid grid-cols-1 gap-5">
         {watchers.isLoading ? (
           <div className="grid gap-3">
             <Skeleton className="h-48 rounded-xl" />
@@ -305,7 +305,7 @@ export function WatchersPage() {
           />
         ) : (
           <>
-            <ul className="grid gap-3" data-testid="watchers-list">
+            <ul className="grid grid-cols-1 gap-3" data-testid="watchers-list">
               {list.map((w) => (
                 <WatcherCard
                   key={w.id}

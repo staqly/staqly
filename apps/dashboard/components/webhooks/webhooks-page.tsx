@@ -156,7 +156,8 @@ function DeliveryDialog({
 
 function DeliveriesTable({ webhookId }: { webhookId: string }) {
   const qc = useQueryClient()
-  const isMobile = useIsMobile()
+  // Eight columns need a desktop: phones and tablets get cards.
+  const isMobile = useIsMobile(1024)
   const [openId, setOpenId] = useState<string | null>(null)
   const deliveries = useQuery({
     queryKey: qk.deliveries(webhookId),
@@ -201,13 +202,13 @@ function DeliveriesTable({ webhookId }: { webhookId: string }) {
 
   if (isMobile) {
     return (
-      <ul className="grid gap-2" data-testid="deliveries-table">
+      <ul className="grid grid-cols-1 gap-2 md:grid-cols-2" data-testid="deliveries-table">
         {dialog}
         {list.map((d) => (
           // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- the Details button is the keyboard path
           <li
             key={d.id}
-            className="grid cursor-pointer gap-2 rounded-xl border bg-card p-3 text-sm"
+            className="grid cursor-pointer grid-cols-1 gap-2 rounded-xl border bg-card p-3 text-sm"
             onClick={() => setOpenId(d.id)}
           >
             <div className="flex items-center gap-2">
@@ -395,7 +396,7 @@ function WebhookCard({
     // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the title button is the keyboard path
     <div
       className={cn(
-        'grid cursor-pointer gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:border-foreground/25 hover:bg-muted/30',
+        'grid cursor-pointer grid-cols-1 gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:border-foreground/25 hover:bg-muted/30',
         selected && 'border-brand/50 ring-1 ring-brand/30 hover:border-brand/60',
       )}
       data-testid="webhook-card"
@@ -433,7 +434,7 @@ function WebhookCard({
         <div className={cn('grid min-w-0 basis-56 gap-1', !w.active && 'opacity-70')}>
           <div className="flex flex-wrap gap-1">
             {w.events.map((e) => (
-              <span key={e} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+              <span key={e} className="max-w-full rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] wrap-anywhere">
                 {e}
               </span>
             ))}
@@ -534,7 +535,7 @@ export function WebhooksPage() {
           )
         }
       />
-      <div className="mt-6 grid gap-6">
+      <div className="mt-6 grid grid-cols-1 gap-6">
         {webhooks.isLoading ? (
           <Skeleton className="h-40" />
         ) : webhooks.error ? (
@@ -553,7 +554,7 @@ export function WebhooksPage() {
           />
         ) : (
           <>
-            <div className="grid gap-2">
+            <div className="grid grid-cols-1 gap-2">
               {list.map((w) => (
                 <WebhookCard
                   key={w.id}
@@ -572,7 +573,7 @@ export function WebhooksPage() {
               ))}
             </div>
             {selected && (
-              <section className="grid gap-3">
+              <section className="grid grid-cols-1 gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                   <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold">
                     Deliveries
