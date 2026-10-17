@@ -22,7 +22,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { api, type CreateItemInput, type Item } from '@/lib/api'
 import { charCount } from '@/lib/chars'
 import { focusFirstInvalid, formApiError, useFormErrors } from '@/lib/form-errors'
-import { formatBytes } from '@/lib/format'
+import { formatBytes, parseJSON } from '@/lib/format'
 import { namedToast } from '@/lib/notify'
 import { invalidateAfterItemChange, refetchItemListsFromStart } from '@/lib/queries'
 import { cn } from '@/lib/utils'
@@ -51,14 +51,6 @@ function parseMetadata(raw: string): Record<string, unknown> | undefined | Error
     return v
   } catch {
     return new Error('Metadata is not valid JSON')
-  }
-}
-
-function parseJSON(raw: string): { ok: true; value: unknown } | { ok: false } {
-  try {
-    return { ok: true, value: JSON.parse(raw) }
-  } catch {
-    return { ok: false }
   }
 }
 

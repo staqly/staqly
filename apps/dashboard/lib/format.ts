@@ -97,6 +97,15 @@ export function prettyJSON(value: unknown): string {
   return JSON.stringify(value ?? null, null, 2)
 }
 
+/** JSON.parse without throwing: `{ ok: false }` for invalid JSON. */
+export function parseJSON(text: string): { ok: true; value: unknown } | { ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(text) }
+  } catch {
+    return { ok: false }
+  }
+}
+
 export function hostOf(url: string): string {
   try {
     return new URL(url).host

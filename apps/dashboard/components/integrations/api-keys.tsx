@@ -7,19 +7,10 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Callout } from '@/components/common/callout'
+import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
 import { SecretField } from '@/components/common/secret-field'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -503,39 +494,33 @@ function CloudApiKeysManager() {
         title={revealed?.title}
         onOpenChange={(o) => !o && setRevealed(null)}
       />
-      <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirm?.kind === 'rotate' ? 'Rotate' : 'Revoke'} “{confirm?.key.name}”?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirm?.kind === 'rotate'
-                ? 'The current key stops working immediately and a replacement with the same name and scopes is issued. Update every integration that uses it.'
-                : 'Any agent or automation using this key will immediately get 401 errors. This cannot be undone.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                if (!confirm) {
-                  return
-                }
+      <ConfirmDialog
+        open={!!confirm}
+        onOpenChange={(o) => !o && setConfirm(null)}
+        title={
+          <>
+            {confirm?.kind === 'rotate' ? 'Rotate' : 'Revoke'} “{confirm?.key.name}”?
+          </>
+        }
+        description={
+          confirm?.kind === 'rotate'
+            ? 'The current key stops working immediately and a replacement with the same name and scopes is issued. Update every integration that uses it.'
+            : 'Any agent or automation using this key will immediately get 401 errors. This cannot be undone.'
+        }
+        confirmLabel={confirm?.kind === 'rotate' ? 'Rotate key' : 'Revoke key'}
+        variant="destructive"
+        onConfirm={() => {
+          if (!confirm) {
+            return
+          }
 
-                if (confirm.kind === 'rotate') {
-                  rotate.mutate(confirm.key.id)
-                } else {
-                  revoke.mutate(confirm.key.id)
-                }
-              }}
-            >
-              {confirm?.kind === 'rotate' ? 'Rotate key' : 'Revoke key'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          if (confirm.kind === 'rotate') {
+            rotate.mutate(confirm.key.id)
+          } else {
+            revoke.mutate(confirm.key.id)
+          }
+        }}
+      />
     </PageContainer>
   )
 }

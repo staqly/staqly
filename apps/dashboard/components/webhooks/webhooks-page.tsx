@@ -6,19 +6,10 @@ import dynamic from 'next/dynamic'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
 import { SecretField } from '@/components/common/secret-field'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -36,7 +27,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { api, type Delivery, type Webhook } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
-import { qk, useCollections } from '@/lib/queries'
+import { qk, useCollections, useWebhooks } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
@@ -495,7 +486,7 @@ function WebhookCard({
 
 export function WebhooksPage() {
   const qc = useQueryClient()
-  const webhooks = useQuery({ queryKey: qk.webhooks, queryFn: async () => (await api.webhooks()).data ?? [] })
+  const webhooks = useWebhooks()
   const collections = useCollections(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<Webhook | null>(null)
@@ -605,22 +596,15 @@ export function WebhooksPage() {
           }}
         />
       )}
-      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this webhook?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleting?.url} will stop receiving events and its delivery history is removed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => deleting && del.mutate(deleting.id)}>
-              Delete webhook
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title="Delete this webhook?"
+        description={<>{deleting?.url} will stop receiving events and its delivery history is removed.</>}
+        confirmLabel="Delete webhook"
+        variant="destructive"
+        onConfirm={() => deleting && del.mutate(deleting.id)}
+      />
     </PageContainer>
   )
 }

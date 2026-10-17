@@ -25,7 +25,7 @@ import { ApiError, ITEM_TYPES, type Item, type ItemQuery } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { flattenItems, useCollection, useItemsInfinite, useRefetchOnForeignChange } from '@/lib/queries'
 import { STATUS_META } from '@/lib/status'
-import { cn } from '@/lib/utils'
+import { cn, hrefWithParams } from '@/lib/utils'
 
 import { StatusCounts } from './collections-index'
 import { TableView } from './item-views'
@@ -95,21 +95,8 @@ export function CollectionPage({ id }: { id: string }) {
   }, [params])
 
   const setParams = useCallback(
-    (patch: Record<string, string | undefined>) => {
-      const sp = new URLSearchParams(latestParams.current.toString())
-
-      for (const [k, v] of Object.entries(patch)) {
-        if (v) {
-          sp.set(k, v)
-        } else {
-          sp.delete(k)
-        }
-      }
-
-      const s = sp.toString()
-
-      router.replace(`${pathname}${s ? `?${s}` : ''}`, { scroll: false })
-    },
+    (patch: Record<string, string | undefined>) =>
+      router.replace(hrefWithParams(pathname, latestParams.current, patch), { scroll: false }),
     [router, pathname],
   )
 
@@ -158,12 +145,7 @@ export function CollectionPage({ id }: { id: string }) {
     (urlSort && urlSort !== defaultSort ? 1 : 0)
 
   const open = useCallback(
-    (it: Item) => {
-      const sp = new URLSearchParams(latestParams.current.toString())
-
-      sp.set('item', it.id)
-      router.replace(`${pathname}?${sp}`, { scroll: false })
-    },
+    (it: Item) => router.replace(hrefWithParams(pathname, latestParams.current, { item: it.id }), { scroll: false }),
     [router, pathname],
   )
 

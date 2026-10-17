@@ -3,6 +3,8 @@
 import { usePathname } from 'next/navigation'
 import { useSyncExternalStore } from 'react'
 
+import { safeDecodeURIComponent } from '@/lib/safe'
+
 const subscribe = () => () => {}
 
 /**
@@ -23,14 +25,5 @@ export function useRouteId(): string | null {
     return null
   }
 
-  return decodeSegment(pathname.split('/').findLast(Boolean) ?? '')
-}
-
-/** A malformed escape (a stray "%") would throw a URIError and take the page down; keep the raw segment. */
-function decodeSegment(segment: string) {
-  try {
-    return decodeURIComponent(segment)
-  } catch {
-    return segment
-  }
+  return safeDecodeURIComponent(pathname.split('/').findLast(Boolean) ?? '')
 }

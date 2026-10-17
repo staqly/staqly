@@ -17,16 +17,7 @@ import {
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -53,7 +44,7 @@ import { api, ApiError, type ActionBody, type ActionDef, type Item, type ItemFie
 import { charCount } from '@/lib/chars'
 import { env } from '@/lib/env'
 import { focusFirstInvalid, useFormErrors } from '@/lib/form-errors'
-import { prettyJSON } from '@/lib/format'
+import { parseJSON, prettyJSON } from '@/lib/format'
 import { itemActionToast, namedToast, quoted, toastApiError } from '@/lib/notify'
 import { invalidateAfterItemChange, qk, syncItemInCache, useCollections, useItemActions } from '@/lib/queries'
 import { statusMeta } from '@/lib/status'
@@ -385,23 +376,23 @@ export function ConfirmActionDialog({
   onConfirm: () => void
 }) {
   return (
-    <AlertDialog open={!!action} onOpenChange={(o) => !o && onCancel()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {action?.label} {quoted(itemTitle)}?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            staqly sends the {action?.event} event to your automation
-            {action?.set_status ? ` and the item moves to ${action.set_status}` : ''}.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>{action?.label}</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open={!!action}
+      onOpenChange={(o) => !o && onCancel()}
+      title={
+        <>
+          {action?.label} {quoted(itemTitle)}?
+        </>
+      }
+      description={
+        <>
+          staqly sends the {action?.event} event to your automation
+          {action?.set_status ? ` and the item moves to ${action.set_status}` : ''}.
+        </>
+      }
+      confirmLabel={action?.label}
+      onConfirm={onConfirm}
+    />
   )
 }
 
@@ -589,14 +580,6 @@ export function EditItemDialog({
 }
 
 // Outside the component: a try/catch around conditional code makes the React Compiler skip the component.
-function parseJSON(text: string): { ok: true; value: unknown } | { ok: false } {
-  try {
-    return { ok: true, value: JSON.parse(text) }
-  } catch {
-    return { ok: false }
-  }
-}
-
 function EditItemForm({
   item,
   pending,

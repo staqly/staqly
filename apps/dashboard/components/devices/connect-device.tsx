@@ -11,6 +11,7 @@ import { PublicShell } from '@/components/auth/public-shell'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { api, ApiError, errorMessage, setCsrfToken } from '@/lib/api'
+import { safeDecodeURIComponent } from '@/lib/safe'
 import { rememberApiKey } from '@/lib/session-key'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
@@ -30,18 +31,9 @@ function takeToken(): string {
   }
 
   // `#token=...` (already decoded by URLSearchParams) or the bare token.
-  const token = new URLSearchParams(raw).get('token') ?? decodeOr(raw)
+  const token = new URLSearchParams(raw).get('token') ?? safeDecodeURIComponent(raw)
 
   return token.trim()
-}
-
-/** A malformed escape (a stray "%") throws a URIError; the token is then just invalid, not a crash. */
-function decodeOr(text: string) {
-  try {
-    return decodeURIComponent(text)
-  } catch {
-    return text
-  }
 }
 
 function reasonOf(err: unknown): 'expired' | 'used' | 'invalid' | null {

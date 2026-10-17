@@ -3,7 +3,6 @@
 import { Cloud } from 'lucide-react'
 
 import { CodeBlock, InlineCode } from '@/components/common/code-block'
-import { usePublicApiUrl } from '@/lib/config'
 import { useMode } from '@/lib/queries'
 import { useRememberedApiKey } from '@/lib/session-key'
 
@@ -15,13 +14,6 @@ export function useApiKeyValue() {
   const { isLocal } = useMode()
 
   return { key: remembered?.key ?? KEY_PLACEHOLDER, remembered, isLocal }
-}
-
-/** Where agents reach the API and its MCP endpoint (the API's PUBLIC_API_URL). */
-export function useApiUrls() {
-  const apiUrl = usePublicApiUrl()
-
-  return { apiUrl, mcpUrl: `${apiUrl}/mcp` }
 }
 
 /** All MCP tools (apps/api/internal/mcpserver). */

@@ -12,27 +12,12 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useNow } from '@/hooks/use-now'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 export const QR_WARNING =
   "This QR grants full access to your workspace. Only scan it with your own device and don't share a screenshot."
-
-function useNow(active: boolean) {
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    if (!active) {
-      return
-    }
-
-    const t = setInterval(() => setNow(Date.now()), 1000)
-
-    return () => clearInterval(t)
-  }, [active])
-
-  return now
-}
 
 /** Renders `backtick` spans from server hints as inline code. */
 function withCode(text: string) {

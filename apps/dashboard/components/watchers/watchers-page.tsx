@@ -22,19 +22,10 @@ import { memo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Callout } from '@/components/common/callout'
+import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
 import { UsageChip } from '@/components/plans/usage-chip'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -325,23 +316,20 @@ export function WatchersPage() {
       </div>
 
       {sheetUsed && <WatcherSheet open={sheetOpen} onOpenChange={setSheetOpen} state={sheet} />}
-      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{deleting?.name}”?</AlertDialogTitle>
-            <AlertDialogDescription>
-              staqly stops checking {deleting ? hostOf(deleting.url) : 'this source'}. Items it already created stay in
-              their collection.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => deleting && del.mutate(deleting.id)}>
-              Delete watcher
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={<>Delete “{deleting?.name}”?</>}
+        description={
+          <>
+            staqly stops checking {deleting ? hostOf(deleting.url) : 'this source'}. Items it already created stay in
+            their collection.
+          </>
+        }
+        confirmLabel="Delete watcher"
+        variant="destructive"
+        onConfirm={() => deleting && del.mutate(deleting.id)}
+      />
     </PageContainer>
   )
 }

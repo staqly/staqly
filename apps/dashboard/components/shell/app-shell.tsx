@@ -25,17 +25,7 @@ import {
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import {
-  createContext,
-  memo,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react'
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { PlanBadge } from '@/components/plans/plan-badge'
@@ -69,6 +59,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { api, setCsrfToken, UNLIMITED, type Collection } from '@/lib/api'
 import { toastApiError } from '@/lib/notify'
 import { useCollections, useMode, useSession, useUsage } from '@/lib/queries'
@@ -137,23 +128,9 @@ export function useLogout(opts?: { message?: string }) {
 
 // ---- responsive helpers ----
 
-const WIDE_QUERY = '(min-width: 1280px)'
-
-function subscribeWide(cb: () => void) {
-  const mql = window.matchMedia(WIDE_QUERY)
-
-  mql.addEventListener('change', cb)
-
-  return () => mql.removeEventListener('change', cb)
-}
-
-/** True on wide desktops; tablets (768–1279px) get a collapsed icon rail by default. */
+/** True on wide desktops (and while prerendering); tablets (768–1279px) get a collapsed icon rail by default. */
 function useIsWide() {
-  return useSyncExternalStore(
-    subscribeWide,
-    () => window.matchMedia(WIDE_QUERY).matches,
-    () => true,
-  )
+  return !useIsMobile(1280)
 }
 
 // ---- workspace menu ----
