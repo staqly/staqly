@@ -39,7 +39,8 @@ beyond loopback without `LOCAL_TRUSTED_PEERS`.
 | Active API keys | 1 | unlimited |
 | Storage | 1 GB | 100 GB |
 | Max file size | 5 MB | 100 MB |
-| Backups and data export (workspace ZIP, event export) | no | yes |
+| Workspace data export (ZIP) | data only, no media files | yes, with media files |
+| Backups and event export | no | yes |
 
 New workspaces start on a **7-day Pro trial** (`plan_expires_at`). When a Pro trial or paid
 period ends unpaid, the workspace is **suspended**: reads and exports work, every other change
@@ -49,8 +50,9 @@ Free (`POST /v1/workspace/plan`, admin) or `set-plan pro` (operator, no end date
 File sizes are also capped by the operator's `MAX_UPLOAD_MB` (default 100).
 The limits live in `apps/api/internal/app/plans.go` and are enforced by the API.
 
-Signed webhooks, MCP and full history are on every plan; workspace exports and
-`GET /v1/events/export` answer `402` on Free.
+Signed webhooks, MCP and full history are on every plan. The workspace export works on
+every plan: on Free it is data only (`includes_media: false`, no `media/` files);
+`GET /v1/events/export` answers `402` on Free.
 
 * Limits apply **per workspace**: every API key of a workspace shares its
   plan. "Approvals / month" counts approvals and rejections (by people, chat

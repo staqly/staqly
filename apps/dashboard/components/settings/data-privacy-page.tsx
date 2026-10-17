@@ -85,7 +85,8 @@ function ActivityExportCard() {
   )
 }
 
-function WorkspaceExportCard() {
+/** The workspace export. `dataOnly` (cloud Free): the API builds the same ZIP without the media files. */
+function WorkspaceExportCard({ dataOnly = false }: { dataOnly?: boolean }) {
   const qc = useQueryClient()
   const [exportId, setExportId] = useState<string | null>(null)
   const job = useQuery({
@@ -123,7 +124,11 @@ function WorkspaceExportCard() {
     <SettingsCard
       title="Export workspace"
       icon={<Archive />}
-      description="A ZIP with collections, items (with every version), events, media files, webhooks and watchers."
+      description={
+        dataOnly
+          ? 'A ZIP with your data: collections, items (with every version), events, webhooks and watchers. Media files are listed but not included.'
+          : 'A ZIP with collections, items (with every version), events, media files, webhooks and watchers.'
+      }
     >
       <div className="grid gap-3" data-testid="workspace-export">
         {x && !gone && (
@@ -173,6 +178,14 @@ function WorkspaceExportCard() {
             API keys, sessions and the recovery key are never included. Webhook secrets are redacted.
           </span>
         </div>
+        {dataOnly && (
+          <p className="text-xs text-muted-foreground" data-testid="export-data-only">
+            Media files, backups and the activity log export come with Pro.{' '}
+            <Link href="/settings/plan" className="text-brand hover:underline">
+              See plans
+            </Link>
+          </p>
+        )}
       </div>
     </SettingsCard>
   )
@@ -324,17 +337,10 @@ export function DataPrivacyPage() {
       <SettingsHeader />
       <SettingsNav className="mt-4" />
       <div className="mt-6 grid gap-4">
-        {/* Exports are a paid feature in the cloud (the API answers 402 on Free); local installs always have them. */}
+        {/* Every plan exports its data. On cloud Free the workspace ZIP has no media files and the activity log
+            export is Pro (the API answers 402); local installs always have everything. */}
         {exportAccess === 'free' ? (
-          <SettingsCard
-            title="Data export"
-            icon={<Download />}
-            description="Exporting the activity log and the whole workspace (ZIP) comes with the paid plans."
-          >
-            <Button asChild variant="outline" size="sm" className="w-fit">
-              <Link href="/settings/plan">See plans</Link>
-            </Button>
-          </SettingsCard>
+          <WorkspaceExportCard dataOnly />
         ) : exportAccess ? (
           <>
             <ActivityExportCard />

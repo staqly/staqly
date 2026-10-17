@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 
-import { useBackupAccess } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
 const LINKS = [
@@ -14,15 +13,11 @@ const LINKS = [
   { href: '/settings/backups', label: 'Backups' },
   { href: '/settings/system', label: 'System' },
 ]
-const LINKS_WITHOUT_BACKUPS = LINKS.filter((l) => l.href !== '/settings/backups')
 
 export function SettingsNav({ className }: { className?: string }) {
   const pathname = usePathname()
-  // Backups are a paid feature in cloud mode: no tab on Free (or until the plan is known).
-  const backups = useBackupAccess()
-  const links = backups === 'local' || backups === 'paid' ? LINKS : LINKS_WITHOUT_BACKUPS
   const nav = useRef<HTMLElement>(null)
-  const activeIndex = links.findIndex((l) => l.href === pathname)
+  const activeIndex = LINKS.findIndex((l) => l.href === pathname)
 
   // On a phone the tabs scroll sideways: bring the current one into view (Backups and System start off-screen).
   // Only the strip scrolls; scrollIntoView would also move the page.
@@ -48,7 +43,7 @@ export function SettingsNav({ className }: { className?: string }) {
       aria-label="Settings sections"
       className={cn('scrollbar-none -mx-4 flex gap-1 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0', className)}
     >
-      {links.map((l) => {
+      {LINKS.map((l) => {
         const active = pathname === l.href
 
         return (

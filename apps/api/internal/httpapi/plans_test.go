@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -110,15 +111,25 @@ func TestProTrialAndSuspension(t *testing.T) {
 	e.do(nil, "POST", "/v1/collections/"+c.ID+"/items", e.key, map[string]any{"title": "on free"}, 201, nil)
 }
 
-// Data export (workspace backups and event exports) is a paid feature: Free gets 402, Pro (and the trial) can.
+// The activity log export is a paid feature (402 on Free); the workspace export works on every plan, data only
+// (no media files) on Free and full on Pro (and the trial).
 func TestDataExportNeedsPaidPlan(t *testing.T) {
 	e := newEnv(t)
+	withDataDir(e)
 	csrf := []string{"X-CSRF-Token", e.csrf}
 	e.free()
-	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 402, nil, csrf...)
+	var job app.WorkspaceExport
+	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 202, &job, csrf...)
+	if job.IncludesMedia {
+		t.Fatalf("Free export includes media: %+v", job)
+	}
 	e.do(nil, "GET", "/v1/events/export", e.key, nil, 402, nil)
+	e.svc.ProcessExports(context.Background())
 	e.paid()
-	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 202, nil, csrf...)
+	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 202, &job, csrf...)
+	if !job.IncludesMedia {
+		t.Fatalf("Pro export without media: %+v", job)
+	}
 	e.do(nil, "GET", "/v1/events/export", e.key, nil, 200, nil)
 }
 

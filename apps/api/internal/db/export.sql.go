@@ -11,7 +11,7 @@ import (
 )
 
 const activeWorkspaceExport = `-- name: ActiveWorkspaceExport :one
-SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at FROM workspace_exports WHERE workspace_id = ? AND status IN ('pending', 'running') LIMIT 1
+SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media FROM workspace_exports WHERE workspace_id = ? AND status IN ('pending', 'running') LIMIT 1
 `
 
 func (q *Queries) ActiveWorkspaceExport(ctx context.Context, workspaceID string) (WorkspaceExport, error) {
@@ -30,6 +30,7 @@ func (q *Queries) ActiveWorkspaceExport(ctx context.Context, workspaceID string)
 		&i.StartedAt,
 		&i.FinishedAt,
 		&i.ExpiresAt,
+		&i.IncludesMedia,
 	)
 	return i, err
 }
@@ -69,18 +70,19 @@ func (q *Queries) CountMediaReferences(ctx context.Context, arg CountMediaRefere
 
 const createWorkspaceExport = `-- name: CreateWorkspaceExport :exec
 
-INSERT INTO workspace_exports (id, workspace_id, actor_type, actor_id, actor_name, created_at, expires_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO workspace_exports (id, workspace_id, actor_type, actor_id, actor_name, created_at, expires_at, includes_media)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateWorkspaceExportParams struct {
-	ID          string `json:"id"`
-	WorkspaceID string `json:"workspace_id"`
-	ActorType   string `json:"actor_type"`
-	ActorID     string `json:"actor_id"`
-	ActorName   string `json:"actor_name"`
-	CreatedAt   string `json:"created_at"`
-	ExpiresAt   string `json:"expires_at"`
+	ID            string `json:"id"`
+	WorkspaceID   string `json:"workspace_id"`
+	ActorType     string `json:"actor_type"`
+	ActorID       string `json:"actor_id"`
+	ActorName     string `json:"actor_name"`
+	CreatedAt     string `json:"created_at"`
+	ExpiresAt     string `json:"expires_at"`
+	IncludesMedia int64  `json:"includes_media"`
 }
 
 // ---- workspace export jobs ----
@@ -93,6 +95,7 @@ func (q *Queries) CreateWorkspaceExport(ctx context.Context, arg CreateWorkspace
 		arg.ActorName,
 		arg.CreatedAt,
 		arg.ExpiresAt,
+		arg.IncludesMedia,
 	)
 	return err
 }
@@ -560,7 +563,7 @@ func (q *Queries) FinishWorkspaceExport(ctx context.Context, arg FinishWorkspace
 }
 
 const getWorkspaceExport = `-- name: GetWorkspaceExport :one
-SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at FROM workspace_exports WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media FROM workspace_exports WHERE workspace_id = ? AND id = ?
 `
 
 type GetWorkspaceExportParams struct {
@@ -584,6 +587,7 @@ func (q *Queries) GetWorkspaceExport(ctx context.Context, arg GetWorkspaceExport
 		&i.StartedAt,
 		&i.FinishedAt,
 		&i.ExpiresAt,
+		&i.IncludesMedia,
 	)
 	return i, err
 }
@@ -616,7 +620,7 @@ func (q *Queries) ListWorkspaceExportIDs(ctx context.Context, workspaceID string
 }
 
 const listWorkspaceExports = `-- name: ListWorkspaceExports :many
-SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at FROM workspace_exports WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 20
+SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media FROM workspace_exports WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 20
 `
 
 func (q *Queries) ListWorkspaceExports(ctx context.Context, workspaceID string) ([]WorkspaceExport, error) {
@@ -641,6 +645,7 @@ func (q *Queries) ListWorkspaceExports(ctx context.Context, workspaceID string) 
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.ExpiresAt,
+			&i.IncludesMedia,
 		); err != nil {
 			return nil, err
 		}
@@ -692,7 +697,7 @@ func (q *Queries) MarkWorkspaceExportExpired(ctx context.Context, id string) err
 }
 
 const pendingWorkspaceExports = `-- name: PendingWorkspaceExports :many
-SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at FROM workspace_exports WHERE status = 'pending' ORDER BY created_at LIMIT ?
+SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media FROM workspace_exports WHERE status = 'pending' ORDER BY created_at LIMIT ?
 `
 
 func (q *Queries) PendingWorkspaceExports(ctx context.Context, limit int64) ([]WorkspaceExport, error) {
@@ -717,6 +722,7 @@ func (q *Queries) PendingWorkspaceExports(ctx context.Context, limit int64) ([]W
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.ExpiresAt,
+			&i.IncludesMedia,
 		); err != nil {
 			return nil, err
 		}

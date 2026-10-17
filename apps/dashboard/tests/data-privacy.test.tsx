@@ -25,6 +25,7 @@ function exportJob(over: Partial<WorkspaceExport> = {}): WorkspaceExport {
     started_at: null,
     finished_at: null,
     expires_at: '2026-10-14T10:00:00Z',
+    includes_media: true,
     ...over,
   }
 }
@@ -257,10 +258,26 @@ describe('rejected step', () => {
     expect((await screen.findAllByText('Nothing rejected')).length).toBeGreaterThan(0)
   })
 
-  it('cloud Free: no exports, a pointer to the plans instead', async () => {
-    mockApi({ 'GET /v1/workspace/usage': usage(PLANS[0]) })
+  it('cloud Free: the data-only workspace export, a note that files and backups are Pro, no activity log export', async () => {
+    const api = mockApi({
+      'GET /v1/workspace/usage': usage(PLANS[0]),
+      'POST /v1/workspace/export': { status: 202, body: exportJob({ includes_media: false }) },
+      'GET /v1/workspace/exports/exp_1': { ...READY, includes_media: false },
+    })
+    const user = userEvent.setup()
+
     renderWithProviders(<DataPrivacyPage />, { mode: 'cloud' })
-    expect(await screen.findByRole('link', { name: 'See plans' })).toHaveAttribute('href', '/settings/plan')
-    expect(screen.queryByRole('button', { name: /export workspace/i })).not.toBeInTheDocument()
+    expect(await screen.findByText(/Media files are listed but not included/)).toBeInTheDocument()
+    expect(screen.getByTestId('export-data-only')).toHaveTextContent(
+      'Media files, backups and the activity log export come with Pro.',
+    )
+    expect(screen.getByRole('link', { name: 'See plans' })).toHaveAttribute('href', '/settings/plan')
+    expect(screen.queryByTestId('export-all-ndjson')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /export workspace/i }))
+    await waitFor(() => expect(api.find('POST', '/v1/workspace/export')).toHaveLength(1))
+    expect(await screen.findByRole('link', { name: /download zip/i })).toHaveAttribute(
+      'href',
+      '/api/v1/workspace/exports/exp_1/download',
+    )
   })
 })

@@ -1705,8 +1705,9 @@ class AsyncExports(_Resource):
     async def create_workspace_export(
         self, *, request_options: RequestOptions | None = None
     ) -> WorkspaceExport:
-        """Starts a full workspace export (admin). Only one may be pending/running
-        (409 with ``details["export_id"]``); archives are deleted after 24 h."""
+        """Starts a workspace export (admin); data only on Free (``includes_media`` False).
+        Only one may be pending/running (409 with ``details["export_id"]``);
+        archives are deleted after 24 h."""
         r = await self._http.request(
             RequestSpec("POST", "/v1/workspace/export", options=_opts(request_options))
         )

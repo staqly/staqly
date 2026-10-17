@@ -21,8 +21,8 @@ LIMIT @lim;
 -- ---- workspace export jobs ----
 
 -- name: CreateWorkspaceExport :exec
-INSERT INTO workspace_exports (id, workspace_id, actor_type, actor_id, actor_name, created_at, expires_at)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO workspace_exports (id, workspace_id, actor_type, actor_id, actor_name, created_at, expires_at, includes_media)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetWorkspaceExport :one
 SELECT * FROM workspace_exports WHERE workspace_id = ? AND id = ?;

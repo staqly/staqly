@@ -20,6 +20,7 @@ const READY = {
   finished_at: '2026-10-16T10:00:05Z',
   expires_at: '2026-10-17T10:00:00Z',
   download_url: '/v1/workspace/exports/exp_1/download',
+  includes_media: true,
 }
 
 describe('backup card', () => {
@@ -47,27 +48,20 @@ describe('backup card', () => {
     await waitFor(() => expect(api.find('POST', '/v1/workspace/export')).toHaveLength(1))
   })
 
-  it('cloud, Free: no backups, a pointer to the plans', async () => {
+  it('cloud, Free: no backups, a pointer to the data-only export and the plans', async () => {
     const api = mockApi({ 'GET /v1/workspace/usage': usage('free'), 'GET /v1/workspace/exports': { data: [] } })
 
     renderWithProviders(<BackupCard />, { mode: 'cloud' })
     expect(await screen.findByRole('link', { name: 'See plans' })).toHaveAttribute('href', '/settings/plan')
+    expect(screen.getByRole('link', { name: 'Export your data' })).toHaveAttribute('href', '/settings/data')
+    expect(screen.getByText(/media files included, come with Pro/)).toBeInTheDocument()
     expect(screen.queryByTestId('cloud-backups')).not.toBeInTheDocument()
     expect(api.find('GET', '/v1/workspace/exports')).toHaveLength(0)
   })
 
-  it('the Backups tab: on paid cloud plans, not on Free', async () => {
-    mockApi({ 'GET /v1/workspace/usage': usage('pro') })
-    const paid = renderWithProviders(<SettingsNav />, { mode: 'cloud' })
-
-    expect(await screen.findByRole('link', { name: 'Backups' })).toHaveAttribute('href', '/settings/backups')
-    paid.unmount()
-
-    const api = mockApi({ 'GET /v1/workspace/usage': usage('free') })
-
+  it('the Backups tab: on every plan, Free included', () => {
+    mockApi({ 'GET /v1/workspace/usage': usage('free') })
     renderWithProviders(<SettingsNav />, { mode: 'cloud' })
-    await waitFor(() => expect(api.find('GET', '/v1/workspace/usage')).toHaveLength(1))
-    expect(screen.getByRole('link', { name: 'System' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Backups' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Backups' })).toHaveAttribute('href', '/settings/backups')
   })
 })

@@ -639,6 +639,8 @@ class WorkspaceExport(StaqlyModel):
     finished_at: OptionalDatetime = None
     expires_at: OptionalDatetime = None
     download_url: str | None = None
+    includes_media: bool = True
+    """False for a data-only export (Free plan): the ZIP has no media files."""
 
 
 class PurgeResult(StaqlyModel):

@@ -27,8 +27,8 @@ const DOCKER_UPLOADS = `docker run --rm --volumes-from staqly:ro -v "$PWD":/out 
 
 /**
  * Backups. Local: the commands from the backup guide (binary or Docker). Cloud: the workspace's backups (ZIP
- * exports of everything) with Download, on paid plans only; Free gets a pointer to the plans (the tab is hidden,
- * but the page can still be opened by its URL).
+ * exports of everything) with Download, on paid plans only; Free gets a pointer to its data-only export in
+ * Data & privacy and to the plans.
  */
 export function BackupCard() {
   const access = useBackupAccess()
@@ -73,11 +73,21 @@ export function BackupCard() {
       <Card
         title="Backups"
         icon={<DatabaseBackup />}
-        description="ZIP backups of the whole workspace come with the paid plans."
+        description="Backups of the whole workspace, media files included, come with Pro."
       >
-        <Button asChild variant="outline" size="sm">
-          <Link href="/settings/plan">See plans</Link>
-        </Button>
+        <div className="grid gap-3 text-sm" data-testid="free-backups">
+          <p className="text-muted-foreground">
+            On Free you can export your data without the media files in <strong>Data &amp; privacy</strong>.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm">
+              <Link href="/settings/data">Export your data</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/settings/plan">See plans</Link>
+            </Button>
+          </div>
+        </div>
       </Card>
     )
   }
@@ -159,7 +169,7 @@ function BackupRow({ x }: { x: WorkspaceExport }) {
   )
 }
 
-/** Settings -> Backups: on a local install and on paid cloud plans (the tab is hidden on Free). */
+/** Settings -> Backups: backups on a local install and on paid cloud plans; on Free a pointer to the data export. */
 export function BackupsPage() {
   return (
     <PageContainer>

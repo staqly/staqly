@@ -1086,11 +1086,15 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Start a full workspace export (admin; GDPR data portability)
+         * Start a workspace export (admin; GDPR data portability)
          * @description Queues a background job that builds a ZIP (workspace.json,
          *     collections.ndjson, items.ndjson with versions, events.ndjson,
          *     media.ndjson, media/ files under their original names, webhooks.json
          *     with secrets redacted, watchers.json, README.txt).
+         *     Every plan can export. On a plan without data export (Free) the
+         *     export is data only (`includes_media: false`): the same files without
+         *     media/, media.ndjson lists each file by id, original_name and
+         *     mime_type. Pro and local installs get the files too.
          *     Only one export per workspace may be pending or running (409 with
          *     `details.export_id`). Finished archives are deleted after 24 hours.
          */
@@ -1651,7 +1655,7 @@ export interface components {
                 watchers: number;
                 min_watcher_interval_seconds: number;
                 notification_channels: number;
-                /** @description Workspace exports (backups) and event exports; false on Free */
+                /** @description Full workspace exports with media files (backups) and event exports; false on Free, where the workspace export is data only */
                 data_export: boolean;
             };
             features: string[];
@@ -1976,6 +1980,8 @@ export interface components {
             id: string;
             /** @enum {string} */
             status: "pending" | "running" | "ready" | "failed" | "expired";
+            /** @description false for a data-only export (Free): no media/ files in the ZIP */
+            includes_media: boolean;
             size_bytes: number;
             error?: string;
             /** Format: date-time */
@@ -4933,7 +4939,6 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];

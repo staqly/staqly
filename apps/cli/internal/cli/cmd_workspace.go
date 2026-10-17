@@ -29,7 +29,14 @@ type WorkspaceExport struct {
 	FinishedAt  *string `json:"finished_at"`
 	ExpiresAt   string  `json:"expires_at"`
 	DownloadURL string  `json:"download_url"`
+	// IncludesMedia is false for a data-only export (Free plan); nil from servers that predate it.
+	IncludesMedia *bool `json:"includes_media"`
 }
+
+// dataOnly: the export has no media files (Free plan).
+func (x WorkspaceExport) dataOnly() bool { return x.IncludesMedia != nil && !*x.IncludesMedia }
+
+const dataOnlyHint = "Data only: media files are listed in media.ndjson but not included (files and backups come with Pro)."
 
 type BrowserSession struct {
 	ID         string `json:"id"`
@@ -160,7 +167,7 @@ func printUsage(c *Ctx, u usageResponse) {
 }
 
 func workspaceExportCommand() *Command {
-	start := leaf("start", "", "Start a full workspace export (admin); --wait/--output to fetch the ZIP", 0, 0, func(fs *flag.FlagSet) runFunc {
+	start := leaf("start", "", "Start a workspace export (admin); --wait/--output to fetch the ZIP", 0, 0, func(fs *flag.FlagSet) runFunc {
 		wait := fs.Bool("wait", false, "wait until the export is ready")
 		output := fs.String("output", "", "download the finished ZIP to this `file` (implies --wait)")
 		fs.StringVar(output, "o", "", "shorthand for --output")
@@ -181,11 +188,17 @@ func workspaceExportCommand() *Command {
 					return c.printRaw(raw)
 				}
 				fmt.Fprintf(c.Out, "Started export %s (%s)\n", c.paint(bold, x.ID), c.status(x.Status))
+				if x.dataOnly() {
+					fmt.Fprintln(c.Out, dataOnlyHint)
+				}
 				fmt.Fprintf(c.Out, "Check it with: staqly workspace export status %s\n", x.ID)
 				return nil
 			}
 			if !c.JSON {
 				fmt.Fprintf(c.Stderr, "Started export %s; waiting for it to finish\n", x.ID)
+				if x.dataOnly() {
+					fmt.Fprintln(c.Stderr, dataOnlyHint)
+				}
 			}
 			x, raw, err = waitForExport(c, cl, x, raw, *timeout, *interval)
 			if err != nil {
@@ -234,6 +247,8 @@ func workspaceExportCommand() *Command {
 	cmd := &Command{Name: "export", Short: "Export all workspace data as a ZIP (start, status, download)", Subs: []*Command{start, status, dl}}
 	cmd.Long = `Export all workspace data as a ZIP (collections, items with versions,
 events, media files, webhooks with secrets redacted, watchers).
+On the Free plan the export is data only: the same files without the media
+files (media.ndjson still lists each one by id, name and type).
 Only one export may run at a time; finished archives are deleted after 24 hours.`
 	return cmd
 }
@@ -271,7 +286,14 @@ func printExport(c *Ctx, x WorkspaceExport) {
 	if x.SizeBytes > 0 {
 		size = humanBytes(x.SizeBytes)
 	}
-	c.kv("ID", x.ID, "Status", c.status(x.Status), "Size", size, "Error", x.Error, "Created", fmtTime(x.CreatedAt),
+	contents := ""
+	if x.IncludesMedia != nil {
+		contents = "data and media files"
+		if x.dataOnly() {
+			contents = "data only (media files come with Pro)"
+		}
+	}
+	c.kv("ID", x.ID, "Status", c.status(x.Status), "Contents", contents, "Size", size, "Error", x.Error, "Created", fmtTime(x.CreatedAt),
 		"Finished", fmtOptTime(x.FinishedAt), "Expires", fmtTime(x.ExpiresAt))
 	if x.Status == "ready" {
 		fmt.Fprintf(c.Out, "\nDownload it with: staqly workspace export download %s\n", x.ID)
