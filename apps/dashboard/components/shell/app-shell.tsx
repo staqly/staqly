@@ -68,6 +68,7 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { api, setCsrfToken, UNLIMITED, type Collection } from '@/lib/api'
 import { toastApiError } from '@/lib/notify'
 import { useCollections, useMode, useSession, useUsage } from '@/lib/queries'
@@ -657,15 +658,6 @@ const ConnectDeviceDialog = dynamic(
   () => import('@/components/devices/connect-device-dialog').then((m) => m.ConnectDeviceDialog),
   { ssr: false },
 )
-
-/** Open state for a lazily loaded dialog: it mounts on first open and then stays (so closing animates). */
-function useLazyDialog() {
-  const [state, setState] = useState({ open: false, used: false })
-  const setOpen = useCallback((open: boolean) => setState({ open, used: true }), [])
-  const toggle = useCallback(() => setState((s) => ({ open: !s.open, used: true })), [])
-
-  return { ...state, setOpen, toggle }
-}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const create = useLazyDialog()

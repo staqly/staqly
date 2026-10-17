@@ -4,7 +4,7 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@ta
 import { ThemeProvider } from 'next-themes'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { z } from 'zod'
+import { config as zodConfig } from 'zod/v4/core'
 
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -13,7 +13,9 @@ import { setNavigator } from '@/lib/notify'
 
 // Zod probes for `new Function` to JIT-compile object schemas; our CSP has no
 // 'unsafe-eval', so the probe would be reported as a CSP violation on every page.
-z.config({ jitless: true })
+// Set through zod/v4/core (the same global config `z.config` writes): importing `z` here would put all
+// of zod (~30 KB gzipped) into the JavaScript of every route; the forms load it with their own chunks.
+zodConfig({ jitless: true })
 
 const PUBLIC_ROUTES = new Set(['/setup', '/login', '/connect'])
 

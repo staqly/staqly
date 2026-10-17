@@ -1,10 +1,11 @@
-import { QueryClient, type InfiniteData } from '@tanstack/react-query'
-import { describe, expect, it } from 'vitest'
+import { InfiniteQueryObserver, QueryClient, type InfiniteData } from '@tanstack/react-query'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { ItemPage } from '@/lib/api'
-import { qk, refetchItemListsFromStart, shareItemPages } from '@/lib/queries'
+import type { EventPage, ItemPage, StashEvent } from '@/lib/api'
+import { createRecentIds, qk, refetchItemListsFromStart, refreshEventLists, shareItemPages } from '@/lib/queries'
 
 import { item } from './fixtures'
+import { mockApi } from './utils'
 
 const a = item({ id: 'itm_a', title: 'A' })
 const b = item({ id: 'itm_b', title: 'B' })
@@ -69,5 +70,68 @@ describe('refetchItemListsFromStart', () => {
     expect(out.pages).toHaveLength(1)
     expect(out.pageParams).toEqual([''])
     expect(qc.getQueryState(key)?.isInvalidated).toBe(true)
+  })
+})
+
+describe('createRecentIds', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('treats an id as changed here only for a while, so a later change to the item counts as foreign', () => {
+    vi.useFakeTimers()
+    const ids = createRecentIds(1000)
+
+    ids.add('itm_a')
+    expect(ids.has('itm_a')).toBe(true)
+    expect(ids.has('itm_b')).toBe(false)
+    vi.advanceTimersByTime(1001)
+    expect(ids.has('itm_a')).toBe(false)
+    // Adding again restarts the window.
+    ids.add('itm_a')
+    expect(ids.has('itm_a')).toBe(true)
+  })
+})
+
+const ev = (seq: number) => ({ id: `evt_${seq}`, seq, type: 'item.created' }) as StashEvent
+
+describe('refreshEventLists', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('puts new events in front of a loaded activity feed with one request instead of refetching every page', async () => {
+    const api = mockApi({ 'GET /v1/events': { data: [ev(12), ev(11), ev(10), ev(9)], next_cursor: 'c1' } })
+    const qc = new QueryClient()
+    const key = qk.events({ limit: 50 })
+    const loaded: InfiniteData<EventPage> = {
+      pages: [
+        { data: [ev(10), ev(9)], next_cursor: 'c1' },
+        { data: [ev(8), ev(7)], next_cursor: 'c2' },
+      ],
+      pageParams: ['', 'c1'],
+    }
+
+    qc.setQueryData(key, loaded)
+    const observer = new InfiniteQueryObserver(qc, {
+      queryKey: key,
+      queryFn: () => Promise.reject(new Error('the feed must not refetch its pages')),
+      initialPageParam: '',
+      getNextPageParam: (last: EventPage) => last.next_cursor || undefined,
+      staleTime: Infinity,
+    })
+    const unsubscribe = observer.subscribe(() => {})
+
+    await refreshEventLists(qc)
+    unsubscribe()
+
+    const out = qc.getQueryData<InfiniteData<EventPage>>(key)!
+
+    expect(api.find('GET', '/v1/events')).toHaveLength(1)
+    expect(out.pages.map((p) => p.data.map((e) => e.seq))).toEqual([
+      [12, 11, 10, 9],
+      [8, 7],
+    ])
+    expect(out.pages[1]).toBe(loaded.pages[1])
   })
 })

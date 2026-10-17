@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ExternalLink, History, Layers, MoreHorizontal } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -33,13 +34,19 @@ import { FailedNote } from './failed-note'
 import { FeedbackNote } from './feedback-note'
 import { ItemActionBar } from './item-actions'
 import { ItemDeliveries } from './item-deliveries'
-import { ItemEditForm } from './item-edit-form'
 import { useItemOptions } from './item-options'
 import { ItemPreview } from './item-preview'
 import { ItemSummary } from './item-summary'
 import { TagList, TagsPopover } from './item-tags'
 import { MetadataCard } from './metadata-card'
 import { ProcessingNote } from './processing-note'
+
+// The Edit tab loads on first open: its form brings zod, react-hook-form and the select, which the inbox,
+// the item sheet and the item page would otherwise ship with every visit.
+const ItemEditForm = dynamic(() => import('./item-edit-form').then((m) => m.ItemEditForm), {
+  ssr: false,
+  loading: () => <Skeleton className="h-72" />,
+})
 
 function Prop({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
   return (

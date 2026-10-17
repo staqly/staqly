@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { memo, useState } from 'react'
@@ -43,6 +44,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { api, type Watcher } from '@/lib/api'
 import { formatDateTime, formatInterval, hostOf, pluralize, timeAgo } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
@@ -52,7 +54,10 @@ import { cn } from '@/lib/utils'
 import { runResultMessage } from '@/lib/watchers'
 
 import { KIND_LABELS, SourceIcon, WatcherStatusBadge } from './watcher-shared'
-import { WatcherSheet, type WatcherSheetState } from './watcher-sheet'
+import type { WatcherSheetState } from './watcher-sheet'
+
+// The add/edit sheet (zod, react-hook-form) loads on first open, not with the page.
+const WatcherSheet = dynamic(() => import('./watcher-sheet').then((m) => m.WatcherSheet), { ssr: false })
 
 // memo: the list polls every 20 s; a check that changes one watcher re-renders only its card. Callbacks take the
 // watcher, so the page passes stable functions.
@@ -236,7 +241,7 @@ export function WatchersPage() {
   const qc = useQueryClient()
   const watchers = useWatchers({ refetchInterval: 20_000 })
   const collections = useCollections(true)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const { open: sheetOpen, used: sheetUsed, setOpen: setSheetOpen } = useLazyDialog()
   const [sheet, setSheet] = useState<WatcherSheetState>({ mode: 'add' })
   const [deleting, setDeleting] = useState<Watcher | null>(null)
   const list = watchers.data ?? []
@@ -319,7 +324,7 @@ export function WatchersPage() {
         )}
       </div>
 
-      <WatcherSheet open={sheetOpen} onOpenChange={setSheetOpen} state={sheet} />
+      {sheetUsed && <WatcherSheet open={sheetOpen} onOpenChange={setSheetOpen} state={sheet} />}
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

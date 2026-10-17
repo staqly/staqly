@@ -3,7 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 
-import { qk, useRecentEvents } from '@/lib/queries'
+import { qk, refreshEventLists, useRecentEvents } from '@/lib/queries'
 
 /** How often the dashboard looks for changes made elsewhere (agents, curl, other tabs); paused in background tabs. */
 export const LIVE_INTERVAL_MS = 3000
@@ -37,7 +37,8 @@ export function LiveUpdates() {
 
     void qc.invalidateQueries({ queryKey: qk.collectionsAll })
     void qc.invalidateQueries({ queryKey: ['collection'] })
-    void qc.invalidateQueries({ queryKey: qk.eventsAll })
+    // The activity feed: only its newest events, not every page it has loaded.
+    void refreshEventLists(qc)
     void qc.invalidateQueries({ queryKey: ['deliveries'] })
     // The inbox step counts.
     void qc.invalidateQueries({ queryKey: ['flow'] })

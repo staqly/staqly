@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal, Pencil, Plus, RefreshCw, RotateCw, Send, Trash2, Webhook as WebhookIcon } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -30,6 +31,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { api, type Delivery, type Webhook } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
@@ -38,7 +40,8 @@ import { qk, useCollections } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
-import { WebhookFormSheet } from './webhook-form-sheet'
+// The add/edit sheet loads on first open, not with the page.
+const WebhookFormSheet = dynamic(() => import('./webhook-form-sheet').then((m) => m.WebhookFormSheet), { ssr: false })
 
 const DELIVERY_STATUS: Record<string, string> = {
   pending: TONES.info.badge,
@@ -495,7 +498,7 @@ export function WebhooksPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<Webhook | null>(null)
   const [fresh, setFresh] = useState<{ id: string; secret: string } | null>(null)
-  const [formOpen, setFormOpen] = useState(false)
+  const { open: formOpen, used: formUsed, setOpen: setFormOpen } = useLazyDialog()
   const [deleting, setDeleting] = useState<Webhook | null>(null)
 
   const list = webhooks.data ?? []
@@ -586,18 +589,20 @@ export function WebhooksPage() {
         )}
       </div>
 
-      <WebhookFormSheet
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        webhook={editing}
-        onSaved={(w) => {
-          setSelectedId(w.id)
+      {formUsed && (
+        <WebhookFormSheet
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          webhook={editing}
+          onSaved={(w) => {
+            setSelectedId(w.id)
 
-          if (isFullSecret(w.secret)) {
-            setFresh({ id: w.id, secret: w.secret })
-          }
-        }}
-      />
+            if (isFullSecret(w.secret)) {
+              setFresh({ id: w.id, secret: w.secret })
+            }
+          }}
+        />
+      )}
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
