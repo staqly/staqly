@@ -292,7 +292,7 @@ function ConnectAgent() {
               </li>
             ))}
           </ul>
-          <Link href="/agents" className={`mt-7 ${arrowLink}`}>
+          <Link href="/agents" className={`mt-7 ${arrowLink} pointer-coarse:mt-4.5`}>
             Setup for every agent <ArrowRight className="size-4" />
           </Link>
         </div>
@@ -411,7 +411,7 @@ function OpenSource() {
             limits that runs in the background on macOS or Linux (or one Docker container) — you just take care of
             backups and updates yourself.
           </p>
-          <a href={`${DOCS}/quickstart`} className={`mt-6 ${arrowLink}`}>
+          <a href={`${DOCS}/quickstart`} className={`mt-6 ${arrowLink} pointer-coarse:mt-3.5`}>
             Self-hosting quickstart <ArrowRight className="size-4" />
           </a>
         </div>

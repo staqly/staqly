@@ -126,7 +126,7 @@ export default function AgentsPage() {
               </tbody>
             </table>
           </div>
-          <a href={`${DOCS}/mcp/tools`} className={`mt-5 ${arrowLink}`}>
+          <a href={`${DOCS}/mcp/tools`} className={`mt-5 ${arrowLink} pointer-coarse:mt-2.5`}>
             All 71 tools <ArrowRight className="size-4" />
           </a>
         </div>
