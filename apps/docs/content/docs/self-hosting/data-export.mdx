@@ -27,6 +27,9 @@ GET /v1/events/export?format=ndjson|csv&from=&to=&type=&type_prefix=&actor_type=
 
 - Scope `items:read` (dashboard sessions work too). Events come **oldest first** and the
   response is streamed, so a log of any size exports without paging.
+- Credential and session audit events (`api_key.*`, `session.*`, `recovery_key.*`, `device.*`,
+  `device_link.*`) are included only for admins (dashboard sessions, local mode, keys with
+  `admin`); other keys get the rest of the log.
 - `from` is inclusive, `to` exclusive (RFC 3339 or `YYYY-MM-DD`). `type` is an exact match;
   `type_prefix` a literal prefix such as `item.`.
 - **NDJSON**: one event per line, the same shape as `GET /v1/events`.

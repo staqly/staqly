@@ -77,7 +77,8 @@ docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco
 ```
 
 Then open `/login`, choose **Lost your key?** and enter it. staqly signs you in and shows a new
-admin API key and a new recovery key once; save both (the printed key works only once).
+admin API key and a new recovery key once; save both (the printed key works only once). On Free,
+which allows one API key, the old admin key is revoked; on Pro it keeps working.
 
 This needs shell access to the server — there is no remote backdoor. Like a rotation from the
 dashboard, it **signs out every browser session** of the workspace.

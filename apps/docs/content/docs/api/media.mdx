@@ -56,6 +56,10 @@ curl -s -X POST "http://localhost:3333/v1/collections/Instagram%20Avatar/items" 
 
 `media_id: ""` in an update removes the media from an item.
 
+`image` and `video` items need something to show: a `media_id` or an external `url`. Creating
+one with neither, or an update that clears both, answers `422 validation_failed` (field
+`media_id`).
+
 ## Upload from an agent (MCP)
 
 The [`create_item`](/mcp/tools#create_item) tool accepts **`media_base64`** (plus

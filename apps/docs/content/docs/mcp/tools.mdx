@@ -54,8 +54,9 @@ A full walkthrough: [Gate a risky agent action on human approval](/cookbook/appr
 - Collection inputs accept an ID (`col_qjuybkx6355nz4no6pqk`) **or** the exact name.
 - Every REST operation has a tool, and both go through the same authorization checks. Only
   the browser flows (sign-in, sign-out, setup, redeeming a device link, decision links),
-  recovery key rotation (dashboard session only), the agent list (`/v1/agents`) and writing a
-  new summary (`POST /v1/items/{id}/summarize`) have none.
+  recovery key rotation (dashboard session only), the agent list (`/v1/agents`), the list of
+  workspace exports (`GET /v1/workspace/exports`) and writing a new summary
+  (`POST /v1/items/{id}/summarize`) have none.
 - Tools marked *destructive* delete or invalidate something (data, a key, a secret).
 - A suspended workspace (unpaid Pro period) can call read-only tools plus `revoke_session`,
   `revoke_api_key`, `create_device_link`, `start_workspace_export`, `choose_free_plan`,
@@ -135,8 +136,8 @@ One item with content, metadata, media and status. *Read-only* · `items:read`
 | `item_id` | string | <Required /> | `itm_oalirbz67y4m4cqxq5dw` |
 
 ### `create_item`
-Add an item to a collection. Items default to `pending` so they show up for review. ·
-`items:write`
+Add an item to a collection. Items default to `pending` so they show up for review. `image` and
+`video` items need `media_base64` or a `url`. · `items:write`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -311,7 +312,8 @@ Delete a media file; items that reference it lose their media. *Destructive* · 
 
 ### `list_events`
 The activity log (items created, approved, rejected, actions run, settings changed), newest
-first. *Read-only* · `items:read`
+first. Without `admin`, the [audit events](/api/events#audit-events) are left out.
+*Read-only* · `items:read`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -328,7 +330,10 @@ first. *Read-only* · `items:read`
 
 ### `export_events`
 Export the activity log as NDJSON or CSV text, oldest first. The output is capped at 1 MiB;
-when `truncated` is `true`, narrow `from` / `to` to get the rest. *Read-only* · `items:read`
+when `truncated` is `true`, narrow `from` / `to` to get the rest. Without `admin`, the
+[audit events](/api/events#audit-events) (API keys, sessions, recovery key, devices) are left
+out, as in `list_events`. On the Free cloud plan it answers `plan_limit_exceeded` (no data
+export). *Read-only* · `items:read`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -377,16 +382,16 @@ decision, else its run (published, failed...) if one ran, else its decision. Bri
 
 ### `get_flow`
 Where items are and how they moved: item counts per state (decision, run, the action that started it, archived)
-and event counts per type in the last 24 hours. Optional `collection`. · `items:read`
+and event counts per type in the last 24 hours. Optional `collection`. *Read-only* · `items:read`
 
 ### `list_tags`
 The workspace's item tags with how many items carry each, most used first. Use them with `list_items` (`tag`)
-or `update_item` (`tags`). · `items:read`
+or `update_item` (`tags`). *Read-only* · `items:read`
 
 ### `list_requested_work`
 Items a person asked your automation to work on (Publish, Regenerate, Retry...) that wait for a result: their
 `run` is `processing` and `run_action` says what was asked. Without webhooks, poll this, do the work, then call
-`report_result`. Oldest first. · `items:read`
+`report_result`. Oldest first. *Read-only* · `items:read`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -478,7 +483,7 @@ Create a webhook that receives signed event POSTs. The response contains the sig
 |---|---|---|---|
 | `url` | string | <Required /> | Receiver URL, e.g. `https://n8n.example.com/webhook/staqly` |
 | `description` | string | No | What the receiver does, shown in the dashboard |
-| `events` | string[] | No | Event types to send, e.g. `["item.approved"]`; `["*"]` (default) sends all |
+| `events` | string[] | No | Event types to send, e.g. `["item.approved"]`; `["*"]` (default) sends all. Unknown types or patterns are refused ([matching](/api/events#matching-events-in-webhooks)) |
 | `collection_ids` | string[] | No | Only events from these collections; empty sends all |
 | `active` | boolean | No | `false` pauses deliveries |
 | `timeout_ms` | integer | No | Per-attempt timeout in milliseconds |
@@ -565,7 +570,7 @@ Create a channel that tells reviewers about new pending items. · `channels:mana
 | `type` | string | <Required /> | `telegram`, `slack`, `discord`, `ntfy` or `email` |
 | `config` | object | No | Type-specific settings, e.g. `{"webhook_url": "https://hooks.slack.com/services/T000/B000/XXXX"}` for Slack or `{"topic": "staqly-reviews"}` for ntfy |
 | `enabled` | boolean | No | `false` pauses the channel |
-| `events` | string[] | No | Event types to notify about, e.g. `["item.created"]` |
+| `events` | string[] | No | Event types to notify about, e.g. `["item.created"]`; unknown types or patterns are refused |
 | `collection_ids` | string[] | No | Only events from these collections; empty notifies for all |
 | `digest_window_seconds` | integer | No | Group notifications within this many seconds into one message; `0` sends each |
 
@@ -696,8 +701,9 @@ The cloud plans with their limits and prices. *Read-only* · no scope needed
 No inputs.
 
 ### `get_usage`
-The workspace's plan, usage this period against its limits, and whether it is suspended.
-*Read-only* · no scope needed
+The workspace's plan, usage this period against its limits, and whether it is suspended, plus
+`items_by_status` (items created this period by current status) and `webhook_deliveries`
+(`queued`, `retrying`, `failed`). *Read-only* · no scope needed
 
 No inputs.
 

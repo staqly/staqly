@@ -5,7 +5,7 @@ description: Rename your workspace, change the theme, manage signed-in devices, 
 
 **Settings** is where you manage the workspace itself, rather than its content: its name and
 look, which browsers and phones can sign in, notifications, exports and backups. Open it
-from **Settings** at the bottom of the sidebar or from the command palette
+from **Settings** under *Configure* in the sidebar or from the command palette
 (<Kbd>⌘</Kbd> <Kbd>K</Kbd>).
 
 ## Common tasks
@@ -35,7 +35,7 @@ own page, **Notifications** in the sidebar (see [Notifications](/automation/noti
 | **Processing timeout** | How long an item may stay *processing* (after Publish, Regenerate or any action that sets it) before it fails with "No result reported": 15 minutes to 1 day, default 1 hour. While an item waits, its page shows how long it has waited of this limit and when it will fail. A single item can get its own limit with **Change the limit** in its waiting box (`PATCH /v1/items/{id}` `processing_timeout_seconds`; 0 returns to the workspace's). Such an item shows **Timed out** (its status stays `failed`, the webhook `item.failed` carries `timeout: true`) and can be retried. This is not *Expired*, which means nobody decided a pending item in time. |
 | **Appearance** | Light, dark or system theme. |
 | **Devices** | Browsers and phones signed in to this workspace, with when each was last seen. **Sign out** any of them (it loses access at once and has to be connected again); **Connect a device** creates a new QR code. Signing a browser in again with a new link replaces its old entry, so each browser is listed once. |
-| **Recovery key** <Badge>cloud</Badge> | Rotate the recovery key, the way back in if you lose the admin API key (**Lost your key?** on the sign-in screen; each recovery key works once and is replaced by a new one). Rotating signs out every other browser. The new key is shown once; store it somewhere safe. |
+| **Recovery key** <Badge>cloud</Badge> | Rotate the recovery key, the way back in if you lose the admin API key (**Lost your key?** on the sign-in screen: it signs you in with a new admin key, **Admin key (recovered)**, and the recovery key is replaced by a new one, since each works once; on a plan with a key limit, such as Free, the old admin keys are revoked). Rotating signs out every other browser. The new key is shown once; store it somewhere safe. |
 | **Sign out** <Badge>cloud</Badge> | **Log out** ends the session in this browser. |
 
 With `staqly serve` on this computer only, nothing needs to sign in, so **Devices** may be
@@ -55,6 +55,8 @@ The workspace's plan and this month's usage. See [Plan & usage](/dashboard/plan-
 | **Retention & single items** | A pointer to **Delete item** › **Also erase its history** in an item's **...** menu, which erases one item together with its history (see [Item details](/dashboard/items#delete-or-purge-an-item)), and to server-side retention of old events, deliveries and archived items. |
 | **Delete workspace** <Badge>cloud</Badge> | Permanently delete the workspace and everything in it, and sign out every device. Only a signed-in dashboard session can do this, and you confirm by typing the workspace name. Earlier backups still contain the data. |
 | **Delete all data** <Badge>local</Badge> | A local install has one workspace, so there is no delete button. The card shows how to remove the data instead: `staqly service uninstall` and `rm -rf ~/.local/share/staqly` with the binary, or `docker rm -f staqly` and `docker volume rm staqly-data` with Docker. |
+
+In cloud mode both exports come with the paid plans: on Free a **Data export** card links to the plans instead.
 
 See [Data export](/self-hosting/data-export).
 

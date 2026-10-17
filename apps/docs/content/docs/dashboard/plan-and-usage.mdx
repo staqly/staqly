@@ -56,6 +56,8 @@ curl -s http://localhost:3333/v1/workspace/usage
 {
   "plan": { "id": "unlocked", "name": "Unlocked", "limits": { "decisions_per_month": -1, "items_per_month": -1, "webhooks": -1 } },
   "period": "2026-10",
+  "plan_expires_at": null,
+  "suspended": false,
   "usage": { "decisions_per_month": 17, "items_per_month": 42, "webhooks": 1, "api_keys": 0, "storage_bytes": 1048576, "watchers": 1, "notification_channels": 0 },
   "items_by_status": { "pending": 5, "approved": 30, "rejected": 7 },
   "webhook_deliveries": { "queued": 0, "retrying": 1, "failed": 0 }

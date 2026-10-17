@@ -52,7 +52,8 @@ bodies, keys or tokens — see [Logs & tracing](/self-hosting/logs-and-tracing).
 Using or rotating the recovery key — from the dashboard or with the
 [`recovery-key` operator command](/self-hosting/operator-cli) on the host — signs out every
 other session of the workspace. A recovery key works once: signing in with it replaces it with
-a new one and creates a new admin API key, in one transaction.
+a new one and creates a new admin API key, in one transaction. On a plan with a key limit (Free),
+the old admin keys are revoked at the same time, so a lost key stops working.
 
 ## Dashboard sign-in (cloud)
 
@@ -78,8 +79,8 @@ a new one and creates a new admin API key, in one transaction.
   can bypass authorization. Every query is scoped by workspace.
 - Cookie-authenticated unsafe requests need a CSRF token. `/mcp` never accepts cookies.
 - Credential audit events (`api_key.*`, `session.*`, `recovery_key.*`, `device.*`,
-  `device_link.*`) are listed only for admins (dashboard sessions, local mode, keys with
-  `admin`).
+  `device_link.*`) are listed and exported (`/v1/events/export`) only for admins (dashboard
+  sessions, local mode, keys with `admin`).
 
 ## Decisions
 

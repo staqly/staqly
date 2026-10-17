@@ -63,7 +63,9 @@ scopes. Or use the CLI with the admin key from the previous step:
 staqly keys create --name "CI gate" --scope items:read,items:write
 ```
 
-Without `items:review` the pipeline can ask for approval but never approve itself. Store the
+Without `items:review` the pipeline can ask for approval but never approve itself. This is a
+second key, so it needs a plan with more than one API key (Free allows one; over the limit the
+create answers `402`). Store the
 key (`stk_...`) as a repository secret named `STAQLY_API_KEY` (**Settings → Secrets and
 variables → Actions** in GitHub).
 

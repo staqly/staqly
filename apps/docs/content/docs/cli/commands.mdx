@@ -145,7 +145,7 @@ staqly items list [--collection C] [--status pending] [--type image] [--q text] 
 staqly items get itm_123                  # fields, metadata, content, available actions
 staqly items create <collection> [--title --content TEXT|-|@file --stdin --file PATH --url --type --metadata '{json}' --meta k=v --source --external-ref --status --idempotency-key --expires-in 24h --editable title,content] [--wait [--timeout 30m]]
 staqly items approve itm_1 [itm_2 itm_3] [--feedback "<text>"|-m "<text>"] [--expected-version N]
-staqly items reject  itm_1 [itm_2 itm_3] [--feedback "<text>"]
+staqly items reject  itm_1 [itm_2 itm_3] [--feedback "<text>"|-m "<text>"] [--expected-version N]
 staqly items action  itm_1 regenerate [--feedback "make her smile"] [--payload '{"n":2}']
 staqly items update  itm_1 [--status completed] [--metadata-patch '{"url":"https://example.com","old":null}'] [--metadata '{"seed":42}'] [--title] [--content] [--url] [--collection] [--external-ref] [--expected-version]
 staqly items history itm_1                # activity, oldest first
@@ -309,7 +309,9 @@ staqly events export --type 'item.*' --collection "Blog posts" | jq -c 'select(.
 ```
 
 `export` streams every matching event, oldest first, with no page size. CSV columns are
-`created_at,id,type,actor_type,actor_id,actor_name,collection_id,item_id,data`.
+`created_at,id,type,actor_type,actor_id,actor_name,collection_id,item_id,data`. Credential and
+session audit events (`api_key.*`, `session.*`, `recovery_key.*`, `device*`) are included only
+for admin principals.
 
 | Flag | Type | Required | Description |
 |---|---|---|---|
@@ -337,7 +339,8 @@ staqly webhooks retry dlv_123
 staqly webhooks delete wh_123
 ```
 
-`create` prints the signing secret once. `--events` defaults to `*` (all events). See
+`create` prints the signing secret once. `--events` defaults to `*` (all events); an unknown
+event name or glob (a typo such as `item.aproved`) is refused with `422`. See
 [Webhooks](/automation/webhooks).
 
 `update` changes only the fields you pass:
@@ -374,7 +377,7 @@ staqly channels delete nch_oalirbz67y4m4cqxq5dw
 | `--name` | string | <Required /> | Channel name (required for `create`, optional for `update`) |
 | `--config` | `key=value` | No | One setting, repeatable. `port` and `priority` are numbers, `to` and `approver_user_ids` comma lists; `key=null` removes a setting on `update` |
 | `--config-json` | JSON | No | Settings as a JSON object; `-` reads stdin and `@path` a file, which keeps secrets out of your shell history. `--config` values are merged on top |
-| `--events` | string list | No | Event patterns; default `item.created` |
+| `--events` | string list | No | Event patterns; default `item.created`. Unknown patterns are refused with `422` |
 | `--collection` | string list | No | Only these collections (names or IDs, repeatable) |
 | `--all-collections` | boolean | No | `update` only: notify for every collection again |
 | `--digest` | duration | No | Batch events within this window into one message, e.g. `5m`; `0` sends immediately |

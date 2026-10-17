@@ -119,7 +119,8 @@ pnpm gen               # regenerate lib/api-types.ts from ../api/openapi.yaml
   hue in a component. Approve/Reject buttons match staqly.ai (neutral border,
   green/red text, Reject first); Failed is the one solid badge.
 * Must work and look good on phones (375–430 px), tablets and desktop, light
-  and dark; no horizontal page overflow; touch targets ≥ 44 px.
+  and dark; no horizontal page overflow; touch targets ≥ 40 px on touch
+  screens (`pointer-coarse:` variants in the primitives).
 * Focus and motion live in the primitives and `app/globals.css`: `--ring` is
   solid in light mode (a 1px `border-ring`/outline is ≥ 3:1), so a custom
   focus style needs `border-ring` or `outline-ring`, not only the soft
@@ -128,9 +129,10 @@ pnpm gen               # regenerate lib/api-types.ts from ../api/openapi.yaml
   their header, footer and close button for safe areas; floating content
   (menus, selects, popovers, tooltips) keeps 8 px from the screen edge.
 * Use shadcn/ui primitives from `components/ui`; feature components live in
-  `components/<feature>`; pages in `app/(app)/...`. Settings sections:
-  General, Plan & usage, Notifications (`components/notifications`), Data &
-  privacy, Backups, System.
+  `components/<feature>`; pages in `app/(app)/...`. Settings sections
+  (`components/settings/settings-nav.tsx`): General, Plan & usage, Data &
+  privacy, Backups (local or paid plans only), System. Notifications is its
+  own page (`/notifications`, `components/notifications`).
 * Notification channel secrets come back masked (`••••abcd`): show "•••• set"
   with Replace/Remove, never prefill them, and leave unchanged secrets out of
   PATCH bodies (`lib/channels.ts`).

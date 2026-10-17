@@ -52,6 +52,15 @@ status, dates). Searches use at most 16 distinct words. See
 Changing where a channel sends requires re-entering its secret in the same request. See
 [Notifications](/automation/notifications#managing-channels).
 </Accordion>
+<Accordion title="422 validation_failed: unknown event pattern (webhook or channel)">
+Webhook and notification-channel subscriptions must name events staqly knows: `*`, a family glob
+such as `item.*`, an event type from [Events](/api/events), or a custom action's event. A typo
+like `item.aproved` or `items.*` is refused instead of never matching.
+</Accordion>
+<Accordion title="422 validation_failed: image items need media">
+An `image` or `video` item needs a file (`media_id`, or `--file` with the CLI) or a `url`. Send
+one, or use another type such as `text`.
+</Accordion>
 <Accordion title="429 from a webhook or channel Send test button">
 Test sends are limited per API key or session: a burst of 5, then 10 per minute.
 </Accordion>

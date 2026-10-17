@@ -8,7 +8,11 @@ How to get data out of staqly, how long it is kept, and how to delete it.
 GET /v1/events/export?format=ndjson|csv&from=&to=&type=&type_prefix=&actor_type=&actor_id=&collection_id=&item_id=
 ```
 
-* Scope: `items:read`. The dashboard session works too.
+* Scope: `items:read`. The dashboard session works too. MCP: `export_events`.
+* Credential and session audit events (`api_key.*`, `session.*`,
+  `recovery_key.*`, `device*.*`) are included only for `admin` principals,
+  like in `GET /v1/events`.
+* Cloud: a paid-plan feature; on Free it answers `402 plan_limit_exceeded`.
 * Events come oldest first. The response is streamed in chunks, so any size of
   log can be exported without paging.
 * `from` is inclusive and `to` is exclusive. Both take RFC 3339 or
@@ -31,7 +35,8 @@ curl -H "Authorization: Bearer $KEY" \
 1. `POST /v1/workspace/export` (scope `admin`; dashboard sessions and local
    mode have it) returns `202` with a job `{id, status: "pending", ...}`. Only
    one export per workspace can be pending or running at a time. A second
-   request gets `409` with `details.export_id`.
+   request gets `409` with `details.export_id`. Cloud: paid plans only (`402`
+   on Free).
 2. `GET /v1/workspace/exports/{id}` reports the status: `pending`, `running`,
    `ready`, `failed` or `expired`. Once it is `ready`, it also has
    `download_url`.

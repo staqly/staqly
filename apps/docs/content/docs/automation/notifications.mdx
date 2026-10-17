@@ -229,9 +229,9 @@ In the dashboard each channel card shows its health (*Active*, *Paused*, *Failin
 *Disabled after failures*), its type and destination, whether decisions come back as
 *Buttons in chat* or *One-tap links*, the digest window and when it last sent. The switch
 pauses or enables it (**Re-enable** after automatic disabling), **Send test** sends a test
-message, **Deliveries** opens its delivery history, and the menu has **Edit** and **Delete**.
-In the form, required fields are marked with `*`, and invalid fields turn red (*Check the
-highlighted fields*). Stored secrets are never shown again: leave them as they are, or
+message, **Deliveries** opens its delivery history (refreshed every 5 s while open), and the menu
+has **Edit** and **Delete**. In the form, required fields are marked with `*`, and invalid fields
+turn red with the message under them. Stored secrets are never shown again: leave them as they are, or
 replace them.
 Over an API key this needs the **`channels:manage`** scope (or `admin`). Grant it to
 agent keys only deliberately, because channels hold secrets. Dashboard sessions and local mode have it

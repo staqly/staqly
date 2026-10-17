@@ -285,7 +285,7 @@ reason, never the response body.
 
 | Where | How |
 |---|---|
-| Dashboard | **Webhooks** → select a webhook to see its deliveries (event, status, attempts, response, error, next attempt); **Retry** re-queues any delivery that is not pending |
+| Dashboard | **Webhooks** → select a webhook to see its last 50 deliveries (event, status, attempts, response, error, next attempt), refreshed every 3 s while one is pending and every 15 s otherwise; **Retry** re-queues any delivery that is not pending |
 | <Method m="GET" path="/v1/webhook-deliveries" /> | e.g. `?webhook_id=wh_lv5rc7rttjnfwnnsn4ny&status=failed` |
 | <Method m="POST" path="/v1/webhook-deliveries/{id}/retry" /> | re-queue a finished delivery |
 | <Method m="POST" path="/v1/webhooks/{id}/test" /> | queue a `webhook.test` event to this webhook only |

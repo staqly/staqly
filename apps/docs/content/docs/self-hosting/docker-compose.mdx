@@ -105,7 +105,7 @@ repository root:
 |---|---|
 | `make check` (`pnpm check`) | Formatting, lint, types and unit tests of every package |
 | `make test` (`pnpm test`) | Unit and integration tests of every package |
-| `make test-api`, `make test-cli`, `make test-dashboard`, `make test-sdk`, `make test-sdk-python`, `make test-docs` | Tests of one package (`pnpm turbo run test --filter=@staqly/<name>`) |
+| `make test-api`, `make test-cli`, `make test-dashboard`, `make test-sdk`, `make test-sdk-python` | Tests of one package (`pnpm turbo run test --filter=@staqly/<name>`) |
 | `make test-e2e` (`pnpm test:e2e`) | End-to-end suite in `e2e/`: builds the image, starts an isolated `staqly-e2e` compose project (`compose.yml` + `compose.e2e.yml`, ports `13333`, `18080` and `19000`) and runs Vitest tests with the TypeScript SDK against it. `E2E_KEEP=1` leaves the stack running, `E2E_BUILD=0` reuses the built image |
 | `make gen` (`pnpm gen`) | Regenerates the sqlc queries, the dashboard API types and the TypeScript SDK schema |
 | `make lint-openapi` | Validates `apps/api/openapi.yaml` |

@@ -14,7 +14,7 @@ Go (module `github.com/staqly/staqly/apps/api`), chi, `modernc.org/sqlite`
 | `cmd/dashboard` | The dashboard alone in front of a remote API (`API_INTERNAL_URL`); the image and `staqly serve` embed it in `server` instead |
 | `cmd/mcp-stdio` | MCP over STDIO against the same DB (keyless locally, `STAQLY_API_KEY` in cloud) |
 | `internal/app` | **Domain services + authorization.** Every exported method takes a `Principal` and checks scopes |
-| `internal/httpapi` | Router, auth/CSRF/local-mode guard, idempotency, handlers, rate limit. **All integration tests live in `api_test.go`** |
+| `internal/httpapi` | Router, auth/CSRF/local-mode guard, idempotency, handlers, rate limit. Integration tests in `*_test.go`, harness (`newEnv`, `newLocal`) in `api_test.go` |
 | `internal/mcpserver` | MCP tool definitions (thin wrappers over `internal/app`) |
 | `internal/db` | sqlc output + `items_search.go` (hand-written FTS5/keyset query) |
 | `internal/store` | Open SQLite (pragmas in DSN), goose migrations, `VACUUM INTO` backup |
@@ -39,9 +39,9 @@ sqlc generate                       # after editing db/queries or migrations (~/
   triggers.
 * **New endpoint**: service method in `internal/app` (takes `Principal`,
   calls `p.require(scope)` first, returns `*app.Error` for client errors) →
-  handler in `internal/httpapi/handlers.go` → route in `server.go` → OpenAPI →
-  test in `api_test.go`. If agents need it, add an MCP tool in
-  `internal/mcpserver` calling the same method.
+  handler in `internal/httpapi/handlers.go` → route in `server.go` (or a
+  `routes_*.go`) → OpenAPI → test in `internal/httpapi/*_test.go`. If agents
+  need it, add an MCP tool in `internal/mcpserver` calling the same method.
 * **Writes go through `s.tx`** (BEGIN IMMEDIATE). Domain changes that
   matter to integrations call `s.emit` inside the same transaction (event +
   webhook outbox rows). `tx` wakes the worker after commit.

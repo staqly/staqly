@@ -42,7 +42,8 @@ DSN pragmas apply to every pooled connection: `journal_mode=WAL`,
 `foreign_keys=ON`, `busy_timeout=10000`, `synchronous=NORMAL`, and
 `_txlock=immediate` so write transactions take the lock up front (no
 `SQLITE_BUSY` on lock upgrade). Timestamps are fixed-width ISO-8601 UTC text,
-so string comparison equals time order.
+so string comparison equals time order. `PRAGMA optimize` runs on open and
+daily (with the retention worker) so the query planner has statistics.
 
 Writes are serialised in the process before they reach SQLite: `s.tx` and
 single write statements (`Service.W`, sqlc `:exec` queries) take a one-slot
@@ -58,7 +59,9 @@ happens becomes **503** `busy` with `Retry-After`, never 500. Never call
 
 JSON columns are `TEXT` with
 `json_valid` checks; critical fields (status, type, collection, timestamps) are
-relational columns with indexes.
+relational columns with indexes. Worker sweeps have partial indexes too, e.g.
+`items_processing` (`updated_at WHERE status = 'processing'`) for the
+processing-timeout check that runs on every worker pass.
 
 Migrations are embedded and applied at startup; each goose migration runs in
 its own transaction, so an interrupted startup leaves the schema at the last
@@ -82,7 +85,7 @@ webhooks(id, workspace_id, url, secret, events JSON, collection_ids JSON, active
 webhook_deliveries(id, webhook_id, event_id, status, attempts, next_attempt_at, last_*; UNIQUE(webhook_id,event_id))
 idempotency_keys(workspace_id, principal_id, key, request_hash, status_code, response_body)
 usage_counters(workspace_id, period YYYY-MM, metric, count)
-device_links, watchers, watcher_seen, notification_channels, notification_outbox,
+agents, device_links, watchers, watcher_collections, watcher_seen, notification_channels, notification_outbox,
 decision_links, workspace_exports, stripe_events(id)   -- Stripe events applied once
 ```
 
@@ -194,7 +197,7 @@ public (rate-limited) unless `SETUP_TOKEN` is set.
 | API key `stk_...` (256-bit) | SHA-256 hash + 6-char display prefix | REST + MCP, scoped |
 | Session cookie (256-bit) | SHA-256 hash | Dashboard; HttpOnly, SameSite=Lax, `Secure` (`COOKIE_SECURE`, default `true` in cloud mode), 30-day expiry (`SESSION_TTL`), revocable |
 | CSRF token | per session | Required in `X-CSRF-Token` for cookie-authenticated unsafe requests |
-| Recovery key (200-bit) | SHA-256 hash | Only `POST /v1/sessions/recover`, single-use: a recovery swaps in a new recovery key and creates a new admin API key. Rotated from a dashboard session or `server recovery-key` on the host. Recovering or rotating signs out every other session |
+| Recovery key (200-bit) | SHA-256 hash | Only `POST /v1/sessions/recover`, single-use: a recovery swaps in a new recovery key and creates a new admin API key (on key-limited plans it revokes the old `admin` keys). Rotated from a dashboard session or `server recovery-key` on the host. Recovering or rotating signs out every other session |
 
 High-entropy random secrets make a plain SHA-256 an adequate verifier (no
 password hashing needed). `/mcp` accepts only bearer keys, never cookies.

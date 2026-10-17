@@ -71,7 +71,8 @@ Optional demo data from a checkout: `make seed` (`scripts/seed.sh`, against
   workspace; the `admin` key from signup signs browsers in to the dashboard), a
   single-use **recovery key** and browser sessions;
 * **plans** limit each workspace — Free (50 approvals/month, unlimited items, 3 webhooks,
-  1 key, 1 GB, 5 MB files) and Pro $30 (unlimited, 100 GB, 100 MB files; new
+  1 key, 1 GB, 5 MB files, no exports) and Pro $30 (unlimited, 100 GB, 100 MB
+  files, backups and data export; new
   workspaces get a 7-day Pro trial, then are read-only until paid or switched
   to Free). Over a limit the API answers `402 plan_limit_exceeded`. Workspaces
   upgrade by card through Stripe Checkout when the operator sets the `STRIPE_*`
@@ -86,10 +87,11 @@ Details, deployment and moving local data: [docs/cloud.md](cloud.md).
 The dashboard works on phones and tablets. **Connect a device** shows a QR
 code; scanning it opens staqly on the phone already signed in. The link
 works once, expires in 5 minutes, and the device appears under
-*Settings → Devices*, where you can revoke it. For phones on your Wi-Fi set
-`PUBLIC_DASHBOARD_URL=http://<LAN IP>:8080` (`-e` on `docker run`, or in the
-environment of `staqly serve --expose`; see
-[docs/cloud.md](cloud.md#connect-a-device-qr)).
+*Settings → Devices*, where you can revoke it. With `staqly serve --expose` a
+dashboard opened as `localhost` puts this computer's Wi-Fi address in the QR on
+its own; with Docker the dialog asks for that address once (or set
+`PUBLIC_DASHBOARD_URL=http://<LAN IP>:8080`); see
+[docs/cloud.md](cloud.md#connect-a-device-qr).
 
 ## Concepts
 
@@ -191,9 +193,8 @@ Errors are `{"error":{"code","message","fields","details"}}`. Unsafe requests ac
 `watchers:manage`, `channels:manage`, `admin`.
 Creating content (`items:write`) is separate from deciding on it
 (`items:review`), so a generator agent cannot approve its own output. The key
-created at setup has every scope except `admin` and
-`channels:manage` (channels hold secrets); manage keys under
-**API keys** in the sidebar. Only SHA-256 hashes of keys are stored. In local
+created at signup is the "Admin key" (scope `admin`, which signs browsers in);
+give agents their own scoped keys under **API keys** in the sidebar. Only SHA-256 hashes of keys are stored. In local
 mode every local client has full access.
 
 ## MCP (Claude Code, Codex, other agents)
@@ -262,8 +263,9 @@ container is covered in [docs/n8n.md](n8n.md).
 
 ## Webhooks
 
-Configure under **Webhooks** or `POST /v1/webhooks` with event patterns
-(`"*"`, `"item.*"`, `"item.approved"`) and an optional collection filter.
+Configure under **Webhooks** (Automation in the sidebar) or `POST /v1/webhooks`
+with event patterns (`"*"`, `"item.*"`, `"item.approved"`; 1-50, unknown
+patterns such as `item.aproved` are `422`) and an optional collection filter.
 
 ```
 POST <your url>

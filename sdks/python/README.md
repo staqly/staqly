@@ -169,6 +169,8 @@ staqly.items.reject(item.id, feedback="Too dark", follow_up="regenerate")  # rej
 staqly.items.update(item.id, tags=["client-a", "urgent"])  # labels, any status, no new version
 staqly.items.list(decision=["approved"], run="failed", tag="client-a", archived=False)
 staqly.items.unarchive(item.id)  # back to review, its run or its decision
+# rewrite the AI summary (409 not_configured without AI)
+staqly.items.summarize(item.id, context="focus on tone")
 
 staqly.items.history(item.id)  # events, newest first
 staqly.items.versions(item.id)  # snapshots before each change
@@ -182,7 +184,8 @@ for it in staqly.items.iterate(status="pending", created_after=date(2026, 10, 1)
 
 Statuses: `draft`, `pending` (awaiting review), `approved`, `rejected`, `expired`, `processing`,
 `completed`, `failed`, `archived`. They are available as `staqly.models.ItemStatus`. `update()`
-cannot set `approved` or `rejected`. Use `approve()` and `reject()` for that.
+cannot set `approved` or `rejected`. Use `approve()` and `reject()` for that. Image and video
+items need a file (`media_id` or `url`); without one the API answers 422 (`ValidationError`).
 
 ## Waiting for a human decision
 
@@ -268,7 +271,7 @@ staqly.media.url(media.id)  # absolute URL (needs auth)
 staqly.media.delete(media.id)
 ```
 
-Uploads are read into memory. Per-file limits depend on the plan: 25 MB on Free.
+Uploads are read into memory. Per-file limits depend on the plan: 5 MB on Free, 100 MB on Pro.
 
 ## Events
 
@@ -283,7 +286,7 @@ for ev in staqly.events.iterate(item_id=item.id):
 ```python
 hook = staqly.webhooks.create(
     "https://my-app.example.com/staqly",
-    events=["item.approved", "item.rejected", "item.expired"],  # or "*" / "item.*"
+    events=["item.approved", "item.rejected", "item.expired"],  # or "*" / "item.*"; unknown patterns: 422
     collection_ids=[col.id],  # empty = all collections
 )
 hook.secret  # whsec_... keep it to verify deliveries
@@ -418,18 +421,23 @@ job = staqly.exports.export_workspace("workspace.zip", timeout=600)  # create, w
 staqly.items.purge(item.id)  # PurgeResult(item_id, events_deleted, media_deleted)
 ```
 
-Only one workspace export can run at a time. Starting another raises `ConflictError` with
-`details["export_id"]`. A failed or expired job raises `ExportFailedError`.
+Exports need a plan with data export (not Free: `PlanLimitError`, `limit == "data_export"`). The
+event export needs `items:read`; without `admin` it leaves out credential and session audit events
+(`api_key.*`, `session.*`, `recovery_key.*`, device links). Only one workspace export can run at a
+time. Starting another raises `ConflictError` with `details["export_id"]`. A failed or expired job
+raises `ExportFailedError`.
 
 ## Workspace, plans, billing and API keys
 
 ```python
 staqly.workspace.get()
 staqly.workspace.rename("Acme agents")  # admin
-u = staqly.workspace.usage()  # u.plan.limits, u.usage.items_per_month, u.period
+u = staqly.workspace.usage()  # u.plan.limits, u.usage, u.period, u.items_by_status, u.webhook_deliveries
 staqly.workspace.set_plan("free")  # admin, cloud: switch to Free (lifts a trial suspension)
 staqly.workspace.rotate_recovery_key().recovery_key  # dashboard session only; shown once
 staqly.workspace.delete(confirm="Acme agents")  # cloud, dashboard session only; permanent
+staqly.workspace.agents()  # admin: MCP clients and API connections seen, latest first
+staqly.workspace.forget_agent(agent_id)  # admin; it comes back if it talks to the workspace again
 
 # Pro subscription through Stripe (cloud, admin); open the URLs in a browser
 staqly.billing.get()  # enabled, plan, subscription_status, plan_expires_at, suspended, has_customer

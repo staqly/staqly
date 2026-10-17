@@ -27,7 +27,10 @@ First public release: a rewrite of the internal 1.0.0 client.
   workspace export jobs (`exportWorkspace`, `waitForWorkspaceExport`, `downloadWorkspaceExport`);
   `items.purge()`; `saveResponse()` in `@staqly/sdk/node`.
 - `items.upload()` (multipart create), `items.search()`, `items.bulkAction()`, `items.versions()`,
-  `items.history()`, `items.listActions()`, `items.reportResult()`.
+  `items.history()`, `items.listActions()`, `items.reportResult()`, `items.unarchive()`,
+  `items.summarize()`; `expected_version` on `approve`/`reject`/`action` (409 on a stale version).
+- `workspace.agents()` and `workspace.forgetAgent()` (`/v1/agents`, admin); `workspace.usage()`
+  includes `items_by_status` and `webhook_deliveries`.
 - `items.waitForDecision()` on the server long-poll (`/v1/items/{id}/wait`), `items.wait()`.
 - `requestApproval()` and `requiresApproval()` approval gates (support `expires_in`, `editable`).
 - Auto-paginating async iterators: `items.iterate()`, `events.iterate()`.

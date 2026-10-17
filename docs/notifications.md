@@ -18,7 +18,8 @@ your webhooks all fire as usual. The actor is recorded as `Telegram: @name`,
 
 ## Managing channels
 
-You can manage channels in the dashboard or through the API (scope
+You can manage channels in the dashboard (*Notifications*, under Automation in
+the sidebar, `/notifications`) or through the API (scope
 `channels:manage`; API keys with `admin` also work):
 
 ```bash
@@ -37,7 +38,9 @@ curl -X POST $API/v1/notification-channels -H "Authorization: Bearer $KEY" \
   review (`item.created`, which only fires when the new item is `pending`).
   You can also add others,
   for example `item.approved`, `item.rejected`, `watcher.degraded` or
-  `item.*`.
+  `item.*`. A channel takes 1-50 patterns, each `*`, a glob inside a known
+  family (`item.*`, `item.*_requested`), a known event type or a custom
+  action's event; anything else (e.g. the typo `item.aproved`) is **422**.
 * **collection_ids.** Limits the channel to these collections. Leave it empty
   for all collections.
 * **digest_window_seconds.** Collects everything that arrives within the
