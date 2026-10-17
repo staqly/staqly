@@ -1037,7 +1037,8 @@ export function Inbox() {
   const bulkBar = selected.size > 0 && (
     <div
       // Black in both themes (the dark class gives its buttons dark styles), clear of the shortcuts footer.
-      className="dark fixed bottom-16 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-1.5 rounded-xl bg-black p-1.5 pl-3 text-sm text-foreground shadow-2xl ring-1 ring-white/15 animate-in fade-in slide-in-from-bottom-2"
+      // Centred over the content, not the viewport: next to the sidebar (full or icons) from md up.
+      className="dark fixed bottom-16 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center md:left-[calc(50%+var(--sidebar-width)/2)] md:max-w-[calc(100vw-var(--sidebar-width)-2rem)] md:group-has-data-[collapsible=icon]/sidebar-wrapper:left-[calc(50%+var(--sidebar-width-icon)/2)] md:group-has-data-[collapsible=icon]/sidebar-wrapper:max-w-[calc(100vw-var(--sidebar-width-icon)-2rem)] gap-1.5 rounded-xl bg-black p-1.5 pl-3 text-sm text-foreground shadow-2xl ring-1 ring-white/15 animate-in fade-in slide-in-from-bottom-2"
       data-testid="bulk-bar"
       role="toolbar"
       aria-label="Bulk actions"

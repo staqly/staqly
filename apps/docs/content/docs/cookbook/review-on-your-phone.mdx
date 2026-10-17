@@ -105,8 +105,8 @@ apply (Regenerate, for example, once an item is rejected). After **Approve**, th
 
 ## Troubleshooting
 
-- **The QR code points at `localhost`:** `PUBLIC_DASHBOARD_URL` isn't set. The dialog shows a hint
-  when this happens.
+- **The QR code points at `localhost`:** type your computer's Wi-Fi address in the dialog (Docker),
+  start with `staqly serve --expose`, or set `PUBLIC_DASHBOARD_URL`.
 - **The phone can't open the link:** check `PUBLIC_DASHBOARD_URL` uses your computer's LAN IP, that
   both devices are on the same network, and that no firewall blocks port `8080`.
 - **"Already used or expired":** each link signs in one browser within 5 minutes. Create a new

@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"net"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -54,12 +56,44 @@ func (s *Service) CreateDeviceLink(ctx context.Context, p Principal, origin stri
 	if err != nil {
 		return DeviceLink{}, err
 	}
+	if s.Cfg.DashboardExposed && p.Kind != PrincipalSystem && isLoopbackHost(u.Hostname()) {
+		// Opened as localhost: point the phone at this computer's address on the network instead
+		// (`connect-link` is opened on this computer, so it keeps localhost).
+		if ip := LANIP(); ip != "" {
+			if port := u.Port(); port != "" {
+				ip = net.JoinHostPort(ip, port)
+			}
+			u.Host = ip
+			base = u.String()
+		}
+	}
 	link := DeviceLink{URL: strings.TrimRight(base, "/") + "/connect#" + token, ExpiresAt: exp, Reachable: !isLoopbackHost(u.Hostname())}
 	if !link.Reachable && p.Kind != PrincipalSystem {
-		link.Hint = "This address only works on this computer. To connect a phone on your network, add " +
-			"PUBLIC_DASHBOARD_URL=http://<this computer's LAN IP>:8080 to .env and run `docker compose up -d`."
+		link.Hint = "This address only works on this computer. Open the dashboard at this computer's network " +
+			"address (http://<its IP on your Wi-Fi>:8080) and create the link there."
+		if !s.Cfg.DashboardExposed {
+			link.Hint = "The dashboard only listens on this computer. Restart it with `staqly serve --expose` to open it from a phone."
+		}
 	}
 	return link, nil
+}
+
+// LANIP is this computer's private IPv4 address on the local network, or "" when unknown. Inside a container
+// the address is the container's own, which phones can't reach, so it is not used there. A var for tests.
+var LANIP = func() string {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return ""
+	}
+	// No packet is sent: dialing UDP only picks the interface that routes outward.
+	c, err := net.Dial("udp4", "192.0.2.1:9")
+	if err != nil {
+		return ""
+	}
+	defer c.Close()
+	if a, ok := c.LocalAddr().(*net.UDPAddr); ok && a.IP.IsPrivate() {
+		return a.IP.String()
+	}
+	return ""
 }
 
 func isLoopbackHost(h string) bool {

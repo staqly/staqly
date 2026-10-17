@@ -438,7 +438,7 @@ export async function refreshEventLists(qc: QueryClient) {
   )
 }
 
-async function refreshEventList(qc: QueryClient, queryKey: readonly unknown[]) {
+export async function refreshEventList(qc: QueryClient, queryKey: readonly unknown[]) {
   const q = qc.getQueryCache().find<InfiniteData<EventPage>>({ queryKey, exact: true })
   const data = q?.state.data
   const invalidate = () => qc.invalidateQueries({ queryKey, exact: true })

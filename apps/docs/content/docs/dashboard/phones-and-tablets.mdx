@@ -12,26 +12,18 @@ one-card-at-a-time review with swipe gestures, and touch targets of at least 44 
 
 ## Before you start: open the dashboard to your network
 
-By default the dashboard only answers on the computer running staqly. To reach it from a phone
-on the same Wi-Fi, open it to your network and tell staqly your computer's LAN address (for
-example `192.168.1.23`), so QR codes point somewhere the phone can reach.
+The phone must reach the computer running staqly over the same Wi-Fi. Usually there is nothing
+to set up:
 
-```bash tab="staqly serve"
-PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose
-```
+- **Docker** publishes the dashboard on your network (`-p 8080:8080`). The container can't see
+  your computer's Wi-Fi address, so the first time the dialog asks for it (for example
+  `192.168.1.23`) and remembers it in this browser.
+- **`staqly serve`** answers only on the computer itself until you start it with
+  `staqly serve --expose`. Then the QR code uses your computer's Wi-Fi address by itself.
 
-```bash tab="Docker"
-# -p 8080:8080 already publishes the dashboard on your network; recreate the container with the URL
-docker rm -f staqly
-docker run -d --name staqly ... -e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 ghcr.io/staqly/staqly:latest
-```
-
-With Docker, use your full `docker run` command from [Run with Docker](/self-hosting/docker) and add
-the `-e` line; the data stays in the volume.
-
-Without `PUBLIC_DASHBOARD_URL`, the QR code uses the address you opened the dashboard at. If that is
-`localhost`, the code only works on the computer itself; the dialog tells you so and shows a
-hint.
+To pin the address for every browser, set `PUBLIC_DASHBOARD_URL` (for example
+`http://192.168.1.23:8080`, or a name like `http://staqly.home:8080`): `-e PUBLIC_DASHBOARD_URL=...`
+on your `docker run` command, or `PUBLIC_DASHBOARD_URL=... staqly serve --expose`.
 
 ## Connect your phone
 

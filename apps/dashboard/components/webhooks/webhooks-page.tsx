@@ -162,7 +162,8 @@ function DeliveriesTable({ webhookId }: { webhookId: string }) {
   const deliveries = useQuery({
     queryKey: qk.deliveries(webhookId),
     queryFn: async () => (await api.deliveries({ webhook_id: webhookId, limit: 50 })).data ?? [],
-    refetchInterval: 3000,
+    // Fast while something waits to be delivered, slower otherwise (new deliveries still show up).
+    refetchInterval: (q) => ((q.state.data ?? []).some((d) => d.status === 'pending') ? 3000 : 15_000),
   })
   const retry = useMutation({
     mutationFn: (id: string) => api.retryDelivery(id),
@@ -581,7 +582,7 @@ export function WebhooksPage() {
                       {selected.url}
                     </span>
                   </h2>
-                  <span className="text-xs text-muted-foreground">Refreshes every 3s</span>
+                  <span className="text-xs text-muted-foreground">Refreshes automatically</span>
                 </div>
                 <DeliveriesTable webhookId={selected.id} />
               </section>

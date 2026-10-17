@@ -10,6 +10,7 @@ import { CopyButton } from '@/components/common/copy-button'
 import { ErrorState } from '@/components/common/error-state'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -45,6 +46,43 @@ function withCode(text: string) {
       part
     ),
   )
+}
+
+const LAN_HOST_KEY = 'staqly.lan-host'
+
+/** The link with this computer's network address (typed once, kept in this browser) in place of localhost. */
+function useLanHost() {
+  const [host, setHost] = useState(() => {
+    try {
+      return localStorage.getItem(LAN_HOST_KEY) ?? ''
+    } catch {
+      return ''
+    }
+  })
+
+  function save(value: string) {
+    setHost(value)
+
+    try {
+      localStorage.setItem(LAN_HOST_KEY, value)
+    } catch {}
+  }
+
+  return [host, save] as const
+}
+
+function withHost(url: string, host: string) {
+  const h = host.trim()
+
+  if (!/^[a-z0-9][a-z0-9.-]*$/i.test(h) || /^(localhost|127\.)/i.test(h)) {
+    return null
+  }
+
+  const u = new URL(url)
+
+  u.hostname = h
+
+  return u.toString()
 }
 
 function formatLeft(ms: number) {
@@ -84,7 +122,14 @@ function ConnectDeviceBody() {
     mutate()
   }, [mutate])
 
+  const [lanHost, setLanHost] = useLanHost()
   const data = link.data
+  // The server can't see this computer's address from inside a container: the reader types it once.
+  // ponytail: the --expose hint (binary, dashboard on loopback) is the one case typing an address can't fix.
+  const askHost = !!data && !data.reachable && !data.hint?.includes('--expose')
+  const lanUrl = askHost && data ? withHost(data.url, lanHost) : null
+  const url = lanUrl ?? data?.url ?? ''
+  const reachable = !!data?.reachable || !!lanUrl
   const now = useNow(!!data)
   const left = data ? new Date(data.expires_at).getTime() - now : 0
   const expired = !!data && left <= 0
@@ -104,14 +149,31 @@ function ConnectDeviceBody() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connect-device">
-      {!data.reachable && (
+      {askHost && (
+        <Callout role="note" data-testid="unreachable-hint" icon={WifiOff}>
+          <span className="block font-medium">
+            {lanUrl ? 'Phone and computer must be on the same Wi-Fi' : "Your phone can't reach localhost"}
+          </span>
+          <label htmlFor="lan-host" className="mt-1 block text-[13px] leading-relaxed">
+            Enter this computer&apos;s IP address on your Wi-Fi (macOS: System Settings, Wi-Fi, Details; Windows:{' '}
+            <code className="rounded bg-amber-500/15 px-1 font-mono text-[0.92em]">ipconfig</code>).
+          </label>
+          <Input
+            id="lan-host"
+            className="mt-2 bg-background font-mono"
+            inputMode="decimal"
+            placeholder="192.168.1.20"
+            value={lanHost}
+            onChange={(e) => setLanHost(e.target.value)}
+            data-testid="lan-host"
+          />
+        </Callout>
+      )}
+      {!data.reachable && !askHost && (
         <Callout role="note" data-testid="unreachable-hint" icon={WifiOff}>
           <span className="block font-medium">Your phone can&apos;t reach this computer yet</span>
           <span className="mt-1 block text-[13px] leading-relaxed whitespace-pre-line">
-            {withCode(
-              data.hint ||
-                'This link points at localhost, so only this computer can open it. Open the dashboard to your network and set PUBLIC_DASHBOARD_URL — see the docs.',
-            )}
+            {withCode(data.hint ?? '')}
           </span>
         </Callout>
       )}
@@ -120,12 +182,12 @@ function ConnectDeviceBody() {
         <div
           className={cn(
             'rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition',
-            (expired || !data.reachable) && 'opacity-40',
+            (expired || !reachable) && 'opacity-40',
             expired && 'blur-[2px]',
           )}
         >
           <QRCodeSVG
-            value={data.url}
+            value={url}
             size={200}
             level="M"
             marginSize={0}
@@ -157,10 +219,10 @@ function ConnectDeviceBody() {
       </div>
 
       <div className="flex items-center gap-1 rounded-lg border bg-muted/40 py-1 pr-1 pl-3">
-        <span className="min-w-0 flex-1 truncate font-mono text-xs" title={data.url} data-testid="device-url">
-          {data.url}
+        <span className="min-w-0 flex-1 truncate font-mono text-xs" title={url} data-testid="device-url">
+          {url}
         </span>
-        <CopyButton value={data.url} label="Copy device link" />
+        <CopyButton value={url} label="Copy device link" />
       </div>
 
       <Callout tone="danger" icon={ShieldAlert} className="text-[13px]">

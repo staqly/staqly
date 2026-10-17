@@ -110,7 +110,8 @@ describe('connect a device dialog', () => {
     await waitFor(() => expect(api.find('POST', '/v1/device-links')).toHaveLength(2))
   })
 
-  it('shows the server hint when the link is not reachable from other devices', async () => {
+  it('puts the typed network address in the code when the link points at localhost', async () => {
+    localStorage.removeItem('staqly.lan-host')
     mockApi({
       'POST /v1/device-links': {
         status: 201,
@@ -118,7 +119,29 @@ describe('connect a device dialog', () => {
           ...LINK,
           url: 'http://localhost:8080/connect#tok_abc',
           reachable: false,
-          hint: "Phones can't reach this address yet: add PUBLIC_DASHBOARD_URL=http://<this computer's LAN IP>:8080 to .env and run `docker compose up -d`.",
+          hint: 'Open the dashboard at its address.',
+        },
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ConnectDeviceDialog open onOpenChange={() => {}} />, { mode: 'local' })
+    await user.type(await screen.findByTestId('lan-host'), '192.168.1.20')
+
+    expect(screen.getByTestId('device-url')).toHaveTextContent('http://192.168.1.20:8080/connect#tok_abc')
+    expect(screen.getByTestId('unreachable-hint')).toHaveTextContent(/same Wi-Fi/)
+    expect(localStorage.getItem('staqly.lan-host')).toBe('192.168.1.20')
+  })
+
+  it('shows the server hint when the dashboard only listens on this computer', async () => {
+    mockApi({
+      'POST /v1/device-links': {
+        status: 201,
+        body: {
+          ...LINK,
+          url: 'http://localhost:8080/connect#tok_abc',
+          reachable: false,
+          hint: 'The dashboard only listens on this computer. Restart it with `staqly serve --expose` to open it from a phone.',
         },
       },
     })
@@ -126,10 +149,8 @@ describe('connect a device dialog', () => {
     const hint = await screen.findByTestId('unreachable-hint')
 
     expect(hint).toHaveTextContent(/can't reach this computer/i)
-    expect(hint).toHaveTextContent(
-      "Phones can't reach this address yet: add PUBLIC_DASHBOARD_URL=http://<this computer's LAN IP>:8080 to .env and run docker compose up -d.",
-    )
-    expect(within(hint).getByText('docker compose up -d').tagName).toBe('CODE')
+    expect(within(hint).getByText('staqly serve --expose').tagName).toBe('CODE')
+    expect(screen.queryByTestId('lan-host')).not.toBeInTheDocument()
     expect(screen.getByText(QR_WARNING)).toBeInTheDocument()
   })
 })

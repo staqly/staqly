@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   Activity as ActivityIcon,
@@ -29,7 +30,7 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { eventsExportUrl, type Collection, type EventExportQuery, type EventQuery } from '@/lib/api'
-import { useCollections, useEventsInfinite, useMode } from '@/lib/queries'
+import { qk, refreshEventList, useCollections, useEventsInfinite, useMode } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
 import { AuditEventList } from './audit-event'
@@ -302,6 +303,7 @@ export function ActivityFeed() {
   }
   const query: EventQuery = { ...exportQuery, limit: 50 }
   const events = useEventsInfinite(query)
+  const qc = useQueryClient()
   const filtered = Object.values(exportQuery).some(Boolean)
   // useMemo: a fresh array would re-render the whole list (and the page around it) on every render.
   const list = useMemo(() => events.data?.pages.flatMap((p) => p.data) ?? [], [events.data])
@@ -371,7 +373,13 @@ export function ActivityFeed() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" size="sm" onClick={() => events.refetch()} disabled={events.isFetching}>
+            <Button
+              variant="outline"
+              size="sm"
+              // Only new events: a refetch would reload every page already loaded, one after another.
+              onClick={() => void refreshEventList(qc, qk.events(query))}
+              disabled={events.isFetching}
+            >
               <RefreshCw className={events.isFetching ? 'animate-spin' : undefined} /> Refresh
             </Button>
           </>

@@ -62,12 +62,11 @@ Docker: run `docker exec staqly server connect-link` and open the printed link.
 Links expire after 5 minutes and work once.
 </Accordion>
 <Accordion title="Phone: the dashboard or QR link doesn't open">
-The phone must reach your computer's LAN address. Binary: start with
-`PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose` (use your computer's LAN IP;
-without `--expose` the dashboard only listens on `127.0.0.1`). Docker: recreate the
-container with `-e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080` (see
-[Run with Docker](/self-hosting/docker#settings)). In both
-cases the phone must be on the same network and port 8080 must not be blocked by a firewall.
+The phone must reach your computer's LAN address. Binary: start with `staqly serve --expose`
+(without it the dashboard only listens on `127.0.0.1`); the QR code then uses your Wi-Fi address.
+Docker: type your computer's Wi-Fi address in the Connect a device dialog, or set
+`-e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080` (see [Run with Docker](/self-hosting/docker#settings)).
+In both cases the phone must be on the same network and port 8080 must not be blocked by a firewall.
 See [Phones & tablets](/dashboard/phones-and-tablets).
 </Accordion>
 <Accordion title="402 plan_limit_exceeded (cloud)">

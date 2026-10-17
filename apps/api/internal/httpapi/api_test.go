@@ -1537,6 +1537,32 @@ func TestConnectDeviceLocalMode(t *testing.T) {
 	if link3["reachable"] != false || link3["hint"] == nil {
 		t.Fatalf("unreachable link: %v", link3)
 	}
+	// An exposed dashboard opened as localhost: the link uses this computer's address on the network.
+	orig := app.LANIP
+	t.Cleanup(func() { app.LANIP = orig })
+	svc.Cfg.DashboardExposed = true
+	app.LANIP = func() string { return "192.168.1.7" }
+	_, link4 := call(http.DefaultClient, "POST", "/v1/device-links", "{}", func(r *http.Request) { r.Header.Set("Origin", "http://localhost:8080") })
+	if link4["reachable"] != true || !strings.HasPrefix(link4["url"].(string), "http://192.168.1.7:8080/connect#") {
+		t.Fatalf("LAN link: %v", link4)
+	}
+	// A phone opening that address (unknown to the config) is signed in by the link.
+	jar4, _ := cookiejar.New(nil)
+	phone4 := &http.Client{Jar: jar4}
+	lanHdr := func(r *http.Request) { r.Header.Set("X-Forwarded-Host", "192.168.1.7:8080") }
+	token4 := strings.SplitN(link4["url"].(string), "#", 2)[1]
+	if code, out := call(phone4, "POST", "/v1/device-links/redeem", `{"token":"`+token4+`"}`, lanHdr); code != 201 {
+		t.Fatalf("LAN redeem: %d %v", code, out)
+	}
+	if code, _ := call(phone4, "GET", "/v1/collections", "", lanHdr); code != 200 {
+		t.Fatalf("LAN phone read: %d", code)
+	}
+	// No address found (in a container): unreachable, with a hint that needs no checkout.
+	app.LANIP = func() string { return "" }
+	_, link5 := call(http.DefaultClient, "POST", "/v1/device-links", "{}", func(r *http.Request) { r.Header.Set("Origin", "http://localhost:8080") })
+	if hint, _ := link5["hint"].(string); link5["reachable"] != false || strings.Contains(hint, ".env") || strings.Contains(hint, "compose") {
+		t.Fatalf("container link: %v", link5)
+	}
 }
 
 func TestConnectDeviceCloudMode(t *testing.T) {
