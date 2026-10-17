@@ -490,6 +490,13 @@ function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/webhooks')} tooltip="Webhooks">
+                  <Link href="/webhooks" onClick={close}>
+                    <Webhook /> <span>Webhooks</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -514,13 +521,6 @@ function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/webhooks')} tooltip="Webhooks">
-                  <Link href="/webhooks" onClick={close}>
-                    <Webhook /> <span>Webhooks</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
