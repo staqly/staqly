@@ -40,11 +40,17 @@ export default async function UseCasePage({ params }: Props) {
       <PageHero
         eyebrow={
           <>
-            <Link href="/" className="hover:text-foreground">
+            <Link
+              href="/"
+              className="hover:text-foreground pointer-coarse:-my-2.5 pointer-coarse:inline-block pointer-coarse:py-2.5"
+            >
               staqly
             </Link>{' '}
             ›{' '}
-            <Link href="/use-cases" className="hover:text-foreground">
+            <Link
+              href="/use-cases"
+              className="hover:text-foreground pointer-coarse:-my-2.5 pointer-coarse:inline-block pointer-coarse:py-2.5"
+            >
               Use cases
             </Link>
           </>
@@ -88,10 +94,10 @@ export default async function UseCasePage({ params }: Props) {
                 <li key={href}>
                   <a
                     href={DOCS + href}
-                    className="group -mx-2 flex items-center justify-between rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="group -mx-2 flex items-center justify-between rounded-lg px-2 py-1.5 text-sm pointer-coarse:py-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     {label}
-                    <ArrowRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                    <ArrowRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100" />
                   </a>
                 </li>
               ))}

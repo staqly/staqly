@@ -1,21 +1,42 @@
 'use client'
 
-import { Suspense, use, useId, useSyncExternalStore } from 'react'
+import { Suspense, use, useEffect, useId, useRef, useState } from 'react'
 
 /**
  * Client-side Mermaid renderer (works with static export: nothing is rendered
  * at build time). Themed with the staqly graphite + green palette; the docs are dark only.
  */
 export function Mermaid({ chart }: { chart: string }) {
-  const isClient = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  )
+  // Mermaid is ~0.5 MB of JS: fetch and run it only once a diagram comes near the screen, not on every page load.
+  // Starts false on the server and in the first client render, so hydration matches.
+  const [near, setNear] = useState(false)
+  const placeholderRef = useRef<HTMLDivElement>(null)
 
-  const placeholder = <div className="sq-mermaid sq-mermaid-placeholder" aria-hidden />
+  useEffect(() => {
+    const el = placeholderRef.current
 
-  if (!isClient) {
+    if (near || !el) {
+      return
+    }
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true)
+          io.disconnect()
+        }
+      },
+      { rootMargin: '600px 0px' },
+    )
+
+    io.observe(el)
+
+    return () => io.disconnect()
+  }, [near])
+
+  const placeholder = <div ref={placeholderRef} className="sq-mermaid sq-mermaid-placeholder" aria-hidden />
+
+  if (!near) {
     return placeholder
   }
 

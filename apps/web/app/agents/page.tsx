@@ -6,7 +6,7 @@ import { AgentTabs, type AgentSetup } from '@/components/agent-tabs'
 import { CtaButtons, Eyebrow, H2, PageHero } from '@/components/site'
 import { TerminalCard } from '@/components/terminal'
 import { pageMeta } from '@/lib/seo'
-import { DOCS, GITHUB, MCP_URL, wrap } from '@/lib/site'
+import { DOCS, GITHUB, MCP_URL, arrowLink, wrap } from '@/lib/site'
 
 export const metadata: Metadata = pageMeta(
   'Connect Claude Code, Codex, Cursor and any MCP agent',
@@ -126,10 +126,7 @@ export default function AgentsPage() {
               </tbody>
             </table>
           </div>
-          <a
-            href={`${DOCS}/mcp/tools`}
-            className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-strong hover:underline"
-          >
+          <a href={`${DOCS}/mcp/tools`} className={`mt-5 ${arrowLink}`}>
             All 71 tools <ArrowRight className="size-4" />
           </a>
         </div>

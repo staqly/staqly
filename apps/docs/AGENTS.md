@@ -40,7 +40,8 @@ links: plain `<img>`/`<a>` and fetches must add `env.basePath` (`lib/env.mjs`, t
 | `content/docs/**.mdx` | Pages. Folder = section; `meta.json` = order and titles |
 | `content/docs/meta.json` | Sidebar: `---Separator---` headings + `...folder` to inline a folder |
 | `content/docs/api/reference/` | `index.mdx` + `meta.json`; the per-tag pages are virtual (from OpenAPI) |
-| `app/(docs)/[[...slug]]/page.tsx` | Page renderer (MDX and OpenAPI pages), served at the site root (`/quickstart`, not `/docs/quickstart`); `/` is "What is staqly?" |
+| `app/(docs)/[...slug]/page.tsx` | MDX page renderer, served at the site root (`/quickstart`, not `/docs/quickstart`); `/` is "What is staqly?" |
+| `app/(docs)/api/reference/[tag]/page.tsx` | The OpenAPI per-tag pages. Their own route so the playground's client JS (~130 KB gzipped) loads only there, not with every MDX page |
 | `app/openapi.yaml`, `app/llms*.txt`, `app/llms.mdx` | Static route handlers (raw spec, LLM-friendly text); `scripts/markdown-files.mjs` copies each page's Markdown to `/<page>.md` |
 | `lib/collections.ts` | MDX collections (macro API) |
 | `lib/source.ts` | `loader()` combining MDX + OpenAPI virtual pages (server-only) |
