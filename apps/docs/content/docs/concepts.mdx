@@ -61,7 +61,7 @@ An item is one output from an agent or automation.
 
 | Field | Notes |
 |---|---|
-| `type` | `image`, `video`, `text`, `link`, `json` or `file`. Inferred when omitted (see below). |
+| `type` | `image`, `video`, `text`, `link`, `json` or `file`. Inferred when omitted (see below). `image` and `video` items need `media` or a `url` (`422` otherwise). |
 | `title` | Up to 500 characters. Defaults to the first line of text, the URL, or `Untitled <type>`. |
 | `content` | A string, or any JSON value (stored compacted). Up to 1 MiB. |
 | `url` | An absolute `http(s)` URL — a link, or externally hosted media. |

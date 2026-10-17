@@ -257,7 +257,7 @@ WHERE webhook_deliveries.workspace_id = ?1
   AND (?2 IS NULL OR webhook_deliveries.webhook_id = ?2)
   AND (?3 IS NULL OR webhook_deliveries.status = ?3)
   AND (?4 IS NULL OR webhook_deliveries.event_id IN (
-    SELECT ev.id FROM events ev WHERE ev.item_id = ?4))
+    SELECT ev.id FROM events ev WHERE ev.workspace_id = ?1 AND ev.item_id = ?4))
 ORDER BY webhook_deliveries.created_at DESC
 LIMIT ?5
 `

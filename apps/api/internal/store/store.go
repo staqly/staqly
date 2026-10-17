@@ -42,6 +42,13 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	// Without statistics the planner guesses: a collection filter walked the whole
+	// workspace through items_workspace_created instead of using items_collection.
+	// 0x10002 = also analyze tables never analyzed (fast with the default analysis_limit).
+	if _, err := db.ExecContext(ctx, "PRAGMA analysis_limit=400; PRAGMA optimize=0x10002"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("optimize database: %w", err)
+	}
 	return db, nil
 }
 

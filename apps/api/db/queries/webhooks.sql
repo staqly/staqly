@@ -42,7 +42,7 @@ WHERE webhook_deliveries.workspace_id = @workspace_id
   AND (sqlc.narg(webhook_id) IS NULL OR webhook_deliveries.webhook_id = sqlc.narg(webhook_id))
   AND (sqlc.narg(status) IS NULL OR webhook_deliveries.status = sqlc.narg(status))
   AND (sqlc.narg(item_id) IS NULL OR webhook_deliveries.event_id IN (
-    SELECT ev.id FROM events ev WHERE ev.item_id = sqlc.narg(item_id)))
+    SELECT ev.id FROM events ev WHERE ev.workspace_id = @workspace_id AND ev.item_id = sqlc.narg(item_id)))
 ORDER BY webhook_deliveries.created_at DESC
 LIMIT @lim;
 

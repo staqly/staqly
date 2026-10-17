@@ -629,13 +629,8 @@ func (s *Service) applyChannelInput(ctx context.Context, p Principal, ch *notify
 		return err
 	}
 	if in.Events != nil {
-		if len(*in.Events) == 0 || len(*in.Events) > 50 {
-			return invalid("events", "subscribe to 1-50 event patterns")
-		}
-		for _, e := range *in.Events {
-			if e == "" || len(e) > 100 || strings.ContainsAny(e, " /") {
-				return invalid("events", "invalid event pattern "+e)
-			}
+		if err := s.validateEventPatterns(ctx, p.WorkspaceID, *in.Events); err != nil {
+			return err
 		}
 		ch.events = *in.Events
 	}

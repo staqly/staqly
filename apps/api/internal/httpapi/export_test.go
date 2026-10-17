@@ -134,8 +134,12 @@ func TestEventExportFormatsFiltersAndCSVEscaping(t *testing.T) {
 	if n := count("item_id=" + it1.ID); n != 2 {
 		t.Fatalf("item filter: %d", n)
 	}
-	if n := count("actor_type=session"); n < 1 {
-		t.Fatalf("actor_type filter: %d", n)
+	// The session's events here are api_key.created audit events: admins only, like GET /v1/events.
+	if n := count("actor_type=session"); n != 0 {
+		t.Fatalf("non-admin export shows audit events: %d", n)
+	}
+	if st, _, b := e.raw(nil, "GET", "/v1/events/export?actor_type=session", e.admin, nil); st != 200 || len(ndjsonEvents(t, b)) < 1 {
+		t.Fatalf("actor_type filter (admin): %d %s", st, b)
 	}
 	if n := count("actor_id=" + evil.ID); n != 1 {
 		t.Fatalf("actor_id filter: %d", n)
@@ -493,7 +497,7 @@ func TestRetentionPruning(t *testing.T) {
 	// Seed deliveries: one finished, one pending, on an existing event.
 	q := db.New(e.svc.DB)
 	var wh app.Webhook
-	e.do(nil, "POST", "/v1/webhooks", e.key, map[string]any{"url": "https://example.com/h", "events": []string{"nothing.*"}}, 201, &wh)
+	e.do(nil, "POST", "/v1/webhooks", e.key, map[string]any{"url": "https://example.com/h", "events": []string{"device.connected"}}, 201, &wh)
 	evs, _ := e.svc.ListEvents(ctx, app.Principal{WorkspaceID: wsID, Kind: app.PrincipalSystem, Scopes: []string{app.ScopeAdmin}}, app.EventFilter{Limit: 200})
 	ts := time.Now().UTC().Format("2006-01-02T15:04:05.000000Z")
 	for i, st := range []string{"succeeded", "pending"} {

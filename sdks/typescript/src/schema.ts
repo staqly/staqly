@@ -1854,6 +1854,7 @@ export interface components {
             metadata_patch?: {
                 [key: string]: unknown;
             };
+            /** @description Inferred when omitted. image and video items need media_id (or an upload) or url; without either the request is a 422. */
             type?: components["schemas"]["ItemType"];
             status?: components["schemas"]["ItemStatus"];
             source?: string;
@@ -1946,6 +1947,7 @@ export interface components {
         WebhookInput: {
             url?: string;
             description?: string;
+            /** @description "*", a glob inside a known event family ("item.*", "item.*_requested"), a known event type, or a custom action event (item.<name>_requested or one configured on a collection action). Unknown patterns are a 422. */
             events?: string[];
             collection_ids?: string[];
             active?: boolean;

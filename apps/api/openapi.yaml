@@ -2531,7 +2531,7 @@ components:
         media_id: { type: string, description: Empty string clears }
         metadata: { type: object, additionalProperties: true, description: Replaces metadata }
         metadata_patch: { type: object, additionalProperties: true, description: Merges top-level keys; null removes a key }
-        type: { $ref: "#/components/schemas/ItemType" }
+        type: { $ref: "#/components/schemas/ItemType", description: "Inferred when omitted. image and video items need media_id (or an upload) or url; without either the request is a 422." }
         status: { $ref: "#/components/schemas/ItemStatus" }
         source: { type: string }
         external_ref: { type: string }
@@ -2618,7 +2618,12 @@ components:
       properties:
         url: { type: string }
         description: { type: string }
-        events: { type: array, items: { type: string } }
+        events:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { type: string, maxLength: 100 }
+          description: '"*", a glob inside a known event family ("item.*", "item.*_requested"), a known event type, or a custom action event (item.<name>_requested or one configured on a collection action). Unknown patterns are a 422.'
         collection_ids: { type: array, items: { type: string } }
         active: { type: boolean }
         timeout_ms: { type: integer, minimum: 1000, maximum: 60000 }

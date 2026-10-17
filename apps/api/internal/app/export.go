@@ -76,10 +76,14 @@ func (s *Service) PrepareEventExport(ctx context.Context, p Principal, f EventEx
 			return nil, invalid(field, "must be at most 200 characters")
 		}
 	}
+	audit := int64(0)
+	if p.Has(ScopeAdmin) {
+		audit = 1 // like ListEvents: api_key.*, session.*, recovery_key.*, device*.* only for admins
+	}
 	return &EventExport{Format: f.Format, s: s, params: db.ExportEventsPageParams{
 		WorkspaceID: p.WorkspaceID, FromTs: from, ToTs: to, Type: optAny(f.Type), TypePrefix: optAny(f.TypePrefix),
 		ActorType: optAny(f.ActorType), ActorID: optAny(f.ActorID), CollectionID: optAny(f.CollectionID),
-		ItemID: optAny(f.ItemID), Lim: exportPageSize,
+		ItemID: optAny(f.ItemID), IncludeAudit: audit, Lim: exportPageSize,
 	}}, nil
 }
 
@@ -555,7 +559,7 @@ func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string
 		return err
 	}
 	enc = json.NewEncoder(w)
-	x := &EventExport{s: s, params: db.ExportEventsPageParams{WorkspaceID: wsID, Lim: exportPageSize}}
+	x := &EventExport{s: s, params: db.ExportEventsPageParams{WorkspaceID: wsID, IncludeAudit: 1, Lim: exportPageSize}} // admin-only job
 	if err := x.Each(ctx, func(e Event) error {
 		e.Data = redactSecrets(e.Data)
 		counts["events"]++
