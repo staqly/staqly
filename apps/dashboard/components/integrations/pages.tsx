@@ -11,6 +11,7 @@ import { CopyButton } from '@/components/common/copy-button'
 import { DOCS_URL } from '@/components/common/docs-link'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
+import { PageTabs } from '@/components/common/page-tabs'
 import { EventTimeline } from '@/components/items/event-timeline'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -353,8 +354,8 @@ export function IntegrationsPage() {
   const params = useSearchParams()
   const requested = params.get('tab')
   const tab = INTEGRATION_TABS.find((t) => t.id === requested)?.id ?? 'claude-code'
-  // Two views: how to connect (Integrations) and who is connected (Connections).
-  const view = params.get('view') === 'connections' ? 'connections' : 'setup'
+  // Two sections: how to connect (Setup) and who is connected and what they did (Agents & activity).
+  const view = params.get('view') === 'agents' ? 'agents' : 'setup'
   const [transport, setTransport] = useState<Transport>('http')
   const [agent, setAgent] = useState<Agent | null>(null)
   // Cloud mode: this instance, over HTTPS with a key. A local install connects only to itself, keyless.
@@ -376,28 +377,26 @@ export function IntegrationsPage() {
         icon={<Blocks className="size-4" />}
         description="Connect an agent, see which agents talk to this workspace and what they did. Step-by-step guides live at docs.staqly.ai."
       />
-      <Tabs
-        value={view}
-        onValueChange={(v) =>
-          router.replace(hrefWithParams(pathname, params, { view: v === 'connections' ? v : undefined }), {
-            scroll: false,
-          })
-        }
-        className="mt-4 gap-0"
-      >
-        <TabsList variant="line" aria-label="Integrations view" className="border-b">
-          <TabsTrigger value="setup" className="flex-none">
-            Integrations
-          </TabsTrigger>
-          <TabsTrigger value="connections" className="flex-none" data-testid="connections-tab">
-            Connections
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="connections" className="mt-6 grid grid-cols-1 gap-4">
+      <PageTabs
+        label="Integrations sections"
+        className="mt-4"
+        tabs={[
+          { href: hrefWithParams(pathname, params, { view: undefined }), label: 'Setup', active: view === 'setup' },
+          {
+            href: hrefWithParams(pathname, params, { view: 'agents' }),
+            label: 'Agents & activity',
+            active: view === 'agents',
+            testId: 'agents-tab',
+          },
+        ]}
+      />
+      {view === 'agents' ? (
+        <div className="mt-6 grid grid-cols-1 gap-4">
           <ConnectedAgents selectedId={agent?.id ?? null} onSelect={setAgent} />
           <RecentActivity agent={agent} onShowAll={() => setAgent(null)} />
-        </TabsContent>
-        <TabsContent value="setup" className="mt-6 grid grid-cols-1 gap-4">
+        </div>
+      ) : (
+        <div className="mt-6 grid grid-cols-1 gap-4">
           <ConnectionBar />
 
           <Tabs
@@ -453,13 +452,13 @@ export function IntegrationsPage() {
               )
             })}
           </Tabs>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </PageContainer>
   )
 }
 
-export function IntegrationsRedirect({ tab, view }: { tab?: string; view?: 'connections' }) {
+export function IntegrationsRedirect({ tab, view }: { tab?: string; view?: 'agents' }) {
   const router = useRouter()
 
   useEffect(() => {

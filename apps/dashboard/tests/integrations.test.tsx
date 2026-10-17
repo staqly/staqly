@@ -146,13 +146,11 @@ describe('local mode integrations', () => {
     expect(nav.replace).toHaveBeenCalledWith('/integrations?tab=n8n', { scroll: false })
   })
 
-  it('keeps connected agents on their own Connections tab', async () => {
-    const user = userEvent.setup()
-
+  it('keeps connected agents on their own Agents & activity tab', () => {
     renderTab('claude-code', 'local')
     expect(screen.queryByTestId('agents')).not.toBeInTheDocument()
-    await user.click(screen.getByTestId('connections-tab'))
-    expect(nav.replace).toHaveBeenCalledWith('/integrations?tab=claude-code&view=connections', { scroll: false })
+    expect(screen.getByTestId('agents-tab')).toHaveAttribute('href', '/integrations?tab=claude-code&view=agents')
+    expect(screen.getByRole('link', { name: 'Setup' })).toHaveAttribute('aria-current', 'page')
   })
 })
 

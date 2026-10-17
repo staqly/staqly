@@ -89,7 +89,7 @@ export function useShell() {
 
 const INTEGRATION_LINKS = [
   { href: '/integrations', label: 'Integrations' },
-  { href: '/integrations?view=connections', label: 'Connections' },
+  { href: '/integrations?view=agents', label: 'Agents & activity' },
   { href: '/integrations/api-keys', label: 'API keys', cloudOnly: true },
   { href: '/integrations?tab=claude-code', label: 'Claude Code' },
   { href: '/integrations?tab=codex', label: 'Codex' },
@@ -408,7 +408,7 @@ function AppSidebar() {
                 {pending > 0 && (
                   <SidebarMenuBadge
                     data-testid="inbox-count"
-                    className="rounded-full bg-brand px-1.5 text-brand-foreground peer-data-[active=true]/menu-button:text-brand-foreground in-data-[mobile=true]:top-3"
+                    className="rounded-full bg-brand px-1.5 text-brand-foreground peer-hover/menu-button:text-brand-foreground peer-data-active/menu-button:text-brand-foreground in-data-[mobile=true]:top-3"
                   >
                     {pending > 999 ? '999+' : pending}
                   </SidebarMenuBadge>

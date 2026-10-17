@@ -36,7 +36,7 @@ describe('agents', () => {
     expect(agentActivity({ last_seen_at: '2026-10-12T08:00:00Z' }, now)).toBe('idle')
   })
 
-  it('lists agents on Integrations > Connections; recent activity shows every agent until one is selected; forget removes one', async () => {
+  it('lists agents on Integrations > Agents & activity; recent activity shows every agent until one is selected; forget removes one', async () => {
     const user = userEvent.setup()
     const api = mockApi({
       'GET /v1/agents': { data: AGENTS },
@@ -44,7 +44,7 @@ describe('agents', () => {
       'DELETE /v1/agents/agt_2': null,
     })
 
-    nav.set('/integrations', 'view=connections')
+    nav.set('/integrations', 'view=agents')
     renderWithProviders(<IntegrationsPage />, { mode: 'local' })
     const agents = await screen.findByTestId('agents')
 
