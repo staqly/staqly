@@ -248,7 +248,7 @@ function QuickStart() {
           <div className="mt-7 flex flex-wrap gap-3 text-sm">
             <Link
               href="/quickstart"
-              className="inline-flex items-center gap-1.5 font-semibold text-brand-strong hover:underline"
+              className="inline-flex items-center gap-1.5 font-semibold text-brand-strong hover:underline pointer-coarse:-my-2.5 pointer-coarse:py-2.5"
             >
               Follow the quickstart <ArrowRight className="size-4" />
             </Link>
@@ -303,7 +303,7 @@ function Sections() {
                 <li key={href}>
                   <Link
                     href={href}
-                    className="group -mx-2 flex items-center justify-between rounded-lg px-2 py-1.5 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-foreground"
+                    className="group -mx-2 flex items-center justify-between rounded-lg px-2 py-1.5 text-sm text-fd-muted-foreground pointer-coarse:py-2.5 transition-colors hover:bg-fd-accent hover:text-fd-foreground"
                   >
                     {label}
                     <ArrowRight className="size-3.5 opacity-50 transition-opacity group-hover:opacity-100" />
@@ -354,7 +354,7 @@ function Modes() {
         </div>
         <Link
           href="/dashboard/phones-and-tablets"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-strong hover:underline"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-strong hover:underline pointer-coarse:-my-2.5 pointer-coarse:py-2.5"
         >
           Connect a device <ArrowRight className="size-4" />
         </Link>
@@ -373,7 +373,7 @@ function Footer() {
             Apache-2.0
           </a>
         </span>
-        <nav className="flex flex-wrap gap-x-5 gap-y-2">
+        <nav className="flex flex-wrap gap-x-5 gap-y-2 pointer-coarse:[&>*]:inline-flex pointer-coarse:[&>*]:min-h-10 pointer-coarse:[&>*]:items-center">
           <Link href="/introduction" className="hover:text-fd-foreground">
             Docs
           </Link>

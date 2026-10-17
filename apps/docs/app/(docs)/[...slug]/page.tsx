@@ -11,7 +11,6 @@ import { createRelativeLink } from 'fumadocs-ui/mdx'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
-import { OpenAPIPage } from '@/components/api-page'
 import { getMDXComponents } from '@/components/mdx'
 import { editUrl, getPageMarkdownUrl } from '@/lib/shared'
 import { source } from '@/lib/source'
@@ -20,24 +19,9 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
   const params = await props.params
   const page = source.getPage(params.slug)
 
-  if (!page) {
+  // OpenAPI pages have their own route: api/reference/[tag].
+  if (!page || page.type === 'openapi') {
     notFound()
-  }
-
-  if (page.type === 'openapi') {
-    return (
-      <DocsPage full toc={page.data.toc}>
-        <DocsTitle>{page.data.title}</DocsTitle>
-        <DocsDescription>
-          Generated from <code>apps/api/openapi.yaml</code> (OpenAPI 3.2). Local mode needs no credentials; cloud mode
-          expects <code>Authorization: Bearer stk_...</code>. Use <strong>Send</strong> to try a request against your
-          cloud instance with your API key.
-        </DocsDescription>
-        <DocsBody>
-          <OpenAPIPage {...page.data.getOpenAPIPageProps()} />
-        </DocsBody>
-      </DocsPage>
-    )
   }
 
   const MDX = page.data.body
@@ -64,7 +48,10 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
 }
 
 export async function generateStaticParams() {
-  return source.generateParams()
+  return source
+    .getPages()
+    .filter((p) => p.type !== 'openapi')
+    .map((p) => ({ slug: p.slugs }))
 }
 
 export async function generateMetadata(props: PageProps<'/[...slug]'>): Promise<Metadata> {

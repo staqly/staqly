@@ -23,7 +23,7 @@ export function AgentTabs({ agents }: { agents: AgentSetup[] }) {
             type="button"
             aria-pressed={i === active}
             onClick={() => setActive(i)}
-            className={`rounded-full border px-4 py-1.5 text-sm transition-colors ${
+            className={`rounded-full border px-4 py-1.5 text-sm transition-colors pointer-coarse:py-2.5 ${
               i === active
                 ? 'border-border bg-accent text-foreground'
                 : 'border-border/60 text-muted-foreground hover:text-foreground'
@@ -39,7 +39,10 @@ export function AgentTabs({ agents }: { agents: AgentSetup[] }) {
       <p className="mt-4 text-sm text-muted-foreground">
         Self-hosted? Point it at{' '}
         <code className="rounded bg-muted px-1 font-mono text-[0.9em]">localhost:3333/mcp</code> and skip the key.{' '}
-        <a href={a.guide} className="inline-flex items-center gap-1 font-medium text-brand-strong hover:underline">
+        <a
+          href={a.guide}
+          className="inline-flex items-center gap-1 font-medium text-brand-strong hover:underline pointer-coarse:-my-2.5 pointer-coarse:py-2.5"
+        >
           Full guide <ArrowRight className="size-3.5" />
         </a>
       </p>

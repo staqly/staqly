@@ -29,6 +29,7 @@ import {
   MCP_URL,
   SIGNUP,
   SITE_URL,
+  arrowLink,
   btnPrimary,
   btnSecondary,
   wrap,
@@ -291,10 +292,7 @@ function ConnectAgent() {
               </li>
             ))}
           </ul>
-          <Link
-            href="/agents"
-            className="mt-7 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-strong hover:underline"
-          >
+          <Link href="/agents" className={`mt-7 ${arrowLink} pointer-coarse:mt-4.5`}>
             Setup for every agent <ArrowRight className="size-4" />
           </Link>
         </div>
@@ -376,10 +374,7 @@ function UseCasesTeaser() {
           <Eyebrow>Use cases</Eyebrow>
           <H2>See it applied.</H2>
         </div>
-        <Link
-          href="/use-cases"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-strong hover:underline"
-        >
+        <Link href="/use-cases" className={arrowLink}>
           All use cases <ArrowRight className="size-4" />
         </Link>
       </div>
@@ -416,10 +411,7 @@ function OpenSource() {
             limits that runs in the background on macOS or Linux (or one Docker container) — you just take care of
             backups and updates yourself.
           </p>
-          <a
-            href={`${DOCS}/quickstart`}
-            className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-strong hover:underline"
-          >
+          <a href={`${DOCS}/quickstart`} className={`mt-6 ${arrowLink} pointer-coarse:mt-3.5`}>
             Self-hosting quickstart <ArrowRight className="size-4" />
           </a>
         </div>

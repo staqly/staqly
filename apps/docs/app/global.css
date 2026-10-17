@@ -141,6 +141,11 @@ body {
   white-space: nowrap;
 }
 
+/* github-dark-dimmed paints comments #768390: 4.3:1 on the code block, under WCAG AA. Lift them to 5:1. */
+.dark .shiki span[style*='--shiki-dark:#768390' i] {
+  --shiki-dark: #838d9a !important;
+}
+
 /* ── Small MDX helpers (components/mdx/bits.tsx) ───────────────────────── */
 
 .sq-badge {
@@ -309,6 +314,25 @@ body {
 
 #nd-page:not([data-full='true']) {
   max-width: 1040px;
+}
+
+/* ── Touch screens: 40px hit areas ─────────────────────────────────────── */
+
+/* Fumadocs sizes its header icon buttons (32-34px) and sidebar rows (32-36px) for a mouse. */
+@media (pointer: coarse) {
+  button:is(
+    [aria-label='Open Search'],
+    [aria-label='Open Sidebar'],
+    [aria-label='Toggle Menu'],
+    [aria-label='Collapse Sidebar']
+  ) {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+  }
+
+  :is(#nd-sidebar, #nd-sidebar-mobile) :is(a, button) {
+    min-height: 2.5rem;
+  }
 }
 
 /* ── Sidebar: section headings ─────────────────────────────────────────── */

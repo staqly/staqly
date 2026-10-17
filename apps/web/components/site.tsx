@@ -34,17 +34,17 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-md">
       <div className={`${wrap} flex h-16 items-center gap-3 md:gap-8`}>
-        <Link href="/" aria-label="staqly home">
+        <Link href="/" aria-label="staqly home" className="flex min-h-10 items-center">
           <Logo colorway="dark" wordmarkClassName="text-[18px]" />
         </Link>
         <nav className="ml-auto hidden gap-6 text-sm text-muted-foreground md:flex">
           {navLinks.map(([label, href]) => (
-            <Link key={label} href={href} className="hover:text-foreground">
+            <Link key={label} href={href} className="hover:text-foreground pointer-coarse:py-2.5">
               {label}
             </Link>
           ))}
         </nav>
-        <a href={SIGNUP} className={`${btnPrimary} ml-auto h-9 px-4 md:ml-0`}>
+        <a href={SIGNUP} className={`${btnPrimary} ml-auto h-9 px-4 md:ml-0 pointer-coarse:h-10`}>
           Get started
         </a>
         <MobileMenu links={navLinks} signup={SIGNUP} />
@@ -75,7 +75,7 @@ export function Footer() {
         <span className="inline-flex items-center gap-2">
           <LogoMark className="size-5" colorway="dark" /> © 2026 staqly · human sign-off for AI agents
         </span>
-        <nav className="flex flex-wrap items-center gap-y-2 text-xs [&>*+*]:before:mx-2 [&>*+*]:before:text-muted-foreground/40 [&>*+*]:before:content-['•'] [&>*]:inline-flex [&>*]:items-center">
+        <nav className="flex flex-wrap items-center gap-y-2 text-xs [&>*+*]:before:mx-2 [&>*+*]:before:text-muted-foreground/40 [&>*+*]:before:content-['•'] [&>*]:inline-flex [&>*]:items-center pointer-coarse:[&>*]:min-h-10">
           {footerLinks.map(([label, href]) => (
             <Link key={label} href={href} className="hover:text-foreground">
               {label}

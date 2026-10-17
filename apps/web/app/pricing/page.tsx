@@ -20,7 +20,10 @@ export default function PricingPage() {
           the limits for agents that never stop.
         </p>
       </PageHero>
-      <section className={`${wrap} py-12 sm:py-16`}>
+      <section aria-labelledby="plans" className={`${wrap} py-12 sm:py-16`}>
+        <h2 id="plans" className="sr-only">
+          Plans
+        </h2>
         <PricingCards />
       </section>
     </main>

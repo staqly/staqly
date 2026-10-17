@@ -15,6 +15,11 @@ export const btnPrimary =
   'inline-flex h-11 items-center gap-2 rounded-xl sq-rainbow px-5 text-sm font-semibold shadow-[0_8px_24px_-8px_color-mix(in_oklch,var(--brand)_70%,transparent)] transition hover:brightness-110'
 export const btnSecondary =
   'inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-card px-5 text-sm font-semibold transition-colors hover:bg-accent'
+// Standalone arrow links ("All use cases ->"). On touch screens the hit area grows to 40px tall without moving
+// anything: the extra padding is cancelled by a negative margin. A caller with a top margin must lower it by 2.5 on
+// pointer-coarse (mt-5 pointer-coarse:mt-2.5), or the -my-2.5 replaces it.
+export const arrowLink =
+  'inline-flex items-center gap-1.5 text-sm font-semibold text-brand-strong hover:underline pointer-coarse:-my-2.5 pointer-coarse:py-2.5'
 export const wrap = 'mx-auto w-full max-w-6xl px-5 sm:px-8'
 
 export const SITE_URL = env.siteUrl
