@@ -46,8 +46,8 @@ function AlertDialogContent({
         data-size={size}
         className={cn(
           'group/alert-dialog-content fixed z-50 grid w-full grid-cols-[minmax(0,1fr)] gap-4 bg-popover text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0',
-          'max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[calc(100svh_-_env(safe-area-inset-top)_-_0.75rem)] max-sm:overflow-y-auto max-sm:rounded-t-2xl max-sm:p-5 max-sm:pb-[calc(1.25rem_+_env(safe-area-inset-bottom))] max-sm:data-open:slide-in-from-bottom-10',
-          'sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:p-4 sm:data-[size=default]:max-w-sm sm:data-[size=sm]:max-w-xs sm:data-open:zoom-in-95 sm:data-closed:zoom-out-95',
+          'max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[calc(100svh_-_env(safe-area-inset-top)_-_0.75rem)] max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:rounded-t-2xl max-sm:p-5 max-sm:pb-[calc(1.25rem_+_env(safe-area-inset-bottom))] max-sm:data-open:slide-in-from-bottom-10',
+          'sm:top-1/2 sm:left-1/2 sm:max-h-[calc(100svh-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:overflow-y-auto sm:rounded-xl sm:p-4 sm:data-[size=default]:max-w-sm sm:data-[size=sm]:max-w-xs sm:data-open:zoom-in-95 sm:data-closed:zoom-out-95',
           className,
         )}
         {...props}
