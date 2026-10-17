@@ -121,7 +121,8 @@ appends; IPv6 clients are counted per /64).
   the recovery key. The recovery key is **single-use**: in one transaction it
   signs this browser in, creates a new admin key "Admin key (recovered)" (not
   counted against the plan's key limit), issues a new recovery key (the old one
-  stops working) and signs out every other session. Existing API keys keep
+  stops working) and signs out every other session. On Free (key limit) the old
+  admin keys are revoked so the new one replaces them; on Pro existing API keys keep
   working. Response `201 {"csrf_token", "api_key": {..., "key"}, "recovery_key"}`;
   the dashboard shows both secrets once behind an "I have saved..." checkbox.
   Events: `recovery_key.rotated` (`via: "recovery"`), `api_key.created`,

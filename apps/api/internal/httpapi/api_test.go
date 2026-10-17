@@ -391,7 +391,7 @@ func TestSignInWithAPIKey(t *testing.T) {
 // working, existing API keys keep working, and every other session is signed out.
 func TestRecoveryRotatesAndIssuesAdminKey(t *testing.T) {
 	e := newEnv(t)
-	e.free() // the new admin key is not blocked by the Free plan's one-key limit
+	e.free() // Free (one key): the new admin key replaces the lost one
 	jar, _ := cookiejar.New(nil)
 	b := &http.Client{Jar: jar}
 	var rec struct {
@@ -406,9 +406,10 @@ func TestRecoveryRotatesAndIssuesAdminKey(t *testing.T) {
 	}
 	// The old recovery key is gone; the new one works once.
 	e.do(nil, "POST", "/v1/sessions/recover", "", map[string]string{"recovery_key": e.recovery}, 401, nil)
-	// Existing keys keep working; the new admin key signs in; the old browser session is signed out.
+	// On Free the lost admin key is revoked (the limit holds); other keys keep working; the new admin key
+	// signs in; the old browser session is signed out.
 	e.do(nil, "GET", "/v1/collections", e.key, nil, 200, nil)
-	e.do(nil, "GET", "/v1/collections", e.admin, nil, 200, nil)
+	e.do(nil, "GET", "/v1/collections", e.admin, nil, 401, nil)
 	e.do(e.browser, "GET", "/v1/session", "", nil, 401, nil)
 	e.do(b, "GET", "/v1/session", "", nil, 200, nil)
 	e.do(nil, "POST", "/v1/sessions/api-key", "", map[string]string{"api_key": rec.APIKey.Key}, 201, nil)
@@ -434,11 +435,19 @@ func TestRecoveryRotatesAndIssuesAdminKey(t *testing.T) {
 	if ok.Load() != 1 {
 		t.Fatalf("%d concurrent recoveries succeeded with one key, want 1", ok.Load())
 	}
-	var evs struct{ Data []app.Event }
-	e.do(nil, "GET", "/v1/events?type=session.recovered", e.admin, nil, 200, &evs)
-	if len(evs.Data) != 2 {
-		t.Fatalf("session.recovered events: %d", len(evs.Data))
+	// Every admin key recovery replaced was revoked; exactly one stays active (the Free plan's limit).
+	var recovered, admins int
+	e.svc.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE type = 'session.recovered'`).Scan(&recovered)
+	e.svc.DB.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE revoked_at IS NULL AND scopes LIKE '%admin%'`).Scan(&admins)
+	if recovered != 2 || admins != 1 {
+		t.Fatalf("session.recovered events: %d, active admin keys: %d", recovered, admins)
 	}
+}
+
+func TestRecoveryKeepsKeysOnUnlimitedPlans(t *testing.T) {
+	e := newEnv(t) // Pro trial: no key limit
+	e.do(nil, "POST", "/v1/sessions/recover", "", map[string]string{"recovery_key": e.recovery}, 201, nil)
+	e.do(nil, "GET", "/v1/collections", e.admin, nil, 200, nil)
 }
 
 func TestCollectionCRUD(t *testing.T) {

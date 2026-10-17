@@ -458,7 +458,7 @@ staqly.sessions.logout()  # revoke the current session
 s = staqly.sessions.sign_in_with_api_key("stk_...")
 # recovery key (single use) -> session cookie + csrf_token, a new admin key and the next recovery
 # key (both shown once); the old recovery key stops working, every other session is signed out,
-# existing API keys keep working
+# existing API keys keep working (on Free the old admin key is replaced)
 r = staqly.sessions.recover("staqly-recovery-K7QMZ-3XKD5-VNPW2-HCY4T-BRFA6-JLE5S-O2UQM-4ZXRA")
 r.api_key.key, r.recovery_key
 

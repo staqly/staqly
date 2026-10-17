@@ -269,8 +269,9 @@ export interface paths {
          * @description The recovery key is single-use. In one transaction this sets a session
          *     cookie, creates a new admin API key (not counted against the plan's key
          *     limit), replaces the recovery key with a new one (the old one stops
-         *     working) and signs out every other session of the workspace. Existing
-         *     API keys keep working. The new API key and recovery key are returned only
+         *     working) and signs out every other session of the workspace. On a plan
+         *     with a key limit (Free) the new admin key replaces the old admin keys,
+         *     which are revoked; otherwise existing API keys keep working. The new API key and recovery key are returned only
          *     in this response. Rate-limited per client IP (429).
          */
         post: operations["recoverSession"];

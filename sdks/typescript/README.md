@@ -442,7 +442,7 @@ await staqly.sessions.revoke("ses_q2vbm4kz7xw3dn5hjr6c"); // admin
 await staqly.sessions.logout();             // revoke the current session
 await staqly.sessions.signInWithApiKey("stk_..."); // cloud: admin key -> new session (no auth)
 // Recovery key (single use) -> new session, a new admin key and the next recovery key (no auth).
-// The old recovery key stops working and every other session is signed out; API keys keep working.
+// The old recovery key stops working and every other session is signed out; API keys keep working (on Free the old admin key is replaced).
 const { api_key, recovery_key } = await staqly.sessions.recover("staqly-recovery-K7QX2-MB4ZD-W9PLT-R3HVN-6YCJE-A5FUG-T2KWS-8NDQB");
 await staqly.deviceLinks.create();          // session or local: one-time sign-in link (5 min)
 await staqly.deviceLinks.redeem(token);     // token from the link fragment (no auth)

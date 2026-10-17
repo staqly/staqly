@@ -174,7 +174,9 @@ way back in when you lost the admin API key. Signup shows it once, next to the a
   The response (`201`) holds `csrf_token`, `api_key` (with the raw `key`) and `recovery_key`;
   the dashboard shows the new admin key and recovery key once, and you confirm you saved them
   before you continue.
-- Existing API keys keep working. If one leaked, revoke it under **API keys**.
+- On the Free plan (one API key) the new admin key **replaces** the lost one: old admin keys are
+  revoked (`api_key.revoked`, reason `recovery`). On Pro every existing API key keeps working; if
+  one leaked, revoke it under **API keys**.
 - Rotate the recovery key yourself from a dashboard session (**Settings → Recovery key**) or on
   the server with `docker exec staqly server recovery-key` (`staqly serve recovery-key` with the
   binary). Rotating signs out every other session of the workspace.

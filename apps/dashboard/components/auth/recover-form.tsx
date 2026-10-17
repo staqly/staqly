@@ -111,8 +111,8 @@ export function RecoverForm({ onBack }: { onBack?: () => void }) {
             }}
           />
           <FieldDescription>
-            A recovery key works once: using it replaces it with a new one and signs out every other browser. Your
-            existing API keys keep working.
+            A recovery key works once: using it replaces it with a new one and signs out every other browser. You get a
+            new admin key; on the Free plan it replaces your old one.
           </FieldDescription>
           <FieldError errors={[formState.errors.recovery_key]} />
         </Field>

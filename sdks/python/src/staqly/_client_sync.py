@@ -1279,7 +1279,8 @@ class Sessions(_Resource):
         """Exchanges the recovery key (single use) for a new session cookie (kept in the client's
         cookie jar), a new admin API key and the next recovery key. The old recovery key stops
         working and every other session of the workspace is signed out; existing API keys keep
-        working. Sent without credentials. Store ``api_key.key`` and ``recovery_key`` now: they
+        working, except on Free, where the new admin key replaces the old admin keys. Sent without
+        credentials. Store ``api_key.key`` and ``recovery_key`` now: they
         are shown only once."""
         r = self._http.request(
             RequestSpec(

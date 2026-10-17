@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -464,6 +465,10 @@ func (s *Service) Recover(ctx context.Context, recoveryKey, userAgent string) (R
 			return invalidKey // used concurrently
 		}
 		sys := Principal{WorkspaceID: ws.ID, Kind: PrincipalSystem, ID: "recovery", Name: "Recovery key"}
+		replaced, err := s.revokeLostAdminKeys(ctx, q, sys)
+		if err != nil {
+			return err
+		}
 		// Never blocked by the plan's key limit: recovery must always restore access.
 		key, err := s.insertKey(ctx, q, sys, "Admin key (recovered)", AdminKeyScopes, nil)
 		if err != nil {
@@ -481,13 +486,42 @@ func (s *Service) Recover(ctx context.Context, recoveryKey, userAgent string) (R
 			return err
 		}
 		if _, err := s.emit(ctx, q, sys, "session.recovered", "", "", map[string]any{"user_agent": userAgent, "sessions_revoked": revoked,
-			"api_key_id": key.ID}); err != nil {
+			"api_key_id": key.ID, "api_keys_replaced": replaced}); err != nil {
 			return err
 		}
 		res = RecoverResult{Session: ns, APIKey: key, RecoveryKey: next}
 		return nil
 	})
 	return res, err
+}
+
+// revokeLostAdminKeys: on a plan with a key limit (Free allows one), the new
+// admin key replaces the lost ones, so the workspace stays within its limit and
+// a lost key stops working. Unlimited plans keep every key.
+func (s *Service) revokeLostAdminKeys(ctx context.Context, q *db.Queries, sys Principal) ([]string, error) {
+	plan, err := s.planFor(ctx, q, sys.WorkspaceID)
+	if err != nil || plan.Limits.APIKeys == Unlimited {
+		return []string{}, err
+	}
+	keys, err := q.ListAPIKeys(ctx, sys.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	replaced := []string{}
+	for _, k := range keys {
+		var scopes []string
+		if k.RevokedAt.Valid || json.Unmarshal([]byte(k.Scopes), &scopes) != nil || !slices.Contains(scopes, ScopeAdmin) {
+			continue
+		}
+		if _, err := q.RevokeAPIKey(ctx, db.RevokeAPIKeyParams{RevokedAt: nullStr(s.now()), WorkspaceID: sys.WorkspaceID, ID: k.ID}); err != nil {
+			return nil, err
+		}
+		if _, err := s.emit(ctx, q, sys, "api_key.revoked", "", "", map[string]any{"api_key_id": k.ID, "reason": "recovery"}); err != nil {
+			return nil, err
+		}
+		replaced = append(replaced, k.ID)
+	}
+	return replaced, nil
 }
 
 // RotateRecoveryKey is restricted to dashboard sessions: an API key must never

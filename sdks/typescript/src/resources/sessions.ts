@@ -54,7 +54,8 @@ export class Sessions extends APIResource {
   /**
    * Exchanges the recovery key (single use) for a new browser session, a new admin
    * API key and the next recovery key; the old recovery key stops working and every
-   * other session is signed out. Existing API keys keep working. Sent without
+   * other session is signed out. Existing API keys keep working, except on Free, where
+   * the new admin key replaces the old admin keys. Sent without
    * credentials; the session is set as a cookie. Store `api_key.key` and
    * `recovery_key` now: they are shown only once.
    */
