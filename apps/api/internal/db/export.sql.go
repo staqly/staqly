@@ -308,8 +308,11 @@ WHERE workspace_id = ?1
   AND (?8 IS NULL OR actor_id = ?8)
   AND (?9 IS NULL OR collection_id = ?9)
   AND (?10 IS NULL OR item_id = ?10)
+  -- Same rule as ListEvents: credential/session audit events only for admin principals.
+  AND (CAST(?11 AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
+       OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'))
 ORDER BY seq
-LIMIT ?11
+LIMIT ?12
 `
 
 type ExportEventsPageParams struct {
@@ -323,6 +326,7 @@ type ExportEventsPageParams struct {
 	ActorID      interface{} `json:"actor_id"`
 	CollectionID interface{} `json:"collection_id"`
 	ItemID       interface{} `json:"item_id"`
+	IncludeAudit int64       `json:"include_audit"`
 	Lim          int64       `json:"lim"`
 }
 
@@ -339,6 +343,7 @@ func (q *Queries) ExportEventsPage(ctx context.Context, arg ExportEventsPagePara
 		arg.ActorID,
 		arg.CollectionID,
 		arg.ItemID,
+		arg.IncludeAudit,
 		arg.Lim,
 	)
 	if err != nil {

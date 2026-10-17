@@ -239,6 +239,7 @@ Approve a pending item, optionally editing title/content first. · `items:review
 | `feedback` | string | No | Optional note stored with the decision |
 | `title` | string | No | New title, applied before approving (subject to the item's `editable` list) |
 | `content` | string | No | New content or caption, applied before approving (subject to the item's `editable` list) |
+| `expected_version` | integer | No | The item's `version` you reviewed; if it changed since, the call fails with a conflict and nothing is applied |
 
 ### `reject_item`
 Reject a pending item with feedback explaining why. · `items:review`
@@ -248,6 +249,7 @@ Reject a pending item with feedback explaining why. · `items:review`
 | `item_id` | string | <Required /> | Item ID |
 | `feedback` | string | <Required /> | Sent to automations so they can regenerate |
 | `follow_up` | string | No | Run this action next with the same feedback, e.g. `regenerate` |
+| `expected_version` | integer | No | The item's `version` you reviewed; if it changed since, the call fails with a conflict and nothing is applied |
 
 ### `list_available_actions`
 Actions the caller can run on an item in its current status. *Read-only* · `items:read`

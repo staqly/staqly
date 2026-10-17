@@ -59,6 +59,7 @@ Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs up
 | Performance: image thumbnails (`GET /v1/media/{id}?w=`, cached on disk), in-process write serialisation (no `SQLITE_BUSY` under parallel writers; residual busy = 503 + `Retry-After`), lazy-loaded command palette / dialogs, locally derived item actions, one-page revisits of long lists | ✅ |
 | Backend security audit fixes: loopback-only local mode by default (`LOCAL_TRUSTED_PEERS`, `LOCAL_ALLOWED_ORIGINS`), mode-dependent safe defaults, hardened SSRF policy, version-bound decisions, post-approval write rules, bounded search, missing indexes, idempotency/rate-limit hardening | ✅ |
 | Second backend audit: the dashboard relay names each browser in `X-Forwarded-For` (per-browser sign-up/recovery/connect limits behind Caddy), model replies bounded and model address hidden from cloud tenants, `summarize` rate-limited, unarchive back to review survives edits made while archived, PATCH with tags + a stale `expected_version` applies nothing, summary queue writes scoped by workspace, `staqly service` units owner-only | ✅ |
+| Third backend audit (2026-10-17): MCP `approve_item` / `reject_item` take `expected_version` (stale = conflict, nothing applied, like REST); webhook and notification channel `events` are validated (1-50 patterns: `*`, a glob inside a known family such as `item.*` or `item.*_requested`, a known event type, or a custom action's event; typos such as `item.aproved` are 422); `image` / `video` items need media or a `url` (422, also when an update clears both); `GET /v1/events/export` and MCP `export_events` hide credential/session audit events from non-admins like the list does; index `items_processing` (migration `00018`) for the processing-timeout sweep that runs on every worker pass; delivery log item filter scoped by workspace; `PRAGMA optimize` on open and daily so the planner has statistics | ✅ |
 | CLI covers the REST surface: notification channels, media upload/download, item delete/purge/bulk/versions, events export, workspace get/rename/usage/export, plans + switch to Free, sessions, connect links, key rotation, watchers get/pause/resume, webhooks get + update (not in the CLI: editing a watcher, `PATCH /v1/watchers/{id}`; by design: workspace delete and recovery-key rotation, which the API only allows from a dashboard session) | ✅ |
 
 ## Verification (executed)
@@ -72,9 +73,11 @@ Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs up
   the medium/low findings fixed, each with a regression test.
 * Dashboard profiling with ~3,000 items: `j` 36,017 → 557 renders, approve
   75,928 → 1,292, idle poll 42 requests → 1, inbox first load 51 MB → 249 KB.
-* `e2e/` (Vitest + TS SDK on `compose.e2e.yml`, 43 tests in 8 files): local
+* `e2e/` (Vitest + TS SDK on `compose.e2e.yml`, 54 tests in 9 files): local
   keyless access and its guards, browser sign-in link, REST item + dashboard proxy (12 MB upload),
-  approve, webhook retry + signature, history, MCP HTTP + STDIO,
+  approve, webhook retry + signature, the webhook outbox giving up after `max_attempts` and a
+  manual retry, collection/event filters, ntfy notification retried and decided by its one-tap
+  link, RSS watcher, REST long-poll, history, MCP HTTP + STDIO,
   `await_decision`, search, phone via QR (single-use), persistence across
   restart/recreate, switch to cloud mode, setup-token gate, Free-plan limit.
 * Real clients: Claude Code (HTTP + STDIO ✔ Connected), OpenCode (✔ connected,
@@ -95,6 +98,14 @@ Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs up
   live payments haven't been exercised. Without Stripe settings, plans are
   changed by the operator (`server set-plan`, e.g. `docker exec staqly server set-plan ws_... pro`).
 * No per-item `callback_url` (use webhooks or `/wait`).
+* Webhooks subscribed to `*` (or `api_key.*`, `session.*`...) also receive the
+  credential/session audit events, although `GET /v1/events` shows those only
+  to admins; creating a webhook needs `webhooks:manage`, not `admin`.
+* The `decided_desc` and `title_asc` item sorts, the tag cloud and the flow
+  counts sort in a temporary B-tree (about 50-130 ms at 200k items in one
+  workspace); the default `created_desc` list uses a covering index.
+* `/wait` and `await_decision` waiters re-read their item after every commit
+  in the process (cheap primary-key reads; per-item wake-ups would remove them).
 * The TypeScript code generator (openapi-typescript) still needs the TS 5.9
   compiler API, so `gen` scripts run it via `npx` with TS 5.9; everything else
   uses TypeScript 7.

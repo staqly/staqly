@@ -245,7 +245,7 @@ implicitly.
 
 | Field | Description |
 |---|---|
-| `events` | Glob patterns. Default: a new item waiting for review (`item.created`, only notified when the new item is `pending`). Add others such as `item.approved`, `item.rejected` or `item.*`. |
+| `events` | Glob patterns. Default: a new item waiting for review (`item.created`, only notified when the new item is `pending`). Add others such as `item.approved`, `item.rejected` or `item.*`. Patterns follow the same rules as [webhook events](/automation/webhooks); unknown ones are refused with `422`. |
 | `collection_ids` | Only these collections; empty = all. |
 | `digest_window_seconds` | Collect everything within the window into one message (e.g. `300` = at most one message per 5 minutes; 0 – 86,400). Digests keep per-item buttons for the first 10 items (5 on Discord). |
 | `config` | Type-specific settings; see the sections for each type above. |

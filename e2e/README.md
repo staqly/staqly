@@ -33,7 +33,7 @@ never replaces the released `ghcr.io/staqly/staqly` image:
 |---|---|
 | API (`staqly-e2e`) | `http://localhost:13333` |
 | Dashboard (`staqly-e2e`) | `http://localhost:18080` |
-| Webhook receiver (`staqly-e2e-receiver`) | `http://localhost:19000` |
+| Webhook, ntfy and RSS receiver (`staqly-e2e-receiver`) | `http://localhost:19000` |
 
 Settings live in [`e2e.env`](e2e.env) and are passed with `--env-file`. To run
 the stack by hand:
@@ -57,6 +57,7 @@ same volume from local to cloud mode, and `08-signup-and-plans` needs that.
 | `01-local-mode` | Workspace created automatically; setup disabled (409); keyless access from this machine; foreign Origin and Host refused (403); dashboard API refused without a session; browser sign-in with a one-time link from `server connect-link` |
 | `02-items-and-dashboard` | Image upload over REST (SDK); item and inbox pages render; item and image served through the dashboard proxy; 12 MB upload streamed through the proxy; approval with session and CSRF; second decision conflicts (409); item history |
 | `03-webhooks` | Webhook on `item.approved`; the receiver fails the first delivery, the retry succeeds (2 attempts); HMAC signature checked with the SDK's `verifyWebhook` |
+| `03b-queues` | Webhook outbox: unknown event patterns refused (422), a delivery that keeps failing gives up after `max_attempts` and succeeds on a manual retry, only subscribed events of subscribed collections arrive; ntfy notification channel retried after a failure, its one-tap approve link decides the item once (then 410); RSS watcher with keywords (baseline run, new entries become items once); REST long-poll wait (decided and timed out); image item without media refused (422) |
 | `04-mcp` | Streamable HTTP: initialize, tool count, `create_item`; STDIO via `docker exec -i staqly-e2e mcp-stdio`; `await_decision` returns when a human approves concurrently |
 | `05-search-and-devices` | Prefix full-text search; a phone on the LAN (non-local Host) is refused, redeems a QR link, reads and acts; the link works once (410) |
 | `06-persistence` | Items and media survive `compose restart` and `up --force-recreate` |
@@ -71,7 +72,7 @@ When MCP tools are added or removed, update `TOOL_COUNT` in
 ```
 compose.e2e.yml      project name, container and image names, receiver service (repo root)
 e2e/e2e.env          ports and settings of the e2e stack
-e2e/receiver/        webhook receiver (fails the first delivery; GET /requests, POST /reset)
+e2e/receiver/        webhook/ntfy receiver and RSS feed (fails the first POST; GET /requests, POST /reset, POST /fail?n=, PUT /feed, GET /feed.xml)
 e2e/fixtures/        images used by the tests and by scripts/seed.sh
 e2e/lib/             global setup, compose and docker helpers, raw HTTP and cookies, MCP, polling
 e2e/tests/           the test files above

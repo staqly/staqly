@@ -202,6 +202,10 @@ func init() {
 			case <-time.After(wait):
 			}
 			wait = 24 * time.Hour
+			// Refresh planner statistics (sqlite_stat1) so filtered lists pick the selective index.
+			if _, err := s.DB.ExecContext(ctx, "PRAGMA optimize"); err != nil && ctx.Err() == nil {
+				s.logger(ctx).Warn("pragma optimize failed", "err", err)
+			}
 			rep, err := s.RunRetention(ctx)
 			if err != nil {
 				if ctx.Err() == nil {

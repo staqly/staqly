@@ -470,10 +470,12 @@ type approveIn struct {
 	Feedback string  `json:"feedback,omitempty" jsonschema:"optional note stored with the decision"`
 	Title    *string `json:"title,omitempty" jsonschema:"edit the title before approving"`
 	Content  *string `json:"content,omitempty" jsonschema:"edit the content/caption before approving"`
+	// ExpectedVersion mirrors REST optimistic concurrency: a stale version is a conflict, nothing is applied.
+	ExpectedVersion *int64 `json:"expected_version,omitempty" jsonschema:"fail with a conflict if the item changed since this version"`
 }
 
 func (t *tools) approve(ctx context.Context, _ *mcp.CallToolRequest, in approveIn) (*mcp.CallToolResult, any, error) {
-	ai := app.ActionInput{Feedback: in.Feedback}
+	ai := app.ActionInput{Feedback: in.Feedback, ExpectedVersion: in.ExpectedVersion}
 	if in.Title != nil || in.Content != nil {
 		ai.Edits = &app.ItemEdits{Title: in.Title}
 		if in.Content != nil {
@@ -484,13 +486,14 @@ func (t *tools) approve(ctx context.Context, _ *mcp.CallToolRequest, in approveI
 }
 
 type rejectIn struct {
-	ItemID   string `json:"item_id"`
-	Feedback string `json:"feedback" jsonschema:"why the item was rejected; sent to automations so they can regenerate"`
-	FollowUp string `json:"follow_up,omitempty" jsonschema:"run this action right after, with the same feedback, e.g. regenerate"`
+	ItemID          string `json:"item_id"`
+	Feedback        string `json:"feedback" jsonschema:"why the item was rejected; sent to automations so they can regenerate"`
+	FollowUp        string `json:"follow_up,omitempty" jsonschema:"run this action right after, with the same feedback, e.g. regenerate"`
+	ExpectedVersion *int64 `json:"expected_version,omitempty" jsonschema:"fail with a conflict if the item changed since this version"`
 }
 
 func (t *tools) reject(ctx context.Context, _ *mcp.CallToolRequest, in rejectIn) (*mcp.CallToolResult, any, error) {
-	return nil0(t.svc.RunAction(ctx, t.principal(ctx), in.ItemID, "reject", app.ActionInput{Feedback: in.Feedback, FollowUp: in.FollowUp}))
+	return nil0(t.svc.RunAction(ctx, t.principal(ctx), in.ItemID, "reject", app.ActionInput{Feedback: in.Feedback, FollowUp: in.FollowUp, ExpectedVersion: in.ExpectedVersion}))
 }
 
 func (t *tools) availableActions(ctx context.Context, _ *mcp.CallToolRequest, in itemRef) (*mcp.CallToolResult, any, error) {

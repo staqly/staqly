@@ -184,6 +184,8 @@ export interface EventListParams {
 export interface DeliveryListParams {
   webhook_id?: string
   status?: 'pending' | 'succeeded' | 'failed'
+  /** Only deliveries of events about this item. */
+  item_id?: string
   limit?: number
 }
 

@@ -283,7 +283,19 @@ func (s *Service) applyFields(ctx context.Context, q *db.Queries, it *db.Item, f
 	if len(it.Metadata) > 256<<10 {
 		return false, invalid("metadata", "must be at most 256 KiB")
 	}
+	// On update and edit-before-approve (create checks in inferType, once the type is known):
+	// clearing both media and url would leave an image or video with nothing to show.
+	if (f.URL != nil || f.MediaID != nil) && needsMedia(it.Type) && !it.MediaID.Valid && it.Url == "" {
+		return false, errNoMedia(it.Type)
+	}
 	return isJSON, nil
+}
+
+// needsMedia: image and video items show a file, uploaded (media_id) or hosted (url).
+func needsMedia(typ string) bool { return typ == "image" || typ == "video" }
+
+func errNoMedia(typ string) error {
+	return invalid("media_id", typ+" items need media: upload a file (media_id) or pass a url")
 }
 
 func (s *Service) CreateItem(ctx context.Context, p Principal, collection string, in CreateItemInput) (Item, error) {
@@ -429,6 +441,9 @@ func (s *Service) inferType(ctx context.Context, q *db.Queries, it db.Item, give
 		}
 		if given == "json" && it.Content != "" && !json.Valid([]byte(it.Content)) {
 			return "", invalid("content", "must be valid JSON for json items")
+		}
+		if needsMedia(given) && !it.MediaID.Valid && it.Url == "" {
+			return "", errNoMedia(given)
 		}
 		return given, nil
 	}

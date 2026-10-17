@@ -126,7 +126,7 @@ bundled n8n compose file the URL is `http://n8n:5678/webhook/staqly-demo` (Docke
 |---|---|---|
 | `url` | — | Absolute `http(s)` URL, no credentials in it |
 | `description` | `""` | Free text, up to 500 characters |
-| `events` | `["*"]` | Exact names or globs: `"*"`, `"item.*"`, `"item.*_requested"` (custom actions). At least one |
+| `events` | `["*"]` | 1 to 50 patterns: `"*"`, a glob inside an event family (`"item.*"`, `"item.*_requested"`), a [known event type](/api/events), or a custom action's event (`item.<name>_requested` or the `event` set on a collection action). Anything else, e.g. the typo `"item.aproved"`, is refused with `422` |
 | `collection_ids` | `[]` | Only events from these collections; empty = all |
 | `active` | `true` | Pause without deleting. Deliveries already queued for a paused webhook finish as `failed` ("webhook disabled"); re-enable and retry them to resend |
 | `timeout_ms` | `10000` | 1,000 – 60,000 (the dashboard asks for seconds, 1 – 60) |

@@ -161,13 +161,8 @@ func (s *Service) applyWebhookInput(ctx context.Context, p Principal, w *db.Webh
 		w.Description = d
 	}
 	if in.Events != nil {
-		if len(*in.Events) == 0 {
-			return invalid("events", "subscribe to at least one event (use \"*\" for all)")
-		}
-		for _, e := range *in.Events {
-			if e == "" || len(e) > 100 || strings.ContainsAny(e, " /") {
-				return invalid("events", "invalid event pattern "+e)
-			}
+		if err := s.validateEventPatterns(ctx, p.WorkspaceID, *in.Events); err != nil {
+			return err
 		}
 		w.Events = mustJSON(*in.Events)
 	}
