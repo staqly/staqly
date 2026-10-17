@@ -60,7 +60,7 @@ function Section({
   return (
     <section
       className={cn(
-        'grid gap-3',
+        'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3',
         (danger || archive) && 'rounded-xl border p-4',
         danger && TONES.danger.border,
         archive && TONES.attention.border,
@@ -183,9 +183,14 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
   }
 
   return (
-    <div className="grid gap-6 p-4">
+    // minmax(0,1fr) tracks: long names, codes and rows shrink to the panel instead of widening it on phones.
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 p-4">
       <Section title="General">
-        <form onSubmit={handleSubmit((v) => save.mutate(v))} className="grid gap-4" noValidate>
+        <form
+          onSubmit={handleSubmit((v) => save.mutate(v))}
+          className="grid grid-cols-[minmax(0,1fr)] gap-4"
+          noValidate
+        >
           <FieldGroup className="gap-4">
             <Field data-invalid={!!formState.errors.name}>
               <FieldLabel htmlFor="settings-name" required>

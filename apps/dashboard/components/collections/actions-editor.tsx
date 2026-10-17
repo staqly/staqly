@@ -182,7 +182,7 @@ export function ActionsEditor({ collection }: { collection: Collection }) {
   }
 
   return (
-    <div className="grid gap-3" data-testid="actions-editor">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3" data-testid="actions-editor">
       <p className="text-sm text-muted-foreground">
         Custom actions appear in each item&apos;s menu. Running one sends its event to your webhooks; an action that
         starts a run then waits for your automation to report it done or failed, under the names you give it below.
