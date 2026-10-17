@@ -47,6 +47,7 @@ Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs up
 | Plans: Free (50 approvals/month; unlimited items and collections) and Pro ($30, unlimited, 100 GB, 100 MB files); 7-day Pro trial for new cloud workspaces; unpaid → suspended (read-only + export) across REST, MCP, decision links and watchers; self-service switch to Free (migration `00002_pro_plan_and_trial`) | ✅ |
 | Billing with Stripe (cloud): Checkout for Pro, customer portal, signed webhook `POST /v1/billing/webhook` applied once per event, plan follows the subscription (paid period + 3 days grace), subscription canceled on workspace delete; `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_PRO`; CLI `staqly billing`, MCP billing tools (migration `00003_billing`) | ✅ |
 | Operator: `server set-plan <ws> <plan> --until DATE` comps a plan until a date; `server stats` prints workspaces by plan, trials, suspensions, signups and this month's usage as JSON | ✅ |
+| Plan & usage also shows items created this period by status (each opens its Inbox tab) and the webhook delivery backlog (queued, retrying, failed); `GET /v1/workspace/usage` returns `items_by_status` and `webhook_deliveries` | ✅ |
 | Docs site on GitHub Pages (`.github/workflows/docs.yml`, https://docs.staqly.ai); Caddy docs image removed | ✅ |
 | `make site`: the landing page (:8070) and docs (:8090) from the checkout, linked to each other and the dev dashboard | ✅ |
 | `staqly serve`: API + MCP + dashboard in one process from the CLI binary, no Docker (`apps/api/server`, `DASHBOARD_ADDR`) | ✅ |

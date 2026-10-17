@@ -13,6 +13,7 @@ import {
   Sparkles,
   Webhook,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -23,10 +24,11 @@ import { EVERY_PLAN, PlanGrid } from '@/components/plans/plan-cards'
 import { SettingsHeader } from '@/components/settings/settings-header'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { api, UNLIMITED, type Billing, type WorkspaceUsage } from '@/lib/api'
+import { api, ITEM_STATUSES, UNLIMITED, type Billing, type WorkspaceUsage } from '@/lib/api'
 import { formatBytes, formatInterval } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { qk, useBilling, useMode, usePlans, useUsage } from '@/lib/queries'
+import { STATUS_META } from '@/lib/status'
 import { TONES } from '@/lib/tones'
 import { meterTone, usageMeter } from '@/lib/usage'
 import { cn } from '@/lib/utils'
@@ -115,6 +117,96 @@ function UsageMeter({
         )}
       </div>
       {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+    </div>
+  )
+}
+
+/** Shown even at 0; the other statuses only when an item of this period has them. */
+const MAIN_STATUSES = new Set(['pending', 'approved', 'rejected', 'completed', 'failed', 'expired'])
+
+/** The inbox step that lists a status (draft has none). */
+const STEP_OF: Partial<Record<string, string>> = {
+  pending: 'review',
+  approved: 'approved',
+  rejected: 'rejected',
+  expired: 'expired',
+  processing: 'processing',
+  completed: 'done',
+  failed: 'failed',
+  archived: 'archived',
+}
+
+/** Items created this period by current status, and the webhook delivery backlog. */
+function PeriodActivity({ usage }: { usage: WorkspaceUsage }) {
+  const counts = usage.items_by_status
+  const created = Object.values(counts).reduce((a, b) => a + b, 0)
+  const statuses = ITEM_STATUSES.filter((s) => MAIN_STATUSES.has(s) || (counts[s] ?? 0) > 0)
+  const d = usage.webhook_deliveries
+  const rows = [
+    { label: 'Queued', value: d.queued, hint: 'Waiting for the first attempt' },
+    { label: 'Retrying', value: d.retrying, hint: 'Failed at least once, will try again' },
+    { label: 'Failed', value: d.failed, hint: 'Gave up after every retry; redeliver it from Webhooks' },
+  ]
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <div
+        className="grid content-start gap-3 rounded-xl border bg-card p-3.5 sm:p-4 lg:col-span-2"
+        data-testid="period-items"
+      >
+        <div className="flex items-center justify-between gap-2 text-[13px] sm:text-sm">
+          <span className="font-medium">Items created this period</span>
+          <span className="text-muted-foreground">
+            <span className="font-semibold text-foreground tabular-nums">{created.toLocaleString('en-US')}</span>{' '}
+            created
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          {statuses.map((s) => {
+            const meta = STATUS_META[s]
+            const step = STEP_OF[s]
+
+            return (
+              <Link
+                key={s}
+                href={step ? `/inbox?step=${step}` : '/inbox'}
+                title={`${meta.description}: open in the Inbox`}
+                className="grid justify-items-center gap-1.5 rounded-lg p-2 hover:bg-muted"
+              >
+                <span className={cn('text-xl font-semibold tabular-nums sm:text-2xl', TONES[meta.tone].text)}>
+                  {(counts[s] ?? 0).toLocaleString('en-US')}
+                </span>
+                <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset', meta.badge)}>
+                  {meta.label}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          By current status. Counts every item created since the 1st (UTC).
+        </p>
+      </div>
+      <div className="grid content-start gap-2 rounded-xl border bg-card p-3.5 sm:p-4" data-testid="webhook-deliveries">
+        <Link
+          href="/webhooks"
+          className="inline-flex items-center gap-2 text-[13px] font-medium hover:underline sm:text-sm"
+        >
+          <Webhook className="size-4 shrink-0 text-muted-foreground" /> Webhook delivery
+        </Link>
+        <dl className="divide-y text-sm">
+          {rows.map((r) => (
+            <div key={r.label} className="flex items-center justify-between py-1.5" title={r.hint}>
+              <dt className="text-muted-foreground">{r.label}</dt>
+              <dd
+                className={cn('font-semibold tabular-nums', r.label === 'Failed' && r.value > 0 && TONES.danger.text)}
+              >
+                {r.value.toLocaleString('en-US')}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </div>
   )
 }
@@ -347,6 +439,7 @@ export function PlanUsagePage() {
             )}
           </div>
         )}
+        {usage.data?.items_by_status && <PeriodActivity usage={usage.data} />}
         {!unlocked && plan && plan.limits.max_upload_bytes > 0 && (
           <p className="text-xs text-muted-foreground">
             Files up to {formatBytes(plan.limits.max_upload_bytes)} per upload on the {plan.name} plan.

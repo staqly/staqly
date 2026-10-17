@@ -92,5 +92,7 @@ export function usage(plan: Plan, u: Partial<WorkspaceUsage['usage']> = {}): Wor
     },
     plan_expires_at: null,
     suspended: false,
+    items_by_status: { pending: 2, approved: 1 },
+    webhook_deliveries: { queued: 0, retrying: 0, failed: 1 },
   }
 }

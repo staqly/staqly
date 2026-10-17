@@ -27,3 +27,12 @@ SELECT CAST(COALESCE(SUM(size_bytes), 0) AS INTEGER) AS used FROM media WHERE wo
 -- name: UsageTotals :many
 SELECT metric, CAST(SUM(count) AS INTEGER) AS total, COUNT(DISTINCT workspace_id) AS workspaces
 FROM usage_counters WHERE period = ? GROUP BY metric ORDER BY metric;
+
+-- name: ItemStatusCountsSince :many
+SELECT status, COUNT(*) AS n FROM items WHERE workspace_id = ? AND created_at >= ? GROUP BY status;
+
+-- name: WebhookDeliveryBacklog :one
+SELECT CAST(COALESCE(SUM(status = 'pending' AND attempts = 0), 0) AS INTEGER) AS queued,
+       CAST(COALESCE(SUM(status = 'pending' AND attempts > 0), 0) AS INTEGER) AS retrying,
+       CAST(COALESCE(SUM(status = 'failed'), 0) AS INTEGER) AS failed
+FROM webhook_deliveries WHERE workspace_id = ?;

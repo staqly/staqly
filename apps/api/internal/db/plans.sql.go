@@ -84,6 +84,43 @@ func (q *Queries) IncrementUsage(ctx context.Context, arg IncrementUsageParams) 
 	return count, err
 }
 
+const itemStatusCountsSince = `-- name: ItemStatusCountsSince :many
+SELECT status, COUNT(*) AS n FROM items WHERE workspace_id = ? AND created_at >= ? GROUP BY status
+`
+
+type ItemStatusCountsSinceParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	CreatedAt   string `json:"created_at"`
+}
+
+type ItemStatusCountsSinceRow struct {
+	Status string `json:"status"`
+	N      int64  `json:"n"`
+}
+
+func (q *Queries) ItemStatusCountsSince(ctx context.Context, arg ItemStatusCountsSinceParams) ([]ItemStatusCountsSinceRow, error) {
+	rows, err := q.db.QueryContext(ctx, itemStatusCountsSince, arg.WorkspaceID, arg.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemStatusCountsSinceRow
+	for rows.Next() {
+		var i ItemStatusCountsSinceRow
+		if err := rows.Scan(&i.Status, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkspaces = `-- name: ListWorkspaces :many
 SELECT id, name, plan, plan_expires_at, created_at FROM workspaces ORDER BY created_at
 `
@@ -192,4 +229,24 @@ func (q *Queries) UsageTotals(ctx context.Context, period string) ([]UsageTotals
 		return nil, err
 	}
 	return items, nil
+}
+
+const webhookDeliveryBacklog = `-- name: WebhookDeliveryBacklog :one
+SELECT CAST(COALESCE(SUM(status = 'pending' AND attempts = 0), 0) AS INTEGER) AS queued,
+       CAST(COALESCE(SUM(status = 'pending' AND attempts > 0), 0) AS INTEGER) AS retrying,
+       CAST(COALESCE(SUM(status = 'failed'), 0) AS INTEGER) AS failed
+FROM webhook_deliveries WHERE workspace_id = ?
+`
+
+type WebhookDeliveryBacklogRow struct {
+	Queued   int64 `json:"queued"`
+	Retrying int64 `json:"retrying"`
+	Failed   int64 `json:"failed"`
+}
+
+func (q *Queries) WebhookDeliveryBacklog(ctx context.Context, workspaceID string) (WebhookDeliveryBacklogRow, error) {
+	row := q.db.QueryRowContext(ctx, webhookDeliveryBacklog, workspaceID)
+	var i WebhookDeliveryBacklogRow
+	err := row.Scan(&i.Queued, &i.Retrying, &i.Failed)
+	return i, err
 }

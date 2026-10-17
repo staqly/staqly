@@ -164,6 +164,10 @@ class WorkspaceUsage(StaqlyModel):
     plan_expires_at: OptionalDatetime = None
     #: The Pro trial or paid period ended unpaid: the workspace is read-only.
     suspended: bool = False
+    #: Items created this period, by their current status.
+    items_by_status: dict[str, int] = {}
+    #: Webhook deliveries right now: ``queued``, ``retrying`` and ``failed`` (gave up).
+    webhook_deliveries: dict[str, int] = {}
 
 
 class APIKey(StaqlyModel):

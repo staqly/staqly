@@ -183,7 +183,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [plan, period, usage, plan_expires_at, suspended]
+                required: [plan, period, usage, plan_expires_at, suspended, items_by_status, webhook_deliveries]
                 properties:
                   plan: { $ref: "#/components/schemas/Plan" }
                   period: { type: string, examples: ["2026-10"] }
@@ -208,6 +208,19 @@ paths:
                       The Pro trial or paid period ended unpaid. The workspace is read-only:
                       reads and exports work, other changes answer 402 `plan_expired` until it is
                       paid or switched to Free (`POST /v1/workspace/plan`).
+                  items_by_status:
+                    type: object
+                    description: Items created this period, counted by their current status (statuses with no items are left out).
+                    additionalProperties: { type: integer }
+                    examples: [{ pending: 2, approved: 2, rejected: 1 }]
+                  webhook_deliveries:
+                    type: object
+                    description: Webhook deliveries right now. `failed` gave up after every retry and can be redelivered.
+                    required: [queued, retrying, failed]
+                    properties:
+                      queued: { type: integer, description: Waiting for their first attempt }
+                      retrying: { type: integer, description: "Failed at least once; another attempt is scheduled" }
+                      failed: { type: integer, description: Gave up after every retry }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -2125,7 +2138,7 @@ components:
     Usage:
       description: Plan, monthly usage and trial/suspension state (also returned inline by GET /v1/workspace/usage)
       type: object
-      required: [plan, period, usage, plan_expires_at, suspended]
+      required: [plan, period, usage, plan_expires_at, suspended, items_by_status, webhook_deliveries]
       properties:
         plan: { $ref: "#/components/schemas/Plan" }
         period: { type: string, examples: ["2026-10"] }
@@ -2150,6 +2163,19 @@ components:
             The Pro trial or paid period ended unpaid. The workspace is read-only:
             reads and exports work, other changes answer 402 `plan_expired` until it is
             paid or switched to Free (`POST /v1/workspace/plan`).
+        items_by_status:
+          type: object
+          description: Items created this period, counted by their current status (statuses with no items are left out).
+          additionalProperties: { type: integer }
+          examples: [{ pending: 2, approved: 2, rejected: 1 }]
+        webhook_deliveries:
+          type: object
+          description: Webhook deliveries right now. `failed` gave up after every retry and can be redelivered.
+          required: [queued, retrying, failed]
+          properties:
+            queued: { type: integer, description: Waiting for their first attempt }
+            retrying: { type: integer, description: "Failed at least once; another attempt is scheduled" }
+            failed: { type: integer, description: Gave up after every retry }
     Billing:
       type: object
       required: [enabled, plan, subscription_status, plan_expires_at, suspended, has_customer]

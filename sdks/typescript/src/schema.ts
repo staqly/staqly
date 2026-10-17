@@ -1320,7 +1320,7 @@ export interface paths {
         put?: never;
         /**
          * Perform the link's action (approve or reject)
-         * @description Consumes the link and runs the action through the normal action path as actor "Link: <channel name>". Accepts an empty body, a form or JSON with an optional `feedback` (reject only). Returns HTML, or JSON (DecisionResult) when `Accept: application/json` without text/html. 409 when the item was already decided, or (the item changed since the message was sent) because links are bound to the item version they showed; the link is consumed either way. Errors of the action itself (e.g. 402 plan limits) keep their status. Rate-limited per client IP.
+         * @description Consumes the link and runs the action through the normal action path as actor "Link: <channel name>". Accepts an empty body, a form or JSON with an optional `feedback` (reject only; without one the item records "Rejected by <channel> without a reason."). Returns HTML, or JSON (DecisionResult) when `Accept: application/json` without text/html. 409 when the item was already decided, or (the item changed since the message was sent) because links are bound to the item version they showed; the link is consumed either way. Errors of the action itself (e.g. 402 plan limits) keep their status. Rate-limited per client IP.
          */
         post: operations["useDecisionLink"];
         delete?: never;
@@ -1457,6 +1457,26 @@ export interface components {
              *     paid or switched to Free (`POST /v1/workspace/plan`).
              */
             suspended: boolean;
+            /**
+             * @description Items created this period, counted by their current status (statuses with no items are left out).
+             * @example {
+             *       "pending": 2,
+             *       "approved": 2,
+             *       "rejected": 1
+             *     }
+             */
+            items_by_status: {
+                [key: string]: number;
+            };
+            /** @description Webhook deliveries right now. `failed` gave up after every retry and can be redelivered. */
+            webhook_deliveries: {
+                /** @description Waiting for their first attempt */
+                queued: number;
+                /** @description Failed at least once; another attempt is scheduled */
+                retrying: number;
+                /** @description Gave up after every retry */
+                failed: number;
+            };
         };
         Billing: {
             /** @description Billing is configured on this instance */
@@ -2470,6 +2490,26 @@ export interface operations {
                          *     paid or switched to Free (`POST /v1/workspace/plan`).
                          */
                         suspended: boolean;
+                        /**
+                         * @description Items created this period, counted by their current status (statuses with no items are left out).
+                         * @example {
+                         *       "pending": 2,
+                         *       "approved": 2,
+                         *       "rejected": 1
+                         *     }
+                         */
+                        items_by_status: {
+                            [key: string]: number;
+                        };
+                        /** @description Webhook deliveries right now. `failed` gave up after every retry and can be redelivered. */
+                        webhook_deliveries: {
+                            /** @description Waiting for their first attempt */
+                            queued: number;
+                            /** @description Failed at least once; another attempt is scheduled */
+                            retrying: number;
+                            /** @description Gave up after every retry */
+                            failed: number;
+                        };
                     };
                 };
             };
@@ -4789,6 +4829,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
@@ -4821,6 +4862,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];

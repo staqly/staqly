@@ -213,6 +213,10 @@ type Usage struct {
 	PlanExpiresAt *string `json:"plan_expires_at"`
 	// Suspended: the period ended unpaid; the workspace is read-only.
 	Suspended bool `json:"suspended"`
+	// ItemsByStatus: items created this period, by their current status.
+	ItemsByStatus map[string]int64 `json:"items_by_status"`
+	// Deliveries: webhook deliveries waiting (queued, retrying) or given up (failed).
+	Deliveries db.WebhookDeliveryBacklogRow `json:"webhook_deliveries"`
 }
 
 func (s *Service) GetUsage(ctx context.Context, p Principal) (Usage, error) {
@@ -256,9 +260,22 @@ func (s *Service) GetUsage(ctx context.Context, p Principal) (Usage, error) {
 	if err != nil {
 		return Usage{}, err
 	}
-	return Usage{Plan: plan, Period: period, PlanExpiresAt: expiresAt, Suspended: suspended, Usage: map[string]int64{
-		LimitItemsPerMonth: items, LimitDecisions: decisions, LimitWebhooks: hooks, LimitAPIKeys: keys, LimitStorage: storage,
-		LimitWatchers: watchers, LimitChannels: channels}}, nil
+	rows, err := s.Q.ItemStatusCountsSince(ctx, db.ItemStatusCountsSinceParams{WorkspaceID: p.WorkspaceID, CreatedAt: period})
+	if err != nil {
+		return Usage{}, err
+	}
+	byStatus := map[string]int64{}
+	for _, r := range rows {
+		byStatus[r.Status] = r.N
+	}
+	deliveries, err := s.Q.WebhookDeliveryBacklog(ctx, p.WorkspaceID)
+	if err != nil {
+		return Usage{}, err
+	}
+	return Usage{Plan: plan, Period: period, PlanExpiresAt: expiresAt, Suspended: suspended,
+		ItemsByStatus: byStatus, Deliveries: deliveries, Usage: map[string]int64{
+			LimitItemsPerMonth: items, LimitDecisions: decisions, LimitWebhooks: hooks, LimitAPIKeys: keys, LimitStorage: storage,
+			LimitWatchers: watchers, LimitChannels: channels}}, nil
 }
 
 // changePlan sets a workspace's plan (expires "" = no end date, which also

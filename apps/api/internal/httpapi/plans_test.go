@@ -121,3 +121,19 @@ func TestDataExportNeedsPaidPlan(t *testing.T) {
 	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 202, nil, csrf...)
 	e.do(nil, "GET", "/v1/events/export", e.key, nil, 200, nil)
 }
+
+func TestUsageItemsByStatusAndDeliveries(t *testing.T) {
+	e := newEnv(t)
+	c := e.collection("Usage")
+	e.item(c.ID, map[string]any{"title": "a"})
+	it := e.item(c.ID, map[string]any{"title": "b"})
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/approve", e.key, nil, 200, nil)
+	var u app.Usage
+	e.do(nil, "GET", "/v1/workspace/usage", e.key, nil, 200, &u)
+	if u.ItemsByStatus["pending"] != 1 || u.ItemsByStatus["approved"] != 1 {
+		t.Fatalf("items_by_status: %+v", u.ItemsByStatus)
+	}
+	if u.Deliveries.Queued != 0 || u.Deliveries.Retrying != 0 || u.Deliveries.Failed != 0 {
+		t.Fatalf("webhook_deliveries: %+v", u.Deliveries)
+	}
+}

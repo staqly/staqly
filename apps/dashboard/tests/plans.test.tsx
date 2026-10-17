@@ -58,6 +58,13 @@ describe('plan & usage page', () => {
     expect(screen.getByTestId('meter-API keys')).toHaveAttribute('data-level', 'full') // 1/1: Free has one key
     expect(within(screen.getByTestId('meter-Storage')).getByText('200 MB')).toBeInTheDocument()
 
+    // This period's items by status, and the webhook delivery backlog (fixture: 2 pending, 1 approved, 1 failed delivery).
+    const period = screen.getByTestId('period-items')
+
+    expect(within(period).getByText('3')).toBeInTheDocument()
+    expect(within(period).getByRole('link', { name: /2\s*pending/i })).toHaveAttribute('href', '/inbox?step=review')
+    expect(within(screen.getByTestId('webhook-deliveries')).getByText('Failed').nextSibling).toHaveTextContent('1')
+
     // Plan cards with the current plan marked; without Stripe, upgrades go through the operator.
     expect(await screen.findByTestId('plan-free')).toHaveAttribute('data-current', 'true')
     expect(within(screen.getByTestId('plan-free')).getByText('Current plan')).toBeInTheDocument()

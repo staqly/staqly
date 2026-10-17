@@ -21,6 +21,11 @@ Open **Settings → Plan & usage**, or search for *Plan & usage* in the command 
   *Storage*, *Watchers* (active, not paused) and *Notification channels*, each against
   its limit (∞ when unlimited). A meter shows *Almost full* above 80 % and *Limit reached* at the
   limit. On paid plans the page also shows the largest file you can upload;
+- **Items created this period**, counted by their current status (Pending, Approved, Rejected,
+  Completed, Failed, Expired, plus Processing, Archived or Draft when there are any). Each count
+  opens the matching Inbox tab;
+- **Webhook delivery**: deliveries *Queued* for their first attempt, *Retrying* after a failure,
+  and *Failed* after every retry (redeliver them from **Webhooks**);
 - in cloud mode, the **Plans** section with every plan's price, limits and a button to switch.
 
 | Banner | What it means | Buttons |
@@ -51,7 +56,9 @@ curl -s http://localhost:3333/v1/workspace/usage
 {
   "plan": { "id": "unlocked", "name": "Unlocked", "limits": { "decisions_per_month": -1, "items_per_month": -1, "webhooks": -1 } },
   "period": "2026-10",
-  "usage": { "decisions_per_month": 17, "items_per_month": 42, "webhooks": 1, "api_keys": 0, "storage_bytes": 1048576, "watchers": 1, "notification_channels": 0 }
+  "usage": { "decisions_per_month": 17, "items_per_month": 42, "webhooks": 1, "api_keys": 0, "storage_bytes": 1048576, "watchers": 1, "notification_channels": 0 },
+  "items_by_status": { "pending": 5, "approved": 30, "rejected": 7 },
+  "webhook_deliveries": { "queued": 0, "retrying": 1, "failed": 0 }
 }
 ```
 
