@@ -383,9 +383,12 @@ export function IntegrationsPage() {
           className="gap-0 rounded-xl border bg-card"
         >
           <div className="flex flex-wrap items-center gap-2 border-b p-3" data-testid="connection-options">
-            <TabsList className="h-auto max-w-full flex-wrap justify-start" aria-label="Client">
+            <TabsList
+              className="max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto pointer-coarse:group-data-horizontal/tabs:h-auto"
+              aria-label="Client"
+            >
               {INTEGRATION_TABS.map((t) => (
-                <TabsTrigger key={t.id} value={t.id}>
+                <TabsTrigger key={t.id} value={t.id} className="pointer-coarse:min-h-10">
                   {t.label}
                 </TabsTrigger>
               ))}

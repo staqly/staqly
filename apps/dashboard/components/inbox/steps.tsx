@@ -1,7 +1,9 @@
 'use client'
 
 import { ArrowRight } from 'lucide-react'
+import { useRef, type KeyboardEvent } from 'react'
 
+import { useKeepInView } from '@/hooks/use-keep-in-view'
 import type { Flow, Item, ItemQuery } from '@/lib/api'
 import { statusMeta } from '@/lib/status'
 import { TONES } from '@/lib/tones'
@@ -147,6 +149,35 @@ export function Stepper({
   counts: Partial<Record<StepId, number>> | null
   onPick: (s: StepId) => void
 }) {
+  const list = useRef<HTMLDivElement>(null)
+
+  // The open step stays visible where the toolbar scrolls sideways (tablets).
+  useKeepInView(list, `[data-testid="step-${active}"]`)
+
+  // The tabs pattern: one Tab stop (the open step), arrows, Home and End move between steps and open them.
+  function onKeyDown(e: KeyboardEvent) {
+    const order = GROUPS.flat()
+    const i = order.indexOf(active)
+    const next =
+      e.key === 'ArrowRight'
+        ? order[(i + 1) % order.length]
+        : e.key === 'ArrowLeft'
+          ? order[(i - 1 + order.length) % order.length]
+          : e.key === 'Home'
+            ? order[0]
+            : e.key === 'End'
+              ? order[order.length - 1]
+              : undefined
+
+    if (!next || e.metaKey || e.ctrlKey || e.altKey) {
+      return
+    }
+
+    e.preventDefault()
+    onPick(next)
+    list.current?.querySelector<HTMLElement>(`[data-testid="step-${next}"]`)?.focus()
+  }
+
   const tab = (id: StepId) => {
     const n = counts?.[id]
     const on = active === id
@@ -157,7 +188,9 @@ export function Stepper({
         type="button"
         role="tab"
         aria-selected={on}
+        tabIndex={on ? 0 : -1}
         onClick={() => onPick(id)}
+        onKeyDown={onKeyDown}
         data-testid={`step-${id}`}
         className={cn(
           'relative flex h-12 items-center gap-1.5 px-2 text-sm whitespace-nowrap transition-colors',
@@ -184,7 +217,7 @@ export function Stepper({
 
   return (
     // Groups follow the flow: an arrow between steps that follow each other, a gap before the side step (archive).
-    <div className="flex items-center" role="tablist" aria-label="Steps">
+    <div ref={list} className="flex items-center" role="tablist" aria-label="Steps">
       {GROUPS.map((group, i) => (
         <div key={group.join()} className="flex items-center">
           {i > 0 &&

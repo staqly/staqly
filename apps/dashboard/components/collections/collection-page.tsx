@@ -370,8 +370,12 @@ export function CollectionPage({ id }: { id: string }) {
         aria-busy={items.isPlaceholderData}
       >
         {items.isLoading ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            <SkeletonList count={8} className="aspect-[4/5] rounded-xl" />
+          // The shape of what loads: cards on phones, table rows (header included) from md up.
+          <div
+            className="grid gap-2 md:gap-px md:overflow-hidden md:rounded-xl md:border md:bg-border"
+            data-testid="items-loading"
+          >
+            <SkeletonList count={8} className="h-[4.625rem] rounded-xl md:h-11 md:rounded-none md:first:h-10" />
           </div>
         ) : items.error ? (
           <ErrorState error={items.error} onRetry={() => refetch()} />

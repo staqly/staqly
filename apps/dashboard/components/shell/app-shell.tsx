@@ -198,7 +198,7 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
         <span className="truncate text-sm font-semibold" data-testid="workspace-name">
           {name}
         </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-sidebar-foreground/60">
+        <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
           {plan && <PlanBadge plan={plan} />}
           <span className="truncate">{isLocal ? 'Local install' : 'Cloud'}</span>
         </span>
@@ -293,7 +293,7 @@ function PlanFooterLink() {
                 {(plan || isLocal) && <PlanBadge plan={unlocked ? 'unlocked' : plan?.id} className="ml-auto" />}
               </span>
               {unlocked ? (
-                <span className="text-[11px] text-sidebar-foreground/60">No limits on this install</span>
+                <span className="text-[11px] text-muted-foreground">No limits on this install</span>
               ) : usage.data ? (
                 <>
                   <span className="block h-1 overflow-hidden rounded-full bg-sidebar-accent">
@@ -302,7 +302,7 @@ function PlanFooterLink() {
                       style={{ width: `${level === 'unlimited' ? 0 : Math.max(pct, used ? 3 : 0)}%` }}
                     />
                   </span>
-                  <span className="text-[11px] text-sidebar-foreground/60 tabular-nums">
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
                     {used.toLocaleString('en-US')} / {level === 'unlimited' ? '∞' : max.toLocaleString('en-US')}{' '}
                     approvals this month
                   </span>
@@ -347,7 +347,7 @@ const NavCollectionItem = memo(function NavCollectionItem({
       </SidebarMenuButton>
       {/* Always the item count; a warning-tone clock when some wait for review. */}
       <SidebarMenuBadge
-        className="gap-1 text-muted-foreground/70 in-data-[mobile=true]:top-2.5"
+        className="gap-1 text-muted-foreground in-data-[mobile=true]:top-2.5"
         title={pending ? `${c.item_count} items, ${pending} waiting for review` : `${c.item_count} items`}
       >
         {pending > 0 && <Clock aria-label={`${pending} pending`} className={cn('size-3', TONES.warning.text)} />}
@@ -380,7 +380,7 @@ function NavCollections({ collections, isLoading }: { collections?: Collection[]
       {visible.map((c) => (
         <NavCollectionItem key={c.id} collection={c} active={pathname === `/collections/${c.id}`} onNavigate={close} />
       ))}
-      {visible.length === 0 && <div className="px-2 py-1.5 text-xs text-sidebar-foreground/60">No collections yet</div>}
+      {visible.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">No collections yet</div>}
     </>
   )
 }

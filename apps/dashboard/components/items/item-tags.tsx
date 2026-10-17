@@ -51,7 +51,7 @@ export function TagsPopover({ item }: { item: Item }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground pointer-coarse:-my-2 pointer-coarse:size-10"
           aria-label="Edit tags"
         >
           <Pencil className="size-3" />

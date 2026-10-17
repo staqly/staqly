@@ -7,6 +7,7 @@ import * as React from 'react'
 
 import { Button } from '@/components/ui/button'
 import { inToast } from '@/components/ui/sonner'
+import { useReturnFocus } from '@/hooks/use-return-focus'
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
@@ -45,6 +46,8 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const returnFocus = useReturnFocus(props)
+
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -59,6 +62,7 @@ function DialogContent({
           className,
         )}
         {...props}
+        {...returnFocus}
         onInteractOutside={(e) => {
           if (inToast(e.target)) {
             e.preventDefault()

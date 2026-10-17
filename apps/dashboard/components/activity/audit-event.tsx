@@ -287,7 +287,7 @@ export const AuditEventRow = memo(function AuditEventRow({ event: e }: { event: 
             </span>
           )}
           {d.edited && <span className="text-xs text-muted-foreground">(with edits)</span>}
-          <span className="max-w-full truncate font-mono text-[11px] text-muted-foreground/80">{e.type}</span>
+          <span className="max-w-full truncate font-mono text-[11px] text-muted-foreground">{e.type}</span>
         </div>
         {e.type === 'item.rule_applied' && d.expires_at && (
           <div className="mt-1 text-sm text-muted-foreground">

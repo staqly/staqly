@@ -217,7 +217,7 @@ export function ItemDetail({
         {!sheet && (
           <Link
             href={`/collections/${it.collection_id}`}
-            className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground pointer-coarse:-my-3 pointer-coarse:py-3"
           >
             <ArrowLeft className="size-3" /> {collection.data?.name ?? 'Collection'}
           </Link>
