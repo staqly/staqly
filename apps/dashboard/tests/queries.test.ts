@@ -134,4 +134,33 @@ describe('refreshEventLists', () => {
     ])
     expect(out.pages[1]).toBe(loaded.pages[1])
   })
+
+  it('does not put the same events in front twice when two refreshes overlap', async () => {
+    mockApi({ 'GET /v1/events': { data: [ev(12), ev(11), ev(10), ev(9)], next_cursor: 'c1' } })
+    const qc = new QueryClient()
+    const key = qk.events({ limit: 50 })
+
+    qc.setQueryData<InfiniteData<EventPage>>(key, {
+      pages: [
+        { data: [ev(10), ev(9)], next_cursor: 'c1' },
+        { data: [ev(8), ev(7)], next_cursor: 'c2' },
+      ],
+      pageParams: ['', 'c1'],
+    })
+    const observer = new InfiniteQueryObserver(qc, {
+      queryKey: key,
+      queryFn: () => Promise.reject(new Error('the feed must not refetch its pages')),
+      initialPageParam: '',
+      getNextPageParam: (last: EventPage) => last.next_cursor || undefined,
+      staleTime: Infinity,
+    })
+    const unsubscribe = observer.subscribe(() => {})
+
+    await Promise.all([refreshEventLists(qc), refreshEventLists(qc)])
+    unsubscribe()
+
+    const out = qc.getQueryData<InfiniteData<EventPage>>(key)!
+
+    expect(out.pages[0].data.map((e) => e.seq)).toEqual([12, 11, 10, 9])
+  })
 })

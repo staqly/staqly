@@ -479,11 +479,19 @@ async function refreshEventList(qc: QueryClient, queryKey: readonly unknown[]) {
     return
   }
 
-  qc.setQueryData<InfiniteData<EventPage>>(queryKey, (old) =>
-    old?.pages.length
-      ? { ...old, pages: [{ ...old.pages[0], data: [...fresh, ...old.pages[0].data] }, ...old.pages.slice(1)] }
-      : old,
-  )
+  qc.setQueryData<InfiniteData<EventPage>>(queryKey, (old) => {
+    if (!old?.pages.length) {
+      return old
+    }
+
+    // Against the list as it is now: another refresh may have put some of these in front while this one waited.
+    const now = old.pages[0].data[0]?.seq ?? 0
+    const add = fresh.filter((e) => e.seq > now)
+
+    return add.length
+      ? { ...old, pages: [{ ...old.pages[0], data: [...add, ...old.pages[0].data] }, ...old.pages.slice(1)] }
+      : old
+  })
 }
 
 /** Flatten infinite item pages. */
