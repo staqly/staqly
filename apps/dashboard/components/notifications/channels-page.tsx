@@ -127,12 +127,14 @@ function DeliveriesSheet({
               Nothing sent yet. Test messages are sent directly and don&apos;t show up here.
             </div>
           ) : (
-            <ul className="grid gap-2" data-testid="channel-deliveries">
+            <ul className="grid grid-cols-1 gap-2" data-testid="channel-deliveries">
               {list.map((d) => (
-                <li key={d.id} className="grid gap-1.5 rounded-xl border bg-card p-3 text-sm">
+                <li key={d.id} className="grid grid-cols-1 gap-1.5 rounded-xl border bg-card p-3 text-sm">
                   <div className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate font-mono text-xs">{d.event_type}</span>
-                    <Pill cls={DELIVERY_STATUS[d.status ?? ''] ?? DELIVERY_STATUS.skipped}>{d.status}</Pill>
+                    <Pill cls={cn('capitalize', DELIVERY_STATUS[d.status ?? ''] ?? DELIVERY_STATUS.skipped)}>
+                      {d.status}
+                    </Pill>
                   </div>
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span title={formatDateTime(d.created_at)}>{timeAgo(d.created_at)}</span>
@@ -147,7 +149,7 @@ function DeliveriesSheet({
                       </Link>
                     )}
                   </div>
-                  {d.last_error && <p className={cn('text-xs break-words', TONES.danger.text)}>{d.last_error}</p>}
+                  {d.last_error && <p className={cn('text-xs wrap-anywhere', TONES.danger.text)}>{d.last_error}</p>}
                 </li>
               ))}
             </ul>
@@ -187,7 +189,10 @@ function ChannelCard({
 
   return (
     <article
-      className={cn('grid content-start gap-3 rounded-xl border bg-card p-4', health === 'paused' && 'opacity-80')}
+      className={cn(
+        'grid grid-cols-1 content-start gap-3 rounded-xl border bg-card p-4',
+        health === 'paused' && 'opacity-80',
+      )}
       data-testid="channel-card"
       aria-label={ch.name}
     >
@@ -235,7 +240,7 @@ function ChannelCard({
 
       <div className="flex flex-wrap gap-1">
         {ch.events.map((e) => (
-          <span key={e} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+          <span key={e} className="max-w-full rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] wrap-anywhere">
             {e}
           </span>
         ))}
@@ -333,7 +338,7 @@ export function ChannelsPage() {
           )
         }
       />
-      <section className="mt-6 grid gap-4" aria-label="Notification channels">
+      <section className="mt-6 grid grid-cols-1 gap-4" aria-label="Notification channels">
         {/* How decisions from a channel behave: a note under the section's subtitle. */}
         <Callout tone="neutral" size="xs" className="text-muted-foreground">
           Decisions from chat or links go through the same path as the dashboard: events and webhooks fire as usual.
@@ -359,7 +364,7 @@ export function ChannelsPage() {
             }
           />
         ) : (
-          <div className="grid gap-3 md:grid-cols-2" data-testid="channels-list">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="channels-list">
             {list.map((ch) => (
               <ChannelCard
                 key={ch.id}

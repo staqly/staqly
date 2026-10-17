@@ -59,7 +59,7 @@ function AgentRow({
         type="button"
         aria-pressed={selected}
         onClick={() => onSelect(selected ? null : a)}
-        className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left"
+        className="flex min-h-11 min-w-0 flex-1 basis-full items-center gap-3 text-left sm:basis-0"
       >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
           {a.kind === 'mcp' ? <Plug className="size-4" /> : <Bot className="size-4" />}
@@ -78,16 +78,19 @@ function AgentRow({
           </span>
         </span>
       </button>
-      <div className="flex items-center gap-1.5 text-xs" title={formatDateTime(a.last_seen_at)}>
+      <div className="flex items-center gap-1.5 text-xs max-sm:mr-auto" title={formatDateTime(a.last_seen_at)}>
         <span aria-hidden className={cn('size-2 rounded-full', TONES[ACTIVITY_TONE[activity]].dot)} />
         {activity === 'active' ? 'Active now' : `Last seen ${timeAgo(a.last_seen_at)}`}
       </div>
-      <div className="w-24 text-right text-xs text-muted-foreground tabular-nums">
+      <div className="w-24 text-right text-xs text-muted-foreground tabular-nums max-sm:w-auto">
         <span className="font-medium text-foreground">{a.items_created}</span> items added
       </div>
-      <div className="w-24 text-right text-xs text-muted-foreground tabular-nums">{a.requests} requests</div>
+      <div className="w-24 text-right text-xs text-muted-foreground tabular-nums max-sm:w-auto">
+        {a.requests} request{a.requests === 1 ? '' : 's'}
+      </div>
       <Button
         size="icon-sm"
+        className="max-sm:ml-auto"
         variant="ghost"
         aria-label={`Remove ${a.name} from the list`}
         title={
@@ -135,7 +138,7 @@ export function ConnectedAgents({
     const rows = list.filter((a) => a.kind === kind)
 
     return (
-      <section className="grid gap-2" aria-label={title}>
+      <section className="grid grid-cols-1 gap-2" aria-label={title}>
         <div>
           <h2 className="text-sm font-semibold">{title}</h2>
           <p className="text-sm text-muted-foreground">{description}</p>
@@ -161,7 +164,7 @@ export function ConnectedAgents({
   }
 
   return (
-    <div id="agents" className="grid gap-5 rounded-xl border bg-card p-4" data-testid="agents">
+    <div id="agents" className="grid grid-cols-1 gap-5 rounded-xl border bg-card p-4" data-testid="agents">
       {group(
         'mcp',
         'Agents',

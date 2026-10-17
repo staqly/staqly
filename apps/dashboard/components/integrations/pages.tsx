@@ -374,7 +374,7 @@ export function IntegrationsPage() {
         icon={<Blocks className="size-4" />}
         description="Connect an agent, see which agents talk to this workspace and what they did. Step-by-step guides live at docs.staqly.ai."
       />
-      <div className="mt-6 grid gap-4">
+      <div className="mt-6 grid grid-cols-1 gap-4">
         <ConnectionBar />
 
         <Tabs
@@ -419,7 +419,7 @@ export function IntegrationsPage() {
             const Body = TAB_BODY[id]
 
             return (
-              <TabsContent key={id} value={id} className="grid gap-3 p-3">
+              <TabsContent key={id} value={id} className="grid grid-cols-1 gap-3 p-3">
                 <Body c={c} />
                 <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
                   <KeyHint cloud={cloud} />

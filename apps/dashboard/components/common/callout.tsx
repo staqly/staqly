@@ -45,7 +45,7 @@ export function Callout({
       {...props}
     >
       <Icon className={cn('size-4 shrink-0', size === 'sm' && 'mt-0.5', TONES[tone].text)} aria-hidden />
-      <div className="min-w-0 flex-1 break-words">{children}</div>
+      <div className="min-w-0 flex-1 wrap-anywhere">{children}</div>
       {action}
     </div>
   )
