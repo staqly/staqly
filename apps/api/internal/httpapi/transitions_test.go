@@ -56,8 +56,8 @@ func TestNoopItemStatusTransitions(t *testing.T) {
 	// Archive, then archive again.
 	e.do(nil, "PATCH", path, e.key, map[string]any{"status": "archived"}, 200, &got)
 	e.wantConflict(nil, "PATCH", path, e.key, map[string]any{"status": "archived"}, "item is already archived")
-	if n := e.eventCount("item_id=" + it.ID + "&type=item.status_changed"); n != 1 {
-		t.Fatalf("status_changed events: %d", n)
+	if n := e.eventCount("item_id=" + it.ID + "&type=item.archived"); n != 1 { // PATCH archived is the same event as the archive action
+		t.Fatalf("item.archived events: %d", n)
 	}
 	// Restoring (the opposite transition) works.
 	e.do(nil, "PATCH", path, e.key, map[string]any{"status": "pending"}, 200, &got)

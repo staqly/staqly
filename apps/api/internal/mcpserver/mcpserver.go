@@ -352,6 +352,7 @@ type createItemIn struct {
 	URL           string         `json:"url,omitempty" jsonschema:"external http(s) URL (link or externally hosted media)"`
 	MediaBase64   string         `json:"media_base64,omitempty" jsonschema:"base64-encoded file to upload (image, video, pdf...)"`
 	MediaFilename string         `json:"media_filename,omitempty" jsonschema:"file name for media_base64, e.g. avatar.png"`
+	MediaID       string         `json:"media_id,omitempty" jsonschema:"an already uploaded file (med_..., from upload_media) instead of media_base64"`
 	Metadata      map[string]any `json:"metadata,omitempty" jsonschema:"arbitrary JSON metadata, e.g. prompt, model, seed"`
 	Status        string         `json:"status,omitempty" jsonschema:"initial status, default pending"`
 	ExpiresIn     string         `json:"expires_in,omitempty" jsonschema:"undecided items expire after this duration, e.g. 24h"`
@@ -382,6 +383,9 @@ func (t *tools) createItem(ctx context.Context, _ *mcp.CallToolRequest, in creat
 	}
 	ci.Editable = in.Editable
 	ci.Tags = in.Tags
+	if in.MediaID != "" {
+		ci.MediaID = &in.MediaID
+	}
 	if in.MediaBase64 != "" {
 		raw, err := base64.StdEncoding.DecodeString(in.MediaBase64)
 		if err != nil {
@@ -405,6 +409,7 @@ type updateItemIn struct {
 	Title           *string        `json:"title,omitempty"`
 	Content         *string        `json:"content,omitempty"`
 	URL             *string        `json:"url,omitempty"`
+	MediaID         *string        `json:"media_id,omitempty" jsonschema:"replace the file with an uploaded one (med_..., from upload_media)"`
 	MetadataPatch   map[string]any `json:"metadata_patch,omitempty" jsonschema:"keys to set; a null value removes the key"`
 	Status          *string        `json:"status,omitempty" jsonschema:"draft, pending, processing, completed, failed or archived"`
 	ExternalRef     *string        `json:"external_ref,omitempty"`
@@ -414,7 +419,7 @@ type updateItemIn struct {
 
 func (t *tools) updateItem(ctx context.Context, _ *mcp.CallToolRequest, in updateItemIn) (*mcp.CallToolResult, any, error) {
 	var ui app.UpdateItemInput
-	ui.Title, ui.URL, ui.Status, ui.ExternalRef, ui.ExpectedVersion = in.Title, in.URL, in.Status, in.ExternalRef, in.ExpectedVersion
+	ui.Title, ui.URL, ui.MediaID, ui.Status, ui.ExternalRef, ui.ExpectedVersion = in.Title, in.URL, in.MediaID, in.Status, in.ExternalRef, in.ExpectedVersion
 	ui.Tags = in.Tags
 	if in.Content != nil {
 		ui.Content, _ = json.Marshal(*in.Content)

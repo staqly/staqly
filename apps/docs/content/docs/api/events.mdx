@@ -100,7 +100,7 @@ a snapshot: `data.item` (the item after the change; before the deletion for `ite
 | `item.regenerate_requested` | *Regenerate* action ran | `action`, `feedback`, `payload` |
 | `item.publish_requested` | *Publish* action ran, or an approval started it ([`auto_run`](/automation/custom-actions#start-publish-automatically-after-approval); recorded right after `item.approved`, same actor) | `action`, `feedback`, `payload`; `auto_run: true` when started by an approval |
 | `item.retry_requested` | *Retry* action ran | `action`, `feedback`, `payload` |
-| `item.archived` | *Archive* action ran | `action` |
+| `item.archived` | *Archive* action ran, or `PATCH` set the status to `archived` | `action` (only from the action) |
 | `item.deleted` | An item was deleted (its history is kept) | — |
 | `item.purged` | An item and its history were [purged](/self-hosting/data-export#purge-an-item) | IDs and counts only |
 

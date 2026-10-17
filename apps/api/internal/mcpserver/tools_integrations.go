@@ -215,7 +215,7 @@ type channelRef struct {
 
 type channelFields struct {
 	Enabled             *bool          `json:"enabled,omitempty" jsonschema:"false pauses the channel"`
-	Config              map[string]any `json:"config,omitempty" jsonschema:"type-specific settings, e.g. {\"webhook_url\": \"https://hooks.slack.com/services/T000/B000/XXXX\"} for slack"`
+	Config              map[string]any `json:"config,omitempty" jsonschema:"type-specific settings. slack/discord: webhook_url (or bot_token + channel). telegram: bot_token, chat_id. ntfy: topic, server_url, access_token, priority. email: host, port, username, password, from, to (a list of addresses), tls (starttls, tls or none)"`
 	Events              *[]string      `json:"events,omitempty" jsonschema:"event types to notify about, e.g. [\"item.created\"]"`
 	CollectionIDs       *[]string      `json:"collection_ids,omitempty" jsonschema:"only events from these collections (col_...); empty notifies for all"`
 	DigestWindowSeconds *int64         `json:"digest_window_seconds,omitempty" jsonschema:"group notifications within this many seconds into one message; 0 sends each"`

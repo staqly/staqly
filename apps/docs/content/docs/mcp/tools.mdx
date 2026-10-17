@@ -137,7 +137,7 @@ One item with content, metadata, media and status. *Read-only* · `items:read`
 
 ### `create_item`
 Add an item to a collection. Items default to `pending` so they show up for review. `image` and
-`video` items need `media_base64` or a `url`. · `items:write`
+`video` items need `media_base64`, `media_id` or a `url`. · `items:write`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -148,6 +148,7 @@ Add an item to a collection. Items default to `pending` so they show up for revi
 | `url` | string | No | External http(s) URL (a link or externally hosted media) |
 | `media_base64` | string | No | Base64-encoded file to upload (image, video, PDF or any other file) |
 | `media_filename` | string | No | File name for `media_base64`, e.g. `avatar.png` |
+| `media_id` | string | No | A file already uploaded with [`upload_media`](#upload_media) (`med_...`), instead of `media_base64` |
 | `metadata` | object | No | Arbitrary JSON: prompt, model, seed, score |
 | `status` | string | No | Initial status: `pending` (default), `draft`, or `approved`/`rejected` with `items:review` |
 | `tags` | string[] | No | Labels, up to 20 |
@@ -166,6 +167,7 @@ Update fields or status (e.g. `processing`, `completed`, `failed`). Approve/reje
 | `title` | string | No | New title; omitted fields stay unchanged |
 | `content` | string | No | New text body, caption or JSON string |
 | `url` | string | No | New external http(s) URL |
+| `media_id` | string | No | Replace the file with one uploaded with `upload_media` (`med_...`) |
 | `external_ref` | string | No | New reference ID of your own |
 | `metadata_patch` | object | No | Keys to set; a `null` value removes the key |
 | `tags` | string[] | No | Replaces the item's tags, in any status (no new version) |
@@ -285,7 +287,7 @@ Run one action on up to 100 items. Each item succeeds or fails on its own; the r
 ## Media
 
 ### `upload_media`
-Upload a file without creating an item; reference the returned media ID later. · `items:write`
+Upload a file without creating an item; pass the returned media ID as `media_id` to `create_item` or `update_item`. · `items:write`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|

@@ -163,3 +163,20 @@ func TestWaitDoesNotLeakGoroutines(t *testing.T) {
 		t.Fatalf("goroutines: %d before, %d after the waits\n%s", before, n, buf[:runtime.Stack(buf, true)])
 	}
 }
+
+// upload_media returns an ID that create_item and update_item take as media_id.
+func TestMCPItemFromUploadedMedia(t *testing.T) {
+	e := newEnv(t)
+	e.collection("Pics")
+	png := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	m := mcpResult(e, e.key, "upload_media", map[string]any{"media_base64": png, "filename": "dot.png"})
+	it := mcpResult(e, e.key, "create_item", map[string]any{"collection": "Pics", "type": "image", "media_id": m["id"]})
+	if it["type"] != "image" || it["media"] == nil {
+		t.Fatalf("item from media_id: %v", it)
+	}
+	m2 := mcpResult(e, e.key, "upload_media", map[string]any{"media_base64": png, "filename": "dot2.png"})
+	got := mcpResult(e, e.key, "update_item", map[string]any{"item_id": it["id"], "media_id": m2["id"]})
+	if fmt.Sprint(got["media"]) == fmt.Sprint(it["media"]) {
+		t.Fatalf("media not replaced: %v", got["media"])
+	}
+}

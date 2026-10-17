@@ -63,7 +63,8 @@ one with neither, or an update that clears both, answers `422 validation_failed`
 ## Upload from an agent (MCP)
 
 The [`create_item`](/mcp/tools#create_item) tool accepts **`media_base64`** (plus
-`media_filename`, e.g. `avatar.png`) and uploads it in the same call. Alternatively pass an
+`media_filename`, e.g. `avatar.png`) and uploads it in the same call, or `media_id` for a file
+uploaded earlier with `upload_media`. Alternatively pass an
 external `url` — staqly never fetches external URLs itself; the item just references them.
 
 ## Allowed file types

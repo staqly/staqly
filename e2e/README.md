@@ -83,3 +83,26 @@ e2e/tests/           the test files above
 The `e2e` job in `.github/workflows/ci.yml` builds the staqly image once (with the
 GitHub Actions layer cache) tagged `staqly-e2e:test`, checks formatting, lint and types of this package,
 then runs `pnpm turbo run test:e2e --filter=@staqly/e2e` with `E2E_BUILD=0`.
+
+## Real-agent MCP suite
+
+`agent/run.mjs` drives the dev stack (`make dev`: local mode, mailpit) with a
+real Claude Code agent: each scenario runs `claude -p` with only the staqly MCP
+tools allowed, then checks the result over REST. It covers collection flows and
+the action catalog, every item type, review, auto-run publish with
+`report_result`, regenerate/fail/retry, stale `expected_version`, archive and
+history, search and bulk actions, webhooks (`"*"` without audit events, signed),
+pattern validation, an RSS watcher, an email channel approved through its
+decision link, `await_decision` with reviewer feedback, media upload, exports,
+delete and purge.
+
+```bash
+make dev                                      # once
+pnpm --filter @staqly/e2e test:agent          # all scenarios (about 2 min, about $2.5)
+node e2e/agent/run.mjs webhook-star media-upload   # selected scenarios
+```
+
+Needs the `claude` CLI signed in, and port 8799 free (webhook receiver and RSS
+feed, reached from the container as `host.docker.internal`). It cleans up what
+it created; agent transcripts and `results.json` go to `$TMPDIR/staqly-agent-e2e/<run>/`.
+It is not part of `pnpm test:e2e` or CI.

@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "test:e2e": "vitest run",
+    "test:agent": "node agent/run.mjs",
     "lint": "oxlint --deny-warnings",
     "typecheck": "tsc --noEmit",
     "format": "oxlint --fix --quiet; oxfmt",

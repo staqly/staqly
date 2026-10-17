@@ -679,6 +679,9 @@ func (s *Service) UpdateItem(ctx context.Context, p Principal, id string, in Upd
 				}
 				it.Status = st
 				typ = "item.status_changed"
+				if st == "archived" {
+					typ = "item.archived" // same event as the archive action, so subscribers see every archive
+				}
 			}
 			return typ, nil, nil
 		})
