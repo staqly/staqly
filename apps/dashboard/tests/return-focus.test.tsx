@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 
 // Most of our dialogs open from state (an inbox row, ⌘K, a menu item), not from a Radix Trigger. Radix then had no
@@ -36,6 +37,27 @@ function Harness({ kind }: { kind: 'dialog' | 'sheet' }) {
   )
 }
 
+function FromMenu() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger>More</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => setOpen(true)}>Edit</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogTitle>Dialog</DialogTitle>
+          <DialogDescription>Body</DialogDescription>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 describe('dialogs without a Trigger', () => {
   it.each(['dialog', 'sheet'] as const)('%s: focus goes back to what opened it', async (kind) => {
     const user = userEvent.setup()
@@ -46,5 +68,17 @@ describe('dialogs without a Trigger', () => {
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Open it' })).toHaveFocus()
+  })
+
+  it('dialog opened from a menu item: focus goes back to the menu button', async () => {
+    const user = userEvent.setup()
+
+    render(<FromMenu />)
+    await user.click(screen.getByRole('button', { name: 'More' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'More' })).toHaveFocus())
   })
 })

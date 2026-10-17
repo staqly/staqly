@@ -18,7 +18,12 @@ export function useReturnFocus({
   return {
     onOpenAutoFocus: (e: Event) => {
       // Radix calls this before it moves focus into the content, so this is still the element outside.
-      const el = document.activeElement
+      let el = document.activeElement
+
+      // A menu item goes away with its menu: return to the button that opened the menu (through submenus) instead.
+      for (let menu = el?.closest('[role=menu]'), i = 0; menu?.id && i < 5; menu = el?.closest('[role=menu]'), i++) {
+        el = document.querySelector(`[aria-controls="${CSS.escape(menu.id)}"]`)
+      }
 
       returnTo.current = el instanceof HTMLElement && el !== document.body ? el : null
       onOpenAutoFocus?.(e)
