@@ -89,8 +89,9 @@ export class Exports extends APIResource {
   }
 
   /**
-   * Starts a full workspace export (admin). Only one can be pending/running at a
-   * time (409 with `details.export_id`). Archives are deleted after 24 h.
+   * Starts a workspace export (admin). On Free it is data only (`includes_media: false`, no
+   * media files). Only one can be pending/running at a time (409 with `details.export_id`).
+   * Archives are deleted after 24 h.
    */
   createWorkspaceExport(options?: RequestOptions): Promise<WorkspaceExport> {
     return this.http.request({ method: 'POST', path: '/v1/workspace/export', options })

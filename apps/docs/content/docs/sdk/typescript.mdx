@@ -461,7 +461,7 @@ const page = await staqly.events.list({
 |---|---|
 | `events(params)` | Async iterator over the activity log export (NDJSON), oldest first; filters `from`, `to`, `type`, `type_prefix`, `actor_type`, `actor_id`, `collection_id`, `item_id` |
 | `eventsResponse({ format })` | The raw export `Response`; `format` is `ndjson` (default) or `csv`, with the same filters as `events` |
-| `createWorkspaceExport()` | Start a full workspace export (`admin`) |
+| `createWorkspaceExport()` | Start a workspace export (`admin`; data only, without media files, on Free) |
 | `listWorkspaceExports()` | The latest exports, newest first (at most 20) |
 | `getWorkspaceExport(id)` | Export job status |
 | `waitForWorkspaceExport(id, { timeout, pollInterval, signal })` | Poll until the job is ready (default timeout 10 minutes, poll every 1000 ms); throws `ExportFailedError` (with `job`) if it fails or expires, `WaitTimeoutError` on timeout |

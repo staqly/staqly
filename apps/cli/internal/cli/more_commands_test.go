@@ -402,6 +402,16 @@ func TestWorkspaceExport(t *testing.T) {
 	}
 }
 
+func TestWorkspaceExportDataOnly(t *testing.T) {
+	f := newFake(t)
+	job := map[string]any{"id": "wex_1", "status": "pending", "size_bytes": 0, "created_at": "2026-10-13T10:00:00Z",
+		"started_at": nil, "finished_at": nil, "expires_at": "2026-10-14T10:00:00Z", "includes_media": false}
+	f.on("POST /v1/workspace/export", 202, job)
+	f.on("GET /v1/workspace/exports/wex_1", 200, job)
+	mustContain(t, f.run("workspace", "export", "start").mustCode(t, 0).out, "Data only", "come with Pro")
+	mustContain(t, f.run("workspace", "export", "status", "wex_1").mustCode(t, 0).out, "Contents:", "data only")
+}
+
 func TestWorkspaceExportFailed(t *testing.T) {
 	f := newFake(t)
 	f.on("POST /v1/workspace/export", 202, map[string]any{"id": "wex_1", "status": "failed", "error": "disk full"})

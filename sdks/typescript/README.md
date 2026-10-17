@@ -403,8 +403,9 @@ await saveResponse(await staqly.exports.workspaceExportResponse(job.id), "worksp
 await staqly.items.purge(item.id); // { item_id, events_deleted, media_deleted }
 ```
 
-Exports need a plan with data export (not Free: `PlanLimitError`, `limit: "data_export"`). The
-event export needs `items:read`; without `admin` it leaves out credential and session audit events
+The workspace export works on every plan; on Free it is data only (`includes_media: false`: no
+media files in the ZIP). The event export needs a plan with data export (not Free: `PlanLimitError`,
+`limit: "data_export"`) and `items:read`; without `admin` it leaves out credential and session audit events
 (`api_key.*`, `session.*`, `recovery_key.*`, device links). Only one workspace export can run at a
 time. Starting another returns a `ConflictError` with `details.export_id`. A failed or expired job
 throws `ExportFailedError`.

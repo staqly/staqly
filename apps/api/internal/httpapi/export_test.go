@@ -329,7 +329,7 @@ func TestWorkspaceExportZipLifecycle(t *testing.T) {
 
 	e.svc.ProcessExports(context.Background())
 	e.do(nil, "GET", "/v1/workspace/exports/"+job.ID, adminKey, nil, 200, &job)
-	if job.Status != "ready" || job.SizeBytes == 0 || job.DownloadURL == "" {
+	if job.Status != "ready" || job.SizeBytes == 0 || job.DownloadURL == "" || !job.IncludesMedia {
 		t.Fatalf("job after build %+v", job)
 	}
 	if _, err := os.Stat(filepath.Join(dataDir, "exports", job.ID+".zip")); err != nil {
@@ -400,11 +400,12 @@ func TestWorkspaceExportZipLifecycle(t *testing.T) {
 		t.Fatalf("webhooks.json %+v", hooks)
 	}
 	var wsj struct {
-		Workspace app.Workspace
-		Counts    map[string]int
+		Workspace     app.Workspace
+		Counts        map[string]int
+		IncludesMedia bool `json:"includes_media"`
 	}
 	json.Unmarshal(files["workspace.json"], &wsj)
-	if wsj.Workspace.Name != "Test" || wsj.Counts["items"] != 2 || wsj.Counts["media"] != 3 {
+	if wsj.Workspace.Name != "Test" || wsj.Counts["items"] != 2 || wsj.Counts["media"] != 3 || !wsj.IncludesMedia {
 		t.Fatalf("workspace.json %s", files["workspace.json"])
 	}
 	if !bytes.Contains(files["events.ndjson"], []byte(`"item.created"`)) || bytes.Contains(files["events.ndjson"], []byte("Other")) {
@@ -439,6 +440,85 @@ func TestWorkspaceExportZipLifecycle(t *testing.T) {
 		t.Fatalf("status %s", job.Status)
 	}
 	e.do(e.browser, "GET", "/v1/workspace/exports/"+job.ID+"/download", "", nil, 410, nil)
+}
+
+// Free: the workspace export is data only. The same JSON files (collections, items with versions and feedback,
+// events with the decision history and the audit events, media.ndjson), but no media/ files; admin only.
+func TestWorkspaceExportFreeIsDataOnly(t *testing.T) {
+	e := newEnv(t)
+	withDataDir(e)
+	csrf := []string{"X-CSRF-Token", e.csrf}
+	c := e.collection("Photos")
+	var it app.Item
+	e.upload("/v1/collections/"+c.ID+"/items", e.key, map[string]string{"item": `{"title":"one","tags":["red"],"metadata":{"k":"v"}}`},
+		"photo.png", pngBytes, 201, &it)
+	e.do(nil, "PATCH", "/v1/items/"+it.ID, e.key, map[string]any{"title": "one v2"}, 200, nil)
+	e.do(e.browser, "POST", "/v1/items/"+it.ID+"/actions/reject", "", map[string]any{"feedback": "too dark"}, 200, nil, csrf...)
+	e.free()
+
+	// Admin only, on Free too.
+	e.do(nil, "POST", "/v1/workspace/export", e.key, nil, 403, nil)
+	e.do(nil, "GET", "/v1/workspace/exports", e.key, nil, 403, nil)
+	var job app.WorkspaceExport
+	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 202, &job, csrf...)
+	if job.IncludesMedia {
+		t.Fatalf("Free export includes media: %+v", job)
+	}
+	e.svc.ProcessExports(context.Background())
+	e.do(e.browser, "GET", "/v1/workspace/exports/"+job.ID, "", nil, 200, &job)
+	if job.Status != "ready" || job.IncludesMedia || job.DownloadURL == "" {
+		t.Fatalf("job after build %+v", job)
+	}
+	e.do(nil, "GET", job.DownloadURL, e.key, nil, 403, nil)
+	st, _, b := e.raw(e.browser, "GET", job.DownloadURL, "", nil)
+	if st != 200 {
+		t.Fatalf("download %d", st)
+	}
+	files := readZip(t, b)
+	for n := range files {
+		if strings.HasPrefix(n, "media/") {
+			t.Fatalf("Free export has a media file: %s", n)
+		}
+	}
+	for _, want := range []string{"README.txt", "workspace.json", "collections.ndjson", "items.ndjson", "events.ndjson", "media.ndjson"} {
+		if _, ok := files[want]; !ok {
+			t.Fatalf("missing %s", want)
+		}
+	}
+	var wsj struct {
+		Counts        map[string]int
+		IncludesMedia bool   `json:"includes_media"`
+		Note          string `json:"note"`
+	}
+	json.Unmarshal(files["workspace.json"], &wsj)
+	if wsj.IncludesMedia || !strings.Contains(wsj.Note, "Pro") || wsj.Counts["items"] != 1 || wsj.Counts["collections"] < 1 || wsj.Counts["events"] == 0 {
+		t.Fatalf("workspace.json %s", files["workspace.json"])
+	}
+	if !strings.Contains(string(files["README.txt"]), "Data only") {
+		t.Fatal("README without the data-only note")
+	}
+	var m map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(files["media.ndjson"]), &m); err != nil {
+		t.Fatalf("media.ndjson %s", files["media.ndjson"])
+	}
+	if m["id"] != it.Media.ID || m["original_name"] != "photo.png" || m["mime_type"] != "image/png" || m["file"] != "" {
+		t.Fatalf("media.ndjson %v", m)
+	}
+	var line map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(files["items.ndjson"]), &line); err != nil {
+		t.Fatal(err)
+	}
+	if line["title"] != "one v2" || line["status"] != "rejected" || line["media_file"] != nil ||
+		len(line["versions"].([]any)) == 0 || !strings.Contains(fmt.Sprint(line["tags"]), "red") {
+		t.Fatalf("items.ndjson %v", line)
+	}
+	if !strings.Contains(string(files["items.ndjson"]), "too dark") {
+		t.Fatal("rejection feedback missing")
+	}
+	ev := string(files["events.ndjson"])
+	if !strings.Contains(ev, `"item.rejected"`) || !strings.Contains(ev, `"session.`) && !strings.Contains(ev, `"api_key.`) {
+		t.Fatalf("events.ndjson without the decision history or the audit events")
+	}
 }
 
 func TestWorkspaceExportConcurrentRequests(t *testing.T) {

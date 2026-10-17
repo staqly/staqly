@@ -21,12 +21,15 @@ shown for information).
 | Active API keys | 1 | Unlimited |
 | Storage | 1 GB | 100 GB |
 | Max file size | 5 MB | 100 MB |
-| Backups and data export (workspace ZIP, activity log export) | — | Yes |
+| Workspace data export (ZIP of collections, items, events) | Yes, without files | Yes, with files |
+| Backups and activity log export | — | Yes |
 
-Signed webhooks, MCP and full history are on every plan. [Data export](/self-hosting/data-export)
-(the activity log and the whole workspace as a ZIP, **Settings → Backups**) is a Pro feature,
-trial included: on Free the export endpoints answer `402 plan_limit_exceeded` (limit
-`data_export`) and the Backups tab is hidden. Local installs always have it. File sizes are also capped
+Signed webhooks, MCP and full history are on every plan. Every plan can
+[export its data](/self-hosting/data-export) (**Settings → Data & privacy**): on Free the
+workspace ZIP is data only (`includes_media: false`), with media files listed by id, name and
+type but not included. The ZIP with the media files, backups (**Settings → Backups**) and the
+activity log export are Pro, trial included: on Free `GET /v1/events/export` answers
+`402 plan_limit_exceeded` (limit `data_export`). Local installs always have everything. File sizes are also capped
 by the operator's `MAX_UPLOAD_MB` (default 100 MB). On Free the one API key is the admin key
 you get when the workspace is created (it also signs in to the dashboard); on Pro, give each
 agent its own scoped key without `admin`.

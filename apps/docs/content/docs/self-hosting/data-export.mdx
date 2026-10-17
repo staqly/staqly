@@ -8,8 +8,10 @@ audit or a GDPR request), want staqly to clean up old data on its own, or must e
 for good. All of it works the same with the binary and with Docker. For a restorable copy of
 the whole installation, use [Backup & restore](/self-hosting/backup-and-restore) instead.
 
-In cloud mode, exports are a Pro feature (trial included): on Free, `GET /v1/events/export` and
-`POST /v1/workspace/export` answer `402 plan_limit_exceeded`. Local installs always can export.
+In cloud mode, every plan can export the whole workspace. On Free the ZIP is **data only**:
+everything below except the media files (`includes_media: false`). The ZIP with the files and
+the activity log export are Pro (trial included): on Free `GET /v1/events/export` answers
+`402 plan_limit_exceeded`. Local installs always get everything.
 
 ## Export the activity log
 
@@ -39,7 +41,8 @@ GET /v1/events/export?format=ndjson|csv&from=&to=&type=&type_prefix=&actor_type=
 
 ## Export the whole workspace
 
-For data portability (GDPR) — a ZIP of everything in the workspace:
+For data portability (GDPR), a ZIP of everything in the workspace (without the media files on
+the Free plan):
 
 <Steps>
 <Step>
@@ -47,7 +50,8 @@ For data portability (GDPR) — a ZIP of everything in the workspace:
 ### Start an export
 
 `POST /v1/workspace/export` (scope `admin`; dashboard sessions and local mode have it) →
-`202` with a job `{"id":"exp_zxj2lzvmh32poxxq2kgp","status":"pending","created_at":"2026-10-13T09:12:44.512031Z"}`. Only one export per workspace can be
+`202` with a job `{"id":"exp_zxj2lzvmh32poxxq2kgp","status":"pending","includes_media":true,"created_at":"2026-10-13T09:12:44.512031Z"}`
+(`includes_media` is `false` on Free). Only one export per workspace can be
 pending or running; a second request gets `409` with `details.export_id`.
 
 </Step>
@@ -71,17 +75,18 @@ they finish; afterwards the download returns `410`.
 
 | File | Content |
 |---|---|
-| `workspace.json` | Workspace, export format version, export time, record counts |
+| `workspace.json` | Workspace, export format version, export time, record counts, `includes_media` |
 | `collections.ndjson` | All collections, including archived ones |
 | `items.ndjson` | All items, each with `versions` (full edit history) and `media_file` (path in the archive) |
 | `events.ndjson` | The activity log, oldest first |
-| `media.ndjson` | Every upload: id, type, size, SHA-256 and `file` |
-| `media/` | The uploaded files under their original names |
+| `media.ndjson` | Every upload: id, `original_name`, `mime_type`, size, SHA-256 and `file` (empty in a data-only export) |
+| `media/` | The uploaded files under their original names (not in a data-only export) |
 | `webhooks.json` | Webhook endpoints, signing secrets replaced by `[redacted]` |
 | `watchers.json` | Watchers |
 | `README.txt` | A description of the files |
 
-API keys, sessions and the recovery key are never exported. The archive is built from live data
+A data-only export (Free) has no `media/` folder and no `media_file` on items; its
+`workspace.json` and `README.txt` say so. API keys, sessions and the recovery key are never exported. The archive is built from live data
 page by page, not as one snapshot — for a point-in-time copy take a
 [backup](/self-hosting/backup-and-restore). `workspace.export_requested` and
 `workspace.exported` events are recorded.

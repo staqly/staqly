@@ -37,7 +37,8 @@ type PlanLimits struct {
 	// MinWatcherIntervalSeconds is how often a watcher may check its source.
 	MinWatcherIntervalSeconds int64 `json:"min_watcher_interval_seconds"`
 	NotificationChannels      int64 `json:"notification_channels"`
-	// DataExport: workspace ZIP exports (backups) and event exports.
+	// DataExport: full workspace ZIP exports with media files (backups) and
+	// event exports. Without it (Free) the workspace export is data only.
 	DataExport bool `json:"data_export"`
 }
 
@@ -59,11 +60,11 @@ var Plans = []Plan{
 	{ID: "free", Name: "Free", PriceUSDMonth: 0,
 		Limits: PlanLimits{ItemsPerMonth: Unlimited, DecisionsPerMonth: 50, Webhooks: 3, APIKeys: 1, StorageBytes: 1 * gb, MaxUploadBytes: 5 << 20,
 			Watchers: 3, MinWatcherIntervalSeconds: 15 * 60, NotificationChannels: 2, DataExport: false},
-		Features: []string{"50 approvals / month", "Unlimited items and collections", "3 watchers (every 15 min)", "2 notification channels", "3 webhooks", "1 API key", "1 GB storage, 5 MB per file", "No card, no email"}},
+		Features: []string{"50 approvals / month", "Unlimited items and collections", "3 watchers (every 15 min)", "2 notification channels", "3 webhooks", "1 API key", "1 GB storage, 5 MB per file", "Data export without files", "No card, no email"}},
 	{ID: "pro", Name: "Pro", PriceUSDMonth: 30, Highlight: true,
 		Limits: PlanLimits{ItemsPerMonth: Unlimited, DecisionsPerMonth: Unlimited, Webhooks: Unlimited, APIKeys: Unlimited, StorageBytes: 100 * gb, MaxUploadBytes: 100 << 20,
 			Watchers: Unlimited, MinWatcherIntervalSeconds: 60, NotificationChannels: Unlimited, DataExport: true},
-		Features: []string{"Unlimited approvals", "Unlimited items and collections", "Unlimited watchers (every minute)", "Unlimited notification channels", "Unlimited webhooks", "Unlimited API keys", "100 GB storage, 100 MB per file", "Backups and data export", "7-day free trial"}},
+		Features: []string{"Unlimited approvals", "Unlimited items and collections", "Unlimited watchers (every minute)", "Unlimited notification channels", "Unlimited webhooks", "Unlimited API keys", "100 GB storage, 100 MB per file", "Backups and full data export with files", "7-day free trial"}},
 }
 
 // TrialDays: new cloud workspaces start on Pro until then.
@@ -150,7 +151,8 @@ func describeLimit(limit string, max int64) string {
 	return fmt.Sprintf("%d %s", max, limit)
 }
 
-// requireDataExport: exports (workspace backups, event exports) are a paid feature; local installs have them.
+// requireDataExport: full exports (workspace backups with media files, event exports) are a paid feature;
+// local installs have them. Free still gets a data-only workspace export (RequestWorkspaceExport).
 func (s *Service) requireDataExport(ctx context.Context, workspaceID string) error {
 	plan, _, _, err := s.planState(ctx, s.Q, workspaceID)
 	if err != nil {
@@ -158,7 +160,7 @@ func (s *Service) requireDataExport(ctx context.Context, workspaceID string) err
 	}
 	if !plan.Limits.DataExport {
 		return &Error{Code: "plan_limit_exceeded", Status: 402,
-			Message: fmt.Sprintf("The %s plan has no data export or backups; upgrade the workspace plan to export.", plan.Name),
+			Message: fmt.Sprintf("The %s plan has no activity log export or backups; upgrade the workspace plan to export them. The workspace export (data without files) works on every plan.", plan.Name),
 			Details: map[string]any{"limit": LimitDataExport, "plan": plan.ID}}
 	}
 	return nil

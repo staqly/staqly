@@ -44,6 +44,11 @@ Open **Settings → Plan & usage**, or search for *Plan & usage* in the command 
 | **Switch to Free** | Moves the workspace to Free right away and lifts the read-only state after an unpaid Pro period. Needs an admin (a dashboard session or a key with `admin`). Not possible while a Stripe subscription is live: cancel it in the billing portal first, and the workspace moves to Free when it ends. API: `POST /v1/workspace/plan` with `{"plan":"free"}`. |
 | *Upgrade: ask the operator* | Shown when the instance has no Stripe settings. The operator changes the plan with `docker exec staqly server set-plan` (Docker) or `staqly serve set-plan` (binary). See [Operator commands](/self-hosting/operator-cli). |
 
+Switching to Free keeps your data exportable: every plan can download a workspace export in
+**Settings → Data & privacy**. On Free it is data only, without the media files; backups, the
+export with the files and the activity log export come with Pro. See
+[Data export](/self-hosting/data-export).
+
 See [Plans & limits](/plans) for what each plan includes.
 
 ## Usage through the API

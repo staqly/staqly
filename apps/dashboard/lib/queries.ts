@@ -110,8 +110,8 @@ export function useUsage() {
 }
 
 /**
- * Who gets Settings -> Backups (the tab and the page): every local install (`local`); in the cloud, paid plans
- * (`paid`) but not Free (`free`). `undefined` while the cloud plan is still loading.
+ * What Settings -> Backups and Data & privacy offer: everything on a local install (`local`) and on paid cloud
+ * plans (`paid`); on Free (`free`) the data-only export, no backups. `undefined` while the cloud plan is loading.
  */
 export function useBackupAccess(): 'local' | 'paid' | 'free' | undefined {
   const { isCloud } = useMode()

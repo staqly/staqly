@@ -1641,19 +1641,22 @@ paths:
     post:
       operationId: createWorkspaceExport
       tags: [auth]
-      summary: Start a full workspace export (admin; GDPR data portability)
+      summary: Start a workspace export (admin; GDPR data portability)
       description: |
         Queues a background job that builds a ZIP (workspace.json,
         collections.ndjson, items.ndjson with versions, events.ndjson,
         media.ndjson, media/ files under their original names, webhooks.json
         with secrets redacted, watchers.json, README.txt).
+        Every plan can export. On a plan without data export (Free) the
+        export is data only (`includes_media: false`): the same files without
+        media/, media.ndjson lists each file by id, original_name and
+        mime_type. Pro and local installs get the files too.
         Only one export per workspace may be pending or running (409 with
         `details.export_id`). Finished archives are deleted after 24 hours.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       responses:
         "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceExport" } } } }
-        "402": { $ref: "#/components/responses/PaymentRequired" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -2324,7 +2327,7 @@ components:
             watchers: { type: integer }
             min_watcher_interval_seconds: { type: integer }
             notification_channels: { type: integer }
-            data_export: { type: boolean, description: "Workspace exports (backups) and event exports; false on Free" }
+            data_export: { type: boolean, description: "Full workspace exports with media files (backups) and event exports; false on Free, where the workspace export is data only" }
         features: { type: array, items: { type: string } }
 
     Workspace:
@@ -2650,10 +2653,11 @@ components:
 
     WorkspaceExport:
       type: object
-      required: [id, status, size_bytes, created_at, started_at, finished_at, expires_at]
+      required: [id, status, size_bytes, created_at, started_at, finished_at, expires_at, includes_media]
       properties:
         id: { type: string }
         status: { type: string, enum: [pending, running, ready, failed, expired] }
+        includes_media: { type: boolean, description: "false for a data-only export (Free): no media/ files in the ZIP" }
         size_bytes: { type: integer }
         error: { type: string }
         created_at: { type: string, format: date-time }

@@ -142,6 +142,10 @@ func NewEventCSVWriter(w io.Writer) *csv.Writer {
 }
 
 // ---- workspace export (GDPR data portability) ----
+//
+// Every plan can export its data. With data export in the plan (Pro, local
+// installs) the ZIP carries the media files too; without it (Free) the export
+// is data only: the same JSON files, media referenced by id, name and type.
 
 const exportTTL = 24 * time.Hour
 
@@ -155,11 +159,13 @@ type WorkspaceExport struct {
 	FinishedAt  *string `json:"finished_at"`
 	ExpiresAt   string  `json:"expires_at"`
 	DownloadURL string  `json:"download_url,omitempty"`
+	// IncludesMedia is false for a data-only export (Free): no media/ files.
+	IncludesMedia bool `json:"includes_media"`
 }
 
 func toWorkspaceExport(x db.WorkspaceExport) WorkspaceExport {
 	out := WorkspaceExport{ID: x.ID, Status: x.Status, SizeBytes: x.SizeBytes, Error: x.Error, CreatedAt: x.CreatedAt,
-		StartedAt: ptr(x.StartedAt), FinishedAt: ptr(x.FinishedAt), ExpiresAt: x.ExpiresAt}
+		StartedAt: ptr(x.StartedAt), FinishedAt: ptr(x.FinishedAt), ExpiresAt: x.ExpiresAt, IncludesMedia: x.IncludesMedia != 0}
 	if x.Status == "ready" {
 		out.DownloadURL = "/v1/workspace/exports/" + x.ID + "/download"
 	}
@@ -182,13 +188,19 @@ func (s *Service) exportWake() chan struct{} {
 }
 
 // RequestWorkspaceExport queues an export job (admin). Only one export per
-// workspace may be pending or running at a time.
+// workspace may be pending or running at a time. Plans without data export
+// (Free) get a data-only export: no media files.
 func (s *Service) RequestWorkspaceExport(ctx context.Context, p Principal) (WorkspaceExport, error) {
 	if err := p.require(ScopeAdmin); err != nil {
 		return WorkspaceExport{}, err
 	}
+	media := int64(1)
 	if err := s.requireDataExport(ctx, p.WorkspaceID); err != nil {
-		return WorkspaceExport{}, err
+		var ae *Error
+		if !errors.As(err, &ae) || ae.Status != 402 {
+			return WorkspaceExport{}, err
+		}
+		media = 0
 	}
 	now := s.Now().UTC()
 	id := newID("exp")
@@ -202,13 +214,13 @@ func (s *Service) RequestWorkspaceExport(ctx context.Context, p Principal) (Work
 		}
 		if err := q.CreateWorkspaceExport(ctx, db.CreateWorkspaceExportParams{ID: id, WorkspaceID: p.WorkspaceID,
 			ActorType: p.Kind, ActorID: p.ID, ActorName: p.Name, CreatedAt: formatTime(now),
-			ExpiresAt: formatTime(now.Add(exportTTL))}); err != nil {
+			ExpiresAt: formatTime(now.Add(exportTTL)), IncludesMedia: media}); err != nil {
 			if strings.Contains(err.Error(), "UNIQUE") {
 				return conflict("an export is already in progress for this workspace")
 			}
 			return err
 		}
-		_, err := s.emit(ctx, q, p, "workspace.export_requested", "", "", map[string]any{"export_id": id})
+		_, err := s.emit(ctx, q, p, "workspace.export_requested", "", "", map[string]any{"export_id": id, "includes_media": media == 1})
 		return err
 	})
 	if err != nil {
@@ -324,7 +336,7 @@ func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport) {
 	ctx = logctx.With(ctx, "workspace_id", j.WorkspaceID, "export_id", j.ID)
 	p := Principal{WorkspaceID: j.WorkspaceID, Kind: j.ActorType, ID: j.ActorID, Name: j.ActorName}
 	final := s.exportPath(j.ID)
-	size, err := s.writeExportZip(ctx, j.WorkspaceID, final)
+	size, err := s.writeExportZip(ctx, j.WorkspaceID, final, j.IncludesMedia != 0)
 	now := s.Now().UTC()
 	status, msg := "ready", ""
 	if err != nil {
@@ -410,7 +422,7 @@ type exportMedia struct {
 // the workspace); ponytail: rows changed during the export may appear in their
 // before or after state — fine for portability, not a point-in-time snapshot
 // (use `server backup` for that).
-func (s *Service) writeExportZip(ctx context.Context, wsID, dst string) (size int64, err error) {
+func (s *Service) writeExportZip(ctx context.Context, wsID, dst string, withMedia bool) (size int64, err error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return 0, err
 	}
@@ -427,7 +439,7 @@ func (s *Service) writeExportZip(ctx context.Context, wsID, dst string) (size in
 	}()
 	bw := bufio.NewWriterSize(f, 256<<10)
 	zw := zip.NewWriter(bw)
-	if err = s.fillExportZip(ctx, zw, wsID); err != nil {
+	if err = s.fillExportZip(ctx, zw, wsID, withMedia); err != nil {
 		return 0, err
 	}
 	if err = zw.Close(); err != nil {
@@ -452,7 +464,7 @@ func (s *Service) writeExportZip(ctx context.Context, wsID, dst string) (size in
 	return st.Size(), nil
 }
 
-func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string) error {
+func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string, withMedia bool) error {
 	ts := s.Now().UTC()
 	create := func(name string, method uint16) (io.Writer, error) {
 		return zw.CreateHeader(&zip.FileHeader{Name: name, Method: method, Modified: ts})
@@ -484,6 +496,10 @@ func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string
 		}
 		for _, m := range rows {
 			entry := exportMedia{Media: Media{MediaRef: *s.mediaRef(m), SHA256: m.Sha256, CreatedAt: m.CreatedAt}}
+			if !withMedia { // data only: the file is referenced, not copied
+				mediaIndex = append(mediaIndex, entry)
+				continue
+			}
 			src, err := os.Open(s.mediaPath(m.StorageName))
 			if err != nil {
 				s.logger(ctx).Warn("export: media file missing", "media_id", m.ID)
@@ -604,17 +620,25 @@ func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string
 	}
 	counts["watchers"] = len(outWatchers)
 
-	if err := writeJSONFile("workspace.json", map[string]any{
+	meta := map[string]any{
 		"format": "staqly-export", "format_version": 1, "exported_at": formatTime(ts),
-		"workspace": s.toWorkspace(ws), "counts": counts,
-	}); err != nil {
+		"workspace": s.toWorkspace(ws), "counts": counts, "includes_media": withMedia,
+	}
+	if !withMedia {
+		meta["note"] = dataOnlyNote
+	}
+	if err := writeJSONFile("workspace.json", meta); err != nil {
 		return err
 	}
 	rw, err := create("README.txt", zip.Deflate)
 	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(rw, fmt.Sprintf(exportReadme, ws.Name, formatTime(ts)))
+	readme := fmt.Sprintf(exportReadme, ws.Name, formatTime(ts))
+	if !withMedia {
+		readme += "\n" + dataOnlyReadme
+	}
+	_, err = io.WriteString(rw, readme)
 	return err
 }
 
@@ -708,4 +732,13 @@ watchers.json       Watchers (RSS / page-change sources).
 
 NDJSON = one JSON document per line. Timestamps are ISO-8601 UTC.
 API keys, sessions and the recovery key are not included.
+`
+
+const dataOnlyNote = "Data-only export: media files are referenced in media.ndjson by id, original_name and mime_type but not included. Exports with the files and backups come with Pro."
+
+const dataOnlyReadme = `Data only
+---------
+This export has no media/ folder: media.ndjson lists every file by id,
+original_name and mime_type with an empty "file", and items have no
+"media_file". Exports with the files and backups come with the Pro plan.
 `

@@ -306,7 +306,8 @@ On a cloud instance, workspace admins on a paid plan get backups in **Settings â
 **Create backup** builds a ZIP of the whole workspace (collections, items with their versions,
 events and media), and each ready backup has a **Download** button for 24 hours. These are the
 workspace exports from [Data export & privacy](/self-hosting/data-export)
-(`POST /v1/workspace/export`, `GET /v1/workspace/exports`). On the Free plan the tab is hidden.
+(`POST /v1/workspace/export`, `GET /v1/workspace/exports`). On the Free plan the tab points
+to the data-only export in **Settings â†’ Data & privacy** (no media files) instead.
 The operator still backs up the whole instance with the commands above.
 
 ## From a checkout (Compose)

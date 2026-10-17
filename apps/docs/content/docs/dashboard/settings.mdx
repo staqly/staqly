@@ -16,15 +16,17 @@ from **Settings** under *Configure* in the sidebar or from the command palette
 - **Sign out a lost device**: find it under **Devices** and sign it out.
 - **Back up your data**: **Settings → Backups** shows the commands for a local install
   (`staqly serve backup <file>`, or `docker exec staqly server backup /data/backups/<file>` with
-  Docker); on a paid cloud plan it creates and lists downloadable backups. See
+  Docker); on a paid cloud plan it creates and lists downloadable backups (on Free it points to
+  the data-only export). See
   [Backup & restore](/self-hosting/backup-and-restore).
-- **Download everything**: **Settings → Data & privacy → Export workspace**.
+- **Download everything**: **Settings → Data & privacy → Export workspace** (on the Free plan
+  without the media files).
 - **Connect an agent**: open **Integrations** in the sidebar for copy-ready setup steps.
 
 ## Settings tabs
 
 Settings has five tabs: **General**, **Plan & usage**, **Data & privacy**, **Backups** and
-**System**. In cloud mode **Backups** is hidden on the Free plan. Notification channels have their
+**System**. Notification channels have their
 own page, **Notifications** in the sidebar (see [Notifications](/automation/notifications)).
 
 ### General
@@ -56,7 +58,10 @@ The workspace's plan and this month's usage. See [Plan & usage](/dashboard/plan-
 | **Delete workspace** <Badge>cloud</Badge> | Permanently delete the workspace and everything in it, and sign out every device. Only a signed-in dashboard session can do this, and you confirm by typing the workspace name. Earlier backups still contain the data. |
 | **Delete all data** <Badge>local</Badge> | A local install has one workspace, so there is no delete button. The card shows how to remove the data instead: `staqly service uninstall` and `rm -rf ~/.local/share/staqly` with the binary, or `docker rm -f staqly` and `docker volume rm staqly-data` with Docker. |
 
-In cloud mode both exports come with the paid plans: on Free a **Data export** card links to the plans instead.
+In cloud mode on the Free plan, **Export workspace** builds a data-only ZIP: the same files
+without the media files (`media.ndjson` still lists each file by id, name and type). A note
+under it says that files, backups and the activity log export come with Pro, and the
+**Activity log** card is not shown.
 
 See [Data export](/self-hosting/data-export).
 
@@ -73,7 +78,8 @@ the database and the uploads, in two tabs:
 In cloud mode on a paid plan, the **Backups** card lists the workspace's backups
 (`GET /v1/workspace/exports`). **Create backup** builds a ZIP of the whole workspace
 (collections, items with their versions, events and media); when it is ready, **Download**
-works for 24 hours. The tab is hidden on Free.
+works for 24 hours. On Free the tab says that backups come with Pro and links to the data-only
+export in **Data & privacy**.
 
 See [Backup & restore](/self-hosting/backup-and-restore).
 

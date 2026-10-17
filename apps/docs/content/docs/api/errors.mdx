@@ -131,7 +131,7 @@ was hit:
 | `watchers` | Creating or resuming a watcher |
 | `notification_channels` | Creating a notification channel |
 | `min_watcher_interval_seconds` | A watcher `every` faster than the plan allows |
-| `data_export` | A workspace export or event export on a plan without data export (no `max` / `used`) |
+| `data_export` | An activity log export (`GET /v1/events/export`) on a plan without data export (no `max` / `used`); the workspace export works on every plan, data only on Free |
 
 Don't retry a 402 automatically — it won't succeed until the plan changes or the month rolls
 over.

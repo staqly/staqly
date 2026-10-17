@@ -308,16 +308,17 @@ type Workspace struct {
 }
 
 type WorkspaceExport struct {
-	ID          string         `json:"id"`
-	WorkspaceID string         `json:"workspace_id"`
-	Status      string         `json:"status"`
-	ActorType   string         `json:"actor_type"`
-	ActorID     string         `json:"actor_id"`
-	ActorName   string         `json:"actor_name"`
-	SizeBytes   int64          `json:"size_bytes"`
-	Error       string         `json:"error"`
-	CreatedAt   string         `json:"created_at"`
-	StartedAt   sql.NullString `json:"started_at"`
-	FinishedAt  sql.NullString `json:"finished_at"`
-	ExpiresAt   string         `json:"expires_at"`
+	ID            string         `json:"id"`
+	WorkspaceID   string         `json:"workspace_id"`
+	Status        string         `json:"status"`
+	ActorType     string         `json:"actor_type"`
+	ActorID       string         `json:"actor_id"`
+	ActorName     string         `json:"actor_name"`
+	SizeBytes     int64          `json:"size_bytes"`
+	Error         string         `json:"error"`
+	CreatedAt     string         `json:"created_at"`
+	StartedAt     sql.NullString `json:"started_at"`
+	FinishedAt    sql.NullString `json:"finished_at"`
+	ExpiresAt     string         `json:"expires_at"`
+	IncludesMedia int64          `json:"includes_media"`
 }
