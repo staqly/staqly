@@ -23,7 +23,7 @@ export function ToggleChip({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[13px] transition-colors pointer-coarse:h-10',
+        'inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[13px] transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:h-10',
         pressed
           ? 'border-brand/50 bg-brand-soft font-medium text-foreground'
           : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',

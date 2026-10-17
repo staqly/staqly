@@ -120,6 +120,13 @@ pnpm gen               # regenerate lib/api-types.ts from ../api/openapi.yaml
   green/red text, Reject first); Failed is the one solid badge.
 * Must work and look good on phones (375–430 px), tablets and desktop, light
   and dark; no horizontal page overflow; touch targets ≥ 44 px.
+* Focus and motion live in the primitives and `app/globals.css`: `--ring` is
+  solid in light mode (a 1px `border-ring`/outline is ≥ 3:1), so a custom
+  focus style needs `border-ring` or `outline-ring`, not only the soft
+  `ring-ring/50` halo. Under `prefers-reduced-motion` overlays only fade
+  (no slide/zoom), transitions jump and skeletons stop pulsing. Sheets pad
+  their header, footer and close button for safe areas; floating content
+  (menus, selects, popovers, tooltips) keeps 8 px from the screen edge.
 * Use shadcn/ui primitives from `components/ui`; feature components live in
   `components/<feature>`; pages in `app/(app)/...`. Settings sections:
   General, Plan & usage, Notifications (`components/notifications`), Data &
