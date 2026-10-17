@@ -243,7 +243,7 @@ describe('notification channel helpers', () => {
 })
 
 describe('notification channels page', () => {
-  beforeEach(() => nav.set('/settings/notifications'))
+  beforeEach(() => nav.set('/notifications'))
 
   it('lists channels with type, status, events and the plan usage', async () => {
     mockApi(routes())

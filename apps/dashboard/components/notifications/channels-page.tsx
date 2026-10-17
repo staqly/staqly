@@ -20,10 +20,8 @@ import { toast } from 'sonner'
 
 import { Callout } from '@/components/common/callout'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
-import { PageContainer } from '@/components/common/page-header'
+import { PageContainer, PageHeader } from '@/components/common/page-header'
 import { UsageChip } from '@/components/plans/usage-chip'
-import { SettingsHeader } from '@/components/settings/settings-header'
-import { SettingsNav } from '@/components/settings/settings-nav'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -320,29 +318,22 @@ export function ChannelsPage() {
 
   return (
     <PageContainer>
-      <SettingsHeader />
-      <SettingsNav className="mt-4" />
-      <section className="mt-6 grid gap-4" aria-labelledby="channels-heading">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 basis-64">
-            <h2
-              id="channels-heading"
-              className="flex flex-wrap items-center gap-2 text-base font-semibold tracking-tight"
-            >
-              Notification channels {list.length > 0 && <UsageChip metric="notification_channels" noun="channels" />}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Telegram, Slack, Discord, ntfy or email — get pinged when something needs review and approve right from
-              the message.
-            </p>
-          </div>
-          {list.length > 0 && (
-            <Button onClick={openNew}>
-              <Plus /> New channel
-            </Button>
-          )}
-        </div>
-
+      <PageHeader
+        title="Notifications"
+        icon={<BellRing className="size-4" />}
+        description="Telegram, Slack, Discord, ntfy or email: get pinged when something needs review and approve right from the message."
+        actions={
+          list.length > 0 && (
+            <>
+              <UsageChip metric="notification_channels" noun="channels" />
+              <Button onClick={openNew}>
+                <Plus /> New channel
+              </Button>
+            </>
+          )
+        }
+      />
+      <section className="mt-6 grid gap-4" aria-label="Notification channels">
         {/* How decisions from a channel behave: a note under the section's subtitle. */}
         <Callout tone="neutral" size="xs" className="text-muted-foreground">
           Decisions from chat or links go through the same path as the dashboard: events and webhooks fire as usual.

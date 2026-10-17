@@ -38,10 +38,10 @@ const READY = exportJob({
 })
 
 describe('settings navigation', () => {
-  it('has Notifications, Data & privacy and System sections', () => {
+  it('has Data & privacy and System sections, and no Notifications (its own page)', () => {
     nav.set('/settings/data')
     renderWithProviders(<SettingsNav />)
-    expect(screen.getByRole('link', { name: 'Notifications' })).toHaveAttribute('href', '/settings/notifications')
+    expect(screen.queryByRole('link', { name: 'Notifications' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Data & privacy' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'System' })).toHaveAttribute('href', '/settings/system')
   })

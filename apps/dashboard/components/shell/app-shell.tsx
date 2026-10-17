@@ -484,8 +484,8 @@ function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/settings/notifications')} tooltip="Notifications">
-                  <Link href="/settings/notifications" onClick={close}>
+                <SidebarMenuButton asChild isActive={isActive('/notifications')} tooltip="Notifications">
+                  <Link href="/notifications" onClick={close}>
                     <BellRing /> <span>Notifications</span>
                   </Link>
                 </SidebarMenuButton>

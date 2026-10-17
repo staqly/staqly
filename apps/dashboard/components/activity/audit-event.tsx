@@ -65,7 +65,7 @@ const OBJECT_KINDS: ObjectKind[] = [
     obj: 'channel',
     idKeys: ['channel_id'],
     nameKeys: ['name'],
-    href: '/settings/notifications',
+    href: '/notifications',
   },
   {
     prefix: 'api_key.',

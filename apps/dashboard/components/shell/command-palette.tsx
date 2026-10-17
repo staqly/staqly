@@ -85,7 +85,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             <CommandItem onSelect={() => go('/settings/plan')}>
               <Gauge /> Plan & usage
             </CommandItem>
-            <CommandItem onSelect={() => go('/settings/notifications')}>
+            <CommandItem onSelect={() => go('/notifications')}>
               <BellRing /> Notifications
             </CommandItem>
             <CommandItem onSelect={() => go('/settings/data')}>

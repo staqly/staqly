@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils'
 const LINKS = [
   { href: '/settings', label: 'General' },
   { href: '/settings/plan', label: 'Plan & usage' },
-  { href: '/settings/notifications', label: 'Notifications' },
   { href: '/settings/data', label: 'Data & privacy' },
   { href: '/settings/backups', label: 'Backups' },
   { href: '/settings/system', label: 'System' },

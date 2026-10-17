@@ -8,7 +8,7 @@ export function SettingsHeader() {
     <PageHeader
       title="Settings"
       icon={<Settings className="size-4" />}
-      description="Workspace, notifications, data and system status."
+      description="Workspace, plan, data and system status."
     />
   )
 }
