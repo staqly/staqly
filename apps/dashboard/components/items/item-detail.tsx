@@ -12,7 +12,13 @@ import { IdChip } from '@/components/common/id-chip'
 import { DecisionState, ItemState, RunState, StatusBadge } from '@/components/common/status-badge'
 import { TYPE_LABELS, TypeIcon } from '@/components/common/type-icon'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -188,9 +194,18 @@ export function ItemDetail({
 
   const it = item.data!
   const sheet = variant === 'sheet'
+  // The panel opens the full item page from the top of its More menu.
+  const openItem = sheet ? (
+    <DropdownMenuItem asChild>
+      <Link href={`/items/${it.id}`}>
+        <ExternalLink /> Open full page
+      </Link>
+    </DropdownMenuItem>
+  ) : null
 
   return (
-    <div className="grid gap-5" data-testid="item-detail">
+    // In the sheet the detail fills the panel, so the phone action bar sits at the bottom even under short content.
+    <div className={cn('grid gap-5', sheet && 'flex min-h-full flex-1 flex-col')} data-testid="item-detail">
       <div className="flex flex-col gap-3">
         {!sheet && (
           <Link
@@ -225,14 +240,7 @@ export function ItemDetail({
           </div>
           <div className={cn('flex flex-wrap items-center justify-end gap-1.5', sheet && 'mr-8')}>
             {/* Actions top right, next to the title. Phones get the sticky bar at the bottom instead. */}
-            {!isMobile && <ItemActionBar item={it} size="sm" menuExtra={options.menu} />}
-            {sheet && (
-              <Button asChild variant="ghost" size="sm">
-                <Link href={`/items/${it.id}`}>
-                  <ExternalLink /> Open
-                </Link>
-              </Button>
-            )}
+            {!isMobile && <ItemActionBar item={it} size="sm" menuStart={openItem} menuExtra={options.menu} />}
             {/* Phones have no action bar up here, so they keep a menu of their own. */}
             {isMobile && (
               <DropdownMenu>
@@ -241,7 +249,11 @@ export function ItemDetail({
                     <MoreHorizontal />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">{options.menu}</DropdownMenuContent>
+                <DropdownMenuContent align="end">
+                  {openItem}
+                  {openItem && <DropdownMenuSeparator />}
+                  {options.menu}
+                </DropdownMenuContent>
               </DropdownMenu>
             )}
           </div>
@@ -296,9 +308,9 @@ export function ItemDetail({
           {!sheet && <div className="h-16" aria-hidden />}
           <div
             className={cn(
-              'z-30 border-t bg-background/90 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/75 empty:hidden',
+              'z-30 border-t border-foreground/10 bg-popover/95 px-3 py-2.5 shadow-[0_-10px_30px_-12px_rgb(0_0_0/0.35)] backdrop-blur-xl dark:shadow-[0_-10px_30px_-10px_rgb(0_0_0/0.8)] empty:hidden',
               sheet
-                ? 'sticky -bottom-[max(1.25rem,env(safe-area-inset-bottom))] -mx-4 pb-[max(0.625rem,env(safe-area-inset-bottom))]'
+                ? 'sticky -bottom-[max(1.25rem,env(safe-area-inset-bottom))] -mx-4 mt-auto pb-[max(0.625rem,env(safe-area-inset-bottom))]'
                 : 'fixed inset-x-0 bottom-(--mobile-chrome-bottom)',
             )}
             data-testid="item-sticky-actions"

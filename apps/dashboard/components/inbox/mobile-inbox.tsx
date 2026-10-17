@@ -337,7 +337,7 @@ export function MobileInbox(p: Props) {
 
       {showBar && active && (
         <div
-          className="fixed inset-x-0 bottom-(--mobile-chrome-bottom) z-30 border-t bg-background/90 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-background/75"
+          className="fixed inset-x-0 bottom-(--mobile-chrome-bottom) z-30 border-t border-foreground/10 bg-popover/95 px-3 py-2.5 shadow-[0_-10px_30px_-12px_rgb(0_0_0/0.35)] backdrop-blur-xl dark:shadow-[0_-10px_30px_-10px_rgb(0_0_0/0.8)]"
           data-testid="inbox-actions"
         >
           <div className="mx-auto flex max-w-lg items-center gap-2">
@@ -373,6 +373,12 @@ export function MobileInbox(p: Props) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" side="top" className="min-w-56">
+                <DropdownMenuItem asChild>
+                  <Link href={`/items/${active.id}`}>
+                    <ExternalLink /> Open details
+                  </Link>
+                </DropdownMenuItem>
+                {(canApprove || p.custom.length > 0) && <DropdownMenuSeparator />}
                 {canApprove && (
                   <DropdownMenuItem onSelect={p.edit}>
                     <Pencil /> Edit
@@ -380,19 +386,13 @@ export function MobileInbox(p: Props) {
                 )}
                 {p.custom.length > 0 && (
                   <>
-                    <DropdownMenuSeparator />
+                    {canApprove && <DropdownMenuSeparator />}
                     <DropdownMenuLabel>Collection actions</DropdownMenuLabel>
                     {p.custom.map((a) => (
                       <ActionMenuItem key={a.name} action={a} onRun={p.runAction} />
                     ))}
                   </>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href={`/items/${active.id}`}>
-                    <ExternalLink /> Open details
-                  </Link>
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

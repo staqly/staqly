@@ -135,6 +135,7 @@ export function ActionToolbar({
   onReject,
   onEdit,
   onCustom,
+  menuStart,
   menuExtra,
   mainOnly,
 }: {
@@ -148,6 +149,8 @@ export function ActionToolbar({
   onReject: () => void
   onEdit: () => void
   onCustom: (a: ActionDef) => void
+  /** Items at the top of the menu (Open in the item panel). */
+  menuStart?: React.ReactNode
   /** Page-level items (download, delete...) added to the same menu, so there is one menu, not two. */
   menuExtra?: React.ReactNode
   /** Inbox rows: the main action only (or the first one when there is none), no More menu. */
@@ -158,7 +161,7 @@ export function ActionToolbar({
   const main = deciding ? undefined : mainAction(custom, mainOnly)
   const shown = main ? [main] : []
   const more = custom.filter((a) => a !== main)
-  const hasMenu = !mainOnly && (canEdit || more.length > 0 || !!menuExtra)
+  const hasMenu = !mainOnly && (canEdit || more.length > 0 || !!menuExtra || !!menuStart)
 
   return (
     <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Item actions">
@@ -192,6 +195,8 @@ export function ActionToolbar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-56">
+            {menuStart}
+            {menuStart && (canEdit || more.length > 0 || !!menuExtra) && <DropdownMenuSeparator />}
             {canEdit && (
               <DropdownMenuItem onSelect={onEdit}>
                 <Pencil /> <span className="flex-1">Edit</span>
@@ -744,9 +749,11 @@ export function ItemActionBar({
   showEdit = true,
   onDone,
   compact = false,
+  menuStart,
   menuExtra,
 }: {
   item: Item
+  menuStart?: React.ReactNode
   menuExtra?: React.ReactNode
   className?: string
   size?: 'sm' | 'default' | 'xs'
@@ -905,6 +912,7 @@ export function ItemActionBar({
         onReject={() => reject && trigger(reject)}
         onEdit={() => setEditing(true)}
         onCustom={trigger}
+        menuStart={menuStart}
         menuExtra={menuExtra}
       />
 
