@@ -141,8 +141,8 @@ curl -s "http://localhost:3333/v1/events?type_prefix=webhook."
 
 ## Listing webhook deliveries
 
-`GET /v1/webhook-deliveries` returns the latest deliveries (filter by `webhook_id` and
-`status`: `pending`, `succeeded`, `failed`; `limit` up to 200). It has no cursor.
+`GET /v1/webhook-deliveries` returns the latest deliveries (filter by `webhook_id`, `item_id`
+and `status`: `pending`, `succeeded`, `failed`; `limit` up to 200). It has no cursor.
 
 ## Next steps
 

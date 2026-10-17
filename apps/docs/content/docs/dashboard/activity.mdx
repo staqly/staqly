@@ -41,8 +41,8 @@ webhooks receive), with the event ID, its sequence number and a **Copy data** bu
 
 ### Load more
 
-Scroll to the end and click **Load older events** to go further back. **Refresh** reloads the
-list.
+Scroll to the end and click **Load older events** to go further back. **Refresh** adds the
+events that happened since, on top; the older pages you loaded stay as they are.
 
 </Step>
 </Steps>
@@ -71,7 +71,8 @@ list.
 Credential events (API keys created, rotated or revoked; sign-ins with the admin API key or the
 recovery key; recovery-key rotations; sessions revoked; devices connected and sign-in links created: types starting with `api_key.`,
 `session.`, `recovery_key.`, `device.` or `device_link.`) are audit events. Only admins see
-them: local mode, dashboard sessions and keys with the `admin` scope.
+them: local mode, dashboard sessions and keys with the `admin` scope. Exports leave them out
+for everyone else too.
 
 ## Export the log
 

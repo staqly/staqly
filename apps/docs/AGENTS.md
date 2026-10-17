@@ -19,7 +19,7 @@ built as a **static export** (`out/`). It is *not* part of the root
 ```bash
 pnpm install
 pnpm dev               # http://localhost:8090 (hot reload)
-pnpm build             # next build → out/, then scripts/check-links.mjs (fails on broken internal links/anchors)
+pnpm build             # next build → out/, scripts/markdown-files.mjs, then scripts/check-links.mjs (fails on broken internal links/anchors)
 pnpm preview           # pnpm dlx serve@latest out -l 8090
 pnpm lint              # oxlint --deny-warnings
 pnpm typecheck         # next typegen && tsc --noEmit
@@ -48,7 +48,7 @@ links: plain `<img>`/`<a>` and fetches must add `env.basePath` (`lib/env.mjs`, t
 | `lib/openapi.ts` | Loads the spec (`OPENAPI_SPEC` env, default `../api/openapi.yaml`) and declares tags that operations use but the top-level `tags` list lacks, so every tag gets a reference page |
 | `lib/shared.ts` | Site name, GitHub repo for "Edit on GitHub" |
 | `components/mdx.tsx` | Components available in MDX |
-| `components/mdx/bits.tsx` | `<Badge>`, `<Kbd>`, `<Method>`, `<ComingSoon>` |
+| `components/mdx/bits.tsx` | `<Badge>`, `<Kbd>`, `<Method>`, `<ComingSoon>`, `<Required>` |
 | `app/global.css` | staqly theme: brand tokens and hero/button helpers from `@staqly/brand` (`packages/brand`, shared with the dashboard and staqly.ai), graphite neutrals for Fumadocs + small helpers. The docs are **dark only**: forced in `components/provider.tsx`, no theme switch |
 | `components/logo.tsx` | The shared logo (`@staqly/brand/logo`) with the base path and the "docs" badge; the home hero demo is `@staqly/brand/hero-demo` |
 | `scripts/check-links.mjs` | Link check (`@staqly/check-links`, shared with staqly.ai) — the build's quality gate (pages and `#anchors`) |

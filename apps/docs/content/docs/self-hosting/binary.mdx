@@ -80,13 +80,15 @@ With `--expose`, other devices on your network can open the dashboard, so every 
 in once with a one-time link:
 
 ```bash
-PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose
+staqly serve --expose
 staqly serve connect-link    # in another terminal: prints a one-time sign-in link
 ```
 
-Or scan the QR code from **Connect a device** in the dashboard. Set `PUBLIC_DASHBOARD_URL` to your
-computer's LAN address so QR codes and links point somewhere phones can reach. See
-[Phones & tablets](/dashboard/phones-and-tablets).
+Or scan the QR code from **Connect a device** in the dashboard: it uses your computer's Wi-Fi
+address by itself, even when you opened the dashboard at `localhost`. To pin another address or
+name for every browser, set `PUBLIC_DASHBOARD_URL` (e.g.
+`PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose`). Without `--expose`, the
+dialog tells you to restart with it. See [Phones & tablets](/dashboard/phones-and-tablets).
 
 ## Operator commands
 

@@ -39,6 +39,7 @@ beyond loopback without `LOCAL_TRUSTED_PEERS`.
 | Active API keys | 1 | unlimited |
 | Storage | 1 GB | 100 GB |
 | Max file size | 5 MB | 100 MB |
+| Backups and data export (workspace ZIP, event export) | no | yes |
 
 New workspaces start on a **7-day Pro trial** (`plan_expires_at`). When a Pro trial or paid
 period ends unpaid, the workspace is **suspended**: reads and exports work, every other change
@@ -48,7 +49,8 @@ Free (`POST /v1/workspace/plan`, admin) or `set-plan pro` (operator, no end date
 File sizes are also capped by the operator's `MAX_UPLOAD_MB` (default 100).
 The limits live in `apps/api/internal/app/plans.go` and are enforced by the API.
 
-Signed webhooks, MCP, full history and backups are on every plan.
+Signed webhooks, MCP and full history are on every plan; workspace exports and
+`GET /v1/events/export` answer `402` on Free.
 
 * Limits apply **per workspace**: every API key of a workspace shares its
   plan. "Approvals / month" counts approvals and rejections (by people, chat
@@ -60,7 +62,9 @@ Signed webhooks, MCP, full history and backups are on every plan.
             "details":{"limit":"decisions_per_month","max":50,"used":50,"plan":"free"}}}
   ```
 * `GET /v1/plans` lists the plans; `GET /v1/workspace/usage` shows the current
-  plan and usage (the dashboard's *Plan & usage* page).
+  plan and usage, including items created this period by status
+  (`items_by_status`) and the webhook delivery backlog (`webhook_deliveries`)
+  (the dashboard's *Settings → Plan & usage* page).
 * **Payments:** with `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
   `STRIPE_PRICE_PRO` set, workspace admins pay for Pro with Stripe Checkout
   (*Settings → Plan & usage → Upgrade to Pro*) and manage it in the Stripe
@@ -121,12 +125,13 @@ appends; IPv6 clients are counted per /64).
   the recovery key. The recovery key is **single-use**: in one transaction it
   signs this browser in, creates a new admin key "Admin key (recovered)" (not
   counted against the plan's key limit), issues a new recovery key (the old one
-  stops working) and signs out every other session. On Free (key limit) the old
-  admin keys are revoked so the new one replaces them; on Pro existing API keys keep
-  working. Response `201 {"csrf_token", "api_key": {..., "key"}, "recovery_key"}`;
+  stops working) and signs out every other session. On plans with a key limit
+  (Free) the old `admin` keys are revoked so the new one replaces them (agent
+  keys keep working); on Pro existing API keys keep working. Response `201 {"csrf_token", "api_key": {..., "key"}, "recovery_key"}`;
   the dashboard shows both secrets once behind an "I have saved..." checkbox.
-  Events: `recovery_key.rotated` (`via: "recovery"`), `api_key.created`,
-  `session.recovered` (`user_agent`, `sessions_revoked`, `api_key_id`).
+  Events: `recovery_key.rotated` (`via: "recovery"`), `api_key.revoked`
+  (`reason: "recovery"`, Free only), `api_key.created`, `session.recovered`
+  (`user_agent`, `sessions_revoked`, `api_key_id`, `api_keys_replaced`).
 * Unchanged: *Settings → Recovery key* rotates it (dashboard session only,
   signs out other sessions); `server recovery-key` on the host; *Connect a
   device* links.
@@ -134,7 +139,7 @@ appends; IPv6 clients are counted per /64).
 Cloud-mode hardening worth knowing: secret-bearing responses (new API keys,
 recovery keys, device links, webhook secrets) are never cached for
 `Idempotency-Key` replay; credential audit events (`api_key.*`, `session.*`,
-`recovery_key.*`, `device*.*`) are listed only for admin principals; the
+`recovery_key.*`, `device*.*`) are listed and exported only for admin principals; the
 webhook signing secret is shown only on create/rotate; using or rotating the
 recovery key signs out every other session (a recovery also replaces the
 recovery key); only `admin` keys can sign a browser in; `mcp-stdio` re-checks
@@ -185,10 +190,13 @@ including the one on this computer: Docker Desktop hides the real client
 address and a `Host` header can be forged, so the dashboard cannot tell "this
 computer" from "someone on the Wi-Fi". `docker exec staqly server connect-link`
 (or `staqly serve connect-link`) prints a one-time link (valid 5 minutes);
-phones scan the QR from *Connect a device*. For the QR to work on a phone, set
-the address it can reach: recreate the container with
-`-e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080` (your computer's LAN IP), or
-start `PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose`.
+phones scan the QR from *Connect a device*. The QR needs an address the phone
+can reach: with `staqly serve --expose` a dashboard opened as `localhost` puts
+this computer's Wi-Fi address in the QR on its own; in Docker the server can't
+see that address, so the dialog asks for it once (kept in that browser). Plain
+`staqly serve` (no `--expose`) only gets a hint to restart with `--expose`.
+`PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080` (`-e` on `docker run`, or the
+environment of `staqly serve --expose`) fixes the address for every link.
 
 Sessions last 30 days and can be revoked under *Settings → Devices*. The API
 stays on `127.0.0.1`, so agents, MCP and scripts on this computer keep working

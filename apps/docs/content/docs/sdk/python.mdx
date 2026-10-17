@@ -402,17 +402,17 @@ staqly.collections.delete("col_oalirbz67y4m4cqxq5dw", confirm="Instagram")  # pe
 
 | Method | Endpoint | Returns |
 |---|---|---|
-| `list(collection=, collection_id=, status=, type=, q=, source=, external_ref=, created_after=, created_before=, decided_after=, decided_before=, sort=, limit=, cursor=)` | `GET /v1/items` | `ItemPage` |
+| `list(collection=, collection_id=, status=, decision=, run=, tag=, archived=, run_action=, type=, q=, source=, external_ref=, created_after=, created_before=, decided_after=, decided_before=, sort=, limit=, cursor=)` | `GET /v1/items` | `ItemPage` |
 | `search(q, collection=, collection_id=, status=, type=, sort=, limit=, cursor=)` | `GET /v1/items?q=` | `ItemPage` |
 | `iterate()` with the filters of `list()` | `GET /v1/items` (every page) | iterator of `Item` |
 | `get(item_id)` | `GET /v1/items/{id}` | `Item` |
-| `create(collection, title=, content=, url=, media_id=, metadata=, type=, status=, source=, external_ref=, expires_in=, editable=)` | `POST /v1/collections/{id}/items` | `Item` |
-| `upload(collection, file, filename=, content_type=)` plus the fields of `create()` except `media_id` | `POST /v1/collections/{id}/items` (multipart) | `Item` |
-| `update(item_id, title=, content=, url=, media_id=, metadata=, metadata_patch=, status=, source=, external_ref=, collection_id=, expected_version=)` | `PATCH /v1/items/{id}` | `Item` |
+| `create(collection, title=, content=, url=, media_id=, metadata=, type=, status=, source=, external_ref=, expires_in=, editable=, tags=)` | `POST /v1/collections/{id}/items` | `Item` |
+| `upload(collection, file, filename=, content_type=)` plus the fields of `create()` except `media_id` and `tags` | `POST /v1/collections/{id}/items` (multipart) | `Item` |
+| `update(item_id, title=, content=, url=, media_id=, metadata=, metadata_patch=, status=, source=, external_ref=, collection_id=, expected_version=, tags=)` | `PATCH /v1/items/{id}` | `Item` |
 | `delete(item_id)` | `DELETE /v1/items/{id}` | `None` |
 | `purge(item_id)` | `POST /v1/items/{id}/purge` | `PurgeResult` |
-| `approve(item_id, feedback=, edits=, payload=, expected_version=)` / `reject()` with the same arguments | `POST /v1/items/{id}/actions/{action}` | `Item` |
-| `action(item_id, name, feedback=, edits=, payload=, expected_version=)` | `POST /v1/items/{id}/actions/{action}` | `Item` |
+| `approve(item_id, feedback=, edits=, payload=, expected_version=)` / `reject()` with the same arguments plus `follow_up=` | `POST /v1/items/{id}/actions/{action}` | `Item` |
+| `action(item_id, name, feedback=, edits=, payload=, expected_version=, follow_up=)` | `POST /v1/items/{id}/actions/{action}` | `Item` |
 | `list_actions(item_id)` | `GET /v1/items/{id}/actions` | `list[ActionDef]` |
 | `bulk_action(ids, action, feedback=, edits=, payload=)` | `POST /v1/items/bulk-actions` | `list[BulkActionResult]` |
 | `history(item_id, limit=, cursor=)` | `GET /v1/items/{id}/events` | `EventPage` |
@@ -420,6 +420,8 @@ staqly.collections.delete("col_oalirbz67y4m4cqxq5dw", confirm="Instagram")  # pe
 | `wait(item_id, timeout=)` | `GET /v1/items/{id}/wait` | `ItemWaitResult` |
 | `wait_for_decision(item_id, timeout=600, on_poll=)` | `GET /v1/items/{id}/wait` (repeated) | `Item` |
 | `report_result(item_id, status=, result=, error=)` | `POST /v1/items/{id}/result` | `Item` |
+| `unarchive(item_id)` | `POST /v1/items/{id}/unarchive` | `Item` |
+| `summarize(item_id, context=)` | `POST /v1/items/{id}/summarize` | `Item` |
 
 ```python
 staqly.items.update("itm_oalirbz67y4m4cqxq5dw", metadata_patch={"score": 0.95, "draft": None}, expected_version=3)
@@ -545,6 +547,7 @@ res.status, res.item_id  # ("rejected", "itm_oalirbz67y4m4cqxq5dw")
 | `events(from_=, to=, type=, type_prefix=, actor_type=, actor_id=, collection_id=, item_id=)` | `GET /v1/events/export` (NDJSON) | iterator of `Event` |
 | `save_events(path, format="ndjson")` plus the filters of `events()` | `GET /v1/events/export` | `Path` |
 | `create_workspace_export()` | `POST /v1/workspace/export` | `WorkspaceExport` |
+| `list_workspace_exports()` | `GET /v1/workspace/exports` | `list[WorkspaceExport]` |
 | `get_workspace_export(export_id)` | `GET /v1/workspace/exports/{id}` | `WorkspaceExport` |
 | `wait_for_workspace_export(export_id, timeout=600, poll_interval=1)` | `GET /v1/workspace/exports/{id}` (polled) | `WorkspaceExport` |
 | `download_workspace_export(export_id)` | `GET /v1/workspace/exports/{id}/download` | `bytes` |
@@ -563,7 +566,8 @@ staqly.exports.save_workspace_export("exp_zxj2lzvmh32poxxq2kgp", "backup.zip")
 |---|---|---|
 | `workspace.get()` | `GET /v1/workspace` | `Workspace` |
 | `workspace.rename(name)` | `PATCH /v1/workspace` | `Workspace` |
-| `workspace.usage()` | `GET /v1/workspace/usage` | `WorkspaceUsage` |
+| `workspace.usage()` | `GET /v1/workspace/usage` | `WorkspaceUsage` (with `items_by_status` and `webhook_deliveries`) |
+| `workspace.agents()` / `workspace.forget_agent(agent_id)` | `GET /v1/agents` / `DELETE /v1/agents/{id}` | `list[Agent]` / `None` |
 | `workspace.set_plan(plan="free")` | `POST /v1/workspace/plan` | `WorkspaceUsage` |
 | `workspace.delete(confirm=)` | `DELETE /v1/workspace` | `None` |
 | `workspace.rotate_recovery_key()` | `POST /v1/recovery-key/rotate` | `RecoveryKey` |

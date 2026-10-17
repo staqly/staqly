@@ -174,6 +174,7 @@ await staqly.items.reject(item.id, { feedback: "Too dark", follow_up: "regenerat
 await staqly.items.update(item.id, { tags: ["client-a", "urgent"] }); // labels, any status, no new version
 await staqly.items.list({ decision: ["approved"], run: "failed", tag: "client-a", archived: false });
 await staqly.items.unarchive(item.id); // back to review, its run or its decision
+await staqly.items.summarize(item.id, { context: "focus on tone" }); // rewrite the AI summary (409 not_configured without AI)
 
 // history
 await staqly.items.history(item.id);   // events, newest first
@@ -187,7 +188,8 @@ for await (const it of staqly.items.iterate({ status: "pending" })) console.log(
 
 Statuses: `draft`, `pending` (awaiting review), `approved`, `rejected`, `expired`, `processing`,
 `completed`, `failed`, `archived`. `items.update` cannot set `approved` or `rejected`. Use
-`approve` and `reject` for that.
+`approve` and `reject` for that. Image and video items need a file (`media_id` or `url`);
+without one the API answers 422 (`ValidationError`).
 
 ## Waiting for a human decision
 
@@ -272,7 +274,7 @@ for await (const ev of staqly.events.iterate({ item_id: item.id })) console.log(
 ```ts
 const hook = await staqly.webhooks.create({
   url: "https://my-app.example.com/staqly",
-  events: ["item.approved", "item.rejected", "item.expired"], // or "*" / "item.*"
+  events: ["item.approved", "item.rejected", "item.expired"], // or "*" / "item.*"; unknown patterns: 422
   collection_ids: [col.id],                                    // empty = all collections
 });
 hook.secret; // whsec_... keep it to verify deliveries
@@ -401,17 +403,22 @@ await saveResponse(await staqly.exports.workspaceExportResponse(job.id), "worksp
 await staqly.items.purge(item.id); // { item_id, events_deleted, media_deleted }
 ```
 
-Only one workspace export can run at a time. Starting another returns a `ConflictError` with
-`details.export_id`. A failed or expired job throws `ExportFailedError`.
+Exports need a plan with data export (not Free: `PlanLimitError`, `limit: "data_export"`). The
+event export needs `items:read`; without `admin` it leaves out credential and session audit events
+(`api_key.*`, `session.*`, `recovery_key.*`, device links). Only one workspace export can run at a
+time. Starting another returns a `ConflictError` with `details.export_id`. A failed or expired job
+throws `ExportFailedError`.
 
 ## Workspace, plans and API keys
 
 ```ts
 await staqly.workspace.get();
 await staqly.workspace.rename("Acme agents"); // admin
-const { plan, usage, period } = await staqly.workspace.usage();
+const { plan, usage, period, items_by_status, webhook_deliveries } = await staqly.workspace.usage();
 await staqly.workspace.setPlan("free"); // admin, cloud; other plans throw PlanLimitError (402)
 await staqly.plans.list(); // limits: -1 = unlimited
+await staqly.workspace.agents(); // admin: MCP clients and API connections seen, latest first
+await staqly.workspace.forgetAgent(agentId); // admin; it comes back if it talks to the workspace again
 
 // Billing (cloud with Stripe; admin scope)
 await staqly.billing.get(); // { enabled, plan, subscription_status, plan_expires_at, suspended, has_customer }

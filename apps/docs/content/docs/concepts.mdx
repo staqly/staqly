@@ -207,7 +207,9 @@ Full list: [Event types](/api/events).
 Webhooks deliver events to your services — n8n, a server, a queue. They are **signed**
 with HMAC-SHA256, **retried** with exponential backoff and delivered **at-least-once**
 through a transactional outbox: the event and its deliveries are committed together with
-the change itself. See [Webhooks](/automation/webhooks).
+the change itself. A webhook (or notification channel) subscribes to event types or family
+globs such as `item.*`; an unknown pattern is refused with `422`, so a typo can't silently
+match nothing. See [Webhooks](/automation/webhooks).
 
 ## Watchers
 

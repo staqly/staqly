@@ -64,7 +64,7 @@ hosted, multi-tenant instance (cloud mode). Only the base URL and the API key ch
 |---|---|---|
 | Status | Default mode, ready to use | Same app with `STAQLY_MODE=cloud`, run by you or an operator |
 | Base URL | `http://localhost:3333` | Your cloud URL, e.g. `https://staqly.example.com` |
-| Setup | `curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh \| sh` then `staqly serve`, or [Docker](/self-hosting/docker) | Sign up on the instance and save the admin API key (`stk_...`); where your plan allows more keys, create a scoped key for each agent under **API keys** in the sidebar |
+| Setup | `curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh \| sh` then `staqly serve`, or [Docker](/self-hosting/docker) | Sign up on the instance and save the **Admin key** it shows once (`stk_...`); where your plan allows more keys (Free allows one), create a scoped key for each agent under **API keys** in the sidebar |
 | Credentials | None (requests must come from this machine) | `Authorization: Bearer` API key with [scopes](/api/authentication) |
 | API surface | Full REST API, MCP at `/mcp`, webhooks | Same REST API, MCP at `/mcp`, webhooks |
 | Approval quota | None | 50 approvals per month on Free, unlimited on Pro ([plans](/plans)) |

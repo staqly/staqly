@@ -39,6 +39,13 @@ the data volume instead) and `choose_free_plan` with `not_available`.
 `default_view` on `create_collection`/`update_collection` is kept for API
 compatibility only; the dashboard always shows a collection as a table.
 `test_webhook` and `test_notification_channel` are rate-limited per caller.
+`approve_item`, `reject_item` and `update_item` take an optional
+`expected_version`: if the item changed since then, the call fails with a
+conflict and nothing is applied (like REST). The same validation as REST
+applies: `image`/`video` items need media or a `url`, and webhook and channel
+`events` must be known patterns (typos such as `item.aproved` are rejected).
+`export_events` leaves out credential and session audit events for non-admin
+keys.
 
 `await_decision` waits up to `timeout_seconds` (default 45, max 300) and
 returns `decided=false` when the time is up; the agent calls it again to keep

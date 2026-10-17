@@ -20,34 +20,36 @@ from the couch. It takes about a minute, and the phone signs in without a passwo
 
 ### Find your computer's LAN address
 
-Your phone needs an address it can reach. Look up your computer's IP on the Wi-Fi, for example
-`192.168.1.23`:
+Your phone needs an address it can reach. With Docker you type it once in the dialog, so look
+up your computer's IP on the Wi-Fi, for example `192.168.1.23`:
 
 ```bash
 ipconfig getifaddr en0    # macOS
 hostname -I               # Linux
 ```
 
+With `staqly serve --expose` staqly finds it by itself.
+
 </Step>
 <Step>
 
 ### Open the dashboard to your network
 
-By default the dashboard only listens on your computer. Open it to the network and tell staqly
-its public address, so the QR code points somewhere your phone can reach:
+By default `staqly serve` only listens on your computer; Docker (`-p 8080:8080`) already
+publishes the dashboard on your network:
 
 ```bash tab="staqly serve"
-PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose
+staqly serve --expose
 ```
 
 ```bash tab="Docker"
-# -p 8080:8080 already publishes the dashboard on your network; recreate the container with the URL
-docker rm -f staqly
-docker run -d --name staqly ... -e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 ghcr.io/staqly/staqly:latest
+# nothing to change: the docker run command from Run with Docker publishes port 8080
 ```
 
-With Docker, use your full command from [Run with Docker](/self-hosting/docker) and add the `-e`
-line; the data stays in the volume.
+To pin the address for every browser instead (for example a name like
+`http://staqly.home:8080`), set `PUBLIC_DASHBOARD_URL`: `PUBLIC_DASHBOARD_URL=... staqly serve --expose`,
+or add `-e PUBLIC_DASHBOARD_URL=...` to your full command from [Run with Docker](/self-hosting/docker)
+and recreate the container (the data stays in the volume).
 
 </Step>
 <Step>
@@ -73,7 +75,8 @@ The link works once and expires after 5 minutes.
 ### Show the QR code
 
 In the dashboard open **Connect a device**: **Settings → Devices**, or <Kbd>⌘</Kbd> <Kbd>K</Kbd>
-→ *Connect a device*.
+→ *Connect a device*. With Docker, the first time the dialog asks for your computer's Wi-Fi
+address (`192.168.1.23`) and remembers it in this browser.
 
 </Step>
 <Step>

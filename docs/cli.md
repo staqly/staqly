@@ -240,7 +240,7 @@ staqly items list [--collection C] [--status pending] [--type image] [--q text] 
 staqly items get itm_123                  # fields, metadata, content, available actions
 staqly items create <collection> [--title --content TEXT|-|@file --stdin --file PATH --url --type --metadata '{json}' --meta k=v --source --external-ref --status --idempotency-key --expires-in 24h --editable title,content] [--wait [--timeout 30m]]
 staqly items approve itm_1 [itm_2 itm_3] [--feedback "<text>"|-m "<text>"] [--expected-version N]
-staqly items reject  itm_1 [--feedback "<text>"]
+staqly items reject  itm_1 [--feedback "<text>"] [--expected-version N]
 staqly items action  itm_1 regenerate [--feedback "make her smile"] [--payload '{"n":2}']
 staqly items update  itm_1 [--status completed] [--metadata-patch '{"url":"https://example.com/post/1","old":null}'] [--metadata '{"seed":42}'] [--title] [--content] [--url] [--collection] [--external-ref] [--media-id med_1] [--expected-version]
 staqly items history itm_1                # activity, oldest first
@@ -380,7 +380,10 @@ staqly events export --type 'item.*' --collection "Blog posts" --actor-type api_
 | `--output`, `-o` | path | No | Write to this file instead of stdout |
 
 Output to a terminal is sanitized like other server text; output to a pipe
-or file is byte-for-byte what the server sent.
+or file is byte-for-byte what the server sent. In cloud mode the export needs
+a paid plan (`402` on Free), and credential/session audit events
+(`api_key.*`, `session.*`, `recovery_key.*`, `device*.*`) are included only
+for `admin` keys.
 
 ### webhooks
 
@@ -509,8 +512,10 @@ staqly sessions revoke ses_oalirbz67y4m4cqxq5dw
 `connect` calls `POST /v1/device-links`, which only the dashboard or the
 local principal may use (a cloud API key gets 403). The URL goes to stdout,
 the expiry and a warning to stderr: the link is a credential, open it only
-on your own device. When it points at `localhost`, set `PUBLIC_DASHBOARD_URL` on
-the server so other devices can open it.
+on your own device. Against `staqly serve --expose` the link uses this
+computer's Wi-Fi address on its own; when it still points at `localhost`
+(Docker, or `staqly serve` without `--expose`) the CLI prints the server's
+hint, and `PUBLIC_DASHBOARD_URL` on the server fixes the address.
 
 ### mcp config
 

@@ -370,7 +370,7 @@ const page = await staqly.collections.listItems('col_oalirbz67y4m4cqxq5dw', { st
 | `update(id, input)` | Update fields, move the item or change its status (not to approved or rejected) |
 | `delete(id)` | Delete the item; its history is kept |
 | `purge(id)` | Delete the item and its history (`admin`) |
-| `approve(id, input)` / `reject(id, input)` | Decide a pending item (`items:review`), optionally with `feedback` and `edits` |
+| `approve(id, input)` / `reject(id, input)` | Decide a pending item (`items:review`), optionally with `feedback`, `edits` and `expected_version` (409 if the item changed since) |
 | `action(id, name, input)` | Run approve, reject or a custom action |
 | `listActions(id)` | Actions the caller may run on the item now |
 | `bulkAction(ids, action, input)` | Run one action on up to 100 items; each succeeds or fails on its own |
@@ -379,6 +379,8 @@ const page = await staqly.collections.listItems('col_oalirbz67y4m4cqxq5dw', { st
 | `wait(id, { timeout })` | One long-poll round (seconds, max 60) |
 | `waitForDecision(id, options)` | Wait until the item leaves `pending` |
 | `reportResult(id, input)` | Report `completed` (with `result`) or `failed` (with `error`) after acting on an approved item |
+| `unarchive(id)` | Bring an archived item back: to review, its run or its decision |
+| `summarize(id, { context })` | Write the item's AI summary again now (tags too, if it has none); 409 `not_configured` without AI |
 
 ### `media`
 
@@ -419,7 +421,7 @@ const page = await staqly.events.list({
 | `rotateSecret(id)` | Issue a new signing secret |
 | `delete(id)` | Delete a webhook |
 | `test(id)` | Queue a `webhook.test` delivery |
-| `deliveries.list({ webhook_id, status, limit })` | Delivery history |
+| `deliveries.list({ webhook_id, status, item_id, limit })` | Delivery history |
 | `deliveries.retry(id)` | Queue a finished delivery again |
 
 ### `watchers`
@@ -460,6 +462,7 @@ const page = await staqly.events.list({
 | `events(params)` | Async iterator over the activity log export (NDJSON), oldest first; filters `from`, `to`, `type`, `type_prefix`, `actor_type`, `actor_id`, `collection_id`, `item_id` |
 | `eventsResponse({ format })` | The raw export `Response`; `format` is `ndjson` (default) or `csv`, with the same filters as `events` |
 | `createWorkspaceExport()` | Start a full workspace export (`admin`) |
+| `listWorkspaceExports()` | The latest exports, newest first (at most 20) |
 | `getWorkspaceExport(id)` | Export job status |
 | `waitForWorkspaceExport(id, { timeout, pollInterval, signal })` | Poll until the job is ready (default timeout 10 minutes, poll every 1000 ms); throws `ExportFailedError` (with `job`) if it fails or expires, `WaitTimeoutError` on timeout |
 | `downloadWorkspaceExport(id)` | Download a finished export as bytes |
@@ -482,7 +485,8 @@ await saveResponse(await staqly.exports.eventsResponse({ format: 'csv', from: '2
 |---|---|
 | `workspace.get()` | Get the workspace |
 | `workspace.rename(name)` | Rename the workspace (`admin`) |
-| `workspace.usage()` | Current plan, billing period and usage |
+| `workspace.usage()` | Current plan, billing period and usage, plus `items_by_status` (items created this period) and `webhook_deliveries` (waiting and failed) |
+| `workspace.agents()` / `workspace.forgetAgent(id)` | Agents and API connections seen in the workspace; forget one (`admin`) |
 | `workspace.setPlan('free')` | Switch to the Free plan (`admin`, cloud). Other plans need a payment and throw `PlanLimitError` (402) |
 | `workspace.rotateRecoveryKey()` | Issue a new recovery key, shown once, and sign out every other session (dashboard session only) |
 | `workspace.delete(confirmName)` | Permanently delete the workspace and all its data (cloud, dashboard session only); `confirmName` must equal the workspace name |

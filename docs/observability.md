@@ -198,7 +198,7 @@ the whole map, so spraying random keys can't clear an offender's bucket.
 
 | Limiter | Applies to | Key | Default |
 |---|---|---|---|
-| Sensitive (`ip`) | `POST /v1/sessions/recover`, `POST /v1/device-links/redeem`, `POST /v1/workspaces`, `/v1/decide/*` | client IP + endpoint | 10/min, burst 10 |
+| Sensitive (`ip`) | `POST /v1/sessions/api-key`, `POST /v1/sessions/recover`, `POST /v1/device-links/redeem`, `POST /v1/workspaces`, `/v1/decide/*` | client IP + endpoint | 10/min, burst 10 |
 | API (`principal`) | everything else under `/v1` and `/mcp`, **cloud mode only** | API key or session (hashed); client IP when there are no credentials | 600/min, burst 100 |
 | Test sends | `POST /v1/webhooks/{id}/test`, `POST /v1/notification-channels/{id}/test` (both modes) | principal | 10/min, burst 5 |
 

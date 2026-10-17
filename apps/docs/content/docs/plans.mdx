@@ -65,7 +65,9 @@ The same applies when a paid Pro period ends unpaid. `GET /v1/workspace/usage` s
 
 - Dashboard: **Settings → Plan & usage** ([details](/dashboard/plan-and-usage)).
 - API: `GET /v1/plans` lists plans and limits (`-1` = unlimited); `GET /v1/workspace/usage`
-  returns the current plan, the period (`2026-10`) and usage.
+  returns the current plan, the period (`2026-10`) and usage, plus `items_by_status` (items
+  created this month, by their current status) and `webhook_deliveries` (`queued`, `retrying`
+  and `failed` deliveries).
 
 ## What happens when you hit a limit
 

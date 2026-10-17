@@ -99,15 +99,13 @@ matches where n8n and staqly run:
 | **On the host**, staqly via `staqly serve` | `http://localhost:3333` | `http://localhost:5678/webhook/staqly-demo`, with `WEBHOOK_ALLOW_LOOPBACK=true` (see below) |
 
 - In local mode staqly only accepts keyless requests whose `Host` is a local name. `api`,
-  `localhost` and `host.docker.internal` are built in (Compose also adds the container name
-  `staqly`). If n8n reaches
+  `localhost` and `host.docker.internal` are built in. If n8n reaches
   staqly under another name, add it to `LOCAL_ALLOWED_HOSTS`.
 - Keyless requests must also come from a trusted peer. The `docker run` command and Compose trust the private ranges
   (`LOCAL_TRUSTED_PEERS`), which covers n8n on the Docker network or on the host. If you
   narrowed `LOCAL_TRUSTED_PEERS`, keep n8n's network in it.
 - `host.docker.internal` works on Docker Desktop. On Linux, start the staqly container with
-  `--add-host host.docker.internal:host-gateway` (staqly's compose file maps it already); for
-  another n8n container on Linux, add the same
+  `--add-host host.docker.internal:host-gateway`; for another n8n container on Linux, add the same
   `extra_hosts: ["host.docker.internal:host-gateway"]` entry.
 - To share a network with an existing n8n container:
   `docker network connect staqly_default <n8n-container>` (with `docker run`, create the network

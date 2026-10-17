@@ -159,6 +159,12 @@ Webhooks match `events` patterns against the type: exact names, `"*"`, or globs 
 `"item.*"` and `"item.*_requested"`. Optionally restrict to `collection_ids`. See
 [Webhooks](/automation/webhooks).
 
+Patterns are checked when you save a webhook or notification channel (1 to 50 of them): an
+exact name must be one of the types on this page, `item.<name>_requested` or an event configured
+on one of your collections' actions, and a glob must stay inside a known family (`item.`,
+`collection.`, `webhook.`...). A typo such as `item.aproved` or `items.*` is rejected with `422`
+instead of silently never matching.
+
 ## Actors
 
 The `actor` field says who caused the event. Filter by it with `actor_type` and `actor_id`.

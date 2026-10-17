@@ -37,8 +37,16 @@ current version.
 Changing a channel's destination requires re-entering its secret in the same
 request (see [notifications.md](notifications.md)).
 
+**`422 unknown event pattern ...` on a webhook or notification channel.**
+`events` takes 1-50 patterns: `*`, a glob inside a known family such as
+`item.*`, a known event type or a custom action's event. Fix the typo (e.g.
+`item.aproved`).
+
+**`422 ... items need media` when creating an image or video item.** Upload a
+file (`media_id`) or pass a `url`; an update may not clear both.
+
 **`402 plan_limit_exceeded` (cloud).** The workspace hit its plan limit
-(`error.details` says which). See *Plan & usage* in the dashboard; the operator
+(`error.details` says which). See *Settings → Plan & usage* in the dashboard; the operator
 can upgrade with `docker exec staqly server set-plan {WORKSPACE_ID} pro`.
 
 **`429 rate_limited` when creating a workspace (cloud).** At most 5 signups
@@ -46,9 +54,12 @@ per hour per IP. Behind a reverse proxy set `TRUST_PROXY=true`, otherwise all
 users share the proxy's IP.
 
 **Phone: "This device isn't connected".** Use *Connect a device* on your
-computer and scan the QR (set `PUBLIC_DASHBOARD_URL=http://<LAN IP>:8080`, with
-`-e` on `docker run` or in the environment of `staqly serve --expose`, so the QR
-points at an address the phone can reach). A browser on this computer signs in
+computer and scan the QR. With `staqly serve --expose` the QR uses this
+computer's Wi-Fi address on its own; with Docker the dialog asks for that
+address once; plain `staqly serve` keeps the dashboard on this computer, so
+restart it with `--expose`. `PUBLIC_DASHBOARD_URL=http://<LAN IP>:8080` (`-e` on
+`docker run`, or the environment of `staqly serve --expose`) fixes the address
+for every link. A browser on this computer signs in
 with the link from `docker exec staqly server connect-link` (or
 `staqly serve connect-link`). The link expires after 5 minutes and works once.
 

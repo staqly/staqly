@@ -48,8 +48,10 @@ Open this link in the browser to sign it in. It works once and expires in 5 minu
 http://localhost:8080/connect#ax37d7fiaginnaqknltsconqmpsrse6vrwubfs3ijeh2xokpffiq
 ```
 
-Phones and tablets scan the QR code from **Connect a device** instead — see
-[Phones & tablets](/dashboard/phones-and-tablets).
+Phones and tablets scan the QR code from **Connect a device** instead. The container can't see
+your computer's Wi-Fi address, so the first time the dialog asks for it (for example
+`192.168.1.23`) and remembers it in this browser; `-e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080`
+sets it for every browser. See [Phones & tablets](/dashboard/phones-and-tablets).
 
 </Step>
 <Step>
