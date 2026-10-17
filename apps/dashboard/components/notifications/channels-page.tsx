@@ -14,6 +14,7 @@ import {
   Send,
   Trash2,
 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -43,6 +44,7 @@ import {
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { api, type NotificationChannel, type NotificationDelivery } from '@/lib/api'
 import { CHANNEL_TYPE_INFO, channelHealth, channelTarget, digestLabel } from '@/lib/channels'
 import { formatDateTime, timeAgo } from '@/lib/format'
@@ -51,8 +53,10 @@ import { qk, useChannels, useCollections } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
-import { ChannelFormSheet } from './channel-form-sheet'
 import { ChannelTypeIcon } from './channel-type-icon'
+
+// The add/edit sheet (every channel's fields and setup guides) loads on first open, not with the page.
+const ChannelFormSheet = dynamic(() => import('./channel-form-sheet').then((m) => m.ChannelFormSheet), { ssr: false })
 
 const HEALTH: Record<ReturnType<typeof channelHealth>, { label: string; cls: string }> = {
   active: { label: 'Active', cls: TONES.success.badge },
@@ -294,7 +298,7 @@ export function ChannelsPage() {
   const qc = useQueryClient()
   const channels = useChannels()
   const collections = useCollections(true)
-  const [formOpen, setFormOpen] = useState(false)
+  const { open: formOpen, used: formUsed, setOpen: setFormOpen } = useLazyDialog()
   const [editing, setEditing] = useState<NotificationChannel | null>(null)
   const [deleting, setDeleting] = useState<NotificationChannel | null>(null)
   const [deliveriesOf, setDeliveriesOf] = useState<NotificationChannel | null>(null)
@@ -377,7 +381,7 @@ export function ChannelsPage() {
         )}
       </section>
 
-      <ChannelFormSheet open={formOpen} onOpenChange={setFormOpen} channel={editing} />
+      {formUsed && <ChannelFormSheet open={formOpen} onOpenChange={setFormOpen} channel={editing} />}
       <DeliveriesSheet channel={deliveriesOf} onOpenChange={(o) => !o && setDeliveriesOf(null)} />
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>

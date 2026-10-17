@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 import { TableView } from '@/components/collections/item-views'
 import { ExternalContentBadge } from '@/components/common/external-badge'
@@ -59,6 +59,11 @@ describe('watcher helpers', () => {
 })
 
 describe('watchers page', () => {
+  // The add/edit sheet is loaded on first open (next/dynamic); compile it before the first test clicks.
+  beforeAll(async () => {
+    await import('@/components/watchers/watcher-sheet')
+  })
+
   it('creates a watcher in one request; staqly detects the kind from the URL', async () => {
     const api = mockApi({
       'GET /v1/watchers': { data: [] },

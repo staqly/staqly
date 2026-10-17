@@ -1,6 +1,7 @@
 'use client'
 
 import { Archive, FolderOpen, Plus, Search, Settings2, SlidersHorizontal, X } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 
@@ -18,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDebounced } from '@/hooks/use-debounced'
+import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ApiError, ITEM_TYPES, type Item, type ItemQuery } from '@/lib/api'
 import { pluralize } from '@/lib/format'
@@ -25,8 +27,6 @@ import { flattenItems, useCollection, useItemsInfinite, useRefetchOnForeignChang
 import { STATUS_META } from '@/lib/status'
 import { cn } from '@/lib/utils'
 
-import { AddItemDialog } from './add-item-dialog'
-import { CollectionSettingsSheet } from './collection-settings'
 import { StatusCounts } from './collections-index'
 import { TableView } from './item-views'
 
@@ -42,6 +42,13 @@ const SORTS = [
 type Sort = (typeof SORTS)[number]['value']
 
 const SORTS_WITHOUT_RELEVANCE = SORTS.filter((s) => s.value !== 'relevance')
+
+// Loaded on first open: the settings sheet (zod, react-hook-form, the actions editor) and the add-item form
+// stay out of the JavaScript the collection page ships.
+const AddItemDialog = dynamic(() => import('./add-item-dialog').then((m) => m.AddItemDialog), { ssr: false })
+const CollectionSettingsSheet = dynamic(() => import('./collection-settings').then((m) => m.CollectionSettingsSheet), {
+  ssr: false,
+})
 
 const splitList = (v: string) => v.split(',').filter(Boolean)
 
@@ -75,8 +82,8 @@ export function CollectionPage({ id }: { id: string }) {
   const sortOptions = debouncedQ ? SORTS : SORTS_WITHOUT_RELEVANCE
   const isMobile = useIsMobile()
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [addOpen, setAddOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const { open: addOpen, used: addUsed, setOpen: setAddOpen } = useLazyDialog()
+  const { open: settingsOpen, used: settingsUsed, setOpen: setSettingsOpen } = useLazyDialog()
 
   // Every card gets `open`, and the filters get `setParams`, so neither may change when the URL does (opening
   // an item sets ?item=, which would otherwise re-render all loaded cards and every filter). Both read the
@@ -419,8 +426,8 @@ export function CollectionPage({ id }: { id: string }) {
       </div>
 
       {filterSheet}
-      <AddItemDialog collectionId={c.id} open={addOpen} onOpenChange={setAddOpen} />
-      <CollectionSettingsSheet collection={c} open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {addUsed && <AddItemDialog collectionId={c.id} open={addOpen} onOpenChange={setAddOpen} />}
+      {settingsUsed && <CollectionSettingsSheet collection={c} open={settingsOpen} onOpenChange={setSettingsOpen} />}
       <ItemSheet id={openItem || null} onClose={() => setParams({ item: undefined })} />
     </PageContainer>
   )

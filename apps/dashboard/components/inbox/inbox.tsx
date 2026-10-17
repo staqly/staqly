@@ -57,6 +57,7 @@ import {
   useItemActions,
   useItemsInfinite,
   useRefetchOnForeignChange,
+  createRecentIds,
 } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
@@ -407,7 +408,7 @@ export function Inbox() {
   const { refetch, fetchNextPage } = list
   // Results of the previous tab or filter, shown until the new list arrives: never act on them.
   const stale = list.isPlaceholderData
-  const decidedHere = useRef(new Set<string>())
+  const decidedHere = useRef(createRecentIds())
   const isDecidedHere = useCallback((itemId: string) => decidedHere.current.has(itemId), [])
 
   useRefetchOnForeignChange(refetch, { refetchInterval: LIVE_INTERVAL_MS, isLocal: isDecidedHere })

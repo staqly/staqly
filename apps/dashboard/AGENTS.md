@@ -181,7 +181,14 @@ re-render only the component it concerns.
   layout and paint. This made virtualisation unnecessary at 3000 cards. It
   doesn't apply to `<tr>`.
 * Heavy per-row children (dialogs, popovers) mount on first use, not per row
-  (see `JsonBlock`, `useItemOptions` and `useLazyDialog` in the app shell).
+  (see `JsonBlock`, `useItemOptions` and `hooks/use-lazy-dialog.ts`).
+* Forms behind a button (add/edit sheets and dialogs, the item Edit tab) are
+  `next/dynamic` + `useLazyDialog`, so zod and react-hook-form stay out of
+  the page chunks. Never import `z` from a module every route loads
+  (`components/providers.tsx` sets zod's `jitless` through `zod/v4/core`).
+* The activity feed gets live events by `refreshEventLists` (fetch the first
+  page, prepend newer events), never by invalidating `['events']`, which
+  would refetch every loaded page.
 
 ## Tests
 

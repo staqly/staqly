@@ -16,6 +16,7 @@ import {
   setCsrfToken,
   type ActionDef,
   type Collection,
+  type EventPage,
   type EventQuery,
   type Item,
   type ItemPage,
@@ -258,8 +259,37 @@ export function useRecentEvents(opts?: { refetchInterval?: number }) {
   })
 }
 
+/**
+ * Item ids this tab changed itself in the last `ttlMs`. Their events are not a reason to refetch a list; a
+ * later change to the same item (an agent edits it, another reviewer decides it) is. Entries expire, so the
+ * set stays small however many items a long session touches.
+ */
+export function createRecentIds(ttlMs = 60_000) {
+  const ids = new Map<string, number>()
+
+  return {
+    add(id: string) {
+      const now = Date.now()
+
+      for (const [k, at] of ids) {
+        if (now - at > ttlMs) {
+          ids.delete(k)
+        }
+      }
+
+      ids.delete(id)
+      ids.set(id, now)
+    },
+    has(id: string) {
+      const at = ids.get(id)
+
+      return at !== undefined && Date.now() - at <= ttlMs
+    },
+  }
+}
+
 // Items whose change this tab already wrote into the cache (syncItemInCache / removeItemFromLists).
-const appliedHere = new Set<string>()
+const appliedHere = createRecentIds()
 
 /**
  * Refetch a paged list only when the workspace changed in a way this tab has not applied itself: polls the
@@ -393,6 +423,77 @@ export function useEventsInfinite(query: EventQuery) {
   })
 }
 
+/**
+ * Bring event lists up to date after new workspace events. The activity feed is newest first and events never
+ * change, so instead of invalidating it (which refetches every loaded page, one after the other, on every new
+ * event) fetch its first page and put the events newer than its top one in front. Lists not on screen and
+ * other event queries are just invalidated (they refetch on their next visit, from one page).
+ */
+export async function refreshEventLists(qc: QueryClient) {
+  await Promise.all(
+    qc
+      .getQueryCache()
+      .findAll({ queryKey: qk.eventsAll })
+      .map((q) => refreshEventList(qc, q.queryKey)),
+  )
+}
+
+async function refreshEventList(qc: QueryClient, queryKey: readonly unknown[]) {
+  const q = qc.getQueryCache().find<InfiniteData<EventPage>>({ queryKey, exact: true })
+  const data = q?.state.data
+  const invalidate = () => qc.invalidateQueries({ queryKey, exact: true })
+
+  if (!q || !data?.pages || data.pages.length <= 1 || q.getObserversCount() === 0) {
+    void invalidate()
+
+    return
+  }
+
+  if (q.state.fetchStatus === 'fetching') {
+    // A refetch or "Load older" is under way and brings the new state itself.
+    return
+  }
+
+  const top = data.pages[0]?.data[0]?.seq ?? 0
+  let first: EventPage
+
+  try {
+    first = await api.events(queryKey[1] as EventQuery)
+  } catch {
+    void invalidate()
+
+    return
+  }
+
+  const fresh = (first.data ?? []).filter((e) => e.seq > top)
+
+  if (!fresh.length) {
+    return
+  }
+
+  if (fresh.length === first.data?.length) {
+    // More new events than one page: there may be a gap below them, so reload from the first page.
+    trimUnwatchedList(qc, queryKey, { watched: true })
+    void invalidate()
+
+    return
+  }
+
+  qc.setQueryData<InfiniteData<EventPage>>(queryKey, (old) => {
+    if (!old?.pages.length) {
+      return old
+    }
+
+    // Against the list as it is now: another refresh may have put some of these in front while this one waited.
+    const now = old.pages[0].data[0]?.seq ?? 0
+    const add = fresh.filter((e) => e.seq > now)
+
+    return add.length
+      ? { ...old, pages: [{ ...old.pages[0], data: [...add, ...old.pages[0].data] }, ...old.pages.slice(1)] }
+      : old
+  })
+}
+
 /** Flatten infinite item pages. */
 export function flattenItems(data?: InfiniteData<ItemPage>): Item[] {
   return data?.pages.flatMap((p) => p.data) ?? []
@@ -449,7 +550,7 @@ export function invalidateAfterItemChange(qc: QueryClient, itemId?: string, opts
 
   void qc.invalidateQueries({ queryKey: qk.collectionsAll })
   void qc.invalidateQueries({ queryKey: ['collection'] })
-  void qc.invalidateQueries({ queryKey: qk.eventsAll })
+  void refreshEventLists(qc)
   // The inbox step counts, so a decided item's step updates right away.
   void qc.invalidateQueries({ queryKey: ['flow'] })
   // Item lists not on screen (another inbox tab, another filter) may now miss or wrongly hold the item.
