@@ -39,15 +39,48 @@ var eventFamilies = func() map[string]bool {
 	return out
 }()
 
+// auditFamilies hold the credential and session audit events (sign-ins with
+// IP and browser, key changes). Like GET /v1/events, which shows them to
+// admins only, subscriptions get them only when they name the family itself
+// ("session.*", "api_key.revoked"), never through "*" or another glob, and
+// only an admin may subscribe that way.
+var auditFamilies = map[string]bool{"api_key": true, "session": true, "recovery_key": true, "device": true, "device_link": true}
+
+func isAuditEvent(typ string) bool {
+	fam, _, _ := strings.Cut(typ, ".")
+	return auditFamilies[fam]
+}
+
+// eventMatches tells whether a webhook or channel pattern covers an event type.
+func eventMatches(pat, typ string) bool {
+	if isAuditEvent(typ) {
+		fam, _, _ := strings.Cut(pat, ".")
+		if !auditFamilies[fam] {
+			return false
+		}
+	}
+	if pat == "*" {
+		return true
+	}
+	ok, _ := path.Match(pat, typ)
+	return ok
+}
+
 // validateEventPatterns checks webhook and notification channel
 // subscriptions: "*", globs inside a known family ("item.*",
 // "item.*_requested"), known event types, and custom action events
 // (item.<x>_requested or an event configured on one of the workspace's
 // collections). A typo like "item.aproved" or "items.*" would otherwise never
 // match and fail silently.
-func (s *Service) validateEventPatterns(ctx context.Context, workspaceID string, pats []string) error {
+func (s *Service) validateEventPatterns(ctx context.Context, p Principal, pats []string) error {
+	workspaceID := p.WorkspaceID
 	if len(pats) == 0 || len(pats) > 50 {
 		return invalid("events", "subscribe to 1-50 event patterns (use \"*\" for all)")
+	}
+	for _, e := range pats {
+		if fam, _, _ := strings.Cut(e, "."); auditFamilies[fam] && !p.Has(ScopeAdmin) {
+			return &Error{Code: "forbidden", Status: 403, Message: "subscribing to " + e + " (credential and session audit events) needs the admin scope"}
+		}
 	}
 	var custom map[string]bool // loaded lazily, only for unknown exact item events
 	for _, e := range pats {

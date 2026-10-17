@@ -12,7 +12,6 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -94,7 +93,7 @@ func channelMatches(eventsJSON, colsJSON, typ, collectionID string) bool {
 	var pats []string
 	_ = json.Unmarshal([]byte(eventsJSON), &pats)
 	for _, p := range pats {
-		if ok, _ := path.Match(p, typ); ok || p == "*" {
+		if eventMatches(p, typ) {
 			return true
 		}
 	}

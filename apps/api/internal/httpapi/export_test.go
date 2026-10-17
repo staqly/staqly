@@ -497,7 +497,7 @@ func TestRetentionPruning(t *testing.T) {
 	// Seed deliveries: one finished, one pending, on an existing event.
 	q := db.New(e.svc.DB)
 	var wh app.Webhook
-	e.do(nil, "POST", "/v1/webhooks", e.key, map[string]any{"url": "https://example.com/h", "events": []string{"device.connected"}}, 201, &wh)
+	e.do(nil, "POST", "/v1/webhooks", e.admin, map[string]any{"url": "https://example.com/h", "events": []string{"device.connected"}}, 201, &wh)
 	evs, _ := e.svc.ListEvents(ctx, app.Principal{WorkspaceID: wsID, Kind: app.PrincipalSystem, Scopes: []string{app.ScopeAdmin}}, app.EventFilter{Limit: 200})
 	ts := time.Now().UTC().Format("2006-01-02T15:04:05.000000Z")
 	for i, st := range []string{"succeeded", "pending"} {

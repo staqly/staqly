@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"math"
-	"path"
 	"strconv"
 	"strings"
 
@@ -98,7 +97,7 @@ func (s *Service) emit(ctx context.Context, q *db.Queries, p Principal, typ, col
 	return ev, nil
 }
 
-// webhookMatches supports exact names, "*" and glob patterns like "item.*".
+// webhookMatches supports exact names, "*" and glob patterns like "item.*" (see eventMatches).
 func webhookMatches(h db.Webhook, typ, collectionID string) bool {
 	var cols []string
 	_ = json.Unmarshal([]byte(h.CollectionIds), &cols)
@@ -114,7 +113,7 @@ func webhookMatches(h db.Webhook, typ, collectionID string) bool {
 	var pats []string
 	_ = json.Unmarshal([]byte(h.Events), &pats)
 	for _, pat := range pats {
-		if ok, _ := path.Match(pat, typ); ok || pat == "*" {
+		if eventMatches(pat, typ) {
 			return true
 		}
 	}

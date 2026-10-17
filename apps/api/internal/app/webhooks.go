@@ -161,7 +161,7 @@ func (s *Service) applyWebhookInput(ctx context.Context, p Principal, w *db.Webh
 		w.Description = d
 	}
 	if in.Events != nil {
-		if err := s.validateEventPatterns(ctx, p.WorkspaceID, *in.Events); err != nil {
+		if err := s.validateEventPatterns(ctx, p, *in.Events); err != nil {
 			return err
 		}
 		w.Events = mustJSON(*in.Events)

@@ -88,6 +88,11 @@ func TestWebhookEventPatternsValidated(t *testing.T) {
 	// Notification channels share the rule.
 	e.channel(map[string]any{"name": "N", "type": "ntfy", "config": map[string]any{"topic": "t1"}, "events": []string{"item.creatd"}}, 422)
 	e.channel(map[string]any{"name": "N", "type": "ntfy", "config": map[string]any{"topic": "t1"}, "events": []string{"item.created", "item.*_requested"}}, 201)
+
+	// Credential and session audit events: only an admin may subscribe to them, by naming the family.
+	e.do(nil, "POST", "/v1/webhooks", e.key, map[string]any{"url": "https://example.com/h", "events": []string{"session.*"}}, 403, nil)
+	e.do(nil, "PATCH", "/v1/webhooks/"+wh.ID, e.key, map[string]any{"events": []string{"api_key.revoked"}}, 403, nil)
+	e.do(nil, "PATCH", "/v1/webhooks/"+wh.ID, e.admin, map[string]any{"events": []string{"session.*", "api_key.revoked"}}, 200, nil)
 }
 
 // Image and video items show a file: without media or url they are refused.

@@ -153,6 +153,10 @@ The credential events above (`api_key.*`, `session.*`, `recovery_key.*`, `device
 for admins: dashboard sessions, local mode and keys with the `admin` scope. Other keys don't see
 them.
 
+Webhooks and notification channels get audit events only when a pattern names their family
+(`"session.*"`, `"api_key.revoked"`), never through `"*"` or another glob, and only an admin may
+subscribe that way (`403` otherwise).
+
 ## Matching events in webhooks
 
 Webhooks match `events` patterns against the type: exact names, `"*"`, or globs such as

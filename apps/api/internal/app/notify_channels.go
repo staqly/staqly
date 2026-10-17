@@ -629,7 +629,7 @@ func (s *Service) applyChannelInput(ctx context.Context, p Principal, ch *notify
 		return err
 	}
 	if in.Events != nil {
-		if err := s.validateEventPatterns(ctx, p.WorkspaceID, *in.Events); err != nil {
+		if err := s.validateEventPatterns(ctx, p, *in.Events); err != nil {
 			return err
 		}
 		ch.events = *in.Events

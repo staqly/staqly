@@ -99,9 +99,6 @@ Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs up
   live payments haven't been exercised. Without Stripe settings, plans are
   changed by the operator (`server set-plan`, e.g. `docker exec staqly server set-plan ws_... pro`).
 * No per-item `callback_url` (use webhooks or `/wait`).
-* Webhooks subscribed to `*` (or `api_key.*`, `session.*`...) also receive the
-  credential/session audit events, although `GET /v1/events` shows those only
-  to admins; creating a webhook needs `webhooks:manage`, not `admin`.
 * The flow view counts group their rows in a small temporary B-tree (they read only a covering
   index; every list sort, the tag cloud and the tag filter use indexes).
 * `/wait` and `await_decision` waiters re-read their item after every commit
