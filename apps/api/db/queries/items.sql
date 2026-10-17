@@ -66,10 +66,10 @@ SELECT editable FROM items WHERE id = ?;
 
 -- name: ListTags :many
 -- Every tag in the workspace with how many items carry it, most used first.
-SELECT CAST(j.value AS TEXT) AS tag, COUNT(*) AS items
-FROM items i, json_each(i.tags) j
-WHERE i.workspace_id = @workspace_id
-GROUP BY j.value
+SELECT tag, COUNT(*) AS items
+FROM item_tags
+WHERE workspace_id = @workspace_id
+GROUP BY tag
 ORDER BY items DESC, tag
 LIMIT 500;
 

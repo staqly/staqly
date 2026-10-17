@@ -101,9 +101,8 @@ Status: **MVP complete, verified end to end** (2026-10-13; dashboard and docs up
 * Webhooks subscribed to `*` (or `api_key.*`, `session.*`...) also receive the
   credential/session audit events, although `GET /v1/events` shows those only
   to admins; creating a webhook needs `webhooks:manage`, not `admin`.
-* The `decided_desc` and `title_asc` item sorts, the tag cloud and the flow
-  counts sort in a temporary B-tree (about 50-130 ms at 200k items in one
-  workspace); the default `created_desc` list uses a covering index.
+* The flow view counts group their rows in a small temporary B-tree (they read only a covering
+  index; every list sort, the tag cloud and the tag filter use indexes).
 * `/wait` and `await_decision` waiters re-read their item after every commit
   in the process (cheap primary-key reads; per-item wake-ups would remove them).
 * The TypeScript code generator (openapi-typescript) still needs the TS 5.9

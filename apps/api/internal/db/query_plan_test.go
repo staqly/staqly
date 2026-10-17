@@ -46,4 +46,21 @@ func TestHotQueriesUseIndexes(t *testing.T) {
 	if strings.Contains(dlv, "SCAN ev") {
 		t.Errorf("ListDeliveries item filter scans events:\n%s", dlv)
 	}
+
+	// Lists, the tag cloud and the flow view read an index, never the items table; sorted lists walk it in order
+	// (the counts still group the few distinct values in a small temporary B-tree).
+	for name, q := range map[string]string{
+		"decided_desc": "SELECT i.* FROM items i WHERE i.workspace_id = 'ws' AND (COALESCE(i.decided_at, ''), i.id) < ('x', 'y') ORDER BY COALESCE(i.decided_at, '') DESC, i.id DESC LIMIT 51",
+		"title_asc":    "SELECT i.* FROM items i WHERE i.workspace_id = 'ws' ORDER BY i.title COLLATE NOCASE ASC, i.id ASC LIMIT 51",
+		"tag filter":   "SELECT i.* FROM items i WHERE i.workspace_id = 'ws' AND i.id IN (SELECT item_id FROM item_tags WHERE workspace_id = 'ws' AND tag IN ('a')) ORDER BY i.created_at DESC, i.id DESC LIMIT 51",
+		"ListTags":     listTags,
+		"FlowStates":   flowStates,
+		"FlowSources":  flowSources,
+	} {
+		p := plan(strings.NewReplacer("?1", "'ws'", "?2", "''", "?", "'ws'").Replace(q))
+		if strings.Contains(p, "SCAN i\n") || strings.HasSuffix(p, "SCAN i") || strings.Contains(p, "SCAN items") ||
+			(strings.HasSuffix(name, "_desc") || strings.HasSuffix(name, "_asc")) && strings.Contains(p, "TEMP B-TREE") {
+			t.Errorf("%s plan:\n%s", name, p)
+		}
+	}
 }

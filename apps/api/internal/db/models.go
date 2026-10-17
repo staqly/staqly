@@ -135,6 +135,12 @@ type Item struct {
 	SummaryAttempts          int64          `json:"summary_attempts"`
 }
 
+type ItemTag struct {
+	ItemID      string `json:"item_id"`
+	WorkspaceID string `json:"workspace_id"`
+	Tag         string `json:"tag"`
+}
+
 type ItemVersion struct {
 	ItemID    string `json:"item_id"`
 	Version   int64  `json:"version"`

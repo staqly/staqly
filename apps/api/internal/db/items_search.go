@@ -212,7 +212,8 @@ func (q *Queries) SearchItems(ctx context.Context, s ItemSearch) ([]Item, string
 		args = append(args, s.RunAction)
 	}
 	if len(s.Tags) > 0 {
-		sb.WriteString(" AND EXISTS (SELECT 1 FROM json_each(i.tags) WHERE value IN (?" + strings.Repeat(", ?", len(s.Tags)-1) + "))")
+		sb.WriteString(" AND i.id IN (SELECT item_id FROM item_tags WHERE workspace_id = ? AND tag IN (?" + strings.Repeat(", ?", len(s.Tags)-1) + "))")
+		args = append(args, s.WorkspaceID)
 		for _, t := range s.Tags {
 			args = append(args, t)
 		}

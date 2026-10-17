@@ -403,10 +403,10 @@ func (q *Queries) ListItemVersions(ctx context.Context, itemID string) ([]ItemVe
 }
 
 const listTags = `-- name: ListTags :many
-SELECT CAST(j.value AS TEXT) AS tag, COUNT(*) AS items
-FROM items i, json_each(i.tags) j
-WHERE i.workspace_id = ?1
-GROUP BY j.value
+SELECT tag, COUNT(*) AS items
+FROM item_tags
+WHERE workspace_id = ?1
+GROUP BY tag
 ORDER BY items DESC, tag
 LIMIT 500
 `
