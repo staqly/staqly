@@ -704,7 +704,7 @@ export interface paths {
             header?: never;
             path: {
                 id: components["parameters"]["id"];
-                /** @description approve, reject (items:review) or a collection action (actions:execute) */
+                /** @description approve, reject (items:review) or a collection action the item's collection enables: regenerate, publish, retry, archive (actions:execute) */
                 action: string;
             };
             cookie?: never;
@@ -712,8 +712,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Approve, reject or run a custom action
-         * @description Atomic; concurrent decisions on the same item yield exactly one success, others get 409.
+         * Approve, reject or run a collection action
+         * @description Atomic; concurrent decisions on the same item yield exactly one success, others get 409. When the collection turns on publish `auto_run`, approve also starts the publish run in the same transaction: the returned item is processing with run_action publish, and item.publish_requested follows item.approved.
          */
         post: operations["runItemAction"];
         delete?: never;
@@ -1690,21 +1690,26 @@ export interface components {
             expires_at: string;
             current: boolean;
         };
+        /** @description An action from the fixed catalog (or built-in approve/reject). Every field but allowed_statuses (regenerate, publish) and auto_run (publish) is fixed by the catalog: regenerate (item.regenerate_requested, feedback required, Regenerating / Regenerated / Regeneration failed), publish (item.publish_requested, Publishing / Published / Publish failed), retry (item.retry_requested, from failed, Retrying / Done / Retry failed), archive (item.archived, sets archived, from any status). */
         ActionDef: {
+            /** @description regenerate, publish, retry, archive, or the built-in approve and reject */
             name: string;
             label: string;
-            /** @description Event emitted, e.g. item.regenerate_requested. Reserved names emitted by staqly itself (item.created, item.updated, item.deleted, item.approved, item.rejected, item.escalated, item.expired, item.status_changed, item.rule_applied, item.completed, item.failed, item.purged, item.tags_changed, item.summarized, item.unarchived) are refused; item.archived is allowed. */
+            /** @description Event emitted, e.g. item.regenerate_requested */
             event: string;
             requires_feedback: boolean;
             set_status?: components["schemas"]["ItemStatus"];
+            /** @description Statuses the action may run from; empty means any */
             allowed_statuses?: components["schemas"]["ItemStatus"][];
             builtin?: boolean;
-            /** @description For an action that starts a run (set_status processing), what to call it, e.g. Publishing / Published / Publish failed. Empty labels read Processing / Completed / Failed. */
+            /** @description For an action that starts a run (set_status processing), what to call it, e.g. Publishing / Published / Publish failed. */
             run_labels?: {
                 running?: string;
                 done?: string;
                 failed?: string;
             };
+            /** @description Publish only: the run starts as soon as an item is approved, in the same transaction (the approver is the actor of item.publish_requested, with data.auto_run true). */
+            auto_run?: boolean;
         };
         Collection: {
             id: string;
@@ -1737,24 +1742,32 @@ export interface components {
             color?: string;
             /** @enum {string} */
             default_view?: "gallery" | "table" | "list";
-            /** @description Replaces the custom actions */
+            /** @description The collection's flow: which catalog actions are enabled, in any order (responses use catalog order). publish and archive are always added; an empty list means all four with their defaults. */
             actions?: components["schemas"]["ActionDefInput"][];
             archived?: boolean;
         };
+        /** @description Enables one catalog action. Only name, allowed_statuses and auto_run are read; the other ActionDef fields are accepted (so a GET can be sent back) and replaced with the catalog's. */
         ActionDefInput: {
-            /** @description Not approve or reject (built in) */
-            name: string;
-            /** @description Defaults to the name, capitalized */
-            label?: string;
-            /** @description Defaults to item.<name>_requested; names staqly emits itself are refused (see ActionDef.event) */
-            event?: string;
-            requires_feedback?: boolean;
-            /** @description Not approved or rejected */
-            set_status?: components["schemas"]["ItemStatus"];
+            /**
+             * @description Unknown names are a 422
+             * @enum {string}
+             */
+            name: "regenerate" | "publish" | "retry" | "archive";
+            /** @description Omit for the default. regenerate: rejected, failed, expired (default rejected, failed). publish: approved, completed (default approved). retry runs from failed and archive from any status, fixed. A status outside the action's options is a 422. */
             allowed_statuses?: components["schemas"]["ItemStatus"][];
+            /** @description Publish only: start the run right after approval. A 422 when publish may not run from approved; ignored on other actions. */
+            auto_run?: boolean;
+            /** @description Ignored (catalog) */
+            label?: string;
+            /** @description Ignored (catalog) */
+            event?: string;
+            /** @description Ignored (catalog) */
+            requires_feedback?: boolean;
+            /** @description Ignored (catalog) */
+            set_status?: components["schemas"]["ItemStatus"];
             /** @description Ignored */
             builtin?: boolean;
-            /** @description Only for set_status processing; see ActionDef.run_labels. */
+            /** @description Ignored (catalog) */
             run_labels?: {
                 running?: string;
                 done?: string;
@@ -1813,7 +1826,7 @@ export interface components {
             run: "none" | "processing" | "completed" | "failed";
             /** @description When the item was archived; null = not archived. `status` is the older single summary of all three. */
             archived_at: string | null;
-            /** @description The collection action that started the current run (its `run_labels` name it, e.g. Publishing). */
+            /** @description The collection action that started the current run (its `run_labels` name it, e.g. Publishing). It may name an action the collection no longer has (a custom action from before the catalog); such runs read Processing / Completed / Failed. */
             run_action: string | null;
             /** @description One short line on what the item is, written by the auto-tagger's model after the item is saved (`TAGGER_URL`); empty until then, or without one. */
             summary: string;
@@ -1951,7 +1964,7 @@ export interface components {
         WebhookInput: {
             url?: string;
             description?: string;
-            /** @description "*", a glob inside a known event family ("item.*", "item.*_requested"), a known event type, or a custom action event (item.<name>_requested or one configured on a collection action). Unknown patterns are a 422. */
+            /** @description "*", a glob inside a known event family ("item.*", "item.*_requested") or a known event type, the catalog action events among them (item.regenerate_requested, item.publish_requested, item.retry_requested, item.archived). Unknown patterns are a 422. */
             events?: string[];
             collection_ids?: string[];
             active?: boolean;
@@ -3956,7 +3969,7 @@ export interface operations {
             };
             path: {
                 id: components["parameters"]["id"];
-                /** @description approve, reject (items:review) or a collection action (actions:execute) */
+                /** @description approve, reject (items:review) or a collection action the item's collection enables: regenerate, publish, retry, archive (actions:execute) */
                 action: string;
             };
             cookie?: never;

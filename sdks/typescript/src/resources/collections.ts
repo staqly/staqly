@@ -1,5 +1,6 @@
 import type {
   ActionDef,
+  ActionFlowInput,
   Collection,
   CollectionInput,
   CollectionItemListParams,
@@ -13,7 +14,7 @@ export interface CollectionCreateInput extends CollectionInput {
   name: string
 }
 
-/** Collections group items (e.g. "Instagram posts") and define their custom actions. */
+/** Collections group items (e.g. "Instagram posts") and configure their review flow from the action catalog. */
 export class Collections extends APIResource {
   /** Lists collections (archived ones only with `include_archived`). */
   async list(params: { include_archived?: boolean } = {}, options?: RequestOptions): Promise<Collection[]> {
@@ -36,13 +37,18 @@ export class Collections extends APIResource {
     return this.http.request({ method: 'POST', path: '/v1/collections', body: input, options })
   }
 
-  /** Renames, re-describes, archives or replaces the custom actions of a collection. */
+  /** Renames, re-describes, archives or changes the action flow of a collection. */
   update(id: string, input: CollectionInput, options?: RequestOptions): Promise<Collection> {
     return this.http.request({ method: 'PATCH', path: `/v1/collections/${enc(id)}`, body: input, options })
   }
 
-  /** Replaces the collection's custom actions (approve/reject are built in). */
-  setActions(id: string, actions: ActionDef[], options?: RequestOptions): Promise<Collection> {
+  /**
+   * Sets the collection's flow from the fixed catalog (`regenerate`, `publish`, `retry`,
+   * `archive`; approve/reject are built in), e.g.
+   * `[{ name: 'regenerate' }, { name: 'publish', auto_run: true }]`. publish and archive are
+   * always kept; an unknown name or a status outside an action's options is a 422.
+   */
+  setActions(id: string, actions: Array<ActionFlowInput | ActionDef>, options?: RequestOptions): Promise<Collection> {
     return this.update(id, { actions }, options)
   }
 

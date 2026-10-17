@@ -36,6 +36,7 @@ from ._http import (
 from .errors import ExportFailedError, RejectedError, WaitTimeoutError
 from .models import (
     ActionDef,
+    ActionFlow,
     Agent,
     APIKey,
     Billing,
@@ -174,7 +175,7 @@ class _Resource:
 
 
 class Collections(_Resource):
-    """Collections group items (e.g. "Instagram posts") and define their custom actions."""
+    """Collections group items (e.g. "Instagram posts") and pick their flow from the action catalog."""
 
     def list(
         self, *, include_archived: bool = False, request_options: RequestOptions | None = None
@@ -204,9 +205,12 @@ class Collections(_Resource):
         icon: str | None = None,
         color: str | None = None,
         default_view: str | None = None,
-        actions: Sequence[ActionDef | JSONMapping] | None = None,
+        actions: Sequence[ActionFlow | ActionDef | JSONMapping] | None = None,
         request_options: RequestOptions | None = None,
     ) -> Collection:
+        """Creates a collection. ``actions`` is its flow from the catalog, e.g.
+        ``[ActionFlow(name="regenerate"), ActionFlow(name="publish", auto_run=True)]``
+        (dicts work too); publish and archive are always on, an empty list enables all four."""
         body = clean(
             {
                 "name": name,
@@ -231,11 +235,11 @@ class Collections(_Resource):
         icon: str | None = None,
         color: str | None = None,
         default_view: str | None = None,
-        actions: Sequence[ActionDef | JSONMapping] | None = None,
+        actions: Sequence[ActionFlow | ActionDef | JSONMapping] | None = None,
         archived: bool | None = None,
         request_options: RequestOptions | None = None,
     ) -> Collection:
-        """Renames, re-describes, archives or replaces the custom actions of a collection."""
+        """Renames, re-describes, archives or changes the action flow of a collection."""
         body = clean(
             {
                 "name": name,
@@ -257,11 +261,17 @@ class Collections(_Resource):
     def set_actions(
         self,
         collection_id: str,
-        actions: Sequence[ActionDef | JSONMapping],
+        actions: Sequence[ActionFlow | ActionDef | JSONMapping],
         *,
         request_options: RequestOptions | None = None,
     ) -> Collection:
-        """Replaces the collection's custom actions (approve/reject are built in)."""
+        """Sets the collection's flow from the fixed catalog (approve/reject are built in).
+
+        Pass ``ActionFlow`` objects or ``{"name", "allowed_statuses", "auto_run"}`` dicts for
+        ``regenerate``, ``publish``, ``retry`` and ``archive``; full ``ActionDef`` objects from a GET
+        are accepted too (only those three fields are read). publish and archive are always kept;
+        an unknown name or a status outside an action's options is a 422.
+        """
         return self.update(collection_id, actions=actions, request_options=request_options)
 
     def archive(self, collection_id: str, *, request_options: RequestOptions | None = None) -> Collection:

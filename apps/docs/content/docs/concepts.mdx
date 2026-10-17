@@ -177,19 +177,21 @@ Actions are what a reviewer — or an agent — can *do* with an item.
 | `approve` | `approved`; optional `edits` are applied first ("edit & approve") | `item.approved` |
 | `reject` | `rejected`; `feedback` is required (422 without it), so the agent always learns why. Chat buttons and email links without a reason record "Rejected by ... without a reason." | `item.rejected` |
 
-**Custom actions** are configured per collection, without code. New collections get four
-defaults:
+**Catalog actions** come from a fixed catalog; each collection chooses its flow (which ones are
+enabled and, for regenerate and publish, the statuses they may run from). Publish and archive are
+always on:
 
 | Action | Allowed from | Sets status | Event | Feedback |
 |---|---|---|---|---|
-| `regenerate` | rejected, failed | processing | `item.regenerate_requested` | required |
-| `publish` | approved | processing | `item.publish_requested` | optional |
+| `regenerate` | rejected, failed (or expired) | processing | `item.regenerate_requested` | required |
+| `publish` | approved (or completed) | processing | `item.publish_requested` | optional |
 | `retry` | failed | processing | `item.retry_requested` | optional |
 | `archive` | any | archived | `item.archived` | optional |
 
-Running a custom action needs the `actions:execute` scope. It records an event and
-notifies webhooks — **external tools do the actual work**. See
-[Custom actions](/automation/custom-actions).
+Running one needs the `actions:execute` scope. It records an event and
+notifies webhooks — **external tools do the actual work**. With publish's `auto_run`
+(*Start automatically after approval*), approving an item starts the publish run right away. See
+[Actions](/automation/custom-actions).
 
 ## Events
 

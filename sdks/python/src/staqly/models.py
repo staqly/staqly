@@ -17,6 +17,8 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 __all__ = [
     "APIKey",
     "ActionDef",
+    "ActionFlow",
+    "ActionName",
     "Actor",
     "Billing",
     "BillingURL",
@@ -301,8 +303,16 @@ class Health(StaqlyModel):
 # ---- collections ------------------------------------------------------------
 
 
+#: The fixed action catalog a collection's flow picks from (``approve``/``reject`` are built in).
+ActionName = Literal["regenerate", "publish", "retry", "archive"]
+
+
 class ActionDef(StaqlyModel):
-    """An action reviewers can run on items (``approve``/``reject`` are built in)."""
+    """An action reviewers can run on items, as returned by the API.
+
+    ``approve``/``reject`` are built in; the rest come from the fixed catalog (``regenerate``,
+    ``publish``, ``retry``, ``archive``), whose label, event, feedback rule and run labels are fixed.
+    """
 
     name: str
     label: str = ""
@@ -313,6 +323,21 @@ class ActionDef(StaqlyModel):
     builtin: bool = False
     #: For an action that starts a run: what to call it (``running``, ``done``, ``failed``), e.g. Publishing.
     run_labels: dict[str, str] | None = None
+    #: Publish only: the run starts as soon as an item is approved (same transaction).
+    auto_run: bool = False
+
+
+class ActionFlow(StaqlyModel):
+    """Enables one catalog action in a collection's flow (``collections.create/update/set_actions``).
+
+    Leave ``allowed_statuses`` as ``None`` for the action's default (regenerate: rejected, failed;
+    publish: approved). ``auto_run`` (publish only) starts the publish run right after approval.
+    An unknown name or a status outside the action's options is a 422.
+    """
+
+    name: ActionName
+    allowed_statuses: list[str] | None = None
+    auto_run: bool | None = None
 
 
 class CollectionCover(StaqlyModel):

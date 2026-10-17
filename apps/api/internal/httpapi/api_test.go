@@ -455,7 +455,7 @@ func TestCollectionCRUD(t *testing.T) {
 	c := e.collection("Generated Images")
 	e.do(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "generated images"}, 409, nil)
 	e.do(nil, "GET", "/v1/collections/Generated%20Images", e.key, nil, 200, nil)
-	if len(c.Actions) != len(app.DefaultActions) {
+	if len(c.Actions) != len(app.DefaultActions()) {
 		t.Fatalf("default actions not attached: %+v", c.Actions)
 	}
 	var upd app.Collection
@@ -665,7 +665,7 @@ func TestConcurrentDecisionsHaveOneWinner(t *testing.T) {
 	}
 }
 
-func TestCustomActions(t *testing.T) {
+func TestCollectionActions(t *testing.T) {
 	e := newEnv(t)
 	c := e.collection("Avatar")
 	it := e.item(c.ID, map[string]any{"title": "x"})
@@ -711,28 +711,122 @@ func TestCustomActions(t *testing.T) {
 		t.Fatalf("event: %s %v", evs.Data[0].Type, data)
 	}
 
-	// Configurable without code: add a custom action.
-	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []map[string]any{
-		{"name": "upscale", "label": "Upscale", "event": "item.upscale_requested"}}}, 200, nil)
 	// While processing nothing runs: the automation reports a result first.
-	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/upscale", e.key, nil, 409, nil)
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/retry", e.key, nil, 409, nil)
 	e.do(nil, "POST", "/v1/items/"+it.ID+"/result", e.key, map[string]any{"status": "failed", "error": "x"}, 200, nil)
-	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/upscale", e.key, nil, 200, &out)
-	if out.Status != "failed" {
-		t.Fatal("action without set_status must keep status")
-	}
+
+	// The flow is configurable, the actions are not: retry turned off is gone from the item.
+	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []map[string]any{
+		{"name": "regenerate"}, {"name": "publish"}, {"name": "archive"}}}, 200, nil)
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/retry", e.key, nil, 404, nil)
 
 	// An action that would set the status the item already has is hidden and refused.
-	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []map[string]any{
-		{"name": "shelve", "label": "Shelve", "event": "item.shelved", "set_status": "archived"}}}, 200, nil)
-	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/shelve", e.key, nil, 200, &out)
-	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/shelve", e.key, nil, 409, nil)
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/archive", e.key, nil, 200, &out)
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/archive", e.key, nil, 409, nil)
 	e.do(nil, "GET", "/v1/items/"+it.ID+"/actions", e.key, nil, 200, &acts)
 	for _, a := range acts.Data {
-		if a.Name == "shelve" {
-			t.Fatal("shelve must not be offered on an archived item")
+		if a.Name == "archive" {
+			t.Fatal("archive must not be offered on an archived item")
 		}
 	}
+}
+
+// Collection actions come from a fixed catalog: a collection only picks which are enabled and, for
+// regenerate and publish, the statuses they run from.
+func TestActionCatalog(t *testing.T) {
+	e := newEnv(t)
+	c := e.collection("Flow")
+	names := func(c app.Collection) string {
+		out := []string{}
+		for _, a := range c.Actions {
+			out = append(out, a.Name+"="+strings.Join(a.AllowedStatuses, "+"))
+		}
+
+		return strings.Join(out, ",")
+	}
+	if got := names(c); got != "regenerate=rejected+failed,publish=approved,retry=failed,archive=" {
+		t.Fatalf("defaults: %s", got)
+	}
+
+	// Fixed fields are taken from the catalog: a renamed label or another event is silently overwritten.
+	var upd app.Collection
+	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []map[string]any{
+		{"name": "archive"},
+		{"name": "publish", "label": "Publish2", "event": "item.shipped", "set_status": "completed", "requires_feedback": true,
+			"run_labels": map[string]any{"running": "Shipping"}, "allowed_statuses": []string{"completed", "approved", "completed"}},
+		{"name": "regenerate", "allowed_statuses": []string{"expired"}}}}, 200, &upd)
+	if got := names(upd); got != "regenerate=expired,publish=approved+completed,archive=" {
+		t.Fatalf("flow: %s", got)
+	}
+	pub := upd.Actions[1]
+	if pub.Label != "Publish" || pub.Event != "item.publish_requested" || pub.SetStatus != "processing" || pub.RequiresFeedback ||
+		pub.RunLabels == nil || pub.RunLabels.Running != "Publishing" {
+		t.Fatalf("publish not from the catalog: %+v", pub)
+	}
+
+	// A full GET round-trips unchanged.
+	var got app.Collection
+	e.do(nil, "GET", "/v1/collections/"+c.ID, e.key, nil, 200, &got)
+	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": got.Actions}, 200, &upd)
+	if names(upd) != names(got) {
+		t.Fatalf("round trip: %s != %s", names(upd), names(got))
+	}
+
+	// publish and archive are required; an empty list means the defaults. A collection never ends up without a flow.
+	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []map[string]any{{"name": "retry"}}}, 200, &upd)
+	if got := names(upd); got != "publish=approved,retry=failed,archive=" {
+		t.Fatalf("required actions: %s", got)
+	}
+	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []any{}}, 200, &upd)
+	if len(upd.Actions) != len(app.DefaultActions()) {
+		t.Fatalf("empty list: %s", names(upd))
+	}
+
+	// Unknown names and statuses outside an action's options are 422.
+	for _, bad := range []map[string]any{
+		{"name": "ship"},
+		{"name": "approve"},
+		{"name": "publish", "allowed_statuses": []string{"failed"}},
+		{"name": "regenerate", "allowed_statuses": []string{"pending"}},
+		{"name": "retry", "allowed_statuses": []string{"rejected"}},
+		{"name": "archive", "allowed_statuses": []string{"nope"}},
+	} {
+		e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []any{bad}}, 422, nil)
+	}
+	e.do(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "Bad", "actions": []any{map[string]any{"name": "upscale"}}}, 422, nil)
+
+	// Legacy collections stored custom actions and labels: on read they normalize to the catalog.
+	legacy := `[{"name":"publish","label":"Publish2","event":"item.shipped","set_status":"completed","allowed_statuses":["completed","pending"]},` +
+		`{"name":"upscale","label":"Upscale","event":"item.upscale_requested","set_status":"processing","run_labels":{"running":"Upscaling"}},` +
+		`{"name":"retry","label":"Again","event":"item.retry_requested","allowed_statuses":["rejected"]}]`
+	if _, err := e.svc.DB.Exec(`UPDATE collections SET actions = ? WHERE id = ?`, legacy, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.do(nil, "GET", "/v1/collections/"+c.ID, e.key, nil, 200, &got)
+	if n := names(got); n != "publish=completed,retry=failed,archive=" || got.Actions[0].Label != "Publish" || got.Actions[1].Label != "Retry" {
+		t.Fatalf("legacy normalized: %s %+v", n, got.Actions)
+	}
+	for _, stored := range []string{`[]`, `[{"name":"upscale","event":"item.upscale_requested"}]`, `null`, ``} {
+		e.svc.DB.Exec(`UPDATE collections SET actions = ? WHERE id = ?`, stored, c.ID)
+		e.do(nil, "GET", "/v1/collections/"+c.ID, e.key, nil, 200, &got)
+		if len(got.Actions) != len(app.DefaultActions()) {
+			t.Fatalf("stored %q: %s", stored, names(got))
+		}
+	}
+
+	// An item whose run a removed custom action started keeps working: it reports a result as usual.
+	it := e.item(c.ID, map[string]any{"title": "x"})
+	e.svc.DB.Exec(`UPDATE items SET status = 'processing', run_action = 'upscale' WHERE id = ?`, it.ID)
+	var item app.Item
+	e.do(nil, "GET", "/v1/items/"+it.ID, e.key, nil, 200, &item)
+	if item.RunAction == nil || *item.RunAction != "upscale" {
+		t.Fatalf("run_action: %v", item.RunAction)
+	}
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/result", e.key, map[string]any{"status": "completed"}, 200, &item)
+	if item.Status != "completed" {
+		t.Fatalf("result: %s", item.Status)
+	}
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/upscale", e.key, nil, 404, nil)
 }
 
 func TestIdempotencyKeys(t *testing.T) {

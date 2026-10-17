@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { ACTION_CATALOG } from '@/lib/action-catalog'
 import { api, type Webhook, type WebhookInput } from '@/lib/api'
 import { focusFirstInvalid, formApiError, useFormErrors } from '@/lib/form-errors'
 import { qk, useCollections } from '@/lib/queries'
@@ -170,14 +171,8 @@ function WebhookForm({
     })
   }
 
-  // Action events come from the collections' actions (Publish, Regenerate...), each named after its action.
-  const actionEvents = [
-    ...new Map(
-      (collections.data ?? [])
-        .flatMap((c) => c.actions ?? [])
-        .map((a) => [a.event, { value: a.event, hint: `${a.label} action` }] as const),
-    ).values(),
-  ]
+  // Action events come from the fixed action catalog (Publish, Regenerate...), each named after its action.
+  const actionEvents = ACTION_CATALOG.map((a) => ({ value: a.event, hint: `${a.label} action` }))
   const groups = [...ITEM_EVENT_GROUPS.slice(0, 2), { title: 'Actions', events: actionEvents }, ITEM_EVENT_GROUPS[2]]
   const known = new Set([...WILDCARD_EVENTS, ...groups.flatMap((g) => g.events)].map((e) => e.value))
   // Patterns saved earlier (through the API) stay visible and removable.

@@ -44,6 +44,11 @@ First release.
 - Removed: watcher presets, `watchers.list_presets()`, `watchers.create_from_preset()` and the
   `WatcherPreset` model (the API no longer has `/v1/watcher-presets` or
   `/v1/watchers/from-preset`, nor `preset_id` on a watcher); create watchers with a feed or page URL.
+- Removed: custom collection actions. A collection's `actions` is now its flow from the fixed
+  catalog (`regenerate`, `publish`, `retry`, `archive`; `ActionName`), set with `ActionFlow`
+  (`name`, `allowed_statuses`, `auto_run`) or plain dicts in `collections.create()`, `update()`
+  and `set_actions()`; full `ActionDef` objects from a GET are still accepted. `ActionDef` gains
+  `auto_run` (publish starts right after approval).
 
 ### Security
 - `verify_webhook` accepts only ASCII digits in `X-Staqly-Timestamp`;

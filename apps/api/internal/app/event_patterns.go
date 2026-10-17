@@ -4,14 +4,13 @@ import (
 	"context"
 	"path"
 	"strings"
-
-	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
-// knownEventTypes are the event types staqly emits itself (docs: api/events).
-// Custom actions add item.<name>_requested or the event configured on a
-// collection action.
+// knownEventTypes are the event types staqly emits itself (docs: api/events),
+// including the catalog actions' events (regenerate, publish, retry; archive
+// emits item.archived).
 var knownEventTypes = map[string]bool{
+	"item.regenerate_requested": true, "item.publish_requested": true, "item.retry_requested": true,
 	"item.created": true, "item.updated": true, "item.deleted": true, "item.approved": true, "item.rejected": true,
 	"item.expired": true, "item.status_changed": true,
 	"item.completed": true, "item.failed": true, "item.purged": true, "item.tags_changed": true, "item.summarized": true,
@@ -68,12 +67,10 @@ func eventMatches(pat, typ string) bool {
 
 // validateEventPatterns checks webhook and notification channel
 // subscriptions: "*", globs inside a known family ("item.*",
-// "item.*_requested"), known event types, and custom action events
-// (item.<x>_requested or an event configured on one of the workspace's
-// collections). A typo like "item.aproved" or "items.*" would otherwise never
-// match and fail silently.
-func (s *Service) validateEventPatterns(ctx context.Context, p Principal, pats []string) error {
-	workspaceID := p.WorkspaceID
+// "item.*_requested") and known event types, the catalog action events among
+// them. A typo like "item.aproved" or "items.*" would otherwise never match and
+// fail silently.
+func (s *Service) validateEventPatterns(_ context.Context, p Principal, pats []string) error {
 	if len(pats) == 0 || len(pats) > 50 {
 		return invalid("events", "subscribe to 1-50 event patterns (use \"*\" for all)")
 	}
@@ -82,7 +79,6 @@ func (s *Service) validateEventPatterns(ctx context.Context, p Principal, pats [
 			return &Error{Code: "forbidden", Status: 403, Message: "subscribing to " + e + " (credential and session audit events) needs the admin scope"}
 		}
 	}
-	var custom map[string]bool // loaded lazily, only for unknown exact item events
 	for _, e := range pats {
 		if e == "*" || knownEventTypes[e] {
 			continue
@@ -102,27 +98,8 @@ func (s *Service) validateEventPatterns(ctx context.Context, p Principal, pats [
 
 			continue
 		}
-		if fam != "item" || !actionEventRe.MatchString(e) {
-			return bad
-		}
-		if strings.HasSuffix(e, "_requested") {
-			continue
-		}
-		if custom == nil {
-			custom = map[string]bool{}
-			rows, err := s.Q.ListCollections(ctx, db.ListCollectionsParams{WorkspaceID: workspaceID, IncludeArchived: 1})
-			if err != nil {
-				return err
-			}
-			for _, r := range rows {
-				for _, a := range toCollection(r).Actions {
-					custom[a.Event] = true
-				}
-			}
-		}
-		if !custom[e] {
-			return bad
-		}
+
+		return bad
 	}
 
 	return nil

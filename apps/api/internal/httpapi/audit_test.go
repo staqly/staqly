@@ -451,22 +451,27 @@ func TestDiscordReasonModalVersionBound(t *testing.T) {
 	}
 }
 
-// M2: custom actions can't emit events staqly itself emits.
-func TestCustomActionsCannotEmitReservedEvents(t *testing.T) {
+// M2: collection actions can't emit events staqly itself emits: the catalog fixes every event.
+func TestActionsCannotEmitReservedEvents(t *testing.T) {
 	e := newEnv(t)
-	for _, ev := range []string{"item.approved", "item.rejected", "item.created", "item.completed", "item.purged", "item.status_changed",
-		"item.tags_changed", "item.summarized", "item.unarchived"} {
+	for _, ev := range []string{"item.approved", "item.rejected", "item.created", "item.completed"} {
 		e.do(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "x" + ev, "actions": []any{map[string]any{"name": "evil", "event": ev}}}, 422, nil)
 	}
 	c := e.collection("OK")
-	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []any{map[string]any{"name": "evil", "event": "item.approved"}}}, 422, nil)
-	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []any{map[string]any{"name": "archive", "event": "item.archived", "set_status": "archived"}}}, 200, nil)
-	// Data stored before the check is refused at run time.
+	var upd app.Collection
+	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []any{
+		map[string]any{"name": "archive", "event": "item.approved", "set_status": "approved"}}}, 200, &upd)
+	for _, a := range upd.Actions {
+		if a.Event == "item.approved" || a.SetStatus == "approved" {
+			t.Fatalf("submitted event kept: %+v", a)
+		}
+	}
+	// Data stored before the catalog is dropped on read and can't run.
 	if _, err := e.svc.DB.Exec(`UPDATE collections SET actions = '[{"name":"evil","label":"Evil","event":"item.approved","requires_feedback":false}]' WHERE id = ?`, c.ID); err != nil {
 		t.Fatal(err)
 	}
 	it := e.item(c.ID, map[string]any{"title": "t"})
-	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/evil", e.key, nil, 409, nil)
+	e.do(nil, "POST", "/v1/items/"+it.ID+"/actions/evil", e.key, nil, 404, nil)
 }
 
 // M3: changing where a channel sends requires the secret it would send.

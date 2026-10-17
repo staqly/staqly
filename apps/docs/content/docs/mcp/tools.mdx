@@ -79,8 +79,8 @@ Get a collection by ID or name, including its configured actions. *Read-only* ·
 | `collection` | string | <Required /> | ID or exact name |
 
 ### `create_collection`
-Create a collection (e.g. "Instagram Avatar"). New collections get the default actions
-*regenerate, publish, retry, archive*. · `collections:write`
+Create a collection (e.g. "Instagram Avatar"). New collections get every catalog action
+*regenerate, publish, retry, archive* (publish and archive are always on; `update_collection` changes the flow). · `collections:write`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -89,7 +89,7 @@ Create a collection (e.g. "Instagram Avatar"). New collections get the default a
 | `default_view` | string | No | `gallery`, `table` or `list`. Kept for API compatibility only: the dashboard always shows a collection as a table |
 
 ### `update_collection`
-Update a collection's name, description, icon, color, default view or actions, or archive or unarchive it.
+Update a collection's name, description, icon, color, default view or action flow, or archive or unarchive it.
 Omitted inputs stay unchanged; archiving an archived collection (or unarchiving an active one) is a conflict. · `collections:write`
 
 | Parameter | Type | Required | Description |
@@ -100,7 +100,7 @@ Omitted inputs stay unchanged; archiving an archived collection (or unarchiving 
 | `icon` | string | No | Icon name shown in the sidebar |
 | `color` | string | No | Accent color, e.g. `#7c3aed` |
 | `default_view` | string | No | `gallery`, `table` or `list`. Kept for API compatibility only; the dashboard ignores it |
-| `actions` | object[] | No | Replaces the custom actions: `name`, `label`, `event`, `requires_feedback`, `set_status`, `allowed_statuses` |
+| `actions` | object[] | No | Replaces the flow: `[{name, allowed_statuses?, auto_run?}]` from the [catalog](/automation/custom-actions#the-catalog) (`regenerate`, `publish`, `retry`, `archive`). Publish and archive are always added; `auto_run` (publish only) starts publishing on approval |
 | `archived` | boolean | No | `true` archives the collection, `false` restores it |
 
 ### `delete_collection`
@@ -260,7 +260,7 @@ Actions the caller can run on an item in its current status. *Read-only* · `ite
 | `item_id` | string | <Required /> | Item ID |
 
 ### `execute_custom_action`
-Run a collection action such as *regenerate* or *publish*. It records an event and notifies
+Run a catalog action the item's collection enables, such as *regenerate* or *publish*. It records an event and notifies
 webhooks; external automations do the actual work. · `actions:execute`
 
 | Parameter | Type | Required | Description |
@@ -273,13 +273,13 @@ webhooks; external automations do the actual work. · `actions:execute`
 ### `execute_bulk_action`
 Run one action on up to 100 items. Each item succeeds or fails on its own; the result lists
 `ok`, `error` and the updated item per ID. · `items:review` for `approve` / `reject`,
-`actions:execute` for custom actions
+`actions:execute` for the other actions
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `item_ids` | string[] | <Required /> | 1 to 100 item IDs, e.g. `["itm_oalirbz67y4m4cqxq5dw"]` |
-| `action` | string | <Required /> | `approve`, `reject` or a custom action such as `publish` |
-| `feedback` | string | No | Note stored with each decision; required by some custom actions (e.g. `regenerate`) and expected with `reject` |
+| `action` | string | <Required /> | `approve`, `reject` or a collection action such as `publish` |
+| `feedback` | string | No | Note stored with each decision; required by `regenerate` and expected with `reject` |
 | `payload` | object | No | Extra JSON passed to webhook receivers |
 
 ## Media

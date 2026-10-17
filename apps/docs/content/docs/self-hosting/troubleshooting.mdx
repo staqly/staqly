@@ -54,8 +54,8 @@ Changing where a channel sends requires re-entering its secret in the same reque
 </Accordion>
 <Accordion title="422 validation_failed: unknown event pattern (webhook or channel)">
 Webhook and notification-channel subscriptions must name events staqly knows: `*`, a family glob
-such as `item.*`, an event type from [Events](/api/events), or a custom action's event. A typo
-like `item.aproved` or `items.*` is refused instead of never matching.
+such as `item.*`, or an event type from [Events](/api/events). A typo
+like `item.aproved` or `items.*`, or a custom event such as `item.shipped`, is refused instead of never matching.
 </Accordion>
 <Accordion title="422 validation_failed: image items need media">
 An `image` or `video` item needs a file (`media_id`, or `--file` with the CLI) or a `url`. Send

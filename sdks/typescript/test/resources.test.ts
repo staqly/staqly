@@ -59,12 +59,46 @@ const cases: Case[] = [
     name: 'collections.setActions',
     call: (c) =>
       c.collections.setActions('col_1', [
-        { name: 'publish', label: 'Publish', event: 'item.publish_requested', requires_feedback: false },
+        { name: 'regenerate', allowed_statuses: ['rejected'] },
+        { name: 'publish', auto_run: true },
       ]),
     method: 'PATCH',
     path: '/v1/collections/col_1',
     body: {
-      actions: [{ name: 'publish', label: 'Publish', event: 'item.publish_requested', requires_feedback: false }],
+      actions: [
+        { name: 'regenerate', allowed_statuses: ['rejected'] },
+        { name: 'publish', auto_run: true },
+      ],
+    },
+  },
+  {
+    name: 'collections.setActions (round trip of a GET)',
+    call: (c) =>
+      c.collections.setActions('col_1', [
+        {
+          name: 'publish',
+          label: 'Publish',
+          event: 'item.publish_requested',
+          requires_feedback: false,
+          set_status: 'processing',
+          allowed_statuses: ['approved'],
+          auto_run: false,
+        },
+      ]),
+    method: 'PATCH',
+    path: '/v1/collections/col_1',
+    body: {
+      actions: [
+        {
+          name: 'publish',
+          label: 'Publish',
+          event: 'item.publish_requested',
+          requires_feedback: false,
+          set_status: 'processing',
+          allowed_statuses: ['approved'],
+          auto_run: false,
+        },
+      ],
     },
   },
   {

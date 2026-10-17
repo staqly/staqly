@@ -48,6 +48,11 @@ First public release: a rewrite of the internal 1.0.0 client.
 - Removed: watcher presets, `watchers.listPresets()`, `watchers.createFromPreset()` and the
   `WatcherPreset` type (the API no longer has `/v1/watcher-presets` or
   `/v1/watchers/from-preset`, nor `preset_id` on a watcher); create watchers with a feed or page URL.
+- Removed: custom collection actions. A collection's `actions` is now its flow from the fixed
+  catalog (`regenerate`, `publish`, `retry`, `archive`; `ActionName`), set with
+  `ActionFlowInput` (`{ name, allowed_statuses?, auto_run? }`) in `collections.create()`,
+  `update()` and `setActions()`; full `ActionDef` objects from a GET are still accepted.
+  `ActionDef` gains `auto_run` (publish starts right after approval).
 
 ### Security
 - The API key is a private field (`#apiKey`, read through the `http.apiKey` getter): not

@@ -2,7 +2,7 @@
 
 Official Python SDK for **[staqly](https://github.com/staqly/staqly)**, the local-first
 workspace where AI agents store generated content (items in collections) and humans review it
-(approve, reject with feedback, custom actions).
+(approve, reject with feedback, then regenerate, publish, retry or archive).
 
 - Sync `Staqly` and async `AsyncStaqly` clients with identical APIs, built on `httpx`.
 - Typed pydantic v2 models, checked against the API's OpenAPI contract, with `py.typed` and
@@ -114,20 +114,24 @@ the same auth, retries and error handling.
 ## Collections
 
 ```python
-from staqly.models import ActionDef
+from staqly.models import ActionFlow
 
+# The flow, from the fixed catalog: regenerate, publish, retry, archive (approve and reject are
+# built in; publish and archive are always on). Leave allowed_statuses out for the defaults.
 col = staqly.collections.create(
     "Instagram",
     description="Avatar and post candidates",
-    actions=[  # approve and reject are built in; add your own
-        ActionDef(name="publish", label="Publish", set_status="processing", allowed_statuses=["approved"]),
+    actions=[
+        ActionFlow(name="regenerate", allowed_statuses=["rejected", "failed", "expired"]),
+        ActionFlow(name="publish", auto_run=True),  # start publishing as soon as an item is approved
+        {"name": "retry"},
     ],
 )
 staqly.collections.list(include_archived=False)
 staqly.collections.get("Instagram")  # ID or exact name
 staqly.collections.list_items(col.id, status="pending", limit=50)  # one ItemPage
 staqly.collections.update(col.id, color="#e1306c")
-staqly.collections.set_actions(col.id, [...])
+staqly.collections.set_actions(col.id, [{"name": "regenerate"}])  # publish and archive stay on
 staqly.collections.archive(col.id)  # unarchive(col.id)
 staqly.collections.delete(col.id, confirm="Instagram")  # permanent; the name must match
 ```
@@ -157,7 +161,7 @@ staqly.items.delete(item.id)  # history is kept
 # decisions (need the items:review scope)
 staqly.items.approve(item.id, feedback="Ship it", edits={"title": "Better title"})
 staqly.items.reject(item.id, feedback="Too dark, brighten it")
-staqly.items.action(item.id, "publish", payload={"channel": "ig"})  # custom action
+staqly.items.action(item.id, "publish", payload={"channel": "ig"})  # catalog action
 staqly.items.list_actions(item.id)
 staqly.items.bulk_action(["itm_1", "itm_2"], "reject", feedback="duplicates")
 staqly.items.approve(item.id, expected_version=item.version)  # optimistic concurrency

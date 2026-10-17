@@ -316,13 +316,13 @@ func TestRunLabels(t *testing.T) {
 	if got.RunAction == nil || *got.RunAction != "publish" || got.Run != "processing" {
 		t.Fatalf("run: %+v %s", got.RunAction, got.Run)
 	}
-	// Labels only stick to an action that starts a run.
+	// Labels come from the catalog: submitted ones are ignored, and archive (no run) has none.
 	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []map[string]any{
-		{"name": "ping", "run_labels": map[string]any{"running": "Pinging"}},
-		{"name": "send", "set_status": "processing", "run_labels": map[string]any{"running": "Sending", "done": "Sent"}}}}, 200, nil)
+		{"name": "publish", "run_labels": map[string]any{"running": "Sending", "done": "Sent"}},
+		{"name": "archive", "run_labels": map[string]any{"running": "Pinging"}}}}, 200, nil)
 	var fresh app.Collection
 	e.do(nil, "GET", "/v1/collections/"+c.ID, e.key, nil, 200, &fresh)
-	if fresh.Actions[0].RunLabels != nil || fresh.Actions[1].RunLabels == nil || fresh.Actions[1].RunLabels.Done != "Sent" {
+	if fresh.Actions[0].RunLabels == nil || fresh.Actions[0].RunLabels.Done != "Published" || fresh.Actions[1].RunLabels != nil {
 		t.Fatalf("labels: %+v", fresh.Actions)
 	}
 }
@@ -631,9 +631,9 @@ func TestLifecycleRules(t *testing.T) {
 	c := e.collection("Posts")
 	writer := e.keyWith(app.ScopeItemsRead, app.ScopeItemsWrite)
 
-	// An action that would only start runs from pending can't be saved (it would run from anywhere).
+	// An action that starts a run can't be allowed from pending: runs follow a decision.
 	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []map[string]any{
-		{"name": "go", "label": "Go", "event": "item.go_requested", "set_status": "processing", "allowed_statuses": []string{"pending"}}}}, 422, nil)
+		{"name": "publish", "allowed_statuses": []string{"pending"}}}}, 422, nil)
 
 	// A new item can't start archived (or in a run).
 	e.do(nil, "POST", "/v1/collections/"+c.ID+"/items", e.key, map[string]any{"title": "x", "content": "x", "status": "archived"}, 422, nil)

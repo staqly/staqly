@@ -112,10 +112,12 @@ its own; with Docker the dialog asks for that address once (or set
   (`/result`).
 - **Approve / reject** — built-in, need the `items:review` scope, only from
   `pending`, atomic (concurrent decisions: one wins, the rest get `409`).
-- **Custom actions** — configured per collection (no code): name, label, event,
-  `requires_feedback`, optional `set_status`, `allowed_statuses`. Defaults:
-  `regenerate`, `publish`, `retry`, `archive`. Running one records an event and
-  notifies webhooks; external tools do the work.
+- **Actions** — a fixed catalog: `regenerate`, `publish`, `retry`, `archive`
+  (label, event, feedback rule and run labels fixed). A collection picks its
+  flow: which are enabled (publish and archive always), `allowed_statuses`
+  for regenerate (rejected/failed/expired) and publish (approved/completed),
+  and publish's `auto_run` (start on approval). Running one records an event
+  and notifies webhooks; external tools do the work.
 - **Watchers** — an HTTP poll of any URL the user gives, on a schedule: `rss`
   (RSS/Atom entries become pending items) or `url_diff` (an item when the page
   text changes; JSON endpoints too). robots.txt is respected for both. No
@@ -165,7 +167,7 @@ curl -s "$API/v1/items?status=pending&type=image"
 # approved yesterday
 curl -s "$API/v1/items?status=approved&decided_after=2026-10-12&decided_before=2026-10-13"
 
-# approve (optionally editing first) / reject with feedback / custom action
+# approve (optionally editing first) / reject with feedback / collection action
 curl -s -X POST $API/v1/items/{ITEM_ID}/actions/approve -H 'Content-Type: application/json' -d '{"edits":{"content":"Fixed caption"}}'
 curl -s -X POST $API/v1/items/{ITEM_ID}/actions/reject  -H 'Content-Type: application/json' -d '{"feedback":"Too dark"}'
 curl -s -X POST $API/v1/items/{ITEM_ID}/actions/regenerate -H 'Content-Type: application/json' -d '{"feedback":"Make her smile"}'

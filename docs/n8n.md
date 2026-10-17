@@ -125,6 +125,6 @@ rejection of generate requests without the demo token.
 * Report progress: `PATCH /v1/items/{id}` with `status`
   (`processing`/`completed`/`failed`) and `metadata_patch`.
 * React to decisions: subscribe a webhook to `item.approved`, `item.rejected`,
-  `item.*_requested` (custom actions) — optionally filtered by collection.
+  `item.*_requested` (regenerate, publish, retry) — optionally filtered by collection.
 * Deliveries are at-least-once; use `event.id` (or `X-Staqly-Event-Id`) to
   deduplicate if a side effect must not repeat.

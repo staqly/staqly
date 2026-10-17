@@ -165,10 +165,20 @@ The allowed changes are listed in [Security model](/self-hosting/security#review
 | *a collection with this name already exists* | Collection names are unique per workspace |
 | *collection is archived* | Archived collections are read-only |
 | *results can be reported for approved or processing items* | `POST /v1/items/{id}/result` on an undecided or rejected item |
-| *action publish emits the reserved event item.approved* | A custom action stored before reserved events were enforced; change its `event` in the collection settings |
 
 Concurrent decisions on one item always resolve to exactly one success; everyone else gets
 `409`. Treat it as "already handled", not as a failure to retry blindly.
+
+### 422 on collection actions
+
+A collection's `actions` only choose from the [action catalog](/automation/custom-actions#the-catalog):
+
+| Message | Meaning |
+|---|---|
+| *unknown action translate; choose from regenerate, publish, retry, archive* | Custom actions no longer exist |
+| *publish can run from approved, completed, not rejected* | An `allowed_statuses` value outside that action's choices |
+| *publish can start automatically after approval only when it may run from approved* | `auto_run` without `approved` in publish's `allowed_statuses` |
+| *unknown event pattern item.shipped; ...* | A webhook or notification channel subscribed to an event that doesn't exist |
 
 A state that is already set can't be set again. Archiving an archived collection or item,
 unarchiving an active collection, pausing a paused watcher, resuming an active one, enabling an

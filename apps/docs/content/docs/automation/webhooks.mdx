@@ -126,7 +126,7 @@ bundled n8n compose file the URL is `http://n8n:5678/webhook/staqly-demo` (Docke
 |---|---|---|
 | `url` | — | Absolute `http(s)` URL, no credentials in it |
 | `description` | `""` | Free text, up to 500 characters |
-| `events` | `["*"]` | 1 to 50 patterns: `"*"`, a glob inside an event family (`"item.*"`, `"item.*_requested"`), a [known event type](/api/events), or a custom action's event (`item.<name>_requested` or the `event` set on a collection action). Anything else, e.g. the typo `"item.aproved"`, is refused with `422`. `"*"` leaves out the credential and session [audit events](/api/events#audit-events); name their family to get them (admin only) |
+| `events` | `["*"]` | 1 to 50 patterns: `"*"`, a glob inside an event family (`"item.*"`, `"item.*_requested"`) or a [known event type](/api/events) (the action events included). Anything else, e.g. the typo `"item.aproved"` or a custom event such as `"item.shipped"`, is refused with `422`. `"*"` leaves out the credential and session [audit events](/api/events#audit-events); name their family to get them (admin only) |
 | `collection_ids` | `[]` | Only events from these collections; empty = all |
 | `active` | `true` | Pause without deleting. Deliveries already queued for a paused webhook finish as `failed` ("webhook disabled"); re-enable and retry them to resend |
 | `timeout_ms` | `10000` | 1,000 – 60,000 (the dashboard asks for seconds, 1 – 60) |
@@ -177,7 +177,7 @@ X-Staqly-Signature: sha256=<hex HMAC-SHA256(secret, timestamp + "." + raw body)>
 - The payload is built from the **event snapshot** taken when the change happened, not the
   item's current state.
 - `actor.type` is `local`, `session`, `api_key` or `system` (watchers, expiry).
-- [Custom actions](/automation/custom-actions) include the `payload` sent with the action,
+- [Actions](/automation/custom-actions) include the `payload` sent with the action,
   if any.
 - Media URLs inside `data.item.media.url` use `PUBLIC_API_URL` and require authentication.
 
@@ -320,5 +320,5 @@ A blocked target shows up in the delivery's `last_error`, for example
   <Card title="Event types" href="/api/events">Every event you can subscribe to, and what its data contains.</Card>
   <Card title="n8n" href="/integrations/n8n">Receive staqly webhooks in an n8n workflow.</Card>
   <Card title="Instagram Avatar, end to end" href="/cookbook/instagram-avatar">A full generate, review, publish loop driven by webhooks.</Card>
-  <Card title="Custom actions" href="/automation/custom-actions">Add buttons like Regenerate or Publish that fire webhook events.</Card>
+  <Card title="Actions" href="/automation/custom-actions">Buttons like Regenerate or Publish that fire webhook events.</Card>
 </Cards>

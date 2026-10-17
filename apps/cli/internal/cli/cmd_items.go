@@ -548,7 +548,7 @@ func decideCommand(action string) *Command {
 }
 
 func itemsActionCommand() *Command {
-	return leaf("action", "<id> <action>", "Run a custom collection action (e.g. regenerate) on an item", 2, 2, func(fs *flag.FlagSet) runFunc {
+	return leaf("action", "<id> <action>", "Run a collection action (regenerate, publish, retry, archive) on an item", 2, 2, func(fs *flag.FlagSet) runFunc {
 		var feedback string
 		fs.StringVar(&feedback, "feedback", "", "feedback / instructions")
 		fs.StringVar(&feedback, "m", "", "shorthand for --feedback")

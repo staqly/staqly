@@ -21,8 +21,25 @@ export type ItemType = Schemas['ItemType']
 export type ErrorBodySchema = Schemas['ErrorBody']
 
 export type Collection = Schemas['Collection']
-export type CollectionInput = Schemas['CollectionInput']
+/** An action as a collection or item returns it: catalog fields, allowed statuses and `auto_run` (publish). */
 export type ActionDef = Schemas['ActionDef']
+/** The fixed action catalog a collection's flow picks from (approve and reject are built in). */
+export type ActionName = Schemas['ActionDefInput']['name']
+/**
+ * Enables one catalog action in a collection's flow: `{ name, allowed_statuses?, auto_run? }`.
+ * Omitted `allowed_statuses` means the action's default; `auto_run` (publish only) starts the
+ * publish run right after approval. Label, event, feedback and run labels come from the catalog.
+ */
+export type ActionFlowInput = Pick<Schemas['ActionDefInput'], 'name' | 'allowed_statuses' | 'auto_run'>
+/**
+ * Collection fields to create or update. `actions` is the collection's flow: a list of catalog
+ * actions (`ActionFlowInput`); full `ActionDef` objects from a GET are accepted too (only
+ * `name`, `allowed_statuses` and `auto_run` are read). publish and archive are always kept; an
+ * empty list enables all four catalog actions with their defaults.
+ */
+export type CollectionInput = Omit<Schemas['CollectionInput'], 'actions'> & {
+  actions?: Array<ActionFlowInput | ActionDef>
+}
 
 export type Item = Schemas['Item']
 export type ItemFields = Schemas['ItemFields']
@@ -189,7 +206,7 @@ export interface DeliveryListParams {
   limit?: number
 }
 
-/** Body of approve/reject/custom action requests. */
+/** Body of approve/reject and catalog action requests. */
 export interface ActionInput {
   /** Reviewer feedback; required by `reject`-style actions that set `requires_feedback`. */
   feedback?: string

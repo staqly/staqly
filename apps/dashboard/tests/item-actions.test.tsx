@@ -4,14 +4,16 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ItemActionBar, undoDelay, useRunAction } from '@/components/items/item-actions'
 import type { ActionDef, Item } from '@/lib/api'
+import { qk } from '@/lib/queries'
 
 import { APPROVE, REGENERATE, REJECT, item } from './fixtures'
-import { mockApi, renderWithProviders } from './utils'
+import { makeClient, mockApi, renderWithProviders } from './utils'
 
-const custom = (name: string, label: string): ActionDef => ({
+/** A catalog action as GET /v1/items/{id}/actions returns it. */
+const action = (name: string, label: string): ActionDef => ({
   name,
   label,
-  event: `item.${name}_requested`,
+  event: name === 'archive' ? 'item.archived' : `item.${name}_requested`,
   requires_feedback: false,
   allowed_statuses: ['pending'],
 })
@@ -202,7 +204,7 @@ describe('item action bar', () => {
     expect(api.find('PATCH', '/v1/items/itm_1')).toHaveLength(0)
   })
 
-  it('runs a custom action that requires feedback', async () => {
+  it('runs a collection action that requires feedback', async () => {
     const itm = item({ status: 'rejected', version: 4 })
     const api = mockApi(
       routes(itm, [REGENERATE], {
@@ -227,20 +229,19 @@ describe('item action bar', () => {
     expect(await screen.findByText(/done for “Avatar v1”|requested for “Avatar v1”/)).toBeInTheDocument()
   })
 
-  it('keeps custom actions of a pending item in the More menu', async () => {
+  it('keeps collection actions of a pending item in the More menu', async () => {
     const itm = item()
     const api = mockApi(
       routes(
         itm,
         [
           APPROVE,
-          custom('upscale', 'Upscale'),
-          custom('crop', 'Crop'),
-          custom('publish', 'Publish'),
-          custom('tag', 'Tag'),
+          action('retry', 'Retry'),
+          action('publish', 'Publish'),
+          { ...action('archive', 'Archive'), set_status: 'archived' },
         ],
         {
-          'POST /v1/items/itm_1/actions/crop': itm,
+          'POST /v1/items/itm_1/actions/publish': itm,
         },
       ),
     )
@@ -248,20 +249,20 @@ describe('item action bar', () => {
 
     renderWithProviders(<ItemActionBar item={itm} />, { mode: 'cloud' })
     await user.click(await screen.findByRole('button', { name: 'More actions' }))
-    expect(screen.queryByRole('button', { name: 'Upscale' })).not.toBeInTheDocument()
-    await user.click(await screen.findByRole('menuitem', { name: /crop/i }))
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    await user.click(await screen.findByRole('menuitem', { name: /publish/i }))
     // Collection actions start the automation: confirmed first.
-    expect(api.find('POST', '/v1/items/itm_1/actions/crop')).toHaveLength(0)
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Crop' }))
+    expect(api.find('POST', '/v1/items/itm_1/actions/publish')).toHaveLength(0)
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Publish' }))
 
-    await waitFor(() => expect(api.find('POST', '/v1/items/itm_1/actions/crop')).toHaveLength(1))
-    expect(api.find('POST', '/v1/items/itm_1/actions/crop')[0].body).toEqual({ expected_version: 1 })
+    await waitFor(() => expect(api.find('POST', '/v1/items/itm_1/actions/publish')).toHaveLength(1))
+    expect(api.find('POST', '/v1/items/itm_1/actions/publish')[0].body).toEqual({ expected_version: 1 })
   })
 
   it('a decided item shows its main action; Archive is in More', async () => {
     const itm = item({ status: 'approved' })
-    const archive = { ...custom('archive', 'Archive'), set_status: 'archived' as const }
-    const publish = { ...custom('publish', 'Publish'), set_status: 'processing' as const }
+    const archive = { ...action('archive', 'Archive'), set_status: 'archived' as const }
+    const publish = { ...action('publish', 'Publish'), set_status: 'processing' as const }
     const user = userEvent.setup()
 
     mockApi(routes(itm, [archive, publish]))
@@ -285,8 +286,8 @@ describe('item action bar', () => {
   it('uses big reject/approve buttons plus a menu in the compact layout', async () => {
     const itm = item()
     const api = mockApi(
-      routes(itm, [APPROVE, REJECT, custom('upscale', 'Upscale')], {
-        'POST /v1/items/itm_1/actions/upscale': itm,
+      routes(itm, [APPROVE, REJECT, action('retry', 'Retry')], {
+        'POST /v1/items/itm_1/actions/retry': itm,
       }),
     )
     const user = userEvent.setup()
@@ -299,9 +300,9 @@ describe('item action bar', () => {
     expect(within(bar).getByRole('button', { name: 'Approve' })).toBeInTheDocument()
     await user.click(within(bar).getByRole('button', { name: 'More actions' }))
     expect(await screen.findByRole('menuitem', { name: /^edit$/i })).toBeInTheDocument()
-    await user.click(screen.getByRole('menuitem', { name: /upscale/i }))
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Upscale' }))
-    await waitFor(() => expect(api.find('POST', '/v1/items/itm_1/actions/upscale')).toHaveLength(1))
+    await user.click(screen.getByRole('menuitem', { name: /retry/i }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(api.find('POST', '/v1/items/itm_1/actions/retry')).toHaveLength(1))
   })
 
   it('renders nothing in the compact layout without actions', async () => {
@@ -343,6 +344,56 @@ describe('item action bar', () => {
       await waitFor(() => expect(api.find('POST', '/v1/items/itm_1/actions/publish')).toHaveLength(1))
       expect(api.find('POST', '/v1/items/itm_1/actions/approve')).toHaveLength(1)
       expect(api.find('POST', '/v1/items/itm_1/actions/publish')[0].body).toEqual({ expected_version: 4 })
+    } finally {
+      undoDelay.ms = 0
+    }
+  })
+
+  it('shows Publishing right away when the collection publishes on approval', async () => {
+    const itm = item({ version: 3 })
+    const publish: ActionDef = {
+      ...action('publish', 'Publish'),
+      set_status: 'processing',
+      allowed_statuses: ['approved'],
+      auto_run: true,
+    }
+    const onDone = vi.fn<(item: Item, action: string) => void>()
+
+    mockApi({
+      'GET /v1/collections': { data: [] },
+      'POST /v1/items/itm_1/actions/approve': {
+        ...itm,
+        status: 'processing',
+        run: 'processing',
+        run_action: 'publish',
+      },
+    })
+    const user = userEvent.setup()
+
+    function Harness() {
+      const { mutate } = useRunAction({ onDone })
+
+      return <button onClick={() => mutate({ item: itm, action: 'approve' })}>a</button>
+    }
+
+    undoDelay.ms = 60_000
+
+    try {
+      const client = makeClient()
+
+      client.setQueryData(qk.collections(false), [{ id: itm.collection_id, name: 'Posts', actions: [publish] }])
+      renderWithProviders(<Harness />, { mode: 'cloud', client })
+      await user.click(screen.getByRole('button', { name: 'a' }))
+      expect(onDone).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'processing',
+          run: 'processing',
+          run_action: 'publish',
+          decision: 'approved',
+        }),
+        'approve',
+      )
+      expect(await screen.findByText('Publishing starts now.')).toBeInTheDocument()
     } finally {
       undoDelay.ms = 0
     }

@@ -93,7 +93,7 @@ const sections: { title: string; icon: ReactNode; links: [string, string][] }[] 
     icon: <Workflow />,
     links: [
       ['Watchers', '/automation/watchers'],
-      ['Custom actions', '/automation/custom-actions'],
+      ['Actions', '/automation/custom-actions'],
       ['Notifications', '/automation/notifications'],
       ['Webhooks', '/automation/webhooks'],
     ],

@@ -100,7 +100,7 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `DATABASE_PATH` | `$DATA_DIR/workspace.db` | SQLite database file. |
 | `UPLOAD_DIR` | `$DATA_DIR/uploads` | Media files. |
 | `MAX_UPLOAD_MB` | `100` | Maximum upload size. Cloud plans can be stricter, never larger. |
-| `PROCESSING_TIMEOUT` | `1h` | Server default for how long an item may stay in `processing` (for example after a custom action) before it is marked `failed` with *"No result reported within 1h"* and an `item.failed` event (`timeout: true`). A Go duration such as `30m` or `6h`; `0` turns it off. An invalid value also turns it off. Each workspace can set its own value in **Settings → General → Processing timeout** (1 minute to 24 hours, `PATCH /v1/workspace` `processing_timeout_seconds`), which wins over this default. Editing the item restarts the clock. |
+| `PROCESSING_TIMEOUT` | `1h` | Server default for how long an item may stay in `processing` (for example after Publish) before it is marked `failed` with *"No result reported within 1h"* and an `item.failed` event (`timeout: true`). A Go duration such as `30m` or `6h`; `0` turns it off. An invalid value also turns it off. Each workspace can set its own value in **Settings → General → Processing timeout** (1 minute to 24 hours, `PATCH /v1/workspace` `processing_timeout_seconds`), which wins over this default. Editing the item restarts the clock. |
 
 ## Webhooks and watchers
 

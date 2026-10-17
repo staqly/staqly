@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
@@ -6,6 +6,8 @@ import { ActionsEditor } from '@/components/collections/actions-editor'
 import type { Collection } from '@/lib/api'
 
 import { mockApi, renderWithProviders } from './utils'
+
+const PATCH = 'PATCH /v1/collections/col_oalirbz67y4m4cqxq5dw'
 
 const collection = {
   id: 'col_oalirbz67y4m4cqxq5dw',
@@ -16,128 +18,135 @@ const collection = {
       label: 'Regenerate',
       event: 'item.regenerate_requested',
       set_status: 'processing',
-      allowed_statuses: ['pending', 'rejected'],
+      allowed_statuses: ['rejected'],
       requires_feedback: true,
+      run_labels: { running: 'Regenerating', done: 'Regenerated', failed: 'Regeneration failed' },
     },
+    {
+      name: 'publish',
+      label: 'Publish',
+      event: 'item.publish_requested',
+      set_status: 'processing',
+      allowed_statuses: ['approved'],
+      requires_feedback: false,
+      run_labels: { running: 'Publishing', done: 'Published', failed: 'Publish failed' },
+    },
+    { name: 'archive', label: 'Archive', event: 'item.archived', set_status: 'archived', requires_feedback: false },
   ],
 } as unknown as Collection
 
+const row = (name: string) => within(screen.getByTestId(`action-row-${name}`))
+
 describe('actions editor', () => {
-  it('shows each action as a one-line summary and expands it to edit', async () => {
-    const user = userEvent.setup()
-
+  it('lists the fixed catalog with no text inputs; publish and archive are always on', () => {
     renderWithProviders(<ActionsEditor collection={collection} />)
 
-    expect(screen.getByText('Regenerate')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Regenerate' })).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Retry' })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Publish' })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: 'Archive' })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: 'Archive' })).toBeChecked()
+    expect(row('publish').getByText('Always on')).toBeInTheDocument()
+    expect(row('publish').getByText('Publishing, then Published or Publish failed')).toBeInTheDocument()
+    expect(row('archive').getByText('Runs from any status')).toBeInTheDocument()
+    // Allowed from offers only the action's options.
     expect(
-      screen.getByText('starts a run (Processing) · from Pending, Rejected · feedback required'),
-    ).toBeInTheDocument()
-    expect(screen.queryByLabelText('Label')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Edit action Regenerate' }))
-    expect(screen.getByLabelText('Label')).toHaveValue('Regenerate')
+      row('regenerate')
+        .getAllByRole('checkbox')
+        .map((c) => c.id),
+    ).toEqual(['action-regenerate-from-rejected', 'action-regenerate-from-failed', 'action-regenerate-from-expired'])
   })
 
-  it('picks allowed statuses from a multi-select and saves them', async () => {
+  it('saves the flow: enabled names and allowed statuses only', async () => {
     const user = userEvent.setup()
-    const api = mockApi({ 'PATCH /v1/collections/col_oalirbz67y4m4cqxq5dw': collection })
+    const api = mockApi({ [PATCH]: collection })
 
     renderWithProviders(<ActionsEditor collection={collection} />)
-    await user.click(screen.getByRole('button', { name: 'Edit action Regenerate' }))
-    const picker = screen.getByRole('button', { name: /allowed from/i })
-
-    // A run starts after a decision: the older "pending" is dropped and not offered.
-    expect(picker).toHaveTextContent(/^Rejected/)
-    await user.click(picker)
-    await user.click(await screen.findByRole('option', { name: 'Failed' }))
-    expect(screen.queryByRole('option', { name: 'Pending' })).not.toBeInTheDocument()
-    await user.keyboard('{Escape}')
-    expect(picker).toHaveTextContent('RejectedFailed')
-
+    await user.click(row('regenerate').getByRole('checkbox', { name: 'Expired' }))
+    await user.click(screen.getByRole('switch', { name: 'Retry' }))
+    expect(row('retry').getByText('Runs from Failed')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save actions' }))
-    const body = api.find('PATCH', '/v1/collections/col_oalirbz67y4m4cqxq5dw')[0].body as Collection
+    const body = api.find('PATCH', '/v1/collections/col_oalirbz67y4m4cqxq5dw')[0].body as { actions: unknown[] }
 
-    expect(body.actions?.[0].allowed_statuses).toEqual(['rejected', 'failed'])
+    expect(body.actions).toEqual([
+      { name: 'regenerate', allowed_statuses: ['rejected', 'expired'] },
+      { name: 'publish', allowed_statuses: ['approved'] },
+      { name: 'retry' },
+      { name: 'archive' },
+    ])
   })
 
-  it('opens a new action ready to fill in', async () => {
+  it('keeps at least one allowed status', async () => {
     const user = userEvent.setup()
 
     renderWithProviders(<ActionsEditor collection={collection} />)
-    await user.click(screen.getByRole('button', { name: /add action/i }))
+    const only = row('regenerate').getByRole('checkbox', { name: 'Rejected' })
 
-    expect(screen.getByText('Untitled action')).toBeInTheDocument()
-    expect(screen.getByLabelText('Label')).toHaveValue('')
+    expect(only).toBeChecked()
+    expect(only).toBeDisabled()
+    await user.click(row('regenerate').getByRole('checkbox', { name: 'Failed' }))
+    expect(only).toBeEnabled()
   })
 
-  it('marks an invalid name on save; the event follows the name and is read-only', async () => {
+  it('starts publish automatically after approval only while it runs from Approved', async () => {
     const user = userEvent.setup()
+    const api = mockApi({ [PATCH]: collection })
 
     renderWithProviders(<ActionsEditor collection={collection} />)
-    await user.click(screen.getByRole('button', { name: 'Edit action Regenerate' }))
-    const name = screen.getByRole('textbox', { name: 'Name' })
+    const auto = screen.getByRole('switch', { name: 'Start automatically after approval' })
 
-    expect(name).toHaveAttribute('aria-required', 'true')
-    expect(screen.getByText('Name', { selector: 'label' })).toHaveTextContent('Name*')
-    expect(screen.queryByRole('textbox', { name: 'Event' })).not.toBeInTheDocument()
+    expect(auto).not.toBeChecked()
+    await user.click(auto)
+    expect(auto).toBeChecked()
 
-    await user.clear(name)
-    // Nothing is flagged before the first save.
-    expect(name).toHaveAttribute('aria-invalid', 'false')
+    // Moving publish to Completed only turns it off and locks it.
+    await user.click(row('publish').getByRole('checkbox', { name: 'Completed' }))
+    await user.click(row('publish').getByRole('checkbox', { name: 'Approved' }))
+    expect(auto).not.toBeChecked()
+    expect(auto).toBeDisabled()
+    expect(row('publish').getByText('Needs publish to be allowed from Approved.')).toBeInTheDocument()
+
+    await user.click(row('publish').getByRole('checkbox', { name: 'Approved' }))
+    await user.click(auto)
     await user.click(screen.getByRole('button', { name: 'Save actions' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Name is required')
-    expect(name.closest('[data-invalid]')).toHaveAttribute('data-invalid', 'true')
-    await user.type(name, 'approve')
-    expect(screen.getByRole('alert')).toHaveTextContent('“approve” is a built-in action')
-    await user.clear(name)
-    await user.type(name, 'redo')
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByText('item.redo_requested')).toBeInTheDocument()
+    const body = api.find('PATCH', '/v1/collections/col_oalirbz67y4m4cqxq5dw')[0].body as {
+      actions: { name: string; auto_run?: boolean }[]
+    }
+
+    expect(body.actions.find((a) => a.name === 'publish')).toEqual({
+      name: 'publish',
+      allowed_statuses: ['approved', 'completed'],
+      auto_run: true,
+    })
   })
 
-  it('names the run of an action that starts one', async () => {
-    const user = userEvent.setup()
-    const api = mockApi({ 'PATCH /v1/collections/col_oalirbz67y4m4cqxq5dw': collection })
-
-    renderWithProviders(<ActionsEditor collection={collection} />)
-    await user.click(screen.getByRole('button', { name: 'Edit action Regenerate' }))
-    await user.type(screen.getByRole('textbox', { name: /while it runs/i }), 'Regenerating')
-    await user.click(screen.getByRole('button', { name: 'Save actions' }))
-    const body = api.find('PATCH', '/v1/collections/col_oalirbz67y4m4cqxq5dw')[0].body as Collection
-
-    expect(body.actions?.[0].run_labels?.running).toBe('Regenerating')
-  })
-
-  it('opens an invalid new action on save and shows the API error under the list', async () => {
+  it('shows a legacy collection as the catalog and the API error under the list', async () => {
     const user = userEvent.setup()
 
-    const api = mockApi({
-      'PATCH /v1/collections/col_oalirbz67y4m4cqxq5dw': {
+    mockApi({
+      [PATCH]: {
         status: 422,
         body: {
           error: {
             code: 'validation_failed',
             message: 'validation failed',
-            fields: { actions: 'event item.approved is reserved for staqly' },
+            fields: { actions: 'unknown action ship' },
           },
         },
       },
     })
 
-    renderWithProviders(<ActionsEditor collection={collection} />)
-    await user.click(screen.getByRole('button', { name: /add action/i }))
-    await user.click(screen.getByRole('button', { name: 'Edit action unnamed' }))
-    expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument()
+    renderWithProviders(<ActionsEditor collection={{ ...collection, actions: [] } as unknown as Collection} />)
+    // Nothing stored: publish and archive still show on, the optional ones off.
+    expect(screen.getByRole('switch', { name: 'Publish' })).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Regenerate' })).not.toBeChecked()
+    expect(screen.queryByText(/no custom actions/i)).not.toBeInTheDocument()
 
+    await user.click(screen.getByRole('switch', { name: 'Regenerate' }))
+    expect(row('regenerate').getByRole('checkbox', { name: 'Rejected' })).toBeChecked()
+    expect(row('regenerate').getByRole('checkbox', { name: 'Failed' })).toBeChecked()
     await user.click(screen.getByRole('button', { name: 'Save actions' }))
-    const name = await screen.findByRole('textbox', { name: 'Name' })
-
-    expect(name).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByRole('alert')).toHaveTextContent('Name is required')
-    expect(api.find('PATCH', '/v1/collections/col_oalirbz67y4m4cqxq5dw')).toHaveLength(0)
-
-    await user.type(name, 'publish')
-    await user.click(screen.getByRole('button', { name: 'Save actions' }))
-    expect(await screen.findByText('Event item.approved is reserved for staqly')).toBeInTheDocument()
+    expect(await screen.findByText('Unknown action ship')).toBeInTheDocument()
   })
 })

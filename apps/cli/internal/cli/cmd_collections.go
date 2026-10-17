@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -85,9 +86,14 @@ func collectionsCommand() *Command {
 						"Archived", yesNo(col.Archived), "Created", fmtTime(col.CreatedAt))
 					if len(col.Actions) > 0 {
 						fmt.Fprintln(c.Out)
-						t := c.table("ACTION", "LABEL", "EVENT", "SETS STATUS", "FEEDBACK")
+						t := c.table("ACTION", "EVENT", "FROM", "FEEDBACK", "AUTO")
 						for _, a := range col.Actions {
-							t.row(a.Name, a.Label, a.Event, orDash(a.SetStatus), map[bool]string{true: "required", false: "optional"}[a.RequiresFeedback])
+							from := strings.Join(a.AllowedStatuses, ",")
+							if from == "" {
+								from = "any"
+							}
+							t.row(a.Name, a.Event, from, map[bool]string{true: "required", false: "optional"}[a.RequiresFeedback],
+								map[bool]string{true: "after approval", false: "-"}[a.AutoRun])
 						}
 						t.flush("")
 					}
@@ -100,6 +106,8 @@ func collectionsCommand() *Command {
 					return patchCollection(c, args[0], map[string]any{"name": args[1]}, "Renamed to %s")
 				}
 			}, "staqly collections rename \"Blog posts\" \"Blog drafts\""),
+
+			collectionsActionsCommand(),
 
 			leaf("archive", "<id|name>", "Archive (or --undo to unarchive) a collection", 1, 1, func(fs *flag.FlagSet) runFunc {
 				undo := fs.Bool("undo", false, "unarchive instead")
@@ -189,4 +197,39 @@ func yesNo(b bool) string {
 		return "yes"
 	}
 	return "no"
+}
+
+// collectionsActionsCommand sets a collection's flow: which catalog actions are on and where they run from.
+func collectionsActionsCommand() *Command {
+	cmd := leaf("actions", "<id|name> [action[=status,status]]...", "Choose which catalog actions a collection offers", 1, -1, func(fs *flag.FlagSet) runFunc {
+		auto := fs.Bool("auto-publish", false, "start publishing as soon as an item is approved")
+		return func(c *Ctx, args []string) error {
+			actions := []map[string]any{}
+			for _, a := range args[1:] {
+				name, from, _ := strings.Cut(a, "=")
+				def := map[string]any{"name": name}
+				if from != "" {
+					def["allowed_statuses"] = strings.Split(from, ",")
+				}
+				if name == "publish" && *auto {
+					def["auto_run"] = true
+				}
+				actions = append(actions, def)
+			}
+			if *auto && !slices.ContainsFunc(actions, func(d map[string]any) bool { return d["name"] == "publish" }) {
+				actions = append(actions, map[string]any{"name": "publish", "auto_run": true})
+			}
+			return patchCollection(c, args[0], map[string]any{"actions": actions}, "Updated the actions of %s")
+		}
+	}, "staqly collections actions \"Blog posts\" regenerate=rejected,expired retry",
+		"staqly collections actions \"Blog posts\" publish=approved --auto-publish",
+		"staqly collections actions \"Blog posts\"")
+	cmd.Long = `Set the collection's flow from the fixed action catalog: regenerate (from
+rejected, failed, expired; default rejected,failed), publish (from approved,
+completed; default approved), retry (from failed) and archive (any status).
+Name the actions to turn on, optionally with the statuses they may run from.
+publish and archive are always on; naming none restores all four defaults.
+--auto-publish starts the publish run right after each approval (publish must
+run from approved). Approve and reject are always available.`
+	return cmd
 }

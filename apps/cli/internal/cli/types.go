@@ -39,13 +39,16 @@ type ItemPage struct {
 	NextCursor string `json:"next_cursor"`
 }
 
+// ActionDef is a built-in (approve, reject) or catalog action (regenerate, publish, retry, archive).
 type ActionDef struct {
-	Name             string `json:"name"`
-	Label            string `json:"label"`
-	Event            string `json:"event"`
-	RequiresFeedback bool   `json:"requires_feedback"`
-	SetStatus        string `json:"set_status"`
-	Builtin          bool   `json:"builtin"`
+	Name             string   `json:"name"`
+	Label            string   `json:"label"`
+	Event            string   `json:"event"`
+	RequiresFeedback bool     `json:"requires_feedback"`
+	SetStatus        string   `json:"set_status"`
+	AllowedStatuses  []string `json:"allowed_statuses"`
+	Builtin          bool     `json:"builtin"`
+	AutoRun          bool     `json:"auto_run"`
 }
 
 type Collection struct {

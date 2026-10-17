@@ -780,10 +780,6 @@ func (s *Service) runAction(ctx context.Context, p Principal, itemID, name strin
 			if def == nil {
 				return "", nil, notFound("action " + name)
 			}
-			if !def.Builtin && reservedEvents[def.Event] {
-				// Stored before reserved events were enforced: refuse to run.
-				return "", nil, conflict("action " + name + " emits the reserved event " + def.Event + "; change its event in the collection settings")
-			}
 			scope := ScopeActionsExecute
 			if def.Builtin {
 				scope = ScopeItemsReview
@@ -839,12 +835,39 @@ func (s *Service) runAction(ctx context.Context, p Principal, itemID, name strin
 			}
 			return def.Event, extra, nil
 		})
+		if err != nil || name != "approve" {
+			return err
+		}
+		out, err = s.autoPublish(ctx, q, p, out)
 		return err
 	})
 	if err != nil {
 		return Item{}, err
 	}
 	return s.toItem(ctx, out), nil
+}
+
+// autoPublish starts the publish run right after an approval, in the same transaction, when the item's
+// collection turns on publish's auto_run. The approver is the actor of item.publish_requested (data
+// auto_run: true); the setting stands in for their actions:execute, so no extra scope is checked.
+func (s *Service) autoPublish(ctx context.Context, q *db.Queries, p Principal, it db.Item) (db.Item, error) {
+	dc, err := q.GetCollection(ctx, db.GetCollectionParams{WorkspaceID: p.WorkspaceID, ID: it.CollectionID})
+	if err != nil {
+		return it, err
+	}
+	i := slices.IndexFunc(toCollection(dc).Actions, func(d ActionDef) bool { return d.Name == "publish" })
+	if i < 0 {
+		return it, nil
+	}
+	def := toCollection(dc).Actions[i]
+	if !def.AutoRun || !def.allowedFrom(it.Status) {
+		return it, nil
+	}
+	return s.mutateItem(ctx, q, p, it.ID, nil, func(it *db.Item, _ Collection) (string, map[string]any, error) {
+		it.Status = def.SetStatus
+		it.RunAction = sql.NullString{String: def.Name, Valid: true}
+		return def.Event, map[string]any{"action": def.Name, "feedback": "", "edited": false, "auto_run": true}, nil
+	})
 }
 
 type BulkResult struct {

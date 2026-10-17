@@ -97,8 +97,8 @@ Inputs and scopes for each: [Tools reference](/mcp/tools).
 
 - **Local mode**: keyless, like the REST API — only requests from this machine are accepted.
 - **Cloud mode**: an API key is required and its scopes are enforced by the domain layer: a
-  read-only key cannot write, `approve_item` / `reject_item` need `items:review`, custom
-  actions need `actions:execute`. See [Authentication & scopes](/api/authentication#scopes).
+  read-only key cannot write, `approve_item` / `reject_item` need `items:review`, the
+  other actions need `actions:execute`. See [Authentication & scopes](/api/authentication#scopes).
 - The HTTP endpoint is **stateless** — every request is authenticated on its own; there is no
   MCP session to hijack. Cookies are never accepted.
 - A STDIO process re-checks its `STAQLY_API_KEY` at most once a minute, so a revoked or

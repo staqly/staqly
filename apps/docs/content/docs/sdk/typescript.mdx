@@ -126,7 +126,7 @@ await staqly.items.upload('Instagram', await fileFromPath('avatar.png'), { title
 // decisions (need the items:review scope)
 await staqly.items.approve(item.id, { feedback: 'Ship it', edits: { title: 'Better title' } })
 await staqly.items.reject(item.id, { feedback: 'Too dark, brighten it' })
-await staqly.items.action(item.id, 'publish', { payload: { channel: 'ig' } }) // custom action
+await staqly.items.action(item.id, 'publish', { payload: { channel: 'ig' } }) // collection action
 
 // after acting on an approved item, record the outcome
 await staqly.items.reportResult(item.id, { status: 'completed', result: { post_url: 'https://instagram.com/p/C9xYz' } })
@@ -346,8 +346,8 @@ const text = await staqly.metrics({ token: process.env.METRICS_TOKEN })
 | `list({ include_archived })` | List collections |
 | `get(idOrName)` | Get a collection by ID or exact name |
 | `create(input)` | Create a collection (`name` is required) |
-| `update(id, input)` | Rename, describe, recolour, archive or replace the custom actions. `default_view` is still accepted for compatibility, but the dashboard always shows collections as a table |
-| `setActions(id, actions)` | Replace the custom actions (approve and reject are built in) |
+| `update(id, input)` | Rename, describe, recolour, archive or change the action flow. `default_view` is still accepted for compatibility, but the dashboard always shows collections as a table |
+| `setActions(id, actions)` | Replace the action flow with catalog actions, e.g. `[{ name: 'publish', auto_run: true }]` (publish and archive are always kept; approve and reject are built in). See [Actions](/automation/custom-actions) |
 | `archive(id)` / `unarchive(id)` | Archive or restore a collection |
 | `delete(id, confirmName)` | Delete a collection and its items; `confirmName` must equal its name |
 | `listItems(idOrName, params)` | One page of the collection's items (`GET /v1/collections/{id}/items`), same filters as `items.list` |
@@ -371,7 +371,7 @@ const page = await staqly.collections.listItems('col_oalirbz67y4m4cqxq5dw', { st
 | `delete(id)` | Delete the item; its history is kept |
 | `purge(id)` | Delete the item and its history (`admin`) |
 | `approve(id, input)` / `reject(id, input)` | Decide a pending item (`items:review`), optionally with `feedback`, `edits` and `expected_version` (409 if the item changed since) |
-| `action(id, name, input)` | Run approve, reject or a custom action |
+| `action(id, name, input)` | Run approve, reject or a collection action |
 | `listActions(id)` | Actions the caller may run on the item now |
 | `bulkAction(ids, action, input)` | Run one action on up to 100 items; each succeeds or fails on its own |
 | `history(id, params)` | The item's activity, newest first |

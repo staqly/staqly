@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -178,6 +179,16 @@ func TestCollections(t *testing.T) {
 	f.run("collections", "rename", "Blog posts", "Renamed").mustCode(t, 0)
 	if b := f.last("PATCH", "/v1/collections/Blog posts").json(t); b["name"] != "Renamed" {
 		t.Fatalf("body = %v", b)
+	}
+	// actions: the flow from the catalog, statuses after "=", --auto-publish on publish.
+	f.run("collections", "actions", "Blog posts", "regenerate=rejected,expired", "retry", "--auto-publish").mustCode(t, 0)
+	if b := f.last("PATCH", "/v1/collections/Blog posts").json(t); fmt.Sprint(b["actions"]) !=
+		"[map[allowed_statuses:[rejected expired] name:regenerate] map[name:retry] map[auto_run:true name:publish]]" {
+		t.Fatalf("actions body = %v", b)
+	}
+	f.run("collections", "actions", "Blog posts").mustCode(t, 0)
+	if b := f.last("PATCH", "/v1/collections/Blog posts").json(t); fmt.Sprint(b["actions"]) != "[]" {
+		t.Fatalf("defaults body = %v", b)
 	}
 	f.run("collections", "archive", "Blog posts").mustCode(t, 0)
 	if b := f.last("PATCH", "/v1/collections/Blog posts").json(t); b["archived"] != true {

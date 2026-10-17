@@ -59,7 +59,7 @@ tags:
   - name: auth
     description: Sessions, devices, API keys, the workspace, its plan and exports
   - name: collections
-    description: Collections of items and their custom actions
+    description: Collections of items and their action flow
   - name: items
     description: Items, review actions, history and long-polling
   - name: media
@@ -1109,12 +1109,12 @@ paths:
   /v1/items/{id}/actions/{action}:
     parameters:
       - { $ref: "#/components/parameters/id" }
-      - { name: action, in: path, required: true, schema: { type: string }, description: "approve, reject (items:review) or a collection action (actions:execute)" }
+      - { name: action, in: path, required: true, schema: { type: string }, description: "approve, reject (items:review) or a collection action the item's collection enables: regenerate, publish, retry, archive (actions:execute)" }
     post:
       operationId: runItemAction
       tags: [items]
-      summary: Approve, reject or run a custom action
-      description: Atomic; concurrent decisions on the same item yield exactly one success, others get 409.
+      summary: Approve, reject or run a collection action
+      description: "Atomic; concurrent decisions on the same item yield exactly one success, others get 409. When the collection turns on publish `auto_run`, approve also starts the publish run in the same transaction: the returned item is processing with run_action publish, and item.publish_requested follows item.approved."
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
@@ -2370,22 +2370,26 @@ components:
 
     ActionDef:
       type: object
+      description: "An action from the fixed catalog (or built-in approve/reject). Every field but allowed_statuses (regenerate, publish) and auto_run (publish) is fixed by the catalog: regenerate (item.regenerate_requested, feedback required, Regenerating / Regenerated / Regeneration failed), publish (item.publish_requested, Publishing / Published / Publish failed), retry (item.retry_requested, from failed, Retrying / Done / Retry failed), archive (item.archived, sets archived, from any status)."
       required: [name, label, event, requires_feedback]
       properties:
-        name: { type: string, pattern: "^[a-z][a-z0-9_]{0,39}$" }
+        name: { type: string, description: "regenerate, publish, retry, archive, or the built-in approve and reject" }
         label: { type: string }
-        event: { type: string, description: "Event emitted, e.g. item.regenerate_requested. Reserved names emitted by staqly itself (item.created, item.updated, item.deleted, item.approved, item.rejected, item.escalated, item.expired, item.status_changed, item.rule_applied, item.completed, item.failed, item.purged, item.tags_changed, item.summarized, item.unarchived) are refused; item.archived is allowed." }
+        event: { type: string, description: "Event emitted, e.g. item.regenerate_requested" }
         requires_feedback: { type: boolean }
         set_status: { $ref: "#/components/schemas/ItemStatus" }
-        allowed_statuses: { type: array, items: { $ref: "#/components/schemas/ItemStatus" } }
+        allowed_statuses: { type: array, items: { $ref: "#/components/schemas/ItemStatus" }, description: "Statuses the action may run from; empty means any" }
         builtin: { type: boolean }
         run_labels:
           type: object
-          description: For an action that starts a run (set_status processing), what to call it, e.g. Publishing / Published / Publish failed. Empty labels read Processing / Completed / Failed.
+          description: For an action that starts a run (set_status processing), what to call it, e.g. Publishing / Published / Publish failed.
           properties:
-            running: { type: string, maxLength: 40 }
-            done: { type: string, maxLength: 40 }
-            failed: { type: string, maxLength: 40 }
+            running: { type: string }
+            done: { type: string }
+            failed: { type: string }
+        auto_run:
+          type: boolean
+          description: "Publish only: the run starts as soon as an item is approved, in the same transaction (the approver is the actor of item.publish_requested, with data.auto_run true)."
 
     Collection:
       type: object
@@ -2421,27 +2425,32 @@ components:
         icon: { type: string }
         color: { type: string }
         default_view: { type: string, enum: [gallery, table, list] }
-        actions: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/ActionDefInput" }, description: Replaces the custom actions }
+        actions: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/ActionDefInput" }, description: "The collection's flow: which catalog actions are enabled, in any order (responses use catalog order). publish and archive are always added; an empty list means all four with their defaults." }
         archived: { type: boolean }
 
     ActionDefInput:
       type: object
+      description: "Enables one catalog action. Only name, allowed_statuses and auto_run are read; the other ActionDef fields are accepted (so a GET can be sent back) and replaced with the catalog's."
       required: [name]
       properties:
-        name: { type: string, pattern: "^[a-z][a-z0-9_]{0,39}$", description: "Not approve or reject (built in)" }
-        label: { type: string, description: "Defaults to the name, capitalized" }
-        event: { type: string, pattern: '^item\.[a-z0-9_.]{1,60}$', description: "Defaults to item.<name>_requested; names staqly emits itself are refused (see ActionDef.event)" }
-        requires_feedback: { type: boolean }
-        set_status: { $ref: "#/components/schemas/ItemStatus", description: Not approved or rejected }
-        allowed_statuses: { type: array, items: { $ref: "#/components/schemas/ItemStatus" } }
+        name: { type: string, enum: [regenerate, publish, retry, archive], description: "Unknown names are a 422" }
+        allowed_statuses:
+          type: array
+          items: { $ref: "#/components/schemas/ItemStatus" }
+          description: "Omit for the default. regenerate: rejected, failed, expired (default rejected, failed). publish: approved, completed (default approved). retry runs from failed and archive from any status, fixed. A status outside the action's options is a 422."
+        auto_run: { type: boolean, description: "Publish only: start the run right after approval. A 422 when publish may not run from approved; ignored on other actions." }
+        label: { type: string, description: Ignored (catalog) }
+        event: { type: string, description: Ignored (catalog) }
+        requires_feedback: { type: boolean, description: Ignored (catalog) }
+        set_status: { $ref: "#/components/schemas/ItemStatus", description: Ignored (catalog) }
         builtin: { type: boolean, description: Ignored }
         run_labels:
           type: object
-          description: Only for set_status processing; see ActionDef.run_labels.
+          description: Ignored (catalog)
           properties:
-            running: { type: string, maxLength: 40 }
-            done: { type: string, maxLength: 40 }
-            failed: { type: string, maxLength: 40 }
+            running: { type: string }
+            done: { type: string }
+            failed: { type: string }
 
     MediaRef:
       type: object
@@ -2498,7 +2507,7 @@ components:
           description: When the item was archived; null = not archived. `status` is the older single summary of all three.
         run_action:
           type: [string, "null"]
-          description: The collection action that started the current run (its `run_labels` name it, e.g. Publishing).
+          description: The collection action that started the current run (its `run_labels` name it, e.g. Publishing). It may name an action the collection no longer has (a custom action from before the catalog); such runs read Processing / Completed / Failed.
         summary:
           type: string
           maxLength: 120
@@ -2626,7 +2635,7 @@ components:
           minItems: 1
           maxItems: 50
           items: { type: string, maxLength: 100 }
-          description: '"*", a glob inside a known event family ("item.*", "item.*_requested"), a known event type, or a custom action event (item.<name>_requested or one configured on a collection action). Unknown patterns are a 422.'
+          description: '"*", a glob inside a known event family ("item.*", "item.*_requested") or a known event type, the catalog action events among them (item.regenerate_requested, item.publish_requested, item.retry_requested, item.archived). Unknown patterns are a 422.'
         collection_ids: { type: array, items: { type: string } }
         active: { type: boolean }
         timeout_ms: { type: integer, minimum: 1000, maximum: 60000 }

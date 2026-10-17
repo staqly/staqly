@@ -17,6 +17,7 @@ import { Field, FieldDescription, FieldError, FieldLabel, FieldTitle } from '@/c
 import { Input } from '@/components/ui/input'
 import { RequiredMark } from '@/components/ui/label'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { ACTION_CATALOG } from '@/lib/action-catalog'
 import { api, type ChannelType, type NotificationChannel } from '@/lib/api'
 import {
   CHANNEL_EVENTS,
@@ -410,11 +411,9 @@ function ChannelForm({ channel, onDone }: { channel: NotificationChannel | null;
     save.mutate()
   }
 
-  // Same picker as webhooks: grouped events, action events from the collections, patterns saved through the API.
+  // Same picker as webhooks: grouped events, the catalog's action events, patterns saved through the API.
   const allItems = values.events.includes('item.*')
-  const actionEvents = [
-    ...new Set((collections.data ?? []).flatMap((c) => c.actions ?? []).map((a) => a.event)),
-  ].filter((e) => !CHANNEL_EVENTS.some((c) => c.value === e))
+  const actionEvents = ACTION_CATALOG.map((a) => a.event).filter((e) => !CHANNEL_EVENTS.some((c) => c.value === e))
   const known = new Set([...CHANNEL_EVENTS.map((c) => c.value), ...actionEvents])
   const eventOptions: MultiOption[] = [
     ...CHANNEL_EVENTS.map((ev) => ({

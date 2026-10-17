@@ -2,7 +2,7 @@
 
 Official TypeScript / JavaScript SDK for **[staqly](https://github.com/staqly/staqly)**, the
 local-first workspace where AI agents store generated content (items in collections) and
-humans review it (approve, reject with feedback, custom actions).
+humans review it (approve, reject with feedback, then regenerate, publish, retry or archive).
 
 - Typed end to end: models are generated from the API's OpenAPI contract.
 - Works on Node ≥ 20.19, Bun, Deno, browsers and edge runtimes (Cloudflare Workers, Vercel/Next.js
@@ -117,16 +117,18 @@ docs. SDK options such as `timeout` and `idempotencyKey` are `camelCase`.
 const col = await staqly.collections.create({
   name: "Instagram",
   description: "Avatar and post candidates",
+  // The flow, from the fixed catalog: regenerate, publish, retry, archive (approve and reject are
+  // built in; publish and archive are always on). Omit allowed_statuses for the defaults.
   actions: [
-    // approve and reject are built in; add your own:
-    { name: "publish", label: "Publish", event: "item.publish_requested", requires_feedback: false,
-      set_status: "processing", allowed_statuses: ["approved"] },
+    { name: "regenerate", allowed_statuses: ["rejected", "failed", "expired"] },
+    { name: "publish", auto_run: true },   // start publishing as soon as an item is approved
+    { name: "retry" },
   ],
 });
 await staqly.collections.list();                       // add { include_archived: true } for archived ones
 await staqly.collections.get("Instagram");             // ID or exact name
 await staqly.collections.update(col.id, { color: "#e1306c" });
-await staqly.collections.setActions(col.id, [...]);
+await staqly.collections.setActions(col.id, [{ name: "regenerate" }]); // publish and archive stay on
 await staqly.collections.archive(col.id);               // unarchive(col.id)
 await staqly.collections.delete(col.id, "Instagram");   // permanent; the name must match
 await staqly.collections.listItems("Instagram", { status: "pending" }); // one page, same filters as items.list
@@ -162,7 +164,7 @@ await staqly.items.delete(item.id);                                             
 // decisions (need the items:review scope)
 await staqly.items.approve(item.id, { feedback: "Ship it", edits: { title: "Better title" } });
 await staqly.items.reject(item.id, { feedback: "Too dark, brighten it" });
-await staqly.items.action(item.id, "publish", { payload: { channel: "ig" } });   // custom action
+await staqly.items.action(item.id, "publish", { payload: { channel: "ig" } });   // catalog action
 await staqly.items.listActions(item.id);            // actions allowed in the current status
 await staqly.items.bulkAction(["itm_1", "itm_2"], "reject", { feedback: "duplicates" });
 await staqly.items.approve(item.id, { expected_version: item.version });         // optimistic concurrency

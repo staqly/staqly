@@ -127,7 +127,7 @@ new profile current. If you don't pass `--key`, `login` uses
 | 1 | Error: API error, network error, failed confirmation, or one or more items in a multi-item command failed. |
 | 2 | With `--wait` or `push`: **rejected**. |
 | 3 | With `--wait` or `push`: **timed out** (still pending), or the item **expired**. |
-| 4 | With `--wait` or `push`: the item left `pending` with another status (for example a custom action moved it to `processing`, or it was archived). |
+| 4 | With `--wait` or `push`: the item left `pending` with another status (for example publish moved it to `processing`, or it was archived). |
 | 64 | Usage error: unknown command or flag, or missing arguments. |
 | 130 | Interrupted (Ctrl-C) during a command. `--follow` and `--watch` exit 0 on Ctrl-C. |
 
@@ -270,7 +270,7 @@ staqly items purge itm_1 [--yes]          # item + its events + unused media (ad
 * `items update --media-id <media-id>` attaches a file uploaded with
   `staqly media upload`; `--media-id ""` removes the item's media.
 * `items bulk` sends `POST /v1/items/bulk-actions` (100 IDs per request) with
-  `approve`, `reject` or a custom action. IDs come from the arguments and,
+  `approve`, `reject` or a collection action. IDs come from the arguments and,
   with `--stdin`, from stdin (whitespace separated). Each item succeeds or
   fails on its own; the command exits 1 if any failed. `--json` prints
   `{"data":[{"id","ok","item"|"error"}]}`.
@@ -281,7 +281,7 @@ staqly items purge itm_1 [--yes]          # item + its events + unused media (ad
 
 | Flag (`items bulk`) | Type | Required | Description |
 |---|---|---|---|
-| `<action>` | string | <Required /> | `approve`, `reject` or a custom collection action such as `regenerate` |
+| `<action>` | string | <Required /> | `approve`, `reject` or a collection action such as `regenerate` |
 | `--stdin` | boolean | No | Also read item IDs from stdin, separated by spaces or newlines |
 | `--feedback`, `-m` | string | No | Feedback for the agent, applied to every item |
 | `--payload` | JSON | No | Any JSON forwarded in each event and webhook |

@@ -3,16 +3,15 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"regexp"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
-// ActionDef is a collection-configured action. Executing one records an event
-// (and optionally moves the item's status); external systems do the work.
+// ActionDef is a catalog action as a collection enables it. Executing one records an event (and
+// optionally moves the item's status); external systems do the work. Everything but the name and,
+// for regenerate and publish, allowed_statuses is fixed by the catalog.
 type ActionDef struct {
 	Name             string   `json:"name"`
 	Label            string   `json:"label"`
@@ -24,6 +23,8 @@ type ActionDef struct {
 	// RunLabels name the run an action starts (set_status processing), e.g. Publishing / Published /
 	// Publish failed. Empty labels read Processing / Completed / Failed.
 	RunLabels *RunLabels `json:"run_labels,omitempty"`
+	// AutoRun (publish only) starts the action as soon as an item is approved, in the same transaction.
+	AutoRun bool `json:"auto_run,omitempty"`
 }
 
 type RunLabels struct {
@@ -53,106 +54,128 @@ var builtinActions = []ActionDef{
 	{Name: "reject", Label: "Reject", Event: "item.rejected", RequiresFeedback: true, SetStatus: "rejected", AllowedStatuses: []string{"pending"}, Builtin: true},
 }
 
-// DefaultActions are attached to new collections when none are supplied.
-var DefaultActions = []ActionDef{
-	{Name: "regenerate", Label: "Regenerate", Event: "item.regenerate_requested", RequiresFeedback: true, SetStatus: "processing", AllowedStatuses: []string{"rejected", "failed"},
-		RunLabels: &RunLabels{Running: "Regenerating", Done: "Regenerated", Failed: "Regeneration failed"}},
-	{Name: "publish", Label: "Publish", Event: "item.publish_requested", SetStatus: "processing", AllowedStatuses: []string{"approved"},
-		RunLabels: &RunLabels{Running: "Publishing", Done: "Published", Failed: "Publish failed"}},
-	{Name: "retry", Label: "Retry", Event: "item.retry_requested", SetStatus: "processing", AllowedStatuses: []string{"failed"},
-		RunLabels: &RunLabels{Running: "Retrying", Done: "Done", Failed: "Retry failed"}},
-	{Name: "archive", Label: "Archive", Event: "item.archived", SetStatus: "archived"},
+// catalogAction is one entry of the fixed action catalog. A collection only chooses which entries are
+// enabled and, where Options is set, which of those statuses each may run from.
+type catalogAction struct {
+	Def ActionDef // fixed fields; AllowedStatuses is the default (empty: any status)
+	// Options are the statuses a collection may pick from; nil means AllowedStatuses is fixed.
+	Options []string
+	// Required actions are always enabled, so every collection keeps the flow approve, publish,
+	// done or failed, plus archive.
+	Required bool
+	// AutoRunnable actions may start on their own right after an approval (auto_run).
+	AutoRunnable bool
+}
+
+// actionCatalog is the fixed set of collection actions, in display order.
+var actionCatalog = []catalogAction{
+	{Def: ActionDef{Name: "regenerate", Label: "Regenerate", Event: "item.regenerate_requested", RequiresFeedback: true, SetStatus: "processing",
+		AllowedStatuses: []string{"rejected", "failed"}, RunLabels: &RunLabels{Running: "Regenerating", Done: "Regenerated", Failed: "Regeneration failed"}},
+		Options: []string{"rejected", "failed", "expired"}},
+	{Def: ActionDef{Name: "publish", Label: "Publish", Event: "item.publish_requested", SetStatus: "processing",
+		AllowedStatuses: []string{"approved"}, RunLabels: &RunLabels{Running: "Publishing", Done: "Published", Failed: "Publish failed"}},
+		Options: []string{"approved", "completed"}, Required: true, AutoRunnable: true},
+	{Def: ActionDef{Name: "retry", Label: "Retry", Event: "item.retry_requested", SetStatus: "processing",
+		AllowedStatuses: []string{"failed"}, RunLabels: &RunLabels{Running: "Retrying", Done: "Done", Failed: "Retry failed"}}},
+	{Def: ActionDef{Name: "archive", Label: "Archive", Event: "item.archived", SetStatus: "archived"}, Required: true},
+}
+
+// def returns a copy of the catalog's fixed definition with the default allowed statuses.
+func (c catalogAction) def() ActionDef {
+	d := c.Def
+	d.AllowedStatuses = slices.Clone(c.Def.AllowedStatuses)
+	if c.Def.RunLabels != nil {
+		l := *c.Def.RunLabels
+		d.RunLabels = &l
+	}
+	return d
+}
+
+// options are the statuses an action may be allowed from: its choices, its fixed list, or any status.
+func (c catalogAction) options() []string {
+	switch {
+	case c.Options != nil:
+		return c.Options
+	case len(c.Def.AllowedStatuses) > 0:
+		return c.Def.AllowedStatuses
+	default:
+		return Statuses
+	}
+}
+
+// DefaultActions are the whole catalog with default allowed statuses: what new collections get.
+func DefaultActions() []ActionDef {
+	out := []ActionDef{}
+	for _, c := range actionCatalog {
+		out = append(out, c.def())
+	}
+	return out
 }
 
 var Statuses = []string{"draft", "pending", "approved", "rejected", "expired", "processing", "completed", "failed", "archived"}
 
 func validStatus(s string) bool {
-	for _, v := range Statuses {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(Statuses, s)
 }
 
-// reservedEvents are emitted by staqly itself; integrations trust them (e.g.
-// "item.approved" means a reviewer approved), so custom actions may not emit
-// them. item.archived stays allowed: the default archive action uses it.
-// item.escalated and item.rule_applied came from escalation rules (removed);
-// they stay reserved so old events can't be imitated.
-var reservedEvents = map[string]bool{
-	"item.created": true, "item.updated": true, "item.deleted": true, "item.approved": true, "item.rejected": true,
-	"item.escalated": true, "item.expired": true, "item.status_changed": true, "item.rule_applied": true,
-	"item.completed": true, "item.failed": true, "item.purged": true, "item.tags_changed": true, "item.summarized": true, "item.unarchived": true,
-}
-
-var (
-	actionNameRe  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
-	actionEventRe = regexp.MustCompile(`^item\.[a-z0-9_.]{1,60}$`)
-)
-
-func validateActions(defs []ActionDef) ([]ActionDef, error) {
-	seen := map[string]bool{"approve": true, "reject": true}
-	out := []ActionDef{}
+// catalogActions builds a collection's actions from what a client sent or the database holds. Catalog
+// actions keep their enabled state and allowed statuses; every other field comes from the catalog, and
+// required actions (publish, archive) are always present. A list without any catalog action means the
+// defaults, so a collection never ends up without a flow. strict (client input) rejects unknown names and
+// statuses outside an action's options with 422; otherwise (stored legacy data) they are dropped.
+func catalogActions(defs []ActionDef, strict bool) ([]ActionDef, error) {
+	byName := map[string]ActionDef{}
 	for _, d := range defs {
-		d.Name = strings.TrimSpace(d.Name)
-		d.Builtin = false
-		if !actionNameRe.MatchString(d.Name) {
-			return nil, invalid("actions", "name must match ^[a-z][a-z0-9_]{0,39}$")
+		name := strings.TrimSpace(d.Name)
+		i := slices.IndexFunc(actionCatalog, func(c catalogAction) bool { return c.Def.Name == name })
+		if i < 0 {
+			if strict {
+				return nil, invalid("actions", "unknown action "+name+"; choose from regenerate, publish, retry, archive")
+			}
+
+			continue
 		}
-		if seen[d.Name] {
-			return nil, invalid("actions", "duplicate or reserved action name "+d.Name)
+		if _, dup := byName[name]; dup && strict {
+			return nil, invalid("actions", "duplicate action "+name)
 		}
-		seen[d.Name] = true
-		if d.Label = strings.TrimSpace(d.Label); d.Label == "" {
-			d.Label = strings.ToUpper(d.Name[:1]) + strings.ReplaceAll(d.Name[1:], "_", " ")
+		byName[name] = d
+	}
+	if len(byName) == 0 {
+		return DefaultActions(), nil
+	}
+	out := []ActionDef{}
+	for _, c := range actionCatalog {
+		in, ok := byName[c.Def.Name]
+		if !ok && !c.Required {
+			continue
 		}
-		if d.Event == "" {
-			d.Event = "item." + d.Name + "_requested"
-		}
-		if !actionEventRe.MatchString(d.Event) {
-			return nil, invalid("actions", "event must look like item.something")
-		}
-		if reservedEvents[d.Event] {
-			return nil, invalid("actions", "event "+d.Event+" is reserved for staqly; pick another name (e.g. item."+d.Name+"_requested)")
-		}
-		if d.SetStatus != "" && !validStatus(d.SetStatus) {
-			return nil, invalid("actions", "unknown set_status "+d.SetStatus)
-		}
-		// Review outcomes must go through approve/reject (items:review scope).
-		if d.SetStatus == "approved" || d.SetStatus == "rejected" {
-			return nil, invalid("actions", "custom actions cannot set approved/rejected; use the built-in approve/reject")
-		}
-		if d.RunLabels != nil {
-			l := RunLabels{strings.TrimSpace(d.RunLabels.Running), strings.TrimSpace(d.RunLabels.Done), strings.TrimSpace(d.RunLabels.Failed)}
-			for _, v := range []string{l.Running, l.Done, l.Failed} {
-				if utf8.RuneCountInString(v) > 40 {
-					return nil, invalid("actions", "run labels are at most 40 characters")
+		d := c.def()
+		picked := []string{}
+		for _, st := range in.AllowedStatuses {
+			if !slices.Contains(c.options(), st) {
+				if strict {
+					return nil, invalid("actions", c.Def.Name+" can run from "+strings.Join(c.options(), ", ")+", not "+st)
 				}
+
+				continue
 			}
-			d.RunLabels = &l
-			if d.SetStatus != "processing" || (l == RunLabels{}) {
-				d.RunLabels = nil // only an action that starts a run has run labels
-			}
+			picked = append(picked, st)
 		}
-		for _, st := range d.AllowedStatuses {
-			if !validStatus(st) {
-				return nil, invalid("actions", "unknown allowed status "+st)
-			}
+		// Only regenerate and publish keep a choice (in catalog order); the others stay fixed.
+		if c.Options != nil && len(picked) > 0 {
+			d.AllowedStatuses = slices.DeleteFunc(slices.Clone(c.Options), func(st string) bool { return !slices.Contains(picked, st) })
 		}
-		if d.SetStatus == "processing" {
-			// Runs start after a decision; older setups listing pending or draft simply lose them.
-			had := len(d.AllowedStatuses)
-			d.AllowedStatuses = slices.DeleteFunc(slices.Clone(d.AllowedStatuses), func(st string) bool { return st == "pending" || st == "draft" })
-			if had > 0 && len(d.AllowedStatuses) == 0 {
-				return nil, invalid("actions", d.Name+" starts a run, which happens after a decision: allow it from approved, rejected, failed...")
+		if c.AutoRunnable && in.AutoRun {
+			// Starting after an approval needs the action to be allowed from approved.
+			if d.allowedFrom("approved") {
+				d.AutoRun = true
+			} else if strict {
+				return nil, invalid("actions", c.Def.Name+" can start automatically after approval only when it may run from approved")
 			}
 		}
 		out = append(out, d)
 	}
-	if len(out) > 20 {
-		return nil, invalid("actions", "at most 20 actions")
-	}
+
 	return out, nil
 }
 
@@ -180,8 +203,9 @@ type Cover struct {
 }
 
 func toCollection(c db.Collection) Collection {
-	var actions []ActionDef
-	_ = json.Unmarshal([]byte(c.Actions), &actions)
+	var stored []ActionDef
+	_ = json.Unmarshal([]byte(c.Actions), &stored)
+	actions, _ := catalogActions(stored, false) // legacy custom actions and labels normalize on read
 	return Collection{
 		ID: c.ID, Name: c.Name, Description: c.Description, Icon: c.Icon, Color: c.Color,
 		DefaultView: c.DefaultView, Actions: actions, IsDefault: c.IsDefault == 1, Archived: c.ArchivedAt.Valid, ArchivedAt: ptr(c.ArchivedAt),
@@ -189,7 +213,7 @@ func toCollection(c db.Collection) Collection {
 	}
 }
 
-// AllActions returns built-ins followed by the collection's custom actions.
+// AllActions returns built-ins followed by the collection's catalog actions.
 func (c Collection) AllActions() []ActionDef {
 	return append(append([]ActionDef{}, builtinActions...), c.Actions...)
 }
@@ -235,7 +259,7 @@ func (s *Service) applyCollectionInput(c *db.Collection, in CollectionInput) err
 		}
 	}
 	if in.Actions != nil {
-		acts, err := validateActions(*in.Actions)
+		acts, err := catalogActions(*in.Actions, true)
 		if err != nil {
 			return err
 		}
@@ -261,7 +285,7 @@ func (s *Service) CreateCollection(ctx context.Context, p Principal, in Collecti
 	}
 	now := s.now()
 	c := db.Collection{ID: newID("col"), WorkspaceID: p.WorkspaceID, DefaultView: "table",
-		Actions: mustJSON(DefaultActions), CreatedAt: now, UpdatedAt: now}
+		Actions: mustJSON(DefaultActions()), CreatedAt: now, UpdatedAt: now}
 	if err := s.applyCollectionInput(&c, in); err != nil {
 		return Collection{}, err
 	}
@@ -283,7 +307,7 @@ func (s *Service) CreateCollection(ctx context.Context, p Principal, in Collecti
 // ensureDefaultCollection creates the workspace's Default collection unless it has one.
 func (s *Service) ensureDefaultCollection(ctx context.Context, q *db.Queries, workspaceID string) error {
 	return q.CreateDefaultCollection(ctx, db.CreateDefaultCollectionParams{ID: newID("col"), WorkspaceID: workspaceID,
-		Actions: mustJSON(DefaultActions), Now: s.now()})
+		Actions: mustJSON(DefaultActions()), Now: s.now()})
 }
 
 // EnsureDefaultCollections gives every workspace without one its Default

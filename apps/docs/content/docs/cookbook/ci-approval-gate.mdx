@@ -144,7 +144,7 @@ fi
 | `1` | API or network error |
 | `2` | rejected |
 | `3` | still pending after `--timeout`, or the item **expired** (`--expires-in`) |
-| `4` | left `pending` with another status (e.g. a custom action, archived) |
+| `4` | left `pending` with another status (e.g. publishing, archived) |
 
 To handle each outcome yourself, capture the code instead of letting the step fail. GitHub
 Actions runs `bash -e`, which would stop at the first non-zero exit:

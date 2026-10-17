@@ -143,15 +143,36 @@ CASES = [
     ),
     Case(
         "collections.create",
-        lambda c: c.collections.create("A", color="#fff", actions=[{"name": "publish", "label": "Publish"}]),
+        lambda c: c.collections.create("A", color="#fff", actions=[{"name": "publish", "auto_run": True}]),
         "POST",
         "/v1/collections",
         COL,
         201,
-        body={"name": "A", "color": "#fff", "actions": [{"name": "publish", "label": "Publish"}]},
+        body={"name": "A", "color": "#fff", "actions": [{"name": "publish", "auto_run": True}]},
     ),
     Case(
-        "collections.create with ActionDef",
+        "collections.create with ActionFlow",
+        lambda c: c.collections.create(
+            "A",
+            actions=[
+                models.ActionFlow(name="regenerate", allowed_statuses=["rejected"]),
+                models.ActionFlow(name="publish", auto_run=True),
+            ],
+        ),
+        "POST",
+        "/v1/collections",
+        COL,
+        201,
+        body={
+            "name": "A",
+            "actions": [
+                {"name": "regenerate", "allowed_statuses": ["rejected"]},
+                {"name": "publish", "auto_run": True},
+            ],
+        },
+    ),
+    Case(
+        "collections.create with ActionDef (round trip of a GET)",
         lambda c: c.collections.create(
             "A", actions=[models.ActionDef(name="publish", label="Publish", set_status="processing")]
         ),
@@ -170,6 +191,7 @@ CASES = [
                     "set_status": "processing",
                     "allowed_statuses": [],
                     "builtin": False,
+                    "auto_run": False,
                 }
             ],
         },

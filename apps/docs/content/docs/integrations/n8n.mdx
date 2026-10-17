@@ -10,7 +10,7 @@ workflow continues. n8n talks to staqly in two directions:
 - **n8n → staqly**: HTTP Request nodes call the REST API to create items. No credentials in
   local mode; in cloud mode add a *Header Auth* credential (`Authorization: Bearer {API_KEY}`).
 - **staqly → n8n**: a staqly [webhook](/automation/webhooks) posts review events (approved,
-  rejected, custom actions) to an n8n *Webhook* trigger, signed with HMAC.
+  rejected, actions such as Publish) to an n8n *Webhook* trigger, signed with HMAC.
 
 The quickest way to see it working is the demo workflow below.
 
@@ -51,7 +51,7 @@ multipart with a `file` (binary) part and an `item` part holding the JSON fields
 ### React to decisions
 
 Create a staqly webhook that points at an n8n *Webhook* trigger, subscribed to
-`item.approved`, `item.rejected` and `item.*_requested` (custom actions), optionally filtered
+`item.approved`, `item.rejected` and `item.*_requested` (Regenerate, Publish, Retry), optionally filtered
 by collection. Verify the [signature](/automation/webhooks#verifying-signatures) in a Code
 node.
 
@@ -132,5 +132,5 @@ A keyless request that fails the local checks gets `403 not_local`: check the `H
 <Cards>
   <Card title="Instagram Avatar cookbook" href="/cookbook/instagram-avatar">The demo workflow, step by step.</Card>
   <Card title="Webhooks" href="/automation/webhooks">Payloads, signatures, retries and the network policy.</Card>
-  <Card title="Custom actions" href="/automation/custom-actions">Add buttons like regenerate or publish that trigger n8n.</Card>
+  <Card title="Actions" href="/automation/custom-actions">Buttons like regenerate or publish that trigger n8n.</Card>
 </Cards>

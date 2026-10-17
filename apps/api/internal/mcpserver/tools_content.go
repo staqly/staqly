@@ -24,7 +24,7 @@ const (
 )
 
 func (t *tools) addContentTools(s *mcp.Server) {
-	add(s, t, &mcp.Tool{Name: "update_collection", Description: "Update a collection: name, description, icon, color, default view, actions, or archive/unarchive it (archiving an archived collection, or unarchiving an active one, is a conflict). Requires collections:write.",
+	add(s, t, &mcp.Tool{Name: "update_collection", Description: "Update a collection: name, description, icon, color, default view, its action flow (which catalog actions are enabled and from which statuses they run), or archive/unarchive it (archiving an archived collection, or unarchiving an active one, is a conflict). Requires collections:write.",
 		Annotations: wr()}, t.updateCollection)
 	add(s, t, &mcp.Tool{Name: "delete_collection", Description: "Permanently delete a collection and all its items. confirm must equal the collection name. Requires collections:write.",
 		Annotations: destructive()}, t.deleteCollection)
@@ -33,7 +33,7 @@ func (t *tools) addContentTools(s *mcp.Server) {
 		Annotations: destructive()}, t.deleteItem)
 	add(s, t, &mcp.Tool{Name: "purge_item", Description: "Erase an item together with its versions, events, pending webhook deliveries and unshared media (e.g. to remove personal data). Requires admin.",
 		Annotations: destructive()}, t.purgeItem)
-	add(s, t, &mcp.Tool{Name: "execute_bulk_action", Description: "Run one action (approve, reject or a custom action such as publish) on up to 100 items; returns a result per item. approve/reject need items:review, custom actions actions:execute.",
+	add(s, t, &mcp.Tool{Name: "execute_bulk_action", Description: "Run one action (approve, reject or a collection action: regenerate, publish, retry, archive) on up to 100 items; returns a result per item. approve/reject need items:review, collection actions actions:execute.",
 		Annotations: wr()}, t.bulkAction)
 	add(s, t, &mcp.Tool{Name: "get_item_versions", Description: "List the prior versions (snapshots) of an item, newest first.", Annotations: ro()}, t.itemVersions)
 
@@ -53,14 +53,21 @@ func (t *tools) addContentTools(s *mcp.Server) {
 // ---- collections ----
 
 type updateCollectionIn struct {
-	Collection  string           `json:"collection" jsonschema:"collection ID (col_...) or exact name"`
-	Name        *string          `json:"name,omitempty" jsonschema:"new name"`
-	Description *string          `json:"description,omitempty" jsonschema:"new description"`
-	Icon        *string          `json:"icon,omitempty" jsonschema:"icon name shown in the sidebar"`
-	Color       *string          `json:"color,omitempty" jsonschema:"accent color, e.g. #7c3aed"`
-	DefaultView *string          `json:"default_view,omitempty" jsonschema:"gallery, table or list"`
-	Actions     *[]app.ActionDef `json:"actions,omitempty" jsonschema:"replaces the custom actions (name, label, event, requires_feedback, set_status, allowed_statuses)"`
-	Archived    *bool            `json:"archived,omitempty" jsonschema:"true archives, false unarchives"`
+	Collection  string          `json:"collection" jsonschema:"collection ID (col_...) or exact name"`
+	Name        *string         `json:"name,omitempty" jsonschema:"new name"`
+	Description *string         `json:"description,omitempty" jsonschema:"new description"`
+	Icon        *string         `json:"icon,omitempty" jsonschema:"icon name shown in the sidebar"`
+	Color       *string         `json:"color,omitempty" jsonschema:"accent color, e.g. #7c3aed"`
+	DefaultView *string         `json:"default_view,omitempty" jsonschema:"gallery, table or list"`
+	Actions     *[]actionFlowIn `json:"actions,omitempty" jsonschema:"the collection's flow: which catalog actions are enabled (regenerate, publish, retry, archive; publish and archive are always on) and, for regenerate and publish, the statuses each may run from. Replaces the whole list; an empty list means the defaults"`
+	Archived    *bool           `json:"archived,omitempty" jsonschema:"true archives, false unarchives"`
+}
+
+// actionFlowIn enables one catalog action; label, event, set_status and run labels are fixed.
+type actionFlowIn struct {
+	Name            string   `json:"name" jsonschema:"regenerate, publish, retry or archive"`
+	AllowedStatuses []string `json:"allowed_statuses,omitempty" jsonschema:"statuses the action may run from: regenerate rejected, failed, expired (default rejected, failed); publish approved, completed (default approved); retry runs from failed and archive from any status. Omit for the default"`
+	AutoRun         bool     `json:"auto_run,omitempty" jsonschema:"publish only: start publishing as soon as an item is approved (publish must be allowed from approved)"`
 }
 
 func (t *tools) updateCollection(ctx context.Context, _ *mcp.CallToolRequest, in updateCollectionIn) (*mcp.CallToolResult, any, error) {
@@ -68,8 +75,16 @@ func (t *tools) updateCollection(ctx context.Context, _ *mcp.CallToolRequest, in
 	if err != nil {
 		return nil, nil, err
 	}
+	var actions *[]app.ActionDef
+	if in.Actions != nil {
+		defs := []app.ActionDef{}
+		for _, a := range *in.Actions {
+			defs = append(defs, app.ActionDef{Name: a.Name, AllowedStatuses: a.AllowedStatuses, AutoRun: a.AutoRun})
+		}
+		actions = &defs
+	}
 	return nil0(t.svc.UpdateCollection(ctx, t.principal(ctx), id, app.CollectionInput{Name: in.Name, Description: in.Description,
-		Icon: in.Icon, Color: in.Color, DefaultView: in.DefaultView, Actions: in.Actions, Archived: in.Archived}))
+		Icon: in.Icon, Color: in.Color, DefaultView: in.DefaultView, Actions: actions, Archived: in.Archived}))
 }
 
 type deleteCollectionIn struct {
@@ -105,8 +120,8 @@ func (t *tools) purgeItem(ctx context.Context, _ *mcp.CallToolRequest, in itemRe
 
 type bulkIn struct {
 	ItemIDs  []string       `json:"item_ids" jsonschema:"1 to 100 item IDs (itm_...)"`
-	Action   string         `json:"action" jsonschema:"approve, reject or a custom action name such as publish"`
-	Feedback string         `json:"feedback,omitempty" jsonschema:"note stored with each decision; required by reject and some custom actions"`
+	Action   string         `json:"action" jsonschema:"approve, reject, regenerate, publish, retry or archive"`
+	Feedback string         `json:"feedback,omitempty" jsonschema:"note stored with each decision; required by reject and regenerate"`
 	Payload  map[string]any `json:"payload,omitempty" jsonschema:"extra JSON passed to webhook receivers"`
 }
 

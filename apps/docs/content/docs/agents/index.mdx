@@ -54,6 +54,6 @@ the JSON-RPC stream.
 
 In local mode, every agent on your computer has full access. In **cloud mode**, MCP requires
 an API key and enforces its scopes: a read-only key cannot write, `approve_item` /
-`reject_item` need `items:review`, custom actions need `actions:execute`. `/mcp` accepts only
+`reject_item` need `items:review`, the other actions need `actions:execute`. `/mcp` accepts only
 bearer keys, never browser cookies. See [MCP tools](/mcp/tools) for the scope of every tool
 and [Authentication & scopes](/api/authentication) for creating keys.

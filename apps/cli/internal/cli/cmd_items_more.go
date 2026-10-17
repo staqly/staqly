@@ -120,7 +120,7 @@ scope. Without --yes you type the item ID to confirm.`
 const bulkChunk = 100
 
 func itemsBulkCommand() *Command {
-	cmd := leaf("bulk", "<action> [<id>...]", "Run approve, reject or a custom action on many items at once", 1, -1, func(fs *flag.FlagSet) runFunc {
+	cmd := leaf("bulk", "<action> [<id>...]", "Run approve, reject or a collection action on many items at once", 1, -1, func(fs *flag.FlagSet) runFunc {
 		var feedback string
 		fs.StringVar(&feedback, "feedback", "", "feedback for the agent (applies to every item)")
 		fs.StringVar(&feedback, "m", "", "shorthand for --feedback")
@@ -223,8 +223,8 @@ func itemsBulkCommand() *Command {
 	}, "staqly items bulk approve itm_oalirbz67y4m4cqxq5dw itm_q2w8n5k7r3t9y4u6i1o0",
 		"staqly items bulk reject itm_oalirbz67y4m4cqxq5dw -m \"off brand\"",
 		"staqly items list --status pending --q \"typo fix\" --all --json | jq -r '.data[].id' | staqly items bulk approve --stdin")
-	cmd.Long = `Run one action (approve, reject or a custom collection action such as
-regenerate) on many items with POST /v1/items/bulk-actions, 100 IDs per
+	cmd.Long = `Run one action (approve, reject or a collection action: regenerate,
+publish, retry, archive) on many items with POST /v1/items/bulk-actions, 100 IDs per
 request. Each item succeeds or fails on its own; the command exits 1 when any
 item failed. With --json it prints {"data":[{"id","ok","item"|"error"}]}.`
 	return cmd

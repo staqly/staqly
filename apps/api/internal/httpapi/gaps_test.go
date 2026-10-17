@@ -61,12 +61,8 @@ func TestMCPDecisionExpectedVersion(t *testing.T) {
 
 func TestWebhookEventPatternsValidated(t *testing.T) {
 	e := newEnv(t)
-	c := e.collection("Ships")
-	e.do(nil, "PATCH", "/v1/collections/"+c.ID, e.key, map[string]any{"actions": []map[string]any{
-		{"name": "ship", "event": "item.shipped"}}}, 200, nil)
-
 	for _, ok := range [][]string{{"*"}, {"item.*"}, {"item.*_requested"}, {"item.approved", "item.rejected"},
-		{"item.publish_requested"}, {"item.shipped"}, {"watcher.*", "workspace.plan_changed"}, {"webhook.test"}} {
+		{"item.publish_requested", "item.regenerate_requested", "item.retry_requested", "item.archived"}, {"watcher.*", "workspace.plan_changed"}, {"webhook.test"}} {
 		e.do(nil, "POST", "/v1/webhooks", e.key, map[string]any{"url": "https://example.com/h", "events": ok}, 201, nil)
 	}
 	tooMany := make([]string, 51)
@@ -74,7 +70,7 @@ func TestWebhookEventPatternsValidated(t *testing.T) {
 		tooMany[i] = "item.*"
 	}
 	for _, bad := range [][]string{{"item.aproved"}, {"items.*"}, {"*.created"}, {"item."}, {"approved"}, {"item.[x"},
-		{"item.shipped_now"}, {"item.approved", "nope"}, {}, tooMany} {
+		{"item.shipped"}, {"item.upscale_requested"}, {"item.approved", "nope"}, {}, tooMany} {
 		e.do(nil, "POST", "/v1/webhooks", e.key, map[string]any{"url": "https://example.com/h", "events": bad}, 422, nil)
 	}
 

@@ -39,8 +39,8 @@ request (see [notifications.md](notifications.md)).
 
 **`422 unknown event pattern ...` on a webhook or notification channel.**
 `events` takes 1-50 patterns: `*`, a glob inside a known family such as
-`item.*`, a known event type or a custom action's event. Fix the typo (e.g.
-`item.aproved`).
+`item.*`, or a known event type. Fix the typo (e.g. `item.aproved`); custom
+events such as `item.shipped` no longer exist (actions come from a fixed catalog).
 
 **`422 ... items need media` when creating an image or video item.** Upload a
 file (`media_id`) or pass a `url`; an update may not clear both.

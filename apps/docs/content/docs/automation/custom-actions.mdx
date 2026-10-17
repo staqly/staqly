@@ -1,43 +1,55 @@
 ---
-title: Custom actions
-description: Add buttons such as Regenerate, Publish or Translate to a collection, so reviewers can trigger your automations from an item.
+title: Actions
+description: Choose which actions a collection offers (Regenerate, Publish, Retry, Archive) and from which statuses, so reviewers can trigger your automations from an item.
 ---
 
 Approve and reject are not always enough. Sometimes a reviewer wants to say "try again,
-but make her smile" or "this is good, publish it now". **Custom actions** are extra buttons
-you add to a collection for exactly that. You configure them without code. When someone
-runs one, staqly records an event and sends it to your [webhooks](/automation/webhooks), and
-your automation (n8n, a script, an agent) does the actual work.
+but make her smile" or "this is good, publish it now". **Actions** are the buttons for exactly
+that. They come from a fixed catalog; each collection only chooses its **flow**: which actions
+are enabled and from which statuses some of them may run. When someone runs an action, staqly
+records an event and sends it to your [webhooks](/automation/webhooks), and your automation
+(n8n, a script, an agent) does the actual work.
 
 For example, n8n receives `item.regenerate_requested` and generates a new image using the
 reviewer's feedback.
 
+## The catalog
+
+| `name` | Event | Allowed from | Status set | Run labels | Feedback | Can be turned off |
+|---|---|---|---|---|---|---|
+| `regenerate` | `item.regenerate_requested` | choice of rejected, failed, expired (default: rejected, failed) | processing | Regenerating / Regenerated / Regeneration failed | required | yes |
+| `publish` | `item.publish_requested` | choice of approved, completed (default: approved) | processing | Publishing / Published / Publish failed | optional | no |
+| `retry` | `item.retry_requested` | failed (fixed) | processing | Retrying / Done / Retry failed | optional | yes |
+| `archive` | `item.archived` | any status (fixed) | archived | none | optional | no |
+
+`approve` and `reject` stay built in: they run from `pending` and need the `items:review`
+scope. The catalog actions need `actions:execute`. Label, event, status, feedback and run labels
+are fixed; you can't add your own actions or events.
+
+Every collection keeps at least the flow *approve, publish, done or failed*, plus archive:
+publish and archive are always on. New collections get all four actions with their defaults.
+
 ## What happens when an action runs
 
-1. staqly checks that the item's current status is allowed for this action.
-2. It optionally moves the item to a new status (for example `processing`).
+1. staqly checks that the item's current status is allowed for this action. Nothing runs
+   while an item is `processing`, and actions that start a run (regenerate, publish, retry)
+   never run from `pending` or `draft`: approve or reject first.
+2. It moves the item to the action's status: `processing` (a run with the labels above, for
+   example *Publishing*) or `archived`.
 3. It stores the feedback (if any) on the item.
-4. It records an event and notifies matching [webhooks](/automation/webhooks).
+4. It records the event and notifies matching [webhooks](/automation/webhooks).
 
-## Adding an action to a collection
+Your automation then [reports the result](/concepts#status-lifecycle) (`POST /v1/items/{id}/result`), which ends the run as done or failed.
 
-Every new collection already has four [default actions](#default-actions). This example adds
-a *Translate to German* button next to them.
+## Setting up a collection's flow
 
-<Steps>
-<Step>
-
-### Define the action
-
-<Tabs items={["Dashboard", "curl"]}>
+<Tabs items={["Dashboard", "curl", "MCP"]}>
 <Tab value="Dashboard">
 
-Open the collection, click **Settings** and go to **Actions**. Click **Add action** and
-fill in the name (required, marked with `*`; `translate`), label, event
-(`item.translate_requested`), the status to set (if any), the statuses it is *allowed from*
-(`approved`; empty means any status) and whether it needs feedback. Each action's row
-summarizes it; if something is wrong, the row shows one validation message in red and
-**Save actions** stays disabled until you fix it. **Reset** discards unsaved changes.
+Open the collection, click **Settings** and go to **Actions**. Each catalog action has a
+toggle (publish and archive are always on). For regenerate and publish, pick the statuses it is
+**Allowed from**; retry and archive are fixed. Publish also has **Start automatically after
+approval** (see [below](#start-publish-automatically-after-approval)). There is nothing to type.
 
 </Tab>
 <Tab value="curl">
@@ -46,74 +58,75 @@ summarizes it; if something is wrong, the row shows one validation message in re
 curl -s -X PATCH http://localhost:3333/v1/collections/$COLLECTION_ID \
   -H 'Content-Type: application/json' -d '{
   "actions": [
-    { "name": "regenerate", "label": "Regenerate", "requires_feedback": true, "set_status": "processing",
-      "allowed_statuses": ["rejected", "failed"] },
-    { "name": "publish", "label": "Publish", "set_status": "processing", "allowed_statuses": ["approved"] },
-    { "name": "retry", "label": "Retry", "set_status": "processing", "allowed_statuses": ["failed"] },
-    { "name": "archive", "label": "Archive", "event": "item.archived", "set_status": "archived" },
-    { "name": "translate", "label": "Translate to German", "event": "item.translate_requested",
-      "allowed_statuses": ["approved"] }
+    { "name": "regenerate", "allowed_statuses": ["rejected", "failed", "expired"] },
+    { "name": "publish", "allowed_statuses": ["approved"], "auto_run": true },
+    { "name": "archive" }
   ]
 }'
 ```
 
-`actions` replaces the whole list, so include the ones you want to keep.
+This enables regenerate (also from `expired`), publishes on approval and turns retry off.
+`actions` replaces the whole flow, so list every action you want enabled.
+
+</Tab>
+<Tab value="MCP">
+
+`update_collection` with `actions: [{name, allowed_statuses?, auto_run?}]`:
+
+> *"Turn off Retry in the Avatars collection and publish items automatically when they are approved."*
 
 </Tab>
 </Tabs>
 
-</Step>
-<Step>
+### The `actions` input
 
-### Subscribe a webhook to its event
+`POST /v1/collections`, `PATCH /v1/collections/{id}` and the MCP `update_collection` tool take
+`actions` as a list of `{name, allowed_statuses?, auto_run?}`:
 
-Point a [webhook](/automation/webhooks) at your automation and subscribe it to
-`item.translate_requested`, or to `item.*_requested` to receive every action that uses the
-default event name.
+- An unknown `name`, a duplicate, or an `allowed_statuses` value outside that action's
+  choices returns `422`. `auto_run` without publish being allowed from `approved` returns `422`.
+- Omitting `allowed_statuses` means the action's default.
+- A list without `publish` or `archive` gets them added back with their defaults. An empty list
+  means all four actions with their defaults.
+- Full action objects (as returned by `GET`) are accepted, so you can read a collection, change it
+  and send it back. `label`, `event`, `set_status`, `requires_feedback` and `run_labels` always come
+  from the catalog: different values are silently replaced, not rejected.
 
-</Step>
-<Step>
+Responses always list the full action objects (`name`, `label`, `event`, `requires_feedback`,
+`set_status`, `allowed_statuses`, `run_labels`, `auto_run`) in catalog order.
 
-### Run it
+## Start publish automatically after approval
 
-Approve an item, then click **Translate to German** in the Inbox or on the item page. Your
-webhook receives the event with the item, the reviewer's `feedback` and any `payload`.
+With `auto_run: true` on publish (**Start automatically after approval** in the dashboard), an
+approval starts the publish run right away, in the same transaction, however the item was
+approved: dashboard, API, MCP, a chat button, a decision link or a bulk approval.
 
-</Step>
-</Steps>
+- The item goes to `processing` with `run_action: "publish"`, so the approve response already
+  shows `processing`.
+- `item.publish_requested` is recorded right after `item.approved` and sent to webhooks as usual.
+  Its actor is the approver (the same actor as `item.approved`) and its data has `auto_run: true`.
+- The approval counts once against the monthly decisions limit; the run is not another decision.
 
-## Default actions
+`auto_run` needs publish to be allowed from `approved`.
 
-New collections get these four actions unless you pass your own:
+## Collections created before the catalog
 
-| `name` | Label | Allowed from | `set_status` | Event | Feedback |
-|---|---|---|---|---|---|
-| `regenerate` | Regenerate | rejected, failed | processing | `item.regenerate_requested` | required |
-| `publish` | Publish | approved | processing | `item.publish_requested` | optional |
-| `retry` | Retry | failed | processing | `item.retry_requested` | optional |
-| `archive` | Archive | any | archived | `item.archived` | optional |
+Collections that stored custom actions (their own names, labels or events) are normalized when
+read: catalog actions keep their enabled state and valid allowed statuses, their fixed fields come
+from the catalog, and custom actions are dropped. A stored list that is empty or has only custom
+actions reads as the four defaults.
 
-## Action definition
-
-| Field | Rules |
-|---|---|
-| `name` | `^[a-z][a-z0-9_]{0,39}$`, unique; `approve` and `reject` are reserved |
-| `label` | Button text; defaults to the name, capitalized, with `_` shown as spaces |
-| `event` | Must look like `item.something`; defaults to `item.<name>_requested`. Events staqly emits itself (`item.created`, `item.updated`, `item.deleted`, `item.approved`, `item.rejected`, `item.escalated`, `item.expired`, `item.status_changed`, `item.rule_applied`, `item.completed`, `item.failed`, `item.purged`, `item.tags_changed`, `item.summarized`, `item.unarchived`) are **reserved** (`422`), so receivers can trust them |
-| `requires_feedback` | Ask the reviewer for a note (e.g. "make her smile") |
-| `set_status` | Optional new status; **never** `approved` or `rejected` (those need the built-in actions and the `items:review` scope) |
-| `allowed_statuses` | Statuses the action can run from; empty = any |
-
-A collection can have up to 20 custom actions.
+Items whose run was started by a removed custom action keep their `run_action` value, read
+*Processing* / *Completed* / *Failed* and report a result as usual. Running a removed action
+name returns `404`.
 
 ## Running an action
 
 <Tabs items={["Dashboard", "REST", "CLI", "MCP", "TypeScript"]}>
 <Tab value="Dashboard">
 
-Custom actions appear next to *Approve* / *Reject* in the Inbox and on the item page,
-filtered to the ones allowed in the item's current status. Several selected items can be
-processed at once.
+Actions appear next to *Approve* / *Reject* in the Inbox and on the item page, filtered to the
+ones allowed in the item's current status. Several selected items can be processed at once.
 
 </Tab>
 <Tab value="REST">
@@ -138,9 +151,9 @@ staqly items action itm_oalirbz67y4m4cqxq5dw regenerate --feedback "Make her smi
 </Tab>
 <Tab value="MCP">
 
-`list_available_actions` then `execute_custom_action`:
+`list_available_actions` then `execute_custom_action` (the tool keeps its name and runs a catalog action):
 
-> *“Regenerate itm_oalirbz67y4m4cqxq5dw with feedback: make her smile.”*
+> *"Regenerate itm_oalirbz67y4m4cqxq5dw with feedback: make her smile."*
 
 </Tab>
 <Tab value="TypeScript">
@@ -154,14 +167,25 @@ await staqly.items.bulkAction(['itm_1', 'itm_2'], 'publish')
 </Tab>
 </Tabs>
 
+## Events
+
+| Action | Event | Data |
+|---|---|---|
+| `regenerate` | `item.regenerate_requested` | `action`, `feedback`, `payload` |
+| `publish` | `item.publish_requested` | `action`, `feedback`, `payload`; `auto_run: true` when started by an approval |
+| `retry` | `item.retry_requested` | `action`, `feedback`, `payload` |
+| `archive` | `item.archived` | `action`, `feedback`, `payload` |
+
+Subscribe a webhook to these types, or to `item.*_requested` for the three run requests. See
+[Event types](/api/events).
+
 ## Permissions and errors
 
-- Running a custom action needs the **`actions:execute`** scope. Sending `edits` with it (to
+- Running an action needs the **`actions:execute`** scope. Sending `edits` with it (to
   change the item while running the action) also needs **`items:write`**.
 - An action that isn't allowed in the item's current status returns `409`.
 - A missing required feedback returns `422`.
-- An action stored before reserved events were enforced that uses one of them refuses to run
-  (`409`) until you change its `event`.
+- An action the collection hasn't enabled (or a removed custom action) returns `404`.
 
 ## Next steps
 

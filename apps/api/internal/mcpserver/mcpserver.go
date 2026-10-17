@@ -200,9 +200,9 @@ func newServer(t *tools, version string) *mcp.Server {
 	f := false
 
 	add(s, t, &mcp.Tool{Name: "list_collections", Description: "List collections with item counts per status.", Annotations: ro()}, t.listCollections)
-	add(s, t, &mcp.Tool{Name: "create_collection", Description: "Create a collection (e.g. \"Instagram Avatar\"). New collections get default actions: regenerate, publish, retry, archive.",
+	add(s, t, &mcp.Tool{Name: "create_collection", Description: "Create a collection (e.g. \"Instagram Avatar\"). New collections get every catalog action: regenerate, publish, retry, archive (publish and archive are always on; update_collection changes the flow).",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &f}}, t.createCollection)
-	add(s, t, &mcp.Tool{Name: "get_collection", Description: "Get a collection by ID or name, including its configured actions.", Annotations: ro()}, t.getCollection)
+	add(s, t, &mcp.Tool{Name: "get_collection", Description: "Get a collection by ID or name, including its enabled actions and the statuses they run from.", Annotations: ro()}, t.getCollection)
 	add(s, t, &mcp.Tool{Name: "list_items", Description: "List items, optionally filtered by collection, status and type. Newest first.", Annotations: ro()}, t.listItems)
 	add(s, t, &mcp.Tool{Name: "get_item", Description: "Get one item with content, metadata, media and status.", Annotations: ro()}, t.getItem)
 	add(s, t, &mcp.Tool{Name: "create_item", Description: "Add an item to a collection. For images/videos pass media_base64 (+ media_filename) or an external url. Items default to status \"pending\" so they show up for review.",
@@ -216,7 +216,7 @@ func newServer(t *tools, version string) *mcp.Server {
 	add(s, t, &mcp.Tool{Name: "reject_item", Description: "Reject a pending item with feedback explaining why. Requires the items:review scope.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &f}}, t.reject)
 	add(s, t, &mcp.Tool{Name: "list_available_actions", Description: "List actions the caller can run on an item in its current status.", Annotations: ro()}, t.availableActions)
-	add(s, t, &mcp.Tool{Name: "execute_custom_action", Description: "Run a collection action such as regenerate or publish. This records an event and notifies webhooks; external automations do the actual work.",
+	add(s, t, &mcp.Tool{Name: "execute_custom_action", Description: "Run a collection action: regenerate, publish, retry or archive (the ones the collection enables; see list_available_actions). This records an event and notifies webhooks; external automations do the actual work.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &f}}, t.executeAction)
 	add(s, t, &mcp.Tool{Name: "get_item_history", Description: "Get the event history (decisions, edits, actions) and prior versions of an item.", Annotations: ro()}, t.history)
 	add(s, t, &mcp.Tool{Name: "await_decision", Description: "Wait until a human approves or rejects an item (or it expires), up to timeout_seconds (default 45, max 300; keep it under your client's tool timeout). Returns decided=false on timeout — call again to keep waiting. Use after create_item to gate an action on human approval.",

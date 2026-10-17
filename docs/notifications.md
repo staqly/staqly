@@ -39,8 +39,9 @@ curl -X POST $API/v1/notification-channels -H "Authorization: Bearer $KEY" \
   You can also add others,
   for example `item.approved`, `item.rejected`, `watcher.degraded` or
   `item.*`. A channel takes 1-50 patterns, each `*`, a glob inside a known
-  family (`item.*`, `item.*_requested`), a known event type or a custom
-  action's event; anything else (e.g. the typo `item.aproved`) is **422**.
+  family (`item.*`, `item.*_requested`), or a known event type
+  (catalog action events included); anything else (e.g. the typo
+  `item.aproved` or a custom event such as `item.shipped`) is **422**.
 * **collection_ids.** Limits the channel to these collections. Leave it empty
   for all collections.
 * **digest_window_seconds.** Collects everything that arrives within the

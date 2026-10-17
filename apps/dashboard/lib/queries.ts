@@ -358,7 +358,7 @@ const BUILTIN_ACTIONS: ActionDef[] = [
 ]
 
 /**
- * What GET /v1/items/{id}/actions returns for a dashboard user: built-ins, then the collection's custom
+ * What GET /v1/items/{id}/actions returns for a dashboard user: built-ins, then the collection's catalog
  * actions, filtered by the item's status. Sessions and local mode hold every scope, so no scope filter.
  */
 export function actionsFor(collection: Pick<Collection, 'actions'>, status: Item['status']): ActionDef[] {

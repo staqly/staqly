@@ -98,18 +98,17 @@ a snapshot: `data.item` (the item after the change; before the deletion for `ite
 | `item.completed` | Outcome reported with `/result` (or `report_result`) | `result`, `error` |
 | `item.failed` | Failure reported with `/result`, or the item stayed in `processing` longer than the workspace's processing timeout (default 1 hour, up to 24 hours). A person who marks a processing item **Failed** or **Canceled** in the dashboard reports it the same way, with `error` `Marked as failed in the dashboard` or `Canceled in the dashboard` | `result`, `error`; `timeout: true` after a processing timeout |
 | `item.regenerate_requested` | *Regenerate* action ran | `action`, `feedback`, `payload` |
-| `item.publish_requested` | *Publish* action ran | `action`, `feedback`, `payload` |
+| `item.publish_requested` | *Publish* action ran, or an approval started it ([`auto_run`](/automation/custom-actions#start-publish-automatically-after-approval); recorded right after `item.approved`, same actor) | `action`, `feedback`, `payload`; `auto_run: true` when started by an approval |
 | `item.retry_requested` | *Retry* action ran | `action`, `feedback`, `payload` |
 | `item.archived` | *Archive* action ran | `action` |
-| `item.<name>_requested` | Any other custom action (or the event name you configured) | `action`, `feedback`, `payload` |
 | `item.deleted` | An item was deleted (its history is kept) | — |
 | `item.purged` | An item and its history were [purged](/self-hosting/data-export#purge-an-item) | IDs and counts only |
 
 Every status-changing item event also includes `previous_status`.
 
-The item events staqly emits itself are **reserved**: a [custom action](/automation/custom-actions)
-can't use them as its `event`, so a webhook receiver can trust that `item.approved` really is
-an approval.
+[Actions](/automation/custom-actions) come from a fixed catalog, so these are the only action
+events: there are no custom event names, and a webhook receiver can trust that `item.approved`
+really is an approval.
 
 ## Other events
 
@@ -164,8 +163,8 @@ Webhooks match `events` patterns against the type: exact names, `"*"`, or globs 
 [Webhooks](/automation/webhooks).
 
 Patterns are checked when you save a webhook or notification channel (1 to 50 of them): an
-exact name must be one of the types on this page, `item.<name>_requested` or an event configured
-on one of your collections' actions, and a glob must stay inside a known family (`item.`,
+exact name must be one of the types on this page (custom events such as `item.shipped` are
+rejected), and a glob must stay inside a known family (`item.`,
 `collection.`, `webhook.`...). A typo such as `item.aproved` or `items.*` is rejected with `422`
 instead of silently never matching.
 

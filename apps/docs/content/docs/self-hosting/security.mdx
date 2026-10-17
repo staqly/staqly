@@ -111,8 +111,9 @@ Status changes `items:write` may make on its own:
 | any | `archived` |
 
 `approved` and `rejected` can never be set with a status change — only by the approve /
-reject actions. Custom actions can't set them either, can't emit events staqly emits itself
-(such as `item.approved` or `item.created`), and edits made while running one need `items:write`.
+reject actions. Collection actions come from a fixed catalog that never sets them or emits their events, and
+edits made while running one need `items:write`. Publish's `auto_run` starts only after a real
+approval, with the approver as its actor.
 
 Decision links and chat buttons are **bound to the item version** the message showed. If the
 agent changed the item since, nothing is decided and the reviewer gets `409 item_changed`

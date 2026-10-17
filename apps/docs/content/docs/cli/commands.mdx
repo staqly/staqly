@@ -176,7 +176,7 @@ staqly items purge itm_1 [--yes]          # item, its events and unused media (a
 ### Acting on items
 
 - `approve` and `reject` take one or more IDs. `--feedback` (or `-m`) tells the agent what to fix.
-- `action` runs a [custom action](/automation/custom-actions) such as `regenerate`.
+- `action` runs a [collection action](/automation/custom-actions) such as `regenerate`.
 - `update` cannot set `approved` or `rejected`; use `approve` / `reject`.
 - `--expected-version N` fails with `409` unless the item is still at that version.
 - `result` reports what happened after you acted on an approved item (stored in

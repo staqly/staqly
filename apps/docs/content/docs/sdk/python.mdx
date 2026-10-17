@@ -120,7 +120,7 @@ staqly.items.upload("Instagram", "avatar.png", title="New avatar")
 # decisions (need the items:review scope)
 staqly.items.approve(item.id, feedback="Ship it", edits={"title": "Better title"})
 staqly.items.reject(item.id, feedback="Too dark, brighten it")
-staqly.items.action(item.id, "publish", payload={"channel": "ig"})  # custom action
+staqly.items.action(item.id, "publish", payload={"channel": "ig"})  # collection action
 
 # after acting on an approved item, record the outcome
 staqly.items.report_result(item.id, status="completed", result={"post_url": "https://instagram.com/p/C9xYz"})
@@ -391,7 +391,7 @@ from staqly.models import ActionDef
 staqly.collections.update(
     "col_oalirbz67y4m4cqxq5dw",
     color="#e1306c",
-    actions=[ActionDef(name="publish", label="Publish", set_status="processing", allowed_statuses=["approved"])],
+    actions=[ActionDef(name="publish", allowed_statuses=["approved"], auto_run=True), ActionDef(name="archive")],
 )
 page = staqly.collections.list_items("col_oalirbz67y4m4cqxq5dw", status="pending", limit=50)
 staqly.collections.archive("col_oalirbz67y4m4cqxq5dw")

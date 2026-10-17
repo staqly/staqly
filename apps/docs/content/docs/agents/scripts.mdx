@@ -19,7 +19,7 @@ API=http://localhost:3333
 # pending images across all collections
 curl -s "$API/v1/items?status=pending&type=image"
 
-# approve (optionally editing first) / reject with feedback / run a custom action
+# approve (optionally editing first) / reject with feedback / run a collection action
 curl -s -X POST $API/v1/items/$ITEM/actions/approve    -H 'Content-Type: application/json' -d '{"edits":{"content":"Fixed caption"}}'
 curl -s -X POST $API/v1/items/$ITEM/actions/reject     -H 'Content-Type: application/json' -d '{"feedback":"Too dark"}'
 curl -s -X POST $API/v1/items/$ITEM/actions/regenerate -H 'Content-Type: application/json' -d '{"feedback":"Make her smile"}'

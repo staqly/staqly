@@ -130,7 +130,7 @@ is not local as remote, so LAN devices need such a session.
 
 ## Decisions and state changes
 
-`RunAction` (approve, reject, custom actions) and item updates go through one
+`RunAction` (approve, reject, catalog actions) and item updates go through one
 path: inside a `BEGIN IMMEDIATE` transaction it loads the item, checks scope,
 allowed statuses and feedback requirements, snapshots the old version, updates
 with `WHERE version = ?`, inserts the event, and inserts outbox rows for every
@@ -142,8 +142,14 @@ of an approved/rejected item is frozen (`metadata_patch` stays allowed) and
 only lifecycle transitions are permitted (draft↔pending, →archived,
 approved→processing|completed|failed, processing→completed|failed,
 failed→processing|pending, rejected/expired→pending); everything else needs
-`items:review`. Custom actions can't emit events staqly emits itself
-(`item.approved`, `item.created`, ...) and their `edits` need `items:write`.
+`items:review`. Collection actions come from a fixed catalog
+(`regenerate`, `publish`, `retry`, `archive` in `app/collections.go`); a
+collection stores only which are enabled, their `allowed_statuses` and
+publish's `auto_run`, and `catalogActions` normalizes stored legacy (custom)
+actions on read. Their `edits` need `items:write`. With `auto_run`, an
+approval starts the publish run in the same transaction (`autoPublish`:
+`item.publish_requested` right after `item.approved`, same actor,
+`auto_run: true`).
 Decisions from links and chat buttons pass the item version the message
 showed as `expected_version`, so a reviewer approves exactly what they saw.
 

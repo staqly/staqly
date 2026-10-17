@@ -7,7 +7,7 @@ agent list (`/v1/agents`) and a new summary (`POST /v1/items/{id}/summarize`). B
 services as REST. In **local mode** (default) no key is needed. In **cloud
 mode** ([cloud.md](cloud.md)) MCP requires an API key and enforces its scopes
 (a read-only key cannot write; `approve_item`/`reject_item` need
-`items:review`; custom actions need `actions:execute`). The recovery key is
+`items:review`; catalog actions need `actions:execute`). The recovery key is
 never accepted or exposed by MCP.
 
 | Tool | Scope (cloud mode) |

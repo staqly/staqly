@@ -40,7 +40,8 @@ import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Kbd } from '@/components/ui/kbd'
 import { Textarea } from '@/components/ui/textarea'
-import { api, ApiError, type ActionBody, type ActionDef, type Item, type ItemFields } from '@/lib/api'
+import { publishesOnApproval } from '@/lib/action-catalog'
+import { api, ApiError, type ActionBody, type ActionDef, type Collection, type Item, type ItemFields } from '@/lib/api'
 import { charCount } from '@/lib/chars'
 import { env } from '@/lib/env'
 import { focusFirstInvalid, useFormErrors } from '@/lib/form-errors'
@@ -216,7 +217,7 @@ const ICON_BY_NAME: Record<string, typeof Play> = {
 }
 const ICON_BY_STATUS: Record<string, typeof Play> = { archived: Archive, completed: CheckCheck, failed: XCircle }
 
-/** One icon per action: the built-in ones by name, custom ones by the status they set, else a play arrow. */
+/** One icon per action: the built-in and catalog ones by name or the status they set, else a play arrow. */
 export function ActionIcon({ action }: { action: ActionDef }) {
   const Icon = ICON_BY_NAME[action.name] ?? ICON_BY_STATUS[action.set_status ?? ''] ?? Play
 
@@ -244,8 +245,27 @@ type RunVars = { item: Item; action: string; body?: ActionBody; deferred?: boole
  */
 const pendingApprovals = new Map<string, () => Promise<Item>>()
 
+/** The item's collection from any cached collection list or single collection, without a request. */
+function cachedCollection(qc: ReturnType<typeof useQueryClient>, id: string): Collection | undefined {
+  const one = qc.getQueryData<Collection>(qk.collection(id))
+
+  if (one) {
+    return one
+  }
+
+  for (const [, list] of qc.getQueriesData<Collection[]>({ queryKey: qk.collectionsAll })) {
+    const found = list?.find((c) => c.id === id)
+
+    if (found) {
+      return found
+    }
+  }
+
+  return undefined
+}
+
 /**
- * Mutation that runs approve/reject/custom actions with consistent cache updates & errors. An approval is
+ * Mutation that runs approve/reject/collection actions with consistent cache updates & errors. An approval is
  * shown at once (onDone gets the item as approved) but sent after undoDelay, unless Undo in its toast is
  * clicked: then the item is put back and onUndo runs.
  */
@@ -332,12 +352,22 @@ export function useRunAction(opts?: {
 
         return send()
       })
-      const shown: Item = { ...v.item, status: 'approved', decision: 'approved', decided_at: new Date().toISOString() }
+      const approved: Item = {
+        ...v.item,
+        status: 'approved',
+        decision: 'approved',
+        decided_at: new Date().toISOString(),
+      }
+      // A collection that publishes on approval shows Publishing at once, as the API will return it.
+      const autoPublish = publishesOnApproval(cachedCollection(qc, v.item.collection_id))
+      const shown: Item = autoPublish
+        ? { ...approved, status: 'processing', run: 'processing', run_action: 'publish' }
+        : approved
 
       latest.current.onDone?.(shown, 'approve')
       syncItemInCache(qc, shown)
       toast.success(`${quoted(v.item.title)} was approved`, {
-        description: 'Your agent can go ahead.',
+        description: autoPublish ? 'Publishing starts now.' : 'Your agent can go ahead.',
         duration: Math.max(undoDelay.ms, 4000),
         action: undoDelay.ms
           ? {
