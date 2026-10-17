@@ -6,5 +6,5 @@ export const metadata: Metadata = { title: 'Agents' }
 
 // Agents moved into Integrations.
 export default function Page() {
-  return <IntegrationsRedirect tab="claude-code" />
+  return <IntegrationsRedirect view="connections" />
 }

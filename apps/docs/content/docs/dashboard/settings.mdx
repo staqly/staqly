@@ -88,21 +88,28 @@ See [Monitoring](/self-hosting/monitoring).
 
 ## Integrations
 
-**Integrations** in the sidebar is one page for connecting an agent:
+**Integrations** in the sidebar has two tabs: **Integrations** (how to connect an agent) and
+**Connections** (who is connected and what they did).
+
+On **Integrations**:
 
 - **Connection**: your instance's agent URL and a **Test connection** button (it checks
   `/health` and your session through the dashboard proxy and shows the version, workspace
   and who you are signed in as). A local install only ever points agents at this computer,
-  keyless (choose **Docker** or **staqly serve**); cloud mode points them at its own address
-  with an API key. A local install never uses cloud API keys.
+  keyless over HTTP (or **STDIO** inside the Docker container); cloud mode points them at its own
+  address with an API key. A local install never uses cloud API keys.
+- Tabs **Claude Code**, **Codex**, **OpenCode**, **n8n** and **REST & MCP**, each with a
+  copy-ready snippet using your instance's real URL (and, in cloud mode, the API key you
+  just created) and a **Full guide** link to these docs. `?tab=codex` opens a tab directly;
+  `?view=connections` opens Connections.
+
+On **Connections**:
+
 - **Agents** (MCP clients) and **API connections** (REST clients): everything that talked to this
   workspace (see [Agents](/dashboard/agents)).
 - **Recent activity**: the latest agent events (in cloud mode: events triggered with API
   keys). Select one to see only its events; **Show all** goes back.
   **View all** opens [Activity](/dashboard/activity).
-- Tabs **Claude Code**, **Codex**, **OpenCode**, **n8n** and **REST & MCP**, each with a
-  copy-ready snippet using your instance's real URL (and, in cloud mode, the API key you
-  just created) and a **Full guide** link to these docs. `?tab=codex` opens a tab directly.
 
 In cloud mode **API keys** sits right under it in the sidebar.
 

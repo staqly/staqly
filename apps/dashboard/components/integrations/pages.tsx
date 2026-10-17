@@ -176,8 +176,6 @@ function RecentActivity({ agent, onShowAll }: { agent: Agent | null; onShowAll: 
   )
 }
 
-/** How staqly runs locally: Docker (STDIO available through the API container) or the staqly binary. */
-type Runtime = 'docker' | 'binary'
 type Transport = 'http' | 'stdio'
 
 interface Conn {
@@ -353,12 +351,14 @@ export function IntegrationsPage() {
   const params = useSearchParams()
   const requested = params.get('tab')
   const tab = INTEGRATION_TABS.find((t) => t.id === requested)?.id ?? 'claude-code'
-  const [runtime, setRuntime] = useState<Runtime>('docker')
+  // Two views: how to connect (Integrations) and who is connected (Connections).
+  const view = params.get('view') === 'connections' ? 'connections' : 'setup'
   const [transport, setTransport] = useState<Transport>('http')
   const [agent, setAgent] = useState<Agent | null>(null)
   // Cloud mode: this instance, over HTTPS with a key. A local install connects only to itself, keyless.
   const cloud = !isLocal
-  const stdioAvailable = !cloud && runtime === 'docker' && MCP_CLIENTS.has(tab)
+  // STDIO runs mcp-stdio in the container, so Docker only; HTTP is the same however staqly is started.
+  const stdioAvailable = !cloud && MCP_CLIENTS.has(tab)
   const c: Conn = {
     auth: cloud,
     key,
@@ -374,87 +374,101 @@ export function IntegrationsPage() {
         icon={<Blocks className="size-4" />}
         description="Connect an agent, see which agents talk to this workspace and what they did. Step-by-step guides live at docs.staqly.ai."
       />
-      <div className="mt-6 grid grid-cols-1 gap-4">
-        <ConnectionBar />
+      <Tabs
+        value={view}
+        onValueChange={(v) => {
+          const sp = new URLSearchParams(params.toString())
 
-        <Tabs
-          value={tab}
-          onValueChange={(v) => router.replace(`${pathname}?tab=${v}`, { scroll: false })}
-          className="gap-0 rounded-xl border bg-card"
-        >
-          <div className="flex flex-wrap items-center gap-2 border-b p-3" data-testid="connection-options">
-            <TabsList
-              className="max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto pointer-coarse:group-data-horizontal/tabs:h-auto"
-              aria-label="Client"
-            >
-              {INTEGRATION_TABS.map((t) => (
-                <TabsTrigger key={t.id} value={t.id} className="pointer-coarse:min-h-10">
-                  {t.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              {!cloud && (
-                <Segmented
-                  label="How staqly is started"
-                  value={runtime}
-                  onChange={setRuntime}
-                  options={[
-                    { value: 'docker', label: 'Docker' },
-                    { value: 'binary', label: 'staqly serve' },
-                  ]}
-                />
-              )}
-              {stdioAvailable && (
-                <Segmented
-                  label="MCP transport"
-                  value={transport}
-                  onChange={setTransport}
-                  options={[
-                    { value: 'http', label: 'HTTP' },
-                    { value: 'stdio', label: 'STDIO' },
-                  ]}
-                />
-              )}
+          if (v === 'connections') {
+            sp.set('view', v)
+          } else {
+            sp.delete('view')
+          }
+
+          router.replace(sp.size ? `${pathname}?${sp}` : pathname, { scroll: false })
+        }}
+        className="mt-4 gap-0"
+      >
+        <TabsList variant="line" aria-label="Integrations view" className="border-b">
+          <TabsTrigger value="setup" className="flex-none">
+            Integrations
+          </TabsTrigger>
+          <TabsTrigger value="connections" className="flex-none" data-testid="connections-tab">
+            Connections
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="connections" className="mt-6 grid grid-cols-1 gap-4">
+          <ConnectedAgents selectedId={agent?.id ?? null} onSelect={setAgent} />
+          <RecentActivity agent={agent} onShowAll={() => setAgent(null)} />
+        </TabsContent>
+        <TabsContent value="setup" className="mt-6 grid grid-cols-1 gap-4">
+          <ConnectionBar />
+
+          <Tabs
+            value={tab}
+            onValueChange={(v) => router.replace(`${pathname}?tab=${v}`, { scroll: false })}
+            className="gap-0 rounded-xl border bg-card"
+          >
+            <div className="flex flex-wrap items-center gap-2 border-b p-3" data-testid="connection-options">
+              <TabsList
+                className="max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto pointer-coarse:group-data-horizontal/tabs:h-auto"
+                aria-label="Client"
+              >
+                {INTEGRATION_TABS.map((t) => (
+                  <TabsTrigger key={t.id} value={t.id} className="pointer-coarse:min-h-10">
+                    {t.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {stdioAvailable && (
+                  <Segmented
+                    label="MCP transport"
+                    value={transport}
+                    onChange={setTransport}
+                    options={[
+                      { value: 'http', label: 'HTTP' },
+                      { value: 'stdio', label: 'STDIO (Docker)' },
+                    ]}
+                  />
+                )}
+              </div>
             </div>
-          </div>
-          {INTEGRATION_TABS.map(({ id, docs }) => {
-            const Body = TAB_BODY[id]
+            {INTEGRATION_TABS.map(({ id, docs }) => {
+              const Body = TAB_BODY[id]
 
-            return (
-              <TabsContent key={id} value={id} className="grid grid-cols-1 gap-3 p-3">
-                <Body c={c} />
-                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
-                  <KeyHint cloud={cloud} />
-                  <div className="ml-auto flex gap-2">
-                    {id === 'api' && (
-                      <Button asChild variant="outline" size="sm">
-                        <a href="/api/openapi.yaml" target="_blank" rel="noopener noreferrer">
-                          <FileCode2 /> openapi.yaml
-                        </a>
-                      </Button>
-                    )}
-                    <GuideLink path={docs} />
+              return (
+                <TabsContent key={id} value={id} className="grid grid-cols-1 gap-3 p-3">
+                  <Body c={c} />
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
+                    <KeyHint cloud={cloud} />
+                    <div className="ml-auto flex gap-2">
+                      {id === 'api' && (
+                        <Button asChild variant="outline" size="sm">
+                          <a href="/api/openapi.yaml" target="_blank" rel="noopener noreferrer">
+                            <FileCode2 /> openapi.yaml
+                          </a>
+                        </Button>
+                      )}
+                      <GuideLink path={docs} />
+                    </div>
                   </div>
-                </div>
-              </TabsContent>
-            )
-          })}
-        </Tabs>
-
-        <ConnectedAgents selectedId={agent?.id ?? null} onSelect={setAgent} />
-        <RecentActivity agent={agent} onShowAll={() => setAgent(null)} />
-      </div>
+                </TabsContent>
+              )
+            })}
+          </Tabs>
+        </TabsContent>
+      </Tabs>
     </PageContainer>
   )
 }
 
-export function IntegrationsRedirect({ tab }: { tab: string }) {
+export function IntegrationsRedirect({ tab, view }: { tab?: string; view?: 'connections' }) {
   const router = useRouter()
 
   useEffect(() => {
-    router.replace(`/integrations?tab=${tab}`)
-  }, [router, tab])
+    router.replace(view ? `/integrations?view=${view}` : `/integrations?tab=${tab}`)
+  }, [router, tab, view])
 
   return null
 }

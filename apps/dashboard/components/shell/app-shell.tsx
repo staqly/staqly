@@ -98,6 +98,7 @@ export function useShell() {
 
 const INTEGRATION_LINKS = [
   { href: '/integrations', label: 'Integrations' },
+  { href: '/integrations?view=connections', label: 'Connections' },
   { href: '/integrations/api-keys', label: 'API keys', cloudOnly: true },
   { href: '/integrations?tab=claude-code', label: 'Claude Code' },
   { href: '/integrations?tab=codex', label: 'Codex' },

@@ -145,19 +145,26 @@ describe('local mode integrations', () => {
     await user.click(screen.getByRole('tab', { name: 'n8n' }))
     expect(nav.replace).toHaveBeenCalledWith('/integrations?tab=n8n', { scroll: false })
   })
-})
 
-describe('connection options (local install)', () => {
-  it('offers STDIO only for Docker, and never shows cloud addresses or keys on a local install', async () => {
+  it('keeps connected agents on their own Connections tab', async () => {
     const user = userEvent.setup()
 
     renderTab('claude-code', 'local')
-    await user.click(screen.getByRole('tab', { name: 'STDIO' }))
-    expect(screen.getByText('claude mcp add staqly -- docker exec -i staqly mcp-stdio')).toBeInTheDocument()
+    expect(screen.queryByTestId('agents')).not.toBeInTheDocument()
+    await user.click(screen.getByTestId('connections-tab'))
+    expect(nav.replace).toHaveBeenCalledWith('/integrations?tab=claude-code&view=connections', { scroll: false })
+  })
+})
 
-    await user.click(screen.getByRole('tab', { name: 'staqly serve' }))
-    expect(screen.queryByRole('tab', { name: 'STDIO' })).not.toBeInTheDocument()
+describe('connection options (local install)', () => {
+  it('offers STDIO for Docker next to HTTP, and never shows cloud addresses or keys on a local install', async () => {
+    const user = userEvent.setup()
+
+    renderTab('claude-code', 'local')
+    expect(screen.queryByRole('tab', { name: 'staqly serve' })).not.toBeInTheDocument()
     expect(screen.getByText('claude mcp add --transport http staqly http://localhost:3333/mcp')).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'STDIO (Docker)' }))
+    expect(screen.getByText('claude mcp add staqly -- docker exec -i staqly mcp-stdio')).toBeInTheDocument()
 
     // A local install connects only to itself: no "Cloud instance" choice, no app.staqly.ai, no keys.
     expect(screen.queryByRole('tab', { name: 'Cloud instance' })).not.toBeInTheDocument()
