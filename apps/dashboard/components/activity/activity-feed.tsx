@@ -31,7 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { eventsExportUrl, type Collection, type EventExportQuery, type EventQuery } from '@/lib/api'
 import { qk, refreshEventList, useCollections, useEventsInfinite, useMode } from '@/lib/queries'
-import { cn } from '@/lib/utils'
+import { cn, hrefWithParams } from '@/lib/utils'
 
 import { AuditEventList } from './audit-event'
 
@@ -309,17 +309,7 @@ export function ActivityFeed() {
   const list = useMemo(() => events.data?.pages.flatMap((p) => p.data) ?? [], [events.data])
 
   function setParams(patch: Record<string, string | undefined>) {
-    const sp = new URLSearchParams(params.toString())
-
-    for (const [k, v] of Object.entries(patch)) {
-      if (v) {
-        sp.set(k, v)
-      } else {
-        sp.delete(k)
-      }
-    }
-
-    router.replace(`${pathname}${sp.toString() ? `?${sp}` : ''}`, { scroll: false })
+    router.replace(hrefWithParams(pathname, params, patch), { scroll: false })
   }
 
   const chips = [

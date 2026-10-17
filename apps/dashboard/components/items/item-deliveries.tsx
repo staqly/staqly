@@ -6,7 +6,7 @@ import Link from 'next/link'
 
 import { api, type Item } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
-import { qk } from '@/lib/queries'
+import { useWebhooks } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
@@ -40,7 +40,7 @@ export function ItemDeliveries({ item }: { item: Item }) {
     queryFn: async () => (await api.deliveries({ item_id: item.id, limit: 20 })).data ?? [],
     refetchInterval: (q) => ((q.state.data ?? []).some((d) => d.status === 'pending') ? 3000 : false),
   })
-  const webhooks = useQuery({ queryKey: qk.webhooks, queryFn: async () => (await api.webhooks()).data ?? [] })
+  const webhooks = useWebhooks()
   const url = (id: string) => webhooks.data?.find((w) => w.id === id)?.url ?? id
   const list = deliveries.data ?? []
 

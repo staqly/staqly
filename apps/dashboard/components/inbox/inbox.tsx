@@ -59,7 +59,7 @@ import {
   useRefetchOnForeignChange,
   createRecentIds,
 } from '@/lib/queries'
-import { cn } from '@/lib/utils'
+import { cn, hrefWithParams } from '@/lib/utils'
 
 import { FilterPopover } from './filter-popover'
 import { MobileInbox } from './mobile-inbox'
@@ -449,23 +449,12 @@ export function Inbox() {
   // Declared before setParam: the React Compiler bails out on the whole component when a function is
   // referenced before its declaration (hoisting), which re-rendered every inbox row on each keypress.
   function setParams(patch: Record<string, string | undefined>) {
-    const sp = new URLSearchParams(params.toString())
-
-    // Filters from before the steps (?decision=, ?run=) never stick around.
-    sp.delete('decision')
-    sp.delete('run')
-
-    for (const [key, value] of Object.entries(patch)) {
-      if (value) {
-        sp.set(key, value)
-      } else {
-        sp.delete(key)
-      }
-    }
-
     setSelected(new Set())
     setActiveId(null)
-    router.replace(`${pathname}${sp.toString() ? `?${sp}` : ''}`, { scroll: false })
+    // Filters from before the steps (?decision=, ?run=) never stick around.
+    router.replace(hrefWithParams(pathname, params, { decision: undefined, run: undefined, ...patch }), {
+      scroll: false,
+    })
   }
 
   function setParam(key: string, value: string | undefined) {
@@ -578,14 +567,14 @@ export function Inbox() {
       }
 
       if (ok.length) {
-        toast.success(`${verb} ${ok.length} item${ok.length === 1 ? '' : 's'}`)
+        toast.success(`${verb} ${pluralize(ok.length, 'item')}`)
       }
 
       if (failed.length) {
         const conflicts = failed.filter((f) => f.error?.code === 'conflict').length
 
         toast.warning(
-          `${failed.length} item${failed.length === 1 ? '' : 's'} skipped` +
+          `${pluralize(failed.length, 'item')} skipped` +
             (conflicts ? ` (${conflicts} already decided)` : `: ${failed[0].error?.message ?? 'error'}`),
         )
       }

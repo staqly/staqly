@@ -3,12 +3,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Ban, CheckCheck, Ellipsis, XCircle } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useNow } from '@/hooks/use-now'
 import { api, type Item } from '@/lib/api'
 import { formatDateTime, formatInterval, parseDate } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
@@ -16,18 +17,6 @@ import { invalidateAfterItemChange, syncItemInCache, useSession } from '@/lib/qu
 import { CANCELED_ERROR, isCanceled } from '@/lib/status'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
-
-function useNow(ms: number) {
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), ms)
-
-    return () => clearInterval(t)
-  }, [ms])
-
-  return now
-}
 
 /** 5 s, 3 min 05 s, 1 h 02 min: precise while it's short, calmer once it's long. */
 function formatElapsed(seconds: number) {
@@ -135,7 +124,7 @@ function useReportResult(item: Item) {
 
 /** How long it has waited, of which limit, and when it fails; ticks every second. */
 function useWaiting(item: Item) {
-  const now = useNow(1000)
+  const now = useNow()
   const workspaceLimit = useSession().data?.workspace.processing_timeout_seconds ?? 0
   const limit = item.processing_timeout_seconds ?? workspaceLimit
   const since = parseDate(item.updated_at)?.getTime() ?? now

@@ -52,6 +52,15 @@ export function safeHttpUrl(value: string | null | undefined): string | null {
   }
 }
 
+/** decodeURIComponent that keeps the raw text on a malformed escape (a stray "%" would throw a URIError). */
+export function safeDecodeURIComponent(text: string): string {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
+}
+
 const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
 // Functional notations; the argument list may not contain parentheses, quotes,
 // semicolons or colons, so nothing else (url(), var(), expressions) fits.

@@ -20,19 +20,10 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Callout } from '@/components/common/callout'
+import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
 import { UsageChip } from '@/components/plans/usage-chip'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -47,7 +38,7 @@ import { Switch } from '@/components/ui/switch'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { api, type NotificationChannel, type NotificationDelivery } from '@/lib/api'
 import { CHANNEL_TYPE_INFO, channelHealth, channelTarget, digestLabel } from '@/lib/channels'
-import { formatDateTime, timeAgo } from '@/lib/format'
+import { formatDateTime, pluralize, timeAgo } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { qk, useChannels, useCollections } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
@@ -142,9 +133,7 @@ function DeliveriesSheet({
                   </div>
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span title={formatDateTime(d.created_at)}>{timeAgo(d.created_at)}</span>
-                    <span className="tabular-nums">
-                      {d.attempts ?? 0} attempt{d.attempts === 1 ? '' : 's'}
-                    </span>
+                    <span className="tabular-nums">{pluralize(d.attempts ?? 0, 'attempt')}</span>
                     {d.status === 'sent' && d.sent_at && <span>sent {timeAgo(d.sent_at)}</span>}
                     {d.status === 'pending' && d.next_attempt_at && <span>next {timeAgo(d.next_attempt_at)}</span>}
                     {d.item_id && (
@@ -238,7 +227,7 @@ function ChannelCard({
       )}
       {health === 'failing' && ch.last_error && (
         <Callout icon={CircleAlert} size="xs">
-          {ch.fail_count} failed send{ch.fail_count === 1 ? '' : 's'} in a row: {ch.last_error}
+          {pluralize(ch.fail_count, 'failed send')} in a row: {ch.last_error}
         </Callout>
       )}
 
@@ -388,22 +377,15 @@ export function ChannelsPage() {
 
       {formUsed && <ChannelFormSheet open={formOpen} onOpenChange={setFormOpen} channel={editing} />}
       <DeliveriesSheet channel={deliveriesOf} onOpenChange={(o) => !o && setDeliveriesOf(null)} />
-      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{deleting?.name}”?</AlertDialogTitle>
-            <AlertDialogDescription>
-              It stops receiving notifications and its delivery history is removed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => deleting && del.mutate(deleting.id)}>
-              Delete channel
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={<>Delete “{deleting?.name}”?</>}
+        description="It stops receiving notifications and its delivery history is removed."
+        confirmLabel="Delete channel"
+        variant="destructive"
+        onConfirm={() => deleting && del.mutate(deleting.id)}
+      />
     </PageContainer>
   )
 }

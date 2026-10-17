@@ -565,6 +565,10 @@ export function invalidateAfterItemChange(qc: QueryClient, itemId?: string, opts
   }
 }
 
+export function useWebhooks() {
+  return useQuery({ queryKey: qk.webhooks, queryFn: async () => (await api.webhooks()).data ?? [] })
+}
+
 export function useWatchers(opts?: { refetchInterval?: number }) {
   return useQuery({
     queryKey: qk.watchers,

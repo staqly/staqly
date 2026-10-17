@@ -16,12 +16,13 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, errorMessage, type Agent, type EventQuery, type Health, type SessionInfo } from '@/lib/api'
+import { usePublicApiUrl } from '@/lib/config'
 import { useCollections, useMode } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
-import { cn } from '@/lib/utils'
+import { cn, hrefWithParams } from '@/lib/utils'
 
 import { ConnectedAgents } from './agents'
-import { KEY_PLACEHOLDER, MCP_TOOL_COUNT, useApiKeyValue, useApiUrls } from './shared'
+import { KEY_PLACEHOLDER, MCP_TOOL_COUNT, useApiKeyValue } from './shared'
 
 interface ProbeResult {
   ok: boolean
@@ -75,7 +76,7 @@ function GuideLink({ path }: { path: string }) {
  * never shows cloud keys or addresses), and a test that checks /health and the session through the proxy.
  */
 function ConnectionBar() {
-  const { apiUrl } = useApiUrls()
+  const apiUrl = usePublicApiUrl()
   const test = useMutation({ mutationFn: probe })
   const r = test.data
 
@@ -344,7 +345,8 @@ function KeyHint({ cloud }: { cloud: boolean }) {
 
 export function IntegrationsPage() {
   const { isLocal } = useMode()
-  const { apiUrl, mcpUrl } = useApiUrls()
+  const apiUrl = usePublicApiUrl()
+  const mcpUrl = `${apiUrl}/mcp`
   const { key } = useApiKeyValue()
   const router = useRouter()
   const pathname = usePathname()
@@ -376,17 +378,11 @@ export function IntegrationsPage() {
       />
       <Tabs
         value={view}
-        onValueChange={(v) => {
-          const sp = new URLSearchParams(params.toString())
-
-          if (v === 'connections') {
-            sp.set('view', v)
-          } else {
-            sp.delete('view')
-          }
-
-          router.replace(sp.size ? `${pathname}?${sp}` : pathname, { scroll: false })
-        }}
+        onValueChange={(v) =>
+          router.replace(hrefWithParams(pathname, params, { view: v === 'connections' ? v : undefined }), {
+            scroll: false,
+          })
+        }
         className="mt-4 gap-0"
       >
         <TabsList variant="line" aria-label="Integrations view" className="border-b">

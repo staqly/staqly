@@ -22,6 +22,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { Callout } from '@/components/common/callout'
+import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { AckCheckbox, useAckGate } from '@/components/common/confirm-name-field'
 import { ErrorState } from '@/components/common/error-state'
 import { IdChip } from '@/components/common/id-chip'
@@ -30,16 +31,6 @@ import { SecretField } from '@/components/common/secret-field'
 import { SettingsHeader } from '@/components/settings/settings-header'
 import { useLogout, useShell } from '@/components/shell/app-shell'
 import { THEMES } from '@/components/shell/theme-toggle'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -290,20 +281,15 @@ function DevicesCard() {
           })}
         </ul>
       )}
-      <AlertDialog open={!!revoking} onOpenChange={(o) => !o && setRevoking(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sign out this device?</AlertDialogTitle>
-            <AlertDialogDescription>It loses access immediately and has to be connected again.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => revoking && revoke.mutate(revoking)}>
-              Revoke access
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!revoking}
+        onOpenChange={(o) => !o && setRevoking(null)}
+        title="Sign out this device?"
+        description="It loses access immediately and has to be connected again."
+        confirmLabel="Revoke access"
+        variant="destructive"
+        onConfirm={() => revoking && revoke.mutate(revoking)}
+      />
     </Card>
   )
 }
@@ -369,20 +355,14 @@ function RecoveryCard() {
           Rotate recovery key
         </Button>
       </div>
-      <AlertDialog open={confirm} onOpenChange={setConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Rotate the recovery key?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Your current recovery key stops working immediately. The new key is shown once — be ready to store it.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => rotate.mutate()}>Rotate key</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirm}
+        onOpenChange={setConfirm}
+        title="Rotate the recovery key?"
+        description="Your current recovery key stops working immediately. The new key is shown once — be ready to store it."
+        confirmLabel="Rotate key"
+        onConfirm={() => rotate.mutate()}
+      />
       <Dialog open={!!newKey} onOpenChange={(o) => !o && ack.checked && setNewKey(null)}>
         <DialogContent className="sm:max-w-lg" showCloseButton={false} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
