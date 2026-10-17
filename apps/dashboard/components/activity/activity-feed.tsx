@@ -66,6 +66,7 @@ const COMMON_EVENT_TYPES = [
   'api_key.created',
   'api_key.revoked',
   'recovery_key.rotated',
+  'session.signed_in',
   'session.recovered',
   'workspace.export_requested',
   'workspace.exported',

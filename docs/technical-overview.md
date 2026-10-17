@@ -68,7 +68,8 @@ Optional demo data from a checkout: `make seed` (`scripts/seed.sh`, against
 * anyone can **create a free workspace** (no card, no email) — or only holders
   of `SETUP_TOKEN`;
 * each workspace gets **API keys** `stk_...` (scoped; the key decides the
-  workspace), a **recovery key** and browser sessions;
+  workspace; the `admin` key from signup signs browsers in to the dashboard), a
+  single-use **recovery key** and browser sessions;
 * **plans** limit each workspace — Free (50 approvals/month, unlimited items, 3 webhooks,
   1 key, 1 GB, 5 MB files) and Pro $30 (unlimited, 100 GB, 100 MB files; new
   workspaces get a 7-day Pro trial, then are read-only until paid or switched

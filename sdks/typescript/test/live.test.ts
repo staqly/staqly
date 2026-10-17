@@ -50,8 +50,8 @@ describe.skipIf(!live)('live', () => {
     let apiKey = process.env.STAQLY_API_KEY
 
     if (mode === 'cloud' && !apiKey) {
-      // Signup returns a default key (not every scope) and a session cookie.
-      // Use the session to mint a key with the scopes these tests need.
+      // Signup returns an admin key (scope `admin`, for dashboard sign-in) and a session
+      // cookie. Use the session to mint an agent key with the scopes these tests need.
       const res = await probe.http.request<Response>({
         method: 'POST',
         path: '/v1/workspaces',

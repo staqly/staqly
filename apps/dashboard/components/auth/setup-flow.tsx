@@ -130,7 +130,7 @@ function SignupClosed() {
       </span>
       <h1 className="text-xl font-semibold tracking-tight">Sign-ups are closed on this server</h1>
       <p className="text-sm text-muted-foreground">
-        Ask the operator for an invite, or sign in to an existing workspace with its recovery key.
+        Ask the operator for an invite, or sign in to an existing workspace with its API key.
       </p>
       <Button asChild size="lg" className="h-11">
         <Link href="/login">
@@ -303,7 +303,7 @@ function WorkspaceForm({ tokenRequired, onDone }: { tokenRequired: boolean; onDo
       <div>
         <h2 className="text-lg font-semibold tracking-tight">Name your workspace</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          You&apos;ll get an API key for your agents and a recovery key for you.
+          You&apos;ll get an admin API key to sign in with and a recovery key for when you lose it.
         </p>
       </div>
       <FieldGroup className="gap-4">
@@ -354,7 +354,7 @@ function WorkspaceForm({ tokenRequired, onDone }: { tokenRequired: boolean; onDo
       <p className="text-center text-xs text-muted-foreground">
         Already have one?{' '}
         <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
-          Sign in with your recovery key
+          Sign in with your API key
         </Link>
       </p>
     </form>
@@ -363,7 +363,7 @@ function WorkspaceForm({ tokenRequired, onDone }: { tokenRequired: boolean; onDo
 
 function SecretsStep({ result, billing }: { result: SetupResult; billing: boolean }) {
   const router = useRouter()
-  const ack = useAckGate('ack-recovery', 'Confirm that you saved your recovery key')
+  const ack = useAckGate('ack-recovery', 'Confirm that you saved your API key and recovery key')
   const apiKey = result.api_key.key ?? ''
   const plan = result.workspace.plan ?? 'free'
 
@@ -374,10 +374,10 @@ function SecretsStep({ result, billing }: { result: SetupResult; billing: boolea
         `staqly workspace: ${result.workspace.name} (${result.workspace.id})`,
         `Created: ${result.workspace.created_at}`,
         '',
-        `API key (${result.api_key.name}; scopes: ${result.api_key.scopes.join(', ')}):`,
+        `API key (${result.api_key.name}; scopes: ${result.api_key.scopes.join(', ')}). Signs you in to the dashboard:`,
         apiKey,
         '',
-        'Recovery key — signs you in to this workspace; the only way back in if all browser sessions are lost:',
+        'Recovery key. For when you lose the API key; works once and is replaced by a new one when used:',
         result.recovery_key,
         '',
         'Store this file in a password manager and delete it from your downloads folder.',
@@ -412,7 +412,7 @@ function SecretsStep({ result, billing }: { result: SetupResult; billing: boolea
       <div className="grid gap-2">
         <Label className="flex flex-wrap items-center gap-1.5">
           <KeyRound className="size-3.5" /> API key
-          <span className="font-normal text-muted-foreground">— for n8n, Claude Code, Codex, scripts</span>
+          <span className="font-normal text-muted-foreground">(admin, signs you in to the dashboard)</span>
         </Label>
         <SecretField value={apiKey} label="API key" />
       </div>
@@ -420,15 +420,16 @@ function SecretsStep({ result, billing }: { result: SetupResult; billing: boolea
       <div className="grid gap-2">
         <Label className="flex flex-wrap items-center gap-1.5">
           <LifeBuoy className="size-3.5" /> Recovery key
-          <span className="font-normal text-muted-foreground">— for you, keep offline</span>
+          <span className="font-normal text-muted-foreground">(for when you lose the API key, keep offline)</span>
         </Label>
         <SecretField value={result.recovery_key} label="Recovery key" />
       </div>
 
       <Callout role="alert">
-        The recovery key is how you <strong>sign in to this workspace</strong> from a new browser and the only way back
-        in if all sessions are lost. staqly stores only a hash of it and cannot show it again. Lose both and you may be{' '}
-        <strong>permanently locked out</strong>.
+        The API key is how you <strong>sign in to this workspace</strong> from a new browser. Lost it? The recovery key
+        gets you back in once, with a new API key and a new recovery key. staqly stores only hashes and cannot show
+        either again. Lose both and you may be <strong>permanently locked out</strong>. For agents, create a scoped key
+        without admin in Settings.
       </Callout>
 
       <Button type="button" variant="outline" size="lg" className="h-11" onClick={download}>
@@ -436,7 +437,7 @@ function SecretsStep({ result, billing }: { result: SetupResult; billing: boolea
       </Button>
 
       <AckCheckbox {...ack.checkbox} className="min-h-11 rounded-lg border p-3">
-        I have saved my recovery key
+        I have saved my API key and recovery key
       </AckCheckbox>
 
       <Button size="lg" className="h-11" onClick={() => ack.confirm(() => router.replace('/inbox'))}>

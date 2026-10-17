@@ -30,7 +30,8 @@ type env struct {
 	t        *testing.T
 	svc      *app.Service
 	srv      *httptest.Server
-	key      string // default key (all non-admin scopes)
+	key      string // agent key with the non-admin scopes (app.DefaultKeyScopes)
+	admin    string // the admin key sign-up returns (dashboard sign-in)
 	recovery string
 	browser  *http.Client // holds the session cookie
 	csrf     string
@@ -54,14 +55,24 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(srv.Close)
 	jar, _ := cookiejar.New(nil)
 	e := &env{t: t, svc: svc, srv: srv, browser: &http.Client{Jar: jar}}
+	e.signup()
+	return e
+}
+
+// signup creates the workspace: e.admin is the admin key sign-up returns, e.key an agent key with
+// app.DefaultKeyScopes (what most tests act as).
+func (e *env) signup() {
+	e.t.Helper()
 	var res struct {
 		APIKey      app.APIKey `json:"api_key"`
 		RecoveryKey string     `json:"recovery_key"`
 		CSRF        string     `json:"csrf_token"`
 	}
 	e.do(e.browser, "POST", "/v1/workspaces", "", map[string]string{"name": "Test", "setup_token": "tok"}, 201, &res)
-	e.key, e.recovery, e.csrf = res.APIKey.Key, res.RecoveryKey, res.CSRF
-	return e
+	e.admin, e.recovery, e.csrf = res.APIKey.Key, res.RecoveryKey, res.CSRF
+	var k app.APIKey
+	e.do(e.browser, "POST", "/v1/api-keys", "", map[string]any{"name": "Default key", "scopes": app.DefaultKeyScopes}, 201, &k, "X-CSRF-Token", e.csrf)
+	e.key = k.Key
 }
 
 // do sends a JSON request. auth is a bearer key; "" means none (cookies may apply).
@@ -248,7 +259,13 @@ func TestAPIKeyAuthAndScopes(t *testing.T) {
 
 	// Rotation: old key dies, new key works with the same scopes.
 	var rotated app.APIKey
-	e.do(e.browser, "POST", "/v1/api-keys/"+keys.Data[len(keys.Data)-1].ID+"/rotate", "", nil, 201, &rotated, "X-CSRF-Token", e.csrf)
+	var defID string
+	for _, k := range keys.Data {
+		if k.Name == "Default key" {
+			defID = k.ID
+		}
+	}
+	e.do(e.browser, "POST", "/v1/api-keys/"+defID+"/rotate", "", nil, 201, &rotated, "X-CSRF-Token", e.csrf)
 	e.do(nil, "GET", "/v1/collections", e.key, nil, 401, nil)
 	e.do(nil, "POST", "/v1/collections", rotated.Key, map[string]any{"name": "after rotate"}, 201, nil)
 
@@ -289,18 +306,139 @@ func TestSessionsCSRFAndRecovery(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 	b2 := &http.Client{Jar: jar}
 	var rec struct {
-		CSRF string `json:"csrf_token"`
+		CSRF        string     `json:"csrf_token"`
+		APIKey      app.APIKey `json:"api_key"`
+		RecoveryKey string     `json:"recovery_key"`
 	}
 	e.do(b2, "POST", "/v1/sessions/recover", "", map[string]string{"recovery_key": " " + strings.ToLower(e.recovery) + " "}, 201, &rec)
 	e.do(b2, "GET", "/v1/collections", "", nil, 200, nil)
 
-	// Rotating the recovery key invalidates the old one.
+	// Rotating the recovery key from the dashboard invalidates the previous one.
 	var rot struct {
 		RecoveryKey string `json:"recovery_key"`
 	}
 	e.do(b2, "POST", "/v1/recovery-key/rotate", "", nil, 200, &rot, "X-CSRF-Token", rec.CSRF)
-	e.do(nil, "POST", "/v1/sessions/recover", "", map[string]string{"recovery_key": e.recovery}, 401, nil)
+	e.do(nil, "POST", "/v1/sessions/recover", "", map[string]string{"recovery_key": rec.RecoveryKey}, 401, nil)
 	e.do(nil, "POST", "/v1/sessions/recover", "", map[string]string{"recovery_key": rot.RecoveryKey}, 201, nil)
+}
+
+// Sign-in with an API key: admin keys open a session, agent keys never do; revoked and expired keys are
+// refused; other sessions stay signed in; the sign-in is recorded.
+func TestSignInWithAPIKey(t *testing.T) {
+	e := newEnv(t)
+	signIn := func(key string, want int) (*http.Client, string) {
+		jar, _ := cookiejar.New(nil)
+		c := &http.Client{Jar: jar}
+		var out struct {
+			CSRF string `json:"csrf_token"`
+		}
+		var body struct{ Error app.Error }
+		res := any(&out)
+		if want != 201 {
+			res = &body
+		}
+		e.do(c, "POST", "/v1/sessions/api-key", "", map[string]string{"api_key": key}, want, res)
+		return c, out.CSRF
+	}
+
+	// The key sign-up returns is an admin key and signs in (surrounding spaces are ignored).
+	c, csrf := signIn(" "+e.admin+" ", 201)
+	e.do(c, "GET", "/v1/session", "", nil, 200, nil)
+	e.do(c, "POST", "/v1/collections", "", map[string]any{"name": "from key session"}, 201, nil, "X-CSRF-Token", csrf)
+	e.do(e.browser, "GET", "/v1/session", "", nil, 200, nil) // the sign-up browser is still signed in
+
+	// Agent keys (no admin scope) cannot open the dashboard.
+	jar, _ := cookiejar.New(nil)
+	agent := &http.Client{Jar: jar}
+	var refused struct{ Error app.Error }
+	e.do(agent, "POST", "/v1/sessions/api-key", "", map[string]string{"api_key": e.key}, 403, &refused)
+	if refused.Error.Code != "forbidden" || !strings.Contains(refused.Error.Message, "admin scope") {
+		t.Fatalf("agent key: %+v", refused.Error)
+	}
+	e.do(agent, "GET", "/v1/session", "", nil, 401, nil)
+	signIn(e.keyWith(app.ScopeCollectionsRead, app.ScopeItemsRead, app.ScopeItemsReview), 403)
+
+	// Unknown, revoked and expired keys: 401.
+	signIn("stk_bogus", 401)
+	signIn("", 401)
+	signIn(e.recovery, 401) // the recovery key is not an API key
+	extra := e.keyWith(app.ScopeAdmin)
+	var keys struct{ Data []app.APIKey }
+	e.do(e.browser, "GET", "/v1/api-keys", "", nil, 200, &keys)
+	for _, k := range keys.Data {
+		if strings.HasPrefix(extra, k.Prefix) {
+			e.do(e.browser, "DELETE", "/v1/api-keys/"+k.ID, "", nil, 204, nil, "X-CSRF-Token", e.csrf)
+		}
+	}
+	signIn(extra, 401)
+	var expiring app.APIKey
+	e.do(e.browser, "POST", "/v1/api-keys", "", map[string]any{"name": "soon", "scopes": []string{"admin"}, "expires_at": "2000-01-01T00:00:00Z"}, 201, &expiring, "X-CSRF-Token", e.csrf)
+	signIn(expiring.Key, 401)
+
+	// Recorded in the activity log as the key that signed in, without the key itself.
+	var evs struct{ Data []app.Event }
+	e.do(e.browser, "GET", "/v1/events?type=session.signed_in", "", nil, 200, &evs)
+	if len(evs.Data) != 1 || evs.Data[0].Actor.Type != app.PrincipalAPIKey || evs.Data[0].Actor.Name != "Admin key" {
+		t.Fatalf("sign-in events: %+v", evs.Data)
+	}
+	raw, _ := json.Marshal(evs.Data)
+	if strings.Contains(string(raw), e.admin) {
+		t.Fatal("event leaks the API key")
+	}
+}
+
+// Recovery is single-use: it returns a new admin key and the next recovery key, the old recovery key stops
+// working, existing API keys keep working, and every other session is signed out.
+func TestRecoveryRotatesAndIssuesAdminKey(t *testing.T) {
+	e := newEnv(t)
+	e.free() // the new admin key is not blocked by the Free plan's one-key limit
+	jar, _ := cookiejar.New(nil)
+	b := &http.Client{Jar: jar}
+	var rec struct {
+		CSRF        string     `json:"csrf_token"`
+		APIKey      app.APIKey `json:"api_key"`
+		RecoveryKey string     `json:"recovery_key"`
+	}
+	e.do(b, "POST", "/v1/sessions/recover", "", map[string]string{"recovery_key": e.recovery}, 201, &rec)
+	if rec.CSRF == "" || !strings.HasPrefix(rec.APIKey.Key, "stk_") || !strings.HasPrefix(rec.RecoveryKey, "staqly-recovery-") ||
+		rec.RecoveryKey == e.recovery || len(rec.APIKey.Scopes) != 1 || rec.APIKey.Scopes[0] != app.ScopeAdmin {
+		t.Fatalf("recover response: %+v", rec)
+	}
+	// The old recovery key is gone; the new one works once.
+	e.do(nil, "POST", "/v1/sessions/recover", "", map[string]string{"recovery_key": e.recovery}, 401, nil)
+	// Existing keys keep working; the new admin key signs in; the old browser session is signed out.
+	e.do(nil, "GET", "/v1/collections", e.key, nil, 200, nil)
+	e.do(nil, "GET", "/v1/collections", e.admin, nil, 200, nil)
+	e.do(e.browser, "GET", "/v1/session", "", nil, 401, nil)
+	e.do(b, "GET", "/v1/session", "", nil, 200, nil)
+	e.do(nil, "POST", "/v1/sessions/api-key", "", map[string]string{"api_key": rec.APIKey.Key}, 201, nil)
+	// Raw secrets are never stored.
+	var n int
+	e.svc.DB.QueryRow(`SELECT COUNT(*) FROM workspaces WHERE recovery_verifier = ?`, rec.RecoveryKey).Scan(&n)
+	if n != 0 {
+		t.Fatal("raw recovery key stored")
+	}
+
+	// Concurrent use of the same recovery key: exactly one wins.
+	key := rec.RecoveryKey
+	var wg sync.WaitGroup
+	var ok atomic.Int32
+	for range 5 {
+		wg.Go(func() {
+			if _, err := e.svc.Recover(context.Background(), key, "ua"); err == nil {
+				ok.Add(1)
+			}
+		})
+	}
+	wg.Wait()
+	if ok.Load() != 1 {
+		t.Fatalf("%d concurrent recoveries succeeded with one key, want 1", ok.Load())
+	}
+	var evs struct{ Data []app.Event }
+	e.do(nil, "GET", "/v1/events?type=session.recovered", e.admin, nil, 200, &evs)
+	if len(evs.Data) != 2 {
+		t.Fatalf("session.recovered events: %d", len(evs.Data))
+	}
 }
 
 func TestCollectionCRUD(t *testing.T) {
@@ -1068,6 +1206,9 @@ func TestLocalModeIsKeylessButLocalOnly(t *testing.T) {
 	if code, _ := localReq(t, srv, "POST", "/v1/workspaces", "", "", `{}`); code != 409 {
 		t.Fatalf("setup must be disabled in local mode: %d", code)
 	}
+	if code, _ := localReq(t, srv, "POST", "/v1/sessions/api-key", "", "", `{"api_key":"stk_x"}`); code != 409 {
+		t.Fatalf("API-key sign-in must be disabled in local mode: %d", code)
+	}
 	// No credentials needed from this machine (curl, agents, the dashboard proxy).
 	for _, host := range []string{"", "localhost:3333", "api:3333", "staqly-api:3333", "host.docker.internal:3333", "[::1]:3333"} {
 		if code, body := localReq(t, srv, "POST", "/v1/collections", host, "", `{"name":"c `+host+`"}`); code != 201 {
@@ -1177,13 +1318,13 @@ func TestPlanLimitsAreEnforcedPerWorkspace(t *testing.T) {
 		e.do(nil, "POST", "/v1/webhooks", e.key, map[string]any{"url": "http://example.com/h"}, 201, nil)
 	}
 	e.do(nil, "POST", "/v1/webhooks", e.key, map[string]any{"url": "http://example.com/h"}, 402, nil)
-	// API keys: 1 active on Free (the setup key).
+	// API keys: 1 active on Free (the admin key; the agent key e.key was created during the trial).
 	e.do(e.browser, "POST", "/v1/api-keys", "", map[string]any{"name": "k", "scopes": []string{"items:read"}}, 402, nil, "X-CSRF-Token", e.csrf)
 
 	var usage app.Usage
 	e.do(nil, "GET", "/v1/workspace/usage", e.key, nil, 200, &usage)
 	if usage.Plan.ID != "free" || usage.Usage["decisions_per_month"] != 50 || usage.Usage["items_per_month"] != 53 ||
-		usage.Usage["webhooks"] != 3 || usage.Usage["api_keys"] != 1 {
+		usage.Usage["webhooks"] != 3 || usage.Usage["api_keys"] != 2 {
 		t.Fatalf("usage: %+v", usage)
 	}
 

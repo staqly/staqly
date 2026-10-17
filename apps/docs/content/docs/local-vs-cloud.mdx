@@ -19,7 +19,7 @@ Set the mode with the `STAQLY_MODE` environment variable before starting staqly.
 | Workspaces | One, created automatically | Many: anyone can create one ("no card, no email"), or only holders of `SETUP_TOKEN` |
 | Plan | **Unlocked** (no limits) | Starts with a 7-day **Pro** trial, then Pro (paid by card through Stripe, or set by the operator) or **Free** |
 | Agents, n8n, scripts | No credentials (this machine only) | API key `stk_...`; the key decides which workspace you work in |
-| Dashboard | No sign-in on this computer (`staqly serve`); exposed to the network (`--expose`, Docker), each browser signs in once with a one-time link | Session cookie + CSRF token; recovery key for lost sessions |
+| Dashboard | No sign-in on this computer (`staqly serve`); exposed to the network (`--expose`, Docker), each browser signs in once with a one-time link | Sign in with the admin API key; session cookie + CSRF token; recovery key if the admin key is lost |
 | Phones and tablets | **Connect a device** QR (with `--expose` or Docker; set `PUBLIC_DASHBOARD_URL` to your LAN address) | **Connect a device** QR |
 | MCP | `http://localhost:3333/mcp`, or `docker exec -i staqly mcp-stdio` (Docker only) | `https://<host>/mcp` + `Authorization: Bearer {API_KEY}` |
 | Summaries and auto-tags | Your own Claude Code or Codex with `staqly serve`; `TAGGER_URL` with the Docker image | The operator's OpenAI-compatible endpoint (`TAGGER_URL`) |
@@ -86,14 +86,19 @@ cloud mode on localhost and give the agent a scoped API key.
 
 `STAQLY_MODE=cloud` turns the same app into a hosted, multi-tenant service:
 
-- **Signup** creates a workspace on a 7-day **Pro trial**, plus a default API key, a recovery
-  key and a browser session. Signup is public and rate-limited to 5 workspaces per hour per
-  client IP, unless `SETUP_TOKEN` is set.
+- **Signup** creates a workspace on a 7-day **Pro trial**, plus an **admin API key** (named
+  "Admin key", scope `admin`), a recovery key and a browser session. Both keys are shown once.
+  Signup is public and rate-limited to 5 workspaces per hour per client IP, unless
+  `SETUP_TOKEN` is set.
 - **API keys** (`stk_...`) are scoped; only their SHA-256 hashes are stored. Manage them under
-  **API keys** in the sidebar. See [Authentication & scopes](/api/authentication).
-- The **dashboard** uses an HttpOnly session cookie and a CSRF token.
-- The **recovery key** is the way back in when every browser session is lost. Using or
-  rotating it signs out every other session.
+  **API keys** in the sidebar. Give agents their own scoped key without `admin`. See
+  [Authentication & scopes](/api/authentication).
+- The **dashboard** signs in with the admin API key (**Sign in with your API key** at `/login`),
+  then uses an HttpOnly session cookie and a CSRF token. Agent keys without `admin` can never
+  open the dashboard.
+- The **recovery key** is the way back in when the admin key is lost (**Lost your key?** on the
+  sign-in screen). It works once: it signs this browser in, creates a new admin key and a new
+  recovery key, and signs out every other session.
 - **Plans** limit each workspace; over a limit the API answers
   [`402 plan_limit_exceeded`](/api/errors#402-plan_limit_exceeded). See
   [Plans & limits](/plans).
@@ -169,7 +174,9 @@ Copy both files into the checkout on the server as `backups/from-local/workspace
 ### Sign in
 
 Get a recovery key for the restored workspace: `docker exec staqly server workspaces`, then
-`docker exec staqly server recovery-key {WORKSPACE_ID}`. Sign in at `/login` with it.
+`docker exec staqly server recovery-key {WORKSPACE_ID}`. At `/login`, choose **Lost your key?**
+and enter it: staqly signs you in and shows a new admin API key and a new recovery key once.
+Save both.
 
 </Step>
 </Steps>

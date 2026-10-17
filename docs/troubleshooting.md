@@ -53,20 +53,30 @@ with the link from `docker exec staqly server connect-link` (or
 `staqly serve connect-link`). The link expires after 5 minutes and works once.
 
 **Dashboard shows the login page but I never set up (cloud mode).** Another setup already
-happened on this volume (e.g. a previous run). Use the recovery key at /login,
-or start fresh by deleting the data volume (`docker volume rm`; deletes all data).
+happened on this volume (e.g. a previous run). Sign in with the admin API key at
+/login (or "Lost your key?" with the recovery key), or start fresh by deleting the data volume (`docker volume rm`; deletes all data).
 
-**Lost every session and the recovery key (cloud mode).** On the host run
-`docker exec staqly server recovery-key` and log in at /login with the
-printed key. This needs shell access to the server — there is no remote
-backdoor. It signs out every other browser of that workspace.
+**Sign-in with an API key fails (cloud mode).** `403`: only keys with the
+`admin` scope open the dashboard; use the admin key from signup or recovery,
+not an agent key. `401`: the key is wrong, revoked or expired; use "Lost your
+key?" with the recovery key. `409`: the server is in local mode; use a connect
+link.
+
+**`401 invalid recovery key` (cloud mode).** Each recovery key works once; a
+recovery replaces it with the new one the dashboard showed. Use the newest one.
+
+**Lost the admin key and the recovery key (cloud mode).** On the host run
+`docker exec staqly server recovery-key` and use the printed key at /login →
+"Lost your key?"; it shows a new admin key and recovery key once. This needs
+shell access to the server — there is no remote backdoor. It signs out every
+other browser of that workspace.
 
 **`403 csrf_failed` from scripts (cloud mode).** You are sending a session cookie. Scripts
 should use `Authorization: Bearer {API_KEY}` (no CSRF needed).
 
 **`403 forbidden: missing required scope ...` (cloud mode).** The API key lacks a scope;
-create a key with the right scopes under API keys in the sidebar. The
-setup key intentionally lacks `admin`.
+create a key with the right scopes under API keys in the sidebar. Agent keys
+should lack `admin` (the signup key has it and signs in to the dashboard).
 
 **Webhook deliveries fail with `private destination ... is not allowed` /
 `loopback destination ...`.** Adjust `WEBHOOK_ALLOW_PRIVATE` /

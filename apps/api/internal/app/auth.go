@@ -131,8 +131,8 @@ func (s *Service) Initialized(ctx context.Context) (bool, error) {
 // SETUP_TOKEN configured) or only holders of the token.
 func (s *Service) SignupOpen() bool { return s.Cfg.Mode == ModeCloud && s.Cfg.SetupToken == "" }
 
-// Setup creates a new cloud workspace on the Free plan with a default API key,
-// a recovery key and a browser session. Each call creates a separate,
+// Setup creates a new cloud workspace with an admin API key (the dashboard
+// sign-in credential), a single-use recovery key and a browser session. Each call creates a separate,
 // isolated workspace; if SETUP_TOKEN is set, only token holders may sign up.
 // (Local mode has exactly one workspace, created at startup.)
 func (s *Service) Setup(ctx context.Context, name, setupToken, userAgent string) (SetupResult, error) {
@@ -170,7 +170,7 @@ func (s *Service) Setup(ctx context.Context, name, setupToken, userAgent string)
 			return err
 		}
 		sys := Principal{WorkspaceID: ws.ID, Kind: PrincipalSystem, ID: "setup", Name: "Setup"}
-		key, err := s.createKey(ctx, q, sys, "Default key", DefaultKeyScopes, nil)
+		key, err := s.createKey(ctx, q, sys, "Admin key", AdminKeyScopes, nil)
 		if err != nil {
 			return err
 		}
@@ -402,31 +402,92 @@ func (s *Service) createSessionID(ctx context.Context, q *db.Queries, workspaceI
 	return ns, id, err
 }
 
-// Recover exchanges the recovery key for a new browser session and signs out
-// every other session (whoever used the key may be locking out an intruder).
-// The recovery key is never accepted anywhere else.
-func (s *Service) Recover(ctx context.Context, recoveryKey, userAgent string) (NewSession, error) {
-	// ponytail: no rate limit; 200-bit keys make online guessing pointless.
-	ws, err := s.Q.GetWorkspaceByRecoveryVerifier(ctx, hashSecret(normalizeRecoveryKey(recoveryKey)))
+// SignInWithAPIKey exchanges an admin API key for a browser session (the
+// cloud dashboard's sign-in). Agent keys without the admin scope never open
+// the dashboard. Other sessions stay signed in.
+func (s *Service) SignInWithAPIKey(ctx context.Context, rawKey, userAgent string) (NewSession, error) {
+	if s.Cfg.Mode != ModeCloud {
+		return NewSession{}, conflict("sign-in with an API key is only used in cloud mode; connect this browser with a connect link instead")
+	}
+	p, err := s.AuthenticateAPIKey(ctx, strings.TrimSpace(rawKey))
 	if err != nil {
-		return NewSession{}, &Error{Code: "unauthorized", Status: 401, Message: "invalid recovery key"}
+		return NewSession{}, &Error{Code: "unauthorized", Status: 401, Message: "invalid, revoked or expired API key"}
+	}
+	if !p.Has(ScopeAdmin) {
+		return NewSession{}, &Error{Code: "forbidden", Status: 403,
+			Message: "this API key cannot sign in: only keys with the admin scope open the dashboard (agent keys stay API-only)"}
 	}
 	var ns NewSession
 	err = s.tx(ctx, func(q *db.Queries) error {
 		var err error
 		var id string
-		if ns, id, err = s.createSessionID(ctx, q, ws.ID, userAgent); err != nil {
+		if ns, id, err = s.createSessionID(ctx, q, p.WorkspaceID, userAgent); err != nil {
+			return err
+		}
+		_, err = s.emit(ctx, q, p, "session.signed_in", "", "", map[string]any{"user_agent": userAgent, "session_id": id,
+			"api_key_id": p.ID})
+		return err
+	})
+	return ns, err
+}
+
+// RecoverResult is what a recovery returns: a session, a new admin API key
+// and the next recovery key (both shown once).
+type RecoverResult struct {
+	Session     NewSession
+	APIKey      APIKey
+	RecoveryKey string
+}
+
+// Recover is the "lost your key?" path: the recovery key buys a new browser
+// session, a new admin API key and a new recovery key, all in one transaction.
+// The recovery key is single-use (it is rotated out), existing API keys keep
+// working, and every other session is signed out (whoever used the key may be
+// locking out an intruder). The recovery key is never accepted anywhere else.
+func (s *Service) Recover(ctx context.Context, recoveryKey, userAgent string) (RecoverResult, error) {
+	// Brute force: 200-bit keys, and the route is rate-limited per IP (sensitiveGroup).
+	invalidKey := &Error{Code: "unauthorized", Status: 401, Message: "invalid recovery key (each recovery key works once)"}
+	oldVerifier := hashSecret(normalizeRecoveryKey(recoveryKey))
+	ws, err := s.Q.GetWorkspaceByRecoveryVerifier(ctx, oldVerifier)
+	if err != nil {
+		return RecoverResult{}, invalidKey
+	}
+	next := newRecoveryKey()
+	var res RecoverResult
+	err = s.tx(ctx, func(q *db.Queries) error {
+		n, err := q.SwapRecoveryVerifier(ctx, db.SwapRecoveryVerifierParams{NewVerifier: hashSecret(next), RotatedAt: s.now(),
+			ID: ws.ID, OldVerifier: oldVerifier})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return invalidKey // used concurrently
+		}
+		sys := Principal{WorkspaceID: ws.ID, Kind: PrincipalSystem, ID: "recovery", Name: "Recovery key"}
+		// Never blocked by the plan's key limit: recovery must always restore access.
+		key, err := s.insertKey(ctx, q, sys, "Admin key (recovered)", AdminKeyScopes, nil)
+		if err != nil {
+			return err
+		}
+		ns, id, err := s.createSessionID(ctx, q, ws.ID, userAgent)
+		if err != nil {
 			return err
 		}
 		revoked, err := q.RevokeOtherSessions(ctx, db.RevokeOtherSessionsParams{RevokedAt: nullStr(s.now()), WorkspaceID: ws.ID, KeepID: id})
 		if err != nil {
 			return err
 		}
-		sys := Principal{WorkspaceID: ws.ID, Kind: PrincipalSystem, ID: "recovery", Name: "Recovery key"}
-		_, err = s.emit(ctx, q, sys, "session.recovered", "", "", map[string]any{"user_agent": userAgent, "sessions_revoked": revoked})
-		return err
+		if _, err := s.emit(ctx, q, sys, "recovery_key.rotated", "", "", map[string]any{"via": "recovery", "sessions_revoked": revoked}); err != nil {
+			return err
+		}
+		if _, err := s.emit(ctx, q, sys, "session.recovered", "", "", map[string]any{"user_agent": userAgent, "sessions_revoked": revoked,
+			"api_key_id": key.ID}); err != nil {
+			return err
+		}
+		res = RecoverResult{Session: ns, APIKey: key, RecoveryKey: next}
+		return nil
 	})
-	return ns, err
+	return res, err
 }
 
 // RotateRecoveryKey is restricted to dashboard sessions: an API key must never
@@ -554,6 +615,11 @@ func (s *Service) createKey(ctx context.Context, q *db.Queries, p Principal, nam
 	if err := checkCount(plan, LimitAPIKeys, plan.Limits.APIKeys, n); err != nil {
 		return APIKey{}, err
 	}
+	return s.insertKey(ctx, q, p, name, scopes, exp)
+}
+
+// insertKey creates a key without the plan's key-count check (createKey checks it).
+func (s *Service) insertKey(ctx context.Context, q *db.Queries, p Principal, name string, scopes []string, exp *string) (APIKey, error) {
 	raw := newAPIKeySecret()
 	now := s.now()
 	row := db.ApiKey{ID: newID("key"), WorkspaceID: p.WorkspaceID, Name: name, Prefix: raw[:len(apiKeyPrefix)+6],

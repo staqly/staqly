@@ -136,12 +136,7 @@ func newNotifyEnv(t *testing.T, fake *fakeChat, logw ...io.Writer) (*env, *envVa
 	vars.set("NOTIFY_PUBLIC_API_URL", srv.URL)
 	jar, _ := cookiejar.New(nil)
 	e := &env{t: t, svc: svc, srv: srv, browser: &http.Client{Jar: jar}}
-	var res struct {
-		APIKey app.APIKey `json:"api_key"`
-		CSRF   string     `json:"csrf_token"`
-	}
-	e.do(e.browser, "POST", "/v1/workspaces", "", map[string]string{"name": "Test", "setup_token": "tok"}, 201, &res)
-	e.key, e.csrf = res.APIKey.Key, res.CSRF
+	e.signup()
 	return e, vars
 }
 
@@ -248,7 +243,7 @@ func TestNotificationChannelCRUDMaskingScopesIsolation(t *testing.T) {
 		APIKey app.APIKey `json:"api_key"`
 	}
 	e.do(nil, "POST", "/v1/workspaces", "", map[string]string{"name": "Other", "setup_token": "tok"}, 201, &other)
-	e.do(nil, "GET", "/v1/notification-channels/"+ch.ID, other.APIKey.Key, nil, 403, nil) // default key: no scope
+	e.do(nil, "GET", "/v1/notification-channels/"+ch.ID, other.APIKey.Key, nil, 404, nil) // the other workspace's admin key
 	jar, _ := cookiejar.New(nil)
 	ob := &http.Client{Jar: jar}
 	var ores struct {

@@ -36,6 +36,7 @@ PUBLIC = {
     "ready",
     "setup",
     "sessions.recover",
+    "sessions.sign_in_with_api_key",
     "device_links.redeem",
     "decision_links.decide",
 }
@@ -255,9 +256,9 @@ class TestAsyncOnlyGaps:
                     "workspace": {"id": "ws_1", "name": "x", "plan": "free", "created_at": TS},
                     "api_key": {
                         "id": "key_1",
-                        "name": "default",
+                        "name": "Admin key",
                         "prefix": "stk_abc",
-                        "scopes": [],
+                        "scopes": ["admin"],
                         "created_at": TS,
                         "key": "stk_secret",
                     },

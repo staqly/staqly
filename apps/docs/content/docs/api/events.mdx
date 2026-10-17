@@ -132,12 +132,13 @@ an approval.
 | `workspace.exported` | A workspace export finished | `export_id`, `size_bytes` |
 | `retention.items_pruned` | The [retention](/self-hosting/data-export#retention) worker deleted old archived items | `count`, `older_than_days`, `item_ids` |
 | `retention.events_pruned` | The retention worker deleted old events | `count`, `older_than_days`, `before` |
-| `api_key.created` | An API key was created (cloud) | `api_key` (no secret) |
+| `api_key.created` | An API key was created (cloud), including the admin key a recovery issues | `api_key` (no secret) |
 | `api_key.rotated` | An API key was rotated | `old_key_id`, `new_key_id`, `name` |
 | `api_key.revoked` | An API key was revoked | `api_key_id` |
-| `session.recovered` | Someone signed in with the recovery key | `user_agent`, `sessions_revoked` |
+| `session.signed_in` | A browser signed in to the dashboard with an admin API key (cloud; the actor is that key) | `user_agent`, `session_id`, `api_key_id` |
+| `session.recovered` | Someone signed in with the recovery key; a new admin key was created and every other session signed out | `user_agent`, `sessions_revoked`, `api_key_id` (the new admin key) |
 | `session.revoked` | A browser session signed out or was revoked | `session_id`, `reason` (`logout` or `revoked`) |
-| `recovery_key.rotated` | The recovery key was rotated (other sessions were signed out) | `sessions_revoked`; `via: "cli"` when rotated with `server recovery-key` |
+| `recovery_key.rotated` | The recovery key was rotated (other sessions were signed out) | `sessions_revoked`; `via: "cli"` when rotated with `server recovery-key`, `via: "recovery"` when a recovery used it up |
 | `device_link.created` | A *Connect a device* link was created | `expires_at` |
 | `device.connected` | A *Connect a device* link was redeemed | `user_agent` |
 
@@ -179,7 +180,7 @@ System actors:
 | `processing-timeout` | `Processing timeout` | An item stayed in `processing` too long and was marked failed |
 | `retention` | `Retention` | The retention worker pruned data |
 | `setup`, `local` | `Setup`, `Local setup` | The workspace was created (cloud signup, first local start) |
-| `recovery` | `Recovery key` | Sign-in with the recovery key |
+| `recovery` | `Recovery key` | Sign-in with the recovery key (and the new admin key and recovery key it issues) |
 | `device-link` | `Connect a device` | A device link was redeemed |
 | `cli` | `Server CLI` | `server recovery-key` on the server |
 | `operator` | `Operator` | `server set-plan` on the server |

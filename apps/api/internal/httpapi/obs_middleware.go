@@ -195,6 +195,8 @@ func sensitiveGroup(r *http.Request) string {
 	switch {
 	case r.Method == http.MethodPost && p == "/v1/sessions/recover":
 		return "recover"
+	case r.Method == http.MethodPost && p == "/v1/sessions/api-key":
+		return "signin"
 	case r.Method == http.MethodPost && p == "/v1/device-links/redeem":
 		return "redeem"
 	case r.Method == http.MethodPost && p == "/v1/workspaces":

@@ -359,7 +359,7 @@ function RecoveryCard() {
     <Card
       title="Recovery key"
       icon={<LifeBuoy />}
-      description="The only way to regain admin access if every browser session is lost."
+      description="For when you lose your API key: signs you in once with a new admin key, then is replaced by a new recovery key."
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-muted-foreground">

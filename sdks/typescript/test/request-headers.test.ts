@@ -85,6 +85,14 @@ const headerCases: HeaderCase[] = [
     jsonBody: true,
   },
   {
+    name: 'sessions.signInWithApiKey',
+    call: (c) => c.sessions.signInWithApiKey('stk_admin'),
+    reply: json({}, 201),
+    auth: false,
+    idempotent: true,
+    jsonBody: true,
+  },
+  {
     name: 'decisionLinks.decide (not retried, so no key)',
     call: (c) => c.decisionLinks.decide('tok'),
     reply: json({ status: 'approved' }),

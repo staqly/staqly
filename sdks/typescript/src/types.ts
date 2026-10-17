@@ -87,8 +87,13 @@ export type Session = Schemas['Session']
 export type Whoami = JSONResponse<'/v1/session', 'get'>
 export type SetupStatus = JSONResponse<'/v1/setup', 'get'>
 export type DeviceLink = JSONResponse<'/v1/device-links', 'post', 201>
-/** Response of `sessions.recover` / `deviceLinks.redeem`; the session itself is a cookie. */
-export type SessionCreated = JSONResponse<'/v1/sessions/recover', 'post', 201>
+/** Response of `sessions.signInWithApiKey` / `deviceLinks.redeem`; the session itself is a cookie. */
+export type SessionCreated = JSONResponse<'/v1/sessions/api-key', 'post', 201>
+/**
+ * Response of `sessions.recover`: the CSRF token of the new session (a cookie), a new admin
+ * API key (`api_key.key`) and the next recovery key. Both secrets are shown only once.
+ */
+export type SessionRecovered = JSONResponse<'/v1/sessions/recover', 'post', 201>
 export type RecoveryKey = JSONResponse<'/v1/recovery-key/rotate', 'post'>
 export type DecisionResult = Schemas['DecisionResult']
 export type Liveness = JSONResponse<'/livez', 'get'>

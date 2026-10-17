@@ -76,7 +76,9 @@ share screenshots of it.
 - It **expires after 5 minutes** and **works once**.
 - The phone gets its own browser session (30 days). It appears under
   **Settings → Devices**, where you can revoke it.
-- Only the dashboard can create links. API keys cannot create browser sessions.
+- Only the dashboard can create links; API keys cannot. In cloud mode a browser can also sign
+  in at `/login` with the workspace's admin API key (**Sign in with your API key**); agent keys
+  without `admin` can't.
 
 ## Who has to sign in
 
@@ -85,6 +87,7 @@ share screenshots of it.
 | `staqly serve` | This computer only | None |
 | `staqly serve --expose` | Your network | Every browser signs in once, this computer included |
 | Docker (`docker run`, `-p 8080:8080`) | Your network | Every browser signs in once, this computer included |
+| Cloud mode | The internet | A link or QR code, or the admin API key at `/login` |
 
 Once the dashboard is open to the network, staqly cannot safely tell "this computer" from
 "someone on the Wi-Fi" (Docker Desktop hides the real client address, and a `Host` header can

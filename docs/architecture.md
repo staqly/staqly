@@ -194,7 +194,7 @@ public (rate-limited) unless `SETUP_TOKEN` is set.
 | API key `stk_...` (256-bit) | SHA-256 hash + 6-char display prefix | REST + MCP, scoped |
 | Session cookie (256-bit) | SHA-256 hash | Dashboard; HttpOnly, SameSite=Lax, `Secure` (`COOKIE_SECURE`, default `true` in cloud mode), 30-day expiry (`SESSION_TTL`), revocable |
 | CSRF token | per session | Required in `X-CSRF-Token` for cookie-authenticated unsafe requests |
-| Recovery key (200-bit) | SHA-256 hash | Only `POST /v1/sessions/recover`; rotated from a dashboard session or `server recovery-key` on the host. Recovering or rotating signs out every other session |
+| Recovery key (200-bit) | SHA-256 hash | Only `POST /v1/sessions/recover`, single-use: a recovery swaps in a new recovery key and creates a new admin API key. Rotated from a dashboard session or `server recovery-key` on the host. Recovering or rotating signs out every other session |
 
 High-entropy random secrets make a plain SHA-256 an adequate verifier (no
 password hashing needed). `/mcp` accepts only bearer keys, never cookies.

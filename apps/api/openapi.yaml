@@ -129,7 +129,7 @@ paths:
       tags: [setup]
       security: []
       summary: Create a cloud workspace (starts a 7-day Pro trial)
-      description: Cloud mode only; each call creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, a default API key, a recovery key and a browser session cookie. Secrets are returned only in this response.
+      description: Cloud mode only; each call creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, an admin API key (scope `admin`, the credential that signs in to the dashboard; see POST /v1/sessions/api-key), a single-use recovery key and a browser session cookie. Secrets are returned only in this response.
       requestBody:
         required: true
         content:
@@ -406,17 +406,60 @@ paths:
       operationId: recoverSession
       tags: [auth]
       security: []
-      summary: Exchange the recovery key for a new browser session
-      description: Every other session of the workspace is signed out.
+      summary: Recover access with the recovery key (lost API key)
+      description: |
+        The recovery key is single-use. In one transaction this sets a session
+        cookie, creates a new admin API key (not counted against the plan's key
+        limit), replaces the recovery key with a new one (the old one stops
+        working) and signs out every other session of the workspace. Existing
+        API keys keep working. The new API key and recovery key are returned only
+        in this response. Rate-limited per client IP (429).
       requestBody:
         required: true
         content:
           application/json:
             schema: { type: object, required: [recovery_key], properties: { recovery_key: { type: string } } }
       responses:
+        "201":
+          description: Session cookie set; the new admin key and the next recovery key, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [csrf_token, api_key, recovery_key]
+                properties:
+                  csrf_token: { type: string }
+                  api_key: { $ref: "#/components/schemas/APIKey" }
+                  recovery_key: { type: string, description: Replaces the recovery key that was just used }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /v1/sessions/api-key:
+    post:
+      operationId: signInWithAPIKey
+      tags: [auth]
+      security: []
+      summary: Sign in to the dashboard with an admin API key
+      description: |
+        Cloud mode only (409 in local mode). Exchanges an API key with the
+        `admin` scope (the key sign-up or recovery returns) for a browser session
+        cookie. Keys without `admin` (agent keys) get 403; unknown, revoked or
+        expired keys get 401. The key goes in the body, not in Authorization.
+        Other sessions stay signed in. Recorded as a `session.signed_in` event.
+        Rate-limited per client IP (429).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [api_key], properties: { api_key: { type: string, description: "An admin key, stk_..." } } }
+      responses:
         "201": { description: Session cookie set, content: { application/json: { schema: { type: object, required: [csrf_token], properties: { csrf_token: { type: string } } } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
@@ -2097,7 +2140,7 @@ components:
       description: |
         Too many requests (`error.code` = `rate_limited`). Unauthenticated
         sensitive endpoints (POST /v1/sessions/recover, POST
-        /v1/device-links/redeem, POST /v1/workspaces, /v1/decide/*) are
+        /v1/sessions/api-key, POST /v1/device-links/redeem, POST /v1/workspaces, /v1/decide/*) are
         limited per client IP; other /v1 and /mcp requests in cloud mode are
         limited per API key / session.
       headers:

@@ -89,7 +89,25 @@ func (s *Server) recover(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	ns, err := s.svc.Recover(r.Context(), in.RecoveryKey, r.UserAgent())
+	res, err := s.svc.Recover(r.Context(), in.RecoveryKey, r.UserAgent())
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	s.setCookie(w, res.Session)
+	writeJSON(w, 201, map[string]any{"csrf_token": res.Session.CSRFToken, "api_key": res.APIKey, "recovery_key": res.RecoveryKey})
+}
+
+// signInWithAPIKey: the cloud dashboard's sign-in. The key travels in the body
+// (an Authorization header would authenticate the request itself).
+func (s *Server) signInWithAPIKey(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		APIKey string `json:"api_key"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	ns, err := s.svc.SignInWithAPIKey(r.Context(), in.APIKey, r.UserAgent())
 	if err != nil {
 		writeErr(w, r, err)
 		return

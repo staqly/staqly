@@ -1,8 +1,16 @@
-import type { DecisionResult, DeviceLink, RequestOptions, Session, SessionCreated, Whoami } from '../types.js'
+import type {
+  DecisionResult,
+  DeviceLink,
+  RequestOptions,
+  Session,
+  SessionCreated,
+  SessionRecovered,
+  Whoami,
+} from '../types.js'
 import { APIResource, enc } from './base.js'
 
 /**
- * Browser sessions. Sessions are cookies: `recover` sets one on the response,
+ * Browser sessions. Sessions are cookies: `signInWithApiKey` and `recover` set one on the response,
  * which only a cookie-aware `fetch` (a browser with credentials, or a custom
  * `fetch` with a cookie jar) keeps. Listing and revoking work with an `admin` API key.
  */
@@ -28,10 +36,29 @@ export class Sessions extends APIResource {
   }
 
   /**
-   * Exchanges the recovery key for a new browser session and signs out every
-   * other session. Sent without credentials; the session is set as a cookie.
+   * Cloud mode: exchanges an `admin` API key (the key sign-up or `recover` returns) for a
+   * browser session. Sent without credentials (the key goes in the body); other sessions
+   * stay signed in. Keys without `admin` throw `PermissionDeniedError` (403), unknown,
+   * revoked or expired keys `AuthenticationError` (401), local mode `ConflictError` (409).
    */
-  recover(recoveryKey: string, options?: RequestOptions): Promise<SessionCreated> {
+  signInWithApiKey(apiKey: string, options?: RequestOptions): Promise<SessionCreated> {
+    return this.http.request({
+      method: 'POST',
+      path: '/v1/sessions/api-key',
+      body: { api_key: apiKey },
+      noAuth: true,
+      options,
+    })
+  }
+
+  /**
+   * Exchanges the recovery key (single use) for a new browser session, a new admin
+   * API key and the next recovery key; the old recovery key stops working and every
+   * other session is signed out. Existing API keys keep working. Sent without
+   * credentials; the session is set as a cookie. Store `api_key.key` and
+   * `recovery_key` now: they are shown only once.
+   */
+  recover(recoveryKey: string, options?: RequestOptions): Promise<SessionRecovered> {
     return this.http.request({
       method: 'POST',
       path: '/v1/sessions/recover',

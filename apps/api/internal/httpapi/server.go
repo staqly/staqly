@@ -109,6 +109,7 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 		r.Get("/plans", s.listPlans)
 		r.Post("/workspaces", s.setup)
 		r.Post("/sessions/recover", s.recover)
+		r.Post("/sessions/api-key", s.signInWithAPIKey)
 		r.Post("/device-links/redeem", s.redeemDeviceLink)
 		for _, f := range publicRoutes {
 			f(s, r)

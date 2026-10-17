@@ -27,8 +27,9 @@ Signed webhooks, MCP and full history are on every plan. [Data export](/self-hos
 (the activity log and the whole workspace as a ZIP, **Settings → Backups**) is a Pro feature,
 trial included: on Free the export endpoints answer `402 plan_limit_exceeded` (limit
 `data_export`) and the Backups tab is hidden. Local installs always have it. File sizes are also capped
-by the operator's `MAX_UPLOAD_MB` (default 100 MB). On Free the one API key is the setup key
-you get when the workspace is created.
+by the operator's `MAX_UPLOAD_MB` (default 100 MB). On Free the one API key is the admin key
+you get when the workspace is created (it also signs in to the dashboard); on Pro, give each
+agent its own scoped key without `admin`.
 
 ## The Pro trial
 

@@ -93,15 +93,16 @@ describe('configuration', () => {
     expect(calls[1]!.body).toEqual({ name: 'x' })
   })
 
-  it('public endpoints (setup, live, recover, redeem, decide) are sent without credentials', async () => {
+  it('public endpoints (setup, live, recover, API key sign-in, redeem, decide) are sent without credentials', async () => {
     const { c, calls } = client(json({ status: 'ok' }))
 
     await c.setup()
     await c.live()
     await c.sessions.recover('rk_1')
+    await c.sessions.signInWithApiKey('stk_admin')
     await c.deviceLinks.redeem('tok')
     await c.decisionLinks.decide('dl_tok')
-    expect(calls.map((x) => x.headers.get('authorization'))).toEqual([null, null, null, null, null])
+    expect(calls.map((x) => x.headers.get('authorization'))).toEqual([null, null, null, null, null, null])
   })
 
   it('decisionLinks.decide is not retried (single-use link)', async () => {

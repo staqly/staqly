@@ -66,7 +66,7 @@ export interface paths {
         put?: never;
         /**
          * Create a cloud workspace (starts a 7-day Pro trial)
-         * @description Cloud mode only; each call creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, a default API key, a recovery key and a browser session cookie. Secrets are returned only in this response.
+         * @description Cloud mode only; each call creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, an admin API key (scope `admin`, the credential that signs in to the dashboard; see POST /v1/sessions/api-key), a single-use recovery key and a browser session cookie. Secrets are returned only in this response.
          */
         post: operations["createWorkspace"];
         delete?: never;
@@ -265,10 +265,40 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Exchange the recovery key for a new browser session
-         * @description Every other session of the workspace is signed out.
+         * Recover access with the recovery key (lost API key)
+         * @description The recovery key is single-use. In one transaction this sets a session
+         *     cookie, creates a new admin API key (not counted against the plan's key
+         *     limit), replaces the recovery key with a new one (the old one stops
+         *     working) and signs out every other session of the workspace. Existing
+         *     API keys keep working. The new API key and recovery key are returned only
+         *     in this response. Rate-limited per client IP (429).
          */
         post: operations["recoverSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in to the dashboard with an admin API key
+         * @description Cloud mode only (409 in local mode). Exchanges an API key with the
+         *     `admin` scope (the key sign-up or recovery returns) for a browser session
+         *     cookie. Keys without `admin` (agent keys) get 403; unknown, revoked or
+         *     expired keys get 401. The key goes in the body, not in Authorization.
+         *     Other sessions stay signed in. Recorded as a `session.signed_in` event.
+         *     Rate-limited per client IP (429).
+         */
+        post: operations["signInWithAPIKey"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2196,7 +2226,7 @@ export interface components {
         /**
          * @description Too many requests (`error.code` = `rate_limited`). Unauthenticated
          *     sensitive endpoints (POST /v1/sessions/recover, POST
-         *     /v1/device-links/redeem, POST /v1/workspaces, /v1/decide/*) are
+         *     /v1/sessions/api-key, POST /v1/device-links/redeem, POST /v1/workspaces, /v1/decide/*) are
          *     limited per client IP; other /v1 and /mcp requests in cloud mode are
          *     limited per API key / session.
          */
@@ -2774,6 +2804,42 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Session cookie set; the new admin key and the next recovery key, shown once */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        csrf_token: string;
+                        api_key: components["schemas"]["APIKey"];
+                        /** @description Replaces the recovery key that was just used */
+                        recovery_key: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    signInWithAPIKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description An admin key, stk_... */
+                    api_key: string;
+                };
+            };
+        };
+        responses: {
             /** @description Session cookie set */
             201: {
                 headers: {
@@ -2787,6 +2853,8 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["RateLimited"];
         };

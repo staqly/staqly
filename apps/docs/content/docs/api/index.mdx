@@ -108,7 +108,7 @@ headers or query strings.
 | Watchers | `/v1/watchers`, `/v1/watchers/{id}/run` — [Watchers](/automation/watchers) |
 | Notifications | `/v1/notification-channels`, `/test`, `/deliveries`, `/v1/decide/{token}`, `/v1/integrations/{telegram,slack,discord}` — [Notifications](/automation/notifications) |
 | Export & privacy | `/v1/events/export`, `/v1/workspace/export`, `/v1/workspace/exports/{id}`, `/v1/workspace/exports/{id}/download`, `/v1/items/{id}/purge`, `DELETE /v1/workspace` (cloud, dashboard session only) — [Data export](/self-hosting/data-export) |
-| Workspace & auth | `/v1/session`, `/v1/sessions`, `/v1/sessions/{id}`, `/v1/sessions/recover`, `/v1/workspace`, `/v1/workspace/usage`, `/v1/api-keys`, `/v1/api-keys/{id}/rotate`, `/v1/device-links`, `/v1/device-links/redeem`, `/v1/recovery-key/rotate` |
+| Workspace & auth | `/v1/session`, `/v1/sessions`, `/v1/sessions/{id}`, `/v1/sessions/api-key`, `/v1/sessions/recover`, `/v1/workspace`, `/v1/workspace/usage`, `/v1/api-keys`, `/v1/api-keys/{id}/rotate`, `/v1/device-links`, `/v1/device-links/redeem`, `/v1/recovery-key/rotate` |
 | Plan & billing | `POST /v1/workspace/plan` (switch to Free), `/v1/billing`, `/v1/billing/checkout`, `/v1/billing/portal`, `/v1/billing/webhook` (Stripe) — [Plans](/plans), [Billing](/self-hosting/billing) |
 | Health & metrics | `GET /health`, `/livez`, `/readyz`, `/metrics`, `/openapi.yaml` — [Monitoring](/self-hosting/monitoring) |
 | MCP | `POST /mcp` — Streamable HTTP, see [MCP](/mcp) |

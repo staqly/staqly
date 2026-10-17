@@ -27,6 +27,8 @@ describe('cloud mode on the local data', () => {
   let pendingItem: string
   let csrf: string
   let key: string
+  let recoveryKey: string
+  let adminKey: string
 
   beforeAll(async () => {
     // Still local mode: remember what the workspace holds.
@@ -52,12 +54,34 @@ describe('cloud mode on the local data', () => {
   })
 
   it('opens a session with a recovery key from `server recovery-key`', async () => {
-    const recoveryKey = await server('recovery-key')
+    recoveryKey = await server('recovery-key')
     const res = await operator.request('/v1/sessions/recover', { method: 'POST', json: { recovery_key: recoveryKey } })
 
     expect(res.status).toBe(201)
     expect(operator.jar.size).toBeGreaterThan(0)
-    csrf = res.json<{ csrf_token: string }>().csrf_token
+    const body = res.json<{ csrf_token: string; api_key: { key: string; scopes: string[] }; recovery_key: string }>()
+
+    csrf = body.csrf_token
+    adminKey = body.api_key.key
+    expect(adminKey).toMatch(/^stk_/)
+    expect(body.api_key.scopes).toEqual(['admin'])
+    expect(body.recovery_key).toMatch(/^staqly-recovery-/)
+    expect(body.recovery_key).not.toBe(recoveryKey)
+  })
+
+  it('the recovery key works once', async () => {
+    const res = await http(`${API}/v1/sessions/recover`, { method: 'POST', json: { recovery_key: recoveryKey } })
+
+    expect(res.status).toBe(401)
+  })
+
+  it('signs another browser in with the admin key from recovery, keeping the first one', async () => {
+    const browser = new Session(API)
+    const res = await browser.request('/v1/sessions/api-key', { method: 'POST', json: { api_key: adminKey } })
+
+    expect(res.status).toBe(201)
+    expect((await browser.request('/v1/session')).status).toBe(200)
+    expect((await operator.request('/v1/session')).status).toBe(200)
   })
 
   it('enforces CSRF on session requests', async () => {
@@ -67,6 +91,10 @@ describe('cloud mode on the local data', () => {
   })
 
   it('creates a scoped API key for an agent', async () => {
+    // Free allows one active key, and recovery just issued the admin key: the operator upgrades first.
+    const ws = (await operator.request('/v1/workspace')).json<{ id: string }>()
+
+    await server('set-plan', ws.id, 'pro')
     const res = await operator.request('/v1/api-keys', {
       method: 'POST',
       json: { name: 'agent', scopes: ['collections:read', 'items:read', 'items:write'] },
@@ -76,6 +104,12 @@ describe('cloud mode on the local data', () => {
     expect(res.status).toBe(201)
     key = res.json<{ key: string }>().key
     expect(key).toMatch(/^stk_/)
+  })
+
+  it('an agent key cannot sign in to the dashboard', async () => {
+    const res = await http(`${API}/v1/sessions/api-key`, { method: 'POST', json: { api_key: key } })
+
+    expect(res.status).toBe(403)
   })
 
   it('the key sees all the data created in local mode', async () => {

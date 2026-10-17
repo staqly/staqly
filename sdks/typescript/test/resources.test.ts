@@ -582,10 +582,22 @@ const cases: Case[] = [
   {
     name: 'sessions.recover',
     call: (c) => c.sessions.recover('rk_1'),
-    reply: json({ csrf_token: 'csrf' }, 201),
+    reply: json(
+      { csrf_token: 'csrf', api_key: { id: 'key_1', key: 'stk_new', scopes: ['admin'] }, recovery_key: 'rk_2' },
+      201,
+    ),
     method: 'POST',
     path: '/v1/sessions/recover',
     body: { recovery_key: 'rk_1' },
+    result: { csrf_token: 'csrf', api_key: { id: 'key_1', key: 'stk_new', scopes: ['admin'] }, recovery_key: 'rk_2' },
+  },
+  {
+    name: 'sessions.signInWithApiKey',
+    call: (c) => c.sessions.signInWithApiKey('stk_admin'),
+    reply: json({ csrf_token: 'csrf' }, 201),
+    method: 'POST',
+    path: '/v1/sessions/api-key',
+    body: { api_key: 'stk_admin' },
     result: { csrf_token: 'csrf' },
   },
   {
