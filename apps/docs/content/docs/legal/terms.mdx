@@ -21,7 +21,8 @@ Decisions can be sent to your systems through webhooks, notifications and the AP
 
 ## 2. Your workspace and credentials
 
-- A workspace is created with an **API key** and a **recovery key**. Keep them secret: anyone
+- A workspace is created with an admin **API key** (it also signs in to the dashboard) and a
+  single-use **recovery key**. Keep them secret: anyone
   with a key can act within its [scopes](/api/authentication#scopes). You are responsible for
   everything done with your keys and browser sessions.
 - Revoke keys you no longer use, and rotate the recovery key if you think it leaked

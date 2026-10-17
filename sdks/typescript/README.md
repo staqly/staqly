@@ -70,8 +70,9 @@ const staqly = new Staqly({
 });
 ```
 
-Don't have a workspace yet? Create one programmatically. It starts on the Free plan, and the key
-is shown only once:
+Don't have a workspace yet? Create one programmatically. It starts on the Free plan. The response
+holds an admin key (scope `admin`, also the dashboard sign-in credential) and a single-use recovery
+key, both shown only once:
 
 ```ts
 const { workspace, api_key, recovery_key } = await new Staqly({ baseUrl: "https://staqly.example.com" })
@@ -429,7 +430,8 @@ as `SCOPES`).
 
 ## Sessions, device links and decision links
 
-Browser sessions are cookies. Methods that create one (`sessions.recover`, `deviceLinks.redeem`)
+Browser sessions are cookies. Methods that create one (`sessions.signInWithApiKey`,
+`sessions.recover`, `deviceLinks.redeem`)
 only help with a cookie-aware `fetch` (a browser with credentials, or a custom `fetch` with a cookie
 jar). Methods marked "session" answer 403 to API keys.
 
@@ -438,7 +440,10 @@ await staqly.sessions.current();            // same as whoami(), plus the CSRF t
 await staqly.sessions.list();               // admin
 await staqly.sessions.revoke("ses_q2vbm4kz7xw3dn5hjr6c"); // admin
 await staqly.sessions.logout();             // revoke the current session
-await staqly.sessions.recover("staqly-recovery-K7QX2-MB4ZD-W9PLT-R3HVN-6YCJE-A5FUG-T2KWS-8NDQB"); // recovery key -> new session (no auth)
+await staqly.sessions.signInWithApiKey("stk_..."); // cloud: admin key -> new session (no auth)
+// Recovery key (single use) -> new session, a new admin key and the next recovery key (no auth).
+// The old recovery key stops working and every other session is signed out; API keys keep working.
+const { api_key, recovery_key } = await staqly.sessions.recover("staqly-recovery-K7QX2-MB4ZD-W9PLT-R3HVN-6YCJE-A5FUG-T2KWS-8NDQB");
 await staqly.deviceLinks.create();          // session or local: one-time sign-in link (5 min)
 await staqly.deviceLinks.redeem(token);     // token from the link fragment (no auth)
 await staqly.workspace.rotateRecoveryKey(); // session: new recovery key, shown once

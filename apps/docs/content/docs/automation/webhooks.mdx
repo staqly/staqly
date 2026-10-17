@@ -35,8 +35,8 @@ subscribe to, and keeps retrying until your endpoint answers with a `2xx`.
 ### Create the webhook
 
 Pick the URL that should receive events and the events you care about. Creating webhooks
-needs the `webhooks:manage` scope (included in the default key; local mode and dashboard
-sessions have it implicitly).
+needs the `webhooks:manage` scope (the `admin` key from signup includes it; local mode and
+dashboard sessions have it implicitly).
 
 <Tabs items={["curl", "CLI", "Dashboard"]}>
 <Tab value="curl">

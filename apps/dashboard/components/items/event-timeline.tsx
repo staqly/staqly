@@ -61,6 +61,7 @@ const LABELS: Record<string, string> = {
   'workspace.plan_changed': 'Plan changed',
   'api_key.rotated': 'API key rotated',
   'session.revoked': 'Session revoked',
+  'session.signed_in': 'Signed in with API key',
   'session.recovered': 'Signed in with recovery key',
   'device_link.created': 'Sign-in link created',
   'device.connected': 'Device connected',

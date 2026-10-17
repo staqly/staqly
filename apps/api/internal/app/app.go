@@ -42,8 +42,13 @@ var AllScopes = []string{
 	ScopeItemsReview, ScopeActionsExecute, ScopeWebhooksManage, ScopeWatchersManage, ScopeChannelsManage, ScopeAdmin,
 }
 
-// DefaultKeyScopes are granted to the key created during setup: everything an
-// automation needs, but not admin (key management stays in the dashboard).
+// AdminKeyScopes are granted to the key created at sign-up and to the new key
+// recovery issues: the admin key is what signs a browser in to the dashboard
+// (POST /v1/sessions/api-key). Agents should get a scoped key instead.
+var AdminKeyScopes = []string{ScopeAdmin}
+
+// DefaultKeyScopes: a typical agent key, everything an automation needs but not
+// admin (no dashboard sign-in, no key management) and not channels:manage.
 var DefaultKeyScopes = []string{
 	ScopeCollectionsRead, ScopeCollectionsWrite, ScopeItemsRead, ScopeItemsWrite,
 	ScopeItemsReview, ScopeActionsExecute, ScopeWebhooksManage, ScopeWatchersManage,

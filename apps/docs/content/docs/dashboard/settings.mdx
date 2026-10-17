@@ -34,7 +34,7 @@ Settings has six tabs: **General**, **Plan & usage**, **Notifications**, **Data 
 | **Processing timeout** | How long an item may stay *processing* (after Publish, Regenerate or any action that sets it) before it fails with "No result reported": 15 minutes to 1 day, default 1 hour. While an item waits, its page shows how long it has waited of this limit and when it will fail. A single item can get its own limit with **Change the limit** in its waiting box (`PATCH /v1/items/{id}` `processing_timeout_seconds`; 0 returns to the workspace's). Such an item shows **Timed out** (its status stays `failed`, the webhook `item.failed` carries `timeout: true`) and can be retried. This is not *Expired*, which means nobody decided a pending item in time. |
 | **Appearance** | Light, dark or system theme. |
 | **Devices** | Browsers and phones signed in to this workspace, with when each was last seen. **Sign out** any of them (it loses access at once and has to be connected again); **Connect a device** creates a new QR code. Signing a browser in again with a new link replaces its old entry, so each browser is listed once. |
-| **Recovery key** <Badge>cloud</Badge> | Rotate the recovery key, the only way to regain admin access if every browser session is lost. The new key is shown once; store it somewhere safe. |
+| **Recovery key** <Badge>cloud</Badge> | Rotate the recovery key, the way back in if you lose the admin API key (**Lost your key?** on the sign-in screen; each recovery key works once and is replaced by a new one). Rotating signs out every other browser. The new key is shown once; store it somewhere safe. |
 | **Sign out** <Badge>cloud</Badge> | **Log out** ends the session in this browser. |
 
 With `staqly serve` on this computer only, nothing needs to sign in, so **Devices** may be
@@ -126,6 +126,10 @@ In cloud mode **API keys** sits right under it in the sidebar.
 - **Rotate** a key: revoke it and issue a replacement with the same name and scopes; the new
   key is shown once.
 - **Revoke** a key.
+- The key from signup, **Admin key** (or **Admin key (recovered)** after a recovery), is listed
+  here too. Keys with `admin` sign in to the dashboard; keys without it, like the presets
+  above except **Full access**, work only for agents and can never open the dashboard. Don't
+  revoke your last admin key unless you still have the recovery key.
 
 Snippets on the integration pages include the key you just created. It is kept only in memory
 in that browser tab, never in local storage.

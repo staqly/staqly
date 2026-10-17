@@ -70,8 +70,9 @@ else:
 staqly = Staqly(base_url="https://staqly.example.com", api_key=os.environ["STAQLY_API_KEY"])
 ```
 
-Don't have a workspace yet? Create one programmatically. It starts on the Free plan, and the key
-is shown only once:
+Don't have a workspace yet? Create one programmatically. It starts on the Free plan. The response
+holds an admin key (scope `admin`, also the dashboard sign-in credential) and a single-use recovery
+key, both shown only once:
 
 ```python
 created = Staqly(base_url="https://staqly.example.com").workspaces.create(name="My agents")
@@ -453,8 +454,13 @@ staqly.sessions.current()  # same as whoami(), includes the csrf_token
 staqly.sessions.list()  # admin: active browser sessions (Session.current marks this one)
 staqly.sessions.revoke("ses_q2vbm4kz7xw3dn5hjr6c")
 staqly.sessions.logout()  # revoke the current session
-# recovery key -> session cookie + csrf_token
-s = staqly.sessions.recover("staqly-recovery-K7QMZ-3XKD5-VNPW2-HCY4T-BRFA6-JLE5S-O2UQM-4ZXRA")
+# cloud: admin API key -> session cookie + csrf_token (no auth; other sessions stay signed in)
+s = staqly.sessions.sign_in_with_api_key("stk_...")
+# recovery key (single use) -> session cookie + csrf_token, a new admin key and the next recovery
+# key (both shown once); the old recovery key stops working, every other session is signed out,
+# existing API keys keep working
+r = staqly.sessions.recover("staqly-recovery-K7QMZ-3XKD5-VNPW2-HCY4T-BRFA6-JLE5S-O2UQM-4ZXRA")
+r.api_key.key, r.recovery_key
 
 link = staqly.device_links.create()  # one-time "connect a device" URL, 5 minutes, single use
 # token from the URL fragment -> session cookie
@@ -465,7 +471,7 @@ html = staqly.decision_links.preview("dl_tiptzca7tyr7yzgxiuqh")  # confirmation 
 staqly.decision_links.decide("dl_tiptzca7tyr7yzgxiuqh", feedback="Off-brand")  # DecisionResult; single use
 ```
 
-`recover()` and `redeem()` store the session cookie in the client's cookie jar. Unsafe requests
+`sign_in_with_api_key()`, `recover()` and `redeem()` store the session cookie in the client's cookie jar. Unsafe requests
 on a session need the CSRF token: pass `default_headers={"X-CSRF-Token": s.csrf_token}` or
 `request_options={"headers": {...}}`. The inbound chat-provider callbacks
 (`/v1/integrations/*`), the Stripe webhook (`/v1/billing/webhook`) and `/mcp` are not wrapped:

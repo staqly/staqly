@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ErrorPage from '@/app/error'
-import { RecoverForm } from '@/components/auth/recover-form'
+import { SignIn } from '@/components/auth/sign-in'
 import { ToggleChip } from '@/components/common/toggle-chip'
 import { Inbox, isShortcutExempt } from '@/components/inbox/inbox'
 import { ApiKeysManager } from '@/components/integrations/api-keys'
@@ -22,19 +22,19 @@ const SECRET = { id: 'key_1', name: 'Default key', key: 'stk_secret' }
 async function signIn(next: string) {
   nav.set('/login', new URLSearchParams({ next }).toString())
   const user = userEvent.setup()
-  const r = renderWithProviders(<RecoverForm />)
+  const r = renderWithProviders(<SignIn />)
 
-  await user.type(screen.getByLabelText('Recovery key*'), 'staqly-recovery-XYZ')
+  await user.type(screen.getByLabelText('API key*'), 'stk_admin')
   await user.click(screen.getByRole('button', { name: /sign in/i }))
   await waitFor(() => expect(nav.replace).toHaveBeenCalled())
 
   return r
 }
 
-describe('recovery sign-in redirect (open redirect)', () => {
+describe('API key sign-in redirect (open redirect)', () => {
   const routes = {
     'GET /v1/setup': { initialized: true, mode: 'cloud', setup_token_required: true },
-    'POST /v1/sessions/recover': { status: 201, body: { csrf_token: 'c' } },
+    'POST /v1/sessions/api-key': { status: 201, body: { csrf_token: 'c' } },
   }
 
   it.each(['/\\evil.example', '/\t/evil.example', '//evil.example', 'https://evil.example', '/login'])(
@@ -57,11 +57,11 @@ describe('recovery sign-in redirect (open redirect)', () => {
     const mocked = globalThis.fetch
     const { promise: held, resolve: release } = Promise.withResolvers<void>()
 
-    // The recovery request stays open until released, so the form is still checking on the second Enter.
+    // The sign-in request stays open until released, so the form is still checking on the second Enter.
     vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
       const res = mocked(input, init)
 
-      if (String(input).endsWith('/v1/sessions/recover')) {
+      if (String(input).endsWith('/v1/sessions/api-key')) {
         await held
       }
 
@@ -70,13 +70,13 @@ describe('recovery sign-in redirect (open redirect)', () => {
     nav.set('/login')
     const user = userEvent.setup()
 
-    renderWithProviders(<RecoverForm />)
-    await user.type(screen.getByLabelText('Recovery key*'), 'staqly-recovery-XYZ{Enter}')
+    renderWithProviders(<SignIn />)
+    await user.type(screen.getByLabelText('API key*'), 'stk_admin{Enter}')
     await waitFor(() => expect(screen.getByRole('button', { name: /checking/i })).toBeDisabled())
     await user.keyboard('{Enter}')
     release()
     await waitFor(() => expect(nav.replace).toHaveBeenCalled())
-    expect(api.find('POST', '/v1/sessions/recover')).toHaveLength(1)
+    expect(api.find('POST', '/v1/sessions/api-key')).toHaveLength(1)
   })
 
   it('forgets the remembered API key and every cached query of the previous session', async () => {
@@ -84,10 +84,10 @@ describe('recovery sign-in redirect (open redirect)', () => {
     rememberApiKey(SECRET)
     nav.set('/login')
     const user = userEvent.setup()
-    const { client } = renderWithProviders(<RecoverForm />)
+    const { client } = renderWithProviders(<SignIn />)
 
     client.setQueryData(qk.apiKeys, { data: [{ id: 'key_old' }] })
-    await user.type(screen.getByLabelText('Recovery key*'), 'staqly-recovery-XYZ')
+    await user.type(screen.getByLabelText('API key*'), 'stk_admin')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/inbox', undefined))
     expect(rememberedApiKey()).toBeNull()

@@ -2,8 +2,8 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import { RecoverForm } from '@/components/auth/recover-form'
 import { SetupFlow } from '@/components/auth/setup-flow'
+import { SignIn } from '@/components/auth/sign-in'
 
 import { nav } from './navigation'
 import { PLANS } from './plans-fixtures'
@@ -19,9 +19,9 @@ const SETUP_RESULT = {
   },
   api_key: {
     id: 'key_1',
-    name: 'Default key',
+    name: 'Admin key',
     prefix: 'stk_abcd',
-    scopes: ['items:read', 'items:write'],
+    scopes: ['admin'],
     created_at: '2026-01-01T00:00:00Z',
     last_used_at: null,
     expires_at: null,
@@ -78,16 +78,19 @@ describe('cloud signup (create your free workspace)', () => {
 
     const open = screen.getByRole('button', { name: /open dashboard/i })
 
-    const ack = screen.getByRole('checkbox', { name: /i have saved my recovery key/i })
+    const ack = screen.getByRole('checkbox', { name: /i have saved my api key and recovery key/i })
 
     expect(ack).toHaveAttribute('aria-required', 'true')
     await user.click(open)
     expect(nav.replace).not.toHaveBeenCalled()
-    expect(screen.getByText('Confirm that you saved your recovery key')).toHaveAttribute('data-slot', 'field-error')
+    expect(screen.getByText('Confirm that you saved your API key and recovery key')).toHaveAttribute(
+      'data-slot',
+      'field-error',
+    )
     expect(ack).toHaveAttribute('aria-invalid', 'true')
 
     await user.click(ack)
-    expect(screen.queryByText('Confirm that you saved your recovery key')).not.toBeInTheDocument()
+    expect(screen.queryByText('Confirm that you saved your API key and recovery key')).not.toBeInTheDocument()
     await user.click(open)
     expect(nav.replace).toHaveBeenCalledWith('/inbox', undefined)
   })
@@ -226,47 +229,130 @@ describe('local mode', () => {
 
   it('skips the recovery login page', async () => {
     mockApi({ 'GET /v1/setup': { initialized: true, mode: 'local', setup_token_required: false } })
-    renderWithProviders(<RecoverForm />)
+    renderWithProviders(<SignIn />)
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/inbox', undefined))
   })
 })
 
-describe('recover access (cloud mode)', () => {
-  it('exchanges the recovery key for a session', async () => {
+const RECOVER_RESULT = {
+  csrf_token: 'c',
+  api_key: { ...SETUP_RESULT.api_key, id: 'key_2', name: 'Admin key (recovered)', key: 'stk_new_admin_key' },
+  recovery_key: 'staqly-recovery-NEXTT-KEYYY',
+}
+
+describe('sign in with an API key (cloud mode)', () => {
+  it('exchanges an admin API key for a session', async () => {
     const api = mockApi({
       'GET /v1/setup': { initialized: true, mode: 'cloud', setup_token_required: true },
-      'POST /v1/sessions/recover': { status: 201, body: { csrf_token: 'c' } },
+      'POST /v1/sessions/api-key': { status: 201, body: { csrf_token: 'c' } },
     })
 
     nav.set('/login', 'next=/webhooks')
     const user = userEvent.setup()
 
-    renderWithProviders(<RecoverForm />)
-    await user.type(screen.getByLabelText('Recovery key*'), 'staqly-recovery-XYZ')
+    renderWithProviders(<SignIn />)
+    expect(screen.getByRole('heading', { name: /sign in with your api key/i })).toBeInTheDocument()
+    await user.type(screen.getByLabelText('API key*'), ' stk_admin ')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/webhooks', undefined))
-    expect(api.find('POST', '/v1/sessions/recover')[0].body).toEqual({ recovery_key: 'staqly-recovery-XYZ' })
+    expect(api.find('POST', '/v1/sessions/api-key')[0].body).toEqual({ api_key: 'stk_admin' })
   })
 
-  it('explains that each workspace is opened with its own recovery key', async () => {
+  it('offers sign-up and never bounces from /login to /setup', async () => {
     mockApi({ 'GET /v1/setup': { initialized: true, mode: 'cloud', signup_open: true, setup_token_required: false } })
-    renderWithProviders(<RecoverForm />)
-    expect(await screen.findByRole('heading', { name: /sign in to your workspace/i })).toBeInTheDocument()
-    expect(screen.getByText(/each workspace has its own recovery key/i)).toBeInTheDocument()
+    renderWithProviders(<SignIn />)
     expect(await screen.findByRole('link', { name: /create one free/i })).toHaveAttribute('href', '/setup')
     // Cloud mode never bounces from /login to /setup ("initialized" is meaningless there).
     expect(nav.replace).not.toHaveBeenCalled()
   })
 
-  it('requires the recovery key: asterisk, aria-required and an error under the field', async () => {
+  it('requires the key: asterisk, aria-required and an error under the field', async () => {
     const api = mockApi({ 'GET /v1/setup': { initialized: true, mode: 'cloud', setup_token_required: true } })
     const user = userEvent.setup()
 
-    renderWithProviders(<RecoverForm />)
+    renderWithProviders(<SignIn />)
+    const key = screen.getByLabelText('API key*')
+
+    expect(key).toHaveAttribute('aria-required', 'true')
+    expect(key).toHaveAttribute('type', 'password')
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+    expect(await screen.findByRole('alert')).toHaveAttribute('data-slot', 'field-error')
+    expect(key).toHaveAttribute('aria-invalid', 'true')
+    expect(api.find('POST', '/v1/sessions/api-key')).toHaveLength(0)
+  })
+
+  it.each([
+    [401, 'unauthorized', /not valid/i],
+    [403, 'forbidden', /only keys with the admin scope sign in/i],
+  ])('explains a %i under the field', async (status, code, text) => {
+    mockApi({
+      'GET /v1/setup': { initialized: true, mode: 'cloud', setup_token_required: true },
+      'POST /v1/sessions/api-key': { status, body: { error: { code, message: 'nope' } } },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<SignIn />)
+    await user.type(screen.getByLabelText('API key*'), 'stk_agent')
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+    expect(await screen.findByText(text)).toBeInTheDocument()
+    expect(nav.replace).not.toHaveBeenCalled()
+  })
+})
+
+async function openRecovery() {
+  const user = userEvent.setup()
+
+  renderWithProviders(<SignIn />)
+  await user.click(screen.getByRole('button', { name: /lost your key/i }))
+  expect(screen.getByRole('heading', { name: /recover your workspace/i })).toBeInTheDocument()
+
+  return user
+}
+
+describe('recover access (cloud mode)', () => {
+  it('exchanges the recovery key for a session and shows the new keys once before opening the dashboard', async () => {
+    const api = mockApi({
+      'GET /v1/setup': { initialized: true, mode: 'cloud', setup_token_required: true },
+      'POST /v1/sessions/recover': { status: 201, body: RECOVER_RESULT },
+    })
+
+    nav.set('/login', 'next=/webhooks')
+    const user = await openRecovery()
+
+    expect(screen.getByText(/a recovery key works once/i)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Recovery key*'), 'staqly-recovery-XYZ')
+    await user.click(screen.getByRole('button', { name: /recover access/i }))
+    expect(await screen.findByTestId('recovered-secrets')).toBeInTheDocument()
+    expect(api.find('POST', '/v1/sessions/recover')[0].body).toEqual({ recovery_key: 'staqly-recovery-XYZ' })
+    expect(screen.getByTestId('secret-API key')).toHaveTextContent('stk_new_admin_key')
+    expect(screen.getByTestId('secret-Recovery key')).toHaveTextContent('staqly-recovery-NEXTT-KEYYY')
+    expect(screen.getByText(/no longer works/i)).toBeInTheDocument()
+
+    const open = screen.getByRole('button', { name: /open dashboard/i })
+
+    await user.click(open)
+    expect(nav.replace).not.toHaveBeenCalled()
+    expect(screen.getByText('Confirm that you saved your new keys')).toHaveAttribute('data-slot', 'field-error')
+    await user.click(screen.getByRole('checkbox', { name: /i have saved my new api key and recovery key/i }))
+    await user.click(open)
+    expect(nav.replace).toHaveBeenCalledWith('/webhooks', undefined)
+  })
+
+  it('goes back to the API key form', async () => {
+    mockApi({ 'GET /v1/setup': { initialized: true, mode: 'cloud', setup_token_required: true } })
+    const user = await openRecovery()
+
+    await user.click(screen.getByRole('button', { name: /sign in with your api key/i }))
+    expect(screen.getByLabelText('API key*')).toBeInTheDocument()
+  })
+
+  it('requires the recovery key: asterisk, aria-required and an error under the field', async () => {
+    const api = mockApi({ 'GET /v1/setup': { initialized: true, mode: 'cloud', setup_token_required: true } })
+    const user = await openRecovery()
     const key = screen.getByLabelText('Recovery key*')
 
     expect(key).toHaveAttribute('aria-required', 'true')
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
+    await user.click(screen.getByRole('button', { name: /recover access/i }))
     expect(await screen.findByRole('alert')).toHaveAttribute('data-slot', 'field-error')
     expect(key).toHaveAttribute('aria-invalid', 'true')
     expect(key.closest('[data-slot=field]')).toHaveAttribute('data-invalid', 'true')
@@ -275,7 +361,7 @@ describe('recover access (cloud mode)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('shows an inline error for a wrong key', async () => {
+  it('shows an inline error for a wrong or already used key', async () => {
     mockApi({
       'GET /v1/setup': { initialized: true, mode: 'cloud', setup_token_required: true },
       'POST /v1/sessions/recover': {
@@ -283,11 +369,10 @@ describe('recover access (cloud mode)', () => {
         body: { error: { code: 'unauthorized', message: 'invalid recovery key' } },
       },
     })
-    const user = userEvent.setup()
+    const user = await openRecovery()
 
-    renderWithProviders(<RecoverForm />)
     await user.type(screen.getByLabelText('Recovery key*'), 'nope')
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
-    expect(await screen.findByText(/not valid for this workspace/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /recover access/i }))
+    expect(await screen.findByText(/each recovery key works only once/i)).toBeInTheDocument()
   })
 })

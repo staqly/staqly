@@ -23,6 +23,12 @@ UPDATE workspaces SET processing_timeout_seconds = ?, updated_at = ? WHERE id = 
 -- name: UpdateRecoveryVerifier :exec
 UPDATE workspaces SET recovery_verifier = ?, recovery_rotated_at = ?, updated_at = ? WHERE id = ?;
 
+-- name: SwapRecoveryVerifier :execrows
+-- Recovery is single-use: the old verifier is replaced only if it still matches
+-- (two concurrent recoveries with the same key: exactly one wins).
+UPDATE workspaces SET recovery_verifier = @new_verifier, recovery_rotated_at = @rotated_at, updated_at = @rotated_at
+WHERE id = @id AND recovery_verifier = @old_verifier;
+
 -- name: CreateAPIKey :exec
 INSERT INTO api_keys (id, workspace_id, name, prefix, key_hash, scopes, created_at, expires_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);

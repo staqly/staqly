@@ -17,6 +17,11 @@ First public release: a rewrite of the internal 1.0.0 client.
   `collections.listItems()`: every operation in `openapi.yaml` has a method, except the chat
   integration callbacks (Telegram, Slack, Discord), the Stripe webhook (`/v1/billing/webhook`),
   `/mcp` and the HTML decision page.
+- `sessions.signInWithApiKey()` (`POST /v1/sessions/api-key`, cloud): exchanges an `admin` API key
+  for a browser session; returns `SessionCreated`.
+- `sessions.recover()` returns `SessionRecovered`: the CSRF token, a new admin API key
+  (`api_key.key`) and the next recovery key. Recovery keys are single use; the key returned by
+  `workspaces.create()` is an admin key (`"Admin key"`, scopes `["admin"]`).
 - `billing.get()`, `billing.checkout()`, `billing.portal()` (Stripe subscription; cloud, `admin`).
 - `exports.events()` streams the NDJSON activity export; `exports.eventsResponse()` (CSV/NDJSON);
   workspace export jobs (`exportWorkspace`, `waitForWorkspaceExport`, `downloadWorkspaceExport`);

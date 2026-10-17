@@ -486,7 +486,7 @@ await saveResponse(await staqly.exports.eventsResponse({ format: 'csv', from: '2
 | `workspace.setPlan('free')` | Switch to the Free plan (`admin`, cloud). Other plans need a payment and throw `PlanLimitError` (402) |
 | `workspace.rotateRecoveryKey()` | Issue a new recovery key, shown once, and sign out every other session (dashboard session only) |
 | `workspace.delete(confirmName)` | Permanently delete the workspace and all its data (cloud, dashboard session only); `confirmName` must equal the workspace name |
-| `workspaces.create({ name, setup_token })` | Sign up for a cloud workspace; returns the first API key and the recovery key (no auth) |
+| `workspaces.create({ name, setup_token })` | Sign up for a cloud workspace; returns the admin API key and the recovery key (no auth) |
 | `plans.list()` | Cloud plans and their limits (`-1` means unlimited) |
 
 ### `billing`
@@ -519,7 +519,7 @@ if (billing.enabled && billing.plan !== 'pro') {
 
 ### `sessions` and `deviceLinks`
 
-Browser sessions are cookies. `sessions.recover` and `deviceLinks.redeem` set one on the
+Browser sessions are cookies. `sessions.signInWithApiKey`, `sessions.recover` and `deviceLinks.redeem` set one on the
 response, which only a cookie-aware `fetch` keeps (a browser with credentials, or a custom
 `fetch` with a cookie jar). Methods marked "dashboard session" answer 403 to API keys.
 
@@ -529,7 +529,8 @@ response, which only a cookie-aware `fetch` keeps (a browser with credentials, o
 | `sessions.list()` | Active browser sessions (`admin`); `current` marks the caller's own |
 | `sessions.revoke(id)` | Sign out a session (`admin`) |
 | `sessions.logout()` | Revoke the session the request carries |
-| `sessions.recover(recoveryKey)` | Exchange the recovery key for a new session and sign out every other one (no auth) |
+| `sessions.signInWithApiKey(apiKey)` | Cloud: exchange an `admin` API key for a session; other sessions stay signed in (no auth; agent keys get 403) |
+| `sessions.recover(recoveryKey)` | Exchange the recovery key (single use) for a new session, a new admin API key and the next recovery key, and sign out every other session (no auth) |
 | `deviceLinks.create()` | Create a one-time sign-in link, valid for 5 minutes (dashboard session or local mode) |
 | `deviceLinks.redeem(token)` | Exchange the token from a link's `#` fragment for a session (no auth) |
 
@@ -540,7 +541,8 @@ for (const s of await staqly.sessions.list()) {
   }
 }
 
-await staqly.sessions.recover('staqly-recovery-K7QX2-MB4ZD-W9PLT-R3HVN-6YCJE-A5FUG-T2KWS-8NDQB')
+const { api_key, recovery_key } = await staqly.sessions.recover('staqly-recovery-K7QX2-MB4ZD-W9PLT-R3HVN-6YCJE-A5FUG-T2KWS-8NDQB')
+// Store api_key.key (stk_...) and recovery_key now: both are shown once
 ```
 
 The chat integration callbacks (Telegram, Slack, Discord), the Stripe webhook

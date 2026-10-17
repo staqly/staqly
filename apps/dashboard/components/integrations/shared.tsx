@@ -40,7 +40,7 @@ export function CloudModeCard({ className }: { className?: string }) {
           <p className="text-sm text-muted-foreground">
             Want agents on other machines to reach staqly? Deploy the same app remotely with{' '}
             <InlineCode>STAQLY_MODE=cloud</InlineCode> plus a <InlineCode>SETUP_TOKEN</InlineCode>, HTTPS and{' '}
-            <InlineCode>COOKIE_SECURE=true</InlineCode>. There you sign in with a recovery key and create scoped API
+            <InlineCode>COOKIE_SECURE=true</InlineCode>. There you sign in with an admin API key and create scoped API
             keys; clients switch by using the cloud URL and <InlineCode>Authorization: Bearer stk_...</InlineCode>.
           </p>
         </div>

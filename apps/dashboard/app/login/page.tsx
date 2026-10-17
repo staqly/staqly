@@ -1,14 +1,14 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 
-import { RecoverForm } from '@/components/auth/recover-form'
+import { SignIn } from '@/components/auth/sign-in'
 
-export const metadata: Metadata = { title: 'Recover access' }
+export const metadata: Metadata = { title: 'Sign in' }
 
 export default function LoginPage() {
   return (
     <Suspense>
-      <RecoverForm />
+      <SignIn />
     </Suspense>
   )
 }

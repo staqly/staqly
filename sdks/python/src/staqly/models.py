@@ -55,6 +55,7 @@ __all__ = [
     "Scope",
     "Session",
     "SessionCreated",
+    "SessionRecovered",
     "SetupStatus",
     "StaqlyModel",
     "Usage",
@@ -245,6 +246,16 @@ class SessionCreated(StaqlyModel):
     """A new session cookie was set; send ``csrf_token`` as ``X-CSRF-Token`` on unsafe requests."""
 
     csrf_token: str = ""
+
+
+class SessionRecovered(StaqlyModel):
+    """Result of ``sessions.recover()``: a new session cookie was set, plus a new admin API key
+    (``api_key.key``) and the next recovery key. Both secrets are shown only once; the recovery
+    key that was just used stops working."""
+
+    csrf_token: str
+    api_key: APIKey
+    recovery_key: str
 
 
 class DeviceLink(StaqlyModel):

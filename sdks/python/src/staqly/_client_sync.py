@@ -64,6 +64,7 @@ from .models import (
     RecoveryKey,
     Session,
     SessionCreated,
+    SessionRecovered,
     SetupStatus,
     StaqlyModel,
     Watcher,
@@ -1253,9 +1254,33 @@ class Sessions(_Resource):
         """Revokes the current session (``DELETE /v1/session``)."""
         self._http.request(RequestSpec("DELETE", "/v1/session", options=_opts(request_options)))
 
-    def recover(self, recovery_key: str, *, request_options: RequestOptions | None = None) -> SessionCreated:
-        """Exchanges the recovery key for a new session cookie (kept in the client's cookie jar).
-        Every other session of the workspace is signed out. Sent without credentials."""
+    def sign_in_with_api_key(
+        self, api_key: str, *, request_options: RequestOptions | None = None
+    ) -> SessionCreated:
+        """Cloud mode: exchanges an ``admin`` API key (the key sign-up or ``recover()`` returns)
+        for a session cookie (kept in the client's cookie jar). Sent without credentials (the key
+        goes in the body); other sessions stay signed in. Keys without ``admin`` raise
+        :class:`~staqly.PermissionDeniedError` (403), unknown, revoked or expired keys
+        :class:`~staqly.AuthenticationError` (401), local mode :class:`~staqly.ConflictError` (409)."""
+        r = self._http.request(
+            RequestSpec(
+                "POST",
+                "/v1/sessions/api-key",
+                json={"api_key": api_key},
+                no_auth=True,
+                options=_opts(request_options),
+            )
+        )
+        return _model(SessionCreated, r)
+
+    def recover(
+        self, recovery_key: str, *, request_options: RequestOptions | None = None
+    ) -> SessionRecovered:
+        """Exchanges the recovery key (single use) for a new session cookie (kept in the client's
+        cookie jar), a new admin API key and the next recovery key. The old recovery key stops
+        working and every other session of the workspace is signed out; existing API keys keep
+        working. Sent without credentials. Store ``api_key.key`` and ``recovery_key`` now: they
+        are shown only once."""
         r = self._http.request(
             RequestSpec(
                 "POST",
@@ -1265,7 +1290,7 @@ class Sessions(_Resource):
                 options=_opts(request_options),
             )
         )
-        return _model(SessionCreated, r)
+        return _model(SessionRecovered, r)
 
 
 class DeviceLinks(_Resource):

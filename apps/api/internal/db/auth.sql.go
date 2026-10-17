@@ -403,6 +403,33 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) (i
 	return result.RowsAffected()
 }
 
+const swapRecoveryVerifier = `-- name: SwapRecoveryVerifier :execrows
+UPDATE workspaces SET recovery_verifier = ?1, recovery_rotated_at = ?2, updated_at = ?2
+WHERE id = ?3 AND recovery_verifier = ?4
+`
+
+type SwapRecoveryVerifierParams struct {
+	NewVerifier string `json:"new_verifier"`
+	RotatedAt   string `json:"rotated_at"`
+	ID          string `json:"id"`
+	OldVerifier string `json:"old_verifier"`
+}
+
+// Recovery is single-use: the old verifier is replaced only if it still matches
+// (two concurrent recoveries with the same key: exactly one wins).
+func (q *Queries) SwapRecoveryVerifier(ctx context.Context, arg SwapRecoveryVerifierParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, swapRecoveryVerifier,
+		arg.NewVerifier,
+		arg.RotatedAt,
+		arg.ID,
+		arg.OldVerifier,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const touchAPIKey = `-- name: TouchAPIKey :exec
 UPDATE api_keys SET last_used_at = ? WHERE id = ?
 `

@@ -62,9 +62,11 @@ From a checkout, the Makefile has shortcuts for the same commands (`make connect
 `workspaces` and `set-plan` matter in [cloud mode](/self-hosting/cloud-deployment); local mode
 has a single workspace.
 
-## Lost every session and the recovery key?
+## Lost the admin key and the recovery key?
 
-On the server, print a fresh recovery key and sign in at `/login` with it:
+In cloud mode the dashboard signs in with the admin API key, and **Lost your key?** on the
+sign-in screen takes the recovery key. If both are gone, print a fresh recovery key on the
+server:
 
 ```bash tab="Binary"
 staqly serve recovery-key
@@ -73,6 +75,9 @@ staqly serve recovery-key
 ```bash tab="Docker"
 docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco
 ```
+
+Then open `/login`, choose **Lost your key?** and enter it. staqly signs you in and shows a new
+admin API key and a new recovery key once; save both (the printed key works only once).
 
 This needs shell access to the server — there is no remote backdoor. Like a rotation from the
 dashboard, it **signs out every browser session** of the workspace.

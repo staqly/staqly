@@ -63,7 +63,7 @@ type QueryOf<P extends keyof paths, M extends keyof paths[P]> = paths[P][M] exte
   ? NonNullable<Q>
   : never
 
-/** "local": single-user, no credentials on localhost. "cloud": hosted, many workspaces, sessions + recovery key. */
+/** "local": single-user, no credentials on localhost. "cloud": hosted, many workspaces, sign-in with an admin API key. */
 export type Mode = 'local' | 'cloud'
 // Older servers did not report mode / signup_open, so keep them optional for the UI.
 export type SetupStatus = Omit<JSONOf<'/v1/setup', 'get', 200>, 'mode' | 'signup_open'> & {
@@ -71,6 +71,8 @@ export type SetupStatus = Omit<JSONOf<'/v1/setup', 'get', 200>, 'mode' | 'signup
   signup_open?: boolean
 }
 export type SetupResult = JSONOf<'/v1/workspaces', 'post', 201>
+/** Recovery: a session plus a new admin API key and the next recovery key (the used one stops working). */
+export type RecoverResult = JSONOf<'/v1/sessions/recover', 'post', 201>
 export type Flow = JSONOf<'/v1/flow', 'get', 200>
 export type Agent = Schemas['Agent']
 export type SessionInfo = Omit<JSONOf<'/v1/session', 'get', 200>, 'mode'> & { mode?: Mode }
@@ -408,8 +410,10 @@ export const api = {
   setupStatus: () => request<SetupStatus>('/v1/setup', { public: true }),
   setup: (body: { name?: string; setup_token?: string }) =>
     request<SetupResult>('/v1/workspaces', { method: 'POST', json: body, public: true }),
+  signInWithApiKey: (api_key: string) =>
+    request<{ csrf_token?: string }>('/v1/sessions/api-key', { method: 'POST', json: { api_key }, public: true }),
   recover: (recovery_key: string) =>
-    request<{ csrf_token?: string }>('/v1/sessions/recover', {
+    request<RecoverResult>('/v1/sessions/recover', {
       method: 'POST',
       json: { recovery_key },
       public: true,

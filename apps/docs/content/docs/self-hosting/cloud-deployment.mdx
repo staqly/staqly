@@ -75,8 +75,11 @@ the Docker network.
 
 ### Create a workspace
 
-Open `https://staqly.example.com`. Signup creates a workspace on a **7-day Pro trial**, a default
-API key, a recovery key and a browser session. Save the keys; they are shown once. When the trial
+Open `https://staqly.example.com`. Signup creates a workspace on a **7-day Pro trial**, an
+**admin API key**, a recovery key and a browser session. Save both keys; they are shown once.
+Other browsers sign in at `/login` with the admin key (**Sign in with your API key**); if it is
+lost, **Lost your key?** takes the recovery key, which works once and issues a new admin key and
+recovery key. For agents, create scoped keys without `admin` under **API keys**. When the trial
 ends unpaid, the workspace becomes read-only until it pays or switches to Free.
 
 </Step>

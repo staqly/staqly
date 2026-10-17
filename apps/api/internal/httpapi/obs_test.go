@@ -244,7 +244,7 @@ func TestObsRateLimitPerPrincipal(t *testing.T) {
 func TestObsSensitiveEndpointsLimitedPerIP(t *testing.T) {
 	e := newObsEnv(t, true, true, nil) // TRUST_PROXY on: X-Forwarded-For identifies the client
 	ip := []string{"X-Forwarded-For", "198.51.100.7"}
-	for _, path := range []string{"/v1/sessions/recover", "/v1/device-links/redeem"} {
+	for _, path := range []string{"/v1/sessions/recover", "/v1/sessions/api-key", "/v1/device-links/redeem"} {
 		for i := range 10 {
 			if code, body, _ := e.req("POST", path, `{}`, ip...); code == 429 {
 				t.Fatalf("%s request %d limited early: %s", path, i, body)

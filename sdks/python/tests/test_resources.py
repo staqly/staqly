@@ -781,10 +781,36 @@ CASES = [
         lambda c: c.sessions.recover("rk_secret"),
         "POST",
         "/v1/sessions/recover",
-        {"csrf_token": "csrf_1"},
+        {
+            "csrf_token": "csrf_1",
+            "api_key": {
+                "id": "key_1",
+                "name": "Admin key",
+                "prefix": "stk_new",
+                "scopes": ["admin"],
+                "created_at": TS,
+                "key": "stk_new_secret",
+            },
+            "recovery_key": "rk_next",
+        },
         201,
         body={"recovery_key": "rk_secret"},
-        check=lambda r: r.csrf_token == "csrf_1",
+        check=lambda r: (
+            r.csrf_token == "csrf_1"
+            and r.api_key.key == "stk_new_secret"
+            and r.api_key.scopes == ["admin"]
+            and r.recovery_key == "rk_next"
+        ),
+    ),
+    Case(
+        "sessions.sign_in_with_api_key",
+        lambda c: c.sessions.sign_in_with_api_key("stk_admin"),
+        "POST",
+        "/v1/sessions/api-key",
+        {"csrf_token": "csrf_2"},
+        201,
+        body={"api_key": "stk_admin"},
+        check=lambda r: r.csrf_token == "csrf_2",
     ),
     Case(
         "device_links.create",

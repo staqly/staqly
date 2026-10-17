@@ -80,20 +80,36 @@ At most 5 signups per hour per IP. Behind a reverse proxy set `TRUST_PROXY=true`
 users share the proxy's IP.
 </Accordion>
 <Accordion title="The login page appears but I never set up (cloud)">
-Another setup already happened on this data (e.g. a previous run). Use the recovery key at
-`/login`, or get a new one with the [`recovery-key` operator command](/self-hosting/operator-cli).
+Another setup already happened on this data (e.g. a previous run). Sign in with the admin API
+key, or choose **Lost your key?** and use the recovery key. Without either, get a new recovery
+key with the [`recovery-key` operator command](/self-hosting/operator-cli).
 </Accordion>
-<Accordion title="Lost every session and the recovery key (cloud)">
-On the host: `docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco` (or `staqly serve recovery-key ws_4uvnnzgy5vvpo4hnqnco`)
-and sign in at `/login` with the printed key. This needs shell access to the server — there is no remote backdoor. It
-signs out every other browser of that workspace.
+<Accordion title="Sign-in with an API key fails (cloud)">
+- `403 forbidden` (*this API key cannot sign in*): only keys with the `admin` scope open the
+  dashboard. Use the admin key from signup (or from a recovery), not an agent key.
+- `401 unauthorized`: the key is wrong, revoked or expired. Use **Lost your key?** with the
+  recovery key to get a new admin key.
+- `409 conflict`: the server runs in local mode, which has no keys. Connect the browser with a
+  one-time link (`docker exec staqly server connect-link`) or a QR code.
+- `429 rate_limited`: too many attempts from your IP; wait for the `Retry-After` seconds.
+</Accordion>
+<Accordion title="401 invalid recovery key (cloud)">
+Each recovery key works once: after a recovery the old key is replaced by the new one the
+dashboard showed you. Use the newest recovery key, or get a fresh one with the operator command
+below.
+</Accordion>
+<Accordion title="Lost the admin key and the recovery key (cloud)">
+On the host: `docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco` (or `staqly serve recovery-key ws_4uvnnzgy5vvpo4hnqnco`),
+then at `/login` choose **Lost your key?** and enter the printed key. You get a new admin API key
+and a new recovery key, shown once. This needs shell access to the server — there is no remote
+backdoor. It signs out every other browser of that workspace.
 </Accordion>
 <Accordion title="403 csrf_failed from scripts">
 You are sending a session cookie. Scripts should use `Authorization: Bearer stk_...` (no
 CSRF needed).
 </Accordion>
 <Accordion title="403 forbidden: missing required scope">
-The API key lacks a scope. Create a key with the right scopes under **API keys** in the sidebar. The signup key intentionally lacks `admin` and `channels:manage`.
+The API key lacks a scope. Create a key with the right scopes under **API keys** in the sidebar. Keep `admin` off agent keys: the signup key has it and is the key that signs in to the dashboard.
 </Accordion>
 <Accordion title="Webhook deliveries fail: private / loopback destination is not allowed">
 Adjust `WEBHOOK_ALLOW_PRIVATE` / `WEBHOOK_ALLOW_LOOPBACK`. `WEBHOOK_ALLOW_PRIVATE` defaults to

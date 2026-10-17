@@ -51,7 +51,18 @@ bodies, keys or tokens — see [Logs & tracing](/self-hosting/logs-and-tracing).
 
 Using or rotating the recovery key — from the dashboard or with the
 [`recovery-key` operator command](/self-hosting/operator-cli) on the host — signs out every
-other session of the workspace.
+other session of the workspace. A recovery key works once: signing in with it replaces it with
+a new one and creates a new admin API key, in one transaction.
+
+## Dashboard sign-in (cloud)
+
+- Browsers sign in with an API key that has the `admin` scope (`POST /v1/sessions/api-key`,
+  the key in the body). Agent keys without `admin` get `403` and can never open the dashboard,
+  so a leaked agent key does not give access to key management or the recovery key.
+- The sign-in, recovery, device-link redeem and signup endpoints are rate-limited per client IP
+  (`RATE_LIMIT_PER_MINUTE`, default 10 per minute).
+- Each sign-in is an audit event: `session.signed_in` (the actor is the API key) and
+  `session.recovered`. See [Events](/api/events#audit-events).
 
 ## Least privilege
 
@@ -60,8 +71,9 @@ other session of the workspace.
 - The review stays honest after the decision: with `items:write` alone, the content of an
   approved or rejected item is frozen and only lifecycle status changes are allowed. See
   [Review integrity](#review-integrity).
-- `admin` and `channels:manage` (notification channels hold secrets) are not in the default
-  key.
+- The key created at signup is the workspace's admin key (it signs in to the dashboard). Give
+  agents separate keys without `admin`, and grant `channels:manage` (notification channels hold
+  secrets) only where needed.
 - REST and MCP call the **same** domain services, which check scopes themselves — no transport
   can bypass authorization. Every query is scoped by workspace.
 - Cookie-authenticated unsafe requests need a CSRF token. `/mcp` never accepts cookies.

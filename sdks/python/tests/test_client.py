@@ -109,9 +109,9 @@ class TestConfiguration:
                     },
                     "api_key": {
                         "id": "key_1",
-                        "name": "default",
+                        "name": "Admin key",
                         "prefix": "stk_abc",
-                        "scopes": ["items:read"],
+                        "scopes": ["admin"],
                         "created_at": "2026-01-01T00:00:00Z",
                         "key": "stk_secret",
                     },
@@ -128,6 +128,7 @@ class TestConfiguration:
             lambda: client.setup(),
             lambda: client.live(),
             lambda: client.sessions.recover("rk"),
+            lambda: client.sessions.sign_in_with_api_key("stk_admin"),
             lambda: client.device_links.redeem("tok"),
             lambda: client.decision_links.decide("dtk"),
         ):
@@ -139,6 +140,16 @@ class TestConfiguration:
                         "signup_open": False,
                         "setup_token_required": False,
                         "status": "ok",
+                        "csrf_token": "c",
+                        "api_key": {
+                            "id": "key_2",
+                            "name": "Admin key",
+                            "prefix": "stk_new",
+                            "scopes": ["admin"],
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "key": "stk_new_secret",
+                        },
+                        "recovery_key": "rk_next",
                     }
                 )
             )

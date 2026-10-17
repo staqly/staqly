@@ -75,8 +75,8 @@ def env() -> Iterator[Env]:
     with Staqly(api_key="") as probe:
         e.mode = probe.request("GET", "/v1/setup")["mode"]
         if e.mode == "cloud" and not e.api_key:
-            # Signup returns a default key (not every scope) plus a browser session;
-            # use the session to mint a key with the scopes these tests need.
+            # Signup returns an admin key (scope `admin`, for dashboard sign-in) plus a browser
+            # session; use the session to mint an agent key with the scopes these tests need.
             r = httpx.post(probe.base_url + "/v1/workspaces", json={"name": f"sdk-py-{uuid.uuid4().hex[:6]}"})
             assert r.status_code == 201, r.text
             created = r.json()

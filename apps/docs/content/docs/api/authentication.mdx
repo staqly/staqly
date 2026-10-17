@@ -5,7 +5,8 @@ description: Find out when you need credentials, how to create a scoped API key,
 
 How you authenticate depends on the [mode](/local-vs-cloud). On your own machine (local mode,
 the default) agents and scripts need **no credentials at all**. On a hosted server (cloud mode)
-every automation sends a **scoped API key**, and browsers sign in with a session.
+every automation sends a **scoped API key**, and browsers sign in with the workspace's admin
+API key, then use a session.
 
 ## Authenticate an automation
 
@@ -73,6 +74,16 @@ are honored in local mode too.
   used.
 - Manage keys in **API keys** in the sidebar or via `/v1/api-keys` (needs `admin`).
 
+### The admin key and agent keys
+
+Signup returns one key, named **Admin key**, with the `admin` scope. It is the key you sign in
+to the dashboard with (and what you keep safe, like a password). For agents, create a separate
+key under **API keys** with only the scopes they need and no `admin`: such keys work for the
+API and MCP but can never open the dashboard, and they can't create or revoke keys.
+
+On the Free plan a workspace has one active API key, so the admin key is also the key your
+agents use; with more keys allowed (Pro), give each agent its own scoped key.
+
 ## Scopes
 
 | Scope | Allows |
@@ -99,8 +110,9 @@ generator agent cannot approve its own output — nor change it after you approv
 works) and only lifecycle status changes are allowed. The exact list is in
 [Security model](/self-hosting/security#review-integrity).
 
-The key created at signup has every scope **except `admin` and `channels:manage`** — key
-management stays in the dashboard and channels hold secrets, so grant those deliberately.
+The key created at signup has the `admin` scope, which includes every other scope. Keys you
+create for agents get only the scopes you tick; grant `admin` and `channels:manage` (channels
+hold secrets) deliberately.
 
 ### Suggested keys
 
@@ -121,18 +133,52 @@ revocable). It is `Secure` by default in cloud mode (`COOKIE_SECURE`, default `t
   token in `X-CSRF-Token`; otherwise `403 csrf_failed`. `GET /v1/session` returns the token.
 - Scripts should never use cookies — use a bearer key (no CSRF needed).
 - `/mcp` accepts only bearer keys, never cookies.
-- New sessions come from cloud signup, the recovery key, or a one-time **device link**
-  (`/v1/device-links`, dashboard only — API keys cannot mint browser sessions).
+- New sessions come from cloud signup, [signing in with the admin API key](#sign-in-with-the-admin-key),
+  the [recovery key](#recovery-key), or a one-time **device link** (`/v1/device-links`, created
+  from the dashboard only).
+
+### Sign in with the admin key
+
+In cloud mode the sign-in screen (`/login`) asks for the API key: **Sign in with your API
+key**. Paste the admin key. Behind it is `POST /v1/sessions/api-key`, sent without an
+`Authorization` header:
+
+```bash
+curl -s -X POST https://staqly.example.com/v1/sessions/api-key \
+  -H "Content-Type: application/json" -d '{"api_key":"stk_..."}' -c cookies.txt
+# 201 {"csrf_token":"..."} and the staqly_session cookie
+```
+
+| Answer | When |
+|---|---|
+| `201` | Signed in: the response sets the session cookie and returns the CSRF token |
+| `401 unauthorized` | Unknown, revoked or expired key |
+| `403 forbidden` | The key has no `admin` scope (an agent key) |
+| `409 conflict` | Local mode: connect browsers with a one-time link instead |
+| `429 rate_limited` | Too many attempts from this client IP (`RATE_LIMIT_PER_MINUTE`, default 10 per minute) |
+
+Signing in does not sign out other browsers. It is recorded as a
+[`session.signed_in`](/api/events#audit-events) audit event.
 
 ## Recovery key
 
 In cloud mode each workspace has a **recovery key** (`staqly-recovery-` followed by 40 characters, 200 bits) — the
-only way back in when every browser session is lost.
+way back in when you lost the admin API key. Signup shows it once, next to the admin key.
 
-- It is accepted only by `POST /v1/sessions/recover` (the `/login` page) and stored hashed.
-- Rotate it from a dashboard session (**Settings → Recovery key**) or on the server with
-  `docker exec staqly server recovery-key` (`staqly serve recovery-key` with the binary).
-- Signing in with it or rotating it signs out every other session of the workspace.
+- On the sign-in screen, choose **Lost your key?** and enter it. Behind it is
+  `POST /v1/sessions/recover` with `{"recovery_key":"staqly-recovery-..."}`; it is accepted
+  nowhere else and stored hashed.
+- **It works once.** In one step it signs this browser in, creates a new admin key named
+  **Admin key (recovered)** (not counted against the plan's key limit), issues a **new
+  recovery key** (the one you used stops working) and signs out every other browser session.
+  The response (`201`) holds `csrf_token`, `api_key` (with the raw `key`) and `recovery_key`;
+  the dashboard shows the new admin key and recovery key once, and you confirm you saved them
+  before you continue.
+- Existing API keys keep working. If one leaked, revoke it under **API keys**.
+- Rotate the recovery key yourself from a dashboard session (**Settings → Recovery key**) or on
+  the server with `docker exec staqly server recovery-key` (`staqly serve recovery-key` with the
+  binary). Rotating signs out every other session of the workspace.
+- Wrong or already used keys get `401 unauthorized`; the endpoint is rate-limited per client IP.
 - MCP never accepts or exposes it.
 
 ## Next steps

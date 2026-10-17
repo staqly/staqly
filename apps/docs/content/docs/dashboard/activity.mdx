@@ -61,15 +61,15 @@ list.
 
 | Filter | Options | Query parameter |
 |---|---|---|
-| **Event type** | *All event types*, one of the common types (`item.created`, `item.updated`, `item.status_changed`, `item.approved`, `item.rejected`, `item.deleted`, `item.regenerate_requested`, `item.publish_requested`, `item.retry_requested`, `item.archived`, `item.expired`, `item.purged`, `watcher.created`, `collection.*`, `api_key.created`, `api_key.revoked`, `recovery_key.rotated`, `session.recovered`, `workspace.export_requested`, `workspace.exported`), or any exact type typed into the box next to it, such as `item.publish_requested` | `type` |
+| **Event type** | *All event types*, one of the common types (`item.created`, `item.updated`, `item.status_changed`, `item.approved`, `item.rejected`, `item.deleted`, `item.regenerate_requested`, `item.publish_requested`, `item.retry_requested`, `item.archived`, `item.expired`, `item.purged`, `watcher.created`, `collection.*`, `api_key.created`, `api_key.revoked`, `recovery_key.rotated`, `session.signed_in`, `session.recovered`, `workspace.export_requested`, `workspace.exported`), or any exact type typed into the box next to it, such as `item.publish_requested` | `type` |
 | **Actor type** | *All actors*, *Local (you & local agents)* (local mode only), *Dashboard sessions*, *API keys (agents)* or *System* | `actor_type` |
 | **Actor ID** | One actor, such as an API key (`key_ozcbqlxbqgyp3qnkbgjr`) or a session (`ses_q2vbm4kz7xw3dn5hjr6c`). Applied when you press <Kbd>Enter</Kbd> or leave the field. | `actor_id` |
 | **Collection** | *All collections*, or one (archived ones included) | `collection` |
 | **Entity ID** | One item (`itm_oalirbz67y4m4cqxq5dw`): its whole history | `item` |
 | **From** / **To** | A date range. Both days are included and use your browser's time zone. | `from`, `to` (`YYYY-MM-DD`) |
 
-Credential events (API keys created, rotated or revoked; recovery-key sign-ins and rotations;
-sessions revoked; devices connected and sign-in links created: types starting with `api_key.`,
+Credential events (API keys created, rotated or revoked; sign-ins with the admin API key or the
+recovery key; recovery-key rotations; sessions revoked; devices connected and sign-in links created: types starting with `api_key.`,
 `session.`, `recovery_key.`, `device.` or `device_link.`) are audit events. Only admins see
 them: local mode, dashboard sessions and keys with the `admin` scope.
 

@@ -15,6 +15,11 @@ First release.
   `api_keys`, `notification_channels`, `exports`, `billing`, `sessions`, `device_links`,
   `decision_links`; plus `health()`, `ready()`, `live()`, `setup()`, `metrics()`, `openapi()`, `whoami()` and a
   low-level `request()`.
+- `sessions.sign_in_with_api_key()` (`POST /v1/sessions/api-key`, cloud): exchanges an `admin`
+  API key for a session cookie; returns `SessionCreated`.
+- `sessions.recover()` returns `SessionRecovered`: the CSRF token, a new admin API key
+  (`api_key.key`) and the next recovery key. Recovery keys are single use; the key returned by
+  `workspaces.create()` is an admin key (`"Admin key"`, scopes `["admin"]`).
 - `collections.list_items()`, `workspace.set_plan()`, `workspace.delete()`,
   `workspace.rotate_recovery_key()`.
 - `exports.events()` streams the NDJSON activity export; `exports.save_events()` (CSV/NDJSON to a

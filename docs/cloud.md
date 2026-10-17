@@ -6,7 +6,7 @@
 | Workspaces | one, created automatically | many — anyone can create one ("no card, no email"), or only `SETUP_TOKEN` holders |
 | Plan | **Unlocked** (no limits) | 7-day **Pro** trial, then Pro (paid) or **Free** |
 | Agents / n8n / scripts | no credentials (this machine only) | API key `stk_...` — the key decides which workspace you work in |
-| Dashboard | opens directly with `staqly serve`; with `--expose` or the Docker image each browser signs in once with a one-time link | session cookie + CSRF; recovery key for lost sessions |
+| Dashboard | opens directly with `staqly serve`; with `--expose` or the Docker image each browser signs in once with a one-time link | sign in with the admin API key (`POST /v1/sessions/api-key`), then session cookie + CSRF; single-use recovery key if the admin key is lost |
 | Phones / tablets | **Connect a device** QR (needs LAN access, see below) | **Connect a device** QR |
 | MCP | `http://localhost:3333/mcp` or `docker exec -i staqly mcp-stdio` | `https://<host>/mcp` + `Authorization: Bearer {API_KEY}` |
 
@@ -101,12 +101,42 @@ Signup is rate-limited to 5 workspaces per hour per client IP (`TRUST_PROXY`
 makes it use the right-most `X-Forwarded-For` entry, the one your proxy
 appends; IPv6 clients are counted per /64).
 
+## Sign-in, admin key and recovery
+
+* **Signup** (`/setup`, `POST /v1/workspaces`) returns an **admin API key**
+  named "Admin key" (scope `admin`) and a recovery key, both shown once, plus a
+  session for that browser.
+* **Sign-in** (`/login`, "Sign in with your API key"):
+  `POST /v1/sessions/api-key` with `{"api_key":"stk_..."}` in the body (no
+  `Authorization` header) returns `201 {"csrf_token":"..."}` and sets the
+  session cookie. Only keys with `admin` sign in: agent keys get 403, unknown,
+  revoked or expired keys 401, local mode 409. Other sessions stay signed in.
+  Rate-limited per client IP like the other sensitive endpoints
+  (`RATE_LIMIT_PER_MINUTE`); audit event `session.signed_in` (actor = the key;
+  `user_agent`, `session_id`, `api_key_id`).
+* **Agents** get their own scoped keys without `admin` (*API keys* in the
+  sidebar); they never open the dashboard. Free allows one active key, so
+  there the admin key doubles as the agent key.
+* **Recovery** ("Lost your key?" on `/login`): `POST /v1/sessions/recover` with
+  the recovery key. The recovery key is **single-use**: in one transaction it
+  signs this browser in, creates a new admin key "Admin key (recovered)" (not
+  counted against the plan's key limit), issues a new recovery key (the old one
+  stops working) and signs out every other session. Existing API keys keep
+  working. Response `201 {"csrf_token", "api_key": {..., "key"}, "recovery_key"}`;
+  the dashboard shows both secrets once behind an "I have saved..." checkbox.
+  Events: `recovery_key.rotated` (`via: "recovery"`), `api_key.created`,
+  `session.recovered` (`user_agent`, `sessions_revoked`, `api_key_id`).
+* Unchanged: *Settings → Recovery key* rotates it (dashboard session only,
+  signs out other sessions); `server recovery-key` on the host; *Connect a
+  device* links.
+
 Cloud-mode hardening worth knowing: secret-bearing responses (new API keys,
 recovery keys, device links, webhook secrets) are never cached for
 `Idempotency-Key` replay; credential audit events (`api_key.*`, `session.*`,
 `recovery_key.*`, `device*.*`) are listed only for admin principals; the
 webhook signing secret is shown only on create/rotate; using or rotating the
-recovery key signs out every other session; `mcp-stdio` re-checks
+recovery key signs out every other session (a recovery also replaces the
+recovery key); only `admin` keys can sign a browser in; `mcp-stdio` re-checks
 `STAQLY_API_KEY` at least once a minute, so revoking it takes effect.
 
 ## Using a cloud workspace from your tools
@@ -141,7 +171,8 @@ to type.
   and works **once**.
 * The phone gets its own browser session; it appears under *Settings →
   Devices* and can be revoked there.
-* Only the dashboard can create links — API keys cannot mint browser sessions.
+* Only the dashboard can create links — API keys cannot. (In cloud mode an
+  `admin` key can still sign a browser in at `/login`.)
 * The QR grants full access to the workspace: scan it only with your own
   device and don't share screenshots.
 
@@ -170,10 +201,12 @@ without keys.
    stack in cloud mode, then `make restore BACKUP=backups/<ts>`.
 3. Get a recovery key for the restored workspace:
    `docker exec staqly server workspaces`, then
-   `docker exec staqly server recovery-key {WORKSPACE_ID}`, and sign in at `/login`.
+   `docker exec staqly server recovery-key {WORKSPACE_ID}`, and use it at
+   `/login` → "Lost your key?". That signs you in and shows a new admin API key
+   and a new recovery key once.
 
-`server recovery-key` is also the operator's escape hatch when a user loses all
-sessions and the recovery key — it needs shell access to the server. Like a
+`server recovery-key` is also the operator's escape hatch when a user loses
+both the admin key and the recovery key — it needs shell access to the server. Like a
 rotation from the dashboard, it signs out every browser session of the
 workspace (the count is printed on stderr; stdout is only the key).
 

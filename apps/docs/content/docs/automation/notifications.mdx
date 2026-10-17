@@ -233,8 +233,8 @@ message, **Deliveries** opens its delivery history, and the menu has **Edit** an
 In the form, required fields are marked with `*`, and invalid fields turn red (*Check the
 highlighted fields*). Stored secrets are never shown again: leave them as they are, or
 replace them.
-Over an API key this needs the **`channels:manage`** scope (or `admin`). It is **not** part
-of the default key, because channels hold secrets. Dashboard sessions and local mode have it
+Over an API key this needs the **`channels:manage`** scope (or `admin`). Grant it to
+agent keys only deliberately, because channels hold secrets. Dashboard sessions and local mode have it
 implicitly.
 
 <Method m="GET" path="/v1/notification-channels" /> ·
