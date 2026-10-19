@@ -1,0 +1,76 @@
+---
+title: Plan & usage
+description: Check which plan your workspace is on and how much of its limits you have used this month.
+---
+
+**Plan & usage** shows which plan your workspace is on and how close you are to its limits.
+Check it when something stops working with a "limit reached" error (HTTP `402`), or before
+adding more channels, webhooks or API keys. On a local install there are no limits: the plan
+is always *Unlocked*.
+
+## Check your usage
+
+Open **Settings → Plan & usage**, or search for *Plan & usage* in the command palette
+(<Kbd>⌘</Kbd> <Kbd>K</Kbd>). The page shows:
+
+- the workspace's **current plan** and its monthly price: *Unlocked* on local installs; *Starter*,
+  *Plus*, *Pro* or *Business* in cloud mode;
+- in cloud mode, a banner about the trial or the paid period when there is one (see the table below);
+- **usage this period** (calendar month, UTC), one meter each: *Posts this month* (resets on
+  the 1st), *Channels*, *Alerts*, *Webhooks*,
+  *API keys* and *Storage*, each against its limit (∞ when unlimited). A meter shows
+  *Almost full* above 80 % and *Limit reached* at the limit. The page also shows the largest file
+  you can upload;
+- **Posts created this period**, counted by their current status (Draft, Scheduled, Publishing,
+  Published, Failed). Each count opens the posts list with that filter;
+- **Webhook delivery**: deliveries *Queued* for their first attempt, *Retrying* after a failure,
+  and *Failed* after every retry (redeliver them from **Webhooks**);
+- in cloud mode, **Change plan**, which opens the plan picker: every plan's monthly and yearly
+  price, its limits and a button to choose or switch. The subscription, the card and the invoices
+  are on [Billing](/dashboard/billing).
+
+| Banner | What it means | Buttons |
+|---|---|---|
+| *Starter trial: N days left* | Starter's free 7-day trial (card required), once per workspace and one workspace of an account at a time. | **Choose a plan** |
+| *Plus: paid through* a date | A Stripe subscription is active. | **Manage billing** |
+| *Payment failed: Plus stays active until* a date | Stripe could not charge the card; the plan runs until the end of the paid period. | **Manage billing** |
+| *Your plan has ended, so this workspace is read-only* | The trial or paid period ended unpaid. You can still read and export everything. | **Choose a plan** |
+
+## Change plan
+
+| Where | How |
+|---|---|
+| **Choose a plan**, **Change plan** | Opens the plan picker with a **Monthly / Yearly** switch. Without a subscription, a plan opens Stripe Checkout; with one, it switches the subscription at once (Stripe prorates). After paying you come back to **Billing**; the plan changes as soon as Stripe confirms (a toast says *Payment received* or *Plan changed*). Paying needs the account owner and an operator who has set up [billing with Stripe](/self-hosting/billing). |
+| **Manage billing** | Opens the Stripe customer portal: change the card, download invoices or cancel. Shown once the workspace has a Stripe customer. |
+| *... ask the operator* | Shown when the instance has no Stripe settings. The operator changes the plan with `docker exec staqly server set-plan` (Docker) or `staqly serve set-plan` (binary). See [Operator commands](/self-hosting/operator-cli). |
+
+Every plan can download a workspace export in **Settings → Data & privacy**. On Starter it is
+data only, without the media files; backups, the export with the files and the activity log
+export come with Plus and above. See [Data export](/self-hosting/data-export).
+
+See [Plans & limits](/plans) for what each plan includes.
+
+## Usage through the API
+
+```bash
+curl -s http://localhost:3333/v1/workspace/usage
+```
+
+```json
+{
+  "plan": { "id": "unlocked", "name": "Unlocked", "limits": { "posts_per_month": -1, "channels": -1, "alerts": -1, "webhooks": -1, "api_keys": -1, "storage_bytes": -1, "max_upload_bytes": 104857600, "data_export": true } },
+  "period": "2026-10",
+  "plan_expires_at": null,
+  "suspended": false,
+  "usage": { "posts_per_month": 42, "channels": 3, "seats": 0, "alerts": 1, "webhooks": 1, "api_keys": 0, "storage_bytes": 1048576 },
+  "posts_by_status": { "draft": 5, "scheduled": 12, "published": 24, "failed": 1 },
+  "webhook_deliveries": { "queued": 0, "retrying": 1, "failed": 0 }
+}
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Plans & limits" href="/plans">What each plan includes.</Card>
+  <Card title="Local vs cloud" href="/local-vs-cloud">Why local installs have no limits.</Card>
+</Cards>

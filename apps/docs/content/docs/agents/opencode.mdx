@@ -1,0 +1,118 @@
+---
+title: OpenCode
+description: Add staqly to OpenCode so it can write posts and put them on the calendar.
+---
+
+Connect OpenCode to staqly as an MCP server, and OpenCode can write posts, list collections
+and schedule or publish them, just from your prompts. OpenCode reads MCP servers from
+`opencode.json` in your project root.
+
+## Connect to local staqly
+
+<Steps>
+<Step>
+
+### Start staqly
+
+Run `staqly serve` (or the [Docker image](/self-hosting/docker)). See the [Quickstart](/quickstart).
+
+</Step>
+<Step>
+
+### Add staqly to `opencode.json`
+
+Copy this file (it ships in `integrations/opencode/`) or merge the `mcp` block into your
+existing config. In local mode, no key is needed:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "staqly": {
+        "type": "remote",
+        "url": "http://localhost:3333/mcp",
+        "codemode": false,
+        "timeout": { "execution": 200000 }
+      }
+    }
+  }
+}
+```
+
+`codemode: false` makes OpenCode call staqly's tools directly instead of through its code mode
+(the model writing a script around one `execute` tool), which is how they are designed and tested.
+The `timeout` gives long tool calls room. This is the OpenCode 2 format
+(`mcp.servers`); OpenCode 1 uses `"mcp": { "staqly": { "type": "remote", "url": "...", "enabled": true } }`
+and has no code mode.
+
+</Step>
+<Step>
+
+### Check the connection
+
+```bash
+opencode mcp list        # → ✓ staqly  connected
+```
+
+</Step>
+</Steps>
+
+Tip: `staqly mcp config opencode` prints this file for your current [CLI](/cli/commands) profile.
+
+### STDIO (Docker only)
+
+With Docker you can use STDIO instead. It runs `mcp-stdio` inside the `staqly` container,
+so it does not work with `staqly serve`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "staqly": {
+        "type": "local",
+        "command": ["docker", "exec", "-i", "staqly", "mcp-stdio"],
+        "codemode": false,
+        "timeout": { "execution": 200000 }
+      }
+    }
+  }
+}
+```
+
+## Connect to a cloud instance
+
+OpenCode substitutes `{env:STAQLY_API_KEY}` from the environment, so the key is not written
+into the file:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "staqly": {
+        "type": "remote",
+        "url": "https://staqly.example.com/mcp",
+        "headers": {
+          "Authorization": "Bearer {env:STAQLY_API_KEY}"
+        },
+        "codemode": false,
+        "timeout": { "execution": 200000 }
+      }
+    }
+  }
+}
+```
+
+<Callout title="Verified">
+With OpenCode 2.0.25, over HTTP and STDIO, including a real `list_collections` call via
+`opencode run`.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Example prompts" href="/mcp/prompts">What to ask once staqly is connected.</Card>
+  <Card title="MCP tools" href="/mcp/tools">Every tool OpenCode can call, and the scope it needs.</Card>
+</Cards>

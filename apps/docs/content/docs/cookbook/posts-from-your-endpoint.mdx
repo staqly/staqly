@@ -1,0 +1,104 @@
+---
+title: Posts from your endpoint
+description: Let a schedule call a small service of yours when the collection runs dry; the service answers with the posts to publish.
+---
+
+Instead of an agent, a few lines of code can keep a collection fed: a schedule with
+**Call an endpoint that returns posts** POSTs to your URL whenever it finds nothing to publish,
+and publishes whatever your endpoint answers with, at that same slot.
+
+## What you need
+
+- Staqly running ([Quickstart](/quickstart)) with a connected [channel](/channels).
+- Somewhere to run a tiny HTTP service that staqly can reach (the
+  [network policy](/automation/webhooks#network-policy-ssrf-guard) applies: LAN targets are fine
+  in local mode, loopback needs `WEBHOOK_ALLOW_LOOPBACK=true`).
+
+## Build it
+
+<Steps>
+<Step>
+
+### Write the endpoint
+
+It verifies the signature, picks something to say and answers `{"posts": [...]}`:
+
+```ts title="server.ts (Node 20+)"
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createServer } from 'node:http'
+
+const SECRET = process.env.STAQLY_ENDPOINT_SECRET!
+const tips = ['Drag a post on the calendar to move it.', 'Customize the text per channel.', 'Retry one channel, not the whole post.']
+
+createServer((req, res) => {
+  let raw = ''
+  req.on('data', (c) => (raw += c))
+  req.on('end', () => {
+    const ts = String(req.headers['x-staqly-timestamp'] ?? '')
+    const sig = String(req.headers['x-staqly-signature'] ?? '')
+    const expected = 'sha256=' + createHmac('sha256', SECRET).update(`${ts}.${raw}`).digest('hex')
+    if (Math.abs(Date.now() / 1000 - Number(ts)) > 300 || sig.length !== expected.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+      res.writeHead(401).end()
+      return
+    }
+    const { slot } = JSON.parse(raw) // also: schedule, collection_id, channels
+    const tip = tips[new Date(slot).getDate() % tips.length]
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ posts: [{ content: `Tip of the day: ${tip}`, tags: ['tips'] }] }))
+  })
+}).listen(8787)
+```
+
+A post without `targets` goes to the schedule's channels; add `targets`, `media` (ids from
+`POST /v1/media`) or `metadata` when you need them. Up to 50 posts per answer are used.
+
+</Step>
+<Step>
+
+### Create the schedule
+
+```bash
+curl -s -X POST http://localhost:3333/v1/schedules -H 'Content-Type: application/json' -d '{
+  "collection": "Daily tips",
+  "name": "Tip of the day",
+  "kind": "recurring",
+  "rule": { "times": ["09:00"], "tz": "Europe/Warsaw" },
+  "channels": ["ch_7h2kq9xw3nbvd5yhzm6a"],
+  "pick": "next",
+  "source": "endpoint",
+  "endpoint_url": "http://192.168.1.20:8787/tips",
+  "endpoint_secret": "a-long-random-secret"
+}'
+```
+
+Leave `endpoint_secret` empty to have one generated (the dashboard shows it once). In the
+dashboard the same is **New schedule → When nothing is waiting → Call an endpoint that returns
+posts**, with the URL and the secret.
+
+</Step>
+<Step>
+
+### Try it
+
+**Run now** on the schedule (or `POST /v1/schedules/{id}/run`). With no draft in the
+collection, the run calls your endpoint, creates the post with `source: "schedule:Tip of the
+day"` and publishes it. `last_result` on the schedule says what happened; a bad answer records
+`schedule.failed` with the reason and is retried with backoff.
+
+</Step>
+</Steps>
+
+## Variations
+
+- **Drafts first.** Drafts written by hand or by an agent are always picked before the endpoint
+  is asked; the endpoint only fills the gaps.
+- **An LLM behind the endpoint.** Call your model inside the handler; the 60-second budget is
+  enough for a short post.
+- **Different content per channel.** Return `targets` with a `content` per channel instead of
+  one `content`.
+
+## Reference
+
+- [Schedules](/automation/schedules#call-an-endpoint-source-endpoint): the request, the
+  signature and the answer format.
+- [Verifying signatures](/automation/webhooks#verifying-signatures): the same code in Python and Go.

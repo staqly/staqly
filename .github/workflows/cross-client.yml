@@ -1,0 +1,51 @@
+# Cross-client suite (e2e/cross-client): the TypeScript and Python SDKs, the
+# staqly CLI, curl and MCP against three real `staqly serve` processes built
+# from this checkout (local, cloud, cloud with a tiny rate limit). No Docker,
+# no secrets. Locally the same: `pnpm --filter @staqly/e2e test:cross-client`
+# after building the SDK (see e2e/README.md).
+name: Cross-client
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-client:
+    name: SDKs, CLI, curl and MCP against staqly serve
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The cloud servers run on PostgreSQL, one schema each (e2e/cross-client/lib.ts).
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env: { POSTGRES_USER: staqly, POSTGRES_PASSWORD: staqly, POSTGRES_DB: staqly }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U staqly" --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      STAQLY_E2E_DATABASE_URL: postgres://staqly:staqly@127.0.0.1:5432/staqly?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: |
+            apps/api/go.sum
+            apps/cli/go.sum
+      # the Python SDK runs from its uv project (sdks/python) through py_worker.py
+      - uses: astral-sh/setup-uv@v10.3.0
+        with: { python-version: "3.13", enable-cache: true, cache-dependency-glob: sdks/python/uv.lock }
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/e2e..." }
+      - name: TypeScript SDK build (the suite imports dist/)
+        run: pnpm turbo run build --filter=@staqly/sdk
+      - name: Cross-client suite
+        run: pnpm --filter @staqly/e2e test:cross-client

@@ -1,0 +1,74 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "import", "unicorn", "oxc", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "es2022": true
+  },
+  "ignorePatterns": ["node_modules", "fixtures"],
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "error",
+    "import/no-cycle": "error",
+    "import/no-duplicates": "error",
+    "import/no-self-import": "error",
+    "no-unused-vars": "error",
+    "eqeqeq": "error",
+    "curly": ["error", "all"],
+    "@stylistic/padding-line-between-statements": [
+      "error",
+      {
+        "blankLine": "always",
+        "prev": "*",
+        "next": ["return", "if", "for", "while", "do", "switch", "try", "throw"]
+      },
+      {
+        "blankLine": "always",
+        "prev": ["if", "for", "while", "do", "switch", "try", "block-like"],
+        "next": "*"
+      },
+      {
+        "blankLine": "always",
+        "prev": ["const", "let", "var"],
+        "next": "*"
+      },
+      {
+        "blankLine": "any",
+        "prev": ["const", "let", "var"],
+        "next": ["const", "let", "var"]
+      },
+      {
+        "blankLine": "always",
+        "prev": "directive",
+        "next": "*"
+      },
+      {
+        "blankLine": "always",
+        "prev": "*",
+        "next": ["function", "class", "export"]
+      },
+      {
+        "blankLine": "any",
+        "prev": "export",
+        "next": "export"
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["tests/**"],
+      "rules": {
+        "vitest/no-conditional-expect": "off",
+        "vitest/valid-title": "off",
+        "vitest/no-standalone-expect": "off",
+        "vitest/require-to-throw-message": "off",
+        "no-shadow": "off",
+        "unicorn/consistent-function-scoping": "off"
+      }
+    }
+  ],
+  "jsPlugins": ["@stylistic/eslint-plugin"]
+}

@@ -1,0 +1,166 @@
+---
+title: Data export & privacy
+description: Get your data out of staqly, decide how long it keeps old data, and permanently remove posts or workspaces.
+---
+
+Use this page when you need a copy of your data in a portable format (for a spreadsheet, an
+audit or a GDPR request), want staqly to clean up old data on its own, or must erase something
+for good. All of it works the same with the binary and with Docker. For a restorable copy of
+the whole installation, use [Backup & restore](/self-hosting/backup-and-restore) instead.
+
+In cloud mode, every plan can export the whole workspace. On Starter the ZIP is **data only**:
+everything below except the media files (`includes_media: false`). The ZIP with the files and
+the activity log export come with Plus and above: on Starter `GET /v1/events/export` answers
+`402 plan_limit_exceeded`. Local installs always get everything.
+
+## Export the activity log
+
+Download the activity log as NDJSON or CSV in one streamed request:
+
+```bash
+curl -s "http://localhost:3333/v1/events/export?format=csv&type_prefix=post.&from=2026-01-01" -o events.csv
+```
+
+All parameters:
+
+```text
+GET /v1/events/export?format=ndjson|csv&from=&to=&type=&type_prefix=&actor_type=&actor_id=&collection_id=&post_id=&channel_id=&schedule_id=
+```
+
+- Scope `events:read` (dashboard sessions work too). Events come **oldest first** and the
+  response is streamed, so a log of any size exports without paging.
+- Credential and session audit events (`api_key.*`, `session.*`, `recovery_key.*`, `device.*`,
+  `device_link.*`) are included only for admins (dashboard sessions, local mode, keys with
+  `admin`); other keys get the rest of the log.
+- `from` is inclusive, `to` exclusive (RFC 3339 or `YYYY-MM-DD`). `type` is an exact match;
+  `type_prefix` a literal prefix such as `post.`.
+- **JSONL** (`format=ndjson`, also called NDJSON; saved as `.jsonl`): one JSON event per line, the same shape as `GET /v1/events`. Not one JSON array, so a large log can be read line by line.
+- **CSV** columns: `created_at,id,type,actor_type,actor_id,actor_name,collection_id,post_id,channel_id,schedule_id,data`
+  (`data` is the event's JSON). RFC 4180 quoting with CRLF line endings; cells starting with
+  `=`, `+`, `-`, `@`, tab or CR get a leading `'` so spreadsheets don't run them as formulas.
+
+## Export the whole workspace
+
+For data portability (GDPR), a ZIP of everything in the workspace (without the media files on
+the Starter plan):
+
+<Steps>
+<Step>
+
+### Start an export
+
+`POST /v1/workspace/export` (scope `admin`; dashboard sessions and local mode have it) →
+`202` with a job `{"id":"exp_zxj2lzvmh32poxxq2kgp","status":"pending","includes_media":true,"created_at":"2026-10-13T09:12:44.512031Z"}`
+(`includes_media` is `false` on Starter). Only one export per workspace can be
+pending or running; a second request gets `409` with `details.export_id`.
+
+</Step>
+<Step>
+
+### Wait until it is ready
+
+`GET /v1/workspace/exports/{id}` → `pending`, `running`, `ready`, `failed` or `expired`. When
+`ready` it includes `download_url`.
+
+</Step>
+<Step>
+
+### Download the ZIP
+
+`GET /v1/workspace/exports/{id}/download` → the ZIP. Archives are deleted **24 hours** after
+they finish; afterwards the download returns `410`.
+
+</Step>
+</Steps>
+
+| File | Content |
+|---|---|
+| `workspace.json` | Workspace, export format version, export time, record counts, `includes_media` |
+| `collections.ndjson` | All collections, including archived ones |
+| `posts.ndjson` | All posts with their targets (status, link and error per channel) and `media_files` (paths in the archive) |
+| `channels.ndjson` | Connected channels: provider, name, handle, status, settings. Credentials are never exported |
+| `schedules.ndjson` | Schedules; endpoint secrets replaced by `[redacted]` |
+| `events.ndjson` | The activity log, oldest first |
+| `media.ndjson` | Every upload: id, `original_name`, `mime_type`, size, SHA-256 and `file` (empty in a data-only export) |
+| `media/` | The uploaded files under their original names (not in a data-only export) |
+| `webhooks.json` | Webhook endpoints, signing secrets replaced by `[redacted]` |
+| `README.txt` | A description of the files |
+
+A data-only export (Starter) has no `media/` folder and no `media_files` on posts; its
+`workspace.json` and `README.txt` say so. API keys, sessions, the recovery key and channel
+credentials are never exported. The archive is built from live data
+page by page, not as one snapshot — for a point-in-time copy take a
+[backup](/self-hosting/backup-and-restore). `workspace.export_requested` and
+`workspace.exported` events are recorded.
+
+## Retention
+
+To have staqly delete old data automatically, set these [environment
+variables](/self-hosting/configuration#how-to-change-a-setting). A daily worker (first run one minute after start) deletes old data:
+
+| Variable | Default | Deletes |
+|---|---|---|
+| `RETENTION_DELIVERIES_DAYS` | `30` | Webhook deliveries that succeeded or failed more than N days ago. Pending deliveries are never deleted. `0` keeps them forever |
+| `RETENTION_AGENTS_DAYS` | `30` | Agents and API connections in Integrations not seen for N days (their events stay). `0` keeps them forever |
+| `RETENTION_NOTIFICATIONS_DAYS` | `30` | Alert outbox rows that were `sent`, `skipped` or `failed` more than N days ago, plus pending rows of alerts disabled for that long. `0` keeps them forever |
+| `RETENTION_EVENTS_DAYS` | `0` (forever) | Events older than N days. A `retention.events_pruned` event per workspace records the count |
+
+- Events can't be changed (a trigger blocks `UPDATE`); retention only deletes whole events. An
+  event with a still-pending delivery is kept until it finishes, so webhooks stay at-least-once.
+- Done jobs of the [queue](/concepts#jobs) are deleted after 7 days without a setting.
+
+## Purge a post
+
+`DELETE /v1/posts/{id}` removes the post, but its events, which hold snapshots of it, stay.
+`POST /v1/posts/{id}/purge` (scope `admin`; **Delete post → Also erase its history** in the
+dashboard) removes the history too:
+
+- the post and its targets;
+- every event about it and their webhook deliveries, **even pending ones**;
+- its media files, unless another post uses them;
+- cached idempotent responses containing it; finished workspace exports are expired.
+
+```json
+{ "post_id": "post_oalirbz67y4m4cqxq5dw", "events_deleted": 4, "media_deleted": 1 }
+```
+
+A single `post.purged` event with only IDs and counts is recorded.
+
+<Callout type="warn" title="Trade-off">
+The activity log loses that post's history. What was already published stays on the platforms. Data other systems already received — webhook
+receivers, earlier downloads, older backups — is out of staqly's reach.
+</Callout>
+
+## Delete a workspace (cloud)
+
+`DELETE /v1/workspace` with `{"confirm": "<exact workspace name>"}` permanently deletes the
+workspace and everything in it (collections, posts, channels, schedules, media files, events,
+webhooks, alerts, API keys, sessions and exports) and signs every session out.
+
+- Only a **signed-in dashboard session** can do it. API keys get `403`, even with `admin`, so a
+  leaked automation key can't destroy a workspace.
+- A wrong or missing `confirm` returns `422`. Other workspaces are unaffected. Earlier database
+  backups still contain the data.
+- With [billing](/self-hosting/billing) on, a live Stripe subscription is canceled right away.
+
+**Local mode** returns `409`: the installation has exactly one workspace. To remove all data,
+stop staqly and delete its data, as the **Delete all data** card in **Settings → Data & privacy**
+shows:
+
+```bash tab="Binary"
+staqly service uninstall          # only if you installed the background service
+rm -rf ~/.local/share/staqly      # or your --data directory
+```
+
+```bash tab="Docker"
+docker rm -f staqly
+docker volume rm staqly-data
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">A restorable copy of everything.</Card>
+  <Card title="Events" href="/api/events">What the activity log records.</Card>
+  <Card title="Security model" href="/self-hosting/security">How secrets and exports are protected.</Card>
+</Cards>

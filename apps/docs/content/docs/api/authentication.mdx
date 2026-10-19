@@ -1,0 +1,225 @@
+---
+title: Authentication & scopes
+description: Find out when you need credentials, how to create a scoped API key, and which scope each call needs.
+---
+
+How you authenticate depends on the [mode](/local-vs-cloud). On your own machine (local mode,
+the default) agents and scripts need **no credentials at all**. On a hosted server (cloud mode)
+every automation sends a **scoped API key**, and people sign in in the browser with Google, an
+email code or a passkey, then use a session.
+
+## Authenticate an automation
+
+<Steps>
+<Step>
+### Local mode: just call the API
+
+Run your script on the same machine as staqly and send no credentials:
+
+```bash
+curl -s http://localhost:3333/v1/posts
+```
+
+If the API answers `403 not_local`, the request didn't look local — see the
+[checks below](#local-mode-no-credentials).
+</Step>
+<Step>
+### Cloud mode: create a key
+
+In the dashboard, open **Integrations → API keys**, give the key a name and tick only the
+[scopes](#scopes) the automation needs. Copy the key (`stk_...`) right away: it is shown
+**once**.
+</Step>
+<Step>
+### Send it as a bearer token
+
+```bash
+curl -s https://staqly.example.com/v1/posts -H "Authorization: Bearer stk_..."
+```
+
+Store the key in a secret or environment variable, never in code. An invalid, expired or
+revoked key returns `401 unauthorized`; a key without the needed scope returns
+`403 forbidden`.
+</Step>
+</Steps>
+
+## Local mode: no credentials
+
+In local mode (the default) requests without credentials get a full-access `local`
+principal — **if** they provably come from this machine:
+
+- the TCP peer is loopback or inside `LOCAL_TRUSTED_PEERS` — the [Docker setup](/self-hosting/docker)
+  sets the private ranges because Docker forwards published ports from its bridge network; with
+  `staqly serve` only loopback counts (and the server listens on `127.0.0.1:3333`),
+- the `Host` header is a local name: `localhost`, `127.0.0.1`, `::1`, `api`,
+  `host.docker.internal`, anything ending in `.localhost`, plus `LOCAL_ALLOWED_HOSTS`
+  (the repository's `compose.yml` adds the container name `staqly`),
+- any `Origin` header is the dashboard's own (`localhost`, `127.0.0.1` or `[::1]` on
+  `DASHBOARD_PORT`, or the origin of `PUBLIC_DASHBOARD_URL`) or listed in `LOCAL_ALLOWED_ORIGINS` — this
+  blocks web pages on other sites and on other localhost ports,
+- the request does not come through the dashboard proxy while the dashboard is open to the
+  network (`DASHBOARD_EXPOSED`, on with Docker and `staqly serve --expose`) — browsers then use
+  sessions.
+
+Otherwise the API answers `403 not_local` with the reason. Session cookies are honored in local
+mode too. Local mode has no API keys: creating one is `409` (agents on this computer need none, and
+other devices sign in with **Connect a device**).
+
+## Cloud mode: API keys
+
+- Keys look like `stk_...` (256 bits of randomness). Only a SHA-256 hash and a 6-character
+  display prefix are stored; the raw key is shown **once**, when created or rotated.
+- Each key belongs to one workspace — the key decides which workspace you work in.
+- Keys can expire (`expires_at`, RFC 3339 or `YYYY-MM-DD`, in the future; an expired key no longer
+  counts against the plan's key limit), be **rotated** (revoke + new key
+  with the same name, scopes and expiry; an expired key can't be rotated, `409`, create a new one)
+  and **revoked**. `last_used_at` shows when a key was last
+  used.
+- Manage keys in **Integrations → API keys** or via `/v1/api-keys` (needs `admin`).
+
+### The admin key and agent keys
+
+Owners and admins create keys under **Integrations → API keys**; a key never does more than its
+creator's current role (see [Accounts](/self-hosting/accounts#api-keys)). Give agents keys with
+only the scopes they need and no `admin`: such keys work for the API and MCP but can never open
+the dashboard, and they can't create or revoke keys.
+
+On a cloud server without accounts (workspaces from before Google and email sign-in), signup
+returns one key, named **Admin key**, with the `admin` scope: the key that signs in to the
+dashboard, to keep safe like a password.
+
+Give each agent its own scoped key: Starter allows two active API keys (the admin key and one
+more), Plus ten, Pro and Business any number.
+
+## Scopes
+
+| Scope | Allows |
+|---|---|
+| `collections:read` | List and read collections |
+| `collections:write` | Create, update and archive collections |
+| `collections:delete` | **Permanently delete** collections (with their posts and schedules) |
+| `posts:read` | List, search and read posts, their history and preview, tags, and what your automation is asked for (`GET /v1/work`) |
+| `posts:write` | Create, edit and duplicate posts |
+| `posts:publish` | Schedule, publish and cancel posts; retry a target; report a result for [your own automation](/channels/your-own-automation); retry a job |
+| `posts:delete` | **Delete** posts and media files (purging a post with its history stays `admin`) |
+| `channels:read` | List and read channels and the provider catalog |
+| `channels:manage` | Connect, change, test and remove channels; register developer apps (they hold credentials) |
+| `schedules:manage` | List, create, change, run and delete schedules |
+| `media:read` | Download media files |
+| `media:write` | Upload media files |
+| `webhooks:manage` | Manage webhooks and their deliveries |
+| `alerts:manage` | Manage [alerts](/automation/alerts) (they hold secrets such as bot tokens) |
+| `events:read` | Read the activity log and export it |
+| `admin` | Everything, including API keys, sessions, device links, renaming the workspace, the [workspace export](/self-hosting/data-export), post purge, billing and plan changes, and seeing [audit events](/api/events#audit-events) in the activity log |
+
+A call without the needed scope returns `403 forbidden`: *"missing required scope
+posts:publish"*. The same check applies over [MCP](/mcp).
+
+### Why deleting is separate
+
+Deleting needs its own scope: `posts:write` and `collections:write` never imply
+`posts:delete` or `collections:delete`. An agent that writes content can't wipe it, so a
+runaway or prompt-injected agent loses at most what it created, not your published history.
+Grant a delete scope only to a key whose job is cleanup. Purging a post together with its event
+history stays `admin`.
+
+### Why writing and publishing are separate
+
+Writing content (`posts:write`) is separate from putting it on your channels
+(`posts:publish`), so a drafting agent can fill a collection without being able to publish a
+word: the schedule you set, a person, or a publisher key with `posts:publish` does that. The
+same scope reports results for your own automation, so a publisher that reports can't rewrite
+posts.
+
+The key created at signup has the `admin` scope, which includes every other scope. Keys you
+create for agents get only the scopes you tick; grant `admin`, `channels:manage` and
+`alerts:manage` (they hold secrets) and the delete scopes deliberately.
+
+### Suggested keys
+
+The dashboard's presets:
+
+| Preset | Scopes |
+|---|---|
+| Content agent (drafts, schedules and publishes posts) | `collections:read posts:read posts:write posts:publish media:read media:write` |
+| Publisher automation (reports results for your own automation) | `posts:read posts:publish` |
+| Read-only agent | `collections:read posts:read channels:read events:read` |
+| Full access | every scope, including `admin` |
+
+A drafting-only agent gets `collections:read posts:read posts:write media:write` and no
+`posts:publish`; a cleanup job adds `posts:delete`.
+
+## Browser sessions
+
+The dashboard uses an HttpOnly session cookie (`staqly_session`, SameSite=Lax, 30-day expiry,
+revocable). It is `Secure` by default in cloud mode (`COOKIE_SECURE`, default `true` in cloud,
+`false` in local). A person's session holds their role's scopes, read on every request; a session without a person
+(local mode, workspaces without an account) holds every scope.
+
+- Cookie-authenticated **unsafe** requests (POST/PATCH/DELETE) must send the session's CSRF
+  token in `X-CSRF-Token`; otherwise `403 csrf_failed`. `GET /v1/session` returns the token.
+- Scripts should never use cookies — use a bearer key (no CSRF needed).
+- `/mcp` accepts only bearer keys, never cookies.
+- New sessions come from signing in with Google, an email code or a passkey
+  ([Accounts](/self-hosting/accounts)), a one-time **device link** (`/v1/device-links`, created
+  from the dashboard only; in an account it signs in the same person), and, in workspaces
+  without an account on a development server, [the admin API key](#sign-in-with-the-admin-key-development-servers)
+  or the [recovery key](#recovery-key) over the API.
+
+### Sign in with the admin key (development servers)
+
+The dashboard never asks for an API key: people sign in with Google, an email code or a passkey,
+and API keys are for agents and automation. A development or test server
+(`AUTH_DEV_SIGNIN=true`) still accepts the older sign-in over the API, for test suites:
+`POST /v1/sessions/api-key` with an admin key, sent without an `Authorization` header.
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/sessions/api-key \
+  -H "Content-Type: application/json" -d '{"api_key":"stk_..."}' -c cookies.txt
+# 201 {"csrf_token":"..."} and the staqly_session cookie
+```
+
+| Answer | When |
+|---|---|
+| `201` | Signed in: the response sets the session cookie and returns the CSRF token |
+| `401 unauthorized` | Unknown, revoked or expired key |
+| `403 forbidden` | The key has no `admin` scope (an agent key) |
+| `403 sign_in_with_account` | A production server, or a workspace in an account |
+| `409 conflict` | Local mode: connect browsers with a one-time link instead |
+| `429 rate_limited` | Too many attempts from this client IP (`RATE_LIMIT_PER_MINUTE`, default 10 per minute) |
+
+## Recovery key
+
+A cloud workspace without an account has a **recovery key** (`staqly-recovery-` followed by 40
+characters, 200 bits), the way back in when you lost the admin API key. Signup shows it once,
+next to the admin key. People in an account have none: they recover access with another
+sign-in method, and the recovery endpoints answer `403 sign_in_with_account` (or `409` when
+rotating) for their workspaces.
+
+- Development and test servers take it at `POST /v1/sessions/recover` with
+  `{"recovery_key":"staqly-recovery-..."}`; the dashboard has no form for it. On a production
+  server, give such a workspace to an account instead
+  ([`attach-workspace`](/self-hosting/operator-cli#give-a-workspace-to-an-account)).
+- **It works once.** In one step it signs this browser in, creates a new admin key named
+  **Admin key (recovered)** (not counted against the plan's key limit), issues a **new
+  recovery key** (the one you used stops working) and signs out every other browser session.
+  The response (`201`) holds `csrf_token`, `api_key` (with the raw `key`) and `recovery_key`;
+  the dashboard shows the new admin key and recovery key once, and you confirm you saved them
+  before you continue.
+- On a plan with an API key limit (Starter, Plus) the new admin key **replaces** the lost one: old
+  admin keys are revoked (`api_key.revoked`, reason `recovery`). On Pro and Business every existing
+  API key keeps working; if
+  one leaked, revoke it under **Integrations → API keys**.
+- Rotate the recovery key yourself from a dashboard session (**Settings → Recovery key**) or on
+  the server with `docker exec staqly server recovery-key` (`staqly serve recovery-key` with the
+  binary). Rotating signs out every other session of the workspace.
+- Wrong or already used keys get `401 unauthorized`; the endpoint is rate-limited per client IP.
+- MCP never accepts or exposes it.
+
+## Next steps
+
+<Cards>
+  <Card title="Errors" href="/api/errors">What `401`, `403` and the other codes mean.</Card>
+  <Card title="Local vs cloud" href="/local-vs-cloud">Choose the mode that fits your setup.</Card>
+  <Card title="Security model" href="/self-hosting/security">How staqly protects channel credentials and keeps writers from publishing.</Card>
+</Cards>

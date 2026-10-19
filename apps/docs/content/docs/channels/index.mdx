@@ -1,0 +1,251 @@
+---
+title: Channels
+description: Connect the accounts staqly publishes to, see which platforms are available and what each one allows.
+---
+
+A **channel** is an account staqly publishes to: a Telegram channel, a Mastodon account, a
+LinkedIn page, or **your own automation** when staqly should hand the post to a script or n8n
+workflow instead. Connect a channel once; from then on every post can target it, and a
+collection's schedules can publish to it.
+
+## Connect a channel
+
+<Steps>
+<Step>
+
+### Pick the platform
+
+Open **Channels** in the sidebar and click **Add channel**. The drawer lists every platform
+staqly knows ([the catalog below](#the-catalog)) in groups: your own automation, social
+networks, video and streaming, communities and chat, blogs and newsletters, business and
+portfolio. Platforms that are not ready yet carry a **Soon** badge and cannot be connected: not built
+yet, or an OAuth platform whose app keys the server doesn't have. A platform turned off on the
+server is not listed (see [Platforms on a server](#platforms-on-a-server)).
+
+Someone without access to Staqly (a client) can connect their account too: send them a
+[connect link](/channels/connect-links).
+
+</Step>
+<Step>
+
+### Connect it
+
+How you connect depends on the platform's `auth`:
+
+| `auth` | What happens |
+|---|---|
+| `token` | The form asks for the platform's credentials (a bot token and chat id for Telegram, a handle and app password for Bluesky). Staqly checks them against the platform, reads the account's name and picture, and stores them sealed. |
+| `oauth2` | **Connect with ...** sends your browser to the platform; after you allow access it comes back to `/channels/callback/<provider>` and the channel is created. The platform needs a [developer app](/channels/developer-apps) whose keys are in the server's environment (`.env`); without them it is listed as **Soon**. |
+| `none` | **Your own automation**: nothing to connect. Staqly asks your script or workflow to publish and waits for its result. See [Your own automation](/channels/your-own-automation). |
+
+Give the channel a **Name** (it defaults to the account's name) and, where the provider offers
+them, default **settings** for new targets (a Mastodon visibility, say).
+
+</Step>
+<Step>
+
+### Use it
+
+Pick the channel's avatar in the composer, or the channel in a schedule. The composer shows the
+platform's character limit per channel, gives each picked channel a tab for a text of its own
+and a folded **Settings** card under the editor with that platform's options (who can reply, a
+community, labels, a last comment, accounts that repost it...). Platforms that are not built yet
+already list their settings, so their posts can be prepared: Instagram (post as feed, reel or story,
+collaborators, first comment), TikTok (who can watch, comments, duets, stitches, AI and branded
+content labels), YouTube (title, visibility, made for kids, tags, category, playlist), LinkedIn
+(visibility), Pinterest (title, board, link, alt text), Reddit (title, subreddit, flair, NSFW,
+spoiler), Facebook (post, reel or story), Threads (who can reply), Dev.to and Medium (title, tags,
+original link), Lemmy (title, community, link). Each platform's page lists its settings.
+
+</Step>
+</Steps>
+
+From a terminal or a script, token platforms and your own automation connect with one request;
+OAuth platforms only through the browser:
+
+```bash tab="curl"
+API=http://localhost:3333
+
+# what each platform needs
+curl -s $API/v1/providers | jq '.data[] | {id, auth, status, credential_fields}'
+
+# a token platform
+curl -s -X POST $API/v1/channels -H 'Content-Type: application/json' \
+  -d '{"provider":"telegram","name":"Announcements","fields":{"bot_token":"123456:ABC-DEF...","chat_id":"@my_channel"}}'
+
+# your own automation
+curl -s -X POST $API/v1/channels -H 'Content-Type: application/json' \
+  -d '{"provider":"custom","name":"My n8n publisher"}'
+```
+
+```bash tab="CLI"
+staqly channels providers
+staqly channels connect telegram --name Announcements --field bot_token=123456:ABC-DEF... --field chat_id=@my_channel
+staqly channels connect custom --name "My n8n publisher"
+```
+
+```text tab="MCP"
+list_providers
+connect_channel { "provider": "telegram", "name": "Announcements", "fields": { "bot_token": "123456:ABC-DEF...", "chat_id": "@my_channel" } }
+```
+
+Creating, changing and removing channels needs the `channels:manage` scope in cloud mode;
+listing them needs `channels:read`. Credentials are never returned by any call.
+
+## The catalog
+
+`GET /v1/providers` (MCP `list_providers`, CLI `staqly channels providers`) lists every provider
+with its `auth`, `status`, `limits`, `credential_fields` and `settings_fields`. In this
+release **Your own automation** and **[X](/channels/x)** are available (X once the server has its app keys); every other platform is in the catalog as `soon`,
+so the dashboard already shows the whole grid and a post's preview can check the platform's
+limits.
+
+| Provider | `id` | Connects with | Text limit | Media | Needs |
+|---|---|---|---|---|---|
+| Your own automation | `custom` | nothing (`none`) | none | up to 10 images, videos, GIFs or files | — |
+| [X](/channels/x) (**available**) | `x` | OAuth | 280 | 4 pictures or 1 video | — |
+| LinkedIn | `linkedin` | OAuth | 3,000 | 9 | — |
+| LinkedIn Page | `linkedin_page` | OAuth | 3,000 | 9 | — |
+| Reddit | `reddit` | OAuth | 40,000 | 1 | a title |
+| Instagram Business (through a Facebook Page) | `instagram` | OAuth | 2,200 | 10 | media |
+| Instagram (Instagram login, no Facebook Page) | `instagram_standalone` | OAuth | 2,200 | 10 | media |
+| Facebook Page | `facebook` | OAuth | 63,206 | 10 | — |
+| Threads | `threads` | OAuth | 500 | 10 | — |
+| YouTube | `youtube` | OAuth | 5,000 | 1 video | a title and the video |
+| Google My Business | `google_business` | OAuth | 1,500 | 1 image | — |
+| TikTok | `tiktok` | OAuth | 2,200 | 1 video | the video |
+| Pinterest | `pinterest` | OAuth | 500 | 1 image | a title, the image and a link |
+| Dribbble | `dribbble` | OAuth | 1,000 | 1 image | a title and the image |
+| Discord | `discord` | token | 2,000 | 10 | — |
+| Slack | `slack` | OAuth | 40,000 | 10 | — |
+| Kick | `kick` | OAuth | 500 | — | — |
+| Twitch | `twitch` | OAuth | 500 | — | — |
+| Mastodon | `mastodon` | OAuth | 500 | 4 | — |
+| Bluesky | `bluesky` | token | 300 | 4 images | — |
+| Lemmy | `lemmy` | token | 10,000 | 1 image | a title |
+| Farcaster | `farcaster` | token | 320 | 2 images | — |
+| Telegram | `telegram` | token | 4,096 | 10 | — |
+| Nostr | `nostr` | token | none | 4 images | — |
+| VK | `vk` | OAuth | 16,000 | 10 | — |
+| Medium | `medium` | token | none | 1 image | a title |
+| Dev.to | `devto` | token | none | 1 image | a title |
+| Hashnode | `hashnode` | token | none | 1 image | a title |
+| WordPress | `wordpress` | token | none | 1 image | a title |
+| ListMonk | `listmonk` | token | none | — | a title |
+| Moltbook | `moltbook` | token | 5,000 | 4 images | — |
+| Whop | `whop` | OAuth | 5,000 | 4 | — |
+| Skool | `skool` | token | 5,000 | 4 images | a title |
+| MeWe | `mewe` | token | 5,000 | 4 | — |
+| Tumblr | `tumblr` | OAuth | 4,096 | 10 | — |
+
+### Platforms on a server
+
+Every platform has a switch in the server's environment (`.env`), locally and in the cloud:
+
+```bash title=".env"
+PROVIDER_X_ENABLED=true            # false: turned off on this server
+PROVIDER_X_CLIENT_ID=...           # OAuth platforms: the developer app
+PROVIDER_X_CLIENT_SECRET=...
+```
+
+- `PROVIDER_<ID>_ENABLED=false` hides the platform from the catalog and the dashboard and refuses
+  connecting it and new posts on its channels (`409 provider_disabled`). Posts already scheduled
+  on its channels still publish, and can still be edited.
+- Enabled but without `_CLIENT_ID` and `_CLIENT_SECRET`, an OAuth platform is listed as **soon**.
+- Restart the server after changing them. `.env.example` has a block for every platform.
+
+All limits in one place: [Limits](/limits).
+
+"Media" means images and videos unless noted. The limits are the platforms' published ones and
+drive the composer's counters and `GET /v1/posts/{id}/preview`. Each platform gets its own page
+here when it becomes available, with what to register and which settings it takes.
+
+## Channel status and health
+
+| Status | Meaning | What to do |
+|---|---|---|
+| **Connected** | Ready to publish. | — |
+| **Needs reconnect** | A publish, a test or a token refresh failed with the stored credentials; the row shows the error. Targets on it fail until it is reconnected. | **Reconnect** in the row's menu: OAuth platforms go through the platform again (the same account reconnects the existing channel), token platforms take fresh credentials (`PATCH /v1/channels/{id}` with `fields`). |
+| **Disabled** | Turned off by you. New posts cannot target it and schedules skip it. | **Enable** in the menu (`PATCH` with `status: connected`). |
+
+**Test connection** (`POST /v1/channels/{id}/test`, MCP `test_channel`, CLI
+`staqly channels test`) checks the stored credentials against the platform now; a failing test
+marks the channel *Needs reconnect*, a passing one clears it. It is rate-limited (burst 5, then
+10 per minute). OAuth sign-ins are refreshed by a `refresh_channel` [job](/concepts#jobs) before
+they expire. The `channel.needs_reconnect` event is one of the three an
+[alert](/automation/alerts) sends by default.
+
+## Managing channels
+
+The **Channels** page lists every channel with its picture, name, handle, platform, status and
+activity (last post, next post, posts in the last 30 days). Each row's menu has **Settings**,
+**Move to group** (once there is more than one group), **Test connection**, **Disable** or
+**Enable**, **Reconnect** and **Remove**. **Settings** renames the channel, picks its **group** and
+sets **Links in posts**, what the channel does with the links in a post's text when it publishes:
+
+| Links in posts | `https://example.com/a` goes out as |
+|---|---|
+| **Keep links** | as written (the default on most platforms) |
+| **Remove links** | nothing: the link is taken out |
+| **Show links as plain text** | `example[.]com/a`, readable but not a link |
+
+Platforms that charge more for links or show posts with them to fewer people offer only the last
+two: [X](/channels/x) removes them unless you choose plain text. The post keeps its text; the
+character limit counts what the channel receives, the composer says in red which channels change
+which links, and `GET /v1/posts/{id}/preview` lists them per target (`links_found`, plus a
+warning). Over the API it is the channel's `settings.links` (the channel's `links` field shows
+the mode in use; the catalog's `limits.links` and `limits.link_modes` give each platform's
+default and choices).
+
+### Channel groups
+
+Every channel belongs to exactly one **group**, for example one group per client. A workspace
+always has a **Default** group, which can't be deleted; new channels land there unless you pick
+another. With more than one group, the Channels page lists the channels group by group (each one
+folds open and closed), the composer's channel picker shows them under their group's name, and a
+group filter keeps one group. **New group** creates one, a group's menu renames it, and deleting a
+group moves its channels to Default.
+
+Over the API: `GET /v1/channel-groups` lists the groups (Default first) with how many channels each
+holds; `POST /v1/channel-groups` creates one (`name`, unique in the workspace; optional `color`
+`#rrggbb` and `position`), `PATCH /v1/channel-groups/{id}` renames it, and
+`DELETE /v1/channel-groups/{id}` deletes it (`409 default_group` for Default). A channel's
+`group_id` says where it is; `POST /v1/channels` takes a `group_id`, `PATCH /v1/channels/{id}` with
+`group_id` moves it, and `GET /v1/channels?group=grp_...` keeps one group.
+
+`GET /v1/channels` and `GET /v1/channels/{id}` also return each channel's `activity`, read from
+its targets: `last_published_at` and `last_post_id` (the last post that went out on it),
+`next_publish_at` (its next scheduled post) and `published_30d`. Webhook payloads carry the
+channel without it.
+
+Removing a channel removes the targets on it from every post; posts with no other
+target become drafts.
+
+<Method m="GET" path="/v1/channels" /> ·
+<Method m="POST" path="/v1/channels" /> ·
+<Method m="GET" path="/v1/channels/{id}" /> ·
+<Method m="PATCH" path="/v1/channels/{id}" /> ·
+<Method m="DELETE" path="/v1/channels/{id}" /> ·
+<Method m="POST" path="/v1/channels/{id}/test" /> ·
+<Method m="GET" path="/v1/channels/oauth/{provider}/start" />
+
+Plan limits (cloud): **5 channels on Starter, 15 on Plus, 40 on Pro, unlimited on Business**. Over the limit, connecting a channel
+answers `402 plan_limit_exceeded` with `details.limit = "channels"`. See [Plans](/plans).
+
+## Security
+
+- Credentials and developer app secrets are sealed with AES-256-GCM. The key is generated into
+  `DATA_DIR/secret.key` on first use, or comes from `STAQLY_SECRET_KEY` (32 bytes, base64).
+  **Back it up with the database**: without it every channel has to be reconnected.
+- No response ever carries a credential or a client secret, not even to an admin.
+- The OAuth `state` is signed and bound to the browser that started the flow with a short-lived
+  cookie, so a callback cannot be replayed into another session.
+- Publishing calls the platform from the server; your browser never holds a platform token.
+
+## Next steps
+
+<Cards>
+  <Card title="Your own automation" href="/channels/your-own-automation">Hand posts to n8n or a script and report the result.</Card>
+  <Card title="Developer apps" href="/channels/developer-apps">What an OAuth platform needs before you can connect it.</Card>
+  <Card title="Posts" href="/dashboard/posts">Write a post and customize it per channel.</Card>
+</Cards>

@@ -1,0 +1,196 @@
+/**
+ * OpenGPEX - An Open-source, Web-based Graphics and Photo editor.
+ * Copyright (C) 2026 The OpenGPEX Authors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+
+import React, { useRef, useCallback, useMemo, useEffect } from 'react';
+import { useEditorState, useEditorServices, usePluginList } from '@opengpex/editor/core/context';
+import { Frame, Layer, InteractionEvent, asViewportPoint } from '@opengpex/editor/core/types';
+import { InteractionDispatcher } from '../interaction/Dispatcher';
+import { createViewportPanHandler } from '../interaction/handlers/ViewportPanHandler';
+import { createLayerMoveHandler } from '../interaction/handlers/LayerMoveHandler';
+import { useViewportScroll } from './useViewportScroll';
+
+/** Extract pointer metadata from a native event, with safe fallbacks for non-PointerEvent inputs. */
+function extractPointerInfo(e: React.PointerEvent | React.MouseEvent | PointerEvent | MouseEvent): InteractionEvent['pointer'] {
+  // PointerEvent inherits MouseEvent — check for pointerId to distinguish
+  if ('pointerId' in e) {
+    const pe = e as PointerEvent | React.PointerEvent;
+    return {
+      id: pe.pointerId,
+      pressure: pe.pressure,
+      tiltX: pe.tiltX,
+      tiltY: pe.tiltY,
+      twist: pe.twist,
+      pointerType: (pe.pointerType || 'mouse') as 'mouse' | 'pen' | 'touch',
+    };
+  }
+  // Fallback for plain MouseEvent (shouldn't happen with onPointer* bindings, but defensive)
+  return {
+    id: 0,
+    pressure: (e as MouseEvent).buttons > 0 ? 0.5 : 0,
+    tiltX: 0,
+    tiltY: 0,
+    twist: 0,
+    pointerType: 'mouse',
+  };
+}
+
+/**
+ * useViewportEvents: Hook for viewport interaction event handler
+ * Acts as shell of Interaction Dispatcher, no longer containing concrete business logic.
+ */
+export function useViewportEvents(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  frame: Frame
+) {
+  const { state, activeLayer } = useEditorState();
+  const services = useEditorServices();
+  const { geometry, actions } = services;
+  const pluginList = usePluginList();
+
+  // 1. Initialize dispatcher and handlers (automatically aggregate built-in and plugin handlers)
+  const dispatcher = useMemo(() => {
+    // Collect all handlers provided by plugins (reactively updated)
+    const pluginInteractions = pluginList.flatMap(p => p.interactions || []);
+
+    return new InteractionDispatcher([
+      ...pluginInteractions,
+      createLayerMoveHandler(),
+      createViewportPanHandler()
+    ]);
+  }, [pluginList]);
+
+  // 2. Helper function to construct InteractionEvent
+  const buildInteractionEvent = useCallback((e: React.PointerEvent | React.MouseEvent | MouseEvent | PointerEvent): InteractionEvent => {
+    const rect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+    const screenPoint = asViewportPoint({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+
+    const currentCam = actions.fast.latestCamera(frame.id);
+    const worldPoint = geometry.space.screenToWorld(screenPoint.x, screenPoint.y, frame, currentCam);
+    const canvasPoint = geometry.space.worldToLocal(worldPoint.x, worldPoint.y, frame);
+
+    return {
+      nativeEvent: e,
+      point: {
+        screen: screenPoint,
+        world: worldPoint,
+        canvas: canvasPoint,
+      },
+      keys: {
+        shift: e.shiftKey,
+        alt: e.altKey,
+        meta: e.metaKey || e.ctrlKey,
+      },
+      pointer: extractPointerInfo(e),
+      geometry,
+      pixels: services.pixels,
+      assets: services.assets,
+      actions,
+      state,
+      activeFrame: frame,
+    };
+  }, [containerRef, frame, geometry, services.pixels, services.assets, actions, state]);
+
+  const lastEventRef = useRef<React.PointerEvent | React.MouseEvent | PointerEvent | MouseEvent | null>(null);
+
+  // --- Pointer Down: Start dispatcher ---
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    lastEventRef.current = e;
+    const event = buildInteractionEvent(e);
+    dispatcher.handleStart(event);
+  }, [buildInteractionEvent, dispatcher]);
+
+  // --- Pointer Move: Handle interaction or hover state ---
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    lastEventRef.current = e;
+    const event = buildInteractionEvent(e);
+
+    if (dispatcher.isActive()) {
+      dispatcher.handleMove(event);
+    } else {
+      // Basic hover determination logic (temporarily kept in Viewport layer, can be moved to plugins in the future)
+      const layersAtPoint = geometry.space.pickLayersAt(event.point.world, frame.layers);
+      const hoveredId = layersAtPoint[0]?.id || null;
+      const isHoveringActive = activeLayer ? layersAtPoint.some((l: Layer) => l.id === activeLayer.id) : false;
+
+      // Write to VIS (fast-track, no React re-render)
+      services.actions.fast.setHover(hoveredId, isHoveringActive);
+    }
+  }, [buildInteractionEvent, dispatcher, geometry, frame.layers, activeLayer, services.actions]);
+
+  // --- Pointer Up: End dispatch and reset fast-track ---
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    // Update lastEventRef with the up event for accurate pointer info at end
+    lastEventRef.current = e;
+
+    let endResult: unknown = undefined;
+    const event = buildInteractionEvent(e);
+    endResult = dispatcher.handleEnd(event);
+
+    // Only reset if an interaction is still hanging (was not committed by handleEnd)
+    // and it did not return a Promise indicating an asynchronous commit.
+    const isAsyncCommit = !!(endResult && typeof (endResult as { then?: unknown }).then === 'function');
+    if (!isAsyncCommit && actions.fast.isInteracting()) {
+      actions.fast.reset();
+    }
+    lastEventRef.current = null;
+  }, [buildInteractionEvent, dispatcher, actions]);
+
+  const handlePointerLeave = useCallback((e: React.PointerEvent) => {
+    // Only handle leave for mouse pointers (touch/pen lift is handled by pointerup)
+    if (e.pointerType !== 'mouse') return;
+
+    // Only end interaction if the dispatcher has an active pointer-drag handler.
+    // Without this guard, pointerleave during a scroll session (which bypasses the
+    // dispatcher) could trigger reset() which wipes the scroll session's buffered
+    // camera — causing the camera to flash/jump back to its pre-scroll position.
+    if (dispatcher.isActive()) {
+      handlePointerUp(e);
+    }
+
+    // Clear hover via VIS (fast-track, no React re-render)
+    services.actions.fast.setHover(null, false);
+  }, [handlePointerUp, services.actions, dispatcher]);
+
+  // --- Escape Key: Cancel active interaction ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && dispatcher.isActive()) {
+        dispatcher.cancelAll();
+        // Clean up fast-track state (mirrors handleMouseUp cleanup)
+        if (actions.fast.isInteracting()) {
+          actions.fast.reset();
+        }
+        lastEventRef.current = null;
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dispatcher, actions]);
+
+  // --- Wheel Interaction: zoom and canvas panning (taken over by independent Hook) ---
+  useViewportScroll(containerRef, frame, actions, geometry);
+
+  return {
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerLeave
+  };
+}

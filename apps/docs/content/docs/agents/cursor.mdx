@@ -1,0 +1,128 @@
+---
+title: Cursor
+description: Add staqly to Cursor so its agent writes posts and puts them on the calendar.
+---
+
+Connect Cursor to staqly as an MCP server, and Cursor's agent can create collections, write posts
+with media and a text per channel, and put them on the calendar. Do this
+once per machine (`~/.cursor/mcp.json`) or once per repository (`.cursor/mcp.json`).
+
+## Connect to local staqly
+
+<Steps>
+<Step>
+
+### Start staqly
+
+Run `staqly serve` (or the [Docker image](/self-hosting/docker)). See the [Quickstart](/quickstart).
+
+</Step>
+<Step>
+
+### Add the MCP server
+
+In local mode, no key is needed. Write the config with the CLI:
+
+```bash
+mkdir -p .cursor && staqly mcp config cursor --snippet > .cursor/mcp.json
+```
+
+or create it yourself:
+
+```json title=".cursor/mcp.json"
+{ "mcpServers": { "staqly": { "url": "http://localhost:3333/mcp" } } }
+```
+
+Use `~/.cursor/mcp.json` instead to have staqly in every project.
+
+</Step>
+<Step>
+
+### Check the connection
+
+Open **Cursor Settings → MCP**. `staqly` should show a green dot and its tools. If it doesn't,
+toggle it off and on, or see [Other MCP clients](/agents/other-mcp-clients#check-the-connection-with-curl)
+to test the endpoint with curl.
+
+</Step>
+</Steps>
+
+### STDIO (Docker only)
+
+If you run staqly with Docker, you can use STDIO instead of HTTP. It runs `mcp-stdio` inside
+the `staqly` container, so it does not work with `staqly serve`:
+
+```json title=".cursor/mcp.json"
+{
+  "mcpServers": {
+    "staqly": { "type": "stdio", "command": "docker", "args": ["exec", "-i", "staqly", "mcp-stdio"] }
+  }
+}
+```
+
+## Connect to a cloud instance
+
+Create a key for Cursor under **Integrations → API keys**, e.g. with
+`collections:read posts:read posts:write media:write`, export it, and reference it from the config.
+Cursor expands `${env:STAQLY_API_KEY}`, so the key stays out of the file:
+
+```bash
+export STAQLY_API_KEY=stk_...
+staqly mcp config cursor --snippet > .cursor/mcp.json   # with a cloud CLI profile
+```
+
+```json title=".cursor/mcp.json"
+{
+  "mcpServers": {
+    "staqly": {
+      "url": "https://staqly.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${env:STAQLY_API_KEY}" }
+    }
+  }
+}
+```
+
+Cursor reads the variable from the environment it was started in, so start it from that shell
+(`cursor .`) or set the variable for your login session.
+
+## Write posts, not just code
+
+Add a project rule so the agent drafts into staqly instead of pasting text for you to copy:
+
+```md title=".cursor/rules/staqly.mdc"
+---
+description: Write posts into staqly instead of posting directly
+alwaysApply: true
+---
+
+When asked for a social post, announcement or release note, write it into staqly:
+
+1. Call `list_channels` once to know the channels and their limits, and `list_collections`
+   for the collection names.
+2. Call `create_post` with the collection, the text, one target per channel the post is for,
+   and a shorter `content` on a target whose platform allows fewer characters.
+3. Call `preview_post` and fix what a platform objects to; then `schedule_post` if a time was
+   given, otherwise leave it as a draft for the collection's schedule.
+4. When `list_requested_work` shows a schedule asking for posts, write three drafts into its
+   collection in the voice of the previous ones.
+```
+
+The posts show up on the staqly calendar, and on your phone if you
+[connected it](/dashboard/phones-and-tablets). The full pattern is in
+[Let an agent fill a collection](/cookbook/agent-fills-a-collection).
+
+## Try it
+
+Ask in Cursor's agent chat:
+
+> *"Create a collection called Release notes and draft a post about this week's changes for the Telegram channel."*
+> *"What is scheduled this week?"*
+
+More in [Example prompts](/mcp/prompts).
+
+## Next steps
+
+<Cards>
+  <Card title="MCP tools" href="/mcp/tools">Every tool the agent can call, and the scope it needs.</Card>
+  <Card title="Let an agent fill a collection" href="/cookbook/agent-fills-a-collection">A schedule publishes every morning; the agent refills the drafts.</Card>
+</Cards>

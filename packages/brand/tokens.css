@@ -1,0 +1,77 @@
+/*
+ * staqly brand tokens, shared by the dashboard, the docs and the landing page. Import after `tailwindcss`.
+ *
+ * One green accent taken from the logo (assets/brand). Light mode uses a deep green for text, links and filled
+ * buttons (AA on white); dark mode (`.dark` on <html>) uses the bright logo green with dark text on it.
+ * --brand-gradient is the logo's lime -> green ramp for highlights; it always takes dark text.
+ * The graphite neutrals (--background, --foreground, --card, --muted, --border...) stay in each app: the
+ * dashboard and the Fumadocs preset tune them differently.
+ */
+
+/* Classes used by the shared logo. */
+@source './src/logo.tsx';
+
+:root {
+  --brand: oklch(0.52 0.13 152);
+  --brand-strong: oklch(0.46 0.11 154);
+  --brand-foreground: oklch(0.99 0.01 150);
+  --brand-soft: oklch(0.62 0.16 150 / 12%);
+  --brand-glow: oklch(0.84 0.19 148);
+  --brand-gradient: linear-gradient(135deg, #c9fb93 0%, #63f08e 48%, #1ed27b 100%);
+  --brand-gradient-foreground: #052817;
+}
+
+.dark {
+  --brand: oklch(0.82 0.19 148);
+  --brand-strong: oklch(0.88 0.16 145);
+  --brand-foreground: oklch(0.24 0.05 155);
+  --brand-soft: oklch(0.82 0.19 148 / 13%);
+  --brand-glow: oklch(0.82 0.19 148);
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-glow: var(--brand-glow);
+}
+
+/*
+ * Arrows nudge on hover and keyboard focus, everywhere (dashboard, docs, landing page): → bounces right and back,
+ * ← bounces left, inside any link, button or menu item (or a card that is one). Chevrons stay still. Off with
+ * reduced motion.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  :is(a, button, [role='button'], [role='menuitem']):is(:hover, :focus-visible)
+    :is(.lucide-arrow-right, .lucide-move-right) {
+    animation: sq-nudge 0.9s ease-in-out infinite;
+  }
+
+  :is(a, button, [role='button'], [role='menuitem']):is(:hover, :focus-visible)
+    :is(.lucide-arrow-left, .lucide-move-left) {
+    animation: sq-nudge-back 0.9s ease-in-out infinite;
+  }
+}
+
+@keyframes sq-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes sq-nudge-back {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(-4px);
+  }
+}

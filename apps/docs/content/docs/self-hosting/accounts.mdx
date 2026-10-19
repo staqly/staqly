@@ -1,0 +1,218 @@
+---
+title: Accounts, workspaces and roles
+description: How people sign in to a cloud staqly with Google, an email code or a passkey, what owners, admins, editors and viewers may do, and how invitations work.
+---
+
+A local install has one person and no sign-in. In cloud mode people sign in with **Google**, with
+a **code sent to their email address** or with a **passkey**, depending on what the server has set
+up. Staqly
+keeps track of who they are and what they may do in each workspace.
+
+## The model
+
+- **Person**: someone who signed in. Staqly identifies them by their sign-in method (their Google
+  account, or the address an email code was sent to), never by the email address alone: a Google
+  account and an email code for the same address are two people until the person links them (see
+  [Sign-in methods](#sign-in-methods)). Staqly stores their name, address and picture, and no Google
+  tokens.
+- **Account**: what a new person gets at their first sign-in. It has exactly one owner and holds
+  workspaces and their plans.
+- **Workspace**: posts, channels, schedules, webhooks and API keys. It belongs to one account.
+- **Member**: a person with a role in a workspace. One person can be a member of many workspaces,
+  in their own account and in others.
+
+## Roles
+
+| Role | May do |
+|---|---|
+| Viewer | Read posts, collections, channels and activity. Change nothing. |
+| Editor | Everything a viewer may, plus write, schedule, publish and delete posts, collections and media, and manage schedules. |
+| Admin | Everything in the workspace: channels, webhooks, alerts, API keys, sessions, members and invitations. |
+| Owner | Like an admin, and also makes, demotes and removes owners. |
+
+The **account owner** is an owner in every workspace of their account. Only they create and
+delete workspaces and manage billing. Nobody can demote or remove them, and a workspace always
+keeps at least one owner.
+
+Roles map onto the same [scopes](/api/authentication#scopes) as API keys, checked in one place
+for the REST API, MCP and the dashboard. The dashboard hides what a role cannot do, but the
+server decides.
+
+## API keys
+
+Admins and owners create API keys for agents, as before. A key belongs to the workspace and
+never does more than the person who created it may do now:
+
+- if that person is demoted, the key narrows to the new role;
+- if they leave or are removed, the key stops working.
+
+People are managed by people: inviting, changing roles and removing members needs a signed-in
+person, never an API key. An admin key can list the members.
+
+## Invitations
+
+Admins and owners invite people under **Settings, Members**. An invitation is for one email
+address and one role:
+
+- the link works once, for 7 days, and only for a person who proves that address: with a code
+  sent to it, or with a Google account whose verified address it is;
+- **Resend** issues a new link and a new week, and the old link stops working;
+- **Revoke** turns the link off;
+- accepting twice, or in two tabs at once, adds the person once.
+
+Admins invite up to admin; only owners invite owners. When the server has mail configured, staqly
+emails the link; the person who invites also gets the link to pass on themselves.
+
+## Signing up
+
+New people open **Create an account** (`/signup`, linked from the sign-in page) and continue with
+Google or an email code; signing in on `/login` with a new address works the same way. They get an
+account with a first workspace, named **My workspace**, on a 7-day Starter trial, and land in the
+welcome, which names the workspace and connects a first channel. With `SETUP_TOKEN` set, new
+accounts need the token on the sign-up page, and everyone else joins by invitation.
+
+The dashboard never creates workspaces from an API key and never signs in with an API key or a
+recovery key: API keys are for agents (**Integrations → API keys**). A workspace without an
+account, such as one moved from a local install, is given to an account with
+[`attach-workspace`](/self-hosting/operator-cli#give-a-workspace-to-an-account). `/setup`, the
+older sign-up address, opens `/signup`.
+
+## Sign in with an email code
+
+**Continue with email** sends a 6-digit code to the address. Entering it signs the person in;
+a new address gets an account and a first workspace, like a first Google sign-in.
+
+- The code works once, for 10 minutes. Five wrong tries end it, and a new code replaces the
+  previous one.
+- One address gets at most one code every 30 seconds and five codes an hour. Each client IP
+  address has its own limit too.
+- The answer to "send a code" is the same whether or not the address has an account, so the page
+  never tells anyone who uses staqly.
+- Staqly stores only a hash of the code.
+
+Email codes work when the server has [mail configured](#mail): `MAIL_SMTP_HOST` and `MAIL_FROM`.
+An invitation can be accepted with a code sent to the invited address.
+
+## Sign in with a passkey
+
+A passkey signs a person in with their fingerprint, face or device PIN, with no address to type and
+no code to wait for. The browser or password manager keeps it; Staqly keeps only its public key.
+
+- Add one under **Settings, Account, Sign-in methods** with **Add passkey**, then use **Sign in
+  with a passkey** on the sign-in page. Browsers that offer it also list saved passkeys in the
+  address field.
+- Passkeys need the dashboard's public address, `PUBLIC_DASHBOARD_URL`: its host is the passkey's
+  site, and a passkey works only on that address (the development stack uses
+  `http://localhost:8080`). Changing the domain later means adding passkeys again.
+- Each prompt works once, for 5 minutes. A passkey whose sign counter goes backwards (a copied
+  authenticator) is refused.
+
+## Sign-in methods
+
+Everyone signed in sees their sign-in methods under **Settings, Account**:
+
+- **Add Google** links a Google account (the button is gone once one is linked). **Add passkey**
+  adds a passkey on this device; **Rename** tells them apart. Each opens a small dialog.
+- **Add email address** sends a code to check the address. A person has one email address: when
+  they already sign in with one, the card offers **Change email address** instead.
+- **Change email address** takes two codes: one to the current address (it is still yours), then
+  one to the new address (that one is yours too). Only then does the address change. The person,
+  their workspaces, sessions and other methods stay as they are, and the old address gets a
+  notice. The confirmation of the current address lasts 10 minutes.
+- **Remove** turns a method off, as long as another one remains.
+- A Google account or an address that already signs in another person cannot be added: sign in
+  with it and remove it there first. Staqly never merges two people on its own.
+
+## Sessions
+
+Every sign-in, with Google, a code or a passkey, creates a new session, so an old cookie never carries over. Sessions expire after
+`SESSION_TTL` (30 days by default). **Sign out** ends the session at once. Removing someone from
+a workspace signs them out of it everywhere. Switching workspaces keeps the session and moves it.
+
+**Connect a device** (**Settings → General → Devices**) signs a phone or another
+browser in as the same person with a QR code: one use, 5 minutes, and it creates a session of its
+own with the person's current role.
+
+People in an account have no recovery key: their way back in is another sign-in method, so keep
+at least two (for example an email address and a passkey).
+
+## Set up Google sign-in
+
+<Steps>
+<Step>
+
+### Create the OAuth client
+
+In the [Google Cloud console](https://console.cloud.google.com/apis/credentials), create an
+**OAuth client ID** of type **Web application**. Configure the consent screen with the scopes
+`openid`, `email` and `profile`.
+
+</Step>
+<Step>
+
+### Register the redirect URL
+
+Add this **Authorized redirect URI**, with your dashboard's address:
+
+```text
+https://staqly.example.com/api/v1/auth/google/callback
+```
+
+</Step>
+<Step>
+
+### Configure staqly
+
+```bash title=".env"
+GOOGLE_CLIENT_ID=1234-abc.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-...
+PUBLIC_DASHBOARD_URL=https://staqly.example.com   # the redirect URL is derived from it
+# GOOGLE_REDIRECT_URL=https://...                 # only when it differs from the line above
+```
+
+A cloud server needs at least one way to sign in: Google, [mail](#mail) for email codes, or
+both. Without either it refuses to start and says what to set.
+
+</Step>
+</Steps>
+
+## Mail
+
+Mail sends sign-in codes and invitation links. Without it, the server signs people in with Google
+only, and the person who invites copies the link.
+
+```bash title=".env"
+MAIL_SMTP_HOST=smtp.example.com
+MAIL_SMTP_PORT=587
+MAIL_SMTP_USERNAME=...
+MAIL_SMTP_PASSWORD=...
+MAIL_SMTP_TLS=starttls        # starttls, tls (port 465) or none (a trusted local relay only)
+MAIL_FROM=staqly <noreply@example.com>
+```
+
+## Workspaces from before accounts
+
+Cloud workspaces created before Google sign-in have no account. Nothing about them changes when
+you upgrade: their admin API keys, recovery keys and sessions keep working as before, and no data
+moves.
+
+To bring one into an account (also a workspace copied in from a local install with
+`import-sqlite`), run `docker exec staqly server attach-workspace <workspace_id> <email>` on the
+host: it prints an **owner invitation** for that address (and emails it when mail is set up). When
+that person signs in as the address and accepts, the workspace joins their account (created for
+them if they have none) and they become its account owner. See
+[Give a workspace to an account](/self-hosting/operator-cli#give-a-workspace-to-an-account).
+
+From then on the workspace signs in like every account workspace: browser sessions and unused
+connect links without a person end, its recovery key and sign-in with an API key stop opening it
+(`403 sign_in_with_account`), and its API keys keep working for agents but belong to the owner,
+so they follow the owner's role. The change is recorded as `workspace.account_attached`.
+
+## Development without Google or mail
+
+For development and tests only, `AUTH_DEV_SIGNIN=true` starts a cloud server without Google or
+mail. It turns on email codes (mailed when mail is configured, and shown to tests at
+`GET /v1/auth/email/dev-code`), and keeps the sign-in from before accounts (setup token, admin API
+key, recovery key) one click away on the sign-in page. Production `compose.cloud.yml` forces it off.
+
+<Callout type="warn">Never set `AUTH_DEV_SIGNIN` on a server reachable from the internet.</Callout>

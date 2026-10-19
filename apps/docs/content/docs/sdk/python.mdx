@@ -1,0 +1,467 @@
+---
+title: Python SDK
+description: Write, schedule and publish posts, connect channels and react to webhooks from Python code, sync or async.
+---
+
+`staqly` is the official Python client for staqly. Use it when your agent, script or web app is
+written in Python and should write posts, put them on the calendar, publish through your own
+automation or react to webhooks. For shell scripts and cron pick the [CLI](/cli), for AI agents
+that speak MCP use the [MCP server](/mcp), and in TS/JS use the [TypeScript SDK](/sdk/typescript).
+
+It offers a sync `Staqly` and an async `AsyncStaqly` client with identical APIs, built on
+`httpx`, with typed pydantic v2 models checked against the API's OpenAPI contract. Requires
+Python 3.10 or newer.
+
+## Get started
+
+<Steps>
+<Step>
+### Install the package
+
+```bash
+pip install staqly        # or: uv add staqly
+```
+
+</Step>
+<Step>
+### Start staqly
+
+Run a server on your computer with [`staqly serve`](/cli#run-the-server) (or Docker). In local
+mode the SDK needs no key.
+
+</Step>
+<Step>
+### Connect a channel, write a post, publish it
+
+```python title="publish.py"
+from staqly import Staqly
+
+with Staqly() as staqly:  # http://localhost:3333, no key
+    channel = staqly.channels.connect(provider="custom", name="My publisher")
+    staqly.collections.create("Product updates")
+
+    post = staqly.posts.create(
+        "Product updates",
+        content="v1.4 is out: schedules, channels and a calendar.",
+        targets=[{"channel_id": channel.id}],
+        publish_now=True,
+    )
+
+    done = staqly.posts.wait_for_published(post.id)  # returns when every channel settled
+
+    for t in done.targets:
+        print(t.channel_name, t.status, t.external_url or t.error)
+```
+
+</Step>
+<Step>
+### Watch it in the dashboard
+
+Open `http://localhost:8080`: the post is on the **Schedule** page and in **Posts**, with a
+status per channel.
+
+</Step>
+</Steps>
+
+## Configure the client
+
+```python
+import httpx
+from staqly import Staqly
+
+staqly = Staqly(
+    base_url="https://staqly.example.com",  # default: $STAQLY_API_URL, then http://localhost:3333
+    api_key="stk_...",  # default: $STAQLY_API_KEY; "" = ignore the env var
+    timeout=60.0,  # seconds per request (or an httpx.Timeout)
+    max_retries=2,  # retries for 408/429/5xx/network errors
+    default_headers={"X-Team": "growth"},
+    user_agent="my-agent/1.0",  # appended to "staqly-sdk-python/<version>"
+    http_client=httpx.Client(proxy="http://proxy:8080"),  # your own client/transport
+)
+```
+
+You only need `api_key` in [cloud mode](/local-vs-cloud). Use the client as a context manager
+(`with Staqly() as staqly:`), or call `staqly.close()`, to release connections.
+
+Every method accepts `request_options=` for per-request overrides:
+
+```python
+staqly.posts.list(status="scheduled", request_options={"timeout": 5, "max_retries": 0})
+staqly.posts.create("Posts", content="x", request_options={"idempotency_key": f"job-{job_id}"})
+```
+
+`staqly.health()` checks liveness, `staqly.ready()` checks readiness, and `staqly.whoami()`
+returns the server mode, the workspace and the calling principal with its scopes. The
+[reference](#reference) below lists every resource and method.
+
+## Work with posts
+
+```python
+# a draft with a text of its own on one channel and a provider setting on another
+post = staqly.posts.create(
+    "Product updates",  # ID or exact name
+    content="Three days, every avatar half price.",
+    media=[media.id],  # from staqly.media.upload
+    targets=[
+        {"channel_id": bluesky.id, "content": "Three days. Half price."},
+        {"channel_id": reddit.id, "settings": {"title": "Spring sale"}},
+    ],
+    tags=["sale"],
+    metadata={"campaign": "spring"},
+)
+
+staqly.posts.preview(post.id)  # the text per channel and what each platform objects to
+staqly.posts.schedule(post.id, "2026-10-21T09:00:00Z")  # onto the calendar
+staqly.posts.cancel(post.id)  # back to draft
+staqly.posts.publish(post.id)  # now (202: a job does the work)
+staqly.posts.retry_target(post.id, bluesky.id)  # one failed channel again
+staqly.posts.update(post.id, content="Fixed", expected_version=post.version)  # ConflictError when someone edited it
+copy = staqly.posts.duplicate(post.id)  # a new draft; published posts are read-only
+
+# list, search and page through everything
+staqly.posts.list(status="scheduled", publish_after="2026-10-20", publish_before="2026-10-27")  # the calendar
+staqly.posts.search("golden hour", collection="Instagram Avatar")
+
+for p in staqly.posts.iterate(channel_id=bluesky.id, status="published"):
+    print(p.content)
+
+staqly.posts.history(post.id)  # its events, newest first
+staqly.posts.tags()  # every tag with its count
+```
+
+## Channels and schedules
+
+```python
+providers = staqly.providers.list()  # the catalog: auth, status, limits, fields
+telegram = staqly.channels.connect(
+    provider="telegram",
+    name="Announcements",
+    fields={"bot_token": os.environ["TG_TOKEN"], "chat_id": "@my_channel"},
+)
+staqly.channels.test(telegram.id)  # against the platform; marks needs_reconnect on failure
+staqly.channels.update(telegram.id, status="disabled")
+
+schedule = staqly.schedules.create(
+    "Product updates",
+    name="Weekday mornings",
+    kind="recurring",
+    rule={"times": ["09:00"], "weekdays": [1, 2, 3, 4, 5], "tz": "Europe/Warsaw"},
+    channels=[telegram.id],
+    pick="next",
+    source="agent",
+)
+staqly.schedules.run(schedule.id)  # now; the regular next run is unchanged
+```
+
+OAuth platforms connect through the dashboard, not the SDK (see
+[Developer apps](/channels/developer-apps)).
+
+## Wait for a post to settle
+
+```python
+from staqly import WaitTimeoutError
+
+try:
+    post = staqly.posts.wait_for_published(post_id, timeout=30 * 60)  # seconds, default 10 min
+
+    if post.status == "failed":
+        for t in post.targets:
+            if t.status == "failed":
+                print(t.channel_name, t.error)
+except WaitTimeoutError as e:
+    print("still publishing", e.post)
+```
+
+`wait_for_published` polls the post until it leaves `publishing`, with backoff. For
+long-running services, push beats waiting: subscribe a [webhook](/automation/webhooks) to
+`post.published` and `post.failed`.
+
+## Be your own publisher
+
+A channel on [your own automation](/channels/your-own-automation) hands posts to your code:
+
+```python
+for w in staqly.work.list():
+    if w.kind == "target":
+        try:
+            url = publish_somewhere(w.post, w.channel)
+            staqly.posts.report_result(w.post.id, w.channel.id, status="published", url=url)
+        except Exception as e:
+            staqly.posts.report_result(w.post.id, w.channel.id, status="failed", error=str(e))
+    else:
+        # a schedule found nothing to publish: write drafts into w.collection
+        staqly.posts.create(w.collection.id, content=draft_one())
+```
+
+`work.list()` is `GET /v1/work`. With a webhook on `post.publish_requested` you get the same
+request pushed to you.
+
+## Verify webhooks
+
+Every webhook delivery is signed with the webhook's secret (`whsec_...`). `verify_webhook` checks
+the `X-Staqly-Signature` and `X-Staqly-Timestamp` headers, rejects timestamps more than 300 s
+away, and returns the parsed event. It raises `WebhookVerificationError` otherwise.
+
+```python title="app.py"
+import os
+
+from fastapi import FastAPI, Request, Response
+from staqly.webhooks import WebhookVerificationError, verify_webhook
+
+app = FastAPI()
+
+
+@app.post("/hooks/staqly")
+async def staqly_hook(request: Request) -> Response:
+    body = await request.body()  # the raw body, exactly as received
+
+    try:
+        event = verify_webhook(os.environ["STAQLY_WEBHOOK_SECRET"], body, request.headers)
+    except WebhookVerificationError:
+        return Response("invalid signature", status_code=400)
+
+    if event.type == "post.publish_requested":
+        await publish_myself(event.data["post"], event.data["channel"])
+
+    return Response("ok")
+```
+
+- Always pass the **raw** body (`bytes`). JSON that was parsed and serialized again will not match.
+- `headers` is any mapping (Starlette, Flask and Django request headers work).
+- `tolerance=` changes the time window in seconds (`0` disables it).
+- Deliveries are at-least-once and can arrive out of order: de-duplicate on `event.id` (also
+  sent as `X-Staqly-Event-Id`) and order by `event.created_at`
+  ([Delivery guarantees](/automation/webhooks#delivery-guarantees)).
+- `is_valid_webhook()` returns a boolean instead of raising; `compute_webhook_signature()` helps
+  you test your handler. The same functions verify a
+  [schedule endpoint](/automation/schedules#call-an-endpoint-source-endpoint) request with the
+  schedule's `endpoint_secret`.
+
+## Handle errors
+
+Every error subclasses `staqly.StaqlyError`. HTTP errors subclass `APIError` and carry `status`,
+`code`, `message`, `fields`, `details`, `request_id`, `body` and `response`. `request_id` is the
+server's `X-Request-Id`; include it in bug reports.
+
+| Class | When |
+|---|---|
+| `BadRequestError` | 400 |
+| `AuthenticationError` | 401 missing, invalid or revoked key |
+| `PlanLimitError` | 402 `plan_limit_exceeded`, with `.limit`, `.max`, `.used`, `.plan` |
+| `PermissionDeniedError` | 403 missing scope; `.is_not_local` when a local server refused a non-local caller |
+| `NotFoundError` | 404 |
+| `ConflictError` | 409, e.g. the post is published, the version changed (`post_changed`), the platform is `soon` |
+| `GoneError` | 410 |
+| `PayloadTooLargeError` / `UnsupportedMediaTypeError` | 413 / 415 |
+| `ValidationError` | 422, with `.fields` (a target over its provider's limit is keyed `targets.<channel_id>.content`) |
+| `RateLimitError` | 429, with `.retry_after` |
+| `InternalServerError` | 5xx |
+| `APIConnectionError` / `TimeoutError` | no response / request timed out (`TimeoutError` is also the built-in `TimeoutError`) |
+| `WaitTimeoutError` | `wait_for_published` or `wait_for_workspace_export` gave up (`.post_id`, `.waited`, `.post`); also a built-in `TimeoutError` |
+| `ExportFailedError` | a workspace export ended `failed` or `expired` (`.job`) |
+| `WebhookVerificationError` | bad signature or timestamp |
+
+```python
+from staqly import ConflictError
+
+try:
+    staqly.posts.update(post_id, content="x", expected_version=3)
+except ConflictError:
+    pass  # someone edited the post meanwhile; reload it
+```
+
+## Retries, timeouts and idempotency
+
+- Requests that fail with 408, 429, 500, 502, 503, 504, a network error or a timeout are retried
+  up to `max_retries` times (default 2) with exponential backoff and jitter. A `Retry-After` of
+  60 s or less is honored; a longer one raises `RateLimitError` right away.
+- Every `POST`, `PATCH` or `DELETE` with a JSON body gets an automatic `Idempotency-Key`, reused
+  across its retries, so a retry never applies the request twice. Set
+  `request_options={"idempotency_key": "tip-2026-10-20"}` to choose the key yourself. JSON bodies are compared by
+  content (key order and spacing don't matter), so a key can be shared with the TypeScript SDK.
+- Multipart uploads are retried only on 429.
+- `timeout` (default 60 s) applies to each attempt.
+
+## Use the async client
+
+`AsyncStaqly` has the same API. Await the methods, use `async for` on iterators, and use
+`async with AsyncStaqly()` or `await staqly.aclose()` instead of `close()`:
+
+```python
+import asyncio
+
+from staqly import AsyncStaqly
+
+
+async def main() -> None:
+    async with AsyncStaqly() as staqly:
+        post = await staqly.posts.create("Drafts", content="Hello", targets=[{"channel_id": channel_id}])
+        await staqly.posts.publish(post.id)
+        done = await staqly.posts.wait_for_published(post.id)
+        print(done.status)
+
+        async for p in staqly.posts.iterate(status="published"):
+            print(p.content)
+
+
+asyncio.run(main())
+```
+
+## Reference
+
+Every method accepts `request_options=` (`timeout`, `max_retries`, `idempotency_key`, `headers`).
+Methods that return a list return a Python `list`; `list()` on paginated endpoints (`posts`,
+`events`, `jobs`) returns a page with `.data` and `.next_cursor`, and `iterate()` walks every page.
+
+### Client
+
+| Method | What it does |
+|---|---|
+| `Staqly(...)`, `AsyncStaqly(...)` | See [Configure the client](#configure-the-client) |
+| `health()`, `live()`, `ready()` | `GET /health`, `/livez`, `/readyz` |
+| `setup()` | `GET /v1/setup` |
+| `whoami()` | `GET /v1/session` |
+| `openapi()` | The raw OpenAPI document as text |
+| `request(method, path, *, query=None, json=None, headers=None)` | Any request with the client's auth, retries and error mapping |
+
+### Posts
+
+| Method | Endpoint |
+|---|---|
+| `posts.list(**filters)`, `posts.iterate(**filters)` | `GET /v1/posts` (`collection_id`, `status`, `channel_id`, `tag`, `publish_after`, `publish_before`, `q`, `sort`, `limit`, `cursor`) |
+| `posts.search(q, **filters)` | `GET /v1/posts?q=` |
+| `posts.get(post_id)` | `GET /v1/posts/{id}` |
+| `posts.create(collection, *, content=None, media=None, targets=None, publish_at=None, status=None, publish_now=False, tags=None, metadata=None, source=None, external_ref=None)` | `POST /v1/posts` |
+| `posts.update(post_id, **fields)` | `PATCH /v1/posts/{id}` (`expected_version` refuses a stale edit; `clear_publish_at=True` clears the time) |
+| `posts.schedule(post_id, publish_at)`, `posts.cancel(post_id)` | `POST .../schedule`, `POST .../cancel` |
+| `posts.publish(post_id)` | `POST .../publish` (202) |
+| `posts.duplicate(post_id)` | `POST .../duplicate` |
+| `posts.preview(post_id)` | `GET .../preview` |
+| `posts.history(post_id)` | `GET .../events` |
+| `posts.retry_target(post_id, channel_id)` | `POST .../targets/{channel}/retry` (202) |
+| `posts.report_result(post_id, channel_id, *, status, url=None, external_id=None, error=None)` | `POST .../targets/{channel}/result` |
+| `posts.wait_for_published(post_id, *, timeout=600, on_poll=None)` | Polls `GET /v1/posts/{id}` until the post settles |
+| `posts.delete(post_id)`, `posts.purge(post_id)` | `DELETE /v1/posts/{id}`, `POST .../purge` |
+| `posts.tags()` | `GET /v1/tags` |
+
+### Work
+
+| Method | Endpoint |
+|---|---|
+| `work.list()` | `GET /v1/work`: targets waiting for a result (`kind == "target"`) and schedules asking for posts (`kind == "posts"`) |
+
+### Collections
+
+| Method | Endpoint |
+|---|---|
+| `collections.list(include_archived=False)` | `GET /v1/collections` |
+| `collections.get(id_or_name)` | `GET /v1/collections/{id}` |
+| `collections.create(name, *, description=None, icon=None, color=None, processing_timeout_seconds=None)` | `POST /v1/collections` |
+| `collections.update(collection_id, **fields)` | `PATCH /v1/collections/{id}` (`clear_processing_timeout=True` goes back to the server default) |
+| `collections.archive(collection_id)`, `collections.unarchive(collection_id)` | `PATCH` with `archived` |
+| `collections.delete(collection_id, *, confirm)` | `DELETE /v1/collections/{id}?confirm=` |
+| `collections.list_posts(id_or_name, **filters)` | `GET /v1/collections/{id}/posts` |
+| `collections.resolve_id(id_or_name)` | The ID for a name |
+
+### Channels and providers
+
+| Method | Endpoint |
+|---|---|
+| `providers.list()` | `GET /v1/providers` |
+| `providers.set_app(provider_id, *, client_id, client_secret)`, `providers.delete_app(provider_id)` | `PUT` / `DELETE /v1/providers/{id}/app` |
+| `channels.list()`, `channels.get(channel_id)` | `GET /v1/channels`, `GET /v1/channels/{id}` |
+| `channels.connect(*, provider, name=None, fields=None, settings=None)` | `POST /v1/channels` (token platforms and `custom`) |
+| `channels.update(channel_id, *, name=None, settings=None, status=None, fields=None)` | `PATCH /v1/channels/{id}` |
+| `channels.test(channel_id)` | `POST /v1/channels/{id}/test` |
+| `channels.remove(channel_id)` | `DELETE /v1/channels/{id}` |
+
+### Schedules
+
+| Method | Endpoint |
+|---|---|
+| `schedules.list(collection=None)`, `schedules.get(schedule_id)` | `GET /v1/schedules`, `GET /v1/schedules/{id}` |
+| `schedules.create(collection, *, name, kind, rule=None, run_at=None, channels=None, pick="next", post_ids=None, source="none", endpoint_url=None, endpoint_secret=None, enabled=True)` | `POST /v1/schedules` |
+| `schedules.update(schedule_id, **fields)` | `PATCH /v1/schedules/{id}` |
+| `schedules.run(schedule_id)` | `POST /v1/schedules/{id}/run` (202) |
+| `schedules.delete(schedule_id)` | `DELETE /v1/schedules/{id}` |
+
+### Jobs
+
+| Method | Endpoint |
+|---|---|
+| `jobs.list(status=None, kind=None, limit=None, cursor=None)`, `jobs.get(job_id)` | `GET /v1/jobs`, `GET /v1/jobs/{id}` |
+| `jobs.stats()` | `GET /v1/jobs/stats` |
+| `jobs.retry(job_id)`, `jobs.cancel(job_id)` | `POST /v1/jobs/{id}/retry`, `/cancel` |
+
+### Media
+
+| Method | Endpoint |
+|---|---|
+| `media.upload(file, *, filename=None)` | `POST /v1/media` (a file object, `bytes` or a path) |
+| `media.get(media_id)`, `media.download(media_id, width=None)`, `media.url(media_id)` | `GET /v1/media/{id}` |
+| `media.delete(media_id)` | `DELETE /v1/media/{id}` |
+
+### Events
+
+| Method | Endpoint |
+|---|---|
+| `events.list(**filters)`, `events.iterate(**filters)` | `GET /v1/events` (`post_id`, `channel_id`, `schedule_id`, `collection_id`, `type`, `type_prefix`, `actor_type`, `actor_id`, `agent`, `from_`, `to`, `limit`, `cursor`) |
+
+### Webhooks
+
+| Method | Endpoint |
+|---|---|
+| `webhooks.list()`, `webhooks.get(webhook_id)` | `GET /v1/webhooks`, `GET /v1/webhooks/{id}` |
+| `webhooks.create(url, *, events=None, collection_ids=None, description=None, active=True, timeout_ms=None, max_attempts=None)` | `POST /v1/webhooks` (the response carries the secret once) |
+| `webhooks.update(webhook_id, **fields)`, `webhooks.rotate_secret(webhook_id)` | `PATCH /v1/webhooks/{id}` |
+| `webhooks.test(webhook_id)` | `POST /v1/webhooks/{id}/test` |
+| `webhooks.delete(webhook_id)` | `DELETE /v1/webhooks/{id}` |
+| `deliveries.list(webhook_id=None, status=None, post_id=None, limit=None)`, `deliveries.retry(delivery_id)` | `GET /v1/webhook-deliveries`, `POST .../{id}/retry` |
+
+### Alerts
+
+| Method | Endpoint |
+|---|---|
+| `alerts.list()`, `alerts.get(alert_id)` | `GET /v1/alerts`, `GET /v1/alerts/{id}` |
+| `alerts.create(*, name, type, config, events=None, collection_ids=None, digest_window_seconds=None, enabled=True)` | `POST /v1/alerts` |
+| `alerts.update(alert_id, **fields)`, `alerts.enable(alert_id)`, `alerts.disable(alert_id)` | `PATCH /v1/alerts/{id}` |
+| `alerts.test(alert_id)` | `POST /v1/alerts/{id}/test` |
+| `alerts.deliveries(alert_id, limit=None)` | `GET /v1/alerts/{id}/deliveries` |
+| `alerts.delete(alert_id)` | `DELETE /v1/alerts/{id}` |
+
+### Exports
+
+| Method | Endpoint |
+|---|---|
+| `exports.events(**filters)`, `exports.save_events(path, **filters)` | `GET /v1/events/export` |
+| `exports.create_workspace_export()`, `exports.list_workspace_exports()`, `exports.get_workspace_export(export_id)` | `/v1/workspace/export`, `/v1/workspace/exports` |
+| `exports.wait_for_workspace_export(export_id, timeout=1800)`, `exports.download_workspace_export(export_id)`, `exports.save_workspace_export(export_id, path)` | Poll, then `GET .../download` |
+| `exports.export_workspace(path)` | Start, wait and save in one call |
+
+### Workspace, plans, billing and API keys
+
+| Method | Endpoint |
+|---|---|
+| `workspace.get()`, `workspace.rename(name)`, `workspace.usage()` | `/v1/workspace`, `/usage` |
+| `workspace.agents()`, `workspace.forget_agent(agent_id)` | `GET /v1/agents`, `DELETE /v1/agents/{id}` |
+| `workspace.delete(confirm=...)`, `workspace.rotate_recovery_key()` | Dashboard session only |
+| `workspaces.create(name, setup_token=None)` | `POST /v1/workspaces` (cloud signup) |
+| `plans.list()` | `GET /v1/plans` |
+| `billing.get()`, `billing.checkout()`, `billing.portal()` | `/v1/billing`, `/checkout`, `/portal` |
+| `api_keys.list()`, `api_keys.create(name, scopes, expires_at=None)`, `api_keys.rotate(key_id)`, `api_keys.revoke(key_id)` | `/v1/api-keys` |
+
+### Sessions and device links
+
+| Method | Endpoint |
+|---|---|
+| `sessions.current()`, `sessions.list()`, `sessions.revoke(session_id)`, `sessions.logout()` | `/v1/session`, `/v1/sessions` |
+| `sessions.sign_in_with_api_key(api_key)`, `sessions.recover(recovery_key)` | `POST /v1/sessions/api-key`, `POST /v1/sessions/recover` |
+| `device_links.create()`, `device_links.redeem(token)` | `/v1/device-links`, `/redeem` |
+
+## Next steps
+
+<Cards>
+  <Card title="Your own automation" href="/channels/your-own-automation">The contract behind `work.list()` and `report_result`.</Card>
+  <Card title="Webhooks" href="/automation/webhooks">Payloads, signatures and delivery guarantees.</Card>
+  <Card title="TypeScript SDK" href="/sdk/typescript">The same client for TS/JS.</Card>
+</Cards>

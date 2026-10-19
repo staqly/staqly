@@ -1,0 +1,114 @@
+---
+title: Claude Code
+description: Add staqly to Claude Code so it can write posts, put them on the calendar and answer when a schedule asks for more.
+---
+
+Connect Claude Code to staqly as an MCP server, and Claude can create collections, write posts
+with media and a text per channel, schedule and publish them, set up schedules and connect
+channels, just from your prompts. Do this once per machine, or once per repository with a
+shared `.mcp.json`.
+
+## Connect to local staqly
+
+<Steps>
+<Step>
+
+### Start staqly
+
+Run `staqly serve` (or the [Docker image](/self-hosting/docker)). See the [Quickstart](/quickstart).
+
+</Step>
+<Step>
+
+### Add the MCP server
+
+In local mode, no key is needed:
+
+```bash
+claude mcp add --transport http staqly http://localhost:3333/mcp
+```
+
+</Step>
+<Step>
+
+### Check the connection
+
+```bash
+claude mcp list        # → staqly: http://localhost:3333/mcp (HTTP) - ✔ Connected
+```
+
+</Step>
+</Steps>
+
+Tip: `staqly mcp config claude` prints this command and a `.mcp.json` snippet for your current
+[CLI](/cli/commands) profile.
+
+### Share it with your team: project `.mcp.json`
+
+Commit this to your repository so everyone working in it gets staqly:
+
+```json title=".mcp.json"
+{ "mcpServers": { "staqly": { "type": "http", "url": "http://localhost:3333/mcp" } } }
+```
+
+### STDIO (Docker only)
+
+If you run staqly with Docker, you can use STDIO instead of HTTP. It runs `mcp-stdio` inside
+the `staqly` container, so it does not work with `staqly serve`:
+
+```bash
+claude mcp add staqly -- docker exec -i staqly mcp-stdio
+```
+
+## Connect to a cloud instance
+
+Create a key per agent under **Integrations → API keys**, e.g. a *Content agent* key with
+`collections:read posts:read posts:write posts:publish media:read media:write`, and pass it
+as a header:
+
+```bash
+export STAQLY_API_KEY=stk_...
+claude mcp add --transport http staqly https://staqly.example.com/mcp \
+  --header "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+Or in `.mcp.json`. Claude Code expands `${STAQLY_API_KEY}` from the environment, so the key
+stays out of git:
+
+```json title=".mcp.json"
+{
+  "mcpServers": {
+    "staqly": {
+      "type": "http",
+      "url": "https://staqly.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${STAQLY_API_KEY}" }
+    }
+  }
+}
+```
+
+STDIO against a cloud-mode container on the same host forwards the key into the container:
+
+```bash
+claude mcp add staqly -e STAQLY_API_KEY=stk_... -- docker exec -i -e STAQLY_API_KEY staqly mcp-stdio
+```
+
+## Try it
+
+Ask Claude in plain language:
+
+> *"Create a collection called Product updates."*
+> *"Draft five posts about the new release into it, one per weekday morning, for my Telegram channel."*
+> *"What is scheduled this week?"*
+
+More in [Example prompts](/mcp/prompts).
+
+To refill a collection on a timer, run Claude from cron: `claude -p "If list_requested_work
+shows a schedule asking for posts, write three drafts into its collection."`
+
+## Next steps
+
+<Cards>
+  <Card title="MCP tools" href="/mcp/tools">Every tool Claude can call, and the scope it needs.</Card>
+  <Card title="Let an agent fill a collection" href="/cookbook/agent-fills-a-collection">A schedule publishes every morning; Claude refills the drafts.</Card>
+</Cards>

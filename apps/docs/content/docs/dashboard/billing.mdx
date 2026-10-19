@@ -1,0 +1,48 @@
+---
+title: Billing
+description: See the subscription of a cloud workspace, its billing period and usage, the card on file and every invoice.
+---
+
+**Billing** gathers what Stripe knows about a cloud workspace: the subscription, the current billing
+period, the card it is charged to and the invoices. Open it from the user menu (**Billing**) or
+**Settings → Billing**. Owners and admins of the workspace see it; local installs have no billing.
+
+The page reads Stripe each time it opens (and keeps the answer for a minute). Staqly stores no card
+data: Stripe keeps the cards, the page shows only the brand, the last four digits and the expiry.
+
+## What it shows
+
+- **Plan**: the workspace's plan, the subscription status (*Active*, *Trial*, *Payment failed*,
+  *Canceled*, ...), the price per user per month (excl. VAT) and, with several people, what the team pays (e.g. *€29.00 per user / month · 3 users = €87.00 / month*), and what comes next: *Renews on* a date, *Ends on* a date
+  when the subscription is set to stop, or *Trial ends on*. **Upgrade** or **Change plan** opens the
+  plan picker; **Manage subscription** opens the Stripe billing portal (the account owner only).
+- **This billing period**: the period Stripe charges for, and the usage meters of the workspace.
+- **X posts this period**: e.g. *37 of 250 included · 200 extra left (expire Nov 30)*, with a bar that
+  turns amber at 80 % and red when they run out (a toast says so too, once a period). **Buy more X
+  posts** (account owner) opens the bundles (200 for €10, 1,000 for €40, 4,000 for €150, excl. VAT)
+  and Stripe Checkout; the posts appear when Stripe confirms the payment. The post editor says so on
+  an X channel when this period's posts are used up.
+- **Trial**: during Starter's trial the plan line reads *Trial ends Oct 27 · then €15.00 per user /
+  month*; cancel in **Manage billing** before then and nothing is charged.
+  Limits count per calendar month (UTC), so the meters show that month.
+- **Payment method**: the cards on file, the default one marked. **Update payment method** opens the
+  Stripe billing portal.
+- **Invoices**: every invoice Stripe issued, newest first, 24 at a time (**Show older invoices**
+  loads more): date, number, amount and status (*Paid*, *Due*, *Void*, *Not paid*), with a link to
+  Stripe's invoice page (**View**, or **Pay** for an open one) and the PDF.
+
+Without [billing with Stripe](/self-hosting/billing) on the instance the page shows the plan and the
+usage with a note that online payments are not enabled; plan changes are then applied by the operator.
+
+## The upgrade prompt
+
+In the Starter trial or when read-only after an unpaid period, the user menu starts with a
+highlighted **Choose a plan** that opens the plan picker. A paying workspace sees **Upgrade to**
+the next plan up instead (Starter to Plus, Plus to Pro, Pro to Business); on Business there is none.
+
+## Through the API
+
+`GET /v1/billing/details` (scope `admin`) answers the same: `subscription` (status, period start and
+end, cancellation, trial end, price), `payment_methods` (brand, last four digits, expiry, default)
+and `invoices` with `has_more_invoices`; pass the last invoice's id as `starting_after` for the next
+page. See the [API reference](/api/reference).

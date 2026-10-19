@@ -1,0 +1,63 @@
+# Cloud mode in production: the pre-built staqly image behind Caddy (HTTPS).
+#   docker compose -f compose.yml -f compose.cloud.yml up -d --wait     (or: make cloud)
+# Needs STAQLY_DOMAIN and POSTGRES_PASSWORD in .env (DNS pointing at this server, ports 80 and 443 open).
+# Cloud mode keeps its data in PostgreSQL (the postgres service, volume postgres-data); media files and
+# exports stay in the staqly-data volume.
+# Only Caddy is published; the staqly ports stay inside the Docker network.
+services:
+  staqly:
+    environment:
+      STAQLY_MODE: cloud
+      DATABASE_URL: postgres://staqly:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/staqly?sslmode=disable
+      PUBLIC_API_URL: https://${STAQLY_DOMAIN:?set STAQLY_DOMAIN in .env}
+      PUBLIC_DASHBOARD_URL: https://${STAQLY_DOMAIN}
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: "true"
+      # Production signs people in with Google (GOOGLE_CLIENT_ID/SECRET), email codes (MAIL_SMTP_HOST,
+      # MAIL_FROM) or both, from .env through compose.yml; with neither the server refuses to start.
+      # The dev sign-in stays off whatever .env says.
+      AUTH_DEV_SIGNIN: "false"
+    ports: !reset []
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17.6-alpine
+    container_name: staqly-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: staqly
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: staqly
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "staqly", "-d", "staqly"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt: ["no-new-privileges:true"]
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    container_name: staqly-caddy
+    restart: unless-stopped
+    environment:
+      STAQLY_DOMAIN: ${STAQLY_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      staqly:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

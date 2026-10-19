@@ -1,0 +1,135 @@
+---
+title: Operator CLI
+description: Run server-side admin tasks — backups, sign-in links, recovery keys, workspaces and plans — from the machine staqly runs on.
+---
+
+Some tasks have no button in the dashboard because they need someone with access to the
+server: printing a sign-in link for a new browser, resetting a lost recovery key, taking a
+backup, or changing a workspace's plan. The operator commands do these. They run against the
+data directory directly, so they need no API key — whoever can run them already controls the
+data — and there is no remote equivalent.
+
+## Run a command
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+Add the command after `staqly serve`. It runs against the same data directory instead of
+starting the server:
+
+```bash
+staqly serve connect-link
+staqly serve backup ~/staqly-backup.db
+staqly serve workspaces
+staqly serve recovery-key
+staqly serve set-plan ws_4uvnnzgy5vvpo4hnqnco pro
+staqly serve set-plan ws_4uvnnzgy5vvpo4hnqnco pro --until 2026-12-31
+```
+
+If you start staqly with `--data` or `--dashboard-port`, pass the same flags before the command, e.g.
+`staqly serve --data ~/staqly-data connect-link`.
+
+</Tab>
+<Tab value="Docker">
+
+Call the `server` binary in the `staqly` container:
+
+```bash
+docker exec staqly server connect-link
+docker exec staqly server backup /data/backups/staqly-backup.db
+docker exec staqly server workspaces
+docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco
+docker exec staqly server set-plan ws_4uvnnzgy5vvpo4hnqnco pro
+```
+
+From a checkout, the Makefile has shortcuts for the same commands (`make connect`,
+`make workspaces`, `make recovery-key WS=...`, `make set-plan WS=... PLAN=...`).
+
+</Tab>
+</Tabs>
+
+## Commands
+
+| Command | Binary | Docker | Does |
+|---|---|---|---|
+| `connect-link [ws]` | `staqly serve connect-link` | `docker exec staqly server connect-link` | Print a one-time browser sign-in link (5 minutes, single use). Default: the local workspace |
+| `backup <file>` | `staqly serve backup <file>` | `docker exec staqly server backup /data/backups/<file>` | SQLite (local mode): consistent online database backup (`VACUUM INTO`); refuses to overwrite an existing file. Back up `uploads/` too — see [Backup & restore](/self-hosting/backup-and-restore) |
+| `import-sqlite <file>` | — | `docker exec staqly server import-sqlite /data/workspace.db` | Cloud mode: copies a SQLite database (an earlier cloud server, or a local install) into the empty PostgreSQL database from `DATABASE_URL`, in one transaction with row counts checked; refuses a database that already has data and writes nothing on error. The SQLite file is left as it was. `--uploads <folder>` also copies the old install's media files into this server's [media storage](/self-hosting/storage) |
+| `storage migrate` | `--from <folder>`, `--dry-run` | `docker exec staqly server storage migrate` | Copies media files from a folder (default `UPLOAD_DIR`) into the S3 bucket of `STORAGE_DRIVER=s3`. Files already there are skipped, so it is safe to run again; see [Media storage](/self-hosting/storage#move-existing-files-into-a-bucket) |
+| `attach-workspace <ws> <email>` | — | `docker exec staqly server attach-workspace ws_... ana@example.com` | Cloud mode with accounts: gives a workspace without an account (from before accounts, or brought in with `import-sqlite`) to the person with that address. Prints an owner invitation link (also emailed when mail is set up); see [below](#give-a-workspace-to-an-account) |
+| `workspaces` | `staqly serve workspaces` | `docker exec staqly server workspaces` | List workspaces: id, plan, plan end (trial or paid period, `-` = none), created, name |
+| `set-plan <ws> <plan> [--until DATE]` | `staqly serve set-plan <ws> <plan>` | `docker exec staqly server set-plan <ws> <plan>` | Change a workspace's plan: `free` or `pro`. Without `--until` it has no end date (ends a trial or suspension); with `--until 2026-12-31` the plan is comped until then and the workspace is suspended afterwards unless it pays. Recorded as `workspace.plan_changed` |
+| `stats` | `staqly serve stats` | `docker exec staqly server stats` | JSON overview: workspaces by plan, active trials, suspended workspaces, signups in the last 7 and 30 days, and this month's usage per metric |
+| `recovery-key [ws]` | `staqly serve recovery-key` | `docker exec staqly server recovery-key` | Print a **new** recovery key (the old one stops working) and sign out every browser session of the workspace. Default: the local workspace |
+| — | — | `docker exec -i staqly mcp-stdio` | MCP over STDIO in the `staqly` container |
+
+`workspaces` and `set-plan` matter in [cloud mode](/self-hosting/cloud-deployment); local mode
+has a single workspace.
+
+## Give a workspace to an account
+
+A workspace without an account (a cloud workspace from before accounts, or one copied in from a
+local install with `import-sqlite`) can't be opened on a server where people sign in with Google,
+an email code or a passkey: nobody in it has a role yet. Hand it to its owner:
+
+```bash
+docker exec staqly server workspaces                                   # find its id
+docker exec staqly server attach-workspace ws_4uvnnzgy5vvpo4hnqnco ana@example.com
+```
+
+The command prints an **owner invitation** link (and emails it when mail is set up; a second run
+replaces the link). The person opens it and signs in **as that address**, with Google or an email
+code. Accepting it puts the workspace into their account, created for them if they have none,
+with them as its owner. Nothing is matched by email address alone: the sign-in proves the address,
+as for every invitation.
+
+When the workspace joins the account:
+
+- browser sessions and unused connect links that had no person behind them end;
+- API keys keep working (agents keep running) and now belong to the owner, so they never do more
+  than the owner may;
+- the recovery key stops working: people in an account recover access with their sign-in methods.
+
+It is recorded as `workspace.account_attached`. The command refuses a workspace that already
+belongs to an account (its owner invites people from **Settings → Members**) and servers without
+accounts (local mode).
+
+## Lost the admin key and the recovery key?
+
+The dashboard signs people in with Google, an email code or a passkey only; it has no API key or
+recovery key sign-in. A workspace without an account (one moved from a local install, or created
+on a development server) is reached by giving it to an account:
+[Give a workspace to an account](#give-a-workspace-to-an-account).
+
+`recovery-key` still prints a fresh recovery key for such a workspace, for development and test
+servers (`AUTH_DEV_SIGNIN=true`), where `POST /v1/sessions/recover` takes it:
+
+```bash tab="Binary"
+staqly serve recovery-key
+```
+
+```bash tab="Docker"
+docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco
+```
+
+Like a rotation from the dashboard, it **signs out every browser session** of the workspace.
+
+The key is the only thing printed on stdout, so scripts can capture it; the number of revoked
+sessions goes to stderr:
+
+```bash
+key=$(docker exec staqly server recovery-key ws_4uvnnzgy5vvpo4hnqnco)   # stderr: Revoked 2 browser session(s) of this workspace.
+```
+
+## Running from source
+
+From `apps/api`, `go run ./cmd/server <command>` runs the same commands with the `DATA_DIR`
+you start the server with.
+
+## Next steps
+
+<Cards>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Full backup and restore steps.</Card>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">Sign in other devices with a link or QR code.</Card>
+  <Card title="Plans & limits" href="/plans">What `set-plan` changes.</Card>
+</Cards>

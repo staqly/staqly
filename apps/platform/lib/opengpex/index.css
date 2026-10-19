@@ -1,0 +1,135 @@
+/*
+ * OpenGPEX - An Open-source, Web-based Graphics and Photo editor.
+ * Copyright (C) 2026 The OpenGPEX Authors
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+
+:root {
+  --editor-grid-color: rgba(0, 0, 0, 0.05);
+  --editor-scrollbar-thumb: #d4d4d8;
+  --editor-scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
+  --layer-selected-bg: rgba(79, 70, 229, 0.1);
+  --layer-selected-border: rgba(99, 102, 241, 0.8);
+  --layer-hover-bg: rgba(0, 0, 0, 0.05);
+  --canvas-bg: #ffffff;
+  --canvas-checker: #f0f0f0;
+
+  /* UI Palette (Light Mode defaults) */
+  --bg-stage: #f1f1f1;
+  --bg-panel: #ffffff;
+  --bg-header: #f8f9fa;
+  --border-subtle: #e5e7eb;
+  --border-light: #ffffff;
+  --text-main: #18181b;
+  --text-muted: #71717a;
+}
+
+.dark {
+  --editor-grid-color: rgba(255, 255, 255, 0.03);
+  --editor-scrollbar-thumb: #3f3f46;
+  --editor-scrollbar-thumb-hover: rgba(255, 255, 255, 0.15);
+  --layer-selected-bg: rgba(79, 70, 229, 0.25);
+  --layer-selected-border: rgba(99, 102, 241, 0.8);
+  --layer-hover-bg: rgba(255, 255, 255, 0.06);
+  /* Canvas checkerboard intentionally stays light regardless of theme (same as Photoshop).
+     Dark checkerboard makes image fragment edges invisible against the backdrop. */
+  --canvas-bg: #ffffff;
+  --canvas-checker: #f0f0f0;
+
+  /* UI Palette (Editor Pro Gray - Professional Dark Mode) */
+  --bg-stage: #1e1e1e;     /* Stage background */
+  --bg-panel: #2b2b2b;     /* Main UI panels (Toolbar, Sidebar) */
+  --bg-header: #333333;    /* Header / Option bar */
+  --border-subtle: #181818; /* Dark inset borders */
+  --border-light: #424242;  /* Light bevel borders / highlights */
+  --text-main: #cccccc;    /* Main UI text */
+  --text-muted: #888888;   /* Muted labels / shortcuts */
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Adaptive scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--editor-scrollbar-thumb);
+  border-radius: 10px;
+  transition: background 0.3s;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: var(--editor-scrollbar-thumb-hover);
+}
+
+/* Smart divider: hide header, footer, and consecutive blank dividers */
+.slot-divider:first-child,
+.slot-divider:last-child,
+.slot-divider+.slot-divider {
+  display: none !important;
+}
+
+
+/* ==========================================================================
+   Popover bubble — kill native UA chrome
+   --------------------------------------------------------------------------
+   The Popover widget (`widgets/Popover.tsx`) renders its content into a
+   portal. Inside the bubble we frequently host *interactive* elements
+   (buttons, links) where the browser's default focus / selection chrome
+   (blue dotted outlines, blue text-selection highlight, native button
+   inset shadows) actively fights with the editor's accent palette. Every
+   one of those defaults can be killed locally without affecting the rest
+   of the app.
+
+   We DO keep `:focus-visible` accessibility for actual keyboard nav by
+   only nuking the *non-visible* focus ring (`:focus:not(:focus-visible)`),
+   but in practice the popovers are pointer-driven so the result is the
+   same: a clean, themed surface with no rogue browser highlights.
+   ========================================================================== */
+.popover-bubble,
+.popover-bubble * {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.popover-bubble button,
+.popover-bubble [role="button"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Suppress the residual focus ring on pointer-activated buttons but keep
+   the keyboard-driven one (focus-visible) intact for a11y. */
+.popover-bubble :focus:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Themed text-selection inside the bubble — visible accent that works on
+   both light (`--bg-panel: #fff`) and dark (`#2b2b2b`) backgrounds.
+   Opacity raised to 0.45 (from 0.25) and text forced white so the
+   highlight remains legible against dark input backgrounds (e.g.
+   ComboInput's `dark:bg-zinc-950`). */
+.popover-bubble ::selection {
+  background-color: rgba(99, 102, 241, 0.45); /* indigo-500/45 */
+  color: #fff;
+}
+
+/* Contenteditable custom text selection: suppress native oversized highlight */
+[data-text-editor-container] ::selection {
+  background: transparent !important;
+}
+

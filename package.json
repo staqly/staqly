@@ -1,0 +1,23 @@
+{
+  "name": "staqly",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "description": "staqly monorepo: API, CLI, dashboard, docs, landing page, SDKs (Turborepo + pnpm)",
+  "packageManager": "pnpm@11.5.0",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "turbo run format",
+    "format:check": "turbo run format:check",
+    "check": "turbo run format:check lint typecheck test size",
+    "size": "turbo run size",
+    "test:e2e": "turbo run test:e2e",
+    "gen": "turbo run gen"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.8"
+  }
+}

@@ -1,0 +1,202 @@
+---
+title: Schedules
+description: Give a collection a publishing rhythm, pick which posts go out, and let a schedule ask your agent or an endpoint for new posts when the collection runs dry.
+---
+
+A **schedule** belongs to a collection and publishes on its behalf: every weekday at 09:00,
+every six hours, or once on Friday evening. Instead of giving each post a time, you fill the
+collection with drafts and the schedule sends them out in order. When nothing is left, it can
+do nothing, ask your agent for new posts, or call an endpoint of yours that returns them.
+
+## Create a schedule
+
+<Steps>
+<Step>
+
+### Open the collection's settings
+
+In **Posts**, open the collection and click **Settings**. Unfold **Schedules** and click
+**New schedule**. The drawer has the fields below; **Create schedule** saves it.
+
+</Step>
+<Step>
+
+### Say when
+
+| Field | Options |
+|---|---|
+| **Name** | Shown on the calendar's hollow chips (`09:00 · Weekday mornings · next post`). |
+| **When** | **At fixed times** (recurring: times of day, the weekdays, a time zone) · **Every few hours** (recurring: every N minutes) · **Once, at a time**. |
+
+Times follow the time zone you pick (an IANA name such as `Europe/Warsaw`), so a 09:00 stays
+09:00 across daylight saving changes.
+
+</Step>
+<Step>
+
+### Say what and where
+
+| Field | Options |
+|---|---|
+| **Channels** | The channels the chosen posts go to. A post with targets of its own keeps them. |
+| **What to publish** | **The next waiting post (oldest first)** · **Every waiting post** · **Chosen posts** (pick them). |
+| **When nothing is waiting** | **Do nothing** · **Ask my agent for new posts** · **Call an endpoint that returns posts** (URL and a secret). |
+
+A "waiting post" is a `draft` in the collection. Scheduled posts have their own time and are
+left alone.
+
+</Step>
+</Steps>
+
+The same from the API, the CLI or an agent:
+
+```bash tab="curl"
+curl -s -X POST http://localhost:3333/v1/schedules -H 'Content-Type: application/json' -d '{
+  "collection": "Product updates",
+  "name": "Weekday mornings",
+  "kind": "recurring",
+  "rule": { "times": ["09:00"], "weekdays": [1, 2, 3, 4, 5], "tz": "Europe/Warsaw" },
+  "channels": ["ch_7h2kq9xw3nbvd5yhzm6a"],
+  "pick": "next",
+  "source": "agent"
+}'
+```
+
+```bash tab="CLI"
+staqly schedules create "Product updates" --name "Weekday mornings" \
+  --at 09:00 --weekdays mon-fri --tz Europe/Warsaw \
+  --channel ch_7h2kq9xw3nbvd5yhzm6a --pick next --source agent
+```
+
+```text tab="MCP"
+create_schedule {
+  "collection": "Product updates", "name": "Weekday mornings",
+  "kind": "recurring", "rule": { "times": ["09:00"], "weekdays": [1,2,3,4,5], "tz": "Europe/Warsaw" },
+  "channels": ["ch_7h2kq9xw3nbvd5yhzm6a"], "pick": "next", "source": "agent"
+}
+```
+
+Managing schedules needs the `schedules:manage` scope in cloud mode.
+
+## The schedule object
+
+| Field | Meaning |
+|---|---|
+| `collection` (input) / `collection_id`, `collection_name` | The collection; an id or an exact name on create. |
+| `kind` | `once` or `recurring`. |
+| `run_at` | `once`: when, in the future. |
+| `rule.times` | `recurring`: times of day as `HH:MM`. |
+| `rule.weekdays` | `0` Sunday to `6` Saturday; empty means every day. |
+| `rule.tz` | IANA time zone; empty is UTC. |
+| `rule.every_minutes` | Instead of times: every N minutes. |
+| `channels` | Channel ids the chosen posts go to (a post's own targets win). |
+| `pick` | `next` (the oldest waiting draft), `selected` (`post_ids`) or `all` (every waiting draft). |
+| `source` | When nothing waits: `none`, `agent` or `endpoint`. |
+| `endpoint_url`, `endpoint_secret` | `endpoint`: where to ask; the secret signs the request like a webhook and is generated when empty. Never returned. |
+| `enabled` | `false` pauses it; the next run is recomputed when it is enabled again. |
+| `next_run_at`, `last_run_at`, `last_result` | State. `last_result` says what the last run did (`published 1 post`) or why it failed. |
+
+Changing a schedule (`PATCH /v1/schedules/{id}`, any field) recomputes `next_run_at`.
+**Run now** (`POST /v1/schedules/{id}/run`, `202`) runs it at once; the regular next run is
+unchanged. A `once` schedule is disabled after its run.
+
+## What a run does
+
+A run is a `run_schedule` [job](/concepts#jobs), so it survives restarts and is retried when the
+server is busy.
+
+1. Pick the posts: the oldest waiting draft, the chosen ones, or every draft, in creation order.
+2. Give each one targets on the schedule's channels (unless it has its own), and publish it: the
+   post goes `publishing` and its targets are published like any other.
+3. When nothing was waiting, follow `source` (below).
+4. Record `schedule.ran` with what happened (`result` in words, `published_post_ids`), or
+   `schedule.failed` with the error, and set `last_result`.
+
+The calendar shows upcoming runs as hollow chips (`09:00 · Weekday mornings · next post`) next
+to the posts that already have a time.
+
+## When nothing is waiting
+
+### Ask your agent (`source: agent`)
+
+The run records **`schedule.posts_requested`** and leaves the schedule in `GET /v1/work`
+(`kind: posts`, with the schedule and its collection) until a draft appears in the collection.
+An agent connected over MCP sees it with `list_requested_work` and answers by creating drafts in
+that collection; the next run publishes the first of them. An [alert](/automation/alerts)
+subscribed to `schedule.posts_requested` tells you too, and a [webhook](/automation/webhooks)
+can wake a workflow.
+
+What to tell your agent, once, in its instructions or in the conversation:
+
+> When `list_requested_work` shows a schedule asking for posts, write three new drafts into its
+> collection in the voice of the previous posts there, each with targets on the schedule's
+> channels.
+
+See the cookbook: [Let an agent fill a collection](/cookbook/agent-fills-a-collection).
+
+### Call an endpoint (`source: endpoint`)
+
+The run POSTs to `endpoint_url`, signed like a webhook, and creates the posts it answers with:
+
+```http
+POST <endpoint_url>
+Content-Type: application/json
+User-Agent: Staqly-Schedules/1.0
+X-Staqly-Timestamp: 1792400000
+X-Staqly-Signature: sha256=<hex HMAC-SHA256(endpoint_secret, timestamp + "." + raw body)>
+
+{
+  "schedule": { "id": "sch_5k2nq8rx7bvm3dz4hcye", "name": "Weekday mornings", "collection_id": "col_qjuybkx6355nz4no6pqk", "channels": ["ch_7h2kq9xw3nbvd5yhzm6a"], ... },
+  "collection_id": "col_qjuybkx6355nz4no6pqk",
+  "channels": ["ch_7h2kq9xw3nbvd5yhzm6a"],
+  "slot": "2026-10-20T07:00:00Z"
+}
+```
+
+Answer within 60 seconds with `2xx` and a JSON body:
+
+```json
+{
+  "posts": [
+    { "content": "Tip of the day: drag a post on the calendar to move it.", "tags": ["tips"] },
+    { "content": "A longer one for LinkedIn.", "media": ["med_t4w6pz2kqm7xr3nb5vya"],
+      "targets": [{ "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a", "settings": { "title": "Tip of the day" } }],
+      "metadata": { "campaign": "launch" } }
+  ]
+}
+```
+
+- Each entry takes `content`, `media` (ids from `POST /v1/media`), `targets`, `tags` and
+  `metadata`; a post without `targets` gets one per schedule channel. At most 50 posts per
+  answer are used.
+- The posts are created in the schedule's collection with `source` `schedule:<name>` and
+  published by the same run. A post the API refuses (over a provider's limit, say) fails the run.
+- A non-`2xx` answer, a timeout or a body that is not `{"posts": [...]}` fails the run:
+  `schedule.failed` with the error, `last_result` `endpoint failed: ...`, and the job is retried
+  with the usual backoff.
+- The endpoint URL follows the same network policy as webhooks (`WEBHOOK_ALLOW_PRIVATE`,
+  `WEBHOOK_ALLOW_LOOPBACK`); see [Network policy](/automation/webhooks#network-policy-ssrf-guard).
+
+Verify the signature exactly as for a webhook ([Verifying signatures](/automation/webhooks#verifying-signatures)),
+with the schedule's `endpoint_secret` as the key. See the cookbook:
+[Posts from your endpoint](/cookbook/posts-from-your-endpoint).
+
+## Events
+
+| Type | When | `data` |
+|---|---|---|
+| `schedule.created`, `schedule.updated`, `schedule.deleted` | A schedule was created, changed or deleted | `schedule` |
+| `schedule.ran` | A run finished | `schedule`, `result` (what it did, in words), `published_post_ids` |
+| `schedule.posts_requested` | A run found nothing and `source` is `agent` | `schedule`, `collection` |
+| `schedule.failed` | A run failed (the endpoint answered badly, a post was refused) | `schedule`, `error` |
+
+Every event carries `schedule_id` and `collection_id`, so `GET /v1/events?schedule_id=...` is
+one schedule's history.
+
+## Next steps
+
+<Cards>
+  <Card title="Let an agent fill a collection" href="/cookbook/agent-fills-a-collection">Drafts every night, a post every morning.</Card>
+  <Card title="Posts from your endpoint" href="/cookbook/posts-from-your-endpoint">A small service that answers a schedule.</Card>
+  <Card title="Schedule calendar" href="/dashboard/schedule">Where posts and upcoming runs show up.</Card>
+</Cards>

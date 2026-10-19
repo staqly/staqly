@@ -1,0 +1,60 @@
+---
+title: Overview
+description: Pick the right way to connect your coding agent, n8n or scripts to staqly.
+---
+
+To save output in staqly, an agent or automation has to talk to it. Coding agents such as
+Claude Code, Codex and OpenCode use **MCP** (Model Context Protocol, the standard way to give
+an AI agent tools). Automations and scripts use the **REST API**. Both go through the same
+services and the same permission checks, so they can do the same things.
+
+## Choose your client
+
+<Cards>
+  <Card title="Claude Code" href="/agents/claude-code">`claude mcp add` or a project `.mcp.json`.</Card>
+  <Card title="OpenAI Codex" href="/agents/codex">`codex mcp add` or `~/.codex/config.toml`.</Card>
+  <Card title="OpenCode" href="/agents/opencode">An `mcp` block in `opencode.json`.</Card>
+  <Card title="Cursor" href="/agents/cursor">`.cursor/mcp.json`, plus a rule to ask before acting.</Card>
+  <Card title="Windsurf" href="/agents/windsurf">`mcp_config.json`, plus a rule to ask before acting.</Card>
+  <Card title="Other MCP clients" href="/agents/other-mcp-clients">Any client that supports Streamable HTTP or STDIO.</Card>
+  <Card title="Frameworks & automation" href="/integrations">LangChain, OpenAI Agents SDK, CrewAI, Claude Agent SDK, n8n, Make, Zapier.</Card>
+  <Card title="Scripts & SDK" href="/agents/scripts">curl, the TypeScript SDK, or any HTTP client.</Card>
+</Cards>
+
+The [`staqly` CLI](/cli/commands) can also print the right MCP setup for you:
+`staqly mcp config claude` (or `codex`, `opencode`, `cursor`, `windsurf`).
+
+## Endpoints
+
+| Protocol | For | Endpoint |
+|---|---|---|
+| **MCP**, Streamable HTTP (recommended) | coding agents | `http://localhost:3333/mcp` |
+| **MCP**, STDIO | clients that only support STDIO; needs Docker | `docker exec -i staqly mcp-stdio` |
+| **REST** | automations and scripts | `http://localhost:3333/v1/...` |
+
+## Which MCP transport?
+
+Use Streamable HTTP unless your client only supports STDIO. HTTP works with both
+`staqly serve` and Docker; STDIO runs a helper inside the `staqly` Docker container.
+
+| Aspect | Streamable HTTP | STDIO |
+|---|---|---|
+| Endpoint | `http://localhost:3333/mcp` | `docker exec -i staqly mcp-stdio` |
+| Works with `staqly serve` | Yes | Not out of the box: needs Docker, or [building `mcp-stdio` from source](/agents/other-mcp-clients#stdio-details) |
+| Works with a remote / cloud instance | Yes (bearer API key) | No: it opens the database inside the container |
+| Sessions | Stateless: every request is authenticated on its own | One process per agent session |
+| Recommended | ✔ | When your client only supports STDIO |
+
+<Callout type="warn" title="STDIO: use -i, never -t">
+`docker exec -i` keeps stdin open for the protocol. Adding `-t` allocates a TTY and breaks
+the JSON-RPC stream.
+</Callout>
+
+## Permissions in cloud mode
+
+In local mode, every agent on your computer has full access. In **cloud mode**, MCP requires
+an API key and enforces its scopes: a read-only key cannot write, `create_post` needs
+`posts:write`, `schedule_post` / `publish_post` need `posts:publish`, channels need
+`channels:manage`. `/mcp` accepts only
+bearer keys, never browser cookies. See [MCP tools](/mcp/tools) for the scope of every tool
+and [Authentication & scopes](/api/authentication) for creating keys.

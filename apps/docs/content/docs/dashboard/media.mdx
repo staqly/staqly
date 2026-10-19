@@ -1,0 +1,119 @@
+---
+title: Media
+description: "The media library: upload pictures, videos and files once, organize them in folders and tags, describe them and use them in any post."
+---
+
+**Media** in the sidebar is the workspace's library of uploaded files: every picture, video and
+file you or your agents uploaded, including the ones added with **Insert media** in a post.
+
+## Upload
+
+- Click **Upload**, drop files anywhere on the page, or paste a picture (a screenshot, a copied
+  image). Several files go up at once, each with its own progress.
+- Pictures (PNG, JPEG, GIF, WebP, AVIF), videos (MP4, WebM, MOV) and audio (MP3, WAV, OGG, M4A)
+  are accepted; documents, archives, SVG and HTML are not.
+- A file over your plan's size limit, or of a type that isn't accepted, is refused before it
+  uploads, with the reason ("Too big: 3.1 GB. Your plan takes files up to 1 GB."). See
+  [Limits](/limits) for sizes and storage per plan.
+- Pictures are measured on upload. For a video, the browser that uploads it reads its size and
+  length and stores them with the file.
+
+## Find
+
+The page has two parts: the library sidebar on the left, the files on the right. On a phone the
+sidebar opens in a sheet from the button beside the search.
+
+- **Library**: **All files**, **Recents** (uploaded in the last 7 days), **Images**, **Videos**,
+  **Audio**, **Unused** (no post uses them), **Duplicates** (shown when identical files exist)
+  and **Deleted**.
+- **Folders**: click a folder to see the files in it. Arrow keys move through the tree, Right and
+  Left open and close a folder, Enter shows it. **+** on the Folders header creates a folder.
+- **Tags**: click a tag to see the files that carry it. The tag, the place and the search combine.
+- Search by file name and sort by newest, oldest, largest or name.
+
+Each tile shows the picture, the video's first frame and length, or an icon, and how many posts
+use the file. Click a tile to open it; arrow keys move between tiles, Enter opens one.
+
+## Folders and tags
+
+Folders only organize the library: a file stays in every post that uses it, wherever it sits.
+
+- With a folder open, the **...** beside the title has **New folder inside**, **Rename**, **Move
+  to...** and **Delete folder**. Deleting a folder asks first and moves its files and folders up a
+  level; no file is deleted.
+- Move files by dragging them onto a folder in the sidebar (all selected files when you drag a
+  selected one), onto **All files** to take them out of every folder, with **Move to folder** in the
+  action bar, or with **Folder** in the file's drawer. Drag a folder onto another to move it there.
+- Tag a file in its drawer, or select files and use **Tags** to add or remove tags on all of them.
+  Tags are spelled like post tags: `#Summer Sale` becomes `summer-sale`.
+
+## Upload
+
+Uploads show in a small card at the bottom right, with progress and **Cancel** per file; a file
+that fails stays there with the reason, **Retry** and **Dismiss**. When everything is up, the card
+goes away and a message names the file (or the number of files), with **Show**. A file whose exact
+content is already in the library is uploaded anyway, and a message says which file has it.
+
+## A file's drawer
+
+Click a tile to open it:
+
+- the preview, the same size for every file, on a checkerboard so transparent pictures read well
+  (tiny pictures are enlarged pixel by pixel); click it to see the picture full screen;
+- one line of facts: type, size, pixels, shape, length and when it was uploaded (hover for the
+  exact time), and **In 2 posts**, which jumps to the posts that use it;
+- **New post with this**, **Download**, and **...** with **Copy file ID**;
+- **Name**, **Alt text** (describes a picture or video for people who can't see it; platforms
+  that take a description receive it), **Tags** and **Folder**;
+- **Where it fits**, folded to one line ("Fits 3 of 11 places"); open it for each placement per
+  platform (Instagram feed and Reels, TikTok, YouTube, X, LinkedIn, Pinterest...) with **Fits** or
+  how much it crops;
+- **Used in**: the posts that carry the file, with their status.
+
+**Save changes** and **Close** are at the bottom right, **Delete file** at the bottom left.
+
+## Several files at once
+
+Hover a tile and tick the box in its top right corner (on a phone the box is always there); Shift
+selects a range and Cmd/Ctrl+A every tile. An action bar appears at the bottom: **Move to folder**,
+**Tags**, **New post** (a carousel), **Download**, **Edit** (pictures) and **Delete**. Esc or the
+**X** clears the selection.
+
+## Deleted
+
+**Delete file** (and **Delete** in the action bar) moves files to **Deleted**, with **Undo** for a
+few seconds. Files stay there for 30 days, then they are deleted for good; each tile says when.
+Until then they still count toward your storage. In **Deleted**, **Restore** puts a file back where
+it was, **Delete forever** removes it now (posts that use it lose it), and **Empty Deleted** removes
+everything there. A file that a scheduled post uses can't be deleted: remove it from that post
+first. Deleting needs the `posts:delete` scope.
+
+## Duplicates
+
+**Duplicates** lists files with exactly the same content, one set per header ("3 copies · 24 KB
+each"), each tile with its folder and how many posts use it. **Keep one** keeps the oldest copy:
+posts that use another copy use the kept one instead, and the other copies move to **Deleted**.
+
+## Use in posts
+
+- **New post with this** opens the composer with the file attached; **New post** in the action bar
+  starts one with every selected picture and video.
+- In the composer, **From library** next to **Insert media** picks uploaded pictures and videos
+  without uploading them again; it works for the post and for each comment.
+
+## Over the API, MCP and the CLI
+
+| | REST | MCP | CLI |
+|---|---|---|---|
+| List and filter | `GET /v1/media?q=&kind=&used=&folder=&tag=&deleted=&duplicates=&sort=&offset=&limit=` | `list_media` | `staqly media list` |
+| Details | `GET /v1/media/{id}/info` | `get_media` | `staqly media get` (the file) |
+| Rename, alt text, folder, tags | `PATCH /v1/media/{id}` | `update_media` | `staqly media update --name --alt` |
+| Move or tag several | `POST /v1/media/bulk` | `organize_media` | `staqly media mv`, `staqly media tag` |
+| Folders and tags | `GET`, `POST /v1/media-folders`; `PATCH`, `DELETE /v1/media-folders/{id}` | `list_media_folders`, `create_media_folder`, `update_media_folder`, `delete_media_folder` | `staqly media folders list\|create\|rename\|move\|delete` |
+| Which posts use it | `GET /v1/media/{id}/usage` | `get_media_usage` | `staqly media usage` |
+| Move to Deleted, or delete for good | `DELETE /v1/media/{id}[?permanent=true]`, `POST /v1/media/delete` | `delete_media` | `staqly media delete [--permanent]` |
+| Restore from Deleted | `POST /v1/media/{id}/restore` | `restore_media` | `staqly media restore` |
+| Keep one of identical files | `POST /v1/media/{id}/keep` | `keep_media` | `staqly media keep` |
+
+Media IDs (`med_...`) stay the same for the life of a file, so anything that takes media later can
+refer to library files by ID.

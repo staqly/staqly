@@ -1,0 +1,3272 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Take a scheduled post off the schedule; it becomes a draft again. Requires posts:publish.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "cancel_post"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Connect a channel on a token platform (see list_providers credential_fields; e.g. Telegram bot token + chat id, Bluesky handle + app password) or your own automation (provider custom, no fields). OAuth platforms are connected in the dashboard. Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "the provider's credential_fields by key",
+          "type": "object"
+        },
+        "group_id": {
+          "description": "channel group to put it in (grp_...); default: the Default group",
+          "type": "string"
+        },
+        "name": {
+          "description": "what to call the channel; defaults to the account's name",
+          "type": "string"
+        },
+        "provider": {
+          "description": "provider id from list_providers (custom, telegram, bluesky, ...)",
+          "type": "string"
+        },
+        "settings": {
+          "additionalProperties": true,
+          "description": "provider-level defaults",
+          "type": "object"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "type": "object"
+    },
+    "name": "connect_channel"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create an alert that tells people when posts go out or fail and when a channel needs reconnecting. Requires alerts:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "collection_ids": {
+          "description": "only events from these collections (col_...); empty means all",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "config": {
+          "additionalProperties": true,
+          "description": "type-specific settings. slack/discord: webhook_url (or bot_token + channel). telegram: bot_token, chat_id. ntfy: topic, server_url, access_token, priority. email: host, port, username, password, from, to (a list of addresses), tls (starttls, tls or none)",
+          "type": "object"
+        },
+        "digest_window_seconds": {
+          "description": "group messages within this many seconds into one; 0 sends each",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "enabled": {
+          "description": "false pauses the alert",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "events": {
+          "description": "event types to tell about, e.g. [\"post.published\", \"post.failed\"]",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "name": {
+          "description": "alert name",
+          "type": "string"
+        },
+        "type": {
+          "description": "telegram, slack, discord, ntfy or email",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "name": "create_alert"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create an API key with the given scopes (cloud mode; local mode has no keys). The raw key is returned once. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "expires_at": {
+          "description": "RFC3339 expiry; omit for a key that does not expire",
+          "type": "string"
+        },
+        "name": {
+          "description": "key name, e.g. the agent that uses it",
+          "type": "string"
+        },
+        "scopes": {
+          "description": "scopes to grant, e.g. [\"collections:read\", \"items:read\", \"items:write\"]",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "scopes"
+      ],
+      "type": "object"
+    },
+    "name": "create_api_key"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create a channel group (name, unique in the workspace; optional color #rrggbb and position). Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "description": "#rrggbb, or empty",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "group_id": {
+          "description": "channel group ID (grp_...); update only",
+          "type": "string"
+        },
+        "name": {
+          "description": "what to call the group, unique in the workspace",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "position": {
+          "description": "sort order (smaller first; Default always leads)",
+          "type": [
+            "null",
+            "integer"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "create_channel_group"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "A connect link: someone without access to Staqly (a client) opens it and connects a channel to this workspace by signing in at the platform; nothing else is reachable through it. Optional note shown to them, providers (platform ids to offer; empty = every available one), group_id (the channel group connected channels join; empty = Default), expires_in_hours (default 168, max 720) and max_uses (channels, default 1, max 50). The url is returned once. Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "expires_in_hours": {
+          "description": "hours the link works (default 168, at most 720)",
+          "type": "integer"
+        },
+        "group_id": {
+          "description": "channel group connected channels join (empty: Default)",
+          "type": "string"
+        },
+        "max_uses": {
+          "description": "how many channels may be connected (default 1, at most 50)",
+          "type": "integer"
+        },
+        "note": {
+          "description": "shown to the person who opens the link",
+          "type": "string"
+        },
+        "providers": {
+          "description": "platform ids to offer; empty offers every available one",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "create_channel_link"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create a collection (e.g. \"Instagram Avatar\"): a group of posts with its own publishing schedules. Requires collections:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "description": "accent colour, e.g. #7c3aed",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "description": "collection name",
+          "type": "string"
+        },
+        "processing_timeout_seconds": {
+          "description": "how long a post on your own automation waits for a reported result before it fails, 60-86400 seconds; without it the server default applies",
+          "type": [
+            "null",
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "create_collection"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create a one-time link (valid 5 minutes) that signs another browser into the dashboard. Only for local mode callers; API keys get a forbidden error.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "create_device_link"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create a media library folder at the top level or inside another (parent_id). Names are unique among a folder's subfolders, ignoring case. Requires media:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "the folder name",
+          "type": "string"
+        },
+        "parent_id": {
+          "description": "the folder it goes in; empty or omitted for the top level",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "create_media_folder"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. Requires posts:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "collection": {
+          "description": "collection ID (col_...) or exact name",
+          "type": "string"
+        },
+        "content": {
+          "description": "the post's text",
+          "type": "string"
+        },
+        "external_ref": {
+          "description": "your own reference",
+          "type": "string"
+        },
+        "media": {
+          "description": "media IDs (med_...) in order",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "description": "free JSON for your own use",
+          "type": "object"
+        },
+        "publish_at": {
+          "description": "RFC3339, in the future",
+          "type": "string"
+        },
+        "publish_now": {
+          "description": "publish right away",
+          "type": "boolean"
+        },
+        "repeat_every": {
+          "description": "repeat after publishing: 1d to 6d, 1w, 2w or 1mo (empty: no repeat)",
+          "type": "string"
+        },
+        "status": {
+          "description": "draft (default) or scheduled",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "targets": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "channel_id": {
+                "description": "channel ID (ch_...)",
+                "type": "string"
+              },
+              "content": {
+                "description": "text for this channel instead of the post's content",
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "settings": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "the provider's settings_fields by key (title, subreddit, visibility...)",
+                "type": "object"
+              }
+            },
+            "required": [
+              "channel_id"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "thread": {
+          "description": "replies published under the post, in order (at most 25)",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "content": {
+                "description": "the reply's text",
+                "type": "string"
+              },
+              "delay_seconds": {
+                "description": "wait this long after the part before (0 to 86400)",
+                "type": "integer"
+              },
+              "media": {
+                "description": "media IDs (med_...)",
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "collection"
+      ],
+      "type": "object"
+    },
+    "name": "create_post"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "A link to a read-only preview page of the post (as each channel shows it) where anyone with the link can comment without signing in. The url is returned once; expires_in_days 0 never expires.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "expires_in_days": {
+          "description": "days until the link stops working, 0 to 365 (0 never)",
+          "type": "integer"
+        },
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "create_preview_link"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create a publishing schedule for a collection: kind once (run_at) or recurring (rule: times like [\"09:00\",\"17:00\"] with optional weekdays 0-6 and tz, or every_minutes), the channels it publishes to, pick (next waiting post, selected post_ids, or all), and what to do when nothing waits (source none, agent = emit schedule.posts_requested, endpoint = POST a signed request to endpoint_url and create the posts it returns). Requires schedules:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "description": "channel IDs the chosen posts go to (a post's own targets win)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "collection": {
+          "description": "collection ID (col_...) or exact name",
+          "type": "string"
+        },
+        "enabled": {
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "endpoint_secret": {
+          "description": "signs the request like a webhook; generated when empty",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "endpoint_url": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "description": "once or recurring",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "pick": {
+          "description": "next (oldest waiting draft), selected (post_ids) or all",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "post_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "rule": {
+          "additionalProperties": false,
+          "description": "recurring: times (HH:MM) with optional weekdays (0 Sunday to 6 Saturday) and tz (IANA), or every_minutes",
+          "properties": {
+            "every_minutes": {
+              "type": "integer"
+            },
+            "times": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "tz": {
+              "type": "string"
+            },
+            "weekdays": {
+              "items": {
+                "type": "integer"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            }
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "run_at": {
+          "description": "once: RFC3339 in the future",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "source": {
+          "description": "when nothing waits: none, agent (emit schedule.posts_requested) or endpoint (POST to endpoint_url)",
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "collection"
+      ],
+      "type": "object"
+    },
+    "name": "create_schedule"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create a webhook that receives signed event POSTs. The response contains the signing secret once. Requires webhooks:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "description": "false pauses deliveries",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "collection_ids": {
+          "description": "only events from these collections (col_...); empty sends all",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "description": {
+          "description": "what the receiver does, shown in the dashboard",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "events": {
+          "description": "event types to send, e.g. [\"item.approved\"]; [\"*\"] (default) sends all",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "max_attempts": {
+          "description": "delivery attempts before giving up",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "timeout_ms": {
+          "description": "per-attempt timeout in milliseconds",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "url": {
+          "description": "https URL that receives the POSTs",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "name": "create_webhook"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Delete an alert. Requires alerts:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alert_id": {
+          "description": "alert ID (nch_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "alert_id"
+      ],
+      "type": "object"
+    },
+    "name": "delete_alert"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Remove a channel; targets on it go with it. Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "channel ID (ch_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel_id"
+      ],
+      "type": "object"
+    },
+    "name": "delete_channel"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Delete a channel group; its channels move to the Default group, which can't be deleted. Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "group_id": {
+          "description": "channel group ID (grp_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_id"
+      ],
+      "type": "object"
+    },
+    "name": "delete_channel_group"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Permanently delete a collection with its posts and schedules. confirm must equal the collection name. Requires collections:delete (collections:write alone is not enough).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "collection": {
+          "description": "collection ID (col_...) or exact name",
+          "type": "string"
+        },
+        "confirm": {
+          "description": "must be exactly the collection name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "collection",
+        "confirm"
+      ],
+      "type": "object"
+    },
+    "name": "delete_collection"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Move a media file to Deleted, where it can be restored for 30 days before it is deleted for good (refused while a scheduled post uses it); with permanent=true delete it for good now, and posts that reference it lose that file. Requires posts:delete (posts:write alone is not enough).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "media_id": {
+          "description": "media ID (med_...)",
+          "type": "string"
+        },
+        "permanent": {
+          "description": "delete it for good now instead of moving it to Deleted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "media_id"
+      ],
+      "type": "object"
+    },
+    "name": "delete_media"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Delete a media library folder. Its files and subfolders move up to its parent; no file is deleted. Requires media:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "folder_id": {
+          "description": "the folder ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "folder_id"
+      ],
+      "type": "object"
+    },
+    "name": "delete_media_folder"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Delete a post (its event history is kept). Requires posts:delete (posts:write alone is not enough).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "delete_post"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Delete several posts at once (up to 200; their event history is kept). Returns the deleted ids and the ids not found. What already went out stays on the platforms. Requires posts:delete.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "description": "post IDs (post_...), up to 200",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    },
+    "name": "delete_posts"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Delete a schedule. Requires schedules:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "schedule_id": {
+          "description": "schedule ID (sch_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schedule_id"
+      ],
+      "type": "object"
+    },
+    "name": "delete_schedule"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Delete a webhook and stop its deliveries. Requires webhooks:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "webhook_id": {
+          "description": "webhook ID (wh_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "webhook_id"
+      ],
+      "type": "object"
+    },
+    "name": "delete_webhook"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Permanently delete the workspace and everything in it (cloud only). confirm must equal the workspace name. Like REST, this needs a signed-in dashboard session, so API keys get a forbidden error.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirm": {
+          "description": "must be exactly the workspace name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "confirm"
+      ],
+      "type": "object"
+    },
+    "name": "delete_workspace"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Copy a post (content, media, tags, metadata, targets) into a new draft. Requires posts:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "duplicate_post"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Export the activity log as NDJSON or CSV text, oldest first; events is the number of events (lines) in this call. Output is capped at 32 KiB per call: when truncated=true, call again with the same filters and after_seq=next_after_seq for the rest (the whole log is the sum of all calls).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "description": "actor ID, e.g. an API key ID",
+          "type": "string"
+        },
+        "actor_type": {
+          "description": "session, api_key, local or system",
+          "type": "string"
+        },
+        "after_seq": {
+          "description": "continue a truncated export: next_after_seq of the previous call",
+          "type": "integer"
+        },
+        "collection": {
+          "description": "collection ID or exact name",
+          "type": "string"
+        },
+        "format": {
+          "description": "ndjson (default) or csv",
+          "type": "string"
+        },
+        "from": {
+          "description": "YYYY-MM-DD or RFC3339 (inclusive)",
+          "type": "string"
+        },
+        "post_id": {
+          "description": "only events about this post (post_...)",
+          "type": "string"
+        },
+        "to": {
+          "description": "YYYY-MM-DD or RFC3339 (exclusive)",
+          "type": "string"
+        },
+        "type": {
+          "description": "exact event type, e.g. item.approved",
+          "type": "string"
+        },
+        "type_prefix": {
+          "description": "event type prefix, e.g. item.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "export_events",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "description": "the events, one per line (csv: after a header line)",
+          "type": "string"
+        },
+        "events": {
+          "description": "events (lines) in this call",
+          "type": "integer"
+        },
+        "format": {
+          "description": "ndjson or csv",
+          "type": "string"
+        },
+        "next_after_seq": {
+          "description": "after_seq for the next call (only when truncated)",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "truncated": {
+          "description": "more events match: call again with after_seq=next_after_seq",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "events",
+        "truncated",
+        "format",
+        "content"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get one alert. Secrets are masked. Requires alerts:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alert_id": {
+          "description": "alert ID (nch_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "alert_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_alert"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get billing status: whether Stripe billing is enabled, the plan, the subscription status and the end of the trial or paid period. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "get_billing"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get one channel with its group and activity. Credentials are never returned. Requires channels:read.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "channel ID (ch_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_channel"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get a collection by ID or name, with its post counts.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "collection": {
+          "description": "collection ID (col_...) or exact name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "collection"
+      ],
+      "type": "object"
+    },
+    "name": "get_collection"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get a media file's metadata (type, size, name, SHA-256, URL); with include_content=true also its base64 content (files up to 4 MiB).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "include_content": {
+          "description": "also return the file as base64 (files up to 4 MiB)",
+          "type": "boolean"
+        },
+        "media_id": {
+          "description": "media ID (med_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "media_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_media"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The posts that use a media file (in their files or a comment), newest first, at most 50, with each post's title, status and publish time. Check it before deleting a file. Requires media:read and posts:read.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "media_id": {
+          "description": "media ID (med_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "media_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_media_usage"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get one post with its targets (status, link, error per channel).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_post"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The events of a post, newest first: created, edited, scheduled, published or failed per channel.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_post_history"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "A post's numbers per channel (views, likes, reposts, replies, quotes, bookmarks, link clicks where the platform gives them), read from the platform when older than ten minutes or with refresh true. available false: the platform reports none.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        },
+        "refresh": {
+          "description": "read the numbers from the platforms now",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_post_metrics"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get the workspace's plan, usage this period against its limits, and whether it is suspended.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "get_usage"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get one webhook. Requires webhooks:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "webhook_id": {
+          "description": "webhook ID (wh_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "webhook_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_webhook"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get the workspace name, ID and plan.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "get_workspace"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get a workspace export's status (pending, running, ready, failed, expired) and, once ready, its download URL. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "export_id": {
+          "description": "export ID (exp_...) from start_workspace_export",
+          "type": "string"
+        }
+      },
+      "required": [
+        "export_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_workspace_export"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Keep this media file of a set of identical ones (list_media with duplicates=true): posts that use a copy use this file instead, and the copies move to Deleted. Requires posts:delete and posts:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "media_id": {
+          "description": "media ID (med_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "media_id"
+      ],
+      "type": "object"
+    },
+    "name": "keep_media"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List recent messages sent (or failed) through an alert, newest first. Requires alerts:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alert_id": {
+          "description": "alert ID (nch_...)",
+          "type": "string"
+        },
+        "limit": {
+          "description": "max deliveries (default 50, max 200)",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "alert_id"
+      ],
+      "type": "object"
+    },
+    "name": "list_alert_deliveries"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List alerts: where staqly tells people what happened (Telegram, Slack, Discord, ntfy, email). Secrets are masked. Requires alerts:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_alerts"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List API keys (prefix, scopes, last use, expiry, revocation) and the available scopes. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_api_keys"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List the workspace's channel groups (every channel is in exactly one; the Default group always exists) with how many channels each holds. Move a channel with update_channel group_id. Requires channels:read.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_channel_groups"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The workspace's connect links (status open, used, expired or revoked; uses; expiry); the links themselves are not shown again. Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_channel_links"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List connected channels (accounts) with provider, handle, status (connected, needs_reconnect, disabled), group_id (its channel group) and activity (last published post and time, next scheduled post time, posts published in the last 30 days). group_id keeps one channel group. Requires channels:read.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "group_id": {
+          "description": "only channels in this channel group (grp_..., see list_channel_groups)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_channels"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List collections with post counts per status.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "include_archived": {
+          "description": "include archived collections",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_collections"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List the activity log (posts created, scheduled, published or failed, channels connected, schedules run, settings changes), newest first, with optional filters.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "only events about this channel",
+          "type": "string"
+        },
+        "collection": {
+          "description": "only events of this collection (ID or name)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "next_cursor of the previous page",
+          "type": "string"
+        },
+        "from": {
+          "description": "RFC3339 or YYYY-MM-DD, inclusive",
+          "type": "string"
+        },
+        "limit": {
+          "description": "page size (default 50, max 200)",
+          "type": "integer"
+        },
+        "post_id": {
+          "description": "only events about this post",
+          "type": "string"
+        },
+        "schedule_id": {
+          "description": "only events about this schedule",
+          "type": "string"
+        },
+        "to": {
+          "description": "RFC3339 or YYYY-MM-DD, exclusive",
+          "type": "string"
+        },
+        "type": {
+          "description": "exact event type, e.g. post.published",
+          "type": "string"
+        },
+        "type_prefix": {
+          "description": "event type prefix, e.g. post.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_events"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The background queue: publish runs, schedule runs and token refreshes with status (queued, running, done, failed, cancelled), attempts and the last error. Newest first; filter by status or kind.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "publish_post, publish_target, target_timeout, run_schedule or refresh_channel",
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "status": {
+          "description": "queued, running, done, failed or cancelled",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_jobs"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The media library: uploaded pictures, videos and audio, newest first, with how many posts use each (uses). Filter by name (q), kind (image, video, audio), used (used or unused), folder (a folder id or root) and tag; sort created_desc, created_asc, size_desc or name_asc; page with offset and limit (next_offset). Requires media:read.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "deleted": {
+          "description": "list the files in Deleted (with deleted_at and purge_at) instead",
+          "type": "boolean"
+        },
+        "duplicates": {
+          "description": "only files with an identical twin, grouped by content",
+          "type": "boolean"
+        },
+        "folder": {
+          "description": "a folder ID (files directly in it) or root (the top level)",
+          "type": "string"
+        },
+        "kind": {
+          "description": "image, video or audio",
+          "type": "string"
+        },
+        "limit": {
+          "description": "page size (default 60, max 200)",
+          "type": "integer"
+        },
+        "offset": {
+          "description": "next_offset of the previous page",
+          "type": "integer"
+        },
+        "q": {
+          "description": "part of the file name",
+          "type": "string"
+        },
+        "sort": {
+          "description": "created_desc (default), created_asc, size_desc or name_asc",
+          "type": "string"
+        },
+        "tag": {
+          "description": "files carrying this tag",
+          "type": "string"
+        },
+        "used": {
+          "description": "used (posts carry it) or unused",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_media"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The media library's virtual folders (id, parent_id, name, files directly in it), the number of files at the top level and in total, and every file tag with its count. Requires media:read.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_media_folders"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List the cloud plans with their limits and prices.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_plans"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "A post's feedback threads, oldest first: comments reviewers left on its preview pages (name, email) and the team's replies. A thread's first comment has parent_id empty and may mark a passage: quote, the channel's version (channel_id, empty: the shared text), part (0 the post's text, n its n-th comment), where the words are now (anchor_start/anchor_end in UTF-16 units, -1 when gone: text_changed) and resolved_at when resolved.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "list_post_comments"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; sort created_desc lists the newest first.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "posts with a target on this channel",
+          "type": "string"
+        },
+        "collection": {
+          "description": "collection ID or name",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "next_cursor of the previous page",
+          "type": "string"
+        },
+        "limit": {
+          "description": "page size (default 50, max 200)",
+          "type": "integer"
+        },
+        "publish_after": {
+          "description": "RFC3339 or YYYY-MM-DD, inclusive",
+          "type": "string"
+        },
+        "publish_before": {
+          "description": "RFC3339 or YYYY-MM-DD, exclusive",
+          "type": "string"
+        },
+        "sort": {
+          "description": "publish_asc (default), publish_desc, created_desc, created_asc",
+          "type": "string"
+        },
+        "status": {
+          "description": "draft, scheduled, publishing, published or failed",
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_posts"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "A post's preview links (active, expiry, revoked); the links themselves are not shown again.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "list_preview_links"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The platform catalog: every provider staqly can publish to, whether it is available in this build, how it connects (oauth2 in the dashboard, token here with connect_channel, none for your own automation), its limits (characters, media, what it does with links: limits.links and the link_modes a channel may choose) and the per-post settings it takes.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_providers"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "What people's setup asks your automation for: targets on your own automation waiting for report_publish_result (kind target, with the post and the channel) and schedules that found nothing to publish and ask for posts (kind posts; answer by creating draft posts in that collection). Oldest first.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_requested_work"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List a collection's (or every) publishing schedules with their next run.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "collection": {
+          "description": "collection ID or name; empty lists every schedule",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_schedules"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List signed-in dashboard sessions (browser, created, last seen, expiry). Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_sessions"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List the workspace's post tags with how many posts carry each, most used first.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_tags"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List webhook delivery attempts (status, response code, error), newest first. Requires webhooks:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "description": "max deliveries (default 50, max 200)",
+          "type": "integer"
+        },
+        "post_id": {
+          "description": "only deliveries of events about this post (post_...)",
+          "type": "string"
+        },
+        "status": {
+          "description": "pending, succeeded or failed",
+          "type": "string"
+        },
+        "webhook_id": {
+          "description": "only deliveries of this webhook (wh_...)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_webhook_deliveries"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List webhooks with their URL, events, filters and state. Requires webhooks:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_webhooks"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Return a Stripe customer portal URL (payment method, invoices, cancel). Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "open_billing_portal"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Move up to 200 media files to a folder (folder_id; empty = the top level) and/or add and remove tags on them. Requires media:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "add_tags": {
+          "description": "tags to add (lowercase, no #, spaces become dashes)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "folder_id": {
+          "description": "move them to this folder; empty for the top level; omit to leave folders alone",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "ids": {
+          "description": "media IDs (med_...), up to 200",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "remove_tags": {
+          "description": "tags to remove",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    },
+    "name": "organize_media"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "How each target will carry the post: the text per channel (with the channel's links mode applied), the links it removes or defangs (links_found, with a warning naming the channel) and what its provider objects to (too long, missing title...).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "preview_post"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Publish a draft, scheduled or failed post now. Requires posts:publish.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "publish_post"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Delete a post together with its whole history: every event about it (and their webhook deliveries), its media when no other post uses them. For removing personal data; one content-free post.purged event remains. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "purge_post"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Rename the workspace. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "new workspace name",
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "rename_workspace"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Reply to a feedback thread of a post as the team (comment_id: any comment of the thread). Requires posts:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "description": "the reply, up to 2000 characters",
+          "type": "string"
+        },
+        "comment_id": {
+          "description": "a comment of the thread (cmt_...)",
+          "type": "string"
+        },
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id",
+        "comment_id",
+        "body"
+      ],
+      "type": "object"
+    },
+    "name": "reply_to_post_comment"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Your own automation (provider custom) sends the numbers of a post it published, replacing the stored ones. Requires posts:publish.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bookmarks": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "channel_id": {
+          "description": "the custom channel the target is on",
+          "type": "string"
+        },
+        "impressions": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "likes": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "link_clicks": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        },
+        "quotes": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "replies": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "reposts": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "post_id",
+        "channel_id"
+      ],
+      "type": "object"
+    },
+    "name": "report_post_metrics"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Close a target on your own automation (provider custom) that waits for a result: status published with the url (and external_id), or failed with the error. Only for work you did yourself. Requires posts:publish.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "the custom channel the target is on",
+          "type": "string"
+        },
+        "error": {
+          "description": "why it failed",
+          "type": "string"
+        },
+        "external_id": {
+          "description": "the platform's id of the post",
+          "type": "string"
+        },
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        },
+        "status": {
+          "description": "published or failed",
+          "type": "string"
+        },
+        "url": {
+          "description": "where the post lives now",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id",
+        "channel_id",
+        "status"
+      ],
+      "type": "object"
+    },
+    "name": "report_publish_result"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Resolve a feedback thread by its first comment (resolved false reopens it). Requires posts:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "comment_id": {
+          "description": "the thread's first comment (cmt_...)",
+          "type": "string"
+        },
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        },
+        "resolved": {
+          "description": "false reopens a resolved thread; default true",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        }
+      },
+      "required": [
+        "post_id",
+        "comment_id"
+      ],
+      "type": "object"
+    },
+    "name": "resolve_post_comment"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Take a media file out of Deleted, back where it was. Requires posts:delete.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "media_id": {
+          "description": "media ID (med_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "media_id"
+      ],
+      "type": "object"
+    },
+    "name": "restore_media"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Queue a failed job again, now. Requires posts:publish.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "description": "job ID (job_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "type": "object"
+    },
+    "name": "retry_job"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Try a failed target once more, now. Requires posts:publish.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "channel ID (ch_...)",
+          "type": "string"
+        },
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id",
+        "channel_id"
+      ],
+      "type": "object"
+    },
+    "name": "retry_target"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Re-queue a finished (succeeded or failed) webhook delivery. Requires webhooks:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "delivery_id": {
+          "description": "delivery ID (dlv_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "delivery_id"
+      ],
+      "type": "object"
+    },
+    "name": "retry_webhook_delivery"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Revoke an API key; it stops working immediately. Revoking a revoked key is a conflict. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "key_id": {
+          "description": "API key ID (key_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key_id"
+      ],
+      "type": "object"
+    },
+    "name": "revoke_api_key"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Stop a connect link from working; channels already connected through it stay. Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "link_id": {
+          "description": "connect link ID (chl_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "link_id"
+      ],
+      "type": "object"
+    },
+    "name": "revoke_channel_link"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Stop a preview link from working.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        },
+        "preview_id": {
+          "description": "preview link ID (prv_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id",
+        "preview_id"
+      ],
+      "type": "object"
+    },
+    "name": "revoke_preview_link"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Sign out a dashboard session. Revoking a revoked session is a conflict. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "description": "session ID (ses_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "name": "revoke_session"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Replace an API key with a new one (same name and scopes); the old key stops working and the new raw key is returned once. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "key_id": {
+          "description": "API key ID (key_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key_id"
+      ],
+      "type": "object"
+    },
+    "name": "rotate_api_key"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Replace a webhook's signing secret; the new secret is returned once and the old one stops working. Requires webhooks:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "webhook_id": {
+          "description": "webhook ID (wh_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "webhook_id"
+      ],
+      "type": "object"
+    },
+    "name": "rotate_webhook_secret"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Run a schedule now (its regular next run is unchanged). Requires schedules:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "schedule_id": {
+          "description": "schedule ID (sch_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schedule_id"
+      ],
+      "type": "object"
+    },
+    "name": "run_schedule"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Set when a post goes out (RFC3339, in the future) and make it scheduled; the post needs at least one target. Requires posts:publish.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        },
+        "publish_at": {
+          "description": "RFC3339, in the future",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id",
+        "publish_at"
+      ],
+      "type": "object"
+    },
+    "name": "schedule_post"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Find posts whose content contains a text, with the same filters as list_posts.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "posts with a target on this channel",
+          "type": "string"
+        },
+        "collection": {
+          "description": "collection ID or name",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "next_cursor of the previous page",
+          "type": "string"
+        },
+        "limit": {
+          "description": "page size (default 50, max 200)",
+          "type": "integer"
+        },
+        "publish_after": {
+          "description": "RFC3339 or YYYY-MM-DD, inclusive",
+          "type": "string"
+        },
+        "publish_before": {
+          "description": "RFC3339 or YYYY-MM-DD, exclusive",
+          "type": "string"
+        },
+        "query": {
+          "description": "text the content contains",
+          "type": "string"
+        },
+        "sort": {
+          "description": "publish_asc (default), publish_desc, created_desc, created_asc",
+          "type": "string"
+        },
+        "status": {
+          "description": "draft, scheduled, publishing, published or failed",
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "search_posts"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Start a Stripe Checkout for a plan (starter, plus, pro, business; default pro) billed monthly or yearly (interval month or year; default month) and return its URL for a person to open and pay. A workspace that already pays is switched to that plan instead (prorated) and gets the billing page URL. Cloud with billing enabled. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "interval": {
+          "description": "month or year (default month); yearly is 20 percent off or more",
+          "type": "string"
+        },
+        "plan": {
+          "description": "starter, plus, pro or business (default pro)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "start_billing_checkout"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Start a ZIP export of the whole workspace (posts, channels, schedules, media, events). Poll get_workspace_export until status is ready. Requires admin.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "start_workspace_export"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Send a test message through an alert right away. Rate-limited. Requires alerts:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alert_id": {
+          "description": "alert ID (nch_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "alert_id"
+      ],
+      "type": "object"
+    },
+    "name": "test_alert"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Check a channel's stored credentials against its platform. Rate-limited. Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "channel ID (ch_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel_id"
+      ],
+      "type": "object"
+    },
+    "name": "test_channel"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Queue a webhook.test delivery to this webhook only. Rate-limited. Requires webhooks:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "webhook_id": {
+          "description": "webhook ID (wh_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "webhook_id"
+      ],
+      "type": "object"
+    },
+    "name": "test_webhook"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Update an alert's name, config, events, collection filter, digest window or enabled flag. Setting only enabled to its current value is a conflict. Requires alerts:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alert_id": {
+          "description": "alert ID (nch_...)",
+          "type": "string"
+        },
+        "collection_ids": {
+          "description": "only events from these collections (col_...); empty means all",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "config": {
+          "additionalProperties": true,
+          "description": "type-specific settings. slack/discord: webhook_url (or bot_token + channel). telegram: bot_token, chat_id. ntfy: topic, server_url, access_token, priority. email: host, port, username, password, from, to (a list of addresses), tls (starttls, tls or none)",
+          "type": "object"
+        },
+        "digest_window_seconds": {
+          "description": "group messages within this many seconds into one; 0 sends each",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "enabled": {
+          "description": "false pauses the alert",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "events": {
+          "description": "event types to tell about, e.g. [\"post.published\", \"post.failed\"]",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "name": {
+          "description": "new name",
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "alert_id"
+      ],
+      "type": "object"
+    },
+    "name": "update_alert"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Rename a channel, change its default settings (settings replaces them; settings.links = keep, remove or defang sets what the channel does with links in a post, within its provider's link_modes: X allows only remove and defang), turn it off (status disabled) or on (connected), or reconnect a token channel with fresh fields; group_id moves it to another channel group. Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "channel ID (ch_...)",
+          "type": "string"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "token platforms: fresh credential fields to reconnect",
+          "type": "object"
+        },
+        "group_id": {
+          "description": "move the channel to this channel group (grp_...; empty: Default)",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "settings": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "status": {
+          "description": "connected or disabled",
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "channel_id"
+      ],
+      "type": "object"
+    },
+    "name": "update_channel"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Rename a channel group, or change its color or position. Requires channels:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "description": "#rrggbb, or empty",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "group_id": {
+          "description": "channel group ID (grp_...); update only",
+          "type": "string"
+        },
+        "name": {
+          "description": "what to call the group, unique in the workspace",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "position": {
+          "description": "sort order (smaller first; Default always leads)",
+          "type": [
+            "null",
+            "integer"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "update_channel_group"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Update a collection: name, description, icon, colour, the wait for your own automation's result (processing_timeout_seconds), or archive/unarchive it (archiving an archived collection, or unarchiving an active one, is a conflict). Requires collections:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "archived": {
+          "description": "true archives, false unarchives",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "collection": {
+          "description": "collection ID (col_...) or exact name",
+          "type": "string"
+        },
+        "color": {
+          "description": "accent colour, e.g. #7c3aed",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "description": {
+          "description": "new description",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "icon": {
+          "description": "icon name",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "description": "new name",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "processing_timeout_seconds": {
+          "description": "how long a post on your own automation waits for a reported result before it fails, 60-86400 seconds, or null for the server default"
+        }
+      },
+      "required": [
+        "collection"
+      ],
+      "type": "object"
+    },
+    "name": "update_collection"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Rename a media file, set its alt text (a description for people who can't see it; platforms that take alt text receive it), or set a video's width, height and duration_ms. Requires media:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alt_text": {
+          "description": "alt text, up to 1500 characters; empty clears it",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "duration_ms": {
+          "description": "a video's length in milliseconds",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "folder_id": {
+          "description": "move the file: a folder ID, or empty for the top level",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "height": {
+          "description": "pixels",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "media_id": {
+          "description": "the media ID",
+          "type": "string"
+        },
+        "name": {
+          "description": "new file name",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tags": {
+          "description": "replace the file's tags",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "width": {
+          "description": "pixels",
+          "type": [
+            "null",
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "media_id"
+      ],
+      "type": "object"
+    },
+    "name": "update_media"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Rename a media library folder or move it under another folder (parent_id; empty = the top level). A folder can't go inside itself. Requires media:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "folder_id": {
+          "description": "the folder ID",
+          "type": "string"
+        },
+        "name": {
+          "description": "the new name",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "parent_id": {
+          "description": "move it into this folder; empty for the top level",
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "folder_id"
+      ],
+      "type": "object"
+    },
+    "name": "update_media_folder"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (null clears), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. Requires posts:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "collection": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "content": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "expected_version": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "external_ref": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "media": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        },
+        "publish_at": {
+          "description": "RFC3339 in the future, or null to clear"
+        },
+        "repeat_every": {
+          "description": "1d to 6d, 1w, 2w or 1mo; an empty string stops repeating",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "targets": {
+          "description": "replaces the whole list",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "channel_id": {
+                "description": "channel ID (ch_...)",
+                "type": "string"
+              },
+              "content": {
+                "description": "text for this channel instead of the post's content",
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "settings": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "the provider's settings_fields by key (title, subreddit, visibility...)",
+                "type": "object"
+              }
+            },
+            "required": [
+              "channel_id"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "thread": {
+          "description": "replaces the replies; [] clears them",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "content": {
+                "description": "the reply's text",
+                "type": "string"
+              },
+              "delay_seconds": {
+                "description": "wait this long after the part before (0 to 86400)",
+                "type": "integer"
+              },
+              "media": {
+                "description": "media IDs (med_...)",
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "update_post"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Change a schedule (any field of create_schedule, enabled true/false); next_run_at is recomputed. Requires schedules:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "description": "channel IDs the chosen posts go to (a post's own targets win)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "enabled": {
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "endpoint_secret": {
+          "description": "signs the request like a webhook; generated when empty",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "endpoint_url": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "description": "once or recurring",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "pick": {
+          "description": "next (oldest waiting draft), selected (post_ids) or all",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "post_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "rule": {
+          "additionalProperties": false,
+          "description": "recurring: times (HH:MM) with optional weekdays (0 Sunday to 6 Saturday) and tz (IANA), or every_minutes",
+          "properties": {
+            "every_minutes": {
+              "type": "integer"
+            },
+            "times": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "tz": {
+              "type": "string"
+            },
+            "weekdays": {
+              "items": {
+                "type": "integer"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            }
+          },
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "run_at": {
+          "description": "once: RFC3339 in the future",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "schedule_id": {
+          "description": "schedule ID (sch_...)",
+          "type": "string"
+        },
+        "source": {
+          "description": "when nothing waits: none, agent (emit schedule.posts_requested) or endpoint (POST to endpoint_url)",
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "schedule_id"
+      ],
+      "type": "object"
+    },
+    "name": "update_schedule"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Update a webhook's URL, description, events, collection filter, active flag, timeout or retry count. Setting only active to its current value is a conflict. Requires webhooks:manage.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "description": "false pauses deliveries",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "collection_ids": {
+          "description": "only events from these collections (col_...); empty sends all",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "description": {
+          "description": "what the receiver does, shown in the dashboard",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "events": {
+          "description": "event types to send, e.g. [\"item.approved\"]; [\"*\"] (default) sends all",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "max_attempts": {
+          "description": "delivery attempts before giving up",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "timeout_ms": {
+          "description": "per-attempt timeout in milliseconds",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "url": {
+          "description": "new receiver URL",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "webhook_id": {
+          "description": "webhook ID (wh_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "webhook_id"
+      ],
+      "type": "object"
+    },
+    "name": "update_webhook"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Upload a file (base64); returns a media ID to put in a post's media list. Requires media:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "filename": {
+          "description": "file name including the extension, e.g. avatar.png",
+          "type": "string"
+        },
+        "media_base64": {
+          "description": "base64-encoded picture, video or audio file",
+          "type": "string"
+        }
+      },
+      "required": [
+        "media_base64",
+        "filename"
+      ],
+      "type": "object"
+    },
+    "name": "upload_media"
+  }
+]

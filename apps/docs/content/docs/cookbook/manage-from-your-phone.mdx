@@ -1,0 +1,87 @@
+---
+title: Manage from your phone
+description: Connect your phone to a staqly running on your laptop and check the calendar, move a post or publish one from anywhere on your Wi-Fi.
+---
+
+Your agents write posts overnight; you want to glance at tomorrow's calendar over breakfast,
+drag one post to the afternoon and publish another right away, from your phone. Connect the
+phone once with a QR code; no key to type.
+
+## What you need
+
+- Staqly running on a computer with `staqly serve --expose` or the Docker image, so the
+  dashboard is reachable on your network.
+- A phone on the same Wi-Fi.
+
+## Set it up
+
+<Steps>
+<Step>
+
+### Find your computer's LAN address
+
+`ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux), for example `192.168.1.23`.
+
+</Step>
+<Step>
+
+### Open the dashboard to your network
+
+```bash tab="Binary"
+PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080 staqly serve --expose
+```
+
+```bash tab="Docker"
+# add to your docker run command
+-e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080
+```
+
+With `--expose` the QR code uses your Wi-Fi address on its own; `PUBLIC_DASHBOARD_URL` pins it
+for every browser and makes [alert](/automation/alerts) links open on the phone too.
+
+</Step>
+<Step>
+
+### Sign in on your computer
+
+An exposed dashboard asks every browser to sign in once, this computer's included: run
+`staqly serve connect-link` (or `docker exec staqly server connect-link`) and open the link.
+
+</Step>
+<Step>
+
+### Show the QR code and scan it
+
+**Settings → Devices → Connect a device**, or the command palette (<Kbd>⌘</Kbd> <Kbd>K</Kbd>).
+Scan the QR code with the phone's camera; staqly opens signed in.
+
+</Step>
+<Step>
+
+### Use it
+
+The **Schedule** tab shows the calendar as a list by day. Tap a post to open it: **Publish
+now**, **Reschedule**, **Edit**. **Posts** writes a new one; **Channels** says when an account
+needs reconnecting.
+
+</Step>
+</Steps>
+
+## How it works
+
+The QR code carries a one-time link (`/connect#<token>`): it works once, expires after five
+minutes and gives the phone its own 30-day session, listed under **Settings → Devices** where you
+can revoke it. The API itself stays on `127.0.0.1`: the phone talks to the dashboard, which
+proxies `/api/*`. Details: [Phones & tablets](/dashboard/phones-and-tablets).
+
+## Troubleshooting
+
+- **The phone can't open the link**: check that `PUBLIC_DASHBOARD_URL` uses the LAN IP (not
+  `localhost`), that the dashboard is exposed, and that no firewall blocks port 8080.
+- **"Already used or expired"**: create a new QR code; each link signs in one browser.
+- **Alert links open nothing**: set `PUBLIC_DASHBOARD_URL`, which the links are built from.
+
+## Reference
+
+- [Phones & tablets](/dashboard/phones-and-tablets)
+- [Local vs cloud](/local-vs-cloud#signing-in-to-an-exposed-dashboard)

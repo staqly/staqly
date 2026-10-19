@@ -1,0 +1,82 @@
+---
+title: Developer apps
+description: Register your own OAuth app with a platform so staqly can connect accounts on it, locally or on your own cloud instance.
+---
+
+Platforms with `auth: oauth2` (X, LinkedIn, Mastodon, Threads and the others) let an
+application act for an account only after the person signs in at the platform and allows it.
+The application is a **developer app** registered with the platform: a client id and a client
+secret. Someone has to provide one before a channel on that platform can be connected.
+
+<Callout title="Available today: X">
+[X](/channels/x) is the first available OAuth platform; its page lists exactly what to register.
+The other OAuth platforms are `soon`: the catalog lists them and the composer knows their limits,
+and this page already describes how their apps will work.
+</Callout>
+
+## Where the app goes
+
+One app per platform and server, in the server's environment (`.env`), locally and in the cloud:
+`PROVIDER_<ID>_CLIENT_ID` and `PROVIDER_<ID>_CLIENT_SECRET`, for example `PROVIDER_X_CLIENT_ID`.
+Restart the server after changing them. Every workspace on the server connects its accounts
+through that app. How they reach the server:
+
+- **Docker**: a file passed with `docker run --env-file .env` (or `-e NAME=value`).
+- **Binary**: exported in your shell before `staqly serve`, or before `staqly service install`,
+  which keeps `PROVIDER_*` settings in the service.
+
+```bash title=".env"
+PROVIDER_X_ENABLED=true
+PROVIDER_X_CLIENT_ID=your-oauth2-client-id
+PROVIDER_X_CLIENT_SECRET=your-oauth2-client-secret
+```
+
+`PROVIDER_<ID>_ENABLED` (default `true`, every platform has one, including `PROVIDER_CUSTOM_ENABLED`)
+turns a platform off on this server when `false`: it leaves the catalog and the dashboard, and
+connecting it or a new post on one of its channels answers `409 provider_disabled`. Posts that
+already target its channels still publish as planned. Enabled but without its app's keys, an OAuth
+platform is listed as `soon`.
+`.env.example` has a block for every platform.
+
+`GET /v1/providers` reports `app_configured` per provider (status `soon` while it is false). Starting an OAuth flow without an app
+answers `409 app_not_configured`; starting it for a `soon` provider answers `409 provider_soon`.
+`PUT /v1/providers/{id}/app` can still save a workspace's own app over the API (stored sealed,
+never returned; it wins over the server's), but the dashboard does not ask for one.
+
+## Register an app
+
+The steps on the platform's developer portal differ, but every one asks for the same two things:
+
+1. **The redirect (callback) URL.** Staqly's is the dashboard's
+   `<origin>/channels/callback/<provider>`, for example
+   `http://localhost:8080/channels/callback/mastodon` on a local install or
+   `https://staqly.example.com/channels/callback/mastodon` on a cloud one. Register both when one
+   app serves your development and production servers (most portals take several). The platform sends the browser back here with a code; the page
+   hands it to the API, which creates the channel. [Connect links](/channels/connect-links) use
+   the same URL, so nothing needs registering for them.
+2. **The permissions (scopes)** the app asks for: reading the profile and publishing posts.
+   Each platform's page lists them when the provider becomes available.
+
+Then put the client id and secret in the server's environment as above.
+
+## How the connection flow runs
+
+1. **Connect with ...** calls `GET /v1/channels/oauth/{provider}/start` (scope
+   `channels:manage`). The API answers the platform's authorization URL; the state in it is
+   signed and bound to this browser with a short-lived cookie. Extra query parameters are passed
+   to the provider: a Mastodon-style platform takes `instance`, the server to sign in at.
+2. The browser goes to the platform, the person allows access, and the platform redirects to the
+   dashboard's `/channels/callback/{provider}` page.
+3. That page hands `code` and `state` to `GET /v1/channels/oauth/{provider}/callback`, which
+   exchanges the code, reads the account's profile, seals the tokens and creates the channel,
+   or **reconnects** the existing channel of the same account. It redirects back with
+   `?channel=<id>`, or `?error=<message>` when the platform refused.
+4. A `refresh_channel` job refreshes the tokens before they expire; a failed refresh marks the
+   channel **Needs reconnect**, which repeats this flow.
+
+## Next steps
+
+<Cards>
+  <Card title="Channels" href="/channels">The catalog and how each platform connects.</Card>
+  <Card title="Configuration" href="/self-hosting/configuration#channels-and-secrets">`PROVIDER_<ID>_CLIENT_ID`, `STAQLY_SECRET_KEY`.</Card>
+</Cards>

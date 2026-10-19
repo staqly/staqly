@@ -1,0 +1,69 @@
+---
+title: Connect links
+description: Send a link so a client or a colleague without access to Staqly can connect their account to your workspace.
+---
+
+A connect link lets someone who doesn't use Staqly connect a channel for you: a client's
+Instagram, a colleague's X account. They open the link, pick the platform, sign in there and
+the channel appears in your workspace. They get no session and see nothing else: not your
+posts, not your other channels.
+
+## Make a link
+
+1. Open **Channels** and click the **link** icon next to **Add channel** (*Invite someone to
+   connect a channel*).
+2. Optionally fill in:
+   - **Note for them**: shown on the link's page, e.g. *For ACME's Instagram*.
+   - **Platforms**: only these are offered. Leave it on *Any platform* to offer every platform
+     this server can connect. [Your own automation](/channels/your-own-automation) is never
+     offered through a link.
+   - **Group**: the [channel group](/channels#channel-groups) connected channels join, e.g. that
+     client's group. *Default* if you leave it.
+   - **Works for**: 24 hours, 3 days, 7 days (the default) or 30 days.
+   - **Connects**: one channel (the default) or up to 3, 5, 10 or 50.
+3. Click **Make link** and copy it. The link is shown only once; Staqly keeps only a hash of it.
+
+The same dialog lists your open links with how many uses are left, when they end and who made
+them. **Revoke** stops a link at once; channels already connected through it stay.
+
+## What the other person sees
+
+The link opens a page on your dashboard's address (`/add-channel`) with your workspace's name,
+your note and the platforms you allowed:
+
+- **Platforms that sign in with OAuth** (X today): they go to the platform, allow Staqly to post
+  for your workspace and come back to *Connected @handle to \{workspace\}. You can close this page.*
+- **Platforms that take a token** (a bot token, an app password): they enter it on the page.
+
+A link that expired, was revoked or used up says so, and asks them to get a new one.
+
+## On your side
+
+- The channel shows up on **Channels** like any other, in the group you chose. Activity shows
+  it as *Connected via link* (with your note), and the notification bell says *connected through
+  a link*. Webhooks receive the usual [`channel.connected`](/api/events) event.
+- Your plan's channel limit applies: if the workspace is full, the page tells them the channel
+  could not be added and the use is not spent.
+- Connecting an account that is already a channel here reconnects that channel instead of adding
+  a second one.
+
+## Security
+
+- The token is in the link's fragment (after `#`), so it never reaches server logs, proxies or
+  other sites. Only its hash is stored. API paths that carry it are redacted in request logs.
+- The OAuth sign-in is bound to the link (signed state) and to the browser that started it; a
+  team member's sign-in and a link's can't finish each other.
+- The public routes are rate-limited per address (60 per 10 minutes) and the page isn't indexed.
+- Making links needs `channels:manage`, the scope that connects channels directly. An API key
+  with it may make links too, so an agency's onboarding automation can send them.
+- Nothing about the platform's app changes: the callback URL is still your dashboard's
+  `/channels/callback/<provider>` ([Developer apps](/channels/developer-apps)).
+
+## API, MCP and CLI
+
+| | |
+|---|---|
+| REST | `POST /v1/channel-links`, `GET /v1/channel-links`, `DELETE /v1/channel-links/{id}`; the page uses the public `/v1/connect-links/{token}` routes |
+| MCP | `create_channel_link`, `list_channel_links`, `revoke_channel_link` |
+| CLI | `staqly channels links create --note "For ACME" --platforms x --group ACME`, `links list`, `links revoke` |
+| SDKs | `channels.createLink()`, `links()`, `revokeLink()` (TypeScript); `channels.create_link()`, `links()`, `revoke_link()` (Python) |

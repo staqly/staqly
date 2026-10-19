@@ -1,0 +1,237 @@
+---
+title: Billing with Stripe
+description: Let cloud workspaces pay for Starter, Plus, Pro or Business by card, monthly or yearly, with Stripe Checkout and the customer portal.
+---
+
+In cloud mode, Staqly can sell its [plans](/plans) through Stripe. The account owner picks a plan
+and a billing period (monthly, or yearly at 20 % off or more), pays on Stripe's checkout page, and the
+workspace moves to that plan as soon as Stripe confirms the payment. Without Stripe settings,
+billing stays off and you change plans with [`set-plan`](/self-hosting/operator-cli).
+
+With billing on, a new cloud workspace has **no plan** (read-only) until its owner starts a
+subscription: Starter's checkout starts **Stripe's 7-day trial with a card required**
+(`subscription_data[trial_period_days]=7`, `payment_method_collection=always`, cancelled if no card
+is on file when it ends), once per workspace and to one workspace of an account at a time (a workspace
+added while another of the account is trialing is charged at once; `GET /v1/billing` → `trial`); Plus,
+Pro and Business are charged at once. Switching to another workspace and adding one stay possible from a
+read-only workspace. Without
+billing (a cloud server without Stripe), a new workspace gets a 7-day trial of `TRIAL_PLAN`
+(Starter by default) with no card, run by the server; test servers set `TRIAL_PLAN=pro`. When a plan
+ends unpaid the workspace becomes read-only until a plan is paid for (or set by the operator). `GET /v1/setup` reports `billing_enabled`, and the dashboard words its pricing by it.
+
+Local installs have no plans and no billing.
+
+## Set it up
+
+<Steps>
+<Step>
+
+### Create the prices with your own Stripe account
+
+In your Stripe account (test mode first), create one product per plan and one recurring price per
+plan and billing period: eight prices in all. Prices are **per seat** (Stripe's "per unit"
+pricing, with the per-user amount below): Staqly sets each subscription's quantity to the
+workspace's members. Give each price a **lookup key**: Staqly finds the
+price by it, so no price ids go into its settings.
+
+| Plan | Monthly price per user, lookup key | Yearly price per user, lookup key |
+|---|---|---|
+| Starter | €15 / month, `staqly_starter_month` | €144 / year, `staqly_starter_year` |
+| Plus | €29 / month, `staqly_plus_month` | €276 / year, `staqly_plus_year` |
+| Pro | €59 / month, `staqly_pro_month` | €564 / year, `staqly_pro_year` |
+| Business | €99 / month, `staqly_business_month` | €948 / year, `staqly_business_year` |
+
+Also set the metadata `staqly_plan` (`starter`, `plus`, `pro` or `business`) and `staqly_unit`
+(`seat`) on each price, so a subscription changed in Stripe itself still maps back to its plan. The lookup key works for that
+too. Don't add a trial to the prices: Starter's checkout asks for it. Prices are in **euros** and
+**tax exclusive** (`tax_behavior=exclusive`): with Stripe Tax on, Checkout collects the billing
+address and tax ID and adds VAT (`automatic_tax[enabled]=true`). A price's tax behaviour can't
+change; a new one replaces it like an amount.
+
+**Extra posts to X** are one-time prices with the lookup keys `staqly_credits_x_200`,
+`staqly_credits_x_1000` and `staqly_credits_x_4000` (€10, €40, €150; metadata `staqly_kind=credits`,
+`staqly_provider=x`, `staqly_posts`). `POST /v1/billing/credits/checkout` opens a one-time Checkout;
+the webhook's `checkout.session.completed` (mode `payment`) adds the posts once per session, expiring
+at the end of the billing period.
+
+Prices can't change their amount in Stripe. To change one, create a new price, move the lookup key
+to it (Stripe's "transfer lookup key") and archive the old price; existing subscriptions keep the
+old price until they switch plans. Staqly caches a looked-up price for 10 minutes.
+
+**Seats.** The checkout starts the subscription with one seat per member. When someone accepts an
+invitation, leaves or is removed, Staqly queues a job that sets the subscription item's quantity to
+the member count, prorated from the moment the membership changed (`proration_date`):
+
+- A person added mid-period is charged at once for the rest of the period
+  (`proration_behavior=always_invoice`). Waiting for the next invoice would leave that charge
+  unpaid when a subscription is cancelled at the period's end.
+- A person removed mid-period is credited for the unused rest on the next invoice
+  (`create_prorations`).
+- Added and removed in the same period, the charge and the credit net to the days they were a
+  member. Changes made seconds apart, before the job runs, are coalesced: the job sets the
+  absolute member count and prorates from the latest change.
+- During the Starter trial nothing is prorated; the first invoice uses the seats at the trial's
+  end. Yearly plans prorate the same way over the year.
+
+A webhook reporting another quantity (changed in Stripe) queues the same job, which puts it back,
+so turn off "customers can update quantities" in the Stripe customer portal settings. Open
+invitations are not billed.
+
+**Prices shown.** With billing on, the plan list (the dashboard's plan picker, the Billing page,
+`GET /v1/plans` and MCP) shows the amounts Stripe charges, read from the prices by lookup key and
+cached for 10 minutes. A price Stripe doesn't have, an amount that isn't whole dollars, or a Stripe
+that can't be reached falls back to the built-in amounts.
+
+A `STRIPE_PRICE_*` value that isn't a price id (such as the `price_...` placeholder) is ignored, and a
+pinned price Stripe doesn't have is retried once with the lookup key; leave them unset normally.
+
+Instead of lookup keys, you can give the price ids:
+`STRIPE_PRICE_<STARTER|PLUS|PRO|BUSINESS>_<MONTHLY|YEARLY>=price_...` (a set id wins over the
+lookup key).
+
+</Step>
+<Step>
+
+### Add the webhook endpoint
+
+Under **Developers → Webhooks**, add an endpoint:
+
+- URL: `https://staqly.example.com/v1/billing/webhook` (your `PUBLIC_API_URL`)
+- Events: `checkout.session.completed`, `customer.subscription.created`,
+  `customer.subscription.updated`, `customer.subscription.deleted`,
+  `entitlements.active_entitlement_summary.updated` (add-ons and per-customer features)
+
+Copy its signing secret (`whsec_` followed by random characters).
+
+</Step>
+<Step>
+
+### Configure staqly
+
+```bash title=".env"
+STRIPE_SECRET_KEY=sk_test_51ExampleKey
+STRIPE_WEBHOOK_SECRET=whsec_from_the_stripe_webhook_endpoint
+PUBLIC_DASHBOARD_URL=https://staqly.example.com   # Stripe sends people back here (make cloud sets it from STAQLY_DOMAIN)
+```
+
+Billing is on only in cloud mode (`STAQLY_MODE=cloud`) and only when both `STRIPE_` variables are
+set. A plan and period whose price isn't found answers `409 not_available` at checkout. Restart
+Staqly (`make cloud` again recreates the container with the new `.env`).
+
+After checkout or the portal, Stripe sends people back to the **Billing** page:
+`PUBLIC_DASHBOARD_URL` (else `PUBLIC_API_URL`) + `/settings/billing`, with `?checkout=success` or
+`?checkout=canceled` after checkout and `?checkout=switched` after a plan switch.
+
+</Step>
+<Step>
+
+### Turn on the customer portal
+
+In Stripe, under **Settings → Billing → Customer portal**, allow customers to update payment
+methods, see invoices and cancel. **Manage subscription** in the dashboard opens this portal.
+Plan switches go through Staqly's plan picker, so the portal doesn't need to offer them (if it
+does, list the eight prices there; Staqly maps them back by lookup key or metadata).
+
+</Step>
+</Steps>
+
+### Test locally
+
+The development stack (`make dev`, see
+[Docker Compose](/self-hosting/docker-compose#development-stack)) has an opt-in Stripe CLI
+container that forwards test-mode events to the API. Put this in `.env` in the repository root:
+
+```bash title=".env"
+STAQLY_MODE=cloud
+STRIPE_SECRET_KEY=sk_test_51ExampleKey
+COMPOSE_PROFILES=stripe
+```
+
+Then print the signing secret of the Stripe CLI, add it as `STRIPE_WEBHOOK_SECRET` and start the
+stack:
+
+```bash
+make stripe-secret                  # prints whsec_..., put it in .env as STRIPE_WEBHOOK_SECRET
+make dev
+```
+
+Without Docker, run the Stripe CLI yourself and use the secret it prints:
+
+```bash
+stripe listen --forward-to localhost:3333/v1/billing/webhook
+```
+
+## How plans follow the subscription
+
+| Stripe subscription status | Workspace plan |
+|---|---|
+| `active`, `trialing` | The plan of the subscription's price until the end of the paid period plus 3 days of grace |
+| `past_due` (a renewal failed) | Unchanged until the previously paid end plus grace; then read-only |
+| `canceled`, `unpaid`, `incomplete_expired`, `paused` | The plan ends now: the workspace is read-only until it pays again |
+| `incomplete` (first payment pending) | Unchanged |
+
+- Staqly reads `checkout.session.completed` and `customer.subscription.created`, `.updated`,
+  `.deleted`, `.paused` and `.resumed`. Other event types are acknowledged and ignored.
+- Each Stripe event is applied once, even when Stripe retries it.
+- When a workspace replaced its subscription, the old one ending doesn't touch the new one.
+- Every change is recorded in the activity log as `workspace.plan_changed` with
+  `reason: "stripe:<status>"`.
+- A suspended workspace can still open Checkout or the portal to pay.
+- A workspace with a live subscription that picks another plan or period is switched
+  (`proration_behavior=create_prorations`): Stripe charges or credits the difference.
+- Deleting a workspace cancels its subscription right away.
+
+## Add-ons and one customer's features (Stripe Entitlements)
+
+The plans in the server are the baseline. On top of them, a workspace gets whatever its Stripe subscription
+grants through [Stripe Entitlements](https://docs.stripe.com/billing/entitlements): each product on the
+subscription (the plan, an add-on, a deal) carries features, and a feature's metadata says what it does:
+
+| Feature metadata | Effect |
+|---|---|
+| `staqly_limit_<limit>` = `+10` | Adds to a limit: `channels`, `alerts`, `webhooks`, `api_keys`, `posts_per_month`, `x_posts_per_period`, `storage_gb`, `max_upload_mb` |
+| `staqly_limit_<limit>` = `unlimited` | Lifts the limit |
+| `staqly_enable` = `data_export` | Turns backups and full exports on |
+
+- Deltas from several features add up; a limit a plan has unlimited stays unlimited; unknown keys are ignored.
+- The server stores the active features on the workspace and applies them in every limit check. It reads
+  them from Stripe after `entitlements.active_entitlement_summary.updated` and after every subscription event,
+  in a background job, so a request never waits on Stripe.
+- Without billing (no Stripe keys) nothing grants features and the plans apply as they are.
+- The workspace's plan (<Method m="GET" path="/v1/workspace/usage" /> and the Billing page) shows the effective
+  limits, the plan's own (`base_limits`) and what each feature added (`limit_bonuses`), e.g. "Channels 25
+  (15 + 10 from Channels pack)".
+
+**Add-ons.** A product with metadata `staqly_kind=addon` and `staqly_addon=<id>`, whose prices carry the lookup
+keys `staqly_addon_<id>_month` and `staqly_addon_<id>_year` (per workspace, quantity 1), is offered on the
+Billing page. Adding one puts it on the live subscription as an item of its own in the subscription's
+interval, charged at once for the rest of the period (`always_invoice`) with the card on file; removing it
+credits the unused rest on the next invoice. A workspace needs a plan first.
+
+**One customer's deal**, without a release:
+
+1. In the Stripe Dashboard, create a product for the deal (or reuse an add-on), with a recurring price in the
+   subscription's interval (zero for a gift).
+2. On the product, **Features → Add feature**: pick one (for example `channels_extra_10`) or create one with
+   the metadata above.
+3. Open the customer → their subscription → **Update subscription → Add product** → that price, quantity 1.
+
+The workspace's limits change within seconds, when Stripe reports the new features.
+
+## API
+
+| Endpoint | Description |
+|---|---|
+| <Method m="GET" path="/v1/billing" /> | Billing status: `enabled`, `plan`, `subscription_status`, `plan_expires_at`, `suspended`, `has_customer` |
+| <Method m="POST" path="/v1/billing/checkout" /> | Body `{"plan": "plus", "interval": "year"}` (defaults: `pro`, `month`). Answers `{"url": "https://checkout.stripe.com/c/pay/cs_test_a1b2c3"}` to open and pay, or, for a paying workspace, the switched billing page URL |
+| <Method m="POST" path="/v1/billing/portal" /> | URL of the Stripe customer portal |
+| <Method m="GET" path="/v1/billing/addons" /> | Add-ons on sale (with monthly and yearly prices) and which the workspace has |
+| <Method m="POST" path="/v1/billing/addons/{id}" /> | Adds an add-on to the live subscription (`204`); `409` without a plan or when it's already there |
+| <Method m="DELETE" path="/v1/billing/addons/{id}" /> | Removes it (`204`) |
+| <Method m="POST" path="/v1/billing/webhook" /> | Called by Stripe, verified with `Stripe-Signature` |
+
+The first three need an admin key or a dashboard session; checkout and the portal need the account
+owner in an account workspace. When billing is off, checkout and
+portal answer `409 not_available`; the portal answers `409 conflict` until the workspace has
+started a checkout once. A bad `Stripe-Signature` gets `400`. See the
+[API reference](/api/reference) for the full schemas.

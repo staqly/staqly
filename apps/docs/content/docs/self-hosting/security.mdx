@@ -1,0 +1,195 @@
+---
+title: Security model
+description: Understand who can reach your staqly, how channel credentials and other secrets are stored, and what keeps a drafting agent from publishing.
+---
+
+This page explains the protections built into staqly: what is reachable from the network, why
+local mode is safe without keys, how credentials are stored, and how publishing stays under control. Read it
+before you expose the dashboard to your network, run cloud mode, or give an agent an API key.
+You don't need to configure anything for these defaults to apply.
+
+## Network exposure
+
+| Port | Binary (`staqly serve`) | Docker image |
+|---|---|---|
+| **API + MCP** (`3333`) | `127.0.0.1` only | Published on `127.0.0.1` only |
+| **Dashboard** (`8080`) | `127.0.0.1` only, no sign-in; with `--expose` on all interfaces and every browser signs in | Published on all interfaces; every browser signs in (`DASHBOARD_EXPOSED=true`) |
+
+- The API is never reachable from the network. Cloud setups put a reverse proxy in front.
+- Whenever the dashboard is reachable from other devices, it requires a session for **every**
+  browser, including on this computer — see [Phones & tablets](/dashboard/phones-and-tablets).
+
+## Local mode without keys
+
+Credential-less requests are accepted only when:
+
+- the TCP peer is loopback or inside `LOCAL_TRUSTED_PEERS` (the [`docker run` command](/self-hosting/docker)
+  sets the private ranges because Docker forwards published ports from its bridge network; the
+  binary trusts loopback only),
+- the `Host` header is a local name (defeats DNS rebinding),
+- any `Origin` is the dashboard's own origin or listed in `LOCAL_ALLOWED_ORIGINS` (defeats
+  cross-site requests from websites you visit, including pages on other localhost ports),
+- and the request doesn't come through an exposed dashboard.
+
+Every local process has full access — for per-agent permissions run cloud mode on localhost.
+Details: [Authentication](/api/authentication#local-mode-no-credentials).
+
+## Secrets
+
+| Secret | Stored as |
+|---|---|
+| API keys `stk_...` (256-bit) | SHA-256 hash + 6-character display prefix |
+| Session tokens (256-bit) | SHA-256 hash; HttpOnly, SameSite=Lax cookie, `Secure` by default in cloud mode (`COOKIE_SECURE`) |
+| Recovery keys (200-bit) | SHA-256 hash |
+| Device-link tokens | SHA-256 hash; 5-minute, single-use, carried in the URL fragment |
+| Webhook secrets | **Plain text** — needed to sign deliveries. Returned in full only when created or rotated, masked (`whsec_****x7qa`) everywhere else. Protect the data volume. |
+
+High-entropy random secrets make a plain SHA-256 an adequate verifier. Raw keys are shown
+once, and responses that carry a secret are never stored for
+[`Idempotency-Key`](/api/idempotency) replay. Logs never contain headers, query strings,
+bodies, keys or tokens — see [Logs & tracing](/self-hosting/logs-and-tracing).
+
+Using or rotating the recovery key — from the dashboard or with the
+[`recovery-key` operator command](/self-hosting/operator-cli) on the host — signs out every
+other session of the workspace. A recovery key works once: signing in with it replaces it with
+a new one and creates a new admin API key, in one transaction. On a plan with a key limit (Starter, Plus),
+the old admin keys are revoked at the same time, so a lost key stops working.
+
+## Dashboard sign-in (cloud)
+
+- People sign in with Google (OpenID Connect with state, nonce and PKCE), with an email code, or
+  both. The ID token's
+  signature, issuer, audience, expiry and nonce are verified, and the person is identified by
+  their Google account ID, never merged by email address. Staqly keeps no Google tokens. The
+  sign-in state rides in a short-lived, sealed, HttpOnly cookie, and the redirect after sign-in
+  only goes to a path on the dashboard.
+- Every sign-in creates a new session. A person's role is read on every request, so a demotion
+  or removal applies at once; removal also ends their sessions in that workspace and turns off
+  the API keys they created. See [Accounts, workspaces and roles](/self-hosting/accounts).
+- Email codes have 6 digits, are stored only as hashes, work once for 10 minutes and end after
+  five wrong tries (each try is counted before the comparison, so parallel guesses cannot exceed
+  it). Sending is limited per address (one every 30 seconds, five an hour) and per client IP, and
+  the answer never says whether an address has an account. An email identity and a Google identity
+  with the same address are never merged; only the signed-in person links them, after proving
+  the second method, and a method that signs in someone else is refused.
+- Changing the email sign-in address needs a code to the current address and then one to the new
+  address; codes for signing in, adding an address and changing one are kept apart, so none
+  does the job of another. The old address is told about the change.
+- Passkeys (WebAuthn) are discoverable credentials bound to the host of `PUBLIC_DASHBOARD_URL`;
+  only the origin of that address is accepted. Each challenge is stored server-side, works once
+  (also when the answer is refused) and expires after 5 minutes. Staqly keeps the public key and
+  sign counter, and refuses a passkey whose counter goes backwards. Passkey sign-ins are limited
+  per client IP (30 per 10 minutes).
+- Invitation links are single-use, expire after 7 days, are stored only as hashes and work only
+  for a person who proved the invited address (an email code, or Google's verified address).
+- Without Google or mail configured, a cloud server refuses to start. `AUTH_DEV_SIGNIN=true`
+  (development only) turns on email codes without mail, shows the last code per address to tests,
+  and keeps the older sign-in described next.
+- Older sign-in, for workspaces without an account and development servers: browsers sign in with an API key that has the `admin` scope (`POST /v1/sessions/api-key`,
+  the key in the body). Agent keys without `admin` get `403` and can never open the dashboard,
+  so a leaked agent key does not give access to key management or the recovery key.
+- The sign-in, email code, recovery, device-link redeem and signup endpoints are rate-limited per client IP
+  (`RATE_LIMIT_PER_MINUTE`, default 10 per minute).
+- Each sign-in is an audit event: `session.signed_in` (the actor is the API key) and
+  `session.recovered`. Adding, changing and removing a sign-in method are audit events too
+  (`sign_in_method.*`). See [Events](/api/events#audit-events).
+
+## Least privilege
+
+- API keys are scoped. Writing content (`posts:write`) is separate from publishing it
+  (`posts:publish`), so a drafting agent cannot put a word on your channels; the schedules you
+  set, a person or a publisher key do.
+- Deleting is separate from writing: `posts:delete` (posts and media) and
+  `collections:delete` are never implied by `posts:write` or `collections:write`, so an agent
+  that creates content cannot wipe it. Purging a post with its history stays `admin`.
+- The key created at signup is the workspace's admin key (it signs in to the dashboard). Give
+  agents separate keys without `admin`, and grant `channels:manage` and `alerts:manage` (they
+  hold credentials and secrets) only where needed.
+- REST and MCP call the **same** domain services, which check scopes themselves; no transport
+  can bypass authorization. Every query is scoped by workspace.
+- Cookie-authenticated unsafe requests need a CSRF token. `/mcp` never accepts cookies.
+- Credential audit events (`api_key.*`, `session.*`, `recovery_key.*`, `device.*`,
+  `device_link.*`) are listed and exported (`/v1/events/export`) only for admins (dashboard
+  sessions, local mode, keys with `admin`).
+
+## Channel credentials
+
+- Platform tokens, app passwords and developer app client secrets are **sealed** with
+  AES-256-GCM before they reach the database. The key lives in `DATA_DIR/secret.key` (created on
+  first start, mode 0600) or comes from `STAQLY_SECRET_KEY`; without it stored credentials cannot
+  be read and every channel has to be reconnected, so back it up with the database.
+- No API response, MCP tool, export or log ever contains a credential or a client secret, not
+  even for an admin. `GET /v1/channels` returns the account's handle and picture; `fields` on
+  `POST`/`PATCH /v1/channels` are write-only.
+- OAuth flows start from the API with a signed `state` bound to the browser by a short-lived
+  cookie; the callback refuses a state that belongs to another connection or has expired, so a
+  captured redirect cannot attach an account to someone else's workspace.
+- Platforms are called from the server's job worker, never from the browser; a channel whose
+  credentials stop working is marked `needs_reconnect` and its targets fail instead of being
+  retried with the dead token.
+- A published post is read-only and a target already published on a channel cannot be
+  removed from the post, so what went out stays on record (`post.target_published` with the
+  platform's URL and id).
+
+## Uploads
+
+Types are sniffed from content against an allowlist; **SVG and HTML are refused**. Files are
+served only after authorization, with `nosniff`, a sandboxing Content-Security-Policy and the
+stored MIME type. Files reach platforms only when a post that carries them is published.
+
+## Dashboard
+
+- Every page is served with a Content-Security-Policy (`default-src 'self'`, no plugins, no
+  framing, `form-action 'self'`), `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `nosniff` and a restrictive `Permissions-Policy`.
+- **Media previews** come from staqly's own thumbnails, never from a third-party URL.
+
+## Alerts
+
+Alert secrets (bot tokens, webhook URLs, SMTP passwords) are encrypted at rest with
+`NOTIFY_SECRET_KEY` or `DATA_DIR/notify_secret.key`, masked in every response and never logged.
+Messages carry the post's text escaped for each target and a link to the post in the dashboard;
+nothing in a message can change a post. Details: [Alerts](/automation/alerts#security).
+
+## Workspace deletion and export
+
+Deleting a workspace requires a signed-in dashboard session — API keys get `403` even with
+`admin`. Exports never include API keys, sessions or the recovery key, and webhook secrets are
+redacted. See [Data export & privacy](/self-hosting/data-export).
+
+## Backups
+
+Backups contain secrets: webhook signing secrets in plain text, hashed keys and sessions, the
+encrypted channel secrets and `notify_secret.key`, which decrypts them. Keep them owner-only
+(the commands in the backup guide run with `umask 077`). With the binary, the data directory is created owner-only (`0700`). See [Backup & restore](/self-hosting/backup-and-restore).
+
+## Containers
+
+The documented `docker run` command (and `compose.yml`) runs the `staqly` container with a read-only root
+filesystem, no Linux capabilities, `no-new-privileges` and memory / process limits, as a non-root user
+(uid 10001). The API port is published on `127.0.0.1` only. See
+[Run with Docker](/self-hosting/docker#what-the-flags-do).
+
+## Outbound requests
+
+- **Webhooks**: the IP policy is enforced on the resolved address at connect time; link-local
+  (cloud metadata), multicast, unspecified and reserved addresses are always blocked, and IPv6
+  forms that embed an IPv4 address are checked as that address. Private targets are allowed
+  by default only in local mode; loopback is off by default; redirects are not followed. In
+  cloud mode response bodies are not stored.
+- **Alerts**: public internet only by default in both modes
+  (`NOTIFY_ALLOW_PRIVATE=false`); cloud metadata and link-local addresses are always blocked.
+- **Schedule endpoints** follow the webhook policy (`WEBHOOK_ALLOW_PRIVATE`, `WEBHOOK_ALLOW_LOOPBACK`),
+  loopback and link-local always refused, every redirect hop re-checked, `robots.txt`
+  respected, size and time limits. Fetched content is marked `untrusted` — agents are told to
+  treat it as data, never instructions.
+- **Publishing** calls each platform's API from the job worker with the channel's sealed
+  credentials; the post's text and media are sent to that platform and nowhere else.
+
+## Next steps
+
+<Cards>
+  <Card title="Authentication" href="/api/authentication">API keys, scopes and sessions.</Card>
+  <Card title="Cloud deployment" href="/self-hosting/cloud-deployment">Run staqly for a team.</Card>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Back up safely, secrets included.</Card>
+</Cards>

@@ -1,0 +1,223 @@
+---
+title: Troubleshooting
+description: Find the cause and the fix for common staqly errors, from startup failures to webhook and sign-in problems.
+---
+
+Look up the error or symptom you see below; each entry says what it means and how to fix it.
+Where the fix differs, it covers both the binary (`staqly serve`) and the Docker image. If your
+problem isn't here, [check the logs](#check-the-logs) for the request's `request_id`.
+
+## Common problems
+
+<Accordions type="multiple">
+<Accordion title="403 not_local">
+Local mode refused a credential-less request; the message says which check failed.
+
+- **Peer:** only loopback and the networks in `LOCAL_TRUSTED_PEERS` get keyless access.
+  The [`docker run` command](/self-hosting/docker) sets the private ranges; `staqly serve` (or `go run ./cmd/server`) listens on
+  `127.0.0.1:3333` and trusts loopback only. Another machine on your LAN should use
+  a QR session (or cloud mode with API keys) rather than widening `LOCAL_TRUSTED_PEERS`.
+- **Host:** use `localhost` / `127.0.0.1`, `api` or `host.docker.internal`, or add your host name to
+  `LOCAL_ALLOWED_HOSTS`.
+- **Origin:** browsers are accepted only from the dashboard (`localhost`, `127.0.0.1` or
+  `[::1]` on `DASHBOARD_PORT`, the origin of `PUBLIC_DASHBOARD_URL`). A browser tool on another port (e.g.
+  the MCP Inspector) needs its origin in `LOCAL_ALLOWED_ORIGINS`. Pages from other sites are
+  refused on purpose.
+- **Dashboard:** a browser that isn't signed in to an exposed dashboard. Sign in with a link
+  from `staqly serve connect-link` / `docker exec staqly server connect-link` or a QR code.
+</Accordion>
+<Accordion title="Staqly refuses to start: config: <reason>">
+Invalid settings stop `staqly serve` or the `staqly` container instead of falling back silently: `STAQLY_MODE` must be
+`local` or `cloud`; `LOCAL_TRUSTED_PEERS` entries must be CIDRs or IP addresses;
+`NOTIFY_SECRET_KEY` must be at least 32 bytes (`openssl rand -hex 32`), `STAQLY_SECRET_KEY` 32 bytes base64 (`openssl rand -base64 32`); `LOG_LEVEL` must be
+`debug`, `info`, `warn` or `error` and `LOG_FORMAT` `json` or `text`.
+</Accordion>
+<Accordion title="503 unavailable on post lists">
+A listing ran longer than 5 seconds. Add filters (collection, status, channel, dates). See
+[Pagination & search](/api/pagination-and-search).
+</Accordion>
+<Accordion title="409 post_changed when editing a post">
+The `expected_version` you sent is older than the post's `version`: someone (a person in the
+dashboard, another agent) edited it meanwhile. Reload the post and apply your change again.
+</Accordion>
+<Accordion title="A platform shows Soon, or 409 app_not_configured / provider_soon / provider_disabled">
+- **Soon** on an OAuth platform such as X, or `app_not_configured`: the server has no developer
+  app for it. Register one with the platform and put its keys in the server's environment
+  (`PROVIDER_X_CLIENT_ID`, `PROVIDER_X_CLIENT_SECRET` in `.env`), then restart
+  ([Developer apps](/channels/developer-apps)).
+- `provider_soon`: the platform is in the catalog but not available in this build yet.
+- `provider_disabled`, or the platform is missing from **Add channel**: it is turned off with
+  `PROVIDER_<ID>_ENABLED=false`. Posts already scheduled on its channels still go out; new ones
+  are refused.
+</Accordion>
+<Accordion title="A channel shows Needs reconnect">
+A publish, a test or a token refresh failed with the stored credentials; the row shows the
+platform's error. **Reconnect** in the row's menu: OAuth platforms go through the platform again,
+token platforms take fresh credentials. Targets on the channel fail until then. If the error says
+the stored credentials cannot be read, `secret.key` (or `STAQLY_SECRET_KEY`) changed: restore the
+old key from your backup, or reconnect every channel.
+</Accordion>
+<Accordion title="A post stays Publishing">
+A target on your own automation waits for a reported result; the post shows how long it has
+waited of the collection's limit. Check that your webhook receiver got `post.publish_requested`
+(**Webhooks** → deliveries) or poll `GET /v1/work`, then report with
+`POST /v1/posts/{id}/targets/{channel}/result`. Nothing reported within the limit fails the
+target with *No result reported in time*. For a platform channel, look at **Settings → System →
+Queue** for a failed job and its error.
+</Accordion>
+<Accordion title="422: must be re-entered when the URL or host changes (alert)">
+Changing where an alert sends requires re-entering its secret in the same request. See
+[Alerts](/automation/alerts#managing-alerts).
+</Accordion>
+<Accordion title="422 validation_failed: unknown event pattern (webhook or alert)">
+Webhook and alert subscriptions must name events staqly knows: `*`, a family glob such as
+`post.*`, or an event type from [Events](/api/events). A typo like `post.publised` or `posts.*`,
+or a custom event such as `post.shipped`, is refused instead of never matching.
+The error lists the valid event types of that family (or the families), so you can pick the right one.
+</Accordion>
+<Accordion title="429 from a webhook, alert or channel Send test button">
+Test sends are limited per API key or session: a burst of 5, then 10 per minute.
+</Accordion>
+<Accordion title="The dashboard asks me to connect this device">
+The dashboard is reachable from your network (Docker, or `staqly serve --expose`), so every
+browser signs in once. Binary: run `staqly serve connect-link` and open the printed link.
+Docker: run `docker exec staqly server connect-link` and open the printed link.
+Links expire after 5 minutes and work once.
+</Accordion>
+<Accordion title="Phone: the dashboard or QR link doesn't open">
+The phone must reach your computer's LAN address. Binary: start with `staqly serve --expose`
+(without it the dashboard only listens on `127.0.0.1`); the QR code then uses your Wi-Fi address.
+Docker: type your computer's Wi-Fi address in the Connect a device dialog, or set
+`-e PUBLIC_DASHBOARD_URL=http://192.168.1.23:8080` (see [Run with Docker](/self-hosting/docker#settings)).
+In both cases the phone must be on the same network and port 8080 must not be blocked by a firewall.
+See [Phones & tablets](/dashboard/phones-and-tablets).
+</Accordion>
+<Accordion title="402 plan_limit_exceeded (cloud)">
+The workspace hit a plan limit; `error.details.limit` says which. See **Settings → Plan &
+usage**. The operator can upgrade with `docker exec staqly server set-plan ws_4uvnnzgy5vvpo4hnqnco pro`
+(or `staqly serve set-plan ws_4uvnnzgy5vvpo4hnqnco pro`).
+</Accordion>
+<Accordion title="429 rate_limited when signing up (cloud)">
+Sign-ups and codes are limited per IP. Behind a reverse proxy set `TRUST_PROXY=true`, otherwise all
+users share the proxy's IP.
+</Accordion>
+<Accordion title="The login page appears but I never set up (cloud)">
+New people choose **Create an account** (`/signup`) and sign up with Google or an email code;
+returning people sign in on `/login`. See [Accounts](/self-hosting/accounts). The dashboard has no
+API key sign-in: a workspace without an account (for example one imported from a local install)
+is given to an account with [`attach-workspace`](/self-hosting/operator-cli#give-a-workspace-to-an-account).
+</Accordion>
+<Accordion title="Email code: 401 code_invalid, 410 code_expired or 429 code_cooldown">
+- `code_invalid`: a wrong code; the message says how many tries are left (5 per code).
+- `code_expired`: the code is older than 10 minutes, was used, was replaced by a newer one or had
+  too many wrong tries. Ask for a new one.
+- `code_cooldown` / `rate_limited`: one code per address every 30 seconds and 5 per hour; wait the
+  seconds in `Retry-After`.
+- No email arrives: check `MAIL_SMTP_*` and `MAIL_FROM`; a mail error answers `503 mail_failed`.
+</Accordion>
+<Accordion title="Passkeys: no Add passkey button, or 409 passkeys_disabled">
+Passkeys need `PUBLIC_DASHBOARD_URL` set to the address people open, and a browser that supports
+them. A passkey works only on that address: after a domain change, add passkeys again.
+`401 passkey_cloned` means the passkey's counter went backwards; remove it and add it again.
+</Accordion>
+<Accordion title="Recovery key: 409 people in an account recover access with their sign-in methods">
+Workspaces in an account have no recovery key: sign in with Google, an email code or a passkey
+instead. The recovery key below is for cloud workspaces created before accounts.
+</Accordion>
+<Accordion title="An imported workspace (or one from before accounts) can't be opened">
+On a server where people sign in with Google, an email code or a passkey, a workspace without an
+account has nobody with a role in it. Give it to its owner on the host:
+`docker exec staqly server attach-workspace ws_4uvnnzgy5vvpo4hnqnco ana@example.com`, then open the
+printed invitation link and sign in as that address. See
+[Give a workspace to an account](/self-hosting/operator-cli#give-a-workspace-to-an-account).
+</Accordion>
+<Accordion title="403 sign_in_with_account">
+The workspace belongs to an account, so an API key or a recovery key doesn't open the dashboard:
+sign in with the methods the message names (Google, an email code or a passkey). API keys keep
+working for agents and scripts.
+</Accordion>
+<Accordion title="401 invalid recovery key (cloud)">
+Each recovery key works once: after a recovery the old key is replaced by the new one the
+dashboard showed you. Use the newest recovery key, or get a fresh one with the operator command
+below.
+</Accordion>
+<Accordion title="No way into a workspace without an account (cloud)">
+The dashboard signs people in with Google, an email code or a passkey only. Give the workspace to
+an account on the host: `docker exec staqly server attach-workspace ws_4uvnnzgy5vvpo4hnqnco ana@example.com`,
+then open the printed link and sign in as that address. See
+[Give a workspace to an account](/self-hosting/operator-cli#give-a-workspace-to-an-account).
+</Accordion>
+<Accordion title="403 csrf_failed from scripts">
+You are sending a session cookie. Scripts should use `Authorization: Bearer stk_...` (no
+CSRF needed).
+</Accordion>
+<Accordion title="403 forbidden: missing required scope">
+The API key lacks a scope. Create a key with the right scopes under **Integrations → API keys**. Keep `admin` off agent keys. In an account, a key never does more than its creator's current role, so a demoted creator narrows their keys too.
+</Accordion>
+<Accordion title="Webhook deliveries fail: private / loopback destination is not allowed">
+Adjust `WEBHOOK_ALLOW_PRIVATE` / `WEBHOOK_ALLOW_LOOPBACK`. `WEBHOOK_ALLOW_PRIVATE` defaults to
+`true` in local mode and `false` in cloud mode. In cloud mode the delivery log keeps only the
+status code and a short reason, never the response body. With the binary, a receiver on the
+same computer (`localhost`) needs `WEBHOOK_ALLOW_LOOPBACK=true`. Inside Docker, `localhost` is
+the `staqly` container itself — use `host.docker.internal` or a container name on a shared Docker network (see
+[n8n networking](/integrations/n8n#networking-pick-your-setup)).
+</Accordion>
+<Accordion title="Webhook deliveries: connection refused from n8n on the host (Linux)">
+Make n8n listen on all interfaces (or the Docker bridge) and use
+`http://host.docker.internal:5678/webhook/staqly`. On Linux the container needs
+`--add-host host.docker.internal:host-gateway` in `docker run` (`compose.yml` sets it).
+</Accordion>
+<Accordion title="n8n Code node: Cannot find module 'crypto'">
+Set `NODE_FUNCTION_ALLOW_BUILTIN=crypto` on n8n (the example `integrations/n8n/compose.yml`
+does). The demo workflow needs it: its **Verify & parse** node fails closed and rejects every
+event until the secret is set.
+</Accordion>
+<Accordion title="MCP STDIO prints nothing / exits (Docker)">
+STDIO runs inside the `staqly` container; with the binary, connect agents over HTTP
+(`http://localhost:3333/mcp`) instead. Don't pass `-t` to `docker exec`. In cloud mode forward the key
+(`docker exec -i -e STAQLY_API_KEY staqly mcp-stdio`). Run `docker exec -i staqly mcp-stdio` by hand —
+errors go to stderr.
+</Accordion>
+<Accordion title="Port already in use">
+Another program (or a second staqly) uses port 3333 or 8080. Binary: start with other ports,
+e.g. `staqly serve --port 4333 --dashboard-port 9090`. Docker: recreate the container with other
+host ports (`-p 127.0.0.1:4333:3333 -p 9090:8080 -e PUBLIC_API_URL=http://localhost:4333 -e DASHBOARD_PORT=9090`,
+see [Other ports](/self-hosting/docker#other-ports)). In both cases update your MCP client
+URLs. Don't run the binary and the Docker setup at the same time on the default ports.
+</Accordion>
+<Accordion title="Upload rejected with 415">
+Only pictures (PNG, JPEG, GIF, WebP, AVIF), videos (MP4, WebM, MOV) and audio (MP3, WAV, OGG, M4A)
+are accepted; documents and archives are not media, and SVG and HTML are refused because they can
+carry script. Raise the size limit with
+`MAX_UPLOAD_MB`.
+</Accordion>
+<Accordion title="database is locked">
+Shouldn't happen with the bundled configuration (immediate transactions and a 10 s busy
+timeout). Make sure only one staqly server (`staqly serve` or the `server` process) uses a
+data directory.
+</Accordion>
+</Accordions>
+
+## Check the logs
+
+```bash tab="Binary"
+staqly serve                         # logs appear in this terminal
+staqly service logs -f              # when it runs in the background (staqly service install)
+```
+
+```bash tab="Docker"
+docker logs -f staqly
+```
+
+Text with the binary, JSON lines with Docker (change with `LOG_FORMAT`; `LOG_LEVEL=debug` for more); request
+paths are logged, headers and query strings are not. Find everything about one failed request
+by the `request_id` (or `trace_id`) from the error body — see
+[Logs & tracing](/self-hosting/logs-and-tracing).
+
+## Next steps
+
+<Cards>
+  <Card title="Logs & tracing" href="/self-hosting/logs-and-tracing">Log fields and following one request.</Card>
+  <Card title="Configuration" href="/self-hosting/configuration">Every setting and its default.</Card>
+  <Card title="Errors" href="/api/errors">API error codes.</Card>
+</Cards>

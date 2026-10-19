@@ -1,0 +1,121 @@
+@import 'tailwindcss';
+@import '@staqly/brand/tokens.css';
+@import '@staqly/brand/site.css';
+
+/*
+ * staqly identity: brand tokens and the hero/button helpers come from @staqly/brand (packages/brand);
+ * the site is dark only (`dark` on <html>), so these are the dark graphite neutrals.
+ */
+:root {
+  --background: oklch(0.165 0.006 265);
+  --foreground: oklch(0.955 0.004 260);
+  --card: oklch(0.195 0.007 265);
+  --muted: oklch(0.225 0.008 265);
+  --muted-foreground: oklch(0.7 0.012 262);
+  --accent: oklch(0.255 0.009 265);
+  --border: oklch(1 0 0 / 9%);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-accent: var(--accent);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: 'cv11', 'ss01';
+  overflow-x: clip;
+}
+
+/* Brand focus ring for keyboard users instead of the browser's blue; none after a mouse click. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in oklch, var(--brand) 22%, transparent);
+}
+
+/* Terminal playback (components/terminal.tsx): lines fade in at --d, commands type over --t.
+   Paused until the block scrolls into view ([data-run]); shown at once without motion or JS. */
+.sq-term-line {
+  opacity: 0;
+  animation: sq-line-in 1ms linear var(--d) forwards paused;
+}
+.sq-type {
+  display: inline-block;
+  max-width: 0;
+  overflow: hidden;
+  vertical-align: bottom;
+  white-space: pre;
+  animation: sq-type var(--t) steps(var(--n), end) var(--d) forwards paused;
+}
+.sq-term[data-run] :is(.sq-term-line, .sq-type) {
+  animation-play-state: running;
+}
+.sq-caret {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  vertical-align: text-bottom;
+  background: var(--brand);
+  animation: sq-blink 1s steps(1) infinite;
+}
+@keyframes sq-line-in {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sq-type {
+  to {
+    max-width: calc(var(--n) * 1ch);
+  }
+}
+@media (prefers-reduced-motion: reduce), (scripting: none) {
+  .sq-term-line {
+    opacity: 1;
+    animation: none;
+  }
+  .sq-type {
+    max-width: none;
+    animation: none;
+  }
+  .sq-caret {
+    animation: none;
+  }
+}
+
+/* The rotating tool preview (components/tool-preview.tsx): the active tab fills until the next tool shows. */
+.sq-tab-progress {
+  transform: scaleX(0);
+  animation: sq-fill linear forwards;
+}
+@keyframes sq-fill {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Closing banner: a dot matrix fading out on every side. */
+.sq-dot-grid {
+  background-image: radial-gradient(color-mix(in oklch, var(--foreground) 16%, transparent) 1px, transparent 1.5px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 50% 60% at 50% 50%, #000 30%, transparent 100%);
+}

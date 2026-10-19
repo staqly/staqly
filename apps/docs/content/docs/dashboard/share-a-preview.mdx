@@ -1,0 +1,72 @@
+---
+title: Share a preview
+description: Send a link that shows a post as each channel will, and collect comments from people who don't use Staqly.
+---
+
+Anyone with a preview link sees the post as each of its channels will show it and can leave a
+comment there. They don't need an account or to sign in. Use it to get a client's or a
+teammate's view before a post goes out, or to show what went out.
+
+## Make a link
+
+1. Open the post and click the **eye** icon (**Preview and feedback**).
+2. Pick when the link expires (**Never**, **In 1 day**, **In 7 days**, **In 30 days**) and click
+   **Create link**.
+3. Copy the link and send it. It is shown only now; make a new one if you lose it.
+
+**Revoke** next to a link stops it at once. Every post can have several links, each with its own
+expiry, so you can stop one person's link without the others.
+
+Over the API: `POST /v1/posts/{id}/previews` with `expires_in_days` (0 to 365, 0 never) answers
+the `url` once; `GET .../previews` lists them without their tokens and
+`DELETE .../previews/{preview}` revokes one. Agents use the MCP tools `create_preview_link`,
+`list_preview_links` and `revoke_preview_link`, and the CLI has `staqly posts share <id>`.
+
+## What the preview shows
+
+- Each channel's version of the post: the account's picture, name and handle, the text that
+  channel gets (its own version if you wrote one, links handled as the channel does), the
+  pictures and videos, and the comments that go out under it.
+- Whether the post is a draft, scheduled (with its time) or published, and a link to it on each
+  platform once it is out.
+- The comment threads so far, with names but never emails.
+
+The link's token sits after `#` in the address, so it doesn't reach server logs or other sites.
+
+## Comments
+
+Reviewers can comment on the whole post or on a passage:
+
+- **On a passage:** select words in a channel's version (the post's text or one of the comments
+  under it) and choose **Comment** next to the selection, or press **Ctrl+Alt+M**
+  (**Cmd+Option+M** on a Mac). The words stay marked in the post; clicking them opens their
+  comment, and hovering a comment marks its words.
+- **General:** write in the comment box without selecting anything.
+
+The first time, the page asks for a name (an email is optional and only your team sees it). It
+remembers both in that browser.
+
+Comments are threads, like in a shared document: anyone with the link can **Reply**, **Resolve**
+a thread or **Reopen** it. Resolved threads fold into **Resolved** and their words are no longer
+marked. If the post's text changes, a marked passage follows its words; when the words are gone,
+the comment shows **Text changed** with the words it was about. The page refreshes every 30
+seconds, so several reviewers see each other's comments.
+
+Your team sees the same threads under **Preview and feedback** on the post (the eye icon counts
+the open ones), replies as itself, resolves and removes comments (removing a thread's first
+comment removes its replies). New reviewer comments also show up in the notifications bell, in
+Activity as **Feedback on a preview**, and as the `post.feedback_added` event for webhooks.
+
+A link takes up to 30 comments an hour, and one address up to 20 comments or changes every 10
+minutes.
+
+Over the API: `GET /v1/posts/{id}/comments` (with emails), `POST .../comments` (a reply with
+`parent_id`, or a new thread with `quote`, `channel_id`, `part` and `anchor_start`/`anchor_end`),
+`POST .../comments/{comment}/resolve` and `.../reopen`, `DELETE .../comments/{comment}`. Agents
+use the MCP tools `list_post_comments`, `reply_to_post_comment` and `resolve_post_comment`; the
+CLI has `staqly posts comments <id>`.
+
+## Local installs
+
+A local install serves the preview on its dashboard address. A phone or another computer opens
+it only when it can reach that address on your network, like the dashboard itself.

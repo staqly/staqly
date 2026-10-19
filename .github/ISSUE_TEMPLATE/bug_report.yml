@@ -1,0 +1,75 @@
+name: Bug report
+description: Something in staqly doesn't work as documented
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. **Security issues:** please don't open a public issue — see [SECURITY.md](https://github.com/staqly/staqly/blob/main/SECURITY.md).
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched [existing issues](https://github.com/staqly/staqly/issues) and this is not a duplicate
+          required: true
+        - label: I checked the [troubleshooting guide](https://docs.staqly.ai/self-hosting/troubleshooting)
+          required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. Include error messages and the `request_id` from error responses if you have one.
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Connect a channel "..." and write a post "..."
+        2. `curl -X POST http://localhost:3333/v1/...`
+        3. See error
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations: { required: true }
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options: [Dashboard, REST API, MCP (Claude Code / Codex / OpenCode / other), Channels and platforms, Schedules, Publishing queue, Webhooks, Alerts, CLI, SDK (TypeScript), SDK (Python), n8n integration, Docker / self-hosting, Docs]
+    validations: { required: true }
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options: [Local (default), Cloud (STAQLY_MODE=cloud)]
+    validations: { required: true }
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Versions help a lot. `staqly status` prints most of this; `curl -s localhost:3333/health` shows the API version.
+      value: |
+        - staqly version / commit:
+        - How you run it: (staqly serve / docker run of the image / make dev or make cloud / other)
+        - OS + Docker version:
+        - Browser (dashboard bugs):
+        - Agent / client (MCP bugs): (Claude Code x.y, Codex x.y, OpenCode x.y, ...)
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and diagnostics
+      description: |
+        Relevant output of `docker logs --tail=100 staqly` (or `staqly service logs`) and `curl -s localhost:3333/readyz`.
+        Logs never contain API keys, but please double-check and redact anything sensitive.
+      render: shell
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Screenshots, payloads, anything else.

@@ -1,0 +1,87 @@
+---
+title: Media storage
+description: Keep uploaded pictures and videos on the server's disk or in any S3-compatible bucket (AWS S3, Cloudflare R2, MaxIOFS), and move existing files between them.
+---
+
+Everything people upload (pictures, videos, files) and the thumbnails made from them live in one
+place, picked with `STORAGE_DRIVER`:
+
+| `STORAGE_DRIVER` | Where files live | For |
+|---|---|---|
+| `disk` (default) | `UPLOAD_DIR`, by default `uploads/` in the data directory | The binary, a single Docker container, a single cloud server |
+| `s3` | An S3-compatible bucket | Cloud servers, several servers sharing files, storage that grows without a bigger disk |
+
+Nothing else changes: the dashboard, the API, MCP and the SDKs work the same with either.
+
+## Use a bucket
+
+Set these in `.env` (or the container's environment) and restart:
+
+```bash title=".env"
+STORAGE_DRIVER=s3
+S3_ENDPOINT=https://s3.eu-central-1.amazonaws.com
+S3_REGION=eu-central-1
+S3_BUCKET=my-staqly-media
+S3_ACCESS_KEY_ID=AKIA...
+S3_SECRET_ACCESS_KEY=...
+```
+
+The server checks the bucket on start and refuses to run when a setting is missing or the bucket
+can't be reached, with the reason in the log. A missing bucket is created only with
+`S3_CREATE_BUCKET=true`.
+
+| Provider | `S3_ENDPOINT` | Notes |
+|---|---|---|
+| AWS S3 | `https://s3.<region>.amazonaws.com` | Set `S3_REGION` to the bucket's region. |
+| Cloudflare R2 | `https://<account id>.r2.cloudflarestorage.com` | `S3_REGION=auto`. No egress fees, which helps: platforms download every published file. |
+| MaxIOFS, MinIO, Garage, SeaweedFS | `http://<host>:<port>` | Set `S3_FORCE_PATH_STYLE=true`. |
+
+`S3_PREFIX` keeps staqly's files in a folder of a shared bucket (`staqly/`).
+
+The access key needs to read, write, delete and list objects in the bucket (on AWS:
+`s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket`), plus `s3:CreateBucket` if you
+use `S3_CREATE_BUCKET`. The bucket can stay private.
+
+## How files reach people and platforms
+
+- **The dashboard and the API** stream files from the bucket themselves, with the same access checks
+  as on disk: a file is found through its workspace first, never by its name in the bucket. Video
+  seeking works (ranged reads), and the bucket needs no CORS settings.
+- **Platforms that download media themselves** get a signed link to the bucket that works for two
+  hours. With `S3_PUBLIC_URL` (a CDN in front of a public bucket) they get a plain link there instead.
+- **Thumbnails** are made on first use and kept in the bucket under `thumbs/`.
+
+## Move existing files into a bucket
+
+Switching a server from disk to a bucket doesn't move its files by itself. Copy them with:
+
+```bash
+docker exec staqly server storage migrate --dry-run   # what would be copied
+docker exec staqly server storage migrate             # copy UPLOAD_DIR into the bucket
+```
+
+Run it with the new `STORAGE_DRIVER=s3` settings in place. Files already in the bucket are skipped,
+so a run that stopped half way continues where it left off, and running it twice copies nothing.
+`--from <folder>` copies another folder, for example the uploads of a backup. The files on disk
+stay where they are until you delete them.
+
+When you move a local install to a cloud server with
+[`server import-sqlite`](/self-hosting/operator-cli), pass its uploads folder too:
+
+```bash
+server import-sqlite --uploads /old/data/uploads /old/data/workspace.db
+```
+
+## Backups
+
+With `disk`, the uploads folder is part of the data directory you back up (see
+[Backup & restore](/self-hosting/backup-and-restore)). With `s3`, the database backup no longer
+contains the files: protect the bucket with your provider's tools (versioning, replication or a
+lifecycle copy to a second bucket). The workspace export with files (`POST /v1/workspace/export`)
+reads them from the bucket either way.
+
+## Development
+
+The development stack (`make dev`) runs [MaxIOFS](https://github.com/MaxIOFS/MaxIOFS) and keeps
+media there, so the bucket path is the one you test every day. See
+[Docker Compose](/self-hosting/docker-compose#development-stack).

@@ -1,0 +1,277 @@
+---
+title: Alerts
+description: Get a message on Telegram, Slack, Discord, ntfy or email when a post goes out or fails, when a channel needs reconnecting or when a schedule asks for new posts.
+---
+
+Alerts tell **a person** what happened. When a post is published or fails, when a channel's
+sign-in stops working or when a schedule finds nothing to publish, staqly sends a message to
+your phone or team chat with a link to the post in the dashboard.
+
+Alerts belong to the workspace and go to one place for everyone. Each person in a cloud account
+also has [their own notifications](/dashboard/notifications) (email and the bell) for their posts.
+
+Use a [webhook](/automation/webhooks) instead when **code** should react to an event, and a
+channel on [your own automation](/channels/your-own-automation) when your tool should do the
+publishing.
+
+| Type | Delivery |
+|---|---|
+| `telegram` | Bot API message (images uploaded as photos) |
+| `slack` | Incoming webhook or `chat.postMessage` (Block Kit) |
+| `discord` | Channel webhook (images attached) or a bot message |
+| `ntfy` | ntfy publish (ntfy.sh or self-hosted); tapping the notification opens the post |
+| `email` | SMTP (STARTTLS by default), HTML + text |
+
+Messages are built from the event: *Published: v1.4 is out.* with the channels and the link
+to the published post, *Publish failed* with the channel's error, *Channel needs
+reconnecting*, *Posts wanted* for a schedule that asks your agent. **Open in dashboard** links
+point at `PUBLIC_DASHBOARD_URL` (`<PUBLIC_DASHBOARD_URL>/posts/{id}`), so set it when you read
+alerts on another device.
+
+## Setting up your first alert
+
+ntfy is the quickest to try: it needs no account. Install the
+[ntfy app](https://ntfy.sh) on your phone first.
+
+<Steps>
+<Step>
+
+### Create the alert
+
+<Tabs items={["Dashboard", "curl"]}>
+<Tab value="Dashboard">
+
+Open **Alerts** in the sidebar (under Automation, next to Webhooks) and click **New alert**.
+Pick the type, fill in its settings and save. The form includes a setup guide for each type.
+
+</Tab>
+<Tab value="curl">
+
+```bash
+curl -s -X POST http://localhost:3333/v1/alerts \
+  -H 'Content-Type: application/json' -d '{
+  "name": "My phone",
+  "type": "ntfy",
+  "config": { "topic": "staqly-7f3k9q2", "server_url": "https://ntfy.sh" },
+  "events": ["post.published", "post.failed", "channel.needs_reconnect"],
+  "collection_ids": [],
+  "digest_window_seconds": 0
+}'
+```
+
+Use a long, random topic name: on ntfy.sh anyone who knows it can read it.
+
+</Tab>
+</Tabs>
+
+</Step>
+<Step>
+
+### Subscribe on your phone
+
+In the ntfy app, subscribe to the same topic (`staqly-7f3k9q2` in the example). For other
+types, follow the setup for [Telegram](#telegram), [Slack](#slack), [Discord](#discord) or
+[email](#email-smtp) below.
+
+</Step>
+<Step>
+
+### Send a test message
+
+Click **Send test** on the alert, or call `POST /v1/alerts/{id}/test`. The response is
+`{"ok": true}` or `{"ok": false, "error": "Bad Request: chat not found"}`.
+
+</Step>
+<Step>
+
+### Publish something
+
+Publish a post (or let a schedule do it). The message arrives when the post is published or
+fails; tap it to open the post.
+
+</Step>
+</Steps>
+
+## Telegram
+
+<Steps>
+<Step>
+
+### Create a bot
+
+In Telegram, open **@BotFather**, send `/newbot`, choose a name and copy the **bot token**
+(`123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`).
+
+</Step>
+<Step>
+
+### Start a chat with it
+
+Open a chat with your new bot and send `/start`. For a group, add the bot to the group.
+
+</Step>
+<Step>
+
+### Find your chat ID
+
+Open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and read
+`message.chat.id` (a group's ID is negative).
+
+</Step>
+<Step>
+
+### Create the Telegram alert
+
+```json
+{ "name": "Telegram", "type": "telegram", "config": { "bot_token": "123456789:AA...", "chat_id": "123456789" } }
+```
+
+</Step>
+</Steps>
+
+A Telegram alert only sends messages. To **publish** to a Telegram channel, connect it as a
+[channel](/channels) (provider `telegram`) instead; the same bot token works for both.
+
+## Slack
+
+Create an app at api.slack.com/apps, enable **Incoming Webhooks**, choose *Add New Webhook to
+Workspace*, pick a channel and copy the URL:
+
+```json
+{ "name": "Slack", "type": "slack", "config": { "webhook_url": "https://hooks.slack.com/services/YOUR/WEBHOOK/PATH" } }
+```
+
+Instead of a webhook you can use `bot_token` (`xoxb-` token, scope `chat:write`) plus
+`channel` (a channel ID).
+
+## Discord
+
+Create a channel webhook (*Server Settings → Integrations → Webhooks → New Webhook*):
+
+```json
+{ "name": "Discord", "type": "discord", "config": { "webhook_url": "https://discord.com/api/webhooks/123456789012345678/your-webhook-token" } }
+```
+
+Messages are embeds with the post's text and link; images are attached; `@everyone` and other
+mentions are neutralized. A bot works too: `bot_token` plus `channel`.
+
+## ntfy
+
+```json
+{ "name": "Phone", "type": "ntfy",
+  "config": { "topic": "staqly-7f3k9q2", "server_url": "https://ntfy.sh", "access_token": "tk_...", "priority": 4 } }
+```
+
+Install the ntfy app and subscribe to the topic. Tapping the notification opens the post in
+the dashboard.
+
+<Callout type="warn">
+On ntfy.sh **anyone who knows the topic name can read it**. Use a long random topic, or a
+protected topic with an `access_token` (sent as `Authorization: Bearer`).
+</Callout>
+
+## Email (SMTP)
+
+```json
+{ "name": "Team mail", "type": "email",
+  "config": { "host": "smtp.example.com", "port": 587, "username": "apikey", "password": "smtp-password",
+              "from": "staqly <bot@example.com>", "to": ["team@example.com"], "tls": "starttls" } }
+```
+
+`tls` is `starttls` (default, port 587, required), `tls` (implicit TLS, port 465) or `none`
+(plaintext, only for a trusted local relay; credentials are never sent over plaintext except
+to localhost). Messages are multipart text + HTML with a dashboard link; up to 20 recipients.
+
+## Managing alerts
+
+Alerts can be managed in the dashboard (**Alerts** in the sidebar) or with the API.
+
+In the dashboard each alert card shows its health (*Active*, *Paused*, *Failing* or *Disabled
+after failures*), its type and destination, the events it tells about, the digest window and
+when it last sent. The switch pauses or enables it (**Re-enable** after automatic disabling),
+**Send test** sends a test message, **Deliveries** opens its delivery history, and the menu has
+**Edit** and **Delete**. Stored secrets are never shown again: leave them as they are, or
+replace them.
+Over an API key this needs the **`alerts:manage`** scope (or `admin`). Grant it to agent keys
+only deliberately, because alerts hold secrets. Dashboard sessions and local mode have it
+implicitly.
+
+<Method m="GET" path="/v1/alerts" /> ·
+<Method m="POST" path="/v1/alerts" /> ·
+<Method m="GET" path="/v1/alerts/{id}" /> ·
+<Method m="PATCH" path="/v1/alerts/{id}" /> ·
+<Method m="DELETE" path="/v1/alerts/{id}" /> ·
+<Method m="POST" path="/v1/alerts/{id}/test" /> ·
+<Method m="GET" path="/v1/alerts/{id}/deliveries" />
+
+| Field | Description |
+|---|---|
+| `events` | Glob patterns. Default: `post.published`, `post.failed` and `channel.needs_reconnect`. Add others such as `post.scheduled`, `post.publish_requested` (your automation is asked), `schedule.posts_requested`, `schedule.failed` or `post.*`. Patterns follow the same rules as [webhook events](/automation/webhooks); unknown ones are refused with `422`. |
+| `collection_ids` | Only these collections; empty = all. |
+| `digest_window_seconds` | Collect everything within the window into one message (e.g. `300` = at most one message per 5 minutes; 0 to 86,400). |
+| `config` | Type-specific settings; see the sections for each type above. |
+| `enabled` | `false` pauses the alert. |
+
+- **Test**: `POST /v1/alerts/{id}/test` sends a test message now and returns `{"ok": true}` or
+  `{"ok": false, "error": "..."}`. It is rate-limited per API key or session (burst 5, then 10 per
+  minute; `429`). Test messages are sent directly and don't appear in the delivery history.
+- **History**: `GET /v1/alerts/{id}/deliveries` lists recent messages with status `pending`,
+  `sent`, `failed` or `skipped`.
+- **Secrets** (`bot_token`, `webhook_url`, `access_token`, `password`) are encrypted at rest
+  and always come back **masked**. To keep a secret on update, send the masked value back or
+  omit the key; send `null` to remove it.
+- **Changing the destination needs the secret again.** When an update changes where an alert
+  sends (Telegram `chat_id`, Slack / Discord `channel`, ntfy `server_url`, email `host` /
+  `port` / `tls` / `username`), the stored secret that would be sent there must be re-entered
+  in the same request, otherwise `422`.
+- **Retries and failures**: sending is retried with backoff (`NOTIFY_MAX_ATTEMPTS`, default 5).
+  After `NOTIFY_MAX_FAILS` consecutive failures (default 10) the alert is **disabled**
+  (`enabled=false`, `disabled_reason` says why). Fix the cause and `PATCH {"enabled": true}`.
+- **Disabled alerts**: messages queued for a disabled alert stay `pending`. Re-enabling it
+  within `NOTIFY_DISABLED_GRACE` (default 24 h) delivers them; after that they are marked
+  `skipped`.
+- **Delivery**: up to `NOTIFY_CONCURRENCY` alerts (default 4) are sent in parallel, so one slow
+  SMTP server doesn't hold up the rest.
+- **Plan limits** (cloud): 3 alerts on Starter, 10 on Plus, unlimited on Pro and Business. Over the limit:
+  `402 plan_limit_exceeded` with `details.limit = "alerts"`. See [Plans](/plans).
+
+## Network policy
+
+Outbound requests are SSRF-guarded: public internet only by default (in both modes); cloud
+metadata, link-local and reserved addresses are always blocked, as are IPv6 forms that embed
+such an IPv4 address. Carrier-grade NAT space (`100.64.0.0/10`, also used by Tailscale) counts
+as private. `NOTIFY_ALLOW_PRIVATE=true` allows a LAN target (self-hosted ntfy, an SMTP relay);
+`NOTIFY_ALLOW_LOOPBACK=true` a target on the same host.
+
+## Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `NOTIFY_SECRET_KEY` | — | Key material for encrypting alert secrets (AES-256-GCM); **at least 32 bytes** (e.g. `openssl rand -hex 32`); shorter values refuse to start. If unset, a random key is generated once into `DATA_DIR/notify_secret.key` (mode 0600). **Back it up with the database**: without it, stored secrets must be re-entered. |
+| `NOTIFY_MAX_FAILS` | `10` | Consecutive failures before an alert is disabled |
+| `NOTIFY_MAX_ATTEMPTS` | `5` | Attempts per queued message |
+| `NOTIFY_RETRY_BASE` | `30s` | First retry delay (doubles, capped at 30 min) |
+| `NOTIFY_POLL_INTERVAL` | `2s` | Alert outbox worker interval |
+| `NOTIFY_CONCURRENCY` | `4` | Alerts sent in parallel per pass |
+| `NOTIFY_DISABLED_GRACE` | `24h` | How long a disabled alert keeps its queued messages; after that they are marked `skipped` |
+| `RETENTION_NOTIFICATIONS_DAYS` | `30` | Finished outbox rows are pruned after N days; `0` keeps them |
+| `NOTIFY_ALLOW_PRIVATE` / `NOTIFY_ALLOW_LOOPBACK` | `false` | SSRF policy for alert targets |
+| `TELEGRAM_API_BASE`, `SLACK_API_BASE`, `DISCORD_API_BASE` | official APIs | Overrides (tests, proxies) |
+
+Set them in the environment of `staqly serve`, or with `-e NAME=value` on `docker run` (see
+[How to change a setting](/self-hosting/configuration#how-to-change-a-setting)).
+
+## Security
+
+- Alert secrets are encrypted at rest, masked in every response and never logged.
+- Post text is escaped for every target (Telegram HTML, Slack mrkdwn, Discord markdown and
+  mentions, email HTML).
+- Per-IP and per-principal [rate limits](/self-hosting/monitoring#rate-limits) apply to tests.
+
+## Next steps
+
+<Cards>
+  <Card title="Webhooks" href="/automation/webhooks">Let your code react to the same events.</Card>
+  <Card title="Event types" href="/api/events">Every event an alert can tell about.</Card>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">Open the full dashboard on your phone.</Card>
+</Cards>

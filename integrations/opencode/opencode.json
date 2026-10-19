@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "staqly": {
+        "type": "remote",
+        "url": "http://localhost:3333/mcp",
+        "codemode": false,
+        "timeout": { "execution": 200000 }
+      }
+    }
+  }
+}

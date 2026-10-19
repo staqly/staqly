@@ -1,0 +1,153 @@
+---
+title: Upgrades & migrations
+description: Move to a newer staqly version safely, and roll back if something goes wrong.
+---
+
+Upgrading means installing a new binary or pulling a new image and restarting. Your data stays
+where it is, and database changes (migrations) are applied automatically on the next start —
+there is nothing to run by hand. Always take a backup first so you can go back.
+
+## Upgrade
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+<Steps>
+<Step>
+
+**Back up**
+
+```bash
+staqly serve backup ~/staqly-backup.db
+```
+
+Works while staqly runs. Also archive the uploads folder — see
+[Backup & restore](/self-hosting/backup-and-restore).
+
+</Step>
+<Step>
+
+**Install the new release**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh
+```
+
+This installs the latest release over the old binary. To pick a version, set `STAQLY_VERSION`
+for `sh`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | STAQLY_VERSION=v0.2.0 sh
+```
+
+</Step>
+<Step>
+
+**Restart staqly**
+
+Stop `staqly serve` (Ctrl-C) and start it again. If it runs in the background, run
+`staqly service install` again: it replaces the service and restarts it with the new binary. Check the version with `staqly version`.
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab value="Docker">
+
+<Steps>
+<Step>
+
+**Back up**
+
+Take a database backup and an uploads archive as described in
+[Backup & restore](/self-hosting/backup-and-restore) (Docker tab).
+
+</Step>
+<Step>
+
+**Pull the new image**
+
+```bash
+docker pull ghcr.io/staqly/staqly:latest
+```
+
+To move to a specific release, pull its tag instead, for example
+`ghcr.io/staqly/staqly:v0.3.0`.
+
+</Step>
+<Step>
+
+**Recreate the container**
+
+```bash
+docker rm -f staqly
+docker run -d --name staqly --restart unless-stopped \
+  -p 127.0.0.1:3333:3333 -p 8080:8080 \
+  -v staqly-data:/data \
+  -e LOCAL_TRUSTED_PEERS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7 \
+  --read-only --tmpfs /tmp:size=64m,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges:true \
+  --memory 640m --pids-limit 256 \
+  ghcr.io/staqly/staqly:latest
+```
+
+Use the same command (and the same `-e` settings) you started staqly with, and the tag you
+pulled. The data lives in the `staqly-data` volume, so removing the container keeps it.
+
+</Step>
+</Steps>
+
+<Callout type="error">
+`docker volume rm staqly-data` deletes your data. Removing the container is safe.
+</Callout>
+
+Developing from a checkout with Compose? `git pull && make dev` rebuilds the image — see
+[Develop with Docker Compose](/self-hosting/docker-compose).
+
+</Tab>
+</Tabs>
+
+## Roll back
+
+A newer version may already have migrated the database, so go back to the backup together with
+the older version.
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+1. Stop staqly.
+2. Install the previous version: `curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | STAQLY_VERSION=v0.1.0 sh`
+   (use your previous release tag).
+3. Restore the backup into the data directory (`~/.local/share/staqly`) as described in
+   [Backup & restore](/self-hosting/backup-and-restore#restore).
+4. Start `staqly serve`.
+
+</Tab>
+<Tab value="Docker">
+
+1. `docker stop staqly`.
+2. Restore the backup into the volume as described in
+   [Backup & restore](/self-hosting/backup-and-restore#restore) (Docker tab), without starting staqly.
+3. Pull the previous release, e.g. `docker pull ghcr.io/staqly/staqly:v0.1.0` (use your previous release tag).
+4. `docker rm staqly`, then run your `docker run` command with that tag instead of `latest`.
+
+</Tab>
+</Tabs>
+
+## How migrations work
+
+- Database migrations (goose) are **embedded in the binary** — in `staqly` and in the
+  `ghcr.io/staqly/staqly` image alike — and run automatically at startup, each in its own transaction.
+- If a start is interrupted, the next start resumes from the last fully applied migration.
+- There is no separate migration command. `/readyz` reports `migrations: pending` until they
+  are all applied — see [Monitoring](/self-hosting/monitoring#health-endpoints).
+- The job queue's own tables (River, `river_*`) are migrated the same way, right after. Upgrading
+  from a version before the River queue carries queued and running jobs (scheduled posts,
+  pending retries) into it on the first start; nothing is lost and nothing needs doing.
+
+## Next steps
+
+<Cards>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Back up the database and uploads.</Card>
+  <Card title="Troubleshooting" href="/self-hosting/troubleshooting">If staqly doesn't start after an upgrade.</Card>
+</Cards>

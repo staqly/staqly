@@ -1,0 +1,959 @@
+---
+title: Tools reference
+description: Look up each of the 100 MCP tools, its inputs and the scope it needs in cloud mode.
+---
+
+These are the tools an agent sees once staqly is [connected over MCP](/mcp). You rarely call
+them by hand (the agent picks them from your request), but this page tells you what each one
+can do, which inputs it takes, and which [scope](/api/authentication#scopes) an API key needs
+for it in cloud mode.
+
+## Example: draft, preview, schedule
+
+The most common sequence, with the arguments an agent sends:
+
+<Steps>
+<Step>
+### Find the channels: `list_channels`
+
+No inputs. Returns every connected account with its `id`, `provider`, `name` and `status`.
+</Step>
+<Step>
+### Write the post: `create_post`
+
+```json
+{ "collection": "Product updates", "content": "v1.4 is out: schedules, channels and a calendar.", "targets": [{ "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a" }, { "channel_id": "ch_q2w8n5k7r3t9y4u6i1o0", "content": "v1.4 is out." }] }
+```
+
+The post is created as `draft`, with a shorter text of its own on the second channel.
+</Step>
+<Step>
+### Check it: `preview_post`
+
+```json
+{ "post_id": "post_oalirbz67y4m4cqxq5dw" }
+```
+
+Returns the text each channel will carry and what its provider objects to (too long, media
+missing). Fix the post with `update_post`.
+</Step>
+<Step>
+### Put it on the calendar: `schedule_post`
+
+```json
+{ "post_id": "post_oalirbz67y4m4cqxq5dw", "publish_at": "2026-10-21T09:00:00Z" }
+```
+
+Or `publish_post` to send it now. A failed channel is retried alone with `retry_target`.
+</Step>
+</Steps>
+
+A full walkthrough: [Let an agent fill a collection](/cookbook/agent-fills-a-collection).
+
+## Conventions
+
+- Scopes only matter in **cloud mode** (with an API key); in local mode every tool is
+  available.
+- Tools marked *read-only* are annotated as such for clients that care; tools marked
+  *destructive* delete or invalidate something (data, a key, a secret).
+- Collection inputs accept an ID (`col_qjuybkx6355nz4no6pqk`) **or** the exact name.
+- Every REST operation has a tool, and both go through the same authorization checks. Only
+  the browser flows (sign-in, sign-out, setup, redeeming a device link, the OAuth start and
+  callback of a channel), recovery key rotation (dashboard session only), developer app
+  registration (`PUT /v1/providers/{id}/app`), the agent list (`/v1/agents`), the list of
+  workspace exports (`GET /v1/workspace/exports`) and job details (`GET /v1/jobs/{id}`,
+  `/stats`, `/cancel`) have none.
+- A suspended workspace (trial or paid period ended unpaid) can call read-only tools plus `revoke_session`,
+  `revoke_api_key`, `create_device_link`, `start_workspace_export`,
+  `start_billing_checkout`, `open_billing_portal`, `delete_workspace` and `purge_post`; other
+  tools answer with `plan_expired`, like REST.
+
+## Collections
+
+### `list_collections`
+List collections with post counts per status. *Read-only* · `collections:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `include_archived` | boolean | No | Include archived collections |
+
+### `get_collection`
+Get a collection by ID or name, with its post counts. *Read-only* · `collections:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | <Required /> | Collection ID (col_...) or exact name |
+
+### `create_collection`
+Create a collection (e.g. "Instagram Avatar"): a group of posts with its own publishing schedules. · `collections:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `color` | string | No | Accent colour, e.g. #7c3aed |
+| `description` | string | No |  |
+| `name` | string | <Required /> | Collection name |
+| `processing_timeout_seconds` | integer | No | How long a post on your own automation waits for a reported result before it fails, 60-86400 seconds; without it the server default applies |
+
+### `update_collection`
+Update a collection: name, description, icon, colour, the wait for your own automation's result (processing_timeout_seconds), or archive/unarchive it (archiving an archived collection, or unarchiving an active one, is a conflict). · `collections:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `archived` | boolean | No | True archives, false unarchives |
+| `collection` | string | <Required /> | Collection ID (col_...) or exact name |
+| `color` | string | No | Accent colour, e.g. #7c3aed |
+| `description` | string | No | New description |
+| `icon` | string | No | Icon name |
+| `name` | string | No | New name |
+| `processing_timeout_seconds` | object | No | How long a post on your own automation waits for a reported result before it fails, 60-86400 seconds, or null for the server default |
+
+### `delete_collection`
+Permanently delete a collection with its posts and schedules. confirm must equal the collection name. *Destructive* · `collections:delete` (the `:write` scope alone is not enough)
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | <Required /> | Collection ID (col_...) or exact name |
+| `confirm` | string | <Required /> | Must be exactly the collection name |
+
+
+## Posts
+
+### `list_posts`
+List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; sort created_desc lists the newest first. *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | No | Posts with a target on this channel |
+| `collection` | string | No | Collection ID or name |
+| `cursor` | string | No | Next_cursor of the previous page |
+| `limit` | integer | No | Page size (default 50, max 200) |
+| `publish_after` | string | No | RFC3339 or YYYY-MM-DD, inclusive |
+| `publish_before` | string | No | RFC3339 or YYYY-MM-DD, exclusive |
+| `sort` | string | No | Publish_asc (default), publish_desc, created_desc, created_asc |
+| `status` | string | No | Draft, scheduled, publishing, published or failed |
+| `tag` | string | No |  |
+
+### `search_posts`
+Find posts whose content contains a text, with the same filters as list_posts. *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | No | Posts with a target on this channel |
+| `collection` | string | No | Collection ID or name |
+| `cursor` | string | No | Next_cursor of the previous page |
+| `limit` | integer | No | Page size (default 50, max 200) |
+| `publish_after` | string | No | RFC3339 or YYYY-MM-DD, inclusive |
+| `publish_before` | string | No | RFC3339 or YYYY-MM-DD, exclusive |
+| `query` | string | <Required /> | Text the content contains |
+| `sort` | string | No | Publish_asc (default), publish_desc, created_desc, created_asc |
+| `status` | string | No | Draft, scheduled, publishing, published or failed |
+| `tag` | string | No |  |
+
+### `get_post`
+Get one post with its targets (status, link, error per channel). *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `create_post`
+Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. · `posts:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | <Required /> | Collection ID (col_...) or exact name |
+| `content` | string | No | The post's text |
+| `external_ref` | string | No | Your own reference |
+| `media` | string[] | No | Media IDs (med_...) in order |
+| `metadata` | object | No | Free JSON for your own use |
+| `publish_at` | string | No | RFC3339, in the future |
+| `publish_now` | boolean | No | Publish right away |
+| `repeat_every` | string | No | Repeat after publishing: 1d to 6d, 1w, 2w or 1mo (empty: no repeat) |
+| `status` | string | No | Draft (default) or scheduled |
+| `tags` | string[] | No |  |
+| `targets` | object[] | No |  |
+| `thread` | object[] | No | Replies published under the post, in order (at most 25): `content`, `media`, `delay_seconds` |
+
+### `update_post`
+Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (null clears), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. · `posts:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | No |  |
+| `content` | string | No |  |
+| `expected_version` | integer | No |  |
+| `external_ref` | string | No |  |
+| `media` | string[] | No |  |
+| `metadata` | object | No |  |
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `publish_at` | object | No | RFC3339 in the future, or null to clear |
+| `repeat_every` | string | No | 1d to 6d, 1w, 2w or 1mo; an empty string stops repeating |
+| `tags` | string[] | No |  |
+| `thread` | object[] | No | Replaces the replies; [] clears them |
+| `targets` | object[] | No | Replaces the whole list |
+
+### `schedule_post`
+Set when a post goes out (RFC3339, in the future) and make it scheduled; the post needs at least one target. · `posts:publish`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `publish_at` | string | <Required /> | RFC3339, in the future |
+
+### `publish_post`
+Publish a draft, scheduled or failed post now. · `posts:publish`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `cancel_post`
+Take a scheduled post off the schedule; it becomes a draft again. · `posts:publish`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `duplicate_post`
+Copy a post (content, media, tags, metadata, targets) into a new draft. · `posts:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `delete_post`
+Delete a post (its event history is kept). *Destructive* · `posts:delete` (the `:write` scope alone is not enough)
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `delete_posts`
+Delete several posts at once (up to 200; their event history is kept). Returns the deleted ids and the ids not found; what already went out stays on the platforms. *Destructive* · `posts:delete`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `ids` | string[] | <Required /> | Post IDs (post_...), up to 200 |
+
+### `purge_post`
+Delete a post together with its whole history: every event about it (and their webhook deliveries), its media when no other post uses them. For removing personal data; one content-free post.purged event remains. *Destructive* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `preview_post`
+How each target will carry the post: the text per channel (with the channel's links mode applied), the links it removes or defangs (`links_found`, with a warning naming the channel) and what its provider objects to (too long, missing title...). *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `get_post_metrics`
+A post's numbers per channel (views, likes, reposts, replies, quotes, bookmarks, link clicks where the platform gives them), read from the platform when older than ten minutes or with `refresh` true. `available` false: the platform reports none. *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `refresh` | boolean | | Read the numbers from the platforms now |
+
+### `report_post_metrics`
+Your own automation (provider `custom`) sends the numbers of a post it published, replacing the stored ones. · `posts:publish`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `channel_id` | string | <Required /> | The custom channel the target is on |
+| `impressions`, `likes`, `reposts`, `replies`, `quotes`, `bookmarks`, `link_clicks` | integer | | The numbers you have; leave out the ones you don't |
+
+### `create_preview_link`
+A link to a read-only [preview page](/dashboard/share-a-preview) of the post (as each channel shows it) where anyone with the link can comment without signing in. The `url` is returned once; `expires_in_days` 0 never expires. · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `expires_in_days` | integer | | Days until the link stops working, 0 to 365 (0 never) |
+
+### `list_preview_links`
+A post's preview links (active, expiry, revoked); the links themselves are not shown again. *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `revoke_preview_link`
+Stop a preview link from working. *Destructive* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `preview_id` | string | <Required /> | Preview link ID (prv_...) |
+
+### `list_post_comments`
+A post's feedback threads, oldest first: comments reviewers left on its preview pages (name, email) and the team's replies. A thread's first comment has `parent_id` empty and may mark a passage: `quote`, the channel's version (`channel_id`, empty: the shared text), `part` (0 the post's text, n its n-th comment), where the words are now (`anchor_start`/`anchor_end`, -1 when gone: `text_changed`) and `resolved_at` once resolved. *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `reply_to_post_comment`
+Reply to a feedback thread of a post as the team. · `posts:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `comment_id` | string | <Required /> | A comment of the thread (cmt_...) |
+| `body` | string | <Required /> | The reply, up to 2000 characters |
+
+### `resolve_post_comment`
+Resolve a feedback thread by its first comment (`resolved` false reopens it). · `posts:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `comment_id` | string | <Required /> | The thread's first comment (cmt_...) |
+| `resolved` | boolean |  | False reopens a resolved thread; default true |
+
+### `get_post_history`
+The events of a post, newest first: created, edited, scheduled, published or failed per channel. *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `retry_target`
+Try a failed target once more, now. · `posts:publish`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID (ch_...) |
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `list_tags`
+List the workspace's post tags with how many posts carry each, most used first. *Read-only* · `posts:read`
+
+No inputs.
+
+
+## Your own automation
+
+### `list_requested_work`
+What people's setup asks your automation for: targets on your own automation waiting for report_publish_result (kind target, with the post and the channel) and schedules that found nothing to publish and ask for posts (kind posts; answer by creating draft posts in that collection). Oldest first. *Read-only* · `posts:read`
+
+No inputs.
+
+### `report_publish_result`
+Close a target on your own automation (provider custom) that waits for a result: status published with the url (and external_id), or failed with the error. Only for work you did yourself. · `posts:publish`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | The custom channel the target is on |
+| `error` | string | No | Why it failed |
+| `external_id` | string | No | The platform's id of the post |
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `status` | string | <Required /> | Published or failed |
+| `url` | string | No | Where the post lives now |
+
+
+## Channels
+
+### `list_providers`
+The platform catalog: every provider staqly can publish to, whether it is available in this build, how it connects (oauth2 in the dashboard, token here with connect_channel, none for your own automation), its limits (characters, media) and the per-post settings it takes. *Read-only* · `channels:read`
+
+No inputs.
+
+### `list_channels`
+List connected channels (accounts) with provider, handle, status (connected, needs_reconnect, disabled), group_id (its channel group) and activity (last published post and time, next scheduled post time, posts published in the last 30 days). *Read-only* · `channels:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `group_id` | string | No | Only channels in this channel group (grp_..., see list_channel_groups) |
+
+### `get_channel`
+Get one channel with its group and activity. Credentials are never returned. *Read-only* · `channels:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID (ch_...) |
+
+### `connect_channel`
+Connect a channel on a token platform (see list_providers credential_fields; e.g. Telegram bot token + chat id, Bluesky handle + app password) or your own automation (provider custom, no fields). OAuth platforms are connected in the dashboard. · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `fields` | object | No | The provider's credential_fields by key |
+| `name` | string | No | What to call the channel; defaults to the account's name |
+| `provider` | string | <Required /> | Provider id from list_providers (custom, telegram, bluesky, ...) |
+| `settings` | object | No | Provider-level defaults |
+| `group_id` | string | No | Channel group to put it in (grp_...); default: the Default group |
+
+### `update_channel`
+Rename a channel, change its default settings (`settings` replaces them; `settings.links` = keep, remove or defang sets what the channel does with links in a post, within its provider's `link_modes`: X allows only remove and defang), turn it off (status disabled) or on (connected), or reconnect a token channel with fresh fields; `group_id` moves it to another channel group. · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID (ch_...) |
+| `fields` | object | No | Token platforms: fresh credential fields to reconnect |
+| `name` | string | No |  |
+| `settings` | object | No |  |
+| `status` | string | No | Connected or disabled |
+| `group_id` | string | No | Move the channel to this channel group (grp_...; empty: Default) |
+
+### `list_channel_groups`
+List the workspace's channel groups (every channel is in exactly one; the Default group always exists) with how many channels each holds. Move a channel with update_channel group_id. *Read-only* · `channels:read`
+
+No inputs.
+
+### `create_channel_group`
+Create a channel group (name, unique in the workspace; optional color #rrggbb and position). · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `color` | string | No | #rrggbb, or empty |
+| `name` | string | No | What to call the group, unique in the workspace |
+| `position` | integer | No | Sort order (smaller first; Default always leads) |
+
+### `update_channel_group`
+Rename a channel group, or change its color or position. · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `group_id` | string | No | Channel group ID (grp_...); update only |
+| `name` | string | No | What to call the group, unique in the workspace |
+| `color` | string | No | #rrggbb, or empty |
+| `position` | integer | No | Sort order (smaller first; Default always leads) |
+
+### `delete_channel_group`
+Delete a channel group; its channels move to the Default group, which can't be deleted. *Destructive* · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `group_id` | string | <Required /> | Channel group ID (grp_...) |
+
+### `delete_channel`
+Remove a channel; targets on it go with it. *Destructive* · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID (ch_...) |
+
+### `test_channel`
+Check a channel's stored credentials against its platform. Rate-limited. · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID (ch_...) |
+
+
+## Schedules
+
+
+### `create_channel_link`
+A connect link: someone without access to Staqly (a client) opens it and connects a channel to this workspace by signing in at the platform; nothing else is reachable through it. The url is returned once. · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `expires_in_hours` | integer | No | Hours the link works (default 168, at most 720) |
+| `group_id` | string | No | Channel group connected channels join (empty: Default) |
+| `max_uses` | integer | No | How many channels may be connected (default 1, at most 50) |
+| `note` | string | No | Shown to the person who opens the link |
+| `providers` | string[] | No | Platform ids to offer; empty offers every available one |
+
+### `list_channel_links`
+The workspace's connect links (status open, used, expired or revoked; uses; expiry); the links themselves are not shown again. *Read-only* · `channels:manage`
+
+No inputs.
+
+### `revoke_channel_link`
+Stop a connect link from working; channels already connected through it stay. *Destructive* · `channels:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `link_id` | string | <Required /> | Connect link ID (chl_...) |
+### `list_schedules`
+List a collection's (or every) publishing schedules with their next run. *Read-only* · `schedules:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection` | string | No | Collection ID or name; empty lists every schedule |
+
+### `create_schedule`
+Create a publishing schedule for a collection: kind once (run_at) or recurring (rule: times like ["09:00","17:00"] with optional weekdays 0-6 and tz, or every_minutes), the channels it publishes to, pick (next waiting post, selected post_ids, or all), and what to do when nothing waits (source none, agent = emit schedule.posts_requested, endpoint = POST a signed request to endpoint_url and create the posts it returns). · `schedules:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channels` | string[] | No | Channel IDs the chosen posts go to (a post's own targets win) |
+| `collection` | string | <Required /> | Collection ID (col_...) or exact name |
+| `enabled` | boolean | No |  |
+| `endpoint_secret` | string | No | Signs the request like a webhook; generated when empty |
+| `endpoint_url` | string | No |  |
+| `kind` | string | No | Once or recurring |
+| `name` | string | No |  |
+| `pick` | string | No | Next (oldest waiting draft), selected (post_ids) or all |
+| `post_ids` | string[] | No |  |
+| `rule` | object | No | Recurring: times (HH:MM) with optional weekdays (0 Sunday to 6 Saturday) and tz (IANA), or every_minutes |
+| `run_at` | string | No | Once: RFC3339 in the future |
+| `source` | string | No | When nothing waits: none, agent (emit schedule.posts_requested) or endpoint (POST to endpoint_url) |
+
+### `update_schedule`
+Change a schedule (any field of create_schedule, enabled true/false); next_run_at is recomputed. · `schedules:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channels` | string[] | No | Channel IDs the chosen posts go to (a post's own targets win) |
+| `enabled` | boolean | No |  |
+| `endpoint_secret` | string | No | Signs the request like a webhook; generated when empty |
+| `endpoint_url` | string | No |  |
+| `kind` | string | No | Once or recurring |
+| `name` | string | No |  |
+| `pick` | string | No | Next (oldest waiting draft), selected (post_ids) or all |
+| `post_ids` | string[] | No |  |
+| `rule` | object | No | Recurring: times (HH:MM) with optional weekdays (0 Sunday to 6 Saturday) and tz (IANA), or every_minutes |
+| `run_at` | string | No | Once: RFC3339 in the future |
+| `schedule_id` | string | <Required /> | Schedule ID (sch_...) |
+| `source` | string | No | When nothing waits: none, agent (emit schedule.posts_requested) or endpoint (POST to endpoint_url) |
+
+### `delete_schedule`
+Delete a schedule. *Destructive* · `schedules:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `schedule_id` | string | <Required /> | Schedule ID (sch_...) |
+
+### `run_schedule`
+Run a schedule now (its regular next run is unchanged). · `schedules:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `schedule_id` | string | <Required /> | Schedule ID (sch_...) |
+
+
+## Queue
+
+### `list_jobs`
+The background queue: publish runs, schedule runs and token refreshes with status (queued, running, done, failed, cancelled), attempts and the last error. Newest first; filter by status or kind. *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `cursor` | string | No |  |
+| `kind` | string | No | Publish_post, publish_target, target_timeout, run_schedule or refresh_channel |
+| `limit` | integer | No |  |
+| `status` | string | No | Queued, running, done, failed or cancelled |
+
+### `retry_job`
+Queue a failed job again, now. · `posts:publish`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | string | <Required /> | Job ID (job_...) |
+
+
+## Media
+
+### `upload_media`
+Upload a file (base64); returns a media ID to put in a post's media list. · `media:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `filename` | string | <Required /> | File name including the extension, e.g. avatar.png |
+| `media_base64` | string | <Required /> | Base64-encoded picture, video or audio file |
+
+### `get_media`
+Get a media file's metadata (type, size, name, SHA-256, URL, alt text, pixels, length); with include_content=true also its base64 content (files up to 4 MiB). *Read-only* · `media:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `include_content` | boolean | No | Also return the file as base64 (files up to 4 MiB) |
+| `media_id` | string | <Required /> | Media ID (med_...) |
+
+### `list_media`
+The media library: uploaded pictures, videos and audio, newest first, with how many posts use each (uses). Filter by name (q), kind (image, video, audio), used (used or unused), folder (a folder id or root) and tag (deleted=true lists Deleted, duplicates=true identical files); sort created_desc, created_asc, size_desc or name_asc; page with offset and limit (next_offset). *Read-only* · `media:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `deleted` | boolean | No | list the files in Deleted (with deleted_at and purge_at) instead |
+| `duplicates` | boolean | No | only files with an identical twin, grouped by content |
+| `folder` | string | No | a folder ID (files directly in it) or root (the top level) |
+| `kind` | string | No | image, video or other |
+| `limit` | integer | No | page size (default 60, max 200) |
+| `offset` | integer | No | next_offset of the previous page |
+| `q` | string | No | part of the file name |
+| `sort` | string | No | created_desc (default), created_asc, size_desc or name_asc |
+| `tag` | string | No | files carrying this tag |
+| `used` | string | No | used (posts carry it) or unused |
+
+### `update_media`
+Rename a media file, set its alt text (a description for people who can't see it; platforms that take alt text receive it), or set a video's width, height and duration_ms. · `media:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `alt_text` | string | No | alt text, up to 1500 characters; empty clears it |
+| `duration_ms` | integer | No | a video's length in milliseconds |
+| `folder_id` | string | No | move the file: a folder ID, or empty for the top level |
+| `height` | integer | No | pixels |
+| `media_id` | string | <Required /> | the media ID |
+| `name` | string | No | new file name |
+| `tags` | string[] | No | replace the file's tags |
+| `width` | integer | No | pixels |
+
+### `get_media_usage`
+The posts that use a media file (in their files or a comment), newest first, at most 50, with each post's title, status and publish time. Check it before deleting a file. *Read-only* · `media:read` and `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `media_id` | string | <Required /> | Media ID (med_...) |
+
+### `list_media_folders`
+The media library's virtual folders (id, parent_id, name, files directly in it), the number of files at the top level and in total, and every file tag with its count. *Read-only* · `media:read`
+
+### `create_media_folder`
+Create a media library folder at the top level or inside another (parent_id). Names are unique among a folder's subfolders, ignoring case. · `media:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | <Required /> | the folder name |
+| `parent_id` | string | No | the folder it goes in; empty or omitted for the top level |
+
+### `update_media_folder`
+Rename a media library folder or move it under another folder (parent_id; empty = the top level). A folder can't go inside itself. · `media:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `folder_id` | string | <Required /> | the folder ID |
+| `name` | string | No | the new name |
+| `parent_id` | string | No | move it into this folder; empty for the top level |
+
+### `delete_media_folder`
+Delete a media library folder. Its files and subfolders move up to its parent; no file is deleted. *Destructive* · `media:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `folder_id` | string | <Required /> | the folder ID |
+
+### `organize_media`
+Move up to 200 media files to a folder (folder_id; empty = the top level) and/or add and remove tags on them. · `media:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `add_tags` | string[] | No | tags to add (lowercase, no #, spaces become dashes) |
+| `folder_id` | string | No | move them to this folder; empty for the top level; omit to leave folders alone |
+| `ids` | string[] | <Required /> | media IDs (med_...), up to 200 |
+| `remove_tags` | string[] | No | tags to remove |
+
+### `delete_media`
+Move a media file to Deleted, where it can be restored for 30 days before it is deleted for good (refused while a scheduled post uses it); with permanent=true delete it for good now, and posts that reference it lose that file. *Destructive* · `posts:delete` (the `:write` scope alone is not enough)
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `media_id` | string | <Required /> | Media ID (med_...) |
+| `permanent` | boolean | No | delete it for good now instead of moving it to Deleted |
+
+### `restore_media`
+Take a media file out of Deleted, back where it was. · `posts:delete`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `media_id` | string | <Required /> | Media ID (med_...) |
+
+### `keep_media`
+Keep this media file of a set of identical ones (list_media with duplicates=true): posts that use a copy use this file instead, and the copies move to Deleted. *Destructive* · `posts:delete` and `posts:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `media_id` | string | <Required /> | Media ID (med_...) |
+
+
+## Activity log
+
+### `list_events`
+List the activity log (posts created, scheduled, published or failed, channels connected, schedules run, settings changes), newest first, with optional filters. *Read-only* · `events:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | No | Only events about this channel |
+| `collection` | string | No | Only events of this collection (ID or name) |
+| `cursor` | string | No | Next_cursor of the previous page |
+| `from` | string | No | RFC3339 or YYYY-MM-DD, inclusive |
+| `limit` | integer | No | Page size (default 50, max 200) |
+| `post_id` | string | No | Only events about this post |
+| `schedule_id` | string | No | Only events about this schedule |
+| `to` | string | No | RFC3339 or YYYY-MM-DD, exclusive |
+| `type` | string | No | Exact event type, e.g. post.published |
+| `type_prefix` | string | No | Event type prefix, e.g. post. |
+
+### `export_events`
+Export the activity log as NDJSON or CSV text, oldest first; events is the number of events (lines) in this call. Output is capped at 32 KiB per call: when truncated=true, call again with the same filters and after_seq=next_after_seq for the rest (the whole log is the sum of all calls). *Read-only* · `events:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `actor_id` | string | No | Actor ID, e.g. an API key ID |
+| `actor_type` | string | No | Session, api_key, local or system |
+| `after_seq` | integer | No | Continue a truncated export: next_after_seq of the previous call |
+| `collection` | string | No | Collection ID or exact name |
+| `format` | string | No | Ndjson (default) or csv |
+| `from` | string | No | YYYY-MM-DD or RFC3339 (inclusive) |
+| `post_id` | string | No | Only events about this post (post_...) |
+| `to` | string | No | YYYY-MM-DD or RFC3339 (exclusive) |
+| `type` | string | No | Exact event type, e.g. post.published |
+| `type_prefix` | string | No | Event type prefix, e.g. post. |
+
+
+## Webhooks
+
+### `list_webhooks`
+List webhooks with their URL, events, filters and state. *Read-only* · `webhooks:manage`
+
+No inputs.
+
+### `get_webhook`
+Get one webhook. *Read-only* · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | <Required /> | Webhook ID (wh_...) |
+
+### `create_webhook`
+Create a webhook that receives signed event POSTs. The response contains the signing secret once. · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `active` | boolean | No | False pauses deliveries |
+| `collection_ids` | string[] | No | Only events from these collections (col_...); empty sends all |
+| `description` | string | No | What the receiver does, shown in the dashboard |
+| `events` | string[] | No | Event types to send, e.g. ["post.published"]; ["*"] (default) sends all |
+| `max_attempts` | integer | No | Delivery attempts before giving up |
+| `timeout_ms` | integer | No | Per-attempt timeout in milliseconds |
+| `url` | string | <Required /> | Https URL that receives the POSTs |
+
+### `update_webhook`
+Update a webhook's URL, description, events, collection filter, active flag, timeout or retry count. Setting only active to its current value is a conflict. · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `active` | boolean | No | False pauses deliveries |
+| `collection_ids` | string[] | No | Only events from these collections (col_...); empty sends all |
+| `description` | string | No | What the receiver does, shown in the dashboard |
+| `events` | string[] | No | Event types to send, e.g. ["post.published"]; ["*"] (default) sends all |
+| `max_attempts` | integer | No | Delivery attempts before giving up |
+| `timeout_ms` | integer | No | Per-attempt timeout in milliseconds |
+| `url` | string | No | New receiver URL |
+| `webhook_id` | string | <Required /> | Webhook ID (wh_...) |
+
+### `delete_webhook`
+Delete a webhook and stop its deliveries. *Destructive* · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | <Required /> | Webhook ID (wh_...) |
+
+### `rotate_webhook_secret`
+Replace a webhook's signing secret; the new secret is returned once and the old one stops working. *Destructive* · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | <Required /> | Webhook ID (wh_...) |
+
+### `test_webhook`
+Queue a webhook.test delivery to this webhook only. Rate-limited. · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `webhook_id` | string | <Required /> | Webhook ID (wh_...) |
+
+### `list_webhook_deliveries`
+List webhook delivery attempts (status, response code, error), newest first. *Read-only* · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `limit` | integer | No | Max deliveries (default 50, max 200) |
+| `post_id` | string | No | Only deliveries of events about this post (post_...) |
+| `status` | string | No | Pending, succeeded or failed |
+| `webhook_id` | string | No | Only deliveries of this webhook (wh_...) |
+
+### `retry_webhook_delivery`
+Re-queue a finished (succeeded or failed) webhook delivery. · `webhooks:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `delivery_id` | string | <Required /> | Delivery ID (dlv_...) |
+
+
+## Alerts
+
+### `list_alerts`
+List alerts: where staqly tells people what happened (Telegram, Slack, Discord, ntfy, email). Secrets are masked. *Read-only* · `alerts:manage`
+
+No inputs.
+
+### `get_alert`
+Get one alert. Secrets are masked. *Read-only* · `alerts:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `alert_id` | string | <Required /> | Alert ID (nch_...) |
+
+### `create_alert`
+Create an alert that tells people when posts go out or fail and when a channel needs reconnecting. · `alerts:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `collection_ids` | string[] | No | Only events from these collections (col_...); empty means all |
+| `config` | object | No | Type-specific settings. slack/discord: webhook_url (or bot_token + channel). telegram: bot_token, chat_id. ntfy: topic, server_url, access_token, priority. email: host, port, username, password, from, to (a list of addresses), tls (starttls, tls or none) |
+| `digest_window_seconds` | integer | No | Group messages within this many seconds into one; 0 sends each |
+| `enabled` | boolean | No | False pauses the alert |
+| `events` | string[] | No | Event types to tell about, e.g. ["post.published", "post.failed"] |
+| `name` | string | <Required /> | Alert name |
+| `type` | string | <Required /> | Telegram, slack, discord, ntfy or email |
+
+### `update_alert`
+Update an alert's name, config, events, collection filter, digest window or enabled flag. Setting only enabled to its current value is a conflict. · `alerts:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `alert_id` | string | <Required /> | Alert ID (nch_...) |
+| `collection_ids` | string[] | No | Only events from these collections (col_...); empty means all |
+| `config` | object | No | Type-specific settings. slack/discord: webhook_url (or bot_token + channel). telegram: bot_token, chat_id. ntfy: topic, server_url, access_token, priority. email: host, port, username, password, from, to (a list of addresses), tls (starttls, tls or none) |
+| `digest_window_seconds` | integer | No | Group messages within this many seconds into one; 0 sends each |
+| `enabled` | boolean | No | False pauses the alert |
+| `events` | string[] | No | Event types to tell about, e.g. ["post.published", "post.failed"] |
+| `name` | string | No | New name |
+
+### `delete_alert`
+Delete an alert. *Destructive* · `alerts:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `alert_id` | string | <Required /> | Alert ID (nch_...) |
+
+### `test_alert`
+Send a test message through an alert right away. Rate-limited. · `alerts:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `alert_id` | string | <Required /> | Alert ID (nch_...) |
+
+### `list_alert_deliveries`
+List recent messages sent (or failed) through an alert, newest first. *Read-only* · `alerts:manage`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `alert_id` | string | <Required /> | Alert ID (nch_...) |
+| `limit` | integer | No | Max deliveries (default 50, max 200) |
+
+
+## API keys and sessions
+
+### `list_api_keys`
+List API keys (prefix, scopes, last use, expiry, revocation) and the available scopes. *Read-only* · `admin`
+
+No inputs.
+
+### `create_api_key`
+Create an API key with the given scopes (cloud mode; local mode has no keys). The raw key is returned once. · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `expires_at` | string | No | RFC3339 expiry; omit for a key that does not expire |
+| `name` | string | <Required /> | Key name, e.g. the agent that uses it |
+| `scopes` | string[] | <Required /> | Scopes to grant, e.g. ["collections:read", "posts:read", "posts:write"] |
+
+### `revoke_api_key`
+Revoke an API key; it stops working immediately. Revoking a revoked key is a conflict. *Destructive* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `key_id` | string | <Required /> | API key ID (key_...) |
+
+### `rotate_api_key`
+Replace an API key with a new one (same name and scopes); the old key stops working and the new raw key is returned once. *Destructive* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `key_id` | string | <Required /> | API key ID (key_...) |
+
+### `list_sessions`
+List signed-in dashboard sessions (browser, created, last seen, expiry). *Read-only* · `admin`
+
+No inputs.
+
+### `revoke_session`
+Sign out a dashboard session. Revoking a revoked session is a conflict. *Destructive* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | <Required /> | Session ID (ses_...) |
+
+
+## Workspace and plan
+
+### `get_workspace`
+Get the workspace name, ID and plan. *Read-only* · no scope needed
+
+No inputs.
+
+### `rename_workspace`
+Rename the workspace. · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | No | New workspace name |
+
+### `delete_workspace`
+Permanently delete the workspace and everything in it (cloud only). confirm must equal the workspace name. Like REST, this needs a signed-in dashboard session, so API keys get a forbidden error. *Destructive* · dashboard session only (API keys get `forbidden`)
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `confirm` | string | <Required /> | Must be exactly the workspace name |
+
+### `start_workspace_export`
+Start a ZIP export of the whole workspace (posts, channels, schedules, media, events). Poll get_workspace_export until status is ready. · `admin`
+
+No inputs.
+
+### `get_workspace_export`
+Get a workspace export's status (pending, running, ready, failed, expired) and, once ready, its download URL. *Read-only* · `admin`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `export_id` | string | <Required /> | Export ID (exp_...) from start_workspace_export |
+
+### `list_plans`
+List the cloud plans with their limits and prices. *Read-only* · no scope needed
+
+No inputs.
+
+### `get_usage`
+Get the workspace's plan, usage this period against its limits, and whether it is suspended. *Read-only* · no scope needed
+
+No inputs.
+
+### `get_billing`
+Get billing status: whether Stripe billing is enabled, the plan, the subscription status and the end of the trial or paid period. *Read-only* · `admin`
+
+No inputs.
+
+### `start_billing_checkout`
+Start a Stripe Checkout for a plan billed monthly or yearly and return its URL for a person to open and pay; a workspace that already pays is switched to that plan instead (prorated). Cloud with billing enabled. · `admin`
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `plan` | string | No | `starter`, `plus`, `pro` or `business` (default `pro`) |
+| `interval` | string | No | `month` or `year` (default `month`); yearly is 20 % off or more |
+
+### `open_billing_portal`
+Return a Stripe customer portal URL (payment method, invoices, cancel). · `admin`
+
+No inputs.
+
+### `create_device_link`
+Create a one-time link (valid 5 minutes) that signs another browser into the dashboard. Only for local mode callers; API keys get a forbidden error. · local mode or a dashboard session (API keys get `forbidden`)
+
+No inputs.
+
+
+## Next steps
+
+<Cards>
+  <Card title="Example prompts" href="/mcp/prompts">Things to ask your agent.</Card>
+  <Card title="Authentication & scopes" href="/api/authentication#scopes">Pick scopes for an agent's API key.</Card>
+</Cards>

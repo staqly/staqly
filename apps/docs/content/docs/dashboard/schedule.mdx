@@ -1,0 +1,67 @@
+---
+title: Schedule
+description: See every scheduled post and upcoming schedule run on a calendar, move posts by dragging them, and add a post into a free slot.
+---
+
+**Schedule** is the home page and the publishing calendar: every post with a time, by day and
+hour, in your time zone, together with the upcoming runs of your collections' schedules. It
+has its own entry in the sidebar (and the phone tab bar) and in the command palette
+(<Kbd>⌘</Kbd> <Kbd>K</Kbd>).
+
+## The calendar
+
+| View | What you see |
+|---|---|
+| **Day** | One day with an hour grid. |
+| **Week** | Seven days with an hour grid. Each post is a chip with the collection colour as its left bar (grey without one), the time, the first line of the text, its channels as small avatars and its state as an icon: a clock for *Scheduled*, a spinner for *Publishing*, a check for *Published*, a triangle for *Failed*. Past hours are hatched up to the line that marks the current time. |
+| **Month** | A month at a glance, up to three chips per day; **+N more** opens that day. |
+| **List** | The same range as a plain list grouped by day (the toggle next to the view switch; phones always use it). |
+
+Upcoming **schedule runs** show as hollow chips: `09:00 · Weekday mornings · next post`. They
+say what will go out at that time without naming a post yet, because the schedule picks it when
+it runs. Click one to open the collection's schedules.
+
+The header carries the count and the time of the visible range as a subtitle, with the
+controls centred on the title row: previous, **Today**, next, the range, then the view toggles.
+The view, the layout and the day, week or month are kept in the URL, so a link opens the same
+page. The grid scrolls on its own, with the day headers and the hour axis staying put, and
+opens around the current hour.
+
+Click a post to open its [sheet](/dashboard/posts#the-post).
+
+## Add a post into a slot
+
+Future slots have a **+** (shown when you hover an hour or a day, always on a touch screen).
+It opens **Schedule a post here** with every draft in your collections (search them with
+**Search drafts**): pick one and it is scheduled for that time on its channels. **New post for
+this time** at the bottom opens the composer with the publish time already set. Past slots have
+no **+** and take no drop.
+
+## Reschedule or clear
+
+Drag a chip to another day (month view keeps the time of day) or to another hour (week view) to
+move it; a toast confirms the new time. On the post itself, the calendar button in its header
+has **Reschedule** and **Clear schedule**; clearing makes it a draft again and keeps the time as
+a note.
+
+Only drafts, scheduled and failed posts can be moved. Once a post is publishing or published
+its time is read-only; a failed post publishes again with **Publish now**, or one channel with
+**Retry**.
+
+## Time zones and history
+
+Times are stored in UTC and shown in the browser's time zone; the picker names it. Schedules
+keep their own zone (a 09:00 in `Europe/Warsaw` stays 09:00 across daylight saving changes). The
+post's **History** records *Scheduled* or *Rescheduled* with the time, *Schedule cleared*, and
+*Published* or *Failed* per channel.
+
+API: `POST /v1/posts/{id}/schedule`, `POST /v1/posts/{id}/cancel`,
+`GET /v1/posts?publish_after=&publish_before=&sort=publish_asc` for the calendar, and the
+`post.scheduled` / `post.unscheduled` events; `GET /v1/schedules` for the runs.
+
+## Next steps
+
+<Cards>
+  <Card title="Schedules" href="/automation/schedules">Rules, picks and what happens when nothing waits.</Card>
+  <Card title="Posts" href="/dashboard/posts">The composer and the post sheet.</Card>
+</Cards>
