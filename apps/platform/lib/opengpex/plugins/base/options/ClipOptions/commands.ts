@@ -1,0 +1,974 @@
+/**
+ * OpenGPEX - An Open-source, Web-based Graphics and Photo editor.
+ * Copyright (C) 2026 The OpenGPEX Authors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+
+'use client';
+
+import { EditorContextValue, EditorCommand, asLocalRect, asLocalShape, Frame, LocalRect, LocalShape, EditorActions, GeometryService, Point2D } from '@opengpex/editor/core/types';
+import { getClipBox, getRegularClipShape } from '@opengpex/editor/core/helpers/selection';
+import { blobToImageData } from '@opengpex/editor/core/engine/utils/pixel-utils';
+import { clipComputeClient } from './workers/client';
+import * as P from './protocols';
+import type { ClipTool } from './protocols';
+
+
+/**
+ * Single source of truth for "leave clip mode and discard any in-flight
+ * peel/exchange triplet". Used by `exitClip` (Esc) and the `ClipOverlay`
+ * unmount cleanup.
+ *
+ * 2026-06-25 refactor: ESC now means "cancel" — if a peel was in progress,
+ * the exchange is discarded (host hole mask removed, exchange reset) instead
+ * of being baked. Baking is explicitly triggered by Enter (`commitPeel`).
+ * This matches the universal "Enter = confirm, Esc = cancel" mental model.
+ *
+ * Order matters: flip mode FIRST so React/Zustand can tear down ClipOverlay
+ * synchronously; defer `discardExchange` to a microtask so the dirty-check
+ * fast path (no peel happened) doesn't block the visible mode flip.
+ * `discardExchange` is idempotent — duplicate calls short-circuit.
+ *
+ * [noundo] discardExchange is called via `.execute.noundo()` because it runs
+ * inside the peel interaction transaction — the undo boundary is already owned
+ * by `peelToExchange` (undoable: true). Generating an additional checkpoint
+ * here would create a spurious undo step. See peel.ts for architecture notes.
+ */
+export function exitClipMode(ctx: EditorContextValue): void {
+  ctx.actions.setInteraction({ interactionMode: 'pan' });
+  queueMicrotask(() => {
+    ctx.actions.adv.layer.peel.discardExchange.execute.noundo();
+  });
+}
+
+/**
+ * Helper: Unifies the retrieval and updating of the active crop target (Image vs Canvas).
+ */
+export function getActiveTarget(ctx: { activeFrame: Frame | null; actions: EditorActions; geometry: GeometryService }, isReCanvas: boolean) {
+  const { activeFrame, actions, geometry } = ctx;
+  if (!activeFrame) return null;
+  const regularPoly = isReCanvas ? null : getRegularClipShape(activeFrame);
+  const shape: LocalShape = isReCanvas
+    ? activeFrame.canvasClipBox
+    : (regularPoly ? geometry.polygon.polygonToShape(regularPoly) : asLocalShape({ x: 0, y: 0, w: 0, h: 0 }));
+
+  return {
+    isReCanvas,
+    shape,
+    box: shape.rect,
+    aspect: isReCanvas ? activeFrame.canvasAspect : activeFrame.imageAspect,
+    setAspect: (val: number | undefined) => {
+      const setter = isReCanvas ? actions.setCanvasAspect : actions.setImageAspect;
+      setter(activeFrame.id, val);
+    },
+    updateShape: (patch: Partial<LocalShape>) => {
+      if (isReCanvas) {
+        actions.setCanvasClipBox(activeFrame.id, { ...shape, ...patch } as LocalShape);
+      } else {
+        const toolId: 'rect' | 'pathellipse' = shape.type === 'circle' ? 'pathellipse' : 'rect';
+        // clipBoxes stores LocalPolygon — properly convert the patched rect to polygon with rings
+        const patched = { ...shape, ...patch } as LocalShape;
+        const poly = geometry.polygon.regularShapeToLocalPolygon(toolId, patched.rect, patched.antiAliased);
+        actions.setClipBox(activeFrame.id, toolId, poly);
+      }
+    },
+    clampRect: (box: LocalRect) => {
+      if (isReCanvas) return box;
+      const cx = Math.max(0, Math.min(box.x, activeFrame.canvas.w - box.w));
+      const cy = Math.max(0, Math.min(box.y, activeFrame.canvas.h - box.h));
+      return { ...box, x: cx, y: cy };
+    }
+  };
+}
+
+/**
+ * Cycle the active crop tool by `step` (+1 forward, -1 backward) within
+ * the declaration order of `CLIP_TOOL_STRATEGIES`. Shared by
+ * `cycleToolForward` (Tab) and `cycleToolBackward` (Shift+Tab) so the
+ * dispatch path, undo semantics and signal-read freshness stay in one place.
+ *
+ * We delegate the actual write to `setClipTool` (via the ClipOptions
+ * instance UID) rather than calling `scoped.setSignal` directly, because
+ * `setClipTool` carries the pluginConfig persistence (so cross-session
+ * restoration survives).
+ *
+ * Reading `SIGNAL_CLIP_TOOL` directly (rather than caching a local copy)
+ * means we always pick up the *latest* tool regardless of who last set it
+ * (toolbar click, popover, or this very command in a previous beat).
+ */
+function cycleClipTool(ctx: EditorContextValue, step: 1 | -1): void {
+  const order = (Object.keys(P.CLIP_TOOL_STRATEGIES) as ClipTool[]).filter(t => P.CLIP_TOOL_STRATEGIES[t].enabled !== false);
+  const raw = (ctx.activeFrame?.latestClipTool as ClipTool | undefined) ?? order[0];
+  const idx = order.indexOf(raw);
+  // `(idx + step + len) % len` keeps the modulo non-negative even for step=-1.
+  const next = order[(idx + step + order.length) % order.length];
+  ctx.actions.executeCommand(
+    `${P.PLUGIN_AUTHOR}.${P.PLUGIN_ID}.${P.CMD_SET_CLIP_TOOL}`,
+    { tool: next }
+  );
+}
+
+
+/**
+ * CLIP_OPTIONS_COMMANDS: Declarative command configuration (Single Source of Truth).
+ * Contains command metadata (ID, name, shortcuts) and implementation logic.
+ */
+export const CLIP_OPTIONS_COMMANDS = {
+  /**
+   * Space — pure toggle between pan and clip mode:
+   *   1) From any non-clip mode → enter clip mode (no tool change).
+   *   2) Already in clip mode  → exit clip mode (back to pan).
+   *
+   * Tool cycling is handled separately by Tab / Shift+Tab commands
+   * (`cycleToolForward` / `cycleToolBackward`), keeping Space as a clean
+   * enter/exit toggle — matching the mental model of a play/pause button.
+   *
+   * Re-Canvas guard: when Re-Canvas is active, Space is a no-op. Esc
+   * remains the single exit (handled by `exitClip` below — it closes
+   * Re-Canvas first, then leaves clip if applicable).
+   */
+  toggleMode: {
+    id: P.CMD_TOGGLE_MODE,
+    name: 'Toggle Clip Mode',
+    category: 'Selection',
+    execute: async (ctx: EditorContextValue) => {
+      // Re-Canvas is a fully *orthogonal* modal — Space must not leak into it.
+      if (ctx.scoped?.getSignal(P.SIGNAL_RE_CANVAS)) return;
+
+      // First press: enter clip mode, keep current tool.
+      if (ctx.state.interaction.interactionMode !== 'clip') {
+        ctx.actions.setInteraction({ interactionMode: 'clip' });
+        return;
+      }
+
+      // Already in clip mode: merge any dirty peel first (same as Enter),
+      // then exit. This ensures peeled fragments are committed, not discarded.
+      // [noundo] mergeHost runs inside the peel transaction — the undo boundary
+      // is owned by `peelToExchange`. See peel.ts for architecture notes.
+      await ctx.actions.adv.layer.merge.mergeHost.execute.noundo();
+      exitClipMode(ctx);
+    },
+    shortcut: { key: ' ' }
+  } as EditorCommand<void, Promise<void>>,
+
+  /**
+   * Tab — cycle through clip tools forward while already in clip mode
+   * (rect → pathellipse → lasso → wand → rect …).
+   *
+   * Only active when `interactionMode === 'clip'`; no-op in any other mode.
+   * Re-Canvas guard: no-op when active (Re-Canvas is rect-only).
+   * Bound via local keydown listener in ClipOptionsMain (not HotkeyManager).
+   */
+  cycleToolForward: {
+    id: P.CMD_CYCLE_TOOL_FORWARD,
+    name: 'Cycle Clip Tool (Forward)',
+    category: 'Selection',
+    execute: (ctx: EditorContextValue) => {
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+      if (ctx.scoped?.getSignal(P.SIGNAL_RE_CANVAS)) return;
+      cycleClipTool(ctx, +1);
+    },
+  } as EditorCommand<void, void>,
+
+  /**
+   * Shift+Tab — reverse cycle through clip tools while already in clip mode
+   * (rect ← pathellipse ← lasso ← wand ← rect …).
+   *
+   * Only active when `interactionMode === 'clip'`; no-op in any other mode.
+   * Re-Canvas guard: no-op when active (Re-Canvas is rect-only).
+   * Bound via local keydown listener in ClipOptionsMain (not HotkeyManager).
+   */
+  cycleToolBackward: {
+    id: P.CMD_CYCLE_TOOL_BACKWARD,
+    name: 'Cycle Clip Tool (Backward)',
+    category: 'Selection',
+    execute: (ctx: EditorContextValue) => {
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+      if (ctx.scoped?.getSignal(P.SIGNAL_RE_CANVAS)) return;
+      cycleClipTool(ctx, -1);
+    },
+  } as EditorCommand<void, void>,
+
+
+
+  /**
+   * Escape — context-sensitive exit. Three branches, in priority order:
+   *   1) Re-Canvas open  → close Re-Canvas only (its rect / popover collapses).
+   *                        Mode is preserved. If we were in pure Re-Canvas
+   *                        from pan, we stay in pan; if we were in clip,
+   *                        we stay in clip.
+   *   2) Clip mode       → exit clip via the standard `exitClipMode` helper
+   *                        (mode → 'pan' + microtask mergeHost).
+   *   3) Neither         → no-op (let overlay-level Esc handlers — text,
+   *                        brush, etc. — run their own logic without
+   *                        conflict).
+   *
+   * Why split (1) and (2)? Before 2026-06-23 Re-Canvas was a sub-modal of
+   * clip, so closing it always implied "still in clip". Re-Canvas is now an
+   * orthogonal modal (you can be in pure pan + Re-Canvas), so the two
+   * dismissals must be independent.
+   */
+  exitClip: {
+    id: P.CMD_EXIT_CLIP_MODE,
+    name: 'Exit Clip / Re-Canvas',
+    category: 'Selection',
+    execute: (ctx: EditorContextValue) => {
+      if (ctx.scoped?.getSignal(P.SIGNAL_RE_CANVAS)) {
+        ctx.scoped.setSignal(P.SIGNAL_RE_CANVAS, false);
+        return;
+      }
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+      exitClipMode(ctx);
+    },
+    shortcut: { key: 'Escape' }
+  } as EditorCommand<void, void>,
+
+  /**
+   * Enter — commit the peel (bake exchange into host) and exit clip mode.
+   *
+   * This is the explicit "confirm" gesture for peel operations. If no peel
+   * is in progress (triplet is clean), the command still exits clip mode as
+   * a convenient "done editing selections" shortcut — matching Photoshop's
+   * Enter-exits-transform behaviour.
+   *
+   * Flow:
+   *   1) Call `mergeHost` to bake any dirty peel triplet.
+   *   2) Exit clip mode via `exitClipMode` (which now only discards —
+   *      but since we just merged, the triplet is already clean so the
+   *      discard call inside `exitClipMode` becomes a no-op).
+   *
+   * Only active while in clip mode; no-op otherwise so Enter doesn't
+   * interfere with text inputs or other overlay interactions.
+   */
+  commitPeel: {
+    id: P.CMD_COMMIT_PEEL,
+    name: 'Commit Peel & Exit Clip',
+    category: 'Selection',
+    execute: async (ctx: EditorContextValue) => {
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+
+      // Bake the peel (mergeHost is async — waits for off-screen composite).
+      // [noundo] mergeHost runs inside the peel transaction — the undo boundary
+      // is owned by `peelToExchange`. See peel.ts for architecture notes.
+      await ctx.actions.adv.layer.merge.mergeHost.execute.noundo();
+
+      // Exit clip mode. Since we just merged, the triplet is now clean and
+      // the discardExchange inside exitClipMode will be a no-op.
+      exitClipMode(ctx);
+    },
+    shortcut: { key: 'Enter' }
+  } as EditorCommand<void, Promise<void>>,
+
+  /**
+   * toggleReCanvas — opens / closes the canvas-resize modal.
+   *
+   * As of 2026-06-23, Re-Canvas is a *fully orthogonal* modal layered on
+   * top of pan; it is NOT a sub-modal of clip. The previous "auto-promote
+   * to clip mode on activation" behaviour has been removed because it
+   * caused two surprises:
+   *   1) clicking Re-Canvas from pan would force the user into clip mode
+   *      (visible by the side-bar toggle flipping), which they didn't ask
+   *      for;
+   *   2) once in that hybrid state, Space (cycle tool) would project
+   *      lasso / wand / circle shapes onto `canvasClipBox`, flipping the
+   *      rose-tinted rect into a circle — also unexpected.
+   *
+   * Now: activating Re-Canvas only writes the `SIGNAL_RE_CANVAS` signal +
+   * coerces `canvasClipBox.type` to 'rect' (resizing only makes sense on
+   * a rectangular footprint). The ClipOverlay mounts whenever Re-Canvas
+   * is on (see `components.tsx::isOverlayActive`) regardless of
+   * interactionMode, and the clipbox InteractionHandler admits pointer
+   * events whenever Re-Canvas is on (see `interactions.ts::makeClipToolGuard`).
+   *
+   * Deactivation never changes mode, mirroring activation — this leaves
+   * the user wherever they were (pan, clip, etc.) before opening
+   * Re-Canvas. Esc closes Re-Canvas first (see `exitClip` above), so a
+   * single Esc from "pan + Re-Canvas" returns to plain pan.
+   */
+  toggleReCanvas: {
+    id: P.CMD_RE_CANVAS_TOGGLE,
+    name: 'Toggle Resize Canvas Mode',
+    execute: (ctx: EditorContextValue) => {
+      const isActivating = !ctx.scoped?.getSignal(P.SIGNAL_RE_CANVAS);
+
+      if (isActivating && ctx.activeFrame) {
+        ctx.actions.setCanvasClipBox(ctx.activeFrame.id, {
+          ...ctx.activeFrame.canvasClipBox,
+          type: 'rect'
+        });
+      }
+
+      ctx.scoped?.toggleSignal(P.SIGNAL_RE_CANVAS);
+    }
+  } as EditorCommand<void, void>,
+
+
+  applyReCanvas: {
+    id: P.CMD_RE_CANVAS_APPLY,
+    name: 'Apply Canvas Resize',
+    undoable: true,
+    execute: (ctx: EditorContextValue) => {
+      if (!ctx.activeFrame) return;
+      ctx.actions.adv.frame.resize.resizeCanvas.execute();
+      ctx.scoped?.setSignal(P.SIGNAL_RE_CANVAS, false);
+      exitClipMode(ctx);
+    }
+  } as EditorCommand<void, void>,
+
+  setAspect: {
+    id: P.CMD_SET_ASPECT,
+    name: 'Set Aspect Ratio',
+    undoable: true,
+    execute: (ctx: EditorContextValue, payload: { aspect: number | undefined }) => {
+      const isReCanvas = !!ctx.scoped!.getSignal(P.SIGNAL_RE_CANVAS);
+      const target = getActiveTarget(ctx, isReCanvas);
+      if (!target) return;
+
+      const targetRatio = payload.aspect;
+
+      if (targetRatio && target.box) {
+        const canvasW = ctx.activeFrame!.canvas.w;
+        const canvasH = ctx.activeFrame!.canvas.h;
+        const originalShortEdge = Math.min(target.box.w, target.box.h);
+
+        let newW = targetRatio >= 1 ? originalShortEdge * targetRatio : originalShortEdge;
+        let newH = targetRatio >= 1 ? originalShortEdge : originalShortEdge / targetRatio;
+
+        if (newW > canvasW) {
+          newW = canvasW;
+          newH = newW / targetRatio;
+        }
+        if (newH > canvasH) {
+          newH = canvasH;
+          newW = newH * targetRatio;
+        }
+
+        const nextBox = asLocalRect({
+          ...target.box,
+          x: target.box.x + (target.box.w - newW) / 2,
+          y: target.box.y + (target.box.h - newH) / 2,
+          w: newW,
+          h: newH
+        });
+
+        const finalBox = target.clampRect(nextBox);
+        target.updateShape({ rect: finalBox });
+        target.setAspect(targetRatio);
+      } else {
+        target.setAspect(targetRatio);
+      }
+    }
+  } as EditorCommand<{ aspect: number | undefined }, void>,
+
+  resetAspect: {
+    id: P.CMD_RESET_ASPECT,
+    name: 'Reset Aspect Ratio',
+    undoable: true,
+    execute: (ctx: EditorContextValue) => {
+      const isReCanvas = !!ctx.scoped!.getSignal(P.SIGNAL_RE_CANVAS);
+      const target = getActiveTarget(ctx, isReCanvas);
+      if (target) target.setAspect(undefined);
+    }
+  } as EditorCommand<void, void>,
+
+  createBranch: {
+    id: P.CMD_BRANCH,
+    name: 'Create Branch',
+    undoable: true,
+    execute: async (ctx: EditorContextValue, payload: { rect: DOMRect }) => {
+      const { activeFrame, actions } = ctx;
+      if (!activeFrame) return;
+
+      const trunkId = activeFrame.parentId || activeFrame.id;
+      const thumbnailUrl = await actions.adv.frame.create.branch.fromSelection.execute();
+
+      if (thumbnailUrl && payload?.rect) {
+        window.dispatchEvent(new CustomEvent('editor:branch-fly', {
+          detail: { rect: payload.rect, thumbnailUrl, trunkId }
+        }));
+      }
+    },
+  } as EditorCommand<{ rect: DOMRect }, Promise<void>>,
+
+  resetBox: {
+    id: P.CMD_RESET_BOX,
+    name: 'Clear Selection',
+    undoable: true,
+    /**
+     * Double-click (or programmatic) clear — removes the active tool's
+     * selection. Works for ALL clip tools (rect / pathellipse / lasso / wand).
+     *
+     * Re-Canvas mode is excluded (the canvas crop box must always exist).
+     *
+     * Uses `getClipBox` to resolve the active slot, then writes `null` to
+     * clear it. This is the "Clear Selection" entry point.
+     *
+     * BUG FIX (2026-07-13): If there's an active peel (exchange layer), we
+     * must commit/merge it before clearing. Otherwise the exchange layer
+     * remains dangling and the peeled pixels are lost.
+     */
+    execute: async (ctx: EditorContextValue) => {
+      const isReCanvas = !!ctx.scoped!.getSignal(P.SIGNAL_RE_CANVAS);
+      if (isReCanvas) return; // Re-Canvas crop box must always exist
+
+      const frame = ctx.activeFrame;
+      if (!frame) return;
+
+      const tool = (frame.latestClipTool as ClipTool) || 'rect';
+      const clipBox = getClipBox(frame);
+      if (!clipBox) return; // already empty — nothing to clear
+
+      // If an exchange layer exists (from peel), merge it into host first.
+      // This mirrors the Enter (commitPeel) behaviour: bake before discard.
+      const activeLayer = frame.activeLayerId ? frame.layers.byId[frame.activeLayerId] : undefined;
+      const exchangeLayer = (activeLayer?.role === 'exchange')
+        ? activeLayer
+        : frame.layers.order.map(id => frame.layers.byId[id]).find(l => l.role === 'exchange' && l.hostId === frame.activeLayerId);
+
+      if (exchangeLayer) {
+        await ctx.actions.adv.layer.merge.mergeHost.execute.noundo();
+      }
+
+      ctx.actions.setClipBox(frame.id, tool, null);
+    }
+  } as EditorCommand<void, Promise<void>>,
+
+  toggleAntiAlias: {
+    id: P.CMD_TOGGLE_ANTI_ALIAS,
+    name: 'Toggle Anti-Alias',
+    category: 'Selection',
+    // [noundo] The toggle is a tool-preference change, not a document edit:
+    // it always writes the per-tool preset (and persists it to pluginConfig),
+    // and it now fires even when no selection exists, so it must never push
+    // an undo checkpoint.
+    undoable: false,
+    // ─── Shortcut: double-tap `A` ──────────────────────────────────────────
+    // Why double-tap rather than single?
+    //   1) The single-letter `A` collides with too many adjacent idioms
+    //      (selection/navigation in other UIs) — would mis-fire constantly.
+    //   2) Tap-tap matches the muscle memory used elsewhere in the editor
+    //      for "commit a transient toggle".
+    // The `HotkeyManager` honours `taps` declaratively (≥2 → enforce a
+    // 400ms tap window, swallow intermediate keystrokes, reject `e.repeat`).
+    // Modifier-key shortcuts (Cmd+A select-all) remain on the single-tap
+    // path because their modifier mask differs.
+    //
+    // Runtime guards (mode / re-canvas / tool family) are enforced **inside
+    // execute()** below so the shortcut is silently no-op'd when invalid —
+    // we deliberately do NOT block at the `beforeExecute` interceptor
+    // layer, because the UI button calling this command also relies on the
+    // same guards being honoured by the command itself (defence in depth).
+    shortcut: { key: 'a', taps: 2 },
+    execute: (ctx: EditorContextValue) => {
+      // ─── Guards ────────────────────────────────────────────────────────
+      // Mirror the AA button's `disabled` rules (clip mode active, active
+      // strategy supports AA, not in Re-Canvas). Re-evaluated at fire time
+      // so toggling tools / opening Re-Canvas mid-keystroke can't dispatch
+      // on stale state.
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+      const isReCanvas = !!ctx.scoped!.getSignal(P.SIGNAL_RE_CANVAS);
+      if (isReCanvas) return; // canvas-resize is a frozen rectangle
+      const tool = (ctx.activeFrame?.latestClipTool as ClipTool | undefined) ?? 'rect';
+      if (!P.CLIP_TOOL_STRATEGIES[tool]?.supportsAntiAlias) return;
+
+      // ─── Step 1: flip the per-tool preset (works with no selection) ────
+      // The tool's preset lives in the reactive per-tool AA map. Toggling is
+      // a tool-options operation in its own right, so it always executes —
+      // an active selection is patched afterwards as a secondary effect.
+      const currentMap = (ctx.scoped!.getSignal(P.SIGNAL_CLIP_TOOL_AA) as P.ClipToolAAMap | undefined)
+        ?? P.DEFAULT_CLIP_TOOL_AA;
+      const currentAA = currentMap[tool] ?? true;
+      const newAA = !currentAA;
+      ctx.scoped!.setSignal(P.SIGNAL_CLIP_TOOL_AA, { ...currentMap, [tool]: newAA });
+
+      // NOTE: deliberately NO pluginConfig persistence here — the per-tool AA
+      // map is a session-scoped tool preference; a refresh resets it to the
+      // factory defaults (accepted product behaviour, unlike feather).
+
+      // ─── Step 2: patch the active selection in place (if any) ───────────
+      // The selection's own `antiAliased` entity flag is the data-level truth
+      // consumed by the GPU mask pipeline; keep it in sync with the preset so
+      // the visible selection reflects the toggle immediately.
+      const frame = ctx.activeFrame;
+      if (!frame) return;
+      const clipBox = getClipBox(frame);
+      if (!clipBox) return; // No selection on canvas -> tool setting updated, done!
+
+      // For the rect tool: rebuild the polygon with the new AA flag
+      // so that rings are regenerated correctly (not just patching metadata).
+      // For the path-based tools (pathellipse / lasso / sam): patch the
+      // edge-mode flags directly on the polygon. INVARIANT (three-state
+      // model): the AA toggle is the sole writer and must write BOTH flags —
+      // `ssdepMode` is display-only (SSDEP) and always resets to false here;
+      // it never enters GPU descriptors. Note rect can only reach this branch
+      // if a legacy rect selection is on canvas; the preset map never lets
+      // rect's toggle pass the supportsAntiAlias guard, so this is dead-path
+      // defensive parity with the previous behaviour.
+      if (tool === 'rect') {
+        const newPoly = ctx.geometry.polygon.regularShapeToLocalPolygon(tool, clipBox.rect, newAA);
+        ctx.actions.setClipBox(frame.id, tool, newPoly);
+      } else {
+        const newPoly = { ...clipBox, antiAliased: newAA, ssdepMode: false };
+        ctx.actions.setClipBox(frame.id, tool, newPoly);
+      }
+    }
+  } as EditorCommand<void, void>,
+
+
+  /**
+   * setClipTool — strategy-driven tool switch.
+   *
+   * Each tool owns its own independent slot in `frame.clipBoxes`, so switching
+   * writes only `latestClipTool`; the ants selector reads the new tool's slot
+   * (empty or shape) and the path updates accordingly. Inactive slots are
+   * preserved for round-trip symmetry (switch back to see the old selection).
+   *
+   * Slot clears only happen via:
+   *   1) `adv.layer.clip.toMask` (mission accomplished);
+   *   2) explicit "Clear Selection" command.
+   *
+   * [noundo] Tool switching is a UI navigation action, not a document edit.
+   * It does NOT create an undo checkpoint — pressing Cmd+Z after a Tab cycle
+   * will not revert the tool selection. This matches the expectation that
+   * undo should only affect meaningful document mutations (selections, masks,
+   * pixel edits), not ephemeral tool-palette navigation.
+   */
+  setClipTool: {
+    id: P.CMD_SET_CLIP_TOOL,
+    name: 'Set Crop Tool',
+    undoable: false,
+    execute: (ctx: EditorContextValue, payload: { tool: ClipTool }) => {
+      const { activeFrame, actions } = ctx;
+      if (!activeFrame || !payload?.tool) return;
+
+      // Write to frame model (per-frame, persistent, participates in undo).
+      actions.updateFrame(activeFrame.id, { latestClipTool: payload.tool });
+    }
+  } as EditorCommand<{ tool: ClipTool }, void>,
+
+  /**
+   * CMD_DRILL_SELECTION — Plugin-level wrapper around `adv.layer.clip.drill`.
+   * Owns the Backspace/Delete keyboard shortcuts and reads the feather signal
+   * before delegating to the core drill command with the feather payload.
+   * This keeps core (`clip.ts`) completely independent of plugin signal knowledge.
+   */
+  drillSelection: {
+    id: P.CMD_DRILL_SELECTION,
+    name: 'Delete Selection (Feathered)',
+    category: 'Selection',
+    shortcuts: [
+      { key: 'Backspace' },
+      { key: 'Delete' }
+    ],
+    execute: (ctx: EditorContextValue) => {
+      const feather = (ctx.scoped?.getSignal(P.SIGNAL_CLIP_FEATHER) as number) || 0;
+      ctx.actions.adv.layer.clip.drill.execute({ feather });
+    }
+  } as EditorCommand<void, void>,
+
+  /**
+   * CMD_LAYER_VIA_COPY — Plugin-level wrapper around `adv.layer.cmdj.copy`.
+   * Owns the Cmd+J keyboard shortcut and reads the feather signal before
+   * delegating to the core command with the feather payload.
+   */
+  layerViaCopy: {
+    id: P.CMD_LAYER_VIA_COPY,
+    name: 'Layer via Copy',
+    category: 'Selection',
+    shortcuts: [{ key: 'j', meta: true }, { key: 'j', ctrl: true }],
+    execute: (ctx: EditorContextValue) => {
+      const feather = (ctx.scoped?.getSignal(P.SIGNAL_CLIP_FEATHER) as number) || 0;
+      ctx.actions.adv.layer.cmdj.copy.execute({ feather });
+    }
+  } as EditorCommand<void, void>,
+
+  /**
+   * CMD_LAYER_VIA_CUT — Plugin-level wrapper around `adv.layer.cmdj.cut`.
+   * Owns the Cmd+Shift+J keyboard shortcut and reads the feather signal before
+   * delegating to the core command with the feather payload.
+   */
+  layerViaCut: {
+    id: P.CMD_LAYER_VIA_CUT,
+    name: 'Layer via Cut',
+    category: 'Selection',
+    shortcuts: [{ key: 'j', meta: true, shift: true }, { key: 'j', ctrl: true, shift: true }],
+    execute: (ctx: EditorContextValue) => {
+      const feather = (ctx.scoped?.getSignal(P.SIGNAL_CLIP_FEATHER) as number) || 0;
+      ctx.actions.adv.layer.cmdj.cut.execute({ feather });
+    }
+  } as EditorCommand<void, void>,
+
+  /**
+   * CMD_SELECT_FROM_ALPHA — Select from Alpha (Cmd+Shift+A).
+   *
+   * Reads the active image layer's alpha channel, sends it to the wand worker
+   * (alpha handler), and writes the resulting polygon selection to the current
+   * tool's slot. Does NOT switch tools — aligned with Invert's design principle.
+   */
+  selectFromAlpha: {
+    id: P.CMD_SELECT_FROM_ALPHA,
+    name: 'Select from Alpha',
+    category: 'Selection',
+    undoable: true,
+    shortcuts: [{ key: 'a', meta: true, shift: true }, { key: 'a', ctrl: true, shift: true }],
+    execute: async (ctx: EditorContextValue) => {
+      // ─── Guards ────────────────────────────────────────────────────────
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+      const isReCanvas = !!ctx.scoped!.getSignal(P.SIGNAL_RE_CANVAS);
+      if (isReCanvas) return;
+
+      const frame = ctx.activeFrame;
+      if (!frame) return;
+
+      // Must have an active image layer
+      const layer = ctx.activeLayer;
+      if (!layer || layer.type !== 'image') return;
+
+      // ─── Get effective alpha via unified composite pipeline ────────────────
+      // Composite the layer (source + VectorMasks + BitmapMasks + adjustments)
+      // and extract ImageData directly — only the alpha channel is needed for
+      // polygon contour tracing. NOT persisted to the frame/layer state.
+      let imageData: ImageData;
+      try {
+        const worldShape = ctx.geometry.shape.unitedShapeOfLayers([layer]);
+        if (!worldShape) {
+          ctx.actions.setInteraction({ hud: { message: 'Failed to analyze layer pixels', type: 'error' } });
+          return;
+        }
+
+        // Composite at 1:1 — we only need the alpha channel for contour tracing.
+        const composited = await ctx.pixels.composite({
+          layers: [layer],
+          roi: worldShape,
+          frame,
+        });
+
+        // Direct path: blobToImageData() avoids the asset → Image → canvas → getImageData cycle
+        imageData = await blobToImageData(composited.displayBlob);
+      } catch (err) {
+        console.error('[SelectFromAlpha] Failed to read layer image data:', err);
+        ctx.actions.setInteraction({ hud: { message: 'Failed to analyze layer pixels', type: 'error' } });
+        return;
+      }
+
+      // ─── Run alpha worker ──────────────────────────────────────────────
+      try {
+        const response = await clipComputeClient.runAlpha({
+          type: 'alpha',
+          imageData: {
+            data: imageData.data.buffer as ArrayBuffer,
+            width: imageData.width,
+            height: imageData.height,
+          },
+          threshold: 0,
+          simplifyEpsilon: 1.0,
+        });
+
+        if (!response.rings) {
+          // No opaque pixels in the layer
+          ctx.actions.setInteraction({ hud: { message: 'No opaque pixels found', type: 'error' } });
+          return;
+        }
+
+        // ─── Build polygon and coordinate-transform ────────────────────
+        // The alpha worker output is in "composite space" (0-based pixel coords
+        // of the compositeLayers/`pixels.composite` output). When the layer's
+        // visibleShape.rect
+        // has non-zero x/y (deriveLogical layers sharing a parent src, or trunk
+        // imports with transparent borders), composite space ≠ layer-local space.
+        // We must offset by visibleShape.rect.(x,y) to convert to true layer-local
+        // coordinates before projecting to frame-local.
+        const vx = layer.visibleShape?.rect.x || 0;
+        const vy = layer.visibleShape?.rect.y || 0;
+        const adjustedRings = (vx === 0 && vy === 0)
+          ? response.rings as Point2D[][]
+          : (response.rings as Point2D[][]).map(ring =>
+              ring.map(p => ({ x: p.x + vx, y: p.y + vy }))
+            );
+        // Wand results are PIXEL selections: pinned to a hard binary edge
+        // (`antiAliased:false, ssdepMode:false`), matching the
+        // wand click handler. Softening is Feather's job, not AA's.
+        const layerPoly = ctx.geometry.point2d.point2dToLocalPolygon(adjustedRings, false);
+        const framePoly = ctx.geometry.polygon.layerLocalToFrameLocal(layerPoly, layer, frame);
+
+        // ─── Write to wand slot and switch tool to wand ──────────────
+        // Select-from-Alpha produces a polygon selection semantically equivalent
+        // to a magic wand result — switch clipTool so the overlay and subsequent
+        // operations (AA toggle, offset, invert) target the correct irregular slot.
+        ctx.actions.updateFrame(frame.id, { latestClipTool: 'wand' });
+        ctx.actions.setClipBox(frame.id, 'wand', framePoly);
+
+        if (response.debug) {
+          console.debug('[SelectFromAlpha]', response.debug);
+        }
+      } catch (err) {
+        console.warn('[SelectFromAlpha] Worker failed:', err);
+        ctx.actions.setInteraction({ hud: { message: 'Failed to analyze layer pixels', type: 'error' } });
+      }
+    }
+  } as EditorCommand<void, Promise<void>>,
+
+  /**
+   * CMD_INVERT_SELECTION — Invert the active selection (Cmd+Shift+I).
+   *
+   * Constructs a polygon where outer ring = canvas boundary rectangle and
+   * inner rings = original selection rings, using evenodd fill rule.
+   *
+   * Design principles (aligned with Photoshop):
+   *   - Does NOT switch tools (`latestClipTool` unchanged).
+   *   - Writes result to the same slot (current tool's clipBoxes entry).
+   *   - For regular selections (rect/ellipse): converts to polygon first.
+   *   - Double-invert = round-trip (attempts `tryPolygonToShape` restore).
+   *   - Full-canvas selection inverted = clear (empty selection).
+   */
+  invertSelection: {
+    id: P.CMD_INVERT_SELECTION,
+    name: 'Invert Selection',
+    category: 'Selection',
+    undoable: true,
+    shortcuts: [{ key: 'i', meta: true, shift: true }, { key: 'i', ctrl: true, shift: true }],
+    execute: async (ctx: EditorContextValue) => {
+      // ─── Guards ────────────────────────────────────────────────────────
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+      const isReCanvas = !!ctx.scoped!.getSignal(P.SIGNAL_RE_CANVAS);
+      if (isReCanvas) return;
+
+      const frame = ctx.activeFrame;
+      if (!frame) return;
+
+      const clipBox = getClipBox(frame);
+      if (!clipBox) return; // no selection to invert
+
+      const tool = (frame.latestClipTool as ClipTool) || 'rect';
+      const { w: canvasW, h: canvasH } = frame.canvas;
+      const antiAliased = clipBox.antiAliased ?? true;
+      const localShape = ctx.geometry.polygon.polygonToShape(clipBox);
+      const isRegular = localShape.type !== 'path';
+
+      const { point2d: geo } = ctx.geometry;
+
+      // 1. Unbox: container → Point2D[][]
+      const rings: Point2D[][] = isRegular
+        ? geo.shapeToPoint2D(localShape)
+        : clipBox.rings as unknown as Point2D[][];
+
+      // 2. Compute boolean difference via Worker (canvas rect - selection)
+      const response = await clipComputeClient.runInvert({
+        type: 'invert',
+        rings,
+        canvasW,
+        canvasH,
+      });
+
+      // 3. Rebox: Point2D[][] → best container, then write
+      if (response.rings === null) {
+        ctx.actions.setClipBox(frame.id, tool, null);
+      } else {
+        const container = geo.point2dToLocalPolygon(response.rings as Point2D[][], antiAliased);
+        ctx.actions.setClipBox(frame.id, tool, container);
+      }
+    }
+  } as EditorCommand<void, void>,
+
+  /**
+   * CMD_OFFSET_SELECTION — Expand or contract the active selection by N pixels.
+   *
+   * Payload: { distance: number } where positive = expand, negative = contract.
+   *
+   * Now async — delegates heavy offset computation to offset.worker.ts via
+   * clipComputeClient. This prevents main-thread stalls on large selections.
+   */
+  offsetSelection: {
+    id: P.CMD_OFFSET_SELECTION,
+    name: 'Offset Selection',
+    undoable: true,
+    execute: async (ctx: EditorContextValue, payload: { distance: number }) => {
+      // ─── Guards ────────────────────────────────────────────────────────
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+      const isReCanvas = !!ctx.scoped!.getSignal(P.SIGNAL_RE_CANVAS);
+      if (isReCanvas) return;
+
+      const frame = ctx.activeFrame;
+      if (!frame) return;
+
+      const clipBox = getClipBox(frame);
+      if (!clipBox) return; // no selection to offset
+
+      const { distance } = payload;
+      if (distance === 0) return;
+
+      const tool = (frame.latestClipTool as ClipTool) || 'rect';
+      const { w: canvasW, h: canvasH } = frame.canvas;
+      const antiAliased = clipBox.antiAliased ?? true;
+      const localShape = ctx.geometry.polygon.polygonToShape(clipBox);
+      const isRegular = localShape.type !== 'path';
+
+      const { point2d: geo } = ctx.geometry;
+
+      // 1. Unbox: container → Point2D[][]
+      const rings: Point2D[][] = isRegular
+        ? geo.shapeToPoint2D(localShape)
+        : clipBox.rings as unknown as Point2D[][];
+
+      // 2. Delegate to offset worker
+      const algorithm = isRegular ? 'vertex-normal' : 'morphological';
+      const response = await clipComputeClient.runOffset({
+        type: 'offset',
+        rings,
+        distance,
+        canvasW,
+        canvasH,
+        algorithm,
+      });
+
+      // 3. Rebox: Point2D[][] → best container, then write
+      if (response.rings === null) {
+        // Contraction eliminated the selection
+        ctx.actions.setClipBox(frame.id, tool, null);
+      } else {
+        const container = geo.point2dToLocalPolygon(response.rings as Point2D[][], antiAliased);
+        ctx.actions.setClipBox(frame.id, tool, container);
+      }
+    }
+  } as EditorCommand<{ distance: number }, Promise<void>>,
+
+  /**
+   * CMD_SELECT_ALL — Select All (Cmd+A / Ctrl+A).
+   *
+   * Creates a full-canvas selection matching the current regular tool shape
+   * (rect). Only active when already in clip mode with the rect tool
+   * selected. Does NOT switch tools or enter clip mode.
+   *
+   * Re-Canvas guard: no-op when active (canvas resize owns the rect).
+   */
+  selectAll: {
+    id: P.CMD_SELECT_ALL,
+    name: 'Select All',
+    category: 'Selection',
+    undoable: true,
+    shortcuts: [{ key: 'a', meta: true }, { key: 'a', ctrl: true }],
+    execute: (ctx: EditorContextValue) => {
+      // Only active in clip mode
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+      const isReCanvas = !!ctx.scoped!.getSignal(P.SIGNAL_RE_CANVAS);
+      if (isReCanvas) return;
+
+      const frame = ctx.activeFrame;
+      if (!frame) return;
+
+      // Only works with the rect tool
+      const tool = (frame.latestClipTool as ClipTool) || 'rect';
+      if (tool !== 'rect') return;
+
+      const { w, h } = frame.canvas;
+      // Build a full-canvas polygon matching the current tool shape
+      const fullCanvasPoly = ctx.geometry.polygon.regularShapeToLocalPolygon(tool, asLocalRect({ x: 0, y: 0, w, h }), false);
+
+      // Write to the current tool's slot (no tool switch)
+      ctx.actions.setClipBox(frame.id, tool, fullCanvasPoly);
+    }
+  } as EditorCommand<void, void>,
+
+  /**
+   * CMD_DESELECT — Deselect / Clear Selection (Cmd+D / Ctrl+D).
+   *
+   * Clears the active tool's selection without exiting clip mode.
+   * Equivalent to a single-click reset (same as `resetBox`).
+   * Only active when in clip mode with the rect tool.
+   *
+   * If a peel exchange layer exists, merges it before clearing.
+   */
+  deselect: {
+    id: P.CMD_DESELECT,
+    name: 'Deselect',
+    category: 'Selection',
+    undoable: true,
+    shortcuts: [{ key: 'd', meta: true }, { key: 'd', ctrl: true }],
+    execute: async (ctx: EditorContextValue) => {
+      // Only active in clip mode
+      if (ctx.state.interaction.interactionMode !== 'clip') return;
+      const isReCanvas = !!ctx.scoped!.getSignal(P.SIGNAL_RE_CANVAS);
+      if (isReCanvas) return;
+
+      const frame = ctx.activeFrame;
+      if (!frame) return;
+
+      // Only works with the rect tool
+      const tool = (frame.latestClipTool as ClipTool) || 'rect';
+      if (tool !== 'rect') return;
+
+      const clipBox = getClipBox(frame);
+      if (!clipBox) return; // already empty — nothing to clear
+
+      // If an exchange layer exists (from peel), merge it first
+      const activeLayer = frame.activeLayerId ? frame.layers.byId[frame.activeLayerId] : undefined;
+      const exchangeLayer = (activeLayer?.role === 'exchange')
+        ? activeLayer
+        : frame.layers.order.map(id => frame.layers.byId[id]).find(l => l.role === 'exchange' && l.hostId === frame.activeLayerId);
+
+      if (exchangeLayer) {
+        await ctx.actions.adv.layer.merge.mergeHost.execute.noundo();
+      }
+
+      // Clear the active tool's slot (stay in clip mode)
+      ctx.actions.setClipBox(frame.id, tool, null);
+    }
+  } as EditorCommand<void, Promise<void>>
+
+};
+
+
+
+/**
+ * CLIP_INTERCEPTORS: Middleware logic for the plugin.
+ */
+export const CLIP_INTERCEPTORS = {
+  beforeExecute: (id: string, ctx: EditorContextValue): boolean => {
+    if (!id.endsWith(P.CMD_RE_CANVAS_TOGGLE)) return false;
+
+    // Pressing Re-Canvas while it is already on collapses it back to plain
+    // clip mode (swallow the toggle).
+    if (ctx.scoped?.getSignal(P.SIGNAL_RE_CANVAS)) {
+      ctx.scoped?.setSignal(P.SIGNAL_RE_CANVAS, false);
+      return true;
+    }
+
+    // ─── Why we DO NOT mutate SIGNAL_CLIP_TOOL on Re-Canvas entry ──────────
+    // Earlier revisions force-set SIGNAL_CLIP_TOOL to 'rect' here whenever
+    // the user entered Re-Canvas with an irregular tool (lasso / wand)
+    // selected, on the theory that "canvas-resize is rectangular-only".
+    // That mutation was destructive: there was no symmetric restore on
+    // Re-Canvas exit, so closing Re-Canvas (Esc) left the user on 'rect'
+    // even when they had originally been on lasso / wand — the
+    // canvas would then render the *previous* shape the
+    // user had just drawn under a toolbar that claimed 'rect' was active,
+    // giving the misleading "tool says rect, selection says otherwise" UX
+    // observed as a real-machine bug on 2026-06-23.
+    //
+    // The "rect-only during Re-Canvas" semantic is already enforced
+    // *non-destructively* by the synthesis layer:
+    //   • ClipOverlay/hooks.ts → `effectiveTool: ClipTool = isReCanvas ? 'rect' : rawTool`
+    //   • interactions.ts::makeClipToolGuard → same synthesis on the dispatch path
+    // so during Re-Canvas the canvas rect is draggable and the pathellipse /
+    // lasso / wand handlers are filtered out, all without touching the
+    // user's actual tool selection. When Re-Canvas closes, the original
+    // signal value is preserved and the user lands back on whichever tool
+    // they had — exactly the round-trip behaviour the orthogonal-modal
+    // design promises.
+    return false;
+  }
+};
+

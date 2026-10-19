@@ -1,0 +1,493 @@
+package cli
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func noContent(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }
+
+// ---- alerts ----
+
+func alert(id string) map[string]any {
+	return map[string]any{"id": id, "name": "Phone", "type": "ntfy", "enabled": true,
+		"config": map[string]any{"topic": "staqly-alerts", "access_token": "••••abcd", "priority": 4},
+		"events": []string{"post.published", "post.failed"}, "collection_ids": []string{}, "digest_window_seconds": 300,
+		"fail_count": 0, "last_error": "", "last_sent_at": nil, "created_at": "2026-10-13T10:00:00Z"}
+}
+
+func TestAlerts(t *testing.T) {
+	f := newFake(t)
+	f.on("GET /v1/alerts", 200, map[string]any{"data": []any{alert("nch_1")}})
+	f.on("GET /v1/alerts/nch_1", 200, alert("nch_1"))
+	f.on("POST /v1/alerts", 201, alert("nch_1"))
+	f.on("PATCH /v1/alerts/nch_1", 200, alert("nch_1"))
+	f.handle("DELETE /v1/alerts/nch_1", noContent)
+	f.seq("POST /v1/alerts/nch_1/test",
+		respond(200, map[string]any{"ok": true}),
+		respond(200, map[string]any{"ok": false, "error": "HTTP 401 from ntfy"}))
+	f.on("GET /v1/alerts/nch_1/deliveries", 200, map[string]any{"data": []any{map[string]any{"id": "ntd_1",
+		"event_type": "post.failed", "post_id": "pst_1", "status": "failed", "attempts": 3, "last_error": "timeout", "created_at": "2026-10-13T10:00:00Z"}}})
+	f.on("GET /v1/collections/Blog", 200, collection("col_1", "Blog"))
+
+	mustContain(t, f.run("alerts", "list").mustCode(t, 0).out, "nch_1", "Phone", "ntfy", "post.published,post.failed")
+	r := f.run("alerts", "get", "nch_1").mustCode(t, 0)
+	mustContain(t, r.out, "staqly-alerts", "••••abcd", "5m0s")
+
+	f.run("alerts", "create", "--type", "ntfy", "--name", "Phone", "--config", "topic=staqly-alerts", "--config", "priority=4",
+		"--events", "post.*", "--collection", "Blog", "--digest", "5m").mustCode(t, 0)
+	b := f.last("POST", "/v1/alerts").json(t)
+	cfg := b["config"].(map[string]any)
+	if b["type"] != "ntfy" || b["name"] != "Phone" || cfg["topic"] != "staqly-alerts" || cfg["priority"] != float64(4) ||
+		b["digest_window_seconds"] != float64(300) || b["collection_ids"].([]any)[0] != "col_1" || b["events"].([]any)[0] != "post.*" {
+		t.Fatalf("body = %v", b)
+	}
+	// Secrets from stdin; chat IDs stay strings; lists split on commas.
+	f.runWith(runOpts{stdin: `{"bot_token":"123:abc"}`}, "alerts", "create", "--type", "email", "--name", "T",
+		"--config-json", "-", "--config", "chat_id=-1001234", "--config", "to=a@x.io,b@x.io").mustCode(t, 0)
+	cfg = f.last("POST", "/v1/alerts").json(t)["config"].(map[string]any)
+	if cfg["bot_token"] != "123:abc" || cfg["chat_id"] != "-1001234" || len(cfg["to"].([]any)) != 2 {
+		t.Fatalf("config = %v", cfg)
+	}
+	f.run("alerts", "create", "--name", "x", "--config", "topic=t").mustCode(t, ExitUsage)
+	f.run("alerts", "create", "--type", "ntfy", "--name", "x").mustCode(t, ExitUsage)
+
+	f.run("alerts", "update", "nch_1", "--disable", "--config", "access_token=null", "--all-collections").mustCode(t, 0)
+	b = f.last("PATCH", "/v1/alerts/nch_1").json(t)
+	if b["enabled"] != false || len(b["collection_ids"].([]any)) != 0 {
+		t.Fatalf("body = %v", b)
+	}
+	if v, ok := b["config"].(map[string]any)["access_token"]; !ok || v != nil {
+		t.Fatalf("access_token=null must send null: %v", b)
+	}
+	f.run("alerts", "update", "nch_1").mustCode(t, ExitUsage)
+	f.run("alerts", "update", "nch_1", "--enable", "--disable").mustCode(t, ExitUsage)
+
+	mustContain(t, f.run("alerts", "test", "nch_1").mustCode(t, 0).out, "Sent a test message")
+	mustContain(t, f.run("alerts", "test", "nch_1").mustCode(t, ExitError).err, "HTTP 401 from ntfy")
+	r = f.run("alerts", "deliveries", "nch_1", "--limit", "5").mustCode(t, 0)
+	mustContain(t, r.out, "ntd_1", "pst_1", "failed", "timeout")
+	if q := f.last("GET", "/v1/alerts/nch_1/deliveries").Query; q["limit"][0] != "5" {
+		t.Fatalf("query = %v", q)
+	}
+	f.run("alerts", "delete", "nch_1").mustCode(t, 0)
+	mustJSON(t, f.run("notifications", "get", "nch_1", "--json").mustCode(t, 0).out)
+}
+
+// ---- keys rotate ----
+
+func TestKeysRotate(t *testing.T) {
+	f := newFake(t)
+	f.on("POST /v1/api-keys/key_1/rotate", 201, map[string]any{"id": "key_2", "name": "CI", "prefix": "stk_rot",
+		"scopes": []string{"items:read"}, "key": "stk_rotatedsecretvalue"})
+	r := f.run("keys", "rotate", "key_1").mustCode(t, 0)
+	mustContain(t, r.out, "key_1", "key_2", "stk_rotatedsecretvalue", "not shown again")
+	if m := mustJSON(t, f.run("keys", "rotate", "key_1", "--json").mustCode(t, 0).out); m["key"] != "stk_rotatedsecretvalue" {
+		t.Fatal(m)
+	}
+}
+
+// ---- workspace, plans, sessions, connect ----
+
+func usageBody(plan string) map[string]any {
+	return map[string]any{"plan": map[string]any{"id": plan, "name": strings.ToUpper(plan[:1]) + plan[1:],
+		"limits": map[string]any{"posts_per_month": 500, "storage_bytes": 1 << 30, "data_export": true}}, "period": "2026-10",
+		"usage": map[string]any{"posts_per_month": 12, "storage_bytes": 2048}, "plan_expires_at": nil, "suspended": plan == "pro",
+		"posts_by_status": map[string]any{"published": 7, "draft": 2}}
+}
+
+func TestWorkspacePlansSessions(t *testing.T) {
+	f := newFake(t)
+	ws := map[string]any{"id": "ws_1", "name": "Acme", "plan": "starter", "recovery_rotated_at": "2026-10-01T10:00:00Z", "created_at": "2026-09-01T10:00:00Z"}
+	f.on("GET /v1/workspace", 200, ws)
+	f.on("PATCH /v1/workspace", 200, map[string]any{"id": "ws_1", "name": "Acme content", "plan": "starter"})
+	f.on("GET /v1/workspace/usage", 200, usageBody("pro"))
+	f.on("GET /v1/plans", 200, map[string]any{"data": []any{
+		map[string]any{"id": "starter", "name": "Starter", "price_month": 15, "price_year": 144, "currency": "eur", "limits": map[string]any{"posts_per_month": -1, "storage_bytes": 1 << 30, "webhooks": 2, "channels": 5, "seats": 1, "data_export": false}},
+		map[string]any{"id": "plus", "name": "Plus", "price_month": 29, "price_year": 276, "currency": "eur", "limits": map[string]any{"posts_per_month": -1, "seats": 3}}}})
+	f.on("GET /v1/sessions", 200, map[string]any{"data": []any{map[string]any{"id": "ses_1", "user_agent": "Mozilla/5.0 (iPhone)",
+		"created_at": "2026-10-13T10:00:00Z", "last_seen_at": "2026-10-13T11:00:00Z", "expires_at": "2026-11-13T10:00:00Z", "current": false}}})
+	f.handle("DELETE /v1/sessions/ses_1", noContent)
+	f.on("POST /v1/device-links", 201, map[string]any{"url": "http://localhost:8080/connect#tok", "expires_at": "2026-10-13T10:05:00Z",
+		"reachable": false, "hint": "Set PUBLIC_DASHBOARD_URL."})
+
+	mustContain(t, f.run("workspace", "get").mustCode(t, 0).out, "ws_1", "Acme", "starter")
+	f.run("workspace", "rename", "Acme content").mustCode(t, 0)
+	if b := f.last("PATCH", "/v1/workspace").json(t); b["name"] != "Acme content" {
+		t.Fatalf("body = %v", b)
+	}
+	mustContain(t, f.run("workspace", "usage").mustCode(t, 0).out, "Pro (pro)", "suspended", "posts_per_month", "1.0 GiB", "POSTS THIS PERIOD", "published")
+
+	r := f.run("plans", "list").mustCode(t, 0)
+	mustContain(t, r.out, "starter", "Plus", "€29", "€276", "unlimited", "1.0 GiB", "PER USER/MONTH")
+	f.run("plans", "free").mustCode(t, ExitUsage) // no free plan to switch to
+
+	mustContain(t, f.run("sessions", "list").mustCode(t, 0).out, "ses_1", "iPhone")
+	f.run("sessions", "revoke", "ses_1").mustCode(t, 0)
+	if len(f.find("DELETE", "/v1/sessions/ses_1")) != 1 {
+		t.Fatal("revoke must DELETE")
+	}
+
+	r = f.run("connect").mustCode(t, 0)
+	if strings.TrimSpace(r.out) != "http://localhost:8080/connect#tok" {
+		t.Fatalf("connect stdout = %q", r.out)
+	}
+	mustContain(t, r.err, "One-time", "localhost", "PUBLIC_DASHBOARD_URL")
+}
+
+func TestMedia(t *testing.T) {
+	f := newFake(t)
+	var uploaded string
+	f.handle("POST /v1/media", func(w http.ResponseWriter, r *http.Request) {
+		_, params, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		mr := multipart.NewReader(r.Body, params["boundary"])
+		part, err := mr.NextPart()
+		if err != nil || part.FormName() != "file" {
+			writeJSON(w, 422, apiErr(422, "validation_failed", "file is required"))
+			return
+		}
+		uploaded = part.FileName() + ":" + readAllString(part)
+		writeJSON(w, 201, map[string]any{"id": "med_1", "mime_type": "image/png", "size_bytes": 4, "original_name": "cover.png", "url": "/v1/media/med_1"})
+	})
+	f.handle("GET /v1/media/med_1", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Content-Disposition", `inline; filename="../cover.png"`)
+		_, _ = w.Write([]byte("\x89PNG" + r.URL.Query().Get("w")))
+	})
+	f.handle("DELETE /v1/media/med_1", noContent)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "cover.png")
+	os.WriteFile(src, []byte("\x89PNG"), 0o600)
+	r := f.run("media", "upload", src).mustCode(t, 0)
+	mustContain(t, r.out, "med_1", "image/png", "--media med_1")
+	if uploaded != "cover.png:\x89PNG" {
+		t.Fatalf("uploaded = %q", uploaded)
+	}
+
+	out := filepath.Join(dir, "thumb.png")
+	f.run("media", "get", "med_1", "--width", "320", "-o", out).mustCode(t, 0)
+	if b, _ := os.ReadFile(out); string(b) != "\x89PNG320" {
+		t.Fatalf("file = %q", b)
+	}
+	if f.last("GET", "/v1/media/med_1").Query["w"][0] != "320" {
+		t.Fatal("--width must send w")
+	}
+	// Piped stdout gets the bytes; a terminal is refused unless saving to a file.
+	if r := f.run("media", "get", "med_1").mustCode(t, 0); r.out != "\x89PNG" {
+		t.Fatalf("stdout = %q", r.out)
+	}
+	f.runWith(runOpts{stdoutTTY: true}, "media", "get", "med_1", "-o", "-").mustCode(t, ExitUsage)
+	m := mustJSON(t, f.run("media", "get", "med_1", "-o", out, "--json").mustCode(t, 0).out)
+	if m["path"] != out || m["bytes"] != float64(4) {
+		t.Fatalf("json = %v", m)
+	}
+	f.run("media", "delete", "med_1").mustCode(t, 0)
+}
+
+func TestMediaLibrary(t *testing.T) {
+	f := newFake(t)
+	f.handle("GET /v1/media", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"data": []any{map[string]any{"id": "med_1", "mime_type": "image/png", "size_bytes": 2048,
+			"original_name": "cover.png", "width": 1080, "height": 1350, "uses": 2}}, "next_offset": 60})
+	})
+	f.handle("PATCH /v1/media/med_1", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"id": "med_1", "mime_type": "image/png", "size_bytes": 2048, "original_name": "cover.png"})
+	})
+	f.handle("GET /v1/media/med_1/usage", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"data": []any{map[string]any{"post_id": "pst_1", "title": "Race week", "status": "scheduled",
+			"publish_at": "2026-10-21T09:00:00Z"}}})
+	})
+
+	r := f.run("media", "list", "--kind", "image", "--used", "used").mustCode(t, 0)
+	mustContain(t, r.out, "med_1", "cover.png", "1080x1350", "2")
+	mustContain(t, r.err, "--offset 60")
+	q := f.last("GET", "/v1/media").Query
+	if q["kind"][0] != "image" || q["used"][0] != "used" {
+		t.Fatalf("query = %v", q)
+	}
+	f.run("media", "update", "med_1").mustCode(t, ExitUsage)
+	f.run("media", "update", "med_1", "--alt", "A runner").mustCode(t, 0)
+	if body := string(f.last("PATCH", "/v1/media/med_1").Body); body != `{"alt_text":"A runner"}` {
+		t.Fatalf("patch body = %s", body)
+	}
+	mustContain(t, f.run("media", "usage", "med_1").mustCode(t, 0).out, "pst_1", "scheduled", "Race week")
+}
+
+// Media folders and organising files: the tree, create/rename/move/delete, mv and tag in bulk.
+func TestMediaFolders(t *testing.T) {
+	f := newFake(t)
+	f.handle("GET /v1/media-folders", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"data": []any{
+			map[string]any{"id": "mfd_1", "parent_id": "", "name": "Clients", "files": 2},
+			map[string]any{"id": "mfd_2", "parent_id": "mfd_1", "name": "ACME", "files": 1}},
+			"root_files": 3, "total_files": 6, "tags": []any{map[string]any{"tag": "hero", "files": 2}}})
+	})
+	f.handle("POST /v1/media-folders", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 201, map[string]any{"id": "mfd_3", "parent_id": "mfd_1", "name": "Launch", "files": 0})
+	})
+	f.handle("PATCH /v1/media-folders/mfd_2", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"id": "mfd_2", "parent_id": "", "name": "ACME", "files": 0})
+	})
+	f.handle("POST /v1/media/bulk", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"updated": []string{"med_1"}, "missing": []string{"med_x"}})
+	})
+
+	r := f.run("media", "folders", "list").mustCode(t, 0)
+	mustContain(t, r.out, "(top level)", "Clients", "  ACME", "hero (2)")
+	f.run("media", "folders", "create", "Launch", "--in", "mfd_1").mustCode(t, 0)
+	if body := string(f.last("POST", "/v1/media-folders").Body); body != `{"name":"Launch","parent_id":"mfd_1"}` {
+		t.Fatalf("create body = %s", body)
+	}
+	f.run("media", "folders", "move", "mfd_2").mustCode(t, ExitUsage)
+	f.run("media", "folders", "move", "mfd_2", "--to", "root").mustCode(t, 0)
+	if body := string(f.last("PATCH", "/v1/media-folders/mfd_2").Body); body != `{"parent_id":""}` {
+		t.Fatalf("move body = %s", body)
+	}
+	f.run("media", "mv", "med_1").mustCode(t, ExitUsage)
+	r = f.run("media", "mv", "med_1", "med_x", "--folder", "mfd_1").mustCode(t, 0)
+	mustContain(t, r.out, "Moved 1 file")
+	mustContain(t, r.err, "med_x")
+	if body := string(f.last("POST", "/v1/media/bulk").Body); body != `{"folder_id":"mfd_1","ids":["med_1","med_x"]}` {
+		t.Fatalf("mv body = %s", body)
+	}
+	f.run("media", "tag", "med_1", "--add", "hero, summer-sale").mustCode(t, 0)
+	if body := string(f.last("POST", "/v1/media/bulk").Body); body != `{"add_tags":["hero","summer-sale"],"ids":["med_1"],"remove_tags":[]}` {
+		t.Fatalf("tag body = %s", body)
+	}
+}
+
+// Deleted files: delete moves to Deleted (or --permanent), restore brings one back, keep dedupes.
+func TestMediaTrash(t *testing.T) {
+	f := newFake(t)
+	f.handle("DELETE /v1/media/med_1", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
+	f.handle("POST /v1/media/med_1/restore", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"id": "med_1", "original_name": "cover.png"})
+	})
+	f.handle("POST /v1/media/med_1/keep", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"deleted": []string{"med_2", "med_3"}})
+	})
+	f.handle("GET /v1/media", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]any{"data": []any{}}) })
+
+	mustContain(t, f.run("media", "delete", "med_1").mustCode(t, 0).out, "Moved med_1 to Deleted")
+	if q := f.last("DELETE", "/v1/media/med_1").Query; url.Values(q).Get("permanent") != "" {
+		t.Fatalf("query = %v", q)
+	}
+	mustContain(t, f.run("media", "delete", "med_1", "--permanent").mustCode(t, 0).out, "for good")
+	if q := f.last("DELETE", "/v1/media/med_1").Query; url.Values(q).Get("permanent") != "true" {
+		t.Fatalf("query = %v", q)
+	}
+	mustContain(t, f.run("media", "restore", "med_1").mustCode(t, 0).out, "Restored med_1 (cover.png)")
+	mustContain(t, f.run("media", "keep", "med_1").mustCode(t, 0).out, "moved 2 copies to Deleted")
+	f.run("media", "list", "--deleted").mustCode(t, 0)
+	if q := f.last("GET", "/v1/media").Query; url.Values(q).Get("deleted") != "true" {
+		t.Fatalf("query = %v", q)
+	}
+}
+
+func TestSuggestedName(t *testing.T) {
+	cases := map[string]string{
+		`attachment; filename="staqly-export-20261013-1000.zip"`: "staqly-export-20261013-1000.zip",
+		`inline; filename="../../etc/passwd"`:                    "passwd",
+		`inline; filename="..\\evil.png"`:                        "evil.png",
+		`inline; filename=".bashrc"`:                             "fallback.bin",
+		``:                                                       "fallback.bin",
+	}
+	for in, want := range cases {
+		if got := suggestedName(in, "fallback.bin"); got != want {
+			t.Errorf("suggestedName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// ---- events export ----
+
+func TestEventsExport(t *testing.T) {
+	f := newFake(t)
+	f.handle("GET /v1/events/export", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("format") == "csv" {
+			w.Header().Set("Content-Type", "text/csv")
+			fmt.Fprint(w, "created_at,id,type\n2026-10-13T10:00:00Z,evt_1,post.created\x1b[2J\n")
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprint(w, `{"id":"evt_1","type":"post.created"}`+"\n"+`{"id":"evt_2","type":"post.published"}`+"\n")
+	})
+	f.on("GET /v1/collections/Blog", 200, collection("col_1", "Blog"))
+
+	r := f.run("events", "export", "--type", "post.*", "--collection", "Blog", "--from", "2026-10-01", "--actor-type", "api_key").mustCode(t, 0)
+	if strings.Count(r.out, "\n") != 2 || !strings.Contains(r.out, "evt_2") {
+		t.Fatalf("stdout = %q", r.out)
+	}
+	q := f.last("GET", "/v1/events/export").Query
+	if q["type_prefix"][0] != "post." || q["collection_id"][0] != "col_1" || q["from"][0] != "2026-10-01" || q["format"][0] != "ndjson" || q["actor_type"][0] != "api_key" {
+		t.Fatalf("query = %v", q)
+	}
+	if _, ok := q["type"]; ok {
+		t.Fatal("a glob must become type_prefix")
+	}
+	f.run("events", "export", "--type", "post.published").mustCode(t, 0)
+	if q := f.last("GET", "/v1/events/export").Query; q["type"][0] != "post.published" {
+		t.Fatalf("query = %v", q)
+	}
+	f.run("events", "export", "--type", "post.*.x").mustCode(t, ExitUsage)
+	f.run("events", "export", "--format", "xml").mustCode(t, ExitUsage)
+
+	// CSV to a terminal is sanitized; to a file it is verbatim.
+	if r := f.runWith(runOpts{stdoutTTY: true}, "events", "export", "--format", "csv").mustCode(t, 0); strings.Contains(r.out, "\x1b") {
+		t.Fatalf("terminal output must be sanitized: %q", r.out)
+	}
+	out := filepath.Join(t.TempDir(), "events.csv")
+	r = f.run("events", "export", "--format", "csv", "--output", out).mustCode(t, 0)
+	mustContain(t, r.err, "Saved", out)
+	if b, _ := os.ReadFile(out); !strings.Contains(string(b), "evt_1,post.created\x1b[2J") {
+		t.Fatalf("file = %q", b)
+	}
+}
+
+// ---- workspace export ----
+
+func TestWorkspaceExport(t *testing.T) {
+	f := newFake(t)
+	exp := func(status string) map[string]any {
+		return map[string]any{"id": "wex_1", "status": status, "size_bytes": 2048, "created_at": "2026-10-13T10:00:00Z",
+			"started_at": nil, "finished_at": nil, "expires_at": "2026-10-14T10:00:00Z"}
+	}
+	f.on("POST /v1/workspace/export", 202, exp("pending"))
+	f.seq("GET /v1/workspace/exports/wex_1", respond(200, exp("running")), respond(200, exp("ready")))
+	f.handle("GET /v1/workspace/exports/wex_1/download", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", `attachment; filename="staqly-export-20261013-1000.zip"`)
+		fmt.Fprint(w, "PK\x03\x04zip")
+	})
+
+	r := f.run("workspace", "export", "start").mustCode(t, 0)
+	mustContain(t, r.out, "wex_1", "pending", "export status wex_1")
+	if len(f.find("GET", "/v1/workspace/exports/wex_1")) != 0 {
+		t.Fatal("start without --wait must not poll")
+	}
+
+	out := filepath.Join(t.TempDir(), "export.zip")
+	r = f.run("workspace", "export", "start", "--output", out).mustCode(t, 0)
+	if b, _ := os.ReadFile(out); string(b) != "PK\x03\x04zip" {
+		t.Fatalf("zip = %q", b)
+	}
+	if len(r.sleeps) != 2 || len(f.find("GET", "/v1/workspace/exports/wex_1")) != 2 {
+		t.Fatalf("expected two polls, slept %v", r.sleeps)
+	}
+
+	mustContain(t, f.run("workspace", "export", "status", "wex_1").mustCode(t, 0).out, "ready", "2.0 KiB", "export download wex_1")
+
+	// Default file name comes from Content-Disposition when stdout is a terminal.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	f.runWith(runOpts{stdoutTTY: true}, "workspace", "export", "download", "wex_1").mustCode(t, 0)
+	if _, err := os.Stat(filepath.Join(dir, "staqly-export-20261013-1000.zip")); err != nil {
+		t.Fatal(err)
+	}
+	// Never overwrites a file it named itself.
+	f.runWith(runOpts{stdoutTTY: true}, "workspace", "export", "download", "wex_1").mustCode(t, ExitError)
+	if r := f.run("workspace", "export", "download", "wex_1"); r.out != "PK\x03\x04zip" {
+		t.Fatalf("piped stdout = %q", r.out)
+	}
+}
+
+func TestWorkspaceExportDataOnly(t *testing.T) {
+	f := newFake(t)
+	job := map[string]any{"id": "wex_1", "status": "pending", "size_bytes": 0, "created_at": "2026-10-13T10:00:00Z",
+		"started_at": nil, "finished_at": nil, "expires_at": "2026-10-14T10:00:00Z", "includes_media": false}
+	f.on("POST /v1/workspace/export", 202, job)
+	f.on("GET /v1/workspace/exports/wex_1", 200, job)
+	mustContain(t, f.run("workspace", "export", "start").mustCode(t, 0).out, "Data only", "come with Pro")
+	mustContain(t, f.run("workspace", "export", "status", "wex_1").mustCode(t, 0).out, "Contents:", "data only")
+}
+
+func TestWorkspaceExportFailed(t *testing.T) {
+	f := newFake(t)
+	f.on("POST /v1/workspace/export", 202, map[string]any{"id": "wex_1", "status": "failed", "error": "disk full"})
+	mustContain(t, f.run("workspace", "export", "start", "--wait").mustCode(t, ExitError).err, "disk full")
+}
+
+// ---- webhooks get & update ----
+
+func TestWebhooksGetUpdate(t *testing.T) {
+	f := newFake(t)
+	masked := map[string]any{"id": "whk_1", "url": "https://example.com/h", "secret": "whsec_****mnop", "events": []string{"*"},
+		"collection_ids": []string{}, "active": true, "timeout_ms": 10000, "max_attempts": 8}
+	rotated := map[string]any{"id": "whk_1", "url": "https://example.com/h", "secret": "whsec_newsecretvalue1234", "events": []string{"*"},
+		"collection_ids": []string{}, "active": true}
+	f.on("GET /v1/webhooks/whk_1", 200, masked)
+	f.handle("PATCH /v1/webhooks/whk_1", func(w http.ResponseWriter, r *http.Request) {
+		var in map[string]any
+		_ = decodeBody(r, &in)
+		if in["rotate_secret"] == true {
+			writeJSON(w, 200, rotated)
+			return
+		}
+		writeJSON(w, 200, masked)
+	})
+	f.on("GET /v1/collections/Blog", 200, collection("col_1", "Blog"))
+
+	mustContain(t, f.run("webhooks", "get", "whk_1").mustCode(t, 0).out, "https://example.com/h", "10000 ms", "all")
+	r := f.run("webhooks", "update", "whk_1", "--disable", "--events", "post.*", "--collection", "Blog", "--description", "").mustCode(t, 0)
+	if strings.Contains(r.out, "secret") {
+		t.Fatalf("no secret without --rotate-secret: %s", r.out)
+	}
+	b := f.last("PATCH", "/v1/webhooks/whk_1").json(t)
+	if b["active"] != false || b["events"].([]any)[0] != "post.*" || b["collection_ids"].([]any)[0] != "col_1" || b["description"] != "" {
+		t.Fatalf("body = %v", b)
+	}
+	if _, ok := b["rotate_secret"]; ok {
+		t.Fatal("rotate_secret only when asked")
+	}
+	r = f.run("webhooks", "update", "whk_1", "--rotate-secret").mustCode(t, 0)
+	mustContain(t, r.out, "whsec_newsecretvalue1234", "not shown again")
+	f.run("webhooks", "update", "whk_1").mustCode(t, ExitUsage)
+	f.run("webhooks", "update", "whk_1", "--collection", "Blog", "--all-collections").mustCode(t, ExitUsage)
+}
+
+func TestNewCommandsInHelpAndCompletion(t *testing.T) {
+	f := newFake(t)
+	r := f.run("--help").mustCode(t, 0)
+	mustContain(t, r.out, "posts", "channels", "schedules", "jobs", "work", "alerts", "media", "workspace", "plans", "sessions", "connect")
+	if strings.Contains(r.out, "inbox") || strings.Contains(r.out, "items") || strings.Contains(r.out, "watchers") {
+		t.Fatalf("item-era commands still in help:\n%s", r.out)
+	}
+	b := f.run("completion", "bash").mustCode(t, 0).out
+	mustContain(t, b, "purge", "duplicate", "providers", "connect", "rotate", "deliveries", "stats")
+	if len(f.calls) != 0 {
+		t.Fatal("help must not call the API")
+	}
+}
+
+func decodeBody(r *http.Request, v any) error { return json.NewDecoder(r.Body).Decode(v) }
+
+func readAllString(r io.Reader) string {
+	b, _ := io.ReadAll(r)
+	return string(b)
+}
+
+func TestBillingCommands(t *testing.T) {
+	f := newFake(t)
+	f.on("GET /v1/billing", 200, map[string]any{"enabled": true, "plan": "pro", "subscription_status": "active",
+		"plan_expires_at": "2026-11-16T09:00:00.000000Z", "suspended": false, "has_customer": true})
+	f.on("POST /v1/billing/checkout", 200, map[string]string{"url": "https://checkout.stripe.com/c/pay/cs_test_a1b2c3"})
+	mustContain(t, f.run("billing", "status").mustCode(t, 0).out, "active")
+	mustContain(t, f.run("billing", "checkout").mustCode(t, 0).out, "https://checkout.stripe.com/c/pay/cs_test_a1b2c3")
+	if b := f.last("POST", "/v1/billing/checkout").json(t); b["plan"] != "pro" || b["interval"] != "month" {
+		t.Fatalf("default checkout body = %v", b)
+	}
+	f.run("billing", "checkout", "--plan", "plus", "--yearly").mustCode(t, 0)
+	if b := f.last("POST", "/v1/billing/checkout").json(t); b["plan"] != "plus" || b["interval"] != "year" {
+		t.Fatalf("checkout body = %v", b)
+	}
+}

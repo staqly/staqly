@@ -1,0 +1,46 @@
+# End-to-end test stack (the e2e/ package). Used on top of compose.yml:
+#
+#   docker compose -f compose.yml -f compose.e2e.yml --env-file e2e/e2e.env up -d --build --wait
+#
+# Own project, container, image and volume names, so it runs next to your own
+# staqly and its local builds never replace the released ghcr.io images.
+name: staqly-e2e
+
+services:
+  staqly:
+    container_name: staqly-e2e
+    image: staqly-e2e:test
+
+  # PostgreSQL for the scenarios that switch the api to cloud mode (07 onwards).
+  postgres:
+    image: postgres:17.6-alpine
+    container_name: staqly-e2e-postgres
+    environment:
+      POSTGRES_USER: staqly
+      POSTGRES_PASSWORD: staqly
+      POSTGRES_DB: staqly
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "staqly", "-d", "staqly"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # Fake webhook endpoint: fails the first delivery, accepts the rest and
+  # records them for the tests (GET /requests, POST /reset).
+  receiver:
+    image: node:24-alpine
+    container_name: staqly-e2e-receiver
+    command: ["node", "/receiver/server.mjs"]
+    volumes:
+      - ./e2e/receiver/server.mjs:/receiver/server.mjs:ro
+    ports:
+      - "127.0.0.1:${RECEIVER_PORT:-19000}:9000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9000/requests"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]

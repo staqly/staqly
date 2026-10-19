@@ -1,0 +1,551 @@
+---
+title: Commands
+description: Look up every staqly command and its flags, from running the server to posts, channels, schedules, the queue, alerts and connecting agents.
+---
+
+This page lists every `staqly` command with its flags and an example. Use it when you know what
+you want to do and need the exact syntax. New to the CLI? Start with the
+[CLI overview](/cli), which covers installing and connecting to a server.
+
+Run `staqly <command> --help` for the full flag list with examples. Wherever a command takes a
+collection, you can pass its **name or its ID**; a channel can be given by name too.
+
+Every command also accepts the global flags `--api-url` (alias `--url`), `--key`, `--profile`,
+`--json`, `--no-color` and `--help`; see [Connect to a server](/cli#connect-to-a-server).
+
+Most command groups have short aliases:
+
+| Command | Aliases |
+|---|---|
+| `posts` | `post` |
+| `channels` | `channel` |
+| `schedules` | `sched` |
+| `collections` | `collection`, `cols` |
+| `alerts` | `alert` |
+| `jobs` | `queue` |
+| `media` | `files` |
+| `webhooks` | `webhook`, `hooks` |
+| `workspace` | `ws` |
+| `plans` | `plan` |
+| `keys` | `key`, `api-keys` |
+| `sessions` | `session` |
+| `profiles` | `profile` |
+
+## A typical session
+
+<Steps>
+<Step>
+### Check the connection
+
+```bash
+staqly status
+```
+
+Shows server health and version, mode, workspace, who you are, the masked key, your plan, usage
+against limits and how many posts are scheduled.
+
+</Step>
+<Step>
+### Connect a channel and write a post
+
+```bash
+staqly channels connect custom --name "My publisher"
+staqly posts create "Product updates" --content @post.md --channel "My publisher" --publish-at "2026-11-03 09:00"
+```
+
+</Step>
+<Step>
+### Follow it
+
+```bash
+staqly schedule
+staqly posts get post_oalirbz67y4m4cqxq5dw
+```
+
+</Step>
+</Steps>
+
+## Run the server: `serve`
+
+```bash
+staqly serve [--data DIR] [--port 3333] [--dashboard-port 8080] [--expose]
+staqly serve token [--rotate] | connect-link | backup <file> | storage migrate
+```
+
+Runs the API, MCP endpoint, job queue and dashboard in one process, without Docker. Data lives
+in `~/.local/share/staqly` unless you pass `--data` (or set `STAQLY_DATA_DIR`). `--expose` opens
+the dashboard to your network. Server environment variables such as `LOG_LEVEL`,
+`STAQLY_SECRET_KEY` and `PUBLIC_DASHBOARD_URL` still apply; `serve` defaults `PUBLIC_API_URL` to
+`http://localhost:<port>` and `LOG_FORMAT` to `text`. At every start it prints the access token
+and a `http://localhost:<dashboard-port>/#token=...` link that signs the browser in.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--data` | path | No | Folder for the SQLite database, uploads, `secret.key` and `access_token` (default `~/.local/share/staqly`, or `STAQLY_DATA_DIR`) |
+| `--port` | integer | No | API and MCP port, always bound to `127.0.0.1` (default `3333`) |
+| `--dashboard-port` | integer | No | Dashboard port (default `8080`) |
+| `--expose` | boolean | No | Serve the dashboard on all network interfaces; phones sign in once with a QR code or a link |
+
+With a subcommand it runs an [operator command](/self-hosting/operator-cli) against the same
+data instead, and exits:
+
+| Subcommand | What it does |
+|---|---|
+| `token [--rotate]` | Prints the access token (stdout: only the token) and, on stderr, a link that signs a browser in; `--rotate` makes a new one, the old one stops working and every browser is signed out |
+| `connect-link` | Prints a one-time sign-in link (5 minutes, single use) |
+| `backup <file>` | Writes a consistent copy of the database while the server runs |
+| `storage migrate [--from DIR] [--dry-run]` | Copies media files into the S3 bucket of `STORAGE_DRIVER=s3` ([Media storage](/self-hosting/storage#move-existing-files-into-a-bucket)) |
+
+See [Run the binary](/self-hosting/binary).
+
+## Run it in the background: `service`
+
+```bash
+staqly service install [--data DIR] [--port 3333] [--dashboard-port 8080] [--expose]
+staqly service status | logs [-f] | uninstall
+```
+
+Installs `staqly serve` as a background service of your user (macOS LaunchAgent, started at
+login; Linux systemd user unit, started at boot), restarted if it stops. Environment settings
+(`STAQLY_*`, `PROVIDER_*`, `PUBLIC_*`, `LOG_*`...) at install time are kept. Running `install`
+again replaces it. See [Run it in the background](/self-hosting/binary#run-it-in-the-background).
+
+## Check the connection: `status`
+
+```bash
+staqly status         # health + version, mode, workspace, principal, masked key, plan, usage vs limits, scheduled count
+staqly status --json
+```
+
+## Write and publish: `posts`
+
+```bash
+staqly posts list [--collection C] [--status draft|scheduled|publishing|published|failed] [--channel CH] [--tag t] [-q text] [--publish-after 2026-10-20] [--publish-before 2026-10-27] [--sort publish_asc] [--limit 50] [--cursor X] [--all]
+staqly posts get post_123                  # content, media, targets with their status and link, history summary
+staqly posts create <collection> [--content TEXT|-|@file --stdin] [--channel CH ...] [--media med_1 ...] [--file PATH ...] [--tag t ...] [--metadata '{json}' --meta k=v] [--source s] [--external-ref r] [--repeat 1w] [--reply-delay 5m --reply TEXT ...] [--publish-at TIME | --now] [--wait [--timeout 10m]]
+staqly posts update post_1 [--content TEXT] [--channel CH ...] [--media ...] [--tag ...] [--metadata '{json}'] [--collection C] [--publish-at TIME | --clear-publish-at] [--repeat 1w|none] [--reply TEXT ... | --no-replies] [--no-channels] [--expected-version N]
+staqly posts schedule post_1 <time>        # set the time, status scheduled
+staqly posts publish post_1 [--wait [--timeout 10m]]
+staqly posts cancel post_1                 # off the calendar, back to draft
+staqly posts duplicate post_1              # a new draft with the same content, media, tags and channels
+staqly posts preview post_1                # the text per channel (links removed or defanged) and what each platform objects to
+staqly posts stats post_1 --refresh        # its numbers per channel (views, likes...) where the platform reports them
+staqly posts share post_1 --expires 7      # a preview link anyone can open and comment on (shown once)
+staqly posts comments post_1               # what reviewers said on the preview
+staqly posts retry post_1 <channel> [--wait]   # one failed channel again
+staqly posts result post_1 <channel> --status published|failed [--url https://...] [--external-id 1790] [--error "<text>"]
+staqly posts history post_1                # events, oldest first
+staqly posts delete post_1 [post_2 post_3] # history is kept; API keys need posts:delete
+staqly posts purge post_1 [--yes]          # post, its events and unused media (admin)
+staqly posts tags                          # the workspace's tags, most used first
+staqly work                                # what your automation is asked for: targets waiting for a result, schedules asking for posts
+```
+
+### Creating posts
+
+| Flag | What it does |
+|---|---|
+| `--content TEXT` | The text. `--content @path` reads a file; `--content -` or `--stdin` reads stdin |
+| `--channel CH` | A target on this channel (name or ID), comma-separated or repeated. A channel's own text and provider settings are set in the dashboard, over REST or MCP; a channel's default settings come from `channels update --setting key=value` |
+| `--media med_...` | A file already uploaded with `media upload`, in order, repeatable |
+| `--file PATH` | Uploads a file and attaches it, repeatable |
+| `--tag` | A label, repeatable (up to 20) |
+| `--metadata '{json}'` | Metadata as a JSON object |
+| `--meta k=v` | One metadata key, repeatable. Values that parse as JSON keep their type: `seed=42` is a number, `tags=["a"]` an array |
+| `--source` | Who wrote it (default `cli`) |
+| `--external-ref` | Your own reference, e.g. a campaign or ticket id |
+| `--repeat` | Bring the post back after each publish: `1d` to `6d`, `1w`, `2w`, `1mo`; `none` (on `posts update`) stops it. `posts get` shows it as *Repeats every week* |
+| `--reply TEXT` | A reply published under the post (a thread part), repeatable, in order. On `posts update` the replies given replace the thread; `--no-replies` removes it. `posts get` lists the thread with each channel's reply state |
+| `--reply-delay 5m` | How long the next `--reply` waits after the part before it (0 to 24h); applies to that one reply |
+| `--publish-at TIME` | Schedule it: RFC 3339 (`2026-11-03T09:00:00Z`), a local day or time (`2026-11-03`, `2026-11-03 09:00`) or relative (`+90m`, `+2h`, `+3d`, `+1w`). Needs at least one channel |
+| `--now` | Publish right away (needs at least one channel) |
+| `--wait`, `--timeout` | With `--now` or `--publish-at`: wait until the post is published or failed, like `posts publish --wait` (default `10m`) |
+| `--idempotency-key` | Makes retries safe: the same key returns the same post. JSON creates send an automatic key when you don't set one |
+
+### Publishing and results
+
+- `schedule`, `publish`, `cancel`, `retry` and `result` need the `posts:publish` scope; `create`,
+  `update` and `duplicate` need `posts:write`.
+- `--wait` on `create`, `publish` and `retry` polls the post until it is `published` (exit
+  `0`) or `failed` (exit `2`), or `--timeout` passes (exit `3`, default `10m`). See
+  [exit codes](/cli#exit-codes).
+- `result` reports what [your own automation](/channels/your-own-automation) did with a target:
+  `published` with `--url` and `--external-id`, or `failed` with `--error`.
+- `update --channel` replaces the whole target list (`--no-channels` removes every target); `--expected-version N` fails with `409`
+  unless the post is still at that version. A published post cannot be updated: `duplicate` it.
+- `delete` removes posts but keeps their events in the activity log. `purge` also deletes every
+  event about the post, their webhook deliveries and its media when no other post uses them. It
+  needs the `admin` scope and asks you to type the post ID unless you pass `--yes` (without
+  `--yes` it refuses when stdin is not a terminal).
+
+## The calendar: `schedule`
+
+```bash
+staqly schedule                            # the next 7 days: scheduled posts and upcoming schedule runs
+staqly schedule --days 30 --collection "Product updates"
+staqly schedule --all                      # every post with a time in any status, including past ones
+staqly schedule --json                     # the raw post page (sort publish_asc)
+```
+
+Posts with a time, soonest first, with the schedules' next runs between them. Set a time with
+`--publish-at` on `posts create` or `posts update`, or with `posts schedule`.
+
+## Connect accounts: `channels`
+
+```bash
+staqly channels providers                  # the catalog: id, name, auth, status, limits
+staqly channels providers telegram         # one provider with its credential and settings fields
+staqly channels list [--group "Client A"]  # with the group and last post; --group keeps one group
+staqly channels get ch_123                 # or by name, with its group, last and next post; credentials are never shown
+staqly channels connect <provider> [--name <text>] [--group <name|id>] [--instance <host>] [--field key=value ...] [--fields-json '{json}'|-|@file] [--setting key=value ...]
+staqly channels update ch_123 [--name <text>] [--group <name|id>] [--setting key=value ...] [--links keep|remove|defang] [--enable | --disable] [--field key=value ...]
+staqly channels test ch_123                # exit 1 when the platform refuses the stored credentials
+staqly channels remove ch_123              # at once, no confirmation; targets on it go with it
+staqly channels app x --client-id ... --client-secret -   # this workspace's own developer app for an OAuth platform; --remove drops it
+staqly channels groups list                # channel groups with their channel counts; Default always exists
+staqly channels groups create "Client A" [--color "#22c55e"]
+staqly channels groups rename "Client A" "Client Alpha"
+staqly channels groups remove "Client A"   # its channels move to Default
+staqly channels links create [--note <text>] [--platforms x,bluesky] [--group <id|name>] [--hours 168] [--uses 1]
+                                           # a connect link for someone without access; printed once
+staqly channels links list                 # status (open, used, expired, revoked) and uses
+staqly channels links revoke chl_123       # channels already connected through it stay
+```
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `<provider>` | string | <Required /> | `connect`: a provider id from `channels providers` with `auth` `token` or `none` (`custom`). OAuth platforms connect in the dashboard |
+| `--name` | string | No | What to call the channel; defaults to the account's name |
+| `--field` | `key=value` | No | One credential field, repeatable (`bot_token=...`, `chat_id=...`). On `update`, fresh credentials to reconnect with |
+| `--fields-json` | JSON | No | The credential fields as a JSON object; `-` reads stdin and `@path` a file, which keeps secrets out of your shell history |
+| `--setting` | `key=value` | No | A provider-level default for new targets, repeatable |
+| `--enable`, `--disable` | boolean | No | `update` only: turn the channel on or off |
+| `--group` | string | No | A channel group by name or ID. `list`: only that group. `connect`: put the channel there. `update`: move it there |
+| `--instance` | string | No | `connect`: for platforms with many servers (Mastodon), the server's URL or host |
+| `--client-id`, `--client-secret` | string | No | `app`: the workspace's own OAuth developer app, used instead of the server's `PROVIDER_<ID>_CLIENT_ID` / `_CLIENT_SECRET`; `--client-secret -` reads stdin. See [Developer apps](/channels/developer-apps) |
+
+Managing channels needs `channels:manage`; listing them `channels:read`. See
+[Channels](/channels).
+
+## Publish on a rhythm: `schedules`
+
+```bash
+staqly schedules list [--collection C]
+staqly schedules get sch_123
+staqly schedules create <collection> --name "Weekday mornings" --times 09:00,17:00 [--weekdays mon,tue,wed,thu,fri] [--tz Europe/Warsaw] --channel CH [--pick next|all|selected --post post_1 ...] [--source none|agent|endpoint --endpoint-url https://... --endpoint-secret s] [--disabled]
+staqly schedules create <collection> --name "Every 6 hours" --every 6h --channel CH
+staqly schedules create <collection> --name "Launch day" --at "2026-11-06 18:00" --channel CH --pick selected --post post_1 --post post_2
+staqly schedules update sch_123 [--name] [--at ... | --every ... | --times ...] [--weekdays] [--tz] [--channel ...] [--pick] [--post ...] [--source] [--endpoint-url] [--endpoint-secret] [--enable | --disable]
+staqly schedules run sch_123               # now; the regular next run is unchanged
+staqly schedules delete sch_123
+```
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--name` | string | <Required /> | Shown on the calendar's hollow chips |
+| `--times HH:MM` | times | one of `--times`, `--every`, `--at` | Times of day, comma-separated (`09:00,17:30`); with `--weekdays` (`mon,wed,fri`, ranges like `mon-fri`, `sat-sun` or `fri-mon` across the weekend, or the API's numbers `0` Sunday to `6` Saturday, comma-separated; default every day) and `--tz` (an IANA name; default the [workspace's time zone](#manage-the-workspace-workspace-plans)) |
+| `--every` | duration | | Every N minutes or hours (`30m`, `6h`; 5 minutes to a week) |
+| `--at` | time | | One run at this time (same formats as `posts create --publish-at`) |
+| `--channel` | string | <Required /> | The channels the chosen posts go to, repeatable (a post's own targets win) |
+| `--pick` | string | No | `next` (default: the oldest waiting draft), `all` (every waiting draft) or `selected` (the `--post` ids; `--post` alone implies it) |
+| `--source` | string | No | When nothing waits: `none` (default), `agent` (ask your agent; it shows up in `staqly work`) or `endpoint` (`--endpoint-url`, signed with `--endpoint-secret`; generated when empty and then printed once by `create`). `--endpoint-url` alone implies `endpoint` |
+| `--disabled`, `--enable`, `--disable` | boolean | No | Create paused; turn on or off on `update` |
+
+Needs `schedules:manage`. See [Schedules](/automation/schedules).
+
+## The queue: `jobs`
+
+```bash
+staqly jobs list [--status queued|running|done|failed|cancelled] [--kind publish_post|publish_target|target_timeout|run_schedule|refresh_channel] [--limit 50]
+staqly jobs stats                          # queued, running, failed, done in the last 24 hours, by kind
+staqly jobs get job_123
+staqly jobs retry job_123                  # a failed job, now (posts:publish)
+staqly jobs cancel job_123                 # a queued job
+```
+
+See [Jobs](/concepts#jobs).
+
+## The media library: `media`
+
+```bash
+staqly media list [-q name] [--kind image|video|audio] [--used used|unused] [--folder mfd_...|root] [--tag hero] [--sort size_desc] [--limit 60 --offset 60]
+staqly media upload cover.png                                   # prints the media ID
+staqly media update med_oalirbz67y4m4cqxq5dw --alt "A runner at the finish line" [--name cover.png]
+staqly media usage med_oalirbz67y4m4cqxq5dw                     # the posts that use it
+staqly media get med_oalirbz67y4m4cqxq5dw -o cover.png
+staqly media get med_oalirbz67y4m4cqxq5dw --width 320 -o thumb.jpg
+staqly media get med_oalirbz67y4m4cqxq5dw | file -              # piped: bytes go to stdout
+staqly media delete med_oalirbz67y4m4cqxq5dw                    # to Deleted for 30 days (--permanent: for good)
+staqly media restore med_oalirbz67y4m4cqxq5dw                   # back out of Deleted
+staqly media list --deleted                                     # what is in Deleted; --duplicates: identical files
+staqly media keep med_oalirbz67y4m4cqxq5dw                      # keep it, its identical copies go to Deleted
+staqly media mv med_oalirbz67y4m4cqxq5dw med_t4w6pz2kqm7xr3nb5vya --folder mfd_k2s7pbk7igv6   # or --folder root
+staqly media tag med_oalirbz67y4m4cqxq5dw --add hero,summer-sale [--remove draft]
+staqly media folders list                                       # the tree with file counts, then the tags
+staqly media folders create "Clients" [--in mfd_k2s7pbk7igv6]
+staqly media folders rename mfd_k2s7pbk7igv6 "Clients 2027"
+staqly media folders move mfd_k2s7pbk7igv6 --to root
+staqly media folders delete mfd_k2s7pbk7igv6                     # its files and folders move up; no file is deleted
+```
+
+Attach an uploaded file to a post with `--media` on `posts create` or `posts update`.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--output`, `-o` | path | No | `get`: file to write; `-` writes to stdout. Without it the bytes go to stdout when it is piped, otherwise to a new file named after the original in the current directory |
+| `--width` | integer | No | `get`: thumbnail width for images, `160`, `320`, `640` or `1280` |
+| `-q`, `--kind`, `--used`, `--sort`, `--limit`, `--offset` | | No | `list`: filter by name, type (`image`, `video`, `audio`) and use (`used`, `unused`), sort (`created_desc`, `created_asc`, `size_desc`, `name_asc`) and page |
+| `--name`, `--alt` | string | No | `update`: new file name, alt text |
+
+The CLI never writes binary data to a terminal and never overwrites a file it named itself.
+
+## Organize collections: `collections`
+
+```bash
+staqly collections list [--archived]
+staqly collections create "Product updates" [--description <text>] [--icon <emoji or name>] [--color "#3b82f6"] [--processing-timeout 2h]
+staqly collections get "Product updates"
+staqly collections rename "Product updates" "Updates"
+staqly collections timeout Updates 2h          # your own automation's targets fail when nothing is reported within 2 hours; `default` goes back to the server's
+staqly collections archive Updates [--undo]
+staqly collections delete Updates [--yes]   # needs collections:delete; without --yes: type the name to confirm
+```
+
+`delete` permanently removes the collection with its posts and schedules.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--description` | string | No | `create`: description shown under the name |
+| `--icon` | string | No | `create`: an emoji or icon name |
+| `--color` | string | No | `create`: colour of the collection's dot and calendar bar, e.g. `#3b82f6`. The dashboard offers green `#22c55e`, blue `#3b82f6`, violet `#8b5cf6`, pink `#ec4899`, red `#ef4444`, orange `#f97316`, yellow `#eab308` and teal `#14b8a6` |
+| `--processing-timeout` | duration | No | `create`: how long a target on your own automation may wait for a result, e.g. `30m` or `2h` (1 minute to 24 hours); without it the server default applies. `collections timeout <collection> <duration or default>` changes it later |
+| `--archived` | boolean | No | `list`: include archived collections |
+| `--undo` | boolean | No | `archive`: unarchive instead |
+| `--yes` | boolean | No | `delete`: skip the confirmation; required when stdin is not a terminal |
+
+## Follow the activity log: `events`
+
+```bash
+staqly events tail                          # last 20 events, oldest first
+staqly events tail --follow --type 'post.*' # poll for new events (--interval 2s)
+staqly events tail -f --json | jq -c 'select(.type=="post.failed")'
+staqly events tail --post post_1 --collection Updates --actor-type api_key --limit 100
+staqly events tail --channel ch_1 --schedule sch_1 --from 2026-10-01 --to 2026-10-14
+```
+
+`--follow` tracks the highest `seq` printed and pages back so no event is missed. An exact
+`--type` is filtered by the server; a glob such as `post.*` by the CLI, after the server returns
+the last `--limit` events, so a glob can print fewer than `--limit` lines.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--follow`, `-f` | boolean | No | Keep polling for new events |
+| `--interval` | duration | No | Poll interval with `--follow` (default `2s`, minimum `500ms`) |
+| `--limit` | integer | No | How many recent events to print first (default `20`, max `200`) |
+| `--type` | string | No | Exact event type such as `post.published`, or a glob such as `post.*` |
+| `--actor-type` | string | No | `local`, `session`, `api_key` or `system` |
+| `--actor-id` | string | No | Only events by this actor, e.g. an API key ID such as `key_r7y65khtqa23kj4btvur` |
+| `--from` | time | No | Events created at or after this time, RFC3339 or `YYYY-MM-DD` |
+| `--to` | time | No | Events created before this time, RFC3339 or `YYYY-MM-DD` |
+| `--collection` | string | No | Collection name or ID |
+| `--post`, `--channel`, `--schedule` | string | No | Only events about this post, channel or schedule |
+
+### Export the log
+
+```bash
+staqly events export > events.ndjson
+staqly events export --format csv --from 2026-10-01 --to 2026-11-01 -o october.csv
+staqly events export --type 'post.*' --collection "Product updates" | jq -c 'select(.type=="post.failed")'
+```
+
+`export` streams every matching event, oldest first, with no page size. CSV columns are
+`created_at,id,type,actor_type,actor_id,actor_name,collection_id,post_id,data`.
+Credential and session audit events (`api_key.*`, `session.*`, `recovery_key.*`, `access_token.*`, `sign_in_method.*`, `device*`) are
+included only for admin principals.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--format` | string | No | `ndjson` (default, one JSON event per line) or `csv` |
+| `--from`, `--to` | time | No | Created at or after / before this time, RFC3339 or `YYYY-MM-DD` |
+| `--type` | string | No | Exact event type, or a prefix ending in `*` such as `post.*` (sent to the server as `type_prefix=post.`; can't be combined with `--type-prefix`) |
+| `--type-prefix` | string | No | Literal type prefix, e.g. `post.` |
+| `--actor-type`, `--actor-id` | string | No | As in `tail` |
+| `--collection`, `--post` | string | No | Collection name or ID; post ID |
+| `--output`, `-o` | path | No | Write to this file instead of stdout |
+
+## Notify other systems: `webhooks`
+
+```bash
+staqly webhooks list                         # secrets masked
+staqly webhooks create --url https://example.com/hook --events post.published,post.failed [--collection Updates] [--description <text>] [--timeout-ms 10000] [--max-attempts 8] [--inactive]
+staqly webhooks get wh_123                   # secret masked
+staqly webhooks update wh_123 [--url <url>] [--events 'post.*'] [--collection Updates | --all-collections] [--description <text>] [--timeout-ms 10000] [--max-attempts 8] [--enable | --disable] [--rotate-secret]
+staqly webhooks test wh_123
+staqly webhooks deliveries [--webhook wh_123] [--status pending|succeeded|failed] [--limit 50]
+staqly webhooks retry dlv_123
+staqly webhooks delete wh_123
+```
+
+`create` prints the signing secret once. `--events` defaults to `*` (all events); an unknown
+event name or glob (a typo such as `post.publised`) is refused with `422`. See
+[Webhooks](/automation/webhooks).
+
+`update` changes only the fields you pass:
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--url` | string | No | New receiver URL (with this command, set the API address with `--api-url`) |
+| `--events` | string list | No | Replaces the event names or globs, comma-separated or repeated |
+| `--collection` | string list | No | Replaces the collection filter (names or IDs, repeatable) |
+| `--all-collections` | boolean | No | Deliver events of every collection again |
+| `--description` | string | No | New description; `--description ""` clears it |
+| `--timeout-ms` | integer | No | Delivery timeout, 1000 to 60000 ms |
+| `--max-attempts` | integer | No | Delivery attempts, 1 to 20 |
+| `--enable`, `--disable` | boolean | No | Activate or deactivate the webhook |
+| `--rotate-secret` | boolean | No | Issue a new signing secret. It is printed once, and the old secret stops verifying deliveries |
+
+## Tell people: `alerts`
+
+```bash
+staqly alerts list
+staqly alerts get nch_oalirbz67y4m4cqxq5dw                  # settings, secrets masked
+staqly alerts create --type ntfy --name Phone --config topic=staqly-alerts-7f3k
+echo '{"webhook_url":"https://hooks.slack.com/services/T000/B000/XXXX"}' | staqly alerts create --type slack --name Team --config-json -
+staqly alerts create --type email --name Ops --config host=smtp.example.com --config port=587 --config from=staqly@example.com --config to=ops@example.com --events 'post.*' --digest 10m
+staqly alerts update nch_oalirbz67y4m4cqxq5dw [--name <text>] [--config key=value] [--config-json <json>] [--events <patterns>] [--collection C | --all-collections] [--digest 5m] [--enable | --disable]
+staqly alerts test nch_oalirbz67y4m4cqxq5dw                 # exit 1 if the message failed
+staqly alerts deliveries nch_oalirbz67y4m4cqxq5dw [--limit 50]
+staqly alerts delete nch_oalirbz67y4m4cqxq5dw
+```
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--type` | string | <Required /> | `create` only: `telegram`, `slack`, `discord`, `ntfy` or `email`; it can't change later |
+| `--name` | string | <Required /> | Alert name (required for `create`, optional for `update`) |
+| `--config` | `key=value` | No | One setting, repeatable. `port` and `priority` are numbers, `to` a comma list; `key=null` removes a setting on `update` |
+| `--config-json` | JSON | No | Settings as a JSON object; `-` reads stdin and `@path` a file, which keeps secrets out of your shell history. `--config` values are merged on top |
+| `--events` | string list | No | Event patterns; default `post.published`, `post.failed`, `channel.needs_reconnect`. Unknown patterns are refused with `422` |
+| `--collection` | string list | No | Only these collections (names or IDs, repeatable) |
+| `--all-collections` | boolean | No | `update` only: tell about every collection again |
+| `--digest` | duration | No | Batch events within this window into one message, e.g. `5m`; `0` sends immediately |
+| `--disabled` | boolean | No | `create` only: create the alert disabled |
+| `--enable`, `--disable` | boolean | No | `update` only: enabling resets the failure counter |
+| `--limit` | integer | No | `deliveries` only: how many recent messages to show (default 50, max 200) |
+
+`create` needs at least one setting. Required settings per type: Telegram `bot_token` and
+`chat_id`; Slack `webhook_url`, or `bot_token` and `channel`; Discord the same as Slack; ntfy
+`topic`; email `host`, `from` and `to`. On `update`, settings merge into the stored ones. Secrets
+are stored encrypted and always shown masked. Managing alerts needs the `alerts:manage` scope.
+See [Alerts](/automation/alerts).
+
+## Manage API keys: `keys`
+
+```bash
+staqly keys list
+staqly keys create --name "Content agent" --scope collections:read,posts:read,posts:write,media:write [--expires 2027-01-01]   # printed once; expires in a year unless --expires is sooner
+staqly keys rotate key_123                   # revoke + new key with the same name and scopes, printed once
+staqly keys revoke key_123
+```
+
+API keys are a cloud-mode feature: the Community Edition has none (`create` answers `409`), its agents use
+the [access token](/local-vs-cloud#the-access-token). Managing keys needs the `admin` scope. `create` and `rotate` print the new key once; store it right away.
+
+## Manage the workspace: `workspace`, `plans`
+
+```bash
+staqly workspace get
+staqly workspace rename "Acme content"                     # admin
+staqly workspace timezone Europe/Warsaw                    # admin; repeats and schedules without a zone follow it
+staqly workspace usage                                     # plan, usage vs limits, trial end, suspension
+staqly workspace export start [--wait] [--output staqly-export.zip] [--timeout 30m]
+staqly workspace export status exp_oalirbz67y4m4cqxq5dw
+staqly workspace export download exp_oalirbz67y4m4cqxq5dw [-o backup.zip]
+staqly plans list                                          # cloud plans, monthly and yearly prices, limits
+```
+
+The export is a ZIP with collections, posts, channels (without credentials), schedules, events,
+media files and webhooks (secrets redacted). Only one export runs at a time, and finished
+archives are deleted after 24 hours. Exports need the `admin` scope.
+
+| Flag | Type | Required | Description |
+|---|---|---|---|
+| `--wait` | boolean | No | `export start`: poll until the export is ready; exits `1` if it failed and `3` on timeout |
+| `--output`, `-o` | path | No | `export start`: download the finished ZIP to this file (implies `--wait`). `export download`: file to write, `-` for stdout; without it the ZIP goes to stdout when piped, else to the server's file name in the current directory |
+| `--timeout` | duration | No | `export start`: how long `--wait` waits (default `30m`) |
+| `--interval` | duration | No | `export start`: poll interval (default `2s`) |
+
+Deleting the workspace and rotating the recovery key are not CLI commands: the API only allows
+them from a signed-in dashboard session, not with an API key or the local principal.
+
+## Pay for a plan: `billing`
+
+Cloud workspaces with Stripe billing enabled (admin key):
+
+```bash
+staqly billing status        # plan, subscription status, paid-through date, suspended
+staqly billing checkout --plan plus --yearly   # Stripe Checkout link; a paying workspace is switched instead
+staqly billing portal        # prints a link to change the card, get invoices or cancel
+```
+
+The links are for a person to open in a browser; the plan changes when Stripe confirms the
+payment.
+
+## Sign in other browsers: `connect`, `sessions`
+
+```bash
+staqly connect                                   # one-time sign-in link, valid 5 minutes (Community Edition)
+staqly sessions list                             # signed-in browsers (admin)
+staqly sessions revoke ses_oalirbz67y4m4cqxq5dw
+```
+
+`connect` prints a link that signs one browser in once, for example a phone on your network. The
+link is a credential: open it only on your own device. The server issues these links only to the
+dashboard or the Community Edition's access token, so a cloud server answers `403` to an API key. When the link
+points at `localhost`, the CLI warns that other devices can't open it; set `PUBLIC_DASHBOARD_URL` on the
+server.
+
+## Manage profiles: `login`, `logout`, `profiles`
+
+```bash
+staqly login --url https://app.staqly.ai --key stk_... --profile work [--no-verify]
+staqly profiles
+staqly profiles use work
+staqly logout --profile work
+```
+
+See [Save servers as profiles](/cli#save-servers-as-profiles).
+
+## Connect an agent: `mcp config`
+
+Prints a ready-to-use MCP configuration for an agent client, pointing at the current profile's
+server (`<url>/mcp`):
+
+```bash
+staqly mcp config claude                     # `claude mcp add` command + .mcp.json snippet
+staqly mcp config codex                      # `codex mcp add` command + ~/.codex/config.toml
+staqly mcp config opencode --stdio           # opencode.json for docker exec -i staqly mcp-stdio
+staqly mcp config cursor --snippet > .cursor/mcp.json
+staqly mcp config windsurf                   # ~/.codeium/windsurf/mcp_config.json snippet
+```
+
+HTTP snippets reference `$STAQLY_API_KEY` (an API key, or the Community Edition's access token:
+`export STAQLY_API_KEY=$(staqly serve token)`); the key itself is never printed. `--stdio` against
+the Community Edition needs no key. `--snippet` prints only the config file snippet, and `--container` changes the
+container name used with `--stdio` (default `staqly`).
+
+## Other commands
+
+```bash
+staqly version [--json]
+staqly completion bash|zsh|fish
+staqly --help
+staqly <command> --help
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Scripting recipes" href="/cli/scripting">Put these commands to work in cron jobs and shell scripts.</Card>
+  <Card title="CLI overview" href="/cli">Install, connect, output formats and exit codes.</Card>
+  <Card title="Schedules" href="/automation/schedules">Let a collection publish on its own.</Card>
+</Cards>

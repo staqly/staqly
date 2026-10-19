@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 120,
+  "semi": false,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "AGENTS.md",
+    "README.md",
+    "CHANGELOG.md",
+    "package-lock.json",
+    ".next/**",
+    "out/**",
+    "next-env.d.ts"
+  ],
+  "jsxSingleQuote": false,
+  "sortImports": {
+    "groups": ["builtin", "external", "internal", ["parent", "sibling", "index"], "style", "unknown"],
+    "newlinesBetween": true
+  }
+}

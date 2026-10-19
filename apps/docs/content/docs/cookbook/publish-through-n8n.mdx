@@ -1,0 +1,91 @@
+---
+title: Publish through n8n
+description: Add a channel on your own automation, receive each post in an n8n workflow, publish it wherever you like and report the result back.
+---
+
+Staqly cannot reach every platform, and some publishing steps are yours alone: an internal
+tool, a newsletter service, a platform whose provider is still `soon`. A channel on **your own
+automation** hands each post to an n8n workflow, which publishes it and reports the link back.
+The post's status and history look the same as for any other channel.
+
+## What you need
+
+- Staqly running ([Quickstart](/quickstart)).
+- Its access token in `STAQLY_API_KEY` for the curl commands: `export STAQLY_API_KEY=$(staqly serve token)`
+  (Docker: `$(docker exec staqly server token)`).
+- An [n8n](https://n8n.io) that staqly can reach (see [networking](/integrations/n8n#networking-pick-your-setup)).
+
+## Build it
+
+<Steps>
+<Step>
+
+### Add the channel
+
+**Channels → Add channel → Your own automation**, name it *n8n publisher*. Or:
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST http://localhost:3333/v1/channels -H 'Content-Type: application/json' \
+  -d '{"provider":"custom","name":"n8n publisher"}'
+# → {"id":"ch_7h2kq9xw3nbvd5yhzm6a", ...}
+```
+
+</Step>
+<Step>
+
+### Create the webhook
+
+Point a webhook at your workflow's trigger, subscribed to the one event that matters:
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST http://localhost:3333/v1/webhooks -H 'Content-Type: application/json' \
+  -d '{"url":"http://n8n:5678/webhook/staqly-publish","events":["post.publish_requested"],"description":"n8n publisher"}'
+```
+
+Save the `secret` from the response; it is shown once.
+
+</Step>
+<Step>
+
+### Build the workflow
+
+| Node | Setting |
+|---|---|
+| **Webhook** (trigger) | Path `staqly-publish`, method POST, *Raw body* on |
+| **Code**: verify | Check `X-Staqly-Timestamp` is within 5 minutes and `X-Staqly-Signature` matches `sha256=HMAC(secret, timestamp + "." + raw body)` ([code](/automation/webhooks#verifying-signatures)); drop repeats of the same `X-Staqly-Event-Id` |
+| **IF** | `{{ $json.data.channel.id }}` equals your channel id (one webhook can serve several custom channels) |
+| **HTTP Request**: publish | Your platform's API, with `{{ $json.data.target.content }}` and the media from `{{ $json.data.post.media_items }}` (download each `url` with the same credentials as the API) |
+| **HTTP Request**: report | With a *Header Auth* credential (`Authorization: Bearer` and the access token or API key): `POST http://api:3333/v1/posts/{{ $json.data.post.id }}/targets/{{ $json.data.channel.id }}/result` with `{"status":"published","url":"<the new post's URL>","external_id":"<its id>"}` |
+| **HTTP Request** (error branch) | The same URL with `{"status":"failed","error":"{{ $json.error.message }}"}` |
+
+Answer the trigger with `200` right away (*Respond immediately*) and do the work after; staqly
+retries deliveries that are not answered within the webhook's timeout.
+
+</Step>
+<Step>
+
+### Publish a post
+
+Write a post in the dashboard with *n8n publisher* as a channel and click **Publish now**. The
+target shows **Publishing** with how long it has waited of the collection's limit; when the
+workflow reports, it shows **Published** with your link, or **Failed** with your error and a
+**Retry** button, which sends `post.publish_requested` again.
+
+</Step>
+</Steps>
+
+## Without a public URL
+
+n8n on the same machine as `staqly serve` needs `WEBHOOK_ALLOW_LOOPBACK=true` in the server's
+environment, and the webhook URL `http://localhost:5678/webhook/staqly-publish`. With staqly in
+Docker, use `http://host.docker.internal:5678/...` or a shared Docker network. Details:
+[n8n networking](/integrations/n8n#networking-pick-your-setup).
+
+Alternatively skip the webhook and let a workflow poll `GET /v1/work` on a schedule: it lists
+every target on your own automation that waits for a result.
+
+## Reference
+
+- [Your own automation](/channels/your-own-automation): the contract, the timeout, the event payload.
+- [Webhooks](/automation/webhooks): signatures, retries, the network policy.
+- [n8n](/integrations/n8n): nodes, networking and idempotency.

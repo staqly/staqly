@@ -1,0 +1,78 @@
+---
+title: Other MCP clients
+description: Connect any MCP client to staqly, and check the connection without one.
+---
+
+Staqly works with any MCP client, not only the ones with their own page. Use this page when
+your client is not listed, or when you need the transport details to debug a connection.
+
+## Connect your client
+
+Most clients need a URL and a header. Pick the transport your client supports:
+
+| Transport | Configuration |
+|---|---|
+| **Streamable HTTP** (recommended) | URL `http://localhost:3333/mcp`, header `Authorization: Bearer {ACCESS_TOKEN}`; works with `staqly serve` and Docker |
+| **STDIO** (Docker only) | Command `docker`, arguments `exec -i staqly mcp-stdio`; no token |
+
+The access token is printed when staqly starts; `staqly serve token` (Docker:
+`docker exec staqly server token`) prints it again. Keep it in `STAQLY_API_KEY` and let the
+client read it from the environment where it can.
+
+Cursor and Windsurf have their own pages: [Cursor](/agents/cursor), [Windsurf](/agents/windsurf).
+
+## Check the connection with curl
+
+A raw `initialize` request tells you whether the endpoint is reachable and the token right,
+without any client (a `401` means the token is missing or wrong):
+
+```bash
+curl -s http://localhost:3333/mcp \
+  -H "Authorization: Bearer $STAQLY_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+```
+
+## Streamable HTTP details
+
+- The endpoint is **stateless**: each JSON-RPC request is authenticated on its own and gets
+  a server bound to that caller. There is no MCP session to keep alive or hijack.
+- Responses are plain JSON (`application/json`), not server-sent events.
+- **Staqly Community Edition**: send `Authorization: Bearer {ACCESS_TOKEN}`, as for the REST API. See
+  [Community Edition vs Staqly Cloud](/local-vs-cloud#the-access-token).
+- **Staqly Cloud**: send `Authorization: Bearer stk_...` to `https://app.staqly.ai/mcp`. Cookies are never accepted on `/mcp`.
+
+## STDIO details
+
+`mcp-stdio` is a second binary in the `ghcr.io/staqly/staqly` image. Run it **inside** the running container so
+it opens the same SQLite database (WAL mode handles several processes on one host). Webhook
+deliveries it queues are sent by the server's worker.
+
+- Use `docker exec -i`, **never `-t`**.
+- The Community Edition needs no key, not even the access token: `mcp-stdio` opens the database itself, so
+  whoever may run it already has the data. Staqly Cloud has no STDIO: connect over HTTP.
+- Without Docker: `cd apps/api && go build -o staqly-mcp ./cmd/mcp-stdio` and run it with
+  `DATA_DIR` pointing at the server's data directory (for `staqly serve`,
+  `~/.local/share/staqly` by default).
+- Errors go to stderr: run the command by hand to see them.
+
+## What the server tells the model
+
+The server announces itself as **`staqly`** ("staqly Agent Workspace", with the server
+version) and sends instructions telling the model how the flow goes (connect channels, create
+posts with one target per channel, preview, schedule or publish), that collections can be
+referenced by ID or exact name, that `list_requested_work` says what the workspace asks of it,
+and that a published post is read-only. The full list is in the
+[MCP overview](/mcp#what-the-server-tells-the-model).
+
+Every tool carries MCP annotations: read-only tools have `readOnlyHint: true`, and write tools
+set `destructiveHint` to `true` (deletes, revokes, rotations) or `false` (creates and
+updates). Clients can use them to decide which calls need confirmation.
+
+## Next steps
+
+<Cards>
+  <Card title="MCP tools" href="/mcp/tools">Every tool, its arguments and the scope it needs.</Card>
+  <Card title="Example prompts" href="/mcp/prompts">What to ask once staqly is connected.</Card>
+</Cards>

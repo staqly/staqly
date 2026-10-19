@@ -1,0 +1,18 @@
+# This file instructs Redocly's linter to ignore the rules contained for specific parts of your API.
+# See https://redocly.com/docs/cli/ for more information.
+# - servers/1 is the real local URL (http://localhost:3333).
+# - Probes and the document itself have no client errors (no auth, no input).
+# - The OAuth callback only redirects (302) to the dashboard's callback page; the Google sign-in start
+#   and callback only redirect (to Google, the dashboard or /login?error=).
+openapi.yaml:
+  operation-2xx-response:
+    - '#/paths/~1v1~1channels~1oauth~1{provider}~1callback/get/responses'
+    - '#/paths/~1v1~1auth~1google~1start/get/responses'
+    - '#/paths/~1v1~1auth~1google~1callback/get/responses'
+  no-server-example.com:
+    - '#/servers/1/url'
+  operation-4xx-response:
+    - '#/paths/~1health/get/responses'
+    - '#/paths/~1openapi.yaml/get/responses'
+    - '#/paths/~1livez/get/responses'
+    - '#/paths/~1readyz/get/responses'

@@ -1,0 +1,160 @@
+---
+title: Community Edition vs Staqly Cloud
+description: Choose between Staqly Cloud (hosted at app.staqly.ai, with accounts, members, API keys and plans) and Staqly Community Edition (self-hosted on your own computer or server, one access token).
+---
+
+Staqly comes in two forms:
+
+- **Staqly Cloud** is the hosted service at [app.staqly.ai](https://app.staqly.ai). You sign up,
+  invite your team, give each agent its own scoped API key, and pay per user for a
+  [plan](/plans). We run the servers, the backups and the updates.
+- **Staqly Community Edition** is the self-hosted option: the open-source app (AGPL-3.0) on your
+  own computer or server, as one binary (`staqly serve`) or one Docker container. One workspace,
+  one access token, no plan limits, and you take care of backups and updates yourself.
+
+Both run the same app with the same REST API, MCP tools, SDKs and dashboard. Self-hosting is
+supported for the Community Edition only.
+
+| | Staqly Cloud | Community Edition |
+|---|---|---|
+| Where | [app.staqly.ai](https://app.staqly.ai), run by us | Your computer or server ([binary](/self-hosting/binary) or [Docker](/self-hosting/docker)) |
+| Workspaces | Many, in accounts: your first sign-in creates an account and a workspace; members join by invitation | One, created automatically |
+| People | Sign in with Google, an email code or a passkey; members with roles ([Accounts](/accounts)) | You; each browser signs in once with the access token |
+| Agents, n8n, scripts | Scoped API keys `stk_...`; the key decides which workspace you work in | The access token `stk_local_...` as `Authorization: Bearer` (API keys `stk_...` are refused, `401`) |
+| MCP | `https://app.staqly.ai/mcp` + `Authorization: Bearer {API_KEY}` | `http://localhost:3333/mcp` + `Authorization: Bearer {ACCESS_TOKEN}`, or `docker exec -i staqly mcp-stdio` (Docker only, no token) |
+| Phones and tablets | Sign in at `app.staqly.ai`, or **Connect a device** QR | **Connect a device** QR (with `--expose` or Docker; the QR uses your Wi-Fi address, which Docker users type once in the dialog) |
+| OAuth platforms | Our developer apps, ready to connect | Your own developer app per platform, in the server's environment (`PROVIDER_<ID>_CLIENT_ID` / `_SECRET`; see [Developer apps](/channels/developer-apps)) |
+| Plan | Starter, Plus, Pro or Business, per user (Starter with a 7-day trial, card required) | **Community Edition** (no limits) |
+| Backups | ZIP backups to download in **Settings → Backups** on Plus and above | Commands in **Settings → Backups**, run on your computer ([Backup & restore](/self-hosting/backup-and-restore)) |
+| Updates | Done by us | You install new versions ([Upgrades](/self-hosting/upgrades)) |
+
+If you want to try Staqly on your own machine first, start with the
+[Community Edition quickstart](/quickstart).
+
+## Staqly Cloud
+
+[Create an account](https://app.staqly.ai/signup) with Google or your email address. Your first
+sign-in creates an account with a workspace, and the welcome walks you through naming it,
+choosing a plan and connecting a first channel.
+
+- **Members and roles**: owners and admins invite people as owner, admin, editor or viewer under
+  **Settings → Members**. A role is read on every request. See [Accounts, members and
+  roles](/accounts).
+- **API keys** (`stk_...`) are for agents and scripts, scoped, and never more than their creator's
+  current role; only their SHA-256 hashes are stored. Manage them under **Integrations → API
+  keys**. See [Authentication & scopes](/api/authentication).
+- The **dashboard** uses an HttpOnly session cookie and a CSRF token after sign-in. **Connect a
+  device** signs a phone in as the same person with a QR code.
+- **Plans** limit each workspace; over a limit the API answers
+  [`402 plan_limit_exceeded`](/api/errors#402-plan_limit_exceeded). The account owner chooses
+  Starter, Plus, Pro or Business by card under **Settings → Plan & usage** and manages the
+  subscription in the Stripe portal. See [Plans](/plans), [Plan & usage](/dashboard/plan-and-usage)
+  and [Limits](/limits).
+
+### Connecting clients to Staqly Cloud
+
+Clients use the hosted address plus your workspace's API key:
+
+```bash tab="curl"
+curl "https://app.staqly.ai/v1/posts?status=scheduled" \
+  -H "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+```bash tab="Claude Code"
+claude mcp add --transport http staqly https://app.staqly.ai/mcp \
+  --header "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+```bash tab="Codex"
+codex mcp add staqly --url https://app.staqly.ai/mcp --bearer-token-env-var STAQLY_API_KEY
+```
+
+```ts tab="TypeScript SDK"
+import { Staqly } from '@staqly/sdk';
+
+const cloud = new Staqly({ baseUrl: 'https://app.staqly.ai', apiKey: process.env.STAQLY_API_KEY });
+```
+
+Several workspaces means several keys: each key only sees its own workspace.
+
+## Community Edition
+
+Start staqly with `staqly serve` (or the [Docker image](/self-hosting/docker)) and you are ready: no sign-up,
+no account, no password. On first start staqly makes an **access token**, and at every start it
+prints it with a link that opens the dashboard signed in:
+
+```text
+Staqly Community Edition (local mode): every request needs the access token.
+  Open the dashboard:  http://localhost:8080/#token=stk_local_...
+  Access token:        stk_local_...
+```
+
+The token is the one key of a Community Edition install. Agents, n8n, scripts, the SDKs and curl send it as
+`Authorization: Bearer {ACCESS_TOKEN}`; the token holder has full access to the one workspace.
+
+| Service | Reachable from | Credentials |
+|---|---|---|
+| **API** `:3333` (REST + MCP) | this computer only, bound to `127.0.0.1` | the access token, as `Authorization: Bearer` |
+| **Dashboard** `:8080`, `staqly serve` | this computer only, bound to `127.0.0.1` | every browser signs in once (sessions last 30 days) |
+| **Dashboard** `:8080`, `staqly serve --expose` or Docker | your network, so phones and tablets can use it | every browser signs in once (sessions last 30 days) |
+
+`STAQLY_MODE=local` is the default and the only mode the self-hosting docs cover; you don't need
+to set it.
+
+### The access token
+
+- It lives in the data folder as `access_token`, readable only by you (mode `0600`). With
+  `staqly serve` that is `~/.local/share/staqly/access_token`; with Docker, the `staqly-data` volume.
+- Print it again with `staqly serve token` (binary) or `docker exec staqly server token` (Docker).
+  Agents, CLI and SDK setups can read it straight from that command:
+  `export STAQLY_API_KEY=$(staqly serve token)`.
+- The `staqly` CLI on the same computer as `staqly serve` needs nothing: it reads the token from
+  the data folder by itself.
+- Make a new one with `staqly serve token --rotate` (or `docker exec staqly server token --rotate`),
+  or **Rotate** next to the access token under **Integrations** in the dashboard. The old token stops working at
+  once, also in a running server, and every browser is signed out (the dashboard you rotate from
+  stays signed in). Update your agents' configuration with the new token.
+- `docker exec -i staqly mcp-stdio` needs no token: it opens the database itself, so whoever may run
+  it already has the data.
+
+### Signing a browser in
+
+- Open the link staqly printed at start (`http://localhost:8080/#token=...`). The token travels in the
+  part of the address after `#`, which browsers never send to a server, and the dashboard removes it
+  from the address bar once it has signed in.
+- Or open the dashboard and paste the access token on its sign-in page.
+- Phones and tablets scan a QR code from **Connect a device** in a signed-in dashboard, or open a
+  one-time link from `staqly serve connect-link` (binary) or `docker exec staqly server connect-link`
+  (Docker). See [Phones & tablets](/dashboard/phones-and-tablets).
+
+### Why the Community Edition is safe
+
+- **Every request carries a credential**: the access token, or a browser session made with it. A
+  website you visit, a page on another localhost port or a DNS-rebinding page can't attach either, so
+  none of them can drive your staqly, and other programs on your computer can't either unless they can
+  read your files.
+- The API binds to **`127.0.0.1`**, so nothing outside this computer can reach it directly (defense in
+  depth). Run outside Docker (`staqly serve`), the server itself listens on `127.0.0.1:3333`; with
+  Docker, `docker run -p 127.0.0.1:3333:3333` publishes the port on `127.0.0.1` only.
+- Browser sessions use an HttpOnly, SameSite=Lax cookie, and every change needs the session's
+  CSRF token.
+- The token is stored in an owner-only file, never in the database or the logs; staqly prints it on
+  the terminal (or `docker logs`) at start.
+
+A request without the token, or with a wrong one, gets `401 unauthorized`. The settings of the older
+keyless local mode (`LOCAL_TRUSTED_PEERS`, `LOCAL_ALLOWED_HOSTS`, `LOCAL_ALLOWED_ORIGINS`) are no longer
+read; staqly warns at start when one is still set.
+
+<Callout title="Need per-agent permissions or a team?">
+The access token gives full access to the one workspace. Scoped API keys, members and roles come
+with [Staqly Cloud](#staqly-cloud).
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Quickstart" href="/quickstart">Run the Community Edition and publish a first post.</Card>
+  <Card title="Accounts, members and roles" href="/accounts">Sign in to Staqly Cloud and invite your team.</Card>
+  <Card title="Plans & limits" href="/plans">What each Staqly Cloud plan includes.</Card>
+  <Card title="Security model" href="/self-hosting/security">How the Community Edition protects your data.</Card>
+</Cards>

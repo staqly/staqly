@@ -1,0 +1,159 @@
+---
+title: Security model
+description: Understand who can reach your staqly, how channel credentials and other secrets are stored, and what keeps a drafting agent from publishing.
+---
+
+This page explains the protections built into staqly: what is reachable from the network, what
+the local access token protects, how credentials are stored, and how publishing stays under control. Read it
+before you expose the dashboard of your Community Edition to your network or give an agent the access token.
+You don't need to configure anything for these defaults to apply.
+
+## Network exposure
+
+| Port | Binary (`staqly serve`) | Docker image |
+|---|---|---|
+| **API + MCP** (`3333`) | `127.0.0.1` only | Published on `127.0.0.1` only |
+| **Dashboard** (`8080`) | `127.0.0.1` only; with `--expose` on all interfaces. Every browser signs in | Published on all interfaces; every browser signs in |
+
+- The API is never reachable from the network.
+- The dashboard requires a session for **every** browser, including on this computer: the
+  access token signs a browser in, a one-time link signs a phone in — see
+  [Phones & tablets](/dashboard/phones-and-tablets).
+
+## Community Edition: the access token
+
+Every request needs the install's access token, also from this computer: API clients send it as
+`Authorization: Bearer`, browsers trade it once for a session (HttpOnly, SameSite=Lax cookie, with
+a CSRF token for every change). A web page on another site, on another localhost port or behind a
+DNS-rebinding name can't attach it.
+
+- The token is made on first start in `DATA_DIR/access_token`, readable by its owner only
+  (`0600`), and printed at every start on the terminal (`docker logs` with Docker), never in the
+  log lines.
+- `server token --rotate` (`staqly serve token --rotate`) replaces it: the old token stops
+  working at once, also in a running server, and every browser is signed out.
+- `mcp-stdio` needs no token: it opens the database itself, so whoever may run it already has the data.
+- Defense in depth stays: the API listens on `127.0.0.1` only (Docker publishes it there).
+
+The token gives full access; scoped per-agent API keys come with [Staqly Cloud](/local-vs-cloud#staqly-cloud).
+Details: [Authentication](/api/authentication#local-mode-the-access-token).
+
+## Secrets
+
+| Secret | Stored as |
+|---|---|
+| API keys `stk_...` (256-bit, Staqly Cloud) | SHA-256 hash + 6-character display prefix |
+| Local access token `stk_local_...` | The file `DATA_DIR/access_token` (`0600`), not in the database; `STAQLY_LOCAL_TOKEN` instead for tests and CI |
+| Session tokens (256-bit) | SHA-256 hash; HttpOnly, SameSite=Lax cookie, `Secure` with `COOKIE_SECURE=true` |
+| Device-link tokens | SHA-256 hash; 5-minute, single-use, carried in the URL fragment |
+| Webhook secrets | **Plain text** — needed to sign deliveries. Returned in full only when created or rotated, masked (`whsec_****x7qa`) everywhere else. Protect the data volume. |
+
+High-entropy random secrets make a plain SHA-256 an adequate verifier. Raw keys are shown
+once, and responses that carry a secret are never stored for
+[`Idempotency-Key`](/api/idempotency) replay. Logs never contain headers, query strings,
+bodies, keys or tokens — see [Logs & tracing](/self-hosting/logs-and-tracing).
+
+## Staqly Cloud sign-in
+
+On Staqly Cloud people sign in with Google, an email code or a passkey, and every member has a
+role. How those sign-ins are protected is in
+[Accounts → How sign-in is protected](/accounts#how-sign-in-is-protected).
+
+## Least privilege
+
+- API keys are scoped. Writing content (`posts:write`) is separate from publishing it
+  (`posts:publish`), so a drafting agent cannot put a word on your channels; the schedules you
+  set, a person or a publisher key do.
+- Deleting is separate from writing: `posts:delete` (posts and media) and
+  `collections:delete` are never implied by `posts:write` or `collections:write`, so an agent
+  that creates content cannot wipe it. Purging a post with its history stays `admin`.
+- People sign in with their own methods; API keys are for agents. Give agents keys without
+  `admin`, and grant `channels:manage` and `alerts:manage` (they hold credentials and secrets)
+  only where needed.
+- REST and MCP call the **same** domain services, which check scopes themselves; no transport
+  can bypass authorization. Every query is scoped by workspace.
+- Cookie-authenticated unsafe requests need a CSRF token. `/mcp` never accepts cookies.
+- Credential audit events (`api_key.*`, `session.*`, `recovery_key.*`, `access_token.*`, `sign_in_method.*`, `device.*`,
+  `device_link.*`) are listed and exported (`/v1/events/export`) only for admins (dashboard
+  sessions, the Community Edition's access token, keys with `admin`).
+
+## Channel credentials
+
+- Platform tokens, app passwords and developer app client secrets are **sealed** with
+  AES-256-GCM before they reach the database. The key lives in `DATA_DIR/secret.key` (created on
+  first start, mode 0600) or comes from `STAQLY_SECRET_KEY`; without it stored credentials cannot
+  be read and every channel has to be reconnected, so back it up with the database.
+- No API response, MCP tool, export or log ever contains a credential or a client secret, not
+  even for an admin. `GET /v1/channels` returns the account's handle and picture; `fields` on
+  `POST`/`PATCH /v1/channels` are write-only.
+- OAuth flows start from the API with a signed `state` bound to the browser by a short-lived
+  cookie; the callback refuses a state that belongs to another connection or has expired, so a
+  captured redirect cannot attach an account to someone else's workspace.
+- Platforms are called from the server's job worker, never from the browser; a channel whose
+  credentials stop working is marked `needs_reconnect` and its targets fail instead of being
+  retried with the dead token.
+- A published post is read-only and a target already published on a channel cannot be
+  removed from the post, so what went out stays on record (`post.target_published` with the
+  platform's URL and id).
+
+## Uploads
+
+Types are sniffed from content against an allowlist; **SVG and HTML are refused**. Files are
+served only after authorization, with `nosniff`, a sandboxing Content-Security-Policy and the
+stored MIME type. Files reach platforms only when a post that carries them is published.
+
+## Dashboard
+
+- Every page is served with a Content-Security-Policy (`default-src 'self'`, no plugins, no
+  framing, `form-action 'self'`), `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `nosniff` and a restrictive `Permissions-Policy`.
+- **Media previews** come from staqly's own thumbnails, never from a third-party URL.
+
+## Alerts
+
+Alert secrets (bot tokens, webhook URLs, SMTP passwords) are encrypted at rest with
+`NOTIFY_SECRET_KEY` or `DATA_DIR/notify_secret.key`, masked in every response and never logged.
+Messages carry the post's text escaped for each target and a link to the post in the dashboard;
+nothing in a message can change a post. Details: [Alerts](/automation/alerts#security).
+
+## Workspace deletion and export
+
+Deleting a workspace requires a signed-in dashboard session — API keys get `403` even with
+`admin`. Exports never include API keys, sessions or the recovery key, and webhook secrets are
+redacted. See [Data export & privacy](/self-hosting/data-export).
+
+## Backups
+
+Backups contain secrets: webhook signing secrets in plain text, hashed keys and sessions, the
+sealed channel credentials and alert secrets, and (when you archive them) `secret.key`,
+`notify_secret.key` and the local `access_token`. Keep them owner-only
+(the commands in the backup guide run with `umask 077`). With the binary, the data directory is created owner-only (`0700`). See [Backup & restore](/self-hosting/backup-and-restore).
+
+## Containers
+
+The documented `docker run` command (and `compose.yml`) runs the `staqly` container with a read-only root
+filesystem, no Linux capabilities, `no-new-privileges` and memory / process limits, as a non-root user
+(uid 10001). The API port is published on `127.0.0.1` only. See
+[Run with Docker](/self-hosting/docker#what-the-flags-do).
+
+## Outbound requests
+
+- **Webhooks**: the IP policy is enforced on the resolved address at connect time; link-local
+  (cloud metadata), multicast, unspecified and reserved addresses are always blocked, and IPv6
+  forms that embed an IPv4 address are checked as that address. Private targets are allowed
+  by default in the Community Edition; loopback is off by default; redirects are not followed.
+- **Alerts**: public internet only by default
+  (`NOTIFY_ALLOW_PRIVATE=false`); cloud metadata and link-local addresses are always blocked.
+- **Schedule endpoints** use the webhook client and policy (`WEBHOOK_ALLOW_PRIVATE`,
+  `WEBHOOK_ALLOW_LOOPBACK`; link-local always blocked, redirects not followed), with a 60-second
+  limit and at most 4 MB read from the answer. The request is signed like a webhook delivery.
+- **Publishing** calls each platform's API from the job worker with the channel's sealed
+  credentials; the post's text and media are sent to that platform and nowhere else.
+
+## Next steps
+
+<Cards>
+  <Card title="Authentication" href="/api/authentication">API keys, scopes and sessions.</Card>
+  <Card title="Accounts, members and roles" href="/accounts">How Staqly Cloud signs people in.</Card>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Back up safely, secrets included.</Card>
+</Cards>

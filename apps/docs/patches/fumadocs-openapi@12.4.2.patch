@@ -1,0 +1,35 @@
+diff --git a/dist/packages/shared-api/dist/components/schema/client.js b/dist/packages/shared-api/dist/components/schema/client.js
+index f2a2808316a8a15b5793c44eacebceff8b92b1cb..378d420b1d60d8f1ec56ff8744f53764ad120f97 100644
+--- a/dist/packages/shared-api/dist/components/schema/client.js
++++ b/dist/packages/shared-api/dist/components/schema/client.js
+@@ -240,7 +240,7 @@ function Breadcrumbs({ from, unions, onBack }) {
+ 		children: [/* @__PURE__ */ jsx(ChevronRightIcon, { className: chevronClassName }), /* @__PURE__ */ jsxs(Menu.Root, { children: [/* @__PURE__ */ jsx(Menu.Trigger, {
+ 			"aria-label": t("Show Path", { note: "aria-label" }),
+ 			className: crumbClassName,
+-			children: "…"
++			children: "..."
+ 		}), /* @__PURE__ */ jsx(Menu.Portal, { children: /* @__PURE__ */ jsx(Menu.Positioner, {
+ 			align: "start",
+ 			sideOffset: 4,
+@@ -270,7 +270,7 @@ function Breadcrumbs({ from, unions, onBack }) {
+ 					className: "flex items-center gap-0.5",
+ 					children: [/* @__PURE__ */ jsx(ChevronRightIcon, { className: chevronClassName }), /* @__PURE__ */ jsx("span", {
+ 						className: "px-1.5 py-1",
+-						children: "…"
++						children: "..."
+ 					})]
+ 				})]
+ 			}, names)
+diff --git a/dist/ui/playground/components/fields.js b/dist/ui/playground/components/fields.js
+index 66eb6f5ff2ef9e11c9fe1d61aa278a0eca84d2cb..8e7f696dd47a36e9ff17b2ebbe7ea0588b8d44da 100644
+--- a/dist/ui/playground/components/fields.js
++++ b/dist/ui/playground/components/fields.js
+@@ -368,7 +368,7 @@ function NavRow({ fieldName, field, type, required, marked = required, name, des
+ 		if (!isPlainObject(value)) return null;
+ 		const keys = Object.keys(value);
+ 		if (keys.length === 0) return "{}";
+-		return `{ ${keys.slice(0, 3).join(", ")}${keys.length > 3 ? ", …" : ""} }`;
++		return `{ ${keys.slice(0, 3).join(", ")}${keys.length > 3 ? ", ..." : ""} }`;
+ 	} });
+ 	return /* @__PURE__ */ jsx(Row, {
+ 		name,

@@ -1,0 +1,35 @@
+---
+title: Getting started
+description: The welcome wizard that takes a new account from its first sign-in to its first post, once.
+---
+
+Right after you create an account, Staqly opens a short **welcome** on its own page, without the
+sidebar. It takes about a minute, every step after the first can wait, and **Skip for now** (top
+right) ends it at any point.
+
+## The steps
+
+| Step | What you do |
+|---|---|
+| **Welcome to Staqly** | Say what Staqly should call you (shown in the sidebar and to your team) and what brings you here: posting as a creator, running a team, or automating with agents. |
+| **Name your workspace** | Most people use their brand or client. You can rename it later in **Settings**. |
+| **Connect your first channel** | The platform grid, right there. Platforms that sign in on their own page (X and the other OAuth platforms) bring you back to this step; **Your own automation** needs only a name. **I'll do it later** moves on. |
+| **Connect an agent** or **Invite your team** | Which one comes first follows your answer in the first step; the other is a link away. For an agent, copy the one-line command for Claude Code or Codex; in the cloud, **Create a key for it** makes an API key that can write and publish posts and puts it into the command (shown only then). Invitations take several addresses at once and a role. |
+| **You are all set** | A short summary, then **Go to the calendar** or **Write your first post**. |
+
+People who join through an invitation see a shorter version: their name, the workspace they joined
+and what their role lets them do.
+
+## When it shows
+
+- **Cloud:** once per person, right after the first sign-in of a new account or an accepted
+  invitation. Finishing or skipping it ends it for good; it is stored with the person, so it doesn't
+  come back on another device.
+- **Staqly Community Edition:** never. The Community Edition has one workspace and no team to invite, so its empty
+  pages (Schedule, Posts, Channels) guide you instead.
+- It opens only from the dashboard's home (the calendar). A link to a post, a preview or Settings
+  opens what it points to.
+- **Getting started** in the user menu (bottom left, cloud only) opens it again whenever you like.
+
+Over the API, `GET /v1/session` reports `onboarded`, and `POST /v1/session/onboarded` (from the
+dashboard) finishes it; see the [API reference](/api/reference).

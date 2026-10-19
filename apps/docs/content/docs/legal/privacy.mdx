@@ -1,0 +1,122 @@
+---
+title: Privacy Policy
+description: What personal data staqly cloud processes, why, for how long, and your rights.
+---
+
+Last updated: 2026-10-21
+
+This policy explains how **staqly, Switzerland** ("staqly", "we", "us") processes
+personal data when you use **staqly cloud** (the hosted dashboard, API and MCP endpoint) and this
+documentation site. We follow the Swiss Federal Act on Data Protection (FADP) and, for people in
+the EU/EEA, the GDPR.
+
+## Staqly on your own computer
+
+If you run staqly yourself (`staqly serve` or Docker), your data stays on your machine. The
+software has **no telemetry** and sends nothing to us. Outgoing requests happen only to
+services you configure yourself: the platforms you connect as channels (your posts and media
+go to them when published), webhooks, alerts (Telegram, Slack, Discord, ntfy, email) and the
+endpoints your schedules call. The rest of this policy is about staqly cloud.
+
+## Who is responsible
+
+Staqly is the controller for account and usage data (section 1 below). For the content
+you and your agents store in a workspace (section 2), **you** decide what goes in and why; we
+process it on your behalf to provide the service.
+
+Contact for privacy questions and requests: [support@staqly.ai](mailto:support@staqly.ai).
+
+## What we process and why
+
+### 1. Account and usage data
+
+| Data | Why | Legal basis |
+|---|---|---|
+| Workspace name, plan, trial and billing period, usage counters | Run your workspace, enforce plan limits, the Starter trial | Contract |
+| Your account: name, email address and picture from Google or the address you sign in with, your passkeys' public keys, the members and roles of your workspaces | Sign you in, invite people, show who did what | Contract |
+| Hashed API keys, email codes, invitation links and session tokens (never stored in plain text) | Sign you in and keep the workspace secure | Contract |
+| Browser sessions: user agent, sign-in time, last use | Show your signed-in devices so you can revoke them | Contract, security |
+| Request logs: IP address, time, path, status, user agent, request ID | Security, abuse prevention, rate limits, troubleshooting | Legitimate interest |
+| Billing data (once payments are available): name, email, country, invoices | Charge for your plan and keep accounting records | Contract, legal obligation |
+| Messages you send us | Answer you | Contract, legitimate interest |
+
+### 2. Content in your workspace
+
+Collections, posts (text, media, per-channel texts and settings), metadata, media files, the
+connected channels with their sealed credentials, schedules, activity history, webhook and
+alert settings. We process it
+only to provide staqly to you: store it, show it, search it, and send it where you configured
+(the platforms you publish to, webhooks, alerts). We do not use it to train AI models, sell it, or show it to
+other customers.
+
+Content may contain personal data about other people, for example in generated posts or
+images. You are responsible for having a legal basis for putting it into staqly.
+
+### 3. This documentation site
+
+docs.staqly.ai is a static site hosted on GitHub Pages. It sets no cookies and uses no
+analytics. GitHub processes connection data (such as IP addresses) to deliver the pages; see
+[GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+The API playground keeps the API key you enter in your browser only and sends requests directly
+from your browser to the instance you choose.
+
+## Cookies
+
+The dashboard uses only what it needs to work: an HttpOnly **session cookie** (valid for up to
+30 days) and a CSRF token, plus a few display preferences (such as the media editor's theme) in your browser's local storage. No advertising or tracking
+cookies.
+
+## Who else processes data
+
+- **Hosting and infrastructure:** the providers that store and run staqly cloud for us, and the
+  email provider that delivers sign-in codes and invitations, under data processing agreements. Ask us at support@staqly.ai for the current list.
+- **Payments:** Stripe, once payments are available. Stripe receives your card details
+  directly; we never see them.
+- **Services you connect:** when you connect a channel, set up webhooks, alerts or schedule endpoints,
+  or add your own OpenAI key for the media editor's AI tools, staqly sends data to (or fetches
+  from) those services on your instruction. Their own terms and
+  policies apply.
+
+We do not sell personal data. We disclose it to authorities only when the law requires it.
+
+## International transfers
+
+When data is processed outside Switzerland and the EU/EEA, we rely on adequacy decisions or
+on standard contractual clauses recognised under the FADP and GDPR.
+
+## How long we keep data
+
+- **Workspace content** stays until you delete it. Deleting a post, purging it, or deleting
+  the whole workspace removes it from the live system right away; it may remain in our backups
+  until they are rotated out, which happens automatically on a regular schedule.
+- **Workspace exports** (ZIP downloads) are deleted after 24 hours.
+- **Sessions** expire after 30 days or when you sign out or revoke them.
+- **Request logs** are kept only as long as needed for security and troubleshooting, then
+  deleted.
+- **Billing records** are kept as long as accounting law requires (in Switzerland, 10 years).
+
+## Security
+
+All traffic is encrypted with HTTPS. API keys, sessions, recovery keys and sign-in links are
+stored only as hashes; channel credentials and alert secrets are encrypted at rest. Workspaces are
+isolated from each other in every query. See [Security](/self-hosting/security) for details.
+
+## Your rights
+
+You can ask for access to your personal data, a copy in a portable format, correction,
+deletion, restriction, or object to processing based on legitimate interest. Much of this you
+can do yourself:
+
+- **Export** your data on every plan: **Settings → Data & privacy → Export workspace** (or
+  [the API](/self-hosting/data-export)). On Starter the export does not include uploaded files;
+  on Plus and above it does.
+- **Delete** posts, or the whole workspace: **Settings → Data & privacy → Delete workspace**.
+
+For anything else, write to [support@staqly.ai](mailto:support@staqly.ai). We answer within 30
+days. You can also complain to a supervisory authority: in Switzerland the Federal Data
+Protection and Information Commissioner (FDPIC), or the authority in your EU/EEA country.
+
+## Changes
+
+We may update this policy; the date at the top shows the latest version. We will notify
+workspace owners in advance of material changes.

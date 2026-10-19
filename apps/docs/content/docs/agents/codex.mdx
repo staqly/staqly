@@ -1,0 +1,89 @@
+---
+title: OpenAI Codex
+description: Add staqly to the Codex CLI so it can write posts and put them on the calendar.
+---
+
+Connect the Codex CLI to staqly as an MCP server, and Codex can write posts, schedule and
+publish them, and answer when a schedule asks for more, just from your prompts. You set it up
+once per machine.
+
+## Connect to Staqly Community Edition
+
+<Steps>
+<Step>
+
+### Start staqly
+
+Run `staqly serve` (or the [Docker image](/self-hosting/docker)). See the [Quickstart](/quickstart).
+
+</Step>
+<Step>
+
+### Add the MCP server
+
+Your agent sends staqly's **access token**, which staqly prints at every start. Put it in
+`STAQLY_API_KEY` (in your shell profile, so the agent always has it):
+
+```bash
+export STAQLY_API_KEY=$(staqly serve token)   # Docker: $(docker exec staqly server token)
+```
+
+Codex reads it from that variable on every request:
+
+```bash
+codex mcp add staqly --url http://localhost:3333/mcp --bearer-token-env-var STAQLY_API_KEY
+```
+
+Or merge this into `~/.codex/config.toml`:
+
+```toml title="~/.codex/config.toml"
+[mcp_servers.staqly]
+url = "http://localhost:3333/mcp"
+bearer_token_env_var = "STAQLY_API_KEY"
+```
+
+</Step>
+</Steps>
+
+Tip: `staqly mcp config codex` prints the command and the TOML for your current
+[CLI](/cli/commands) profile.
+
+### STDIO (Docker only)
+
+With Docker you can use STDIO instead. It runs `mcp-stdio` inside the `staqly` container,
+so it needs no token, and it does not work with `staqly serve`:
+
+```bash tab="Command"
+codex mcp add staqly -- docker exec -i staqly mcp-stdio
+```
+
+```toml tab="config.toml" title="~/.codex/config.toml"
+[mcp_servers.staqly]
+command = "docker"
+args = ["exec", "-i", "staqly", "mcp-stdio"]
+```
+
+## Connect to Staqly Cloud
+
+Codex reads the bearer token from an environment variable:
+
+```bash
+export STAQLY_API_KEY=stk_...
+codex mcp add staqly --url https://app.staqly.ai/mcp --bearer-token-env-var STAQLY_API_KEY
+```
+
+```toml title="~/.codex/config.toml"
+[mcp_servers.staqly]
+url = "https://app.staqly.ai/mcp"
+bearer_token_env_var = "STAQLY_API_KEY"
+```
+
+Then ask: *"Draft a post about the release into Product updates and schedule it for tomorrow
+9:00 on my X channel."* More in [Example prompts](/mcp/prompts).
+
+## Next steps
+
+<Cards>
+  <Card title="Example prompts" href="/mcp/prompts">What to ask once staqly is connected.</Card>
+  <Card title="MCP tools" href="/mcp/tools">Every tool Codex can call, and the scope it needs.</Card>
+</Cards>

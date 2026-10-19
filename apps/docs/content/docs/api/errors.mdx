@@ -1,0 +1,284 @@
+---
+title: Errors
+description: Understand an error response from staqly and decide whether to fix, retry or give up.
+---
+
+Every error from the REST API uses one JSON shape with a stable `code`. Read this page when you write error handling for an automation, or when a call
+fails and you want to know why.
+
+## Handle an error
+
+<Steps>
+<Step>
+### Read the `code`, not the message
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "targets.ch_7h2kq9xw3nbvd5yhzm6a.content: at most 280 characters for this channel (312)",
+    "fields": { "targets.ch_7h2kq9xw3nbvd5yhzm6a.content": "at most 280 characters for this channel (312)" }
+  }
+}
+```
+
+Switch on `error.code`; the `message` is for humans and may change.
+</Step>
+<Step>
+### Decide what to do
+
+| The code is | Do this |
+|---|---|
+| `validation_failed`, `bad_request`, `connect_failed` | Fix the request (see `fields` and the message); don't retry as is |
+| `unauthorized`, `forbidden`, `csrf_failed` | Fix the credentials, the key's [scopes](/api/authentication#scopes) or sign in again |
+| `conflict`, `already_*`, `app_not_configured`, `provider_soon`, `provider_disabled` | Reload; the state already changed, or the platform is not ready on this server |
+| `rate_limited`, `code_cooldown`, `busy`, `unavailable`, `idempotency_in_progress` | Wait (`Retry-After` when present) and retry |
+| `plan_limit_exceeded`, `x_posts_exhausted` | Don't retry: the plan, the month or the bought X posts have to change |
+| `plan_expired` | Don't retry: the workspace is read-only until a plan is paid for |
+| `not_available`, `*_disabled` | Don't retry: the feature is off on this server |
+| `code_expired`, `link_expired`, `link_used`, `link_revoked`, `invitation_expired`, `state_expired`, `passkey_expired` | Start the step again (a new code, link, QR code or invitation) |
+| `internal`, `bad_gateway`, `timeout`, `payment_provider_error`, `ai_provider_error`, `mail_failed`, `google_unavailable` | Retry later; report it with the `request_id` |
+
+The [full list](#error-codes) is below.
+</Step>
+<Step>
+### Keep the `request_id` when reporting a problem
+
+Error responses also carry a top-level `request_id` (the same value as the `X-Request-Id`
+header) and, when the request sent a W3C `traceparent` header, its `trace_id`. They find the
+matching log lines — see [Logs & tracing](/self-hosting/logs-and-tracing#following-one-request).
+
+```json
+{
+  "error": { "code": "not_found", "message": "post not found" },
+  "request_id": "api-1/abc-000042",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+}
+```
+</Step>
+</Steps>
+
+## Error shape
+
+| Field | Meaning |
+|---|---|
+| `error.code` | Stable, machine-readable; switch on this, not on `message` |
+| `error.message` | Human-readable explanation |
+| `error.fields` | Per-field problems (validation errors) |
+| `error.details` | Structured data for some errors (plan limits) |
+| `request_id` | Same as the `X-Request-Id` response header |
+| `trace_id` | Present when the request sent a `traceparent` header |
+
+## Error codes
+
+Grouped by what they are about. Every code keeps its HTTP status.
+
+### Requests and credentials
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `bad_request` | Malformed JSON or unknown fields in the body |
+| 401 | `unauthorized` | Missing, invalid, expired or revoked credentials (Staqly Community Edition: the access token is missing or out of date) |
+| 403 | `forbidden` | The key lacks a scope (*"missing required scope posts:publish"*), the person's role doesn't allow it, or the operation isn't available to this caller (device links and the recovery key need a dashboard session) |
+| 403 | `csrf_failed` | A cookie-authenticated unsafe request without a valid `X-CSRF-Token` |
+| 404 | `not_found` | Unknown ID (or one in another workspace) |
+| 409 | `conflict` | State conflict, see [below](#409-conflict) |
+| 409 | `already_active`, `already_inactive`, `already_enabled`, `already_disabled`, `already_revoked` | You asked for the state it already has; nothing changed |
+| 409 | `idempotency_in_progress` | A request with the same `Idempotency-Key` is still running |
+| 413 | `too_large` | Body or file over the limit ([Limits](/limits#requests)) |
+| 415 | `unsupported_media_type` | Upload type not allowed (e.g. SVG, HTML), or a request content type other than JSON / multipart |
+| 422 | `validation_failed` | Invalid input; see `fields` |
+| 422 | `idempotency_mismatch` | `Idempotency-Key` reused with a different request |
+| 429 | `rate_limited` | Too many requests ([rate limits](/limits#rate-limits)); `Retry-After` says how many seconds to wait |
+| 500 | `internal` | Unexpected server error (logged server-side with the `request_id`) |
+| 502 | `bad_gateway` | The dashboard's `/api` proxy can't reach the API |
+| 503 | `unavailable` | A listing ran longer than 5 seconds; retry, or add filters |
+| 503 | `busy` | The database was locked by another process (e.g. a backup); retry after `Retry-After` (1 s) |
+
+### Posts and targets
+
+| Status | `code` | When |
+|---|---|---|
+| 409 | `conflict` | The post is published or publishing, or two edits raced; see [below](#409-conflict) |
+| 409 | `post_changed` | The post changed since your `expected_version` (*post was modified (version 3, expected 2)*): reload it and apply your edit again |
+| 409 | `provider_disabled` | A new post or a new target on a channel whose platform is turned off on this server. Targets the post already had keep working |
+| 422 | `validation_failed` | A target over its platform's limits is keyed `targets.<channel_id>.content` or `targets.<channel_id>.settings.<key>`; see [below](#422-on-posts-and-targets) |
+
+A target that fails while publishing doesn't answer an error code: the post's target turns
+`failed` with the platform's message in its `error` (see [Publishing errors](#publishing-errors)).
+
+### Channels and platforms
+
+| Status | `code` | When |
+|---|---|---|
+| 409 | `provider_soon` | The platform is in the catalog but not available in this build yet, or an OAuth platform has no app keys on this server |
+| 409 | `provider_disabled` | The platform is turned off on this server (`PROVIDER_<ID>_ENABLED=false`) |
+| 409 | `app_not_configured` | An OAuth sign-in started for a platform without a developer app; see [Developer apps](/channels/developer-apps) |
+| 410 | `state_expired` | The platform's sign-in took too long; start again |
+| 410 | `link_revoked` | A [connect link](/channels/connect-links) was turned off; ask for a new one |
+| 409 | `default_group` | Deleting the Default [channel group](/channels#channel-groups), which every workspace keeps |
+| 422 | `connect_failed` | The platform refused the credentials (*the platform did not accept these details: ...*) |
+
+### Accounts and sign-in (cloud)
+
+| Status | `code` | When |
+|---|---|---|
+| 401 | `code_invalid` | A wrong email code; `details.attempts_left` says how many tries remain |
+| 401 | `google_failed`, `google_cancelled`, `login_expired`, `login_state_mismatch` | The Google sign-in failed, was cancelled, took over 10 minutes or came back to another browser; start it again |
+| 401 | `passkey_invalid` | The passkey's answer could not be checked |
+| 401 | `passkey_cloned` | The passkey's sign counter went backwards, a sign it was copied; it is refused |
+| 401 | `invalid_link` | A device link (QR code) is not valid, or its person can no longer open the workspace |
+| 403 | `sign_in_with_account` | The workspace belongs to an account: sign in with Google, an email code or a passkey, not with an API key or recovery key |
+| 403 | `signup_closed` | Sign-up is closed on this server: join by invitation |
+| 403 | `email_unverified` | The Google account has no verified email address |
+| 403 | `invitation_email_mismatch` | The invitation is for another address than the one you signed in with |
+| 409 | `email_exists` | The person already has an email address: change it instead of adding one |
+| 409 | `identity_taken` | That Google account or address already signs in someone else |
+| 409 | `change_not_verified` | Changing the address before confirming the current one (or after its 10 minutes) |
+| 409 | `last_sign_in_method` | Removing the only way left to sign in |
+| 409 | `passkey_exists` | This passkey is already added |
+| 409 | `already_member`, `already_invited` | The address is already a member, or has an open invitation (use Resend) |
+| 409 | `invitation_closed` | The invitation was already accepted or revoked |
+| 409 | `last_owner` | A workspace needs at least one owner |
+| 409 | `account_owner` | The account owner is always an owner of its workspaces |
+| 409 | `accounts_disabled`, `google_disabled`, `email_sign_in_disabled`, `passkeys_disabled` | That sign-in, or accounts at all, aren't available on this server ([Accounts](/accounts)) |
+| 409 | `sign_in_with_account` | `POST /v1/workspaces` on a server with accounts: new workspaces start on the sign-in page |
+| 409 | `conflict` | *people in an account recover access with their sign-in methods*: a recovery key exists only for workspaces without an account |
+| 410 | `code_expired` | The code expired, was used, was replaced by a newer one or had too many wrong tries |
+| 410 | `invitation_expired`, `invitation_invalid` | Ask for a new invitation |
+| 410 | `link_used` / `link_expired` | A device link was already used / is older than 5 minutes |
+| 410 | `passkey_expired` | The passkey prompt is older than 5 minutes |
+| 429 | `code_cooldown` | A code was sent less than 30 seconds ago; `details.resend_in` says when to ask again |
+| 503 | `mail_failed` | The code could not be mailed |
+| 503 | `google_unavailable` | Google could not be reached |
+
+### Plans and billing
+
+| Status | `code` | When |
+|---|---|---|
+| 402 | `plan_limit_exceeded` | Over a cloud plan limit, see [below](#402-plan_limit_exceeded) |
+| 402 | `plan_expired` | The Starter trial or a paid period ended unpaid: the workspace is read-only (reads and exports still work) until a plan is paid for; see [Plans](/plans#the-starter-trial) |
+| 402 | `x_posts_exhausted` | Publishing to X on a cloud plan whose included and bought X posts are used up (*Your X posts for this period are used up...*); `details` has `needed`, `left` and `period_end`. A scheduled post fails its X target with the same reason. See [Plans](/plans#how-limits-are-counted) |
+| 409 | `not_available` | Billing is not enabled on this server (`/v1/billing*`), or plans were asked for on the Community Edition |
+| 409 | `conflict` | A checkout for a workspace that already has a subscription, or the billing portal before any checkout |
+| 410 | `gone` | A workspace export or backup is no longer available (after 24 hours) |
+| 502 | `payment_provider_error` | Stripe rejected a checkout or portal request; retry later, the operator sees the reason in the logs |
+| 502 | `ai_provider_error` | OpenAI did not answer a media editor AI request, or sent no picture; retry |
+| 409 | `ai_key_rejected` | OpenAI no longer accepts the workspace's AI key; an admin replaces it under Integrations |
+| 504 | `timeout` | OpenAI took too long on a media editor AI request; try again or ask for a smaller picture |
+
+## Common errors in detail
+
+### 402 `plan_limit_exceeded`
+
+Cloud workspaces are limited by their [plan](/plans). The error tells you which limit
+was hit:
+
+```json
+{
+  "error": {
+    "code": "plan_limit_exceeded",
+    "message": "The Starter plan allows 5 channels; upgrade the workspace plan to continue.",
+    "details": { "limit": "channels", "max": 5, "used": 5, "plan": "starter" }
+  }
+}
+```
+
+| `details.limit` | Triggered by |
+|---|---|
+| `posts_per_month` | Creating a post (people, agents, duplicates, posts a schedule fetched from your endpoint) |
+| `channels` | Connecting a channel |
+| `alerts` | Creating an alert |
+| `webhooks` | Creating a webhook |
+| `api_keys` | Creating an API key |
+| `storage_bytes` | Uploading a file |
+| `max_upload_bytes` | Uploading a file larger than the plan allows |
+| `data_export` | An activity log export (`GET /v1/events/export`) on a plan without data export (no `max` / `used`); the workspace export works on every plan, data only on Starter |
+
+Don't retry a 402 automatically — it won't succeed until the plan changes or the month rolls
+over.
+
+### 401 `unauthorized` in the Community Edition
+
+*"local mode needs the access token"*: send `Authorization: Bearer {ACCESS_TOKEN}`; *"invalid access
+token"*: the token was rotated, print the current one with `staqly serve token` (Docker:
+`docker exec staqly server token`). See [Authentication](/api/authentication#local-mode-the-access-token).
+
+### 409 `conflict`
+
+| Message | Meaning |
+|---|---|
+| *this post is published; duplicate it to post it again* | Published posts are read-only |
+| *this post is being published right now* | Wait for the publish to settle |
+| *only a scheduled post can be taken off the schedule* | Cancel applies to `scheduled` posts |
+| *only a failed target can be retried* | The target is pending, publishing or published |
+| *this target is not waiting for a result (it is published)* | `POST .../targets/{channel}/result` for a target that is not `publishing` |
+| *only targets on your own automation take reported results* | The target's channel is not provider `custom` |
+| *a channel this post is already published on cannot be removed* | A `PATCH` to `targets` dropped a published target |
+| *post was modified (version 3, expected 2)*, *post was modified concurrently* | Your `expected_version` is stale, or two edits raced; reload and retry |
+| *this channel needs reconnecting: send its credential fields again or go through its sign-in page* | Enabling a channel in `needs_reconnect` |
+| *this channel's provider is not part of this build* | Testing or changing a channel whose platform this server no longer has |
+| *only a failed job can be retried*, *only a queued job can be cancelled* | Job state |
+| *collection is already archived*, *collection is not archived* | You asked for the state it already has (see below) |
+| *the Default collection cannot be archived* / *deleted* | Every workspace keeps its Default collection |
+| *a collection with this name already exists* | Collection names are unique per workspace |
+| *collection is archived* | Archived collections are read-only |
+
+A state that is already set can't be set again. Archiving an archived collection, unarchiving an
+active one, enabling an enabled webhook or alert (or disabling a disabled one), revoking a
+revoked API key or session, reporting a result a target already has, retrying a job that is
+not failed, cancelling a job that is not queued, and choosing the plan the workspace is already
+on all answer `409` and change nothing: no new version, no event, no webhook. A `PATCH` that
+changes other fields as well is accepted; the unchanged state field is then ignored.
+
+### 422 on posts and targets
+
+| Message (field) | Meaning |
+|---|---|
+| *must be in the future* / *must be within a year* (`publish_at`) | The time is in the past or too far out |
+| *a scheduled post needs a time* (`publish_at`) | `status: scheduled` without `publish_at` |
+| *add at least one channel before scheduling* / *before publishing* (`targets`) | Add a channel first |
+| *channel ch_... is listed twice*, *unknown channel*, *this channel is turned off* (`targets`, `targets.<channel_id>`) | Fix the target list |
+| *this channel's provider is not part of this build* (`targets.<channel_id>`) | The server no longer has the channel's platform |
+| *at most 280 characters for this channel (312)* (`targets.<channel_id>.content`) | The text (the target's own, else the post's) is over the provider's limit |
+| a missing or wrong provider setting (`targets.<channel_id>.settings.<key>`) | See the provider's `settings_fields` |
+| *unknown media id*, *the same file is listed twice*, *at most N files* (`media`) | Fix the media list |
+| *avatar.png (med_...) is in Deleted: restore it to use it again* (`media`) | A file in Deleted can't be added to a post, and a post that carries one can't be scheduled or published (publish now, a retry, a collection schedule's run): restore it (`POST /v1/media/{id}/restore`) or take it out |
+| *set times (HH:MM) with optional weekdays and tz, or every_minutes (5 to 10080)* (`rule`) | A recurring schedule's rule is incomplete |
+| *unknown event pattern post.shipped; ...* | A webhook or alert subscribed to an event that doesn't exist |
+
+`GET /v1/posts/{id}/preview` reports the same problems as `warnings` per target without failing.
+
+## Publishing errors
+
+Publishing happens later, in a [job](/concepts#jobs), so its failures don't come back as an HTTP
+error: the target turns `failed`, its `error` says why, `post.target_failed` is emitted (and `post.failed` once every target settled with at least one failed) and an
+[alert](/automation/alerts) can tell you. Staqly sorts platform answers into three kinds:
+
+| Kind | Example | What happens |
+|---|---|---|
+| Try again | the platform is down, its rate limit, a network error | Retried after about 1, 5 and 15 minutes; then **failed** with a **Retry** |
+| Refused | duplicate text, a link or media the platform doesn't allow, a suspended account | **Failed** at once with the platform's reason: retrying the same post would not help, so change it first |
+| Sign-in | the platform no longer accepts the account | **Failed**, and the channel becomes **Needs reconnect** |
+
+Messages staqly itself writes on a failed target:
+
+| `error` | Meaning |
+|---|---|
+| *channel is turned off* | The channel was disabled before its time came |
+| *channel needs reconnecting* | Reconnect the channel, then **Retry** the target |
+| *channel was removed* | The channel was deleted while the post waited |
+| *No result reported in time* | [Your own automation](/channels/your-own-automation) did not report within the collection's processing timeout |
+| *provider not available in this build* | The server no longer has the channel's platform |
+| *stored credentials cannot be read* | The server's secret key changed; reconnect the channel (see [Security](/self-hosting/security)) |
+
+Each platform's page lists what it refuses, e.g. [X](/channels/x#when-publishing-fails).
+
+## Next steps
+
+<Cards>
+  <Card title="Idempotency" href="/api/idempotency">Retry safely without creating duplicates.</Card>
+  <Card title="Authentication & scopes" href="/api/authentication">Fix `401` and `403` errors.</Card>
+  <Card title="Limits" href="/limits">Every limit, and the error it answers with.</Card>
+  <Card title="Troubleshooting" href="/self-hosting/troubleshooting">Common problems and their fixes.</Card>
+</Cards>

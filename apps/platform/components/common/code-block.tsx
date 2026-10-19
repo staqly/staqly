@@ -1,0 +1,47 @@
+import { cn } from '@/lib/utils'
+
+import { CopyButton } from './copy-button'
+
+export function CodeBlock({
+  code,
+  title,
+  className,
+  language,
+}: {
+  code: string
+  title?: string
+  className?: string
+  language?: string
+}) {
+  const header = !!(title || language)
+  const copy = <CopyButton value={code} label={title ? `Copy ${title}` : 'Copy code'} size="icon-xs" />
+
+  return (
+    <div className={cn('group/code relative overflow-hidden rounded-lg border bg-muted/40', className)}>
+      {/* With a header, Copy sits in it on the right; without one it floats over the code. */}
+      {header && (
+        <div className="flex min-h-8 items-center gap-2 border-b bg-muted/50 py-0.5 pr-1 pl-3 text-xs text-muted-foreground">
+          <span className="min-w-0 font-medium">{title}</span>
+          {language && <span className="ml-auto font-mono tracking-wide uppercase">{language}</span>}
+          <span className={cn(!language && 'ml-auto')}>{copy}</span>
+        </div>
+      )}
+      {/* Focusable: a long line scrolls sideways (on phones most do), and keyboards scroll it with the arrow keys. */}
+      <pre
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrolling region must be reachable by keyboard (WCAG 2.1.1)
+        tabIndex={0}
+        className={cn(
+          'scrollbar-thin overflow-x-auto p-3 font-mono text-[12.5px] leading-relaxed focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+          !header && 'pr-12',
+        )}
+      >
+        <code>{code}</code>
+      </pre>
+      {!header && <div className="absolute top-1.5 right-1.5 rounded-md bg-background/70 backdrop-blur">{copy}</div>}
+    </div>
+  )
+}
+
+export function InlineCode({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <code className={cn('rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]', className)}>{children}</code>
+}

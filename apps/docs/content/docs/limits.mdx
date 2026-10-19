@@ -1,0 +1,146 @@
+---
+title: Limits
+description: Every limit a person, an agent or an integration can run into, in one place, with what happens when you reach it.
+---
+
+Staqly has three kinds of limits: what each **platform** accepts, what the workspace's **plan**
+allows (cloud only), and what the **API** accepts per request or per minute. This page lists all
+of them. When a request goes over one, the [error](/api/errors) says which.
+
+## Platforms
+
+Each channel checks a post against its platform before anything goes out: the text the channel
+will actually receive (its own text, else the post's, after [link handling](#links)), its media
+and the settings the platform needs. A post over a limit is refused with
+`422 validation_failed` keyed `targets.<channel_id>.content` (or `.settings.<key>`);
+`GET /v1/posts/{id}/preview` reports the same as warnings without failing.
+
+| Platform | Text | Media | Needs | Links |
+|---|---|---|---|---|
+| [Your own automation](/channels/your-own-automation) | no limit | up to 10 images, videos, GIFs or files | — | kept |
+| [X](/channels/x) | 280 characters | 4 pictures or 1 video | — | removed (or plain text) |
+
+The other platforms of the [catalog](/channels#the-catalog) are listed as **soon** with their
+published limits, so the composer and the preview already check them.
+
+### Links
+
+A channel's **Links in posts** setting decides what its links become when it publishes: kept,
+removed, or shown as plain text (`https://example.com/a` becomes `example[.]com/a`). X allows only
+the last two and removes links by default. The character count above uses the text after this
+change. See [Channels](/channels#managing-channels).
+
+### Platforms on a server
+
+Each platform can be turned off for a whole server with `PROVIDER_<ID>_ENABLED=false` in its
+environment, in the Community Edition and in the cloud. A turned-off platform leaves the catalog and the
+dashboard, connecting it answers `409 provider_disabled`, and new posts or new targets on its
+channels are refused the same way. Posts that already had one of its channels keep it: they can
+still be edited and publish as planned. An OAuth platform without its app's keys
+(`PROVIDER_<ID>_CLIENT_ID`, `PROVIDER_<ID>_CLIENT_SECRET`) is listed as **soon**. See
+[Developer apps](/channels/developer-apps).
+
+## Plans (cloud)
+
+| | **Starter** | **Plus** | **Pro** | **Business** |
+|---|---|---|---|---|
+| Price per user per month (billed yearly) | €15 (€12) | €29 (€23) | €59 (€47) | €99 (€79) |
+| Posts per month | unlimited | unlimited | unlimited | unlimited |
+| Channels | 5 | 15 | 40 | unlimited |
+| Posts to X per month (each post and reply; more in bundles) | 250 | 450 | 950 | 1,600 |
+| Seats (members) | billed per user | billed per user | billed per user | billed per user |
+| Alerts | 3 | 10 | unlimited | unlimited |
+| Webhooks | 3 | 10 | unlimited | unlimited |
+| API keys | 2 | 10 | unlimited | unlimited |
+| Storage | 10 GB | 50 GB | 200 GB | 1 TB |
+| File size | 25 MB | 100 MB | 250 MB | 1 GB |
+| Backups, activity log export, export with files | no | yes | yes | yes |
+| Collections, schedules, MCP, history | unlimited | unlimited | unlimited | unlimited |
+
+The Community Edition has none of these limits. Going over one answers
+`402 plan_limit_exceeded` with `details.limit` naming it. Starter starts with a 7-day trial (with Stripe
+billing: card required, nothing charged until it ends); when the trial or a paid period ends unpaid, the workspace becomes read-only
+(`402 plan_expired`) until a plan is paid for. Details: [Plans](/plans).
+
+## Posts and schedules
+
+| What | Limit |
+|---|---|
+| Post text | 50,000 characters (each channel then applies its own limit) |
+| Files per post | 20 |
+| Channels per post, channels per schedule | 50 |
+| Tags per post | 20, each at most 40 characters |
+| Comments (thread parts) after a post | 25, each up to a day (86,400 s) after the one before |
+| Publish time | in the future, at most a year ahead |
+| Recurring schedule | times of day (`HH:MM`) with weekdays, or every 5 to 10,080 minutes (a week) |
+| A schedule's endpoint call | 60 seconds |
+| Waiting for your own automation's result | a collection's processing timeout, 60 s to 24 h, default 1 hour (`PROCESSING_TIMEOUT`) |
+
+## Publishing and other jobs
+
+Publishing, schedule runs and sign-in refreshes are [jobs](/concepts#jobs).
+
+| What | Limit |
+|---|---|
+| Tries per job | 3, then the job and its target are **failed** (Retry starts again) |
+| Wait between tries | about 1, 5 and 15 minutes (up to 20% later, so retries spread out) |
+| One run of a job | publishing a target or a comment 10 min, a schedule run 3 min, a sign-in refresh 2 min |
+| A job left running by a server that stopped | queued again after 15 minutes |
+| Jobs at once | `JOB_CONCURRENCY` (default 4, at most 64); one workspace gets at most half while another waits |
+| Finished jobs kept | 7 days (done, failed and cancelled) |
+
+## Webhooks and alerts
+
+| What | Limit |
+|---|---|
+| Delivery tries | `max_attempts`, 1 to 20, default 8, with growing waits (15 s doubling, at most an hour apart) |
+| Timeout per delivery | `timeout_ms`, 1,000 to 60,000, default 10,000 |
+| Test sends (webhooks, alerts, channels) | 10 per minute per key or session, burst 5 |
+| Alert digest window | 0 to 86,400 seconds |
+
+See [Webhooks](/automation/webhooks) and [Alerts](/automation/alerts).
+
+## Requests
+
+| What | Limit |
+|---|---|
+| Page size of list endpoints | default 50, at most 200 ([pagination](/api/pagination-and-search)) |
+| A listing | 5 seconds, then `503 unavailable`: retry or narrow it with filters |
+| Upload | `MAX_UPLOAD_MB` on the server (default 100 MB), or the plan's file size if smaller ([media](/api/media)) |
+| `Idempotency-Key` | remembered for 24 hours ([idempotency](/api/idempotency)) |
+| Invoices per page (billing details) | 24 |
+
+### Rate limits
+
+| Limiter | Applies to | Default |
+|---|---|---|
+| Per client IP | sign-in with an API key or recovery key, Google's callback, email codes (start and check), invitations, device links, creating a workspace | 10 per minute, burst 10 |
+| Per key or session <Badge>cloud</Badge> | everything else under `/v1` and `/mcp` | 600 per minute, burst 100 |
+| Email codes | one per address every 30 seconds, 5 per address per hour, 20 per client IP per hour | fixed |
+| Passkey sign-ins | 30 per client IP per 10 minutes | fixed |
+| New workspaces <Badge>cloud</Badge> | 5 per client IP per hour | fixed |
+
+Over a limit: `429 rate_limited` (or `code_cooldown` for a code asked too soon) with a
+`Retry-After` header. The Community Edition tunes its per-IP limit with `RATE_LIMIT_*`; see
+[Monitoring](/self-hosting/monitoring#rate-limits).
+
+## Sign-in and links
+
+| What | Lasts |
+|---|---|
+| Browser session | 30 days (`SESSION_TTL`) |
+| Email code | 10 minutes, one use, 5 wrong tries |
+| Proof of the current address when changing it | 10 minutes |
+| Passkey prompt | 5 minutes, one use |
+| Google sign-in started in this browser | 10 minutes |
+| Connect a device link (QR code) | 5 minutes, one use |
+| Invitation | 7 days |
+| Workspace export or backup download | 24 hours |
+
+## Next steps
+
+<Cards>
+  <Card title="Errors" href="/api/errors">What each error code means and what to do.</Card>
+  <Card title="Plans" href="/plans">Starter, Plus, Pro, Business, the trial and changing plans.</Card>
+  <Card title="Channels" href="/channels">The platform catalog and channel settings.</Card>
+</Cards>

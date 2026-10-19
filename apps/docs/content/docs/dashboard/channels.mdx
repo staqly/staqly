@@ -1,0 +1,99 @@
+---
+title: Channels
+description: Connect the accounts staqly publishes to, keep them healthy and remove them, from the Channels page.
+---
+
+**Channels** in the sidebar lists every connected account with its picture, name, handle,
+platform and status, and is where you add new ones. For what a channel is and what each
+platform allows, see [Channels](/channels).
+
+## Add a channel
+
+<Steps>
+<Step>
+
+### Pick the platform
+
+Click **Add channel**. The drawer shows the platforms in groups: **Your own**, **Social
+networks**, **Video and streaming**, **Communities and chat**, **Blogs and newsletters** and
+**Business and portfolio**: *Pick the platform. Greyed ones are on the way.* Platforms that are
+not ready on this server carry a **Soon** badge and cannot be picked: not built yet, or an OAuth
+platform whose app keys the server doesn't have. Platforms turned off on the server
+(`PROVIDER_<ID>_ENABLED=false`) are not shown at all. **Your own automation** is always available
+unless it is turned off the same way.
+
+</Step>
+<Step>
+
+### Connect
+
+- **Token platforms** show their credential fields (a bot token, an app password) and a
+  **Name**. **Connect** checks the credentials against the platform and saves the channel with
+  the account's name and picture. None is available in this release: they are all **Soon**.
+- **OAuth platforms** show **Connect with ...** (the platform's name), which sends you to the
+  platform and back. The platform's developer app lives in the server's environment
+  (`PROVIDER_<ID>_CLIENT_ID` and `_CLIENT_SECRET` in `.env`), locally and in the cloud; until it
+  is there the platform shows **Soon**. See [Developer apps](/channels/developer-apps).
+- **Your own automation** takes a **Name** and **How posts reach your automation**: *Send to my
+  endpoint* (the default, with the **Endpoint URL**, **Method** and **Headers** Staqly calls) or
+  *Let my agents and webhooks pick it up*. See [Your own automation](/channels/your-own-automation).
+
+</Step>
+</Steps>
+
+After the platform sends you back, you land on **Channels** with the new channel in the list, or
+on *The channel was not connected* with the platform's error and **Back to Channels**.
+
+## The list
+
+Each row shows the channel's picture, name and status, its platform and handle, and its
+activity: **Last post** (how long ago, linking to that post), **Next post** (the next scheduled
+one) and how many posts went out on it in the last 30 days, or *No posts yet*. Hover a time for
+the exact date.
+
+**Groups.** Every channel is in one group, for example one group per client; the **Default**
+group always exists. With only Default, the list is grouped by platform. **New group** (next to
+Add channel) creates another; from then on the list shows one section per group, each folding open
+and closed, with a **group filter** above it. A group's menu has **Rename** and, for every group
+but Default, **Delete group**: its channels move to Default after you confirm.
+
+| Status | Row |
+|---|---|
+| **Connected** | Ready to publish. |
+| **Needs reconnect** | Shown in amber with the last error. Posts targeting it fail until it is reconnected. |
+| **Disabled** | Greyed; it is not offered in the composer and schedules skip it. |
+
+Each row's menu has:
+
+| Action | What it does |
+|---|---|
+| **Settings** | A drawer with the channel's name (the handle stays the account's), its **Group** (when there is more than one) and **Links in posts**: keep links, remove them or show them as plain text (X offers only the last two). See [Channels](/channels#managing-channels). |
+| **Move to group** | Puts the channel in another group (shown when there is more than one). |
+| **Test connection** | Checks the stored credentials against the platform now; a failing test marks the channel *Needs reconnect*. |
+| **Disable** / **Enable** | Turns the channel off or on without removing it. |
+| **Reconnect** | Shown when the channel needs it: OAuth platforms go through the platform again; token platforms take fresh credentials. |
+| **Edit connection** | Your own automation (and token platforms): change the endpoint, method and headers, or the credentials. |
+| **Remove** | Removes the channel. The confirmation warns: *Scheduled posts lose this channel.* Posts with no other channel become drafts. |
+
+## Where channels show up
+
+- In the composer's **Channels** list, with a character counter and, from two channels on, a tab per picked channel.
+- In a schedule's **Channels**.
+- On calendar chips and post rows as a stack of avatars; in a post's **Delivery** section with a status per channel.
+- Plan limits (cloud): **5 channels on Starter**, 15 on Plus, 40 on Pro, unlimited on Business. **Settings → Plan & usage** counts
+  them.
+
+## Let someone else connect a channel
+
+The **link** icon next to **Add channel** makes a [connect link](/channels/connect-links): a client
+or a colleague without access to Staqly opens it, signs in at the platform and the channel lands
+in your workspace, in the group you picked. Open links are listed in the same dialog with
+**Revoke**.
+
+## Next steps
+
+<Cards>
+  <Card title="Channels" href="/channels">The catalog, limits, statuses and security.</Card>
+  <Card title="Your own automation" href="/channels/your-own-automation">A channel that hands posts to n8n or a script.</Card>
+  <Card title="Connect links" href="/channels/connect-links">Let a client connect their account without access to Staqly.</Card>
+</Cards>

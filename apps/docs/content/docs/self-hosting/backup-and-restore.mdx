@@ -1,0 +1,338 @@
+---
+title: Backup & restore
+description: Take a consistent backup of your staqly data while it runs, and restore it when you need to.
+---
+
+Everything staqly knows (posts, channels, schedules, history, settings and uploaded files) lives in
+one data directory. Back it up regularly, and always before an [upgrade](/self-hosting/upgrades).
+Backups are taken while staqly keeps running; restoring needs a short stop.
+
+With `STORAGE_DRIVER=s3` the uploaded files are in a bucket, not in the data directory: back the
+bucket up with your provider's tools. See [Media storage](/self-hosting/storage#backups).
+
+## What to back up
+
+| File | What it is |
+|---|---|
+| `workspace.db` | The SQLite database, the job queue included (scheduled posts and pending retries). Back it up with the backup command, never by copying the file. |
+| `uploads/` | Uploaded media, one folder per workspace (`uploads/workspaces/<id>/`). Their `thumbs/` folders are a cache staqly rebuilds; you can skip them. |
+| `secret.key` | Decrypts channel credentials and developer app secrets. Only there if you haven't set `STAQLY_SECRET_KEY`. **Without it every channel has to be reconnected.** |
+| `notify_secret.key` | Decrypts alert secrets. Only there if you haven't set `NOTIFY_SECRET_KEY`. |
+| `access_token` | The Community Edition's [access token](/local-vs-cloud#the-access-token). Optional: without it a restored install makes a new token and your agents need the new one. |
+
+They are in `~/.local/share/staqly` with the binary (or your `--data` directory), and in the
+`staqly-data` volume at `/data` with the [Docker image](/self-hosting/docker).
+
+<Callout type="warn" title="Never copy workspace.db from a running server">
+Under WAL the latest commits may live only in `workspace.db-wal`, and a file copy taken
+mid-write can be torn. Use the backup command below.
+</Callout>
+
+## Back up
+
+**Settings → Backups** in the dashboard shows the backup commands for your install (binary or
+Docker), ready to copy. On [Staqly Cloud](#staqly-cloud-workspaces) it lists the workspace's backups instead.
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+`staqly serve backup` copies the **database only**, so archive the uploads next to it.
+
+<Steps>
+<Step>
+
+**Back up the database**
+
+```bash
+umask 077
+mkdir -p ~/staqly-backups/2026-10-13
+staqly serve backup ~/staqly-backups/2026-10-13/workspace.db
+```
+
+This works while `staqly serve` is running. Add `--data` (e.g.
+`staqly serve --data ~/staqly-data backup ~/staqly-backups/2026-10-13/workspace.db`) if you don't use
+the default data directory.
+
+</Step>
+<Step>
+
+**Archive uploads and the keys**
+
+```bash
+cd ~/.local/share/staqly
+tar czf ~/staqly-backups/2026-10-13/uploads.tar.gz --exclude='uploads/workspaces/*/thumbs' \
+  uploads $(ls secret.key notify_secret.key access_token 2>/dev/null)
+```
+
+Take the database first and the uploads second (see
+[Why the order matters](#why-the-order-matters)).
+
+</Step>
+<Step>
+
+**Store it off the machine**
+
+Copy the backup folder somewhere else, encrypted.
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab value="Docker">
+
+These commands use the container `staqly` from [Run with Docker](/self-hosting/docker); no
+checkout is needed.
+
+<Steps>
+<Step>
+
+**Back up the database**
+
+```bash
+umask 077
+mkdir -p ~/staqly-backups/2026-10-13 && cd ~/staqly-backups/2026-10-13
+docker exec staqly server backup /data/backups/staqly-backup.db
+docker cp staqly:/data/backups/staqly-backup.db ./staqly-backup.db
+docker exec staqly rm /data/backups/staqly-backup.db
+```
+
+`server backup` writes a consistent copy inside the container while staqly keeps serving
+requests; `docker cp` copies it out. Remove the copy from the volume afterwards: the backup
+command refuses to overwrite an existing file.
+
+</Step>
+<Step>
+
+**Archive the uploads**
+
+```bash
+docker run --rm --volumes-from staqly:ro -v "$PWD":/out alpine \
+  tar czf /out/staqly-uploads.tar.gz -C /data uploads
+```
+
+A throwaway container mounts the data volume read-only and archives `uploads/`. Take the
+database first and the uploads second (see [Why the order matters](#why-the-order-matters)).
+
+Also copy the keys unless you set them in the environment, and the access token if your agents
+should keep theirs: `docker cp staqly:/data/secret.key .`, `docker cp staqly:/data/notify_secret.key .`
+and `docker cp staqly:/data/access_token .`
+
+</Step>
+<Step>
+
+**Store it off the machine**
+
+Copy the backup folder somewhere else, encrypted.
+
+</Step>
+</Steps>
+
+</Tab>
+</Tabs>
+
+## Restore
+
+Restoring **replaces all current data** with the backup.
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+<Steps>
+<Step>
+
+**Stop staqly**
+
+Press Ctrl-C. If it runs in the background, `staqly service uninstall` stops it (your data is kept);
+run `staqly service install` again afterwards.
+
+</Step>
+<Step>
+
+**Put the backup in place**
+
+```bash
+cd ~/.local/share/staqly
+rm -f workspace.db workspace.db-wal workspace.db-shm
+cp ~/staqly-backups/2026-10-13/workspace.db workspace.db
+rm -rf uploads
+tar xzf ~/staqly-backups/2026-10-13/uploads.tar.gz
+chmod 600 workspace.db
+```
+
+Delete the `-wal` and `-shm` files: stale WAL files must not be replayed onto the restored
+database.
+
+</Step>
+<Step>
+
+**Start staqly again**
+
+```bash
+staqly serve
+```
+
+Pending migrations run automatically on start.
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab value="Docker">
+
+<Steps>
+<Step>
+
+**Stop staqly**
+
+```bash
+docker stop staqly
+```
+
+</Step>
+<Step>
+
+**Put the backup in place**
+
+From the backup folder (with `staqly-backup.db` and `staqly-uploads.tar.gz`):
+
+```bash
+cd ~/staqly-backups/2026-10-13
+docker run --rm --volumes-from staqly -v "$PWD":/backup:ro alpine sh -ec '
+  rm -f /data/workspace.db /data/workspace.db-wal /data/workspace.db-shm
+  cp /backup/staqly-backup.db /data/workspace.db
+  rm -rf /data/uploads
+  tar xzf /backup/staqly-uploads.tar.gz -C /data
+  chown -R 10001:10001 /data
+  chmod 600 /data/workspace.db'
+```
+
+A throwaway container deletes the old database with its `-wal` and `-shm` files (stale WAL
+files must not be replayed onto the restored database), copies the backup in, replaces
+`uploads/` and gives everything back to the staqly user (uid 10001). To restore `secret.key`,
+`notify_secret.key` or `access_token`, copy them in the same way (`cp /backup/secret.key /data/`
+before the `chown`, then `chmod 600` them).
+
+</Step>
+<Step>
+
+**Start staqly again**
+
+```bash
+docker start staqly
+```
+
+Pending migrations run automatically on start.
+
+</Step>
+</Steps>
+
+</Tab>
+</Tabs>
+
+Sessions and API keys come back as they were at backup time. The access token is the
+`access_token` file: restored with it, agents keep working; otherwise the install keeps the token
+it has (or makes a new one).
+
+## Schedule backups
+
+Run the backup from cron (or a systemd timer), then ship the backups off the machine.
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+Save the two backup steps as a script:
+
+```bash title="~/.local/bin/staqly-backup"
+#!/bin/sh
+set -eu
+umask 077
+out="$HOME/staqly-backups/$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$out"
+"$HOME/.local/bin/staqly" serve backup "$out/workspace.db"
+cd "$HOME/.local/share/staqly"
+tar czf "$out/uploads.tar.gz" --exclude='uploads/workspaces/*/thumbs' uploads $(ls secret.key notify_secret.key access_token 2>/dev/null)
+```
+
+Make it executable (`chmod +x ~/.local/bin/staqly-backup`) and run it every night at 3:00:
+
+```text title="crontab -e"
+0 3 * * *  $HOME/.local/bin/staqly-backup >> $HOME/staqly-backups/backup.log 2>&1
+```
+
+</Tab>
+<Tab value="Docker">
+
+Save the backup steps as a script:
+
+```bash title="~/.local/bin/staqly-backup"
+#!/bin/sh
+set -eu
+umask 077
+out="$HOME/staqly-backups/$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$out"
+docker exec staqly server backup /data/backups/staqly-backup.db
+docker cp staqly:/data/backups/staqly-backup.db "$out/staqly-backup.db"
+docker exec staqly rm /data/backups/staqly-backup.db
+docker run --rm --volumes-from staqly:ro -v "$out":/out alpine \
+  sh -c 'cd /data && tar czf /out/staqly-uploads.tar.gz --exclude="uploads/workspaces/*/thumbs" uploads $(ls secret.key notify_secret.key access_token 2>/dev/null)'
+```
+
+Make it executable (`chmod +x ~/.local/bin/staqly-backup`) and run it every night at 3:00:
+
+```text title="crontab -e"
+0 3 * * *  $HOME/.local/bin/staqly-backup >> $HOME/staqly-backups/backup.log 2>&1
+```
+
+</Tab>
+</Tabs>
+
+## How backups work
+
+### A consistent snapshot
+
+The backup command (`staqly serve backup` or `server backup` in the container) runs SQLite's
+**`VACUUM INTO`**: a transactionally consistent, compacted copy taken while the server keeps
+serving requests. The search index is rebuilt in the copy.
+
+### Why the order matters
+
+Media files are written before the database row that references them and are never modified
+afterwards. Taking the database snapshot first and the uploads second therefore never yields a
+row pointing at a missing file.
+
+### Backups contain secrets
+
+The database holds webhook signing secrets (in plain text — they are needed to sign), hashed
+API keys and sessions, sealed channel credentials and encrypted alert secrets; `secret.key` and
+`notify_secret.key` decrypt them. Run the backup commands with `umask 077` as above, so only you can read the
+copies, and keep it that way: store backups encrypted, and don't commit them or put them on
+shared drives.
+
+## Staqly Cloud workspaces
+
+On [Staqly Cloud](/local-vs-cloud#staqly-cloud), workspace admins on a paid plan get backups in **Settings → Backups**:
+**Create backup** builds a ZIP of the whole workspace (collections, posts, channels without
+credentials, schedules, events and media), and each ready backup has a **Download** button for 24 hours. These are the
+workspace exports from [Data export & privacy](/self-hosting/data-export)
+(`POST /v1/workspace/export`, `GET /v1/workspace/exports`). On the Starter plan the tab points
+to the data-only export in **Settings → Data & privacy** (no media files) instead.
+These downloads are your own copy of the workspace.
+
+## From a checkout (Compose)
+
+If you develop staqly from the repository with [Docker Compose](/self-hosting/docker-compose),
+`make backup` (`scripts/backup.sh`) runs the Docker steps above against the Compose volume
+`staqly_staqly-data` and writes `backups/<timestamp>/workspace.db` and `uploads.tar.gz`
+(uploads without the `thumbs` cache, plus `secret.key`, `notify_secret.key` and `access_token` if
+present), all owner-only.
+`make restore BACKUP=backups/<timestamp>` (`scripts/restore.sh`) restores one; it asks for
+confirmation (`FORCE=1` skips it). `STAQLY_CONTAINER` and `STAQLY_VOLUME` select another
+container or volume.
+
+## Next steps
+
+<Cards>
+  <Card title="Upgrades" href="/self-hosting/upgrades">Back up, then install a new version.</Card>
+  <Card title="Data export & privacy" href="/self-hosting/data-export">Export a workspace as a ZIP instead of a full backup.</Card>
+  <Card title="Operator CLI" href="/self-hosting/operator-cli">All server commands.</Card>
+</Cards>

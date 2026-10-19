@@ -1,0 +1,183 @@
+# CI for the staqly monorepo: formatting, lint, types, tests and builds for
+# every part, plus Docker images and a full end-to-end run.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the run still in progress: only the
+# latest commit matters (`make release` releases origin/main, whose run completes).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Every job runs the same turbo tasks a developer runs locally
+  # (`pnpm check`), for its own package: format:check, lint, typecheck, test,
+  # build. Generated code is checked to be up to date.
+
+  # ── Go API ────────────────────────────────────────────────────────────────
+  api:
+    name: API (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/api" }
+      - name: Generated queries are up to date (sqlc)
+        working-directory: apps/api
+        run: pnpm gen && git diff --exit-code internal/db
+      - name: gofmt, vet + OpenAPI lint, tests (race, incl. OpenAPI contract test), build
+        run: pnpm turbo run format:check lint test build --filter=@staqly/api
+
+  # The same Go suite on PostgreSQL (cloud mode's database): every test opens a fresh schema
+  # (internal/store/storetest), plus the schema drift check and the SQLite import.
+  api-postgres:
+    name: API (Go) on PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env: { POSTGRES_USER: staqly, POSTGRES_PASSWORD: staqly, POSTGRES_DB: staqly }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U staqly" --health-interval 2s --health-timeout 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
+      - name: go test -race on PostgreSQL
+        working-directory: apps/api
+        env:
+          STAQLY_TEST_DATABASE_URL: postgres://staqly:staqly@127.0.0.1:5432/staqly?sslmode=disable
+        run: go test -race ./...
+
+  # ── staqly CLI ────────────────────────────────────────────────────────────
+  cli:
+    name: CLI (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: apps/cli/go.mod, cache-dependency-path: apps/cli/go.sum }
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/cli" }
+      - run: pnpm turbo run format:check lint test build --filter=@staqly/cli
+      - name: Release config is valid (goreleaser)
+        uses: goreleaser/goreleaser-action@v7
+        with: { version: "~> v2", workdir: apps/cli, args: check }
+
+  # ── Dashboard, docs site, landing page ────────────────────────────────────
+  dashboard:
+    name: Dashboard (Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/platform..." }
+      - name: API types are up to date with openapi.yaml
+        working-directory: apps/platform
+        run: pnpm gen && git diff --exit-code lib/api-types.ts
+      - run: pnpm turbo run format:check lint typecheck test build size --filter=@staqly/platform
+
+  docs:
+    name: Docs (Fumadocs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/docs..." }
+      - name: Formatting, lint, types, build (static export + link check)
+        run: pnpm turbo run format:check lint typecheck build --filter=@staqly/docs
+
+  web:
+    name: Landing page (staqly.ai)
+    runs-on: ubuntu-latest
+    env:
+      SITE_URL: https://staqly.ai
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/web..." }
+      - name: Formatting, lint, types, build (static export + link check)
+        run: pnpm turbo run format:check lint typecheck build --filter=@staqly/web
+      - name: SEO files are generated
+        working-directory: apps/web
+        run: test -s out/robots.txt && test -s out/sitemap.xml && test -s out/llms.txt
+
+  packages:
+    name: Shared packages (packages/*)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { filter: "./packages/*" }
+      - run: pnpm turbo run format:check lint typecheck --filter="./packages/*"
+
+  # ── SDKs ──────────────────────────────────────────────────────────────────
+  sdk-typescript:
+    name: SDK (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/sdk..." }
+      - name: Schema types are up to date with openapi.yaml
+        working-directory: sdks/typescript
+        run: pnpm gen && git diff --exit-code src/schema.ts
+      - run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/sdk
+
+  sdk-python:
+    name: SDK (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: sdks/python } }
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest supported (requires-python) and newest stable.
+        python: ["3.10", "3.15"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with: { python-version: "${{ matrix.python }}", enable-cache: true, cache-dependency-glob: sdks/python/uv.lock }
+      - run: uv sync --locked
+      - name: Lint + formatting (ruff)
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: Types (mypy --strict)
+        run: uv run mypy --strict
+      - name: Tests (incl. sync-client codegen check)
+        run: uv run pytest -q
+      - run: uv build
+
+  # ── Docker images + end-to-end ────────────────────────────────────────────
+  # Builds the staqly image once (GHA layer cache) with the e2e tag from
+  # compose.e2e.yml, then runs the e2e package against exactly that image: the
+  # same `pnpm test:e2e` as locally, with E2E_BUILD=0.
+  e2e:
+    name: Docker images + end-to-end
+    runs-on: ubuntu-latest
+    needs: [api, dashboard]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: staqly image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: staqly-e2e:test
+          cache-from: type=gha,scope=staqly
+          cache-to: type=gha,mode=max,scope=staqly
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/e2e..." }
+      - name: Formatting, lint, types of the e2e suite
+        run: pnpm turbo run format:check lint typecheck --filter=@staqly/e2e
+      - name: End-to-end
+        run: pnpm turbo run test:e2e --filter=@staqly/e2e
+        env: { E2E_BUILD: "0" }

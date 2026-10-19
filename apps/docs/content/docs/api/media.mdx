@@ -1,0 +1,197 @@
+---
+title: Media uploads
+description: Attach images, videos and audio to posts, and download them or their thumbnails.
+---
+
+Use media uploads when a post is more than text: a generated image, a video clip, a voice
+recording. The file is stored by staqly, shown in the dashboard next to the
+post and sent to each platform when the post is published. Upload the file first, then put its
+id in the post's `media` list.
+
+## Upload a file
+
+<Steps>
+<Step>
+
+### Send one multipart request
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST http://localhost:3333/v1/media -F file=@avatar.png
+```
+
+In cloud mode the key needs `media:write`.
+
+</Step>
+<Step>
+
+### Check the result
+
+```json
+{
+  "id": "med_t4w6pz2kqm7xr3nb5vya",
+  "mime_type": "image/png",
+  "size_bytes": 482113,
+  "original_name": "avatar.png",
+  "sha256": "9f2c...",
+  "url": "http://localhost:3333/v1/media/med_t4w6pz2kqm7xr3nb5vya"
+}
+```
+
+The type is detected from the content, not the file name. The `url` is absolute (based on
+`PUBLIC_API_URL`) and needs the same credentials as the API.
+
+</Step>
+<Step>
+
+### Put it in a post
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST http://localhost:3333/v1/posts -H 'Content-Type: application/json' \
+  -d '{"collection":"Instagram Avatar","content":"Golden hour","media":["med_t4w6pz2kqm7xr3nb5vya"],"targets":[{"channel_id":"ch_7h2kq9xw3nbvd5yhzm6a"}]}'
+```
+
+`media` is ordered; the post's `media_items` returns the same files resolved. A `PATCH` with
+`media` replaces the list. The same file can be in several posts.
+
+</Step>
+</Steps>
+
+From an SDK:
+
+```ts tab="TypeScript"
+import { fileFromPath } from '@staqly/sdk/node' // Node, Bun, Deno only
+
+const media = await staqly.media.upload(await fileFromPath('avatar.png'))
+await staqly.posts.create({ collection: 'Instagram Avatar', content: 'Golden hour', media: [media.id], targets: [{ channel_id: channelId }] })
+```
+
+```python tab="Python"
+with open("avatar.png", "rb") as f:
+    media = staqly.media.upload(f, filename="avatar.png")
+
+staqly.posts.create("Instagram Avatar", content="Golden hour", media=[media.id], targets=[{"channel_id": channel_id}])
+```
+
+## Upload from an agent (MCP)
+
+The [`upload_media`](/mcp/tools#upload_media) tool takes **`media_base64`** and a `filename`
+and returns the media id to pass in `create_post`'s `media`. Files up to a few megabytes are
+fine inline; for anything bigger, let the agent call the REST API or a script.
+
+## What platforms accept
+
+Each provider says what it takes in its `limits`: `max_media` (0 means no media),
+`media_kinds` (`image`, `video`, `gif`, `file`) and `needs_media` (text alone is not a post
+there). The composer and `GET /v1/posts/{id}/preview` check a post's media against every
+target's provider before you publish; a mismatch is a `422` keyed `targets.<channel_id>.content`.
+See [Channels](/channels#the-catalog).
+
+## Allowed file types
+
+The library holds what posts carry: pictures (PNG, JPEG, GIF, WebP, AVIF), videos (MP4, WebM,
+QuickTime) and audio (MP3, WAV, OGG, M4A). Anything else, documents and archives included, is
+refused with `415 unsupported_media_type` and a message listing what is accepted; **SVG, HTML and
+JavaScript** are refused because a browser could run them. Files of other types uploaded before
+stay readable.
+
+## Size limits
+
+| Setting | Default |
+|---|---|
+| `MAX_UPLOAD_MB` (server) | 100 MB |
+| Plan (cloud) | Starter 25 MB per file and 10 GB storage, Plus 100 MB / 50 GB, Pro 250 MB / 200 GB, Business 1 GB / 1 TB |
+
+A file may be as large as the smaller of the two: a Pro or Business workspace needs `MAX_UPLOAD_MB` raised on the server to upload files over 100 MB.
+
+Over the limit: `413 too_large`, or `402 plan_limit_exceeded` with `details.limit` set to
+`max_upload_bytes` or `storage_bytes`.
+
+## The library
+
+Every upload is in the workspace's media library ([Media](/dashboard/media) in the dashboard):
+
+| | Request | Scope |
+|---|---|---|
+| List | `GET /v1/media?q=&kind=image\|video\|audio&used=used\|unused&folder=<id>\|root&tag=&deleted=true&duplicates=true&sort=created_desc\|created_asc\|size_desc\|name_asc&offset=&limit=` (default 60, at most 200; `next_offset` is where the next page starts; each item has `uses`, the posts that carry it) | `media:read` |
+| Details | `GET /v1/media/{id}/info` (`alt_text`, `width`, `height`, `duration_ms`; 0 when unknown) | `media:read` |
+| Rename, alt text, folder, tags | `PATCH /v1/media/{id}` with `name`, `alt_text` (up to 1500 characters), `folder_id` (`""` = the top level), `tags` (replaces them), and for a video `width`, `height`, `duration_ms` | `media:write` |
+| Move or tag several | `POST /v1/media/bulk` with `ids` (up to 200), `folder_id` and/or `add_tags`, `remove_tags`; answers `updated` and `missing` | `media:write` |
+| Which posts use it | `GET /v1/media/{id}/usage` (at most 50, newest first; empty without `posts:read`) | `media:read` |
+| Delete several | `POST /v1/media/delete` with `{"ids": [...]}` (up to 200; `"permanent": true` for good) answers `deleted` and `missing` | `posts:delete` |
+| Restore from Deleted | `POST /v1/media/{id}/restore` | `posts:delete` |
+| Keep one of identical files | `POST /v1/media/{id}/keep` answers `deleted` (the copies) | `posts:delete`, `posts:write` |
+
+### Folders and tags
+
+Folders organize the library and nothing else: a file sits in one folder (or at the top level,
+`folder_id: ""`), and posts keep using it wherever it is. Tags are spelled like post tags:
+lowercase, no `#`, spaces become dashes (`#Summer Sale` is stored as `summer-sale`), at most 20 per
+file. `folder=root` lists the files at the top level; `folder=<id>` the files directly in that
+folder. `folder`, `tag`, `q` and the other filters combine.
+
+| | Request | Scope |
+|---|---|---|
+| Folders, counts and tags | `GET /v1/media-folders`: `data` (flat, each with `parent_id` and `files`, the files directly in it), `root_files`, `total_files`, `tags` (each tag with its `files`, most used first) | `media:read` |
+| Create | `POST /v1/media-folders` with `name` and `parent_id` (optional) | `media:write` |
+| Rename or move | `PATCH /v1/media-folders/{id}` with `name` and/or `parent_id` | `media:write` |
+| Delete | `DELETE /v1/media-folders/{id}`: its files and subfolders move up to its parent; no file is deleted | `media:write` |
+
+Names are unique among a folder's subfolders, ignoring case (`409 conflict` otherwise), up to 80
+characters without `/`. A folder can't move inside itself or one of its subfolders (`422`), and
+folders nest at most 10 deep.
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST http://localhost:3333/v1/media-folders -H 'Content-Type: application/json' -d '{"name":"Clients"}'
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST http://localhost:3333/v1/media/bulk -H 'Content-Type: application/json' \
+  -d '{"ids":["med_t4w6pz2kqm7xr3nb5vya"],"folder_id":"mfd_t3nyil5dk3q253gejo5a","add_tags":["hero"]}'
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" "http://localhost:3333/v1/media?folder=mfd_t3nyil5dk3q253gejo5a&tag=hero"
+```
+
+Pictures are measured on upload; the server has no video tools, so a video's size and length are
+whatever the uploading client reports with `PATCH` (the dashboard does it after each upload).
+Alt text travels with the file to platforms that take a description.
+
+## Downloading
+
+`GET /v1/media/{id}` (scope `media:read`) serves the file after authorization, with the stored
+MIME type, `nosniff`, a sandboxing content security policy and Range support (video seeking).
+
+## Thumbnails
+
+Add `?w=160`, `320`, `640` or `1280` to get a resized image (JPEG for opaque images, PNG when
+there is transparency). Thumbnails are made on first request and cached on disk; images are
+never upscaled, and AVIF or images over 50 megapixels are served as the original. The dashboard
+uses them in lists and on calendar chips.
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" "http://localhost:3333/v1/media/med_t4w6pz2kqm7xr3nb5vya?w=320" -o thumb.jpg
+```
+
+## Deleting
+
+`DELETE /v1/media/{id}` moves the file to Deleted (answers 204): it is still served, posts that
+already carry it keep it, and it still counts toward storage. It can't be added to a post while it
+is in Deleted, and a post that carries it can't be scheduled or published (`422`, *... is in Deleted:
+restore it to use it again*). The daily retention sweep deletes it for good 30 days later;
+every file in Deleted has `deleted_at` and `purge_at`, and `GET /v1/media?deleted=true` lists them.
+`POST /v1/media/{id}/restore` takes it back out. A file that a scheduled or publishing post uses
+answers `409 conflict` (remove it from the post first).
+
+`DELETE /v1/media/{id}?permanent=true` deletes the file now; posts referencing it lose it. Both
+need the `posts:delete` scope in cloud mode (`media:write` is not enough). Purging a post deletes
+its media when no other post uses them.
+
+## Duplicates
+
+Identical files (same `sha256`) are allowed. Each file in the listing, the upload answer and
+`/info` carries `duplicate_of`, the oldest other file with the same content, when there is one.
+`GET /v1/media?duplicates=true` lists only files with a twin, grouped by content (oldest first).
+`POST /v1/media/{id}/keep` keeps that file: posts that use a copy (in their files or a comment)
+use it instead, in one transaction, and the copies move to Deleted.
+
+## Next steps
+
+<Cards>
+  <Card title="Posts" href="/dashboard/posts">Add media in the composer.</Card>
+  <Card title="Channels" href="/channels">What each platform accepts.</Card>
+</Cards>

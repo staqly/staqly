@@ -1,0 +1,48 @@
+---
+title: Your notifications
+description: Get an email when your post is published or fails, when a reviewer leaves feedback, when a channel needs reconnecting or a schedule runs out of posts, and choose what shows in the bell.
+---
+
+In a cloud account every person decides what Staqly tells them about. **Settings → Account →
+Notifications** lists each event with two switches: **Email** (to the address you sign in with)
+and **Bell** (the notifications in the dashboard's user menu). Save once for the whole card.
+
+| Event | Who gets it | Default |
+|---|---|---|
+| Post published | the post's author, and everyone who follows every post | email and bell on |
+| Post failed to publish | the post's author, and everyone who follows every post | email and bell on |
+| Feedback on a preview | the post's author, and everyone who follows every post | email and bell on |
+| Channel needs reconnecting | owners and admins | email and bell on |
+| Schedule out of posts | owners and admins | email and bell on |
+| Someone joined | owners and admins (not the person who joined) | email and bell on |
+
+**Posts to tell me about** picks between **My posts** (the default) and **Every post in my
+workspaces** (editors, admins and owners). A post's author is the person who created it; a post
+an [API key](/api/authentication) or an agent created belongs to the person who made that key, so
+your agent's posts reach you as "my posts". Posts from a schedule's endpoint have no author and
+reach only the people who follow every post.
+
+## The emails
+
+One email per post and person, whatever the number of channels: *Your post was published on X
+and My publisher* with the post's first line, a row per channel with **Open on X** links, and **View
+post** in the dashboard. *Publishing failed on X* shows each channel's error. Every email ends
+with **Change notification preferences** and **Unsubscribe from these emails**: the link turns
+off that one kind of email at once, without signing in. Mail clients that offer a one-click
+unsubscribe button use the same link (`List-Unsubscribe`).
+
+These notifications are part of [Staqly Cloud](/local-vs-cloud#staqly-cloud). Staqly Community
+Edition has no accounts: use an [email alert](/automation/alerts) there.
+
+## Notifications and alerts
+
+These settings are **yours**: they follow you across the workspaces you're in. An
+[alert](/automation/alerts) belongs to the **workspace**: it sends every matching event to one
+place (a team chat, an ntfy topic, a shared inbox) for everyone who reads it. Use both: alerts
+for the team's channel, your notifications for what you personally care about.
+
+## API
+
+`GET /v1/account/notifications` and `PUT /v1/account/notifications` (a signed-in person, not an
+API key) read and change the choices; `POST /v1/notifications/unsubscribe` is what the email's
+link calls. See the [API reference](/api/reference).

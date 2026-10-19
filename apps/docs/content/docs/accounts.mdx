@@ -1,0 +1,174 @@
+---
+title: Accounts, members and roles
+description: Sign in to Staqly Cloud with Google, an email code or a passkey, invite your team, and see what owners, admins, editors and viewers may do.
+---
+
+This page is for [Staqly Cloud](/local-vs-cloud#staqly-cloud), the hosted service at
+[app.staqly.ai](https://app.staqly.ai). People sign in with **Google**, with a **code sent to their
+email address** or with a **passkey**, and Staqly keeps track of who they are and what they may do in
+each workspace. Staqly Community Edition has one person and no accounts: its browsers sign in with the
+[access token](/local-vs-cloud#the-access-token).
+
+## The model
+
+- **Person**: someone who signed in. Staqly identifies them by their sign-in method (their Google
+  account, or the address an email code was sent to), never by the email address alone: a Google
+  account and an email code for the same address are two people until the person links them (see
+  [Sign-in methods](#sign-in-methods)). Staqly stores their name, address and picture, and no Google
+  tokens.
+- **Account**: what a new person gets at their first sign-in. It has exactly one owner and holds
+  workspaces and their plans.
+- **Workspace**: posts, channels, schedules, webhooks and API keys. It belongs to one account.
+- **Member**: a person with a role in a workspace. One person can be a member of many workspaces,
+  in their own account and in others.
+
+## Roles
+
+| Role | May do |
+|---|---|
+| Viewer | Read posts, collections, channels and activity. Change nothing. |
+| Editor | Everything a viewer may, plus write, schedule, publish and delete posts, collections and media, and manage schedules. |
+| Admin | Everything in the workspace: channels, webhooks, alerts, API keys, sessions, members and invitations. |
+| Owner | Like an admin, and also makes, demotes and removes owners. |
+
+The **account owner** is an owner in every workspace of their account. Only they create and
+delete workspaces and manage billing. Nobody can demote or remove them, and a workspace always
+keeps at least one owner.
+
+Roles map onto the same [scopes](/api/authentication#scopes) as API keys, checked in one place
+for the REST API, MCP and the dashboard. The dashboard hides what a role cannot do, but the
+server decides.
+
+## API keys
+
+Admins and owners create API keys for agents under **Integrations → API keys**. A key belongs to
+the workspace and never does more than the person who created it may do now:
+
+- if that person is demoted, the key narrows to the new role;
+- if they leave or are removed, the key stops working.
+
+People are managed by people: inviting, changing roles and removing members needs a signed-in
+person, never an API key. An admin key can list the members.
+
+## Invitations
+
+Admins and owners invite people under **Settings → Members**. An invitation is for one email
+address and one role:
+
+- the link works once, for 7 days, and only for a person who proves that address: with a code
+  sent to it, or with a Google account whose verified address it is;
+- **Resend** issues a new link and a new week, and the old link stops working;
+- **Revoke** turns the link off;
+- accepting twice, or in two tabs at once, adds the person once.
+
+Admins invite up to admin; only owners invite owners. Staqly emails the link, and the person who
+invites also gets the link to pass on themselves.
+
+## Signing up
+
+Open [app.staqly.ai/signup](https://app.staqly.ai/signup) (**Create an account** on the sign-in
+page) and continue with Google or an email code; signing in on `/login` with a new address works
+the same way. You get an account with a first workspace, named **My workspace**, and land in the
+welcome, which names the workspace, offers the plans and connects a first channel. The workspace
+starts once a plan is chosen: Starter with a 7-day trial, card required. See
+[Plans](/plans#the-starter-trial).
+
+The dashboard never creates workspaces from an API key and never signs in with an API key or a
+recovery key: API keys are for agents (**Integrations → API keys**).
+
+## Sign in with an email code
+
+**Continue with email** sends a 6-digit code to the address. Entering it signs the person in;
+a new address gets an account and a first workspace, like a first Google sign-in.
+
+- The code works once, for 10 minutes. Five wrong tries end it, and a new code replaces the
+  previous one.
+- One address gets at most one code every 30 seconds and five codes an hour. Each client IP
+  address has its own limit too.
+- The answer to "send a code" is the same whether or not the address has an account, so the page
+  never tells anyone who uses Staqly.
+- Staqly stores only a hash of the code.
+
+An invitation can be accepted with a code sent to the invited address.
+
+## Sign in with a passkey
+
+A passkey signs a person in with their fingerprint, face or device PIN, with no address to type and
+no code to wait for. The browser or password manager keeps it; Staqly keeps only its public key.
+
+- Add one under **Settings → Account → Sign-in methods** with **Add passkey**, then use **Sign in
+  with a passkey** on the sign-in page. Browsers that offer it also list saved passkeys in the
+  address field.
+- A passkey belongs to the dashboard's address (`app.staqly.ai`) and works only there.
+- Each prompt works once, for 5 minutes. A passkey whose sign counter goes backwards (a copied
+  authenticator) is refused.
+
+## Sign-in methods
+
+Everyone signed in sees their sign-in methods under **Settings → Account**:
+
+- **Add Google** links a Google account (the button is gone once one is linked). **Add passkey**
+  adds a passkey on this device; **Rename** tells them apart. Each opens a small dialog.
+- **Add email address** sends a code to check the address. A person has one email address: when
+  they already sign in with one, the card offers **Change email address** instead.
+- **Change email address** takes two codes: one to the current address (it is still yours), then
+  one to the new address (that one is yours too). Only then does the address change. The person,
+  their workspaces, sessions and other methods stay as they are, and the old address gets a
+  notice. The confirmation of the current address lasts 10 minutes.
+- **Remove** turns a method off, as long as another one remains.
+- A Google account or an address that already signs in another person cannot be added: sign in
+  with it and remove it there first. Staqly never merges two people on its own.
+
+## Sessions
+
+Every sign-in, with Google, a code or a passkey, creates a new session, so an old cookie never
+carries over. Sessions expire after 30 days. **Sign out** ends the session at once. Removing
+someone from a workspace signs them out of it everywhere. Switching workspaces keeps the session
+and moves it.
+
+**Connect a device** (**Settings → General → Devices**) signs a phone or another
+browser in as the same person with a QR code: one use, 5 minutes, and it creates a session of its
+own with the person's current role.
+
+People in an account have no recovery key: their way back in is another sign-in method, so keep
+at least two (for example an email address and a passkey).
+
+## How sign-in is protected
+
+- Google sign-in uses OpenID Connect with state, nonce and PKCE. The ID token's signature, issuer,
+  audience, expiry and nonce are verified, and the person is identified by their Google account ID,
+  never merged by email address. The sign-in state rides in a short-lived, sealed, HttpOnly cookie,
+  and the redirect after sign-in only goes to a path on the dashboard.
+- A person's role is read on every request, so a demotion or removal applies at once; removal also
+  ends their sessions in that workspace and turns off the API keys they created.
+- Email codes are counted before the comparison, so parallel guesses cannot exceed five tries. Codes
+  for signing in, adding an address and changing one are kept apart, so none does the job of
+  another.
+- Passkeys (WebAuthn) are discoverable credentials bound to the dashboard's host; only its origin
+  is accepted. Each challenge is stored server-side and works once, also when the answer is
+  refused. Passkey sign-ins are limited per client IP (30 per 10 minutes).
+- Invitation links are stored only as hashes.
+- Each sign-in is an audit event (`session.signed_in`), and so are adding, changing and removing a
+  sign-in method (`sign_in_method.*`). See [Events](/api/events#audit-events).
+
+## When sign-in fails
+
+| What you see | What to do |
+|---|---|
+| `401 code_invalid` | A wrong code; the message says how many tries are left (5 per code). |
+| `410 code_expired` | The code is older than 10 minutes, was used, was replaced by a newer one or had too many wrong tries. Ask for a new one. |
+| `429 code_cooldown` or `rate_limited` | One code per address every 30 seconds and 5 per hour; wait the seconds in `Retry-After`. |
+| No **Add passkey** button | Your browser doesn't support passkeys. A passkey works only on `app.staqly.ai`. |
+| `401 passkey_cloned` | The passkey's counter went backwards; remove it and add it again. |
+| `403 sign_in_with_account` | An API key doesn't open the dashboard: sign in with Google, an email code or a passkey. API keys keep working for agents and scripts. |
+| `403 invitation_email_mismatch` | The invitation is for another address than the one you signed in with. |
+
+More codes in [Errors](/api/errors).
+
+## Next steps
+
+<Cards>
+  <Card title="Plans & limits" href="/plans">What each plan includes and how seats are billed.</Card>
+  <Card title="Plan & usage" href="/dashboard/plan-and-usage">Plan, usage, card and invoices in the dashboard.</Card>
+  <Card title="Authentication & scopes" href="/api/authentication">API keys and scopes for agents.</Card>
+</Cards>

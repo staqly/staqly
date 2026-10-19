@@ -1,0 +1,30 @@
+# secrets / local config
+.env
+
+# runtime data (anchored: "data" is also a legitimate source directory name)
+/data/
+/apps/api/data/
+/backups/
+*.db
+*.db-shm
+*.db-wal
+
+# dependencies and build output
+node_modules/
+.turbo/
+.next/
+dist/
+# internal notes (anchored: apps/docs is the docs site and stays in the repo); they move to their own repo
+/docs/
+coverage/
+*.tsbuildinfo
+
+.DS_Store
+.serena/
+
+# static export of apps/platform embedded into the Go binaries (make dashboard)
+/apps/api/web/*
+!/apps/api/web/.gitkeep
+
+# Agent worktrees (Claude Code)
+.claude/worktrees/
