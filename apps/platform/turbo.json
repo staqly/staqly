@@ -1,0 +1,8 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // `next build` rewrites .next/types while `next typegen && tsc` reads them: run them one after the other.
+    "build": { "dependsOn": ["^build", "typecheck"] }
+  }
+}

@@ -1,0 +1,39 @@
+Staqly
+Copyright 2026 Piotr Krajewski
+
+This product includes software developed for the staqly project
+(https://staqly.ai, https://github.com/staqly/staqly).
+
+Licensing:
+* Everything in this repository is licensed under the GNU Affero General Public
+  License, version 3 (AGPL-3.0-only, see LICENSE), except:
+* sdks/typescript, sdks/python and integrations/ are licensed under the Apache
+  License, Version 2.0 (their own LICENSE files), so you can use them in code
+  under any license.
+* Releases up to and including v0.1.0 were published under the Apache License,
+  Version 2.0, and stay available under it.
+
+Contributions are accepted under the Contributor License Agreements in ICLA.md
+(individuals) and CCLA.md (legal entities).
+
+If other attributions are required by dependencies or included code, add them here.
+
+The background job queue uses River (https://github.com/riverqueue/river), Mozilla Public
+License 2.0, unmodified; its source is available at that address.
+
+apps/platform/components/editor is adapted from editorcn
+(https://github.com/shadcn-labs/editorcn), MIT License,
+Copyright (c) Abdullah Mukadam and contributors.
+
+The media editor (apps/platform/lib/opengpex and the editor's styles and asset script) is OpenGPEX
+(https://github.com/gpex-cloud/opengpex), Copyright (C) 2026 The OpenGPEX Authors, GNU General
+Public License version 3 (GPL-3.0-only, apps/platform/lib/opengpex/LICENSE), modified for staqly
+(apps/platform/lib/opengpex/README.md lists the changes and the upstream commit). Combined with
+staqly under GPL-3.0 section 13; the combination is distributed under AGPL-3.0-only. Its codecs:
+wasm-vips (MIT; libvips LGPL-2.1+), libheif-js (LGPL-3.0), @jsquash/avif (Apache-2.0),
+@resvg/resvg-wasm (MPL-2.0), gifuct-js and gifenc (MIT). AI models it can download on use:
+InSPyReNet (MIT), SAM 2.1 (Apache-2.0), LaMa (Apache-2.0), Real-ESRGAN (BSD-3-Clause).
+
+packages/brand/fonts holds Geist and Geist Mono (https://github.com/vercel/geist-font), Copyright (c)
+2023 Vercel, in collaboration with basement.studio, SIL Open Font License 1.1
+(packages/brand/fonts/OFL.txt), subset to Latin for the docs and staqly.ai.

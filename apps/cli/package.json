@@ -1,0 +1,13 @@
+{
+  "name": "@staqly/cli",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "description": "staqly CLI and `staqly serve` (Go). Scripts wrap the Go toolchain for turbo.",
+  "scripts": {
+    "build": "make build",
+    "test": "go test -race ./...",
+    "lint": "go vet ./...",
+    "format": "gofmt -w cmd internal",
+    "format:check": "test -z \"$(gofmt -l cmd internal)\""
+  }
+}

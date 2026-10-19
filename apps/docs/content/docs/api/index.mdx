@@ -1,0 +1,155 @@
+---
+title: REST API overview
+description: Learn how to call the staqly REST API from scripts, workflows and your own apps.
+---
+
+The REST API is the plain-HTTP way into staqly. Use it from shell scripts, n8n, CI jobs or any
+language with an HTTP client. Everything else is built on top of it: the dashboard, the CLI,
+the SDKs and the MCP server all go through the same services and permission checks.
+
+| You are | Use this |
+|---|---|
+| An AI agent in Claude Code, Codex, OpenCode or another MCP client | [MCP](/mcp), no HTTP code needed |
+| A person or shell script in a terminal | The [CLI](/cli) (`staqly posts create "Product updates" --content "Hello"`) |
+| A TypeScript / JavaScript app | The [TypeScript SDK](/sdk/typescript), typed, with paging helpers |
+| A Python app | The [Python SDK](/sdk/python), sync and async |
+| Anything else: n8n, Go, CI, curl | **This REST API** |
+
+## Make your first requests
+
+<Steps>
+<Step>
+
+### Start staqly and check it's up
+
+Run `staqly serve` (one binary, API and MCP on `127.0.0.1:3333`) or the
+[Docker image](/self-hosting/docker). Then:
+
+```bash
+curl -s http://localhost:3333/health
+# → {"status":"ok","version":"v0.3.0"}
+```
+
+Every other request needs `Authorization: Bearer ...`: in Staqly Community Edition (`staqly serve`, the Docker image) the
+**access token** staqly prints at start, in cloud mode an API key `stk_...`. The examples in these
+docs read it from `STAQLY_API_KEY`:
+
+```bash
+export STAQLY_API_KEY=$(staqly serve token)   # Docker: $(docker exec staqly server token)
+```
+
+See [Authentication](/api/authentication).
+
+</Step>
+<Step>
+
+### Connect a channel
+
+The catalog says what each platform needs; your own automation needs nothing:
+
+```bash
+API=http://localhost:3333
+
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" $API/v1/providers | jq '.data[] | select(.status=="available") | {id, auth, credential_fields}'
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST $API/v1/channels -H 'Content-Type: application/json' \
+  -d '{"provider":"custom","name":"My publisher"}'
+# → {"id":"ch_7h2kq9xw3nbvd5yhzm6a","provider":"custom","status":"connected", ...}
+```
+
+</Step>
+<Step>
+
+### Create a post
+
+Post into a collection by name (or `col_qjuybkx6355nz4no6pqk` ID). The `Idempotency-Key`
+makes a retry safe:
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST $API/v1/posts \
+  -H 'Content-Type: application/json' -H 'Idempotency-Key: gen-42' \
+  -d '{"collection":"Default","content":"v1.4 is out.","targets":[{"channel_id":"ch_7h2kq9xw3nbvd5yhzm6a"}],"publish_at":"2026-11-03T09:00:00Z","status":"scheduled","source":"n8n"}'
+# → {"id":"post_oalirbz67y4m4cqxq5dw","status":"scheduled","version":1, ...}
+```
+
+Leave out `publish_at` and `status` for a draft; send `"publish_now": true` to publish at
+once. Add `"repeat_every": "1w"` (or `1d` to `6d`, `2w`, `1mo`) to bring the post back after each
+publish; see [Repeating posts](/concepts#repeating-posts). Leave out `source` and staqly names the client from its `User-Agent` instead (`curl`, or
+the agent name an SDK appends).
+
+</Step>
+<Step>
+
+### Follow what happens
+
+At 09:00 a job publishes each target. Subscribe a [webhook](/automation/webhooks) to
+`post.published` and `post.failed`, or read the post:
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" $API/v1/posts/post_oalirbz67y4m4cqxq5dw | jq '{status, targets}'
+# → {"status":"published","targets":[{"channel_id":"ch_...","status":"published","external_url":"https://..."}]}
+```
+
+A target on your own automation stays `publishing` until your script reports with
+`POST /v1/posts/{id}/targets/{channel}/result`; see
+[Your own automation](/channels/your-own-automation).
+
+</Step>
+</Steps>
+
+## Conventions
+
+The contract is an **OpenAPI 3.2** document: `apps/api/openapi.yaml` in the repository,
+served live at `http://localhost:3333/openapi.yaml`, and rendered in the
+[API reference](/api/reference).
+
+| Convention | Value |
+|---|---|
+| Base URL | `http://localhost:3333` (Community Edition) · `https://<your host>` (cloud) |
+| Versioning | Everything lives under `/v1` |
+| Formats | JSON request and response bodies; `multipart/form-data` for uploads. Other content types are rejected. Unknown JSON fields are rejected (`400`). |
+| Auth | `Authorization: Bearer ...`: the access token `stk_local_...` in the Community Edition, an API key `stk_...` in cloud mode ([Authentication](/api/authentication)) |
+| Errors | `{"error":{"code","message","fields","details"}}` ([Errors](/api/errors)) |
+| Lists | `{"data":[],"next_cursor":"eyJjIjoiMjAyNi0xMC0xMyJ9"}` with opaque keyset cursors ([Pagination & search](/api/pagination-and-search)) |
+| Retries | `Idempotency-Key` header, 24 h replay window ([Idempotency](/api/idempotency)) |
+| Async work | Publishing and schedule runs answer `202` and happen in the [job queue](/concepts#jobs) |
+| Timestamps | ISO-8601 UTC strings; filters accept RFC 3339 or `YYYY-MM-DD` |
+| IDs | Prefixed: `col_qjuybkx6355nz4no6pqk`, `post_oalirbz67y4m4cqxq5dw`, `ch_7h2kq9xw3nbvd5yhzm6a`, `sch_5k2nq8rx7bvm3dz4hcye`, `job_r8m3kz6qx2nb7vd5hcwt`, `evt_looiyqe5kfkjh4xedcnd`, `wh_lv5rc7rttjnfwnnsn4ny`, `dlv_bgx4s2p4xnzimajdkoki`, `nch_ce3g6qaygtlxifq4bdmv` (alerts), `exp_zxj2lzvmh32poxxq2kgp`, `med_t4w6pz2kqm7xr3nb5vya`, `mfd_t3nyil5dk3q253gejo5a` (media folders), `grp_eowhj2p7qxt6a2a7pmoq` (channel groups), `key_r7zq2m4xk3pw6ta5ned2`, `ws_h2c5vq7nzk4mtr6pxw3e` |
+| Request IDs | Every response has `X-Request-Id`; errors include `request_id` |
+
+Every response also carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+`X-Frame-Options: DENY` and `Cache-Control: no-store`. Request logs contain paths only, never
+headers or query strings.
+
+## Endpoints by area
+
+| Area | Endpoints |
+|---|---|
+| Setup | `GET /v1/setup`, `POST /v1/workspaces` (cloud signup), `GET /v1/plans` |
+| Collections | `/v1/collections`, `/v1/collections/{id}` (`{id}` may also be the exact name), `GET /v1/collections/{id}/posts` |
+| Posts | `/v1/posts`, `/v1/posts/{id}`, `/schedule`, `/publish`, `/cancel`, `/duplicate`, `/events`, `/preview`, `/metrics`, `/targets/{channel}/result`, `/targets/{channel}/retry`, `/targets/{channel}/metrics`, `/purge`; `POST /v1/posts/delete` (several at once); `GET /v1/tags`; `GET /v1/work` (what your automation is asked for) |
+| Preview links & feedback | `/v1/posts/{id}/previews`, `/v1/posts/{id}/previews/{preview}`, `/v1/posts/{id}/comments` (resolve, reopen, delete); the public page uses `/v1/previews/{token}` ([Share a preview](/dashboard/share-a-preview)) |
+| Channels | `GET /v1/providers`, `PUT`/`DELETE /v1/providers/{id}/app`, `/v1/channels`, `/v1/channels/{id}`, `/v1/channels/{id}/test`, `GET /v1/channels/oauth/{provider}/start`, `/callback`, `/v1/channel-groups` ([Channels](/channels)); `/v1/channel-links` and the public `/v1/connect-links/{token}` ([Connect links](/channels/connect-links)) |
+| Schedules | `/v1/schedules`, `/v1/schedules/{id}`, `POST /v1/schedules/{id}/run` ([Schedules](/automation/schedules)) |
+| Jobs | `GET /v1/jobs`, `GET /v1/jobs/stats`, `GET /v1/jobs/{id}`, `POST /v1/jobs/{id}/retry`, `POST /v1/jobs/{id}/cancel` ([Jobs](/concepts#jobs)) |
+| Media | `/v1/media`, `/v1/media/{id}`, `/info`, `/usage`, `/restore`, `/keep`, `/replace`, `POST /v1/media/delete`, `POST /v1/media/bulk`, `/v1/media-folders` ([Media uploads](/api/media)); `/v1/media-projects`, `/v1/ai` ([Media editor](/dashboard/media-editor)) |
+| Events | `/v1/events` (filters `type`, `type_prefix`, `post_id`, `channel_id`, `schedule_id`, `actor_type`, `actor_id`, `agent`, `from`, `to`) ([Event types](/api/events)) |
+| Webhooks | `/v1/webhooks`, `/v1/webhooks/{id}/test`, `/v1/webhook-deliveries`, `/v1/webhook-deliveries/{id}/retry` ([Webhooks](/automation/webhooks)) |
+| Alerts | `/v1/alerts`, `/v1/alerts/{id}`, `/test`, `/deliveries` ([Alerts](/automation/alerts)) |
+| Agents | `GET /v1/agents`, `DELETE /v1/agents/{id}` ([Agents](/dashboard/agents)) |
+| Export & privacy | `/v1/events/export`, `/v1/workspace/export`, `/v1/workspace/exports/{id}`, `/v1/workspace/exports/{id}/download`, `/v1/posts/{id}/purge`, `DELETE /v1/workspace` (cloud, dashboard session only) ([Data export](/self-hosting/data-export)) |
+| Workspace & auth | `/v1/session`, `/v1/sessions`, `/v1/sessions/{id}`, `/v1/sessions/api-key`, `/v1/sessions/recover`, `/v1/workspace`, `/v1/workspace/usage`, `/v1/access-token`, `/v1/access-token/rotate` (local), `/v1/api-keys`, `/v1/api-keys/{id}/rotate` (cloud), `/v1/device-links`, `/v1/device-links/redeem`, `/v1/recovery-key/rotate` |
+| Accounts (cloud) | `/v1/auth/*` (Google, email code, passkey sign-in), `/v1/account`, `/v1/account/sign-in-methods`, `/v1/account/workspaces`, `/v1/session/workspace`, `/v1/members`, `/v1/invitations` ([Accounts](/accounts)) |
+| Plan & billing (cloud) | `/v1/billing`, `/v1/billing/details`, `/v1/billing/checkout`, `/v1/billing/portal`, `/v1/billing/x-posts`, `/v1/billing/credits/checkout`, `/v1/billing/addons`, `/v1/billing/webhook` (Stripe) ([Plans](/plans), [Plan & usage](/dashboard/plan-and-usage)) |
+| Health & metrics | `GET /health`, `/livez`, `/readyz`, `/metrics`, `/openapi.yaml` ([Monitoring](/self-hosting/monitoring)) |
+| MCP | `POST /mcp`, Streamable HTTP, see [MCP](/mcp) |
+
+Request and response schemas for each endpoint are in the [API reference](/api/reference).
+
+## Next steps
+
+<Cards>
+  <Card title="Authentication & scopes" href="/api/authentication">The Community Edition's access token, API keys and which scope each call needs.</Card>
+  <Card title="Errors" href="/api/errors">Every error code and what to do about it.</Card>
+  <Card title="Media uploads" href="/api/media">Attach images, videos and files to posts.</Card>
+  <Card title="API reference" href="/api/reference">Every endpoint, generated from OpenAPI.</Card>
+</Cards>

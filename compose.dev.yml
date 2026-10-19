@@ -1,0 +1,115 @@
+# Development stack: `make dev` = compose.yml + this file.
+#   - builds the staqly image from this checkout
+#   - readable debug logs; webhooks, alerts, schedule endpoints and your own
+#     automation may reach the Docker network (mailpit, n8n, your receivers)
+#   - mailpit catches every email alert: http://localhost:8025
+#     (email alert: host mailpit, port 1025, tls "none")
+#   - maxiofs keeps media files in an S3 bucket, like a production server on
+#     S3 / R2: S3 API on http://localhost:9000, web console on
+#     http://localhost:9001 (admin / admin). The bucket "staqly-media" and the
+#     dev-only access key below are created on first start. STORAGE_DRIVER=disk
+#     in .env keeps files in the data volume instead.
+#   - stripe (opt in): forwards Stripe test-mode events to the API.
+#     Set in .env: STAQLY_MODE=cloud, STRIPE_SECRET_KEY (an sk_test_ key),
+#     COMPOSE_PROFILES=stripe, and the secret from `make stripe-secret` as
+#     STRIPE_WEBHOOK_SECRET. The test-mode prices need the lookup keys
+#     staqly_<plan>_<month|year> (or STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY>).
+#   - postgres (opt in): cloud mode on :8080. Set in .env: STAQLY_MODE=cloud,
+#     COMPOSE_PROFILES=cloud,
+#     DATABASE_URL=postgres://staqly:staqly@postgres:5432/staqly?sslmode=disable
+#     and sign in with an email code read in mailpit.
+# `make up` uses compose.yml alone.
+
+services:
+  staqly:
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+      WEBHOOK_ALLOW_PRIVATE: ${WEBHOOK_ALLOW_PRIVATE:-true}
+      NOTIFY_ALLOW_PRIVATE: ${NOTIFY_ALLOW_PRIVATE:-true}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PUBLIC_DASHBOARD_URL: ${PUBLIC_DASHBOARD_URL:-http://localhost:${DASHBOARD_PORT:-8080}}
+      # Cloud mode here signs in with email codes (read them in mailpit, http://localhost:8025) and keeps
+      # the setup token / API key sign-in (development only); set GOOGLE_CLIENT_ID and
+      # GOOGLE_CLIENT_SECRET in .env to try the Google sign-in.
+      AUTH_DEV_SIGNIN: ${AUTH_DEV_SIGNIN:-true}
+      # Sign-in codes and invitation emails land in mailpit.
+      MAIL_SMTP_HOST: ${MAIL_SMTP_HOST:-mailpit}
+      MAIL_SMTP_PORT: ${MAIL_SMTP_PORT:-1025}
+      MAIL_SMTP_TLS: ${MAIL_SMTP_TLS:-none}
+      MAIL_FROM: ${MAIL_FROM:-staqly <noreply@staqly.localhost>}
+      # Media files in MaxIOFS (dev only credentials, the same as its bootstrap key below).
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://maxiofs:8080}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-staqly-media}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-staqlydev}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-staqly-dev-secret-not-for-production}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      S3_CREATE_BUCKET: ${S3_CREATE_BUCKET:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false # only with COMPOSE_PROFILES=cloud
+      maxiofs:
+        condition: service_started
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: staqly-postgres
+    profiles: [cloud]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: staqly
+      POSTGRES_PASSWORD: staqly
+      POSTGRES_DB: staqly
+    volumes:
+      - staqly-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U staqly -d staqly"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  maxiofs:
+    image: maxiofs/maxiofs:1.8.0
+    container_name: staqly-maxiofs
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAXIOFS_PORT:-9000}:8080"          # S3 API
+      - "127.0.0.1:${MAXIOFS_CONSOLE_PORT:-9001}:8081"  # web console (admin / admin)
+    environment:
+      # Applied once, on first start: the S3 key staqly uses (dev only, never a real secret).
+      MAXIOFS_BOOTSTRAP_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-staqlydev}
+      MAXIOFS_BOOTSTRAP_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-staqly-dev-secret-not-for-production}
+    volumes:
+      - staqly-maxiofs:/data
+
+  mailpit:
+    image: axllent/mailpit:v1.31
+    container_name: staqly-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"   # web UI with every caught email
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
+  stripe:
+    image: stripe/stripe-cli:v1.54.0
+    container_name: staqly-stripe
+    profiles: [stripe]
+    restart: unless-stopped
+    environment:
+      STRIPE_API_KEY: ${STRIPE_SECRET_KEY:-}
+    command: >-
+      listen --skip-verify
+      --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.paused,customer.subscription.resumed,invoice.finalized,invoice.paid,invoice.payment_failed,entitlements.active_entitlement_summary.updated
+      --forward-to http://staqly:3333/v1/billing/webhook
+    depends_on:
+      staqly:
+        condition: service_healthy
+
+volumes:
+  staqly-postgres:
+  staqly-maxiofs:

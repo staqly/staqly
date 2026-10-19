@@ -1,0 +1,124 @@
+# Staqly: local-first workspace for AI agents. Compose setup for developing
+# staqly from this checkout (`make dev`, `make up`). To just run
+# staqly, use the binary (`staqly serve`) or the image with plain `docker run`
+# (docs: Self-hosting -> Run with Docker); neither needs this repository.
+#   make dev   build the image from this checkout and start (+ compose.dev.yml)
+#   make up    pull the released image (ghcr.io/staqly/staqly) and start
+# One container runs everything (API + MCP + dashboard), like `staqly serve`.
+# STAQLY_VERSION picks the image tag (default: latest, or a release such as v0.2.0).
+# The API is published on 127.0.0.1 only. Every request needs the access token
+# (made on first start in the data volume; `docker exec staqly server token`
+# prints it). The dashboard is reachable from your network; browsers sign in
+# once with the token link (`make up` opens it for you) or a one-time link.
+# n8n is not part of the stack: use your own, or integrations/n8n/compose.yml.
+name: staqly
+
+services:
+  staqly:
+    build:
+      context: .                                     # `make dev` builds locally
+      args: { VERSION: "${STAQLY_VERSION:-dev}" }
+    image: ghcr.io/staqly/staqly:${STAQLY_VERSION:-latest}
+    container_name: staqly
+    restart: unless-stopped
+    # Every line of .env reaches the server, e.g. the PROVIDER_<ID>_* settings of each platform; the list below
+    # adds defaults and wins over it.
+    env_file: [{ path: .env, required: false }]
+    environment:
+      DATA_DIR: /data
+      STAQLY_MODE: ${STAQLY_MODE:-local}
+      # Cloud mode only: the PostgreSQL database (the dev stack's postgres profile, compose.dev.yml). Local mode
+      # keeps SQLite in /data.
+      DATABASE_URL: ${DATABASE_URL:-}
+      # Local mode: fix the access token instead of the one made in /data/access_token (tests, CI).
+      STAQLY_LOCAL_TOKEN: ${STAQLY_LOCAL_TOKEN:-}
+      # Who you are in the activity log of a local install (default: your login name).
+      LOCAL_USER_NAME: ${LOCAL_USER_NAME:-${USER:-}}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}   # cloud: browser origins allowed with an API key (default https://docs.staqly.ai)
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:${API_PORT:-3333}}
+      PUBLIC_DASHBOARD_URL: ${PUBLIC_DASHBOARD_URL:-}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+      # Cloud mode: sign-in with Google, email codes (the MAIL_* lines below) or both (docs: Accounts,
+      # workspaces and roles). AUTH_DEV_SIGNIN=true starts cloud without either for development and tests
+      # only.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-}
+      AUTH_DEV_SIGNIN: ${AUTH_DEV_SIGNIN:-}
+      # The server's mail: sign-in codes and invitation emails (without it the inviter copies the link).
+      MAIL_SMTP_HOST: ${MAIL_SMTP_HOST:-}
+      MAIL_SMTP_PORT: ${MAIL_SMTP_PORT:-587}
+      MAIL_SMTP_USERNAME: ${MAIL_SMTP_USERNAME:-}
+      MAIL_SMTP_PASSWORD: ${MAIL_SMTP_PASSWORD:-}
+      MAIL_SMTP_TLS: ${MAIL_SMTP_TLS:-starttls}
+      MAIL_FROM: ${MAIL_FROM:-}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      DASHBOARD_PORT: ${DASHBOARD_PORT:-8080}
+      # The dashboard is published on all interfaces: connect links point phones at this computer's address.
+      DASHBOARD_EXPOSED: "true"
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      # Empty = mode default: true in local mode (n8n on the Docker network/LAN),
+      # false in cloud mode (tenants must not reach your private network).
+      WEBHOOK_ALLOW_PRIVATE: ${WEBHOOK_ALLOW_PRIVATE:-}
+      WEBHOOK_ALLOW_LOOPBACK: ${WEBHOOK_ALLOW_LOOPBACK:-false}
+      WEBHOOK_RETRY_BASE: ${WEBHOOK_RETRY_BASE:-15s}
+      WEBHOOK_RETRY_MAX: ${WEBHOOK_RETRY_MAX:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      # Optional settings from .env.example, passed through as-is (the ones it
+      # marks [not in compose.yml] need a line here first).
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      SESSION_TTL: ${SESSION_TTL:-}
+      PROCESSING_TIMEOUT: ${PROCESSING_TIMEOUT:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Prices are found by their Stripe lookup keys (staqly_<plan>_<month|year>); the optional
+      # STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY> overrides reach the server through .env (env_file above).
+      RATE_LIMIT_DISABLED: ${RATE_LIMIT_DISABLED:-}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-}
+      RATE_LIMIT_AUTH_PER_MINUTE: ${RATE_LIMIT_AUTH_PER_MINUTE:-}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-}
+      RATE_LIMIT_AUTH_BURST: ${RATE_LIMIT_AUTH_BURST:-}
+      RETENTION_DELIVERIES_DAYS: ${RETENTION_DELIVERIES_DAYS:-}
+      RETENTION_EVENTS_DAYS: ${RETENTION_EVENTS_DAYS:-}
+      RETENTION_AGENTS_DAYS: ${RETENTION_AGENTS_DAYS:-}
+      RETENTION_NOTIFICATIONS_DAYS: ${RETENTION_NOTIFICATIONS_DAYS:-}
+      NOTIFY_SECRET_KEY: ${NOTIFY_SECRET_KEY:-}
+      NOTIFY_ALLOW_PRIVATE: ${NOTIFY_ALLOW_PRIVATE:-}
+      NOTIFY_CONCURRENCY: ${NOTIFY_CONCURRENCY:-}
+      NOTIFY_MAX_ATTEMPTS: ${NOTIFY_MAX_ATTEMPTS:-}
+      NOTIFY_RETRY_BASE: ${NOTIFY_RETRY_BASE:-}
+      NOTIFY_MAX_FAILS: ${NOTIFY_MAX_FAILS:-}
+      NOTIFY_DISABLED_GRACE: ${NOTIFY_DISABLED_GRACE:-}
+    volumes:
+      - staqly-data:/data
+    ports:
+      # The API is never exposed beyond this machine: agents run here, phones
+      # go through the dashboard, and cloud setups put a reverse proxy in front.
+      - "127.0.0.1:${API_PORT:-3333}:3333"
+      # The dashboard is reachable from your network (phones, tablets). Every
+      # browser signs in once: `make up` opens the token link, `make connect`
+      # prints a one-time link, phones scan a QR code from "Connect a device".
+      - "${DASHBOARD_PORT:-8080}:8080"
+    networks:
+      default:
+        # `api` keeps working for n8n and scripts on this network that call http://api:3333.
+        aliases: [api]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach n8n running on the host (Linux)
+    stop_grace_period: 30s
+    # Hardening: immutable root filesystem (state lives in /data), no
+    # privilege escalation, no Linux capabilities, bounded memory/processes.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: ${STAQLY_MEM_LIMIT:-${API_MEM_LIMIT:-640m}}
+    pids_limit: ${STAQLY_PIDS_LIMIT:-${API_PIDS_LIMIT:-256}}
+
+volumes:
+  staqly-data:

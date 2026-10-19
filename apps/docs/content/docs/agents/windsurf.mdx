@@ -1,0 +1,135 @@
+---
+title: Windsurf
+description: Add staqly to Windsurf so Cascade writes posts and puts them on the calendar.
+---
+
+Connect Windsurf to staqly as an MCP server, and Cascade can create collections, write posts
+with media and a text per channel, and put them on the calendar. Windsurf keeps MCP
+servers in one file for all projects: `~/.codeium/windsurf/mcp_config.json`.
+
+## Connect to Staqly Community Edition
+
+<Steps>
+<Step>
+
+### Start staqly
+
+Run `staqly serve` (or the [Docker image](/self-hosting/docker)). See the [Quickstart](/quickstart).
+
+</Step>
+<Step>
+
+### Add the MCP server
+
+The config reads staqly's **access token** (printed at every start) from `STAQLY_API_KEY`, so
+the token stays out of the file. Set it in your shell profile:
+
+```bash
+export STAQLY_API_KEY=$(staqly serve token)   # Docker: $(docker exec staqly server token)
+```
+
+Open **Windsurf Settings → Cascade → MCP servers → View raw config** (or edit the file directly)
+and add `staqly`:
+
+```json title="~/.codeium/windsurf/mcp_config.json"
+{
+  "mcpServers": {
+    "staqly": {
+      "serverUrl": "http://localhost:3333/mcp",
+      "headers": { "Authorization": "Bearer ${env:STAQLY_API_KEY}" }
+    }
+  }
+}
+```
+
+Windsurf reads the variable from the environment it was started in, so start it from that shell
+or set the variable for your login session.
+
+`staqly mcp config windsurf` prints this snippet for your current [CLI](/cli/commands)
+profile. Keep any other servers already in the file.
+
+</Step>
+<Step>
+
+### Check the connection
+
+Press **Refresh** in the MCP servers panel. `staqly` should be listed as connected with its
+tools. If it isn't, see [Other MCP clients](/agents/other-mcp-clients#check-the-connection-with-curl)
+to test the endpoint with curl.
+
+</Step>
+</Steps>
+
+### STDIO (Docker only)
+
+If you run staqly with Docker, you can use STDIO instead of HTTP. It runs `mcp-stdio` inside
+the `staqly` container, so it needs no token, and it does not work with `staqly serve`:
+
+```json title="~/.codeium/windsurf/mcp_config.json"
+{
+  "mcpServers": {
+    "staqly": { "command": "docker", "args": ["exec", "-i", "staqly", "mcp-stdio"] }
+  }
+}
+```
+
+## Connect to Staqly Cloud
+
+Create a key for Windsurf under **Integrations → API keys**, e.g. with
+`collections:read posts:read posts:write media:write`, and export it. Windsurf expands
+`${env:STAQLY_API_KEY}`, so the key stays out of the file:
+
+```json title="~/.codeium/windsurf/mcp_config.json"
+{
+  "mcpServers": {
+    "staqly": {
+      "serverUrl": "https://app.staqly.ai/mcp",
+      "headers": { "Authorization": "Bearer ${env:STAQLY_API_KEY}" }
+    }
+  }
+}
+```
+
+Windsurf reads the variable from the environment it was started in, so start it from that
+shell or set the variable for your login session.
+
+## Write posts, not just code
+
+Add a project rule so Cascade drafts into staqly instead of pasting text for you to copy:
+
+```md title=".windsurf/rules/staqly.md"
+---
+trigger: always_on
+---
+
+When asked for a social post, announcement or release note, write it into staqly:
+
+1. Call `list_channels` once to know the channels and their limits, and `list_collections`
+   for the collection names.
+2. Call `create_post` with the collection, the text, one target per channel the post is for,
+   and a shorter `content` on a target whose platform allows fewer characters.
+3. Call `preview_post` and fix what a platform objects to; then `schedule_post` if a time was
+   given, otherwise leave it as a draft for the collection's schedule.
+4. When `list_requested_work` shows a schedule asking for posts, write three drafts into its
+   collection in the voice of the previous ones.
+```
+
+The posts show up on the staqly calendar, and on your phone if you
+[connected it](/dashboard/phones-and-tablets). The full pattern is in
+[Let an agent fill a collection](/cookbook/agent-fills-a-collection).
+
+## Try it
+
+Ask Cascade:
+
+> *"Create a collection called Release notes and draft a post about this week's changes for my X channel."*
+> *"What is scheduled this week?"*
+
+More in [Example prompts](/mcp/prompts).
+
+## Next steps
+
+<Cards>
+  <Card title="MCP tools" href="/mcp/tools">Every tool Cascade can call, and the scope it needs.</Card>
+  <Card title="Let an agent fill a collection" href="/cookbook/agent-fills-a-collection">A schedule publishes every morning; the agent refills the drafts.</Card>
+</Cards>

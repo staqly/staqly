@@ -1,0 +1,17 @@
+# Build context of the staqly image (Dockerfile at the repo root).
+.git
+**/node_modules
+**/.next
+**/out
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+apps/api/web/*
+!apps/api/web/.gitkeep
+apps/api/data
+sdks/python
+apps/cli/bin
+data
+backups
+.env
+.claude

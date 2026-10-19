@@ -1,0 +1,237 @@
+/**
+ * OpenGPEX - An Open-source, Web-based Graphics and Photo editor.
+ * Copyright (C) 2026 The OpenGPEX Authors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+
+"use client";
+
+import { useMemo, useState, useEffect } from "react";
+import PluginSlot from "./PluginSlot";
+
+/**
+ * Color palette for randomized orbs — soft, creative tones.
+ * Each orb picks ONE color from this palette.
+ */
+const ORB_PALETTE = [
+  "#818cf8", // indigo-400
+  "#a78bfa", // violet-400
+  "#c084fc", // purple-400
+  "#f9a8d4", // pink-300
+  "#67e8f9", // cyan-300
+  "#7dd3fc", // sky-300
+  "#6ee7b7", // emerald-300
+  "#fcd34d", // amber-300
+  "#fca5a5", // red-300
+  "#c4b5fd", // violet-300
+];
+
+/** Generate N randomized orbs. Runs once per mount — zero runtime cost after. */
+function generateOrbs(count: number) {
+  const orbs = [];
+  const usedColors = new Set<number>();
+
+  for (let i = 0; i < count; i++) {
+    // Pick a unique color index
+    let colorIdx: number;
+    do {
+      colorIdx = Math.floor(Math.random() * ORB_PALETTE.length);
+    } while (usedColors.has(colorIdx) && usedColors.size < ORB_PALETTE.length);
+    usedColors.add(colorIdx);
+
+    const size = 12 + Math.random() * 25; // 12% - 37%
+    const top = 8 + Math.random() * 65; // 8% - 73%
+    const left = 5 + Math.random() * 75; // 5% - 80%
+    const opacity = 0.04 + Math.random() * 0.07; // 0.04 - 0.11
+
+    orbs.push({
+      color: ORB_PALETTE[colorIdx],
+      size: `${size}%`,
+      top: `${top}%`,
+      left: `${left}%`,
+      opacity,
+    });
+  }
+  return orbs;
+}
+
+/**
+ * LandingPage: Photoshop-inspired creative start screen.
+ * Two-column centered layout: left = actions, right = screenshot with smooth edge fading.
+ * All decorative elements use radial/linear gradient masks — no hard edges.
+ *
+ * Performance:
+ * - Orb generation is O(n) one-shot on mount via useMemo.
+ * - ALL decorative elements are static (no infinite CSS animations).
+ * - Only a single one-shot fadeInScale animation for the hero image.
+ * - Zero continuous GPU compositing cost — page can stay open indefinitely
+ *   without affecting other tabs or heating up the machine.
+ */
+
+export const LandingPage = () => {
+  // Generate randomized orbs once per component mount
+  const orbs = useMemo(() => generateOrbs(6), []);
+
+  // Pre-check hero image existence to avoid 404 in network/console
+  const [heroSrc, setHeroSrc] = useState<string | null>(null);
+  // Only paint a REAL image (the placeholder slot may hold a blank 1×1 while
+  // no screenshot has been dropped in yet — painting that is what turned into
+  // Safari's black box).
+  const [heroIsReal, setHeroIsReal] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/welcomed.webp", { method: "HEAD" })
+      .then(res => { if (res.ok && !cancelled) setHeroSrc("/welcomed.webp"); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+  <div className="absolute inset-0 flex items-center justify-center select-none overflow-hidden">
+    {/* ─── Edge Vignette: ensures ALL decorations fade before hitting container edges ─── */}
+    <div
+      className="absolute inset-0 pointer-events-none z-[1]"
+      style={{
+        boxShadow: "inset 0 0 80px 40px var(--bg-stage)",
+      }}
+    />
+
+    {/* ─── Randomized Background Orbs (static — no animation needed for ambience) ─── */}
+    {orbs.map((orb, i) => (
+      <div
+        key={i}
+        className="absolute rounded-full pointer-events-none will-change-[opacity]"
+        style={{
+          top: orb.top,
+          left: orb.left,
+          width: orb.size,
+          height: orb.size,
+          opacity: orb.opacity,
+          background: `radial-gradient(circle, ${orb.color} 0%, transparent 55%)`,
+        }}
+      />
+    ))}
+
+    {/* ─── Decorative Mesh Grid (subtle creative texture) ─── */}
+    <div
+      className="absolute inset-[10%] opacity-[0.02] dark:opacity-[0.04]"
+      style={{
+        backgroundImage: `
+          linear-gradient(rgba(99,102,241,0.3) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(99,102,241,0.3) 1px, transparent 1px)
+        `,
+        backgroundSize: "60px 60px",
+        maskImage:
+          "radial-gradient(ellipse 80% 80% at 50% 50%, black 10%, transparent 60%)",
+        WebkitMaskImage:
+          "radial-gradient(ellipse 80% 80% at 50% 50%, black 10%, transparent 60%)",
+      }}
+    />
+
+    {/* ─── Centered Two-Column Layout ─── */}
+    <div className="relative z-10 flex flex-col lg:flex-row items-center lg:justify-between gap-8 lg:gap-16 w-full max-w-6xl px-8 lg:px-12">
+      {/* Left: Content (Plugin Slot) */}
+      <div className="flex-shrink-0 w-full lg:w-auto lg:max-w-md">
+        <PluginSlot name="LANDING_PAGE">
+          {/* Fallback if no plugin contribution */}
+          <div className="text-center lg:text-left space-y-4">
+            <h2 className="text-2xl font-black text-[var(--text-main)] tracking-tighter leading-none">
+              Open a picture to edit
+            </h2>
+            <p className="text-xs text-[var(--text-muted)]">
+              Open or drag an image to begin editing
+            </p>
+          </div>
+        </PluginSlot>
+      </div>
+
+      {/* Right: Hero image with blend mode + fade-in animation.
+          Only rendered when the file exists AND decoded to a real image —
+          a blank/black placeholder must never paint (Safari renders that as
+          an opaque box when the blend below is dropped). */}
+      {heroSrc && heroIsReal && (
+        <div className="hidden dark:lg:block flex-1 max-w-[640px] relative -mt-12 animate-[fadeInScale_1s_ease-out_0.3s_backwards]">
+          {/* Ambient glow behind (static — no animation, just soft backdrop) */}
+          <div
+            className="absolute inset-[-20%] -z-10"
+            style={{
+              background:
+                "radial-gradient(ellipse 50% 45% at 50% 50%, #a78bfa 0%, transparent 65%)",
+              opacity: 0.18,
+              filter: "blur(40px)",
+            }}
+          />
+
+          {/* The image: mix-blend-mode screen makes black → transparent.
+              Static after fadeIn — no floating animation for stability.
+              Bottom + right edges fade to transparent via composite mask.
+              SAFARI CONSTRAINT: keep this element free of `filter` — the
+              WebKit 26.x regression (mix-blend-mode + filter on one element,
+              cf. webkit bugs / home-assistant#29866) silently DROPS the blend
+              and paints the image opaque. The former contrast/brightness
+              boost was removed for exactly that; do not re-add it here. */}
+          <img
+            src={heroSrc}
+            alt=""
+            className="w-full aspect-[3/4] object-cover"
+            draggable={false}
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              setHeroIsReal(img.naturalWidth > 2 && img.naturalHeight > 2);
+            }}
+            onError={() => setHeroIsReal(false)}
+            style={{
+              mixBlendMode: "screen",
+              maskImage:
+                "linear-gradient(to bottom, black 0%, black 60%, transparent 100%), linear-gradient(to left, transparent 0%, black 15%, black 100%)",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, black 0%, black 60%, transparent 100%), linear-gradient(to left, transparent 0%, black 15%, black 100%)",
+              maskComposite: "intersect",
+              WebkitMaskComposite: "destination-in" as string,
+            }}
+          />
+        </div>
+      )}
+    </div>
+
+    {/* ─── Fluid blob accents (static blurred shapes — zero animation cost) ─── */}
+    <div
+      className="absolute top-[12%] right-[12%] w-[160px] h-[160px] opacity-[0.06] dark:opacity-[0.10] pointer-events-none hidden lg:block"
+      style={{
+        background: "#c4b5fd",
+        borderRadius: "30% 70% 70% 30% / 30% 30% 70% 70%",
+        filter: "blur(45px)",
+      }}
+    />
+    <div
+      className="absolute bottom-[20%] right-[20%] w-[100px] h-[100px] opacity-[0.05] dark:opacity-[0.08] pointer-events-none hidden lg:block"
+      style={{
+        background: "#7dd3fc",
+        borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%",
+        filter: "blur(35px)",
+      }}
+    />
+
+    {/* ─── CSS Keyframes (only one-shot fadeInScale remains) ─── */}
+    <style>{`
+      @keyframes fadeInScale {
+        from { opacity: 0; transform: scale(0.92); }
+        to { opacity: 1; transform: scale(1); }
+      }
+    `}</style>
+  </div>
+  );
+};

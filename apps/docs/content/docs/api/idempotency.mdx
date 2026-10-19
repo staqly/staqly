@@ -1,0 +1,76 @@
+---
+title: Idempotency
+description: Retry a failed or timed-out request without creating the same post twice.
+---
+
+Networks fail and automations retry. If a workflow times out after sending "create this
+post", a plain retry may create a duplicate. Send an **`Idempotency-Key`** header on unsafe
+requests (POST, PATCH, DELETE) and a retry with the same key returns the **original response**
+instead of doing the work twice.
+
+## Make a request safe to retry
+
+<Steps>
+<Step>
+### Pick a key per logical operation
+
+Use something unique and repeatable for *this* piece of work, such as a workflow run ID plus an
+index: `n8n-run-8812-post-3`. Up to 200 characters.
+</Step>
+<Step>
+### Send it with the request
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST "http://localhost:3333/v1/posts" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: n8n-run-8812-post-3' \
+  -d '{"collection":"Instagram Avatar","content":"Golden hour portrait","source":"n8n"}'
+```
+</Step>
+<Step>
+### Retry with the same key and body
+
+If the first attempt went through, the retry gets the stored response with the header
+`Idempotent-Replayed: true`: no second post is created.
+</Step>
+</Steps>
+
+## What happens on a retry
+
+| Situation | Response |
+|---|---|
+| First request | Processed normally; status and body are stored |
+| Same key, same method + path + query string + body | The stored response is replayed, with header `Idempotent-Replayed: true` |
+| Same key, same JSON body formatted differently (spaces, key order, `é` vs `é`) | Replayed: JSON bodies are compared by content, not bytes |
+| Same key, **different** request | `422 idempotency_mismatch` |
+| Same key while the first is still running | `409 idempotency_in_progress` — retry shortly |
+| First attempt failed with a `5xx` | The key is released, so a retry runs again |
+| The response carried a **secret**, or was larger than 1 MiB | Never stored: the key is released, so a retry **runs again** |
+| Key longer than 200 characters | `422 validation_failed` |
+
+## Rules and limits
+
+- Keys are scoped to the **caller** (the API key, session or local principal) and kept for
+  **24 hours**.
+- Responses that carry a secret — a new API key, a recovery key, a device link, a webhook
+  signing secret (create or rotate) — are never kept in the replay cache. Retrying such a
+  request with the same key creates another secret, so check whether the first attempt
+  succeeded (e.g. list your keys or webhooks) before retrying it.
+- A JSON body (`Content-Type: application/json`) is compared in a canonical form: object keys
+  sorted, whitespace between tokens ignored, string escapes decoded. So the Python SDK
+  (`json.dumps`, with spaces) and the TypeScript SDK (compact `JSON.stringify`) can share a key
+  for the same request. Array order and every value still count, and **numbers are compared as
+  written**: `1` and `1.0` are different requests (an integer field such as `expected_version`
+  accepts `1` and rejects `1.0`), so `{"n": 1}` then `{"n": 1.0}` is `422 idempotency_mismatch`.
+- Only **JSON** requests are covered. Multipart uploads ignore the header — deduplicate them
+  yourself, e.g. by `external_ref`.
+- Webhook *deliveries* to you are at-least-once and can arrive out of order; deduplicate them
+  on `X-Staqly-Event-Id` and order them by the event's `created_at`
+  ([Delivery guarantees](/automation/webhooks#delivery-guarantees)).
+
+## Next steps
+
+<Cards>
+  <Card title="Errors" href="/api/errors">Which errors are worth retrying.</Card>
+  <Card title="Webhooks" href="/automation/webhooks">Receive events and deduplicate deliveries.</Card>
+</Cards>

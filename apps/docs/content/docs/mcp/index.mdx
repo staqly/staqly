@@ -1,0 +1,129 @@
+---
+title: MCP overview
+description: Connect an AI agent to staqly over MCP so it can write posts, schedule them, connect channels and answer when a schedule asks for more.
+---
+
+Staqly is an MCP server named **`staqly`**. Connect it to an AI agent (Claude Code, Codex,
+OpenCode, Cursor, Windsurf) and the agent gets 100 tools to write and schedule posts, connect
+channels, set up schedules, webhooks and alerts, and see what the workspace asks of it.
+Nearly everything the REST API can do is available as a tool, no HTTP code needed: browser
+sign-in flows, managing people and a few dashboard-only endpoints are left out
+([the list](/mcp/tools#conventions)). Pick MCP when an **agent** does the
+work; for scripts and workflows, use the [REST API](/api) or the [CLI](/cli) instead. Both go
+through the same domain services and authorization checks.
+
+## Connect an agent
+
+<Steps>
+<Step>
+### Start staqly
+
+Run `staqly serve` (one binary with the API and MCP on `127.0.0.1:3333`) or the
+[Docker image](/self-hosting/docker). The MCP endpoint is
+`http://localhost:3333/mcp` either way.
+</Step>
+<Step>
+### Add the server to your client
+
+For Claude Code, with staqly's access token (printed at every start) in `STAQLY_API_KEY`:
+
+```bash
+export STAQLY_API_KEY=$(staqly serve token)   # Docker: $(docker exec staqly server token)
+claude mcp add --transport http staqly http://localhost:3333/mcp \
+  --header "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+Other clients: [Codex](/agents/codex) · [OpenCode](/agents/opencode) ·
+[other MCP clients](/agents/other-mcp-clients). `staqly mcp config <client>` prints a
+ready-made config too (see [CLI commands](/cli/commands)).
+</Step>
+<Step>
+### Ask the agent to use it
+
+> Draft five posts about the new release into Product updates, one per weekday morning.
+
+The agent calls `list_channels`, `create_post` and `schedule_post`; the posts show up on the
+calendar at `http://localhost:8080`. More ideas: [Example prompts](/mcp/prompts).
+</Step>
+</Steps>
+
+## Transports
+
+| Transport | Staqly Community Edition | Cloud |
+|---|---|---|
+| Streamable HTTP | `http://localhost:3333/mcp` + `Authorization: Bearer {ACCESS_TOKEN}` | `https://<host>/mcp` + `Authorization: Bearer stk_...` |
+| STDIO (Docker only) | `docker exec -i staqly mcp-stdio` (no token) | `docker exec -i -e STAQLY_API_KEY staqly mcp-stdio` |
+
+HTTP works with `staqly serve` and with Docker. STDIO runs the `mcp-stdio` binary inside the
+`staqly` container, so it needs the Docker setup (or a `mcp-stdio` binary
+[built from source](/agents/other-mcp-clients#stdio-details)).
+
+`staqly mcp config <client>` prints the setup for `claude`, `codex`, `opencode`, `cursor` or
+`windsurf`, pointing at your current CLI profile's server. Flags: `--stdio` (use STDIO instead
+of HTTP), `--container <name>` (container for `--stdio`, default `staqly`) and
+`--snippet` (print only the config file snippet, to redirect into a file). With a key in the
+profile, the output references `$STAQLY_API_KEY` and never prints the key itself.
+
+In the dashboard, **Integrations → REST & MCP** shows the same URL, the bearer header (cloud)
+and the STDIO command.
+
+## What the server tells the model
+
+On connect, staqly sends instructions so the agent uses it well:
+
+- the flow is **connect channels, create posts, schedule them**: a post has one target per
+  channel, needs at least one to be scheduled or published, and `preview_post` shows what each
+  platform objects to before publishing;
+- collections can be referenced by ID (`col_qjuybkx6355nz4no6pqk`) or exact name;
+- `list_posts` with `publish_after` / `publish_before` is the calendar; `search_posts` finds posts
+  by their text;
+- **`list_requested_work`** says what the workspace asks of the agent: targets on your own
+  automation waiting for `report_publish_result`, and schedules that found nothing to publish
+  and ask for drafts in their collection;
+- report results only for work the agent did itself; a published post is read-only, duplicate
+  it to post it again.
+
+## Tools at a glance
+
+| Group | Tools |
+|---|---|
+| Collections | `list_collections`, `get_collection`, `create_collection`, `update_collection`, `delete_collection` |
+| Posts | `list_posts`, `search_posts`, `get_post`, `create_post`, `update_post`, `schedule_post`, `publish_post`, `cancel_post`, `duplicate_post`, `delete_post`, `delete_posts`, `purge_post`, `preview_post`, `get_post_history`, `get_post_metrics`, `retry_target`, `list_tags` |
+| Preview links and feedback | `create_preview_link`, `list_preview_links`, `revoke_preview_link`, `list_post_comments`, `reply_to_post_comment`, `resolve_post_comment` |
+| Your own automation | `list_requested_work`, `report_publish_result`, `report_post_metrics` |
+| Channels | `list_providers`, `list_channels`, `get_channel`, `connect_channel`, `update_channel`, `delete_channel`, `test_channel`, `list_channel_groups`, `create_channel_group`, `update_channel_group`, `delete_channel_group`, `create_channel_link`, `list_channel_links`, `revoke_channel_link` |
+| Schedules | `list_schedules`, `create_schedule`, `update_schedule`, `delete_schedule`, `run_schedule` |
+| Queue | `list_jobs`, `retry_job` |
+| Media | `upload_media`, `list_media`, `get_media`, `get_media_usage`, `update_media`, `organize_media`, `delete_media`, `restore_media`, `keep_media`, `list_media_folders`, `create_media_folder`, `update_media_folder`, `delete_media_folder` |
+| Activity log | `list_events`, `export_events` |
+| Webhooks | `list_webhooks`, `get_webhook`, `create_webhook`, `update_webhook`, `delete_webhook`, `rotate_webhook_secret`, `test_webhook`, `list_webhook_deliveries`, `retry_webhook_delivery` |
+| Alerts | `list_alerts`, `get_alert`, `create_alert`, `update_alert`, `delete_alert`, `test_alert`, `list_alert_deliveries` |
+| API keys and sessions | `list_api_keys`, `create_api_key`, `revoke_api_key`, `rotate_api_key`, `list_sessions`, `revoke_session` |
+| Workspace and plan | `get_workspace`, `rename_workspace`, `delete_workspace`, `start_workspace_export`, `get_workspace_export`, `list_plans`, `get_usage`, `get_billing`, `start_billing_checkout`, `open_billing_portal`, `create_device_link` |
+
+Inputs and scopes for each: [Tools reference](/mcp/tools).
+
+## Security
+
+- **Community Edition**: the access token is required, like for the REST API, and gives every tool.
+  STDIO (`docker exec -i staqly mcp-stdio`) needs none: it opens the database itself.
+- **Cloud mode**: an API key is required and its scopes are enforced by the domain layer: a
+  read-only key cannot write, `create_post` / `update_post` need `posts:write`, `schedule_post`
+  / `publish_post` / `report_publish_result` need `posts:publish`, channels need
+  `channels:manage`. See [Authentication & scopes](/api/authentication#scopes).
+- The HTTP endpoint is **stateless**: every request is authenticated on its own; there is no
+  MCP session to hijack. Cookies are never accepted.
+- A STDIO process re-checks its `STAQLY_API_KEY` at most once a minute, so a revoked or
+  expired key stops working within a minute.
+- A suspended workspace (the trial or a paid period ended unpaid) can only call read-only tools and a short
+  allowlist; see [Tools reference](/mcp/tools#conventions).
+- Channel credentials are never returned by any tool; the recovery key is never accepted or
+  exposed over MCP.
+
+## Next steps
+
+<Cards>
+  <Card title="Tools reference" href="/mcp/tools">All 100 tools with inputs and scopes.</Card>
+  <Card title="Example prompts" href="/mcp/prompts">Things to ask your agent.</Card>
+  <Card title="Let an agent fill a collection" href="/cookbook/agent-fills-a-collection">Drafts every night, a post every morning.</Card>
+</Cards>

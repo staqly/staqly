@@ -1,0 +1,126 @@
+---
+title: Activity
+description: See everything that happened in your workspace, filter it, and export it.
+---
+
+**Activity** is the log of everything that happened in your workspace, newest first: posts
+created, scheduled, published and failed; channels connected; schedules run; webhooks tested.
+Each entry is an **event** (see [Concepts](/concepts#events)). Open it when you want to know
+who did what and when, or to check what your automations were sent.
+
+## Find what happened
+
+<Steps>
+<Step>
+
+### Open Activity
+
+Click **Activity** in the sidebar (or in the bottom tab bar on a phone).
+
+</Step>
+<Step>
+
+### Filter
+
+One bar holds the filters. Type an event type (suggestions appear as you type, any exact
+type works, <Kbd>Enter</Kbd> applies it), pick a date range, or use **Add filter** to choose
+an actor, a collection, an actor ID or an entity (post, channel or schedule) ID. Each active
+filter shows as a chip below the bar; its **×** removes it and **Clear all** resets them.
+Filters are combined and kept in the URL, so you can bookmark or share a filtered view.
+
+</Step>
+<Step>
+
+### Open an event's data
+
+Click **Data** under an event to see the full JSON payload it carries (the same `data` that
+webhooks receive), with the event ID, its sequence number and a **Copy data** button.
+
+</Step>
+<Step>
+
+### Load more
+
+Scroll to the end and click **Load older events** to go further back. **Refresh** adds the
+events that happened since, on top; the older pages you loaded stay as they are.
+
+</Step>
+</Steps>
+
+## What each event shows
+
+| Part | What you see |
+|---|---|
+| **Title and type** | A readable label such as *Published*, the raw type (`post.published`) and, for channel events, the channel. |
+| **Error** | The platform's or your automation's error, when the event has one. |
+| **Actor** | Who did it: *Dashboard* (a signed-in browser) with its device name, *API key* with the key's name, *Local* (you and local agents, in Staqly Community Edition) or *System* (the scheduler, the publisher, Stripe, the operator). Session and API key actors show their ID with a copy button. |
+| **Entity** | What the event is about, with its name, its ID (with a copy button) and a link: a *Post* (and its collection), a *Collection*, *Channel*, *Schedule*, *Webhook*, *Alert*, *API key*, *Session*, workspace *Export* or the *Workspace*. |
+| **Time** | The date and time; hover for "how long ago". |
+
+## Filters
+
+| Filter | Options | Query parameter |
+|---|---|---|
+| **Event type** | *All event types*, one of the common types (`post.created`, `post.scheduled`, `post.published`, `post.failed`, `post.publish_requested`, `post.deleted`, `channel.connected`, `channel.needs_reconnect`, `schedule.ran`, `schedule.posts_requested`, `collection.*`, `api_key.created`, `api_key.revoked`, `session.signed_in`, `workspace.exported`), or any exact type typed into the box next to it | `type` |
+| **Actor type** | *All actors*, *Local (you & local agents)* (Community Edition only), *Dashboard sessions*, *API keys (agents)* or *System* | `actor_type` |
+| **Actor ID** | One actor, such as an API key (`key_ozcbqlxbqgyp3qnkbgjr`) or a session (`ses_q2vbm4kz7xw3dn5hjr6c`). Applied when you press <Kbd>Enter</Kbd> or leave the field. | `actor_id` |
+| **Collection** | *All collections*, or one (archived ones included) | `collection` |
+| **Entity ID** | One post (`post_oalirbz67y4m4cqxq5dw`), channel or schedule: its whole history | `post`, `channel`, `schedule` |
+| **Dates** | A date range picked on a calendar (two months side by side; one on a phone) or from the presets **Today**, **Yesterday**, **Last 7 days**, **Last 30 days**, **This month**, **Last month**. Both days are included and use your browser's time zone. | `from`, `to` (`YYYY-MM-DD`) |
+
+Credential events (API keys created, rotated or revoked; browser sign-ins, with the access token
+locally or a person's sign-in in the cloud; recovery-key and access-token rotations; sessions
+revoked; devices connected and sign-in links created; sign-in methods added, changed or removed:
+types starting with `api_key.`, `session.`, `recovery_key.`, `access_token.`, `device.`,
+`device_link.` or `sign_in_method.`) are audit events. Only admins see them: the Community Edition's access token, dashboard sessions and keys
+with the `admin` scope. Exports leave them out for everyone else too.
+
+## The bell
+
+The bell sits at the top of the user menu (your name at the bottom of the sidebar; a dot on your
+picture means something is unread), and in the top bar on a phone. It counts what happened while
+you were away and lists it newest first: a post **was published** (with the link to it), **publishing
+failed** with the reason, a post **went out on schedule**, a channel **needs reconnecting** or
+**was connected**, a schedule **asked for new posts** or **failed**, and a plan change. Changes
+you make yourself are not in it.
+
+New rows carry a dot. Closing the list marks everything read; **Mark all as read** does it at
+once. The mark is kept in this browser, per workspace. A row opens the post, the channel or the
+collection's schedules. The list updates as events arrive, without a reload.
+
+## Export the log
+
+Click **Export** and choose **JSONL** (one JSON event per line, the full event shape) or **CSV**
+(opens in a spreadsheet). The file contains the events that match your current filters (or all
+events when no filter is set), oldest first. To download the whole log, use
+**Settings → Data & privacy**. See [Settings](/dashboard/settings).
+
+## Why events can't be changed
+
+Events cannot be edited: a database trigger forbids updates. They are the same records that
+webhooks deliver, so what you see here is exactly what your automations received. The only
+way to remove events is to purge a post (which erases every event about it; see
+[Data export](/self-hosting/data-export#purge-a-post)) or server-side retention.
+
+## API
+
+```bash
+# what one API key did on 20 October 2026 (from inclusive, to exclusive)
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" "http://localhost:3333/v1/events?actor_id=key_ozcbqlxbqgyp3qnkbgjr&from=2026-10-20T00:00:00Z&to=2026-10-21T00:00:00Z"
+
+# one schedule's runs
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" "http://localhost:3333/v1/events?schedule_id=sch_5k2nq8rx7bvm3dz4hcye"
+```
+
+`GET /v1/events` accepts `type`, `type_prefix` (a literal prefix such as `post.` or `webhook.`),
+`actor_type`, `actor_id`, `agent` (an [agent](/dashboard/agents) name such as `claude-code`),
+`collection_id`, `post_id`, `channel_id`, `schedule_id`, `from` (inclusive) and `to` (exclusive),
+with cursor pagination. `GET /v1/events/export` takes the same filters plus `format=ndjson|csv`.
+See [Event types](/api/events).
+
+## Next steps
+
+<Cards>
+  <Card title="Event types" href="/api/events">Every event and its payload.</Card>
+  <Card title="Webhooks" href="/automation/webhooks">Send these events to your own tools.</Card>
+</Cards>

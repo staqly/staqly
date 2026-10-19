@@ -1,0 +1,82 @@
+---
+title: Collections
+description: Group posts into collections, give each one a colour and a processing timeout, manage its schedules and archive or delete it.
+---
+
+A **collection** is a named group of posts with its own schedules, like a folder with a
+calendar: *Product updates*, *Instagram Avatar*, *Weekly digest*. Use collections to keep
+each project's or agent's posts together and to give them a rhythm. See
+[Concepts](/concepts#collections) for how collections, posts and schedules fit together.
+
+Collections live in the left pane of [Posts](/dashboard/posts): every collection with its
+colour dot and post count, **New** at the top, **Show archived** at the bottom. Click one to see
+its posts; **Settings** in the header opens its settings.
+
+## Create a collection
+
+<Steps>
+<Step>
+
+### Open the drawer
+
+Click **New** at the top of the collections pane, or use the command palette
+(<Kbd>⌘</Kbd> <Kbd>K</Kbd>). The form opens in a drawer: the header stays put, the fields
+scroll, **Cancel** and **Create collection** sit at the bottom.
+
+</Step>
+<Step>
+
+### Name it
+
+Give it a **Name** (required, marked with `*`, up to 100 characters), an optional
+**Description** (up to 2,000 characters), **Fail publishing if nothing is reported within**
+(how long a post on [your own automation](/channels/your-own-automation) may wait for a result;
+**Default** names the server's value) and a **Colour**. Names are unique within the workspace,
+so agents can refer to a collection by name: `create_post` with
+`collection: "Product updates"` just works. If a field is invalid, it turns red and the message
+appears under it.
+
+</Step>
+<Step>
+
+### Add schedules later
+
+A new collection has no schedules; add them in its settings (see [below](#collection-settings)).
+
+</Step>
+</Steps>
+
+Agents can create collections too. Ask *"Create a collection called Weekly digest"* and the
+agent uses the `create_collection` MCP tool or `POST /v1/collections`.
+
+### Colours
+
+The colour shows as a dot in the collections pane and as the left bar of calendar chips. Pick
+one of eight colours (green `#22c55e`, blue `#3b82f6`, violet `#8b5cf6`, pink `#ec4899`, red
+`#ef4444`, orange `#f97316`, yellow `#eab308`, teal `#14b8a6`), *No colour*, or the rainbow
+swatch, **Custom colour**: a picker with a saturation and brightness square, a hue slider, a hex
+field such as `#1e3a8a` and a preview. Agents and scripts can set any hex colour through the API
+(`"color": "#3b82f6"`).
+
+## Collection settings
+
+Click **Settings** in the collection's header. The drawer has three sections; one **Save
+changes** in its footer saves them together:
+
+| Section | What you can do |
+|---|---|
+| **General** | Change the name (required), description, **Fail publishing if nothing is reported within** (1 minute to 24 hours, or *Default*) and the colour. |
+| **Schedules** (folded) | The collection's schedules, each with an on/off switch, **Run now**, **Edit** and **Delete**; **New schedule** opens the schedule drawer. See [Schedules](/automation/schedules). |
+| **Danger zone** (folded) | **Archive collection** hides it from the pane (unless *Show archived* is on) and stops new posts: *It is hidden from the list and takes no new posts.* **Unarchive collection** brings it back. **Delete collection** permanently deletes the collection with its posts and schedules; you confirm by typing its name. |
+
+The Default collection has no Danger zone: it can be renamed, but not archived or deleted.
+
+A collection's icon can be set through the API (`PATCH /v1/collections/{id}`), not in this
+drawer.
+
+## Next steps
+
+<Cards>
+  <Card title="Posts" href="/dashboard/posts">Write posts into the collection.</Card>
+  <Card title="Schedules" href="/automation/schedules">Publish the next waiting post every morning.</Card>
+</Cards>

@@ -1,0 +1,68 @@
+---
+title: Operator CLI
+description: Run server-side admin tasks of Staqly Community Edition — the access token, backups, sign-in links and media storage — from the machine it runs on.
+---
+
+Some tasks have no button in the dashboard because they need someone with access to the
+server: printing the access token, a sign-in link for a new browser, taking a backup, or moving
+media files into a bucket. The operator commands do these. They run against the
+data directory directly, so they need no API key — whoever can run them already controls the
+data — and there is no remote equivalent.
+
+## Run a command
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+Add the command after `staqly serve`. It runs against the same data directory instead of
+starting the server:
+
+```bash
+staqly serve token
+staqly serve connect-link
+staqly serve backup ~/staqly-backup.db
+staqly serve storage migrate --dry-run
+```
+
+If you start staqly with `--data` or `--dashboard-port`, pass the same flags before the command, e.g.
+`staqly serve --data ~/staqly-data token`.
+
+</Tab>
+<Tab value="Docker">
+
+Call the `server` binary in the `staqly` container:
+
+```bash
+docker exec staqly server token
+docker exec staqly server connect-link
+docker exec staqly server backup /data/backups/staqly-backup.db
+docker exec staqly server storage migrate --dry-run
+```
+
+From a checkout, the Makefile has shortcuts for some of them (`make token`, `make connect`).
+
+</Tab>
+</Tabs>
+
+## Commands
+
+| Command | Binary | Docker | Does |
+|---|---|---|---|
+| `token [--rotate]` | `staqly serve token` | `docker exec staqly server token` | Community Edition: print the [access token](/local-vs-cloud#the-access-token) every request needs (made on first start if missing; stdout is just the token, for `$(...)`), and on stderr the link that signs a browser in. `--rotate` makes a new one: the old one stops working at once, also in a running server, and every browser session is signed out. Refused when `STAQLY_LOCAL_TOKEN` fixes the token |
+| `connect-link` | `staqly serve connect-link` | `docker exec staqly server connect-link` | Print a one-time browser sign-in link (5 minutes, single use) |
+| `backup <file>` | `staqly serve backup <file>` | `docker exec staqly server backup /data/backups/<file>` | SQLite (Community Edition): consistent online database backup (`VACUUM INTO`); refuses to overwrite an existing file. Back up `uploads/` too — see [Backup & restore](/self-hosting/backup-and-restore) |
+| `storage migrate [--from <folder>] [--dry-run]` | `staqly serve storage migrate` | `docker exec staqly server storage migrate` | Copies media files from a folder (default `UPLOAD_DIR`) into the S3 bucket of `STORAGE_DRIVER=s3`. Files already there are skipped, so it is safe to run again; see [Media storage](/self-hosting/storage#move-existing-files-into-a-bucket) |
+| — | — | `docker exec -i staqly mcp-stdio` | MCP over STDIO in the `staqly` container |
+
+## Running from source
+
+From `apps/api`, `go run ./cmd/server <command>` runs the same commands with the `DATA_DIR`
+you start the server with.
+
+## Next steps
+
+<Cards>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Full backup and restore steps.</Card>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">Sign in other devices with a link or QR code.</Card>
+  <Card title="Media storage" href="/self-hosting/storage">Disk or an S3-compatible bucket.</Card>
+</Cards>

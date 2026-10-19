@@ -1,0 +1,248 @@
+/**
+ * OpenGPEX - An Open-source, Web-based Graphics and Photo editor.
+ * Copyright (C) 2026 The OpenGPEX Authors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+
+/**
+ * gpex-format: Binary pack/unpack for the .gpex file format (v1).
+ *
+ * .gpex is a container format that bundles:
+ *   - A WebP thumbnail (for previews)
+ *   - A JSON manifest (metadata: frame info, dimensions, etc.)
+ *   - A ZIP payload (state.json + assets-manifest.json + assets/ + raw/ + dec/)
+ *
+ * Payload ZIP layout:
+ *   state.json               dehydrated Frame
+ *   assets-manifest.json     `GpexAssetManifest` — per-asset geometry + colour
+ *                            identity + provenance (see below). Absent in
+ *                            legacy containers; readers degrade to category ①.
+ *   assets/{id}.png|webp     8-bit display bitmap, one per referenced assetId
+ *   raw/{fileHash}           original ENCODED source file (category ②),
+ *                            deduplicated by content hash — multi-page imports
+ *                            share one copy
+ *   dec/{id}.bin             DECODED high-depth naked pixels (category ③),
+ *                            a bare `Uint16Array`/`Float32Array` byte image
+ *                            read according to `colorIdentity.dataFormat`
+ *
+ * Binary Layout:
+ * ┌────────────────────────────────────────────────────┐
+ * │  Header (20 bytes, Little-Endian)                   │
+ * │  [0..3]   magic         "GPEX" (4B ASCII)          │
+ * │  [4..5]   version       uint16 LE (=1)             │
+ * │  [6..7]   headerSize    uint16 LE (=20)            │
+ * │  [8..11]  thumbnailSize uint32 LE                  │
+ * │  [12..15] manifestSize  uint32 LE                  │
+ * │  [16..19] payloadSize   uint32 LE                  │
+ * ├────────────────────────────────────────────────────┤
+ * │  Body                                               │
+ * │  [thumbnail bytes] [manifest JSON] [payload ZIP]    │
+ * └────────────────────────────────────────────────────┘
+ *
+ * This format is independent of cloud storage — it can be used
+ * for local export/import, drag-and-drop, or any file I/O scenario.
+ */
+
+import type { ColorIdentity } from '@opengpex/editor/core/storage/asset/AssetStore';
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+/**
+ * GpexAssetMeta — one asset's entry in the INNER `assets-manifest.json`, which
+ * travels inside the payload ZIP.
+ *
+ * Do not confuse it with `GpexManifest` below: that one is the OUTER file
+ * header (frameLocalId / canvas size / editor version) the cloud server reads
+ * without touching the ZIP. This one is the per-asset hydration contract that
+ * lets `unpack` restore an asset's exact identity — geometry, colour identity
+ * and provenance — with zero re-decoding.
+ */
+export interface GpexAssetMeta {
+  id: string;
+  width: number;
+  height: number;
+  dprScale?: number;
+  colorIdentity: ColorIdentity;
+  mimeType: string;
+  /** Original file name (extension drives format routing on cold recovery). */
+  sourceFileName?: string;
+  /**
+   * Content hash of this asset's ENCODED source file; written only when
+   * `assets.getRaw(id)` was non-empty at pack time (category ②). Multi-page
+   * imports share one source file, so several assets carry the same value and
+   * `raw/` holds exactly one copy.
+   */
+  rawFileHash?: string;
+  /**
+   * This asset is a render bake product (merge / rasterize / peel / create):
+   * no source file exists to rebuild it from, so `dec/{id}.bin` ships the
+   * naked pixels verbatim (category ③). Mutually exclusive with `rawFileHash`.
+   */
+  bakedDecOnly?: boolean;
+}
+
+/** Contents of `assets-manifest.json` inside the payload ZIP. */
+export interface GpexAssetManifest {
+  version: 1;
+  assets: Record<string, GpexAssetMeta>;
+}
+
+/**
+ * Manifest embedded in every .gpex file.
+ * Server uses `frameLocalId` as the UPSERT key.
+ */
+export interface GpexManifest {
+  format: "gpex";
+  version: number;
+  /** Architecture generation of OpenGPEX ('v1' | 'v2'). Defaults to 'v1' if absent. */
+  gpexVersion?: "v1" | "v2";
+  frameLocalId: string;
+  frameName: string;
+  canvasWidth: number;
+  canvasHeight: number;
+  layerCount: number;
+  assetCount: number;
+  /**
+   * Document bit depth (8 / 16 / 32). Defaults to 8 when absent.
+   *
+   * LEGACY — READ-ONLY: no longer written. It was fed from the
+   * deleted `Frame.bitDepth`, and a .gpex carries MANY assets whose depths can
+   * differ, so one document-wide number is a fiction. Depth now travels per
+   * asset (`StoredAsset.colorIdentity.bitDepth`) inside the payload ZIP. Kept
+   * optional so manifests written by older builds still parse.
+   */
+  bitDepth?: 8 | 16 | 32;
+  /** Document resolution in dots per inch. Defaults to 72 when absent (backward-compatible). */
+  dpi?: number;
+  editorVersion: string;
+}
+
+/**
+ * Structured data extracted from a .gpex binary file.
+ */
+export interface GpexFileData {
+  /** Thumbnail image (WebP) */
+  thumbnail: Blob;
+  /** Parsed manifest JSON */
+  manifest: GpexManifest;
+  /** ZIP archive containing state.json + assets/ */
+  payload: ArrayBuffer;
+}
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+const MAGIC = [0x47, 0x50, 0x45, 0x58]; // "GPEX"
+const FORMAT_VERSION = 1;
+const HEADER_SIZE = 20;
+
+// ─── Pack ───────────────────────────────────────────────────────────────────
+
+/**
+ * Pack editor data into a .gpex binary file.
+ *
+ * @param thumbnail - WebP image bytes (can be empty Uint8Array if no thumbnail)
+ * @param manifest  - Manifest object (will be JSON-serialized)
+ * @param payload   - ZIP archive bytes (state.json + assets/)
+ * @returns Complete .gpex file as ArrayBuffer
+ */
+export function packGpex(
+  thumbnail: Uint8Array,
+  manifest: GpexManifest,
+  payload: Uint8Array,
+): ArrayBuffer {
+  const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
+
+  const totalSize = HEADER_SIZE + thumbnail.byteLength + manifestBytes.byteLength + payload.byteLength;
+  const buffer = new ArrayBuffer(totalSize);
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+
+  // ─── Header ─────────────────────────────────────────
+  bytes.set(MAGIC, 0);                                     // [0..3]  magic
+  view.setUint16(4, FORMAT_VERSION, true);                 // [4..5]  version
+  view.setUint16(6, HEADER_SIZE, true);                    // [6..7]  headerSize
+  view.setUint32(8, thumbnail.byteLength, true);           // [8..11] thumbnailSize
+  view.setUint32(12, manifestBytes.byteLength, true);      // [12..15] manifestSize
+  view.setUint32(16, payload.byteLength, true);            // [16..19] payloadSize
+
+  // ─── Body ──────────────────────────────────────────
+  let offset = HEADER_SIZE;
+  bytes.set(thumbnail, offset);
+  offset += thumbnail.byteLength;
+
+  bytes.set(manifestBytes, offset);
+  offset += manifestBytes.byteLength;
+
+  bytes.set(payload, offset);
+
+  return buffer;
+}
+
+// ─── Unpack ─────────────────────────────────────────────────────────────────
+
+/**
+ * Unpack a .gpex binary file into structured data.
+ *
+ * @param buffer - Complete .gpex file content
+ * @returns Parsed { thumbnail, manifest, payload }
+ * @throws Error if the file is not a valid .gpex format
+ */
+export function unpackGpex(buffer: ArrayBuffer): GpexFileData {
+  if (buffer.byteLength < HEADER_SIZE) {
+    throw new Error('Not a valid .gpex file: too small');
+  }
+
+  const view = new DataView(buffer);
+  const magicBytes = new Uint8Array(buffer, 0, 4);
+  const magic = String.fromCharCode(...magicBytes);
+
+  if (magic !== 'GPEX') {
+    throw new Error('Not a valid .gpex file: invalid magic bytes');
+  }
+
+  // const version = view.getUint16(4, true);  // reserved for future version handling
+  const headerSize = view.getUint16(6, true);
+  const thumbnailSize = view.getUint32(8, true);
+  const manifestSize = view.getUint32(12, true);
+  const payloadSize = view.getUint32(16, true);
+
+  // Validate sizes
+  const expectedSize = headerSize + thumbnailSize + manifestSize + payloadSize;
+  if (buffer.byteLength < expectedSize) {
+    throw new Error(`Not a valid .gpex file: expected ${expectedSize} bytes, got ${buffer.byteLength}`);
+  }
+
+  // ─── Extract segments ──────────────────────────────
+  let offset = headerSize;
+
+  const thumbnailBytes = buffer.slice(offset, offset + thumbnailSize);
+  offset += thumbnailSize;
+
+  const manifestBytes = buffer.slice(offset, offset + manifestSize);
+  offset += manifestSize;
+
+  const payloadBytes = buffer.slice(offset, offset + payloadSize);
+
+  // ─── Parse ─────────────────────────────────────────
+  const manifestJson = new TextDecoder().decode(manifestBytes);
+  const manifest: GpexManifest = JSON.parse(manifestJson);
+
+  return {
+    thumbnail: new Blob([thumbnailBytes], { type: 'image/webp' }),
+    manifest,
+    payload: payloadBytes,
+  };
+}

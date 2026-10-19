@@ -1,0 +1,106 @@
+---
+title: Plan & usage
+description: Check your plan, its trial or renewal, this month's usage, add-ons, the card on file and the invoices.
+---
+
+**Plan & usage** shows which plan your workspace is on, how close you are to its limits and, on
+[Staqly Cloud](/local-vs-cloud#staqly-cloud), its billing. Check it when something stops working with a "limit reached" error
+(HTTP `402`), or before adding more channels, webhooks or API keys. In Staqly Community Edition there are
+no limits and no billing: the plan is always *Unlocked*.
+
+Open **Settings → Plan & usage**, **Plan & usage** (or **Billing**, for those who manage it) in the user menu, or search for *Plan & usage* in the
+command palette (<Kbd>⌘</Kbd> <Kbd>K</Kbd>). Everyone in the workspace sees the plan and the usage;
+the billing (next payment, add-ons, card and invoices) and its buttons are for owners and admins,
+and paying is for the account owner.
+
+## The plan
+
+The top of the page names the plan (*Starter*, *Plus*, *Pro* or *Business*) and where it stands:
+
+| Status | What it means | Buttons |
+|---|---|---|
+| *Trial · N days left* | Starter's free 7-day trial (card required), once per workspace and one workspace of an account at a time. It counts down to the end of the trial; the card on file is charged then. | **Manage billing**, **Change plan** |
+| *Active* | A subscription is paid. | **Manage billing**, **Change plan** |
+| *Payment failed* | Stripe could not charge the card; the plan runs until the end of the paid period plus a few days. | **Manage billing** |
+| *Ends* a date | The subscription is set to stop and will not renew. | **Manage billing**, **Change plan** |
+| *Read-only* | The trial or paid period ended unpaid. You can still read and export everything. | **Choose a plan** |
+| *No plan yet* | A new workspace before its trial starts. | **Start free trial** |
+
+Under it: the **price** per user (excl. VAT), the **seats** (every member is billed) and, for
+owners and admins, the **next payment** (e.g. *€87 on Nov 10, 2026*, *3 users × €29*).
+
+## Usage
+
+One meter each for this calendar month (UTC): *Posts this month* (resets on the 1st),
+*Channels*, *Webhooks*, *API keys*, *Storage*, *Alerts* and *X posts this month*, each against its
+limit (∞ when unlimited). A meter shows *Almost full* above 80 % and *Limit reached* at the limit;
+a limit raised by an add-on says so (*15 + 10 from Channels pack*). Below the meters:
+
+- **Posts created this period**, counted by their current status. Each count opens the posts list
+  with that filter;
+- **Webhook delivery**: deliveries *Queued* for their first attempt, *Retrying* after a failure,
+  and *Failed* after every retry (redeliver them from **Webhooks**);
+- the largest file you can upload on the plan.
+
+## Add-ons and extra X posts (cloud)
+
+- **Extra X posts**: the posts bought on top of the plan's monthly X posts, how many are left and
+  when they expire. **Buy more X posts** (account owner) opens the bundles (200 for €10, 1,000 for
+  €40, 4,000 for €150, excl. VAT) and Stripe Checkout; they appear when Stripe confirms the payment.
+- **Add-ons** (owners and admins): each with its price per month or year. **Add** charges the rest
+  of the billing period now; **Remove** stops it and credits the unused rest on the next invoice.
+
+## Payments (cloud, owners and admins)
+
+The page reads Stripe each time it opens. Staqly stores no card data.
+
+- **Payment method**: the cards on file (brand, last four digits, expiry), the default one marked.
+  **Update** opens the Stripe billing portal.
+- **Invoices**: every invoice Stripe has for the workspace, newest first, 24 at a time (**Show older
+  invoices** loads more), with a link to Stripe's invoice page (**View**, or **Pay** for an open one)
+  and the PDF. When payments go through Stripe Managed Payments, Link sells the
+  subscription and emails the receipts and invoices; the page says where to find them.
+
+## Change plan
+
+| Where | How |
+|---|---|
+| **Choose a plan**, **Change plan** | Opens the plan picker with a **Monthly / Yearly** switch. Without a subscription, a plan opens Stripe Checkout; with one, it switches the subscription at once (Stripe prorates). After paying you come back to **Plan & usage**; the plan changes as soon as Stripe confirms (a toast says *Payment received* or *Plan changed*). Paying needs the account owner. |
+| **Manage billing** | Opens the Stripe customer portal: change the card, download invoices or cancel. Shown to the account owner once the workspace has a Stripe customer. |
+
+Every plan can download a workspace export in **Settings → Data & privacy**. On Starter it is
+data only, without the media files; backups, the export with the files and the activity log
+export come with Plus and above. See [Data export](/self-hosting/data-export).
+
+See [Plans & limits](/plans) for what each plan includes.
+
+## Through the API
+
+`GET /v1/workspace/usage` (every member) answers the plan and the usage; `trial_ends_at` is when the
+trial ends (`plan_expires_at` adds a few days of payment grace to a Stripe-billed period).
+`GET /v1/billing/details` (scope `admin`) answers the subscription, the cards and the invoices
+(`starting_after` pages them). See the [API reference](/api/reference).
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" http://localhost:3333/v1/workspace/usage
+```
+
+```json
+{
+  "plan": { "id": "unlocked", "name": "Unlocked", "limits": { "posts_per_month": -1, "channels": -1, "alerts": -1, "webhooks": -1, "api_keys": -1, "storage_bytes": -1, "max_upload_bytes": -1, "data_export": true, "x_posts_per_period": -1 } },
+  "period": "2026-10",
+  "plan_expires_at": null,
+  "trial_ends_at": null,
+  "suspended": false,
+  "usage": { "posts_per_month": 42, "channels": 3, "seats": 0, "alerts": 1, "webhooks": 1, "api_keys": 0, "storage_bytes": 1048576, "x_posts_per_period": 0 },
+  "posts_by_status": { "draft": 5, "scheduled": 12, "published": 24, "failed": 1 },
+  "webhook_deliveries": { "queued": 0, "retrying": 1, "failed": 0 }
+}
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Plans & limits" href="/plans">What each plan includes.</Card>
+  <Card title="Community Edition vs Staqly Cloud" href="/local-vs-cloud">Why the Community Edition has no limits.</Card>
+</Cards>

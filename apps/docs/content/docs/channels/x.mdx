@@ -1,0 +1,152 @@
+---
+title: X
+description: Publish to X (x.com) with text, up to 4 pictures or one video, who can reply and communities. What to register in the X developer portal.
+---
+
+Staqly publishes to **X** through the X API v2: it signs in with OAuth 2.0 (with PKCE), uploads
+pictures and videos, and posts with `POST /2/tweets`. A published target links to the post on
+x.com.
+
+## What you need
+
+An **X developer app** with OAuth 2.0 turned on, registered once per server. Its keys go into the
+server's environment (`.env`), the same way locally and in the cloud (see
+[Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app
+
+In the [X developer portal](https://developer.x.com/en/portal/dashboard), open your project's
+app (or create one), then **User authentication settings → Set up**:
+
+| Setting | Value |
+|---|---|
+| App permissions | **Read and write** |
+| Type of App | **Web App, Automated App or Bot** (a confidential client) |
+| Callback URI / Redirect URL | your dashboard's `/channels/callback/x`, for example `http://localhost:8080/channels/callback/x` locally or `https://staqly.example.com/channels/callback/x` |
+| Website URL | any page of yours, for example your staqly cloud domain |
+
+Save, then copy the **OAuth 2.0 Client ID** and **Client Secret** (not the API key and secret,
+which are OAuth 1.0a).
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_X_CLIENT_ID=your-oauth2-client-id
+PROVIDER_X_CLIENT_SECRET=your-oauth2-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_X_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, X shows as **soon** in **Channels → Add channel**. `PROVIDER_X_ENABLED=false`
+hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the account
+
+**Connect with X** opens x.com, where the person picks the account and allows the app. Staqly
+asks for these scopes:
+
+| Scope | Why |
+|---|---|
+| `tweet.read`, `users.read` | Read the account's name, handle and picture |
+| `tweet.write` | Publish posts |
+| `media.write` | Upload pictures and videos |
+| `offline.access` | Keep the connection: renew the two-hour access token without asking again |
+
+The channel shows the account's name, `@handle` and picture. Connecting the same account again
+reconnects the existing channel.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | 280 characters (longer posts need an X Premium account; staqly checks the standard limit) |
+| Media | up to **4 pictures** (PNG, JPEG, WebP, GIF) **or one video** per post |
+| Video | uploaded in 1 MiB chunks; staqly waits until X has processed it before posting |
+
+## Posts to X on a cloud plan
+
+X charges for every post sent through its API, so on a cloud server each plan includes a number of
+posts to X a month, and more can be bought (**Settings → Plan & usage**). Each post and thread reply
+counts once, a post with a live link 14 times (links the channel removes or shows as plain text
+don't count). When they run out, publishing to X answers `402 x_posts_exhausted` and a scheduled
+post's X target fails with the reason. Staqly Community Edition has no such limit. Details:
+[Plans](/plans#how-limits-are-counted).
+
+## Links
+
+The X API charges more for a post with a link, and X shows such posts to fewer people. So links
+never reach X as links. The channel's **Links in posts** setting (the row's menu → **Settings**)
+picks what happens to them:
+
+| Setting | `https://example.com/launch` goes out as |
+|---|---|
+| **Remove links** (default) | nothing: the link is taken out of the text |
+| **Show links as plain text** | `example[.]com/launch`: readable, not clickable, not counted as a link |
+
+Your post keeps its text as written; only what X receives changes, and the 280 characters are
+counted after it. The composer warns in red under the text and in the counter:
+"Links will be removed from: Brand on X", with the links it found. So does
+[`preview_post`](/mcp/tools#preview_post) (`links_found` and a warning per target). Over the
+API, `PATCH /v1/channels/{id}` with `{"settings": {"links": "defang"}}`; the CLI has
+`staqly channels update X --links defang`. Links are found the way X finds them: with or
+without `https://` (`example.com`, `www.example.com/a`); email addresses stay as they are.
+
+## Settings per post
+
+In the composer every picked channel has its own folded **Settings** card under the editor (its
+avatar and name, and a summary of what you changed):
+
+| Setting | What it does |
+|---|---|
+| **Who can reply** (`reply_settings`) | Everyone (default), accounts you follow, only accounts you mention, your subscribers, or verified accounts |
+| **Community** (`community`) | A community link such as `https://x.com/i/communities/1493446837214187523`: the post goes into that X Community instead of your timeline. You must be a member. |
+| **Made with AI** (`made_with_ai`) | X labels the post as containing AI-generated media |
+| **Paid partnership** (`paid_partnership`) | X labels the post as a paid partnership |
+| **Last comment** (`thread_finisher`) | A final comment under the post, after its other comments (for example *Follow for more*); up to 280 characters |
+| **Repost from** (`reposters`) | Your other connected X accounts repost the post right after it goes out; up to 10 |
+
+Over the API the same keys go in the target's `settings` as strings (booleans `"true"` / `"false"`,
+the reposters as comma-separated channel ids):
+
+```json
+{"reply_settings": "following", "made_with_ai": "true",
+ "thread_finisher": "Follow for more", "reposters": "ch_8f2...,ch_9a1..."}
+```
+
+Each repost is a job of its own: an account that fails to repost (signed out, refused) is skipped and
+the post stays published. A reposting account must be another X channel of the same workspace.
+Quote posts are left out: the X API keeps them for enterprise access.
+
+## Threads
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies: each part is a
+reply under the tweet before it, after its delay; the channel's **Last comment** comes last. Replies
+take the conversation's **Who can reply**, community and labels, so they set none of them. A reply X refuses ends the thread there (the parts after it are
+skipped); the post stays up.
+
+## When publishing fails
+
+| X says | Staqly does |
+|---|---|
+| The sign-in is no longer accepted (401, revoked app access) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit (429) or X unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| Duplicate text, a refused link, a suspended or locked account, a video too long for the account | Fails the target with X's reason; retrying would not help, so it does not |
+
+Access tokens last two hours. Staqly renews them half an hour before they run out and again
+right before publishing when needed; a renewal X refuses marks the channel *Needs reconnect*.

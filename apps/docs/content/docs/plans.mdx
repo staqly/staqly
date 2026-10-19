@@ -1,0 +1,148 @@
+---
+title: Plans & limits
+description: Starter, Plus, Pro and Business on Staqly Cloud, priced per user, monthly or yearly (20 % off or more), the 7-day free trial, and what happens when a workspace hits a limit.
+---
+
+Plans set how much each workspace may use on [Staqly Cloud](/local-vs-cloud#staqly-cloud): channels, storage, posts
+to X and so on. Prices are in euros, **exclude VAT** (added at checkout where it applies) and are
+**per user**: every member of the workspace is a seat billed at the plan's price,
+whatever their role. Posts, collections and schedules are unlimited on every plan. If you run
+**Staqly Community Edition** on your own computer or server (`staqly serve` or the Docker image),
+plans don't apply to you: its plan is **Community Edition**, with no limits (usage is still shown
+for information).
+
+## Plan comparison
+
+| | Starter | Plus | Pro | Business |
+|---|---|---|---|---|
+| Per user, billed monthly | €15 / month | €29 / month | €59 / month | €99 / month |
+| Per user, billed yearly | €12 / month (€144 a year) | €23 / month (€276) | €47 / month (€564) | €79 / month (€948) |
+| Posts per month | Unlimited | Unlimited | Unlimited | Unlimited |
+| Collections and schedules | Unlimited | Unlimited | Unlimited | Unlimited |
+| Connected channels | 5 | 15 | 40 | Unlimited |
+| Posts to X per month | 250 | 450 | 950 | 1,600 |
+| People | Per user | Per user | Per user | Per user |
+| Alerts | 3 | 10 | Unlimited | Unlimited |
+| Webhooks | 3 | 10 | Unlimited | Unlimited |
+| Active API keys | 2 | 10 | Unlimited | Unlimited |
+| Storage | 10 GB | 50 GB | 200 GB | 1 TB |
+| Max file size | 25 MB | 100 MB | 250 MB | 1 GB |
+| Workspace data export (ZIP of collections, posts, channels, schedules, events) | Yes, without files | Yes, with files | Yes, with files | Yes, with files |
+| Backups and activity log export | No | Yes | Yes | Yes |
+| Priority support | No | No | No | Yes |
+
+Signed webhooks, MCP, the REST API, the SDKs and the full history are on every plan. Every
+plan can [export its data](/self-hosting/data-export) (**Settings → Data & privacy**): on
+Starter the workspace ZIP is data only (`includes_media: false`), with media files listed by id,
+name and type but not included. The ZIP with the media files, backups (**Settings → Backups**)
+and the activity log export come with Plus and above: on Starter
+`GET /v1/events/export` answers `402 plan_limit_exceeded` (limit `data_export`). The Community Edition
+always has everything.
+
+The compare page on staqly.ai lists the same limits side by side.
+
+## The Starter trial
+
+1. A new workspace has no plan yet: the welcome steps (or the banner on every page) offer
+   **Starter free for 7 days**. The trial is Stripe's: you add a card at checkout, nothing is
+   charged until it ends, and you can cancel anytime before. Only Starter has a trial; Plus, Pro and
+   Business are paid from the first day.
+2. Each workspace gets the trial **once**, and one workspace of an account at a time: a workspace you
+   add while another of yours is still in its trial is charged on the day you choose its plan (the plan
+   picker says so under the button, before Stripe opens). `GET /v1/billing` reports it as `trial`:
+   `available`, `used`, `other_workspace` or `none`.
+3. A workspace you add (**New workspace**) opens on the plan picker; cancelling Stripe's checkout brings
+   you back to it.
+4. Choose a plan any time: **Settings → Plan & usage → Choose a plan**, the user menu, or
+   `POST /v1/billing/checkout` with the plan and interval.
+5. Until a plan starts, and after one ends (a trial cancelled for want of a card, an unpaid renewal,
+   a cancellation), the workspace is **read-only**:
+   - you can still **read and export** everything (dashboard, `GET` requests, read-only MCP
+     tools, the workspace export);
+   - every change (new posts, publishing, channels, schedules and so on) answers
+     **402 `plan_expired`**, and schedules stop running;
+   - your data stays; paying for a plan lifts the suspension when Stripe confirms.
+
+The same applies when a paid period ends unpaid. `GET /v1/workspace/usage` shows
+`plan_expires_at` (end of the trial or paid period, `null` = no end) and `suspended`.
+
+There is no free plan. Workspaces created before the plans above were on a free plan; they are
+now an ended Starter period (read-only) until a plan is paid for.
+
+## How limits are counted
+
+- Limits apply **per workspace**: every API key of a workspace shares its plan.
+- **Seats** are the workspace's members, whatever their role, and each one is billed at the plan's
+  price per user (a team of three on Plus pays 3 × €29 = €87 a month). An invitation adds a seat
+  once it is accepted and the rest of the period is charged at once; removing someone (or someone
+  leaving) takes it away and the unused rest is credited on the next invoice, so a person pays for
+  exactly the days they were a member; during the Starter trial seats are free and the first charge uses the
+  seats at the trial's end. No plan caps the seats. Agents and API keys are not seats and cost
+  nothing.
+- **Posts to X** are counted because X charges for every post sent through its API: each post and
+  thread reply counts once when it goes out (a post with a live link counts 14; X channels remove
+  or defang links by default). The plan's posts reset every month. **Extra posts** come in
+  one-time bundles, **Settings → Plan & usage → Buy more X posts**: 200 for €10, 1,000 for €40 or
+  4,000 for €150, excl. VAT. They are used after the included ones and expire at the end of the
+  billing period. When both run out, publishing to X answers **402 `x_posts_exhausted`** (and a
+  post scheduled for later fails with the reason); other platforms are not counted.
+  `GET /v1/billing/x-posts` shows what's left.
+- Channels, alerts, webhooks, API keys and storage are counted from what currently exists; a
+  disabled channel still counts.
+- **Posts / month** is unlimited on every plan; the count (every post created per calendar month,
+  UTC, by people, agents, duplicates or schedules) is still shown in usage.
+
+## Checking usage
+
+- Dashboard: **Settings → Plan & usage** ([details](/dashboard/plan-and-usage)): the plan, the
+  usage, add-ons, the card and the invoices.
+- API: `GET /v1/plans` lists the plans with `price_month`, `price_year` (per user, in `currency`: `eur`) and their limits
+  (`-1` = unlimited); `GET /v1/workspace/usage` returns the current plan, the period (`2026-10`)
+  and usage (including `seats`), plus `posts_by_status` and `webhook_deliveries`.
+
+## What happens when you hit a limit
+
+A request over a limit fails with **HTTP 402** and machine-readable `details`:
+
+```json
+{
+  "error": {
+    "code": "plan_limit_exceeded",
+    "message": "The Starter plan allows 5 channels; upgrade the workspace plan to continue.",
+    "details": { "limit": "channels", "max": 5, "used": 5, "plan": "starter" }
+  }
+}
+```
+
+`details.limit` is one of `posts_per_month`, `channels`, `alerts`, `webhooks`,
+`api_keys`, `storage_bytes`, `max_upload_bytes` or `data_export`.
+
+## Changing a workspace's plan
+
+A workspace changes plan when its account owner pays with a card: the plan picker (**Settings → Plan & usage → Choose a plan** or **Change plan**, or the user menu)
+has a **Monthly / Yearly** switch and one card per plan. Yearly prices are twelve whole-dollar
+months at 20 % off, rounded down, so the saving is 20 % or a little more.
+
+- Without a subscription, a card opens Stripe Checkout (`POST /v1/billing/checkout` with
+  `{"plan":"plus","interval":"year"}`, account owner). When Stripe confirms the payment, the
+  workspace moves to that plan until the end of the paid period plus 3 days of grace.
+- With a subscription, a card switches it to that plan or interval at once; Stripe charges or
+  credits the difference (proration). The plan changes when Stripe's event arrives.
+- **Manage subscription** opens the Stripe customer portal (`POST /v1/billing/portal`) to change
+  the card, download invoices or cancel. When a subscription is canceled or stays unpaid, the
+  plan ends and the workspace is suspended until it pays again. `GET /v1/billing` shows the
+  subscription status.
+
+Every plan change is recorded as a `workspace.plan_changed` [event](/api/events#other-events)
+with the reason (for example `stripe:active`).
+
+The plan table lives in `apps/api/internal/app/plans.go`, the single source of truth for
+limits and for the pricing shown in the dashboard.
+
+## Next steps
+
+<Cards>
+  <Card title="Plan & usage" href="/dashboard/plan-and-usage">Plan, usage, card and invoices in the dashboard.</Card>
+  <Card title="Community Edition vs Staqly Cloud" href="/local-vs-cloud">When plans apply and when they don't.</Card>
+  <Card title="Limits" href="/limits">Every limit, not only the plan's.</Card>
+</Cards>

@@ -1,0 +1,69 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "nextjs", "typescript", "import", "jsx-a11y", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "rules": {
+    "jsx-a11y/label-has-associated-control": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "react/react-in-jsx-scope": "off",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "import/no-cycle": "error",
+    "import/no-unassigned-import": [
+      "warn",
+      {
+        "allow": ["**/*.css"]
+      }
+    ],
+    "curly": ["error", "all"],
+    "@stylistic/padding-line-between-statements": [
+      "error",
+      {
+        "blankLine": "always",
+        "prev": "*",
+        "next": ["return", "if", "for", "while", "do", "switch", "try", "throw"]
+      },
+      {
+        "blankLine": "always",
+        "prev": ["if", "for", "while", "do", "switch", "try", "block-like"],
+        "next": "*"
+      },
+      {
+        "blankLine": "always",
+        "prev": ["const", "let", "var"],
+        "next": "*"
+      },
+      {
+        "blankLine": "any",
+        "prev": ["const", "let", "var"],
+        "next": ["const", "let", "var"]
+      },
+      {
+        "blankLine": "always",
+        "prev": "directive",
+        "next": "*"
+      },
+      {
+        "blankLine": "always",
+        "prev": "*",
+        "next": ["function", "class", "export"]
+      },
+      {
+        "blankLine": "any",
+        "prev": "export",
+        "next": "export"
+      }
+    ],
+    "nextjs/no-img-element": "off"
+  },
+  "ignorePatterns": [".next/**", "out/**", "node_modules/**", "next-env.d.ts"],
+  "jsPlugins": ["@stylistic/eslint-plugin"]
+}
