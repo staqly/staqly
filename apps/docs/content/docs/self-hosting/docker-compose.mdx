@@ -1,0 +1,126 @@
+---
+title: Develop with Docker Compose
+description: Build and run staqly from a checkout with Docker Compose, the development stack and the test suites.
+---
+
+This page is for working on staqly itself. To just run staqly, use the
+[binary](/self-hosting/binary) or the [Docker image](/self-hosting/docker): neither needs this
+repository. Cloud servers use Compose too, with Caddy in front — see
+[Cloud deployment](/self-hosting/cloud-deployment).
+
+## Start from a checkout
+
+```bash
+git clone https://github.com/staqly/staqly.git && cd staqly
+make dev
+```
+
+You need Docker with Compose v2, `make`, and for the tests Node (`.nvmrc`), pnpm and Go.
+`make dev` builds the image from your checkout, starts the [development stack](#development-stack),
+waits until it is healthy and opens the dashboard in your browser, already signed in.
+
+## Make targets
+
+| Command | Does |
+|---|---|
+| `make dev` | Builds the image from your checkout and starts the [development stack](#development-stack) |
+| `make dev-down` | Stops the development stack (the data volume is kept) |
+| `make up` | Starts `compose.yml` alone with the released image (`STAQLY_VERSION`, default `latest`), building it if the pull fails |
+| `make build` / `make pull` | Builds the image from your checkout / downloads the released one, without starting anything |
+| `make open` / `make connect` | Opens this computer's browser signed in / prints a one-time sign-in link for another browser |
+| `make down`, `make logs`, `make ps` | Stops the stack, follows its logs, shows its status |
+| `make seed` | Loads demo data through the API (`scripts/seed.sh`) |
+| `make backup` / `make restore BACKUP=backups/<timestamp>` | `scripts/backup.sh` / `scripts/restore.sh`: the [Docker backup and restore](/self-hosting/backup-and-restore) steps for the Compose volume |
+| `make mcp-stdio`, `make workspaces`, `make set-plan`, `make recovery-key` | `docker exec staqly ...` shortcuts for the [operator commands](/self-hosting/operator-cli) |
+| `make stripe-secret` | Prints the webhook signing secret of the development stack's Stripe CLI — see [Billing](/self-hosting/billing#test-locally) |
+| `make site` | Runs the landing page (`http://localhost:8070`) and these docs (`http://localhost:8090`) from your checkout, with hot reload. They are static sites and never run in Docker |
+| `make cloud` | Cloud mode in production behind Caddy — see [Cloud deployment](/self-hosting/cloud-deployment) |
+| `make help` | Lists every target |
+
+<Callout type="error" title="Don't use docker compose down -v">
+`-v` **deletes the data volume** — your database and uploads. Plain `docker compose down`
+(or `make down`) is safe.
+</Callout>
+
+## Compose files
+
+| File | Used by | What it adds |
+|---|---|---|
+| `compose.yml` | everything | The `staqly` service (container `staqly`, image `ghcr.io/staqly/staqly:${STAQLY_VERSION:-latest}`, build context `.`) with the same ports, `LOCAL_TRUSTED_PEERS` and hardening as the [`docker run` command](/self-hosting/docker#what-the-flags-do), and the volume `staqly-data` (Compose names it **`staqly_staqly-data`**). On the Compose network it is also reachable as `api` (`http://api:3333`). |
+| `compose.dev.yml` | `make dev` | The [development stack](#development-stack) |
+| `compose.cloud.yml` | `make cloud` | Caddy with automatic HTTPS |
+| `compose.e2e.yml` | `pnpm test:e2e` | An isolated `staqly-e2e` project on other ports |
+
+Settings go in `.env` in the repository root (copy `.env.example`); Compose passes most of them
+to the container. Apply changes with `docker compose up -d`. Memory and process limits are
+`STAQLY_MEM_LIMIT` (default `640m`) and `STAQLY_PIDS_LIMIT` (default `256`).
+
+## Development stack
+
+`make dev` runs `compose.yml` plus `compose.dev.yml`, with the image built from your checkout.
+Compared with `compose.yml` alone it:
+
+- logs at `debug` level in `text` format,
+- lets webhooks, schedule endpoints and alerts reach private addresses (`WEBHOOK_ALLOW_PRIVATE`
+  and `NOTIFY_ALLOW_PRIVATE` default to `true`), so they can reach mailpit,
+  n8n or your own receivers on the Docker network,
+- sets `COOKIE_SECURE=false` and `PUBLIC_DASHBOARD_URL=http://localhost:8080` (or your
+  `DASHBOARD_PORT`) by default,
+- adds **mailpit** (`staqly-mailpit`), which catches every email alert. Open its inbox
+  at `http://localhost:8025` (`MAILPIT_PORT` changes the port). In an email alert use host
+  `mailpit`, port `1025`, TLS `none`,
+- adds an opt-in **Stripe CLI** container (`staqly-stripe`, `COMPOSE_PROFILES=stripe`) that
+  forwards test-mode Stripe events to the API. See [Billing](/self-hosting/billing#test-locally).
+
+Every value above can still be overridden in `.env`. Stop the stack with `make dev-down`.
+`compose.yml` alone (`docker compose up -d --build`) builds the same image without the extras.
+
+## Images and releases
+
+The image is built from the `Dockerfile` in the repository root and published to GitHub
+Container Registry as `ghcr.io/staqly/staqly`, for `linux/amd64` and `linux/arm64`. A maintainer
+publishes a release with `make release VERSION=v0.2.0`: it tags `origin/main` (only if CI on that
+commit passed), and the tag makes CI publish the binaries and the image as `v0.2.0` and `latest`.
+
+To build the image by hand: `docker build -t staqly .`
+
+## Running from source without Docker
+
+For working on staqly itself (to just run it without Docker, use the
+[binary](/self-hosting/binary)):
+
+```bash
+pnpm install                                         # once, in the repository root
+cd apps/api && go run ./cmd/server                   # local mode, data in ./data, listens on 127.0.0.1:3333
+pnpm --filter @staqly/platform dev                  # dashboard (Next.js dev server); API_INTERNAL_URL defaults to http://localhost:3333
+```
+
+The repository is a Turborepo with pnpm workspaces. The dashboard lives in `apps/platform`; the
+landing page (staqly.ai) is `apps/web` and the docs site `apps/docs`. Useful commands from the
+repository root:
+
+| Command | Does |
+|---|---|
+| `make check` (`pnpm check`) | Formatting, lint, types and unit tests of every package |
+| `make test` (`pnpm test`) | Unit and integration tests of every package |
+| `make test-api`, `make test-cli`, `make test-dashboard`, `make test-sdk`, `make test-sdk-python` | Tests of one package (`pnpm turbo run test --filter=@staqly/<name>`) |
+| `make test-e2e` (`pnpm test:e2e`) | End-to-end suite in `e2e/`: builds the image, starts an isolated `staqly-e2e` compose project (`compose.yml` + `compose.e2e.yml`, ports `13333`, `18080` and `19000`) and runs Vitest tests with the TypeScript SDK against it. `E2E_KEEP=1` leaves the stack running, `E2E_BUILD=0` reuses the built image |
+| `make gen` (`pnpm gen`) | Regenerates the sqlc queries, the dashboard API types and the TypeScript SDK schema |
+| `make lint-openapi` | Validates `apps/api/openapi.yaml` |
+| `make dashboard` | Builds the static dashboard into `apps/api/web`, so the Go binaries embed it |
+
+Outside Docker the API trusts loopback only for keyless access (`LOCAL_TRUSTED_PEERS` is
+empty). Add `WEBHOOK_ALLOW_LOOPBACK=true` when webhook receivers listen on localhost.
+
+## n8n
+
+n8n is not part of the stack. Use your own, or the example next to staqly:
+`docker compose -f integrations/n8n/compose.yml up -d` — see [n8n](/integrations/n8n).
+
+## Next steps
+
+<Cards>
+  <Card title="Run with Docker" href="/self-hosting/docker">The pre-built image with docker run.</Card>
+  <Card title="Configuration" href="/self-hosting/configuration">Every setting, for `.env` or `-e`.</Card>
+  <Card title="Cloud deployment" href="/self-hosting/cloud-deployment">Run it as a hosted, multi-workspace service.</Card>
+</Cards>

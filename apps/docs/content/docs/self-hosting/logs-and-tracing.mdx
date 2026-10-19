@@ -1,0 +1,165 @@
+---
+title: Logs & tracing
+description: Read staqly's logs, understand their fields, and follow one request from your proxy to the API.
+---
+
+Staqly writes its logs to stdout — one line per event, with a request ID on every line that
+belongs to a request. Read them when something fails, or ship them to Loki, Datadog or
+Cloudflare Logpush. No agent or OpenTelemetry collector is needed.
+
+## Read the logs
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+`staqly serve` prints its logs in the terminal it runs in, as readable **text** by default.
+Running in the background (`staqly service install`):
+
+```bash
+staqly service logs -f
+```
+
+For JSON lines (to ship them somewhere), start it with `LOG_FORMAT=json staqly serve`.
+
+</Tab>
+<Tab value="Docker">
+
+The `staqly` container writes **one JSON object per line**:
+
+```bash
+docker logs -f staqly
+```
+
+For readable text, recreate the container with `-e LOG_FORMAT=text` (see
+[Run with Docker](/self-hosting/docker#settings)). From a checkout with Compose:
+`docker compose logs -f staqly`.
+
+</Tab>
+</Tabs>
+
+## Log settings
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` (case-insensitive). Anything else refuses to start. |
+| `LOG_FORMAT` | `json`; `text` with the binary | `json` (one object per line), or `text` for reading in a terminal. |
+
+`mcp-stdio` (Docker) logs text to **stderr** (stdout is its protocol channel), at `warn` unless
+`LOG_LEVEL` / `LOG_FORMAT` say otherwise.
+
+**Never logged:** query strings, request and response headers and bodies, API keys, session
+tokens, OAuth codes and channel credentials.
+
+## Fields
+
+Every line:
+
+| Field | Example | Description |
+|---|---|---|
+| `time`, `level`, `msg` | `INFO`, `http_request` | Standard fields |
+| `service` | `staqly-api` | `staqly-mcp-stdio` for the STDIO server |
+| `version` | `v0.2.0` | Build version of the image or binary (`dev` for local builds) |
+| `mode` | `local` / `cloud` | |
+
+Lines logged while handling a request add:
+
+| Field | Description |
+|---|---|
+| `request_id` | Same as the `X-Request-Id` header and `request_id` in error bodies |
+| `trace_id`, `span_id` | From a valid W3C `traceparent` request header (invalid ones are ignored). `trace_id` is also returned in error bodies |
+| `cf_ray` | The `CF-Ray` header, when it looks like a ray ID |
+| `method`, `path` | The path only, never the query string |
+| `workspace_id`, `principal` | After authentication. `principal` is `api_key:key_r7y65khtqa23kj4btvur`, `session`, `local` or `system:<id>` (for example `system:expiry`) — never a secret |
+
+The **access line** (`msg` = `http_request`, one per request) also has `status`,
+`duration_ms`, `bytes` (response body size), `ip` (the client IP as used for rate limiting —
+see `TRUST_PROXY`), `user_agent` (first 200 characters) and `route` (the route pattern, e.g.
+`/v1/posts/{id}`). Its level follows the status: `error` for 5xx, `warn` for 429, `info`
+otherwise. `/health`, `/livez` and `/readyz` are not logged at `info`.
+
+An unexpected error (HTTP 500) also logs `msg` = `internal error` with `err` and the request
+fields above.
+
+Background workers add `worker` (`webhooks`, `jobs`, `notifications`,
+`telegram-poller`, `exports`, `retention`, `expiry`, `processing-timeout`, `obs-heartbeat`) and, where known, `workspace_id` plus the
+entity: `delivery_id` / `webhook_id`, `job_id`, `post_id`, `channel_id`, `schedule_id`, `export_id`.
+
+```json
+{"time":"2026-10-13T12:00:00.123Z","level":"INFO","msg":"http_request","service":"staqly-api","version":"v0.2.0","mode":"cloud","request_id":"api-1/abc-000042","trace_id":"4bf92f3577b34da6a3ce929d0e0e4736","span_id":"00f067aa0ba902b7","cf_ray":"8f2c1a2b3c4d5e6f-AMS","method":"POST","path":"/v1/collections/col_qjuybkx6355nz4no6pqk/items","workspace_id":"ws_4uvnnzgy5vvpo4hnqnco","principal":"api_key:key_r7y65khtqa23kj4btvur","status":201,"duration_ms":12,"bytes":845,"ip":"203.0.113.9","user_agent":"n8n/1.80","route":"/v1/collections/{id}/items"}
+```
+
+## Following one request
+
+Every response carries `X-Request-Id` (yours if you sent one), and error bodies repeat it —
+plus `trace_id` when the request had a `traceparent` header:
+
+```json
+{
+  "error": { "code": "internal", "message": "internal server error" },
+  "request_id": "api-1/abc-000042",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+}
+```
+
+Search the logs for either value to find everything about that request:
+
+```bash tab="Binary"
+staqly service logs | grep 'api-1/abc-000042'    # when it runs in the background
+```
+
+```bash tab="Docker"
+docker logs staqly 2>&1 | grep 'api-1/abc-000042'
+```
+
+```text
+# Loki / Grafana
+{service="staqly-api"} | json | trace_id="4bf92f3577b34da6a3ce929d0e0e4736"
+{service="staqly-api"} | json | level="ERROR" | workspace_id="ws_4uvnnzgy5vvpo4hnqnco"
+```
+
+To tie staqly into your own traces, send a W3C `traceparent` header from your client, Worker
+or proxy; the API logs its `trace_id` and `span_id` on every line of that request.
+
+## Cloudflare
+
+Behind Cloudflare (proxy or Containers), keep `LOG_FORMAT=json` and ship stdout:
+
+- With Cloudflare Containers / Workers Logs, the container's stdout is collected as is.
+- With Logpush, push the HTTP request logs and the container logs to the same destination
+  (R2, S3, Datadog or Loki).
+- Correlate an edge request with the API line by **`cf_ray`** — Cloudflare adds the `CF-Ray`
+  header to every proxied request — and, if your Worker or client sends a `traceparent`, by
+  `trace_id`.
+- Set `TRUST_PROXY=true` so `ip` is the client address (Cloudflare appends it to
+  `X-Forwarded-For`) rather than the edge's.
+
+## Sentry
+
+Set `SENTRY_DSN` to get an alert for every error instead of reading logs. Off by default; with
+no DSN, nothing is sent anywhere.
+
+```bash
+SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0
+SENTRY_ENVIRONMENT=production   # default
+```
+
+Pass them like any other [setting](/self-hosting/configuration#how-to-change-a-setting):
+`-e` with Docker, the environment of `staqly serve` with the binary.
+
+Every log line at level `ERROR` becomes a Sentry event: internal server errors (5xx), panics
+(with the stack trace), and failures in background workers (webhooks, jobs, alerts). Errors you cause as a client (4xx) are not reported.
+
+- The event has the log message and its fields; `request_id`, `trace_id`, `route` and
+  `workspace_id` become tags, so you can jump from Sentry to the matching log lines.
+- Request bodies, headers, cookies and query strings are never sent, and log lines never
+  contain API keys or secrets.
+- The release is `staqly@<version>`.
+
+Any Sentry-compatible service works as well, for example GlitchTip or a self-hosted Sentry.
+
+## Next steps
+
+<Cards>
+  <Card title="Monitoring" href="/self-hosting/monitoring">Health probes, metrics and rate limits.</Card>
+  <Card title="Troubleshooting" href="/self-hosting/troubleshooting">Common errors and fixes.</Card>
+</Cards>

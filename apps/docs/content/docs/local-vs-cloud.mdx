@@ -1,0 +1,192 @@
+---
+title: Local vs cloud
+description: Choose between local mode (keyless, on your own computer) and cloud mode (hosted, with workspaces, API keys and plans).
+---
+
+Staqly is one app that runs in one of two modes. **Local mode** (the default) is for you on
+your own computer: no accounts, no keys. **Cloud mode** is for hosting staqly for several
+people or teams, each with their own workspace, API keys and plan.
+
+If you are just getting started, you want local mode, and you don't need to change anything.
+
+## Choosing a mode
+
+Set the mode with the `STAQLY_MODE` environment variable before starting staqly.
+
+| Setting | Local mode (default) | Cloud mode |
+|---|---|---|
+| `STAQLY_MODE` | `local` | `cloud` |
+| Workspaces | One, created automatically | Many: anyone can create one ("no card, no email"), or only holders of `SETUP_TOKEN` |
+| Plan | **Unlocked** (no limits) | Starts with a 7-day **Pro** trial, then Pro (paid by card through Stripe, or set by the operator) or **Free** |
+| Agents, n8n, scripts | No credentials (this machine only) | API key `stk_...`; the key decides which workspace you work in |
+| Dashboard | No sign-in on this computer (`staqly serve`); exposed to the network (`--expose`, Docker), each browser signs in once with a one-time link | Sign in with the admin API key; session cookie + CSRF token; recovery key if the admin key is lost |
+| Phones and tablets | **Connect a device** QR (with `--expose` or Docker; the QR uses your Wi-Fi address, which Docker users type once in the dialog) | **Connect a device** QR |
+| MCP | `http://localhost:3333/mcp`, or `docker exec -i staqly mcp-stdio` (Docker only) | `https://<host>/mcp` + `Authorization: Bearer {API_KEY}` |
+| OAuth platforms | You register a developer app per platform once (**Channels → Add channel**) | The operator's apps (`PROVIDER_<ID>_CLIENT_ID` / `_SECRET`), or your own per workspace |
+| Backups | Commands in **Settings → Backups**, run on this computer | ZIP backups to download in **Settings → Backups** on Pro |
+
+`STAQLY_MODE` is trimmed and case-insensitive; any value other than `local` or `cloud` refuses
+to start, so a typo never silently picks a mode.
+
+## Local mode
+
+Start staqly with `staqly serve` (or the [Docker image](/self-hosting/docker)) and you are ready: no sign-up, no
+API key, no password. Every local process, agents included, has full API access.
+
+| Service | Reachable from | Credentials |
+|---|---|---|
+| **API** `:3333` (REST + MCP) | this computer only, bound to `127.0.0.1` | none |
+| **Dashboard** `:8080`, `staqly serve` | this computer only, bound to `127.0.0.1` | none |
+| **Dashboard** `:8080`, `staqly serve --expose` or Docker | your network, so phones and tablets can use it | every browser signs in **once** with a one-time link; sessions last 30 days |
+
+<Callout type="warn" title="No API keys on a local install">
+Don't give local agents a cloud API key (`STAQLY_API_KEY`, an `Authorization` header): a local
+install doesn't know it and answers `401 unauthorized`. Connect local agents without
+credentials. **Integrations** in the dashboard of a local install shows only this computer.
+</Callout>
+
+### Signing in to an exposed dashboard
+
+Once the dashboard is reachable from your network, staqly cannot tell "this computer" from
+"someone on the Wi-Fi", so every browser signs in once. With Docker this includes your own
+browser: Docker Desktop hides the real client address, and a `Host` header can be forged.
+
+- `staqly serve connect-link` (binary) or `docker exec staqly server connect-link` (Docker)
+  prints a one-time link.
+- Phones scan a QR code from **Connect a device**. See [Phones & tablets](/dashboard/phones-and-tablets).
+
+### Why local mode is safe without keys
+
+- The API binds to **`127.0.0.1`**, so nothing outside this computer can reach it directly.
+  Run outside Docker (`staqly serve`), the server itself listens on `127.0.0.1:3333`; with
+  Docker, `docker run -p 127.0.0.1:3333:3333` (and compose) publishes the port on `127.0.0.1` only.
+- Credential-less requests must come from a **loopback peer** or one inside
+  **`LOCAL_TRUSTED_PEERS`**. The [`docker run` command](/self-hosting/docker) and compose set it to the private ranges
+  (`10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7`) because Docker forwards published ports
+  from its bridge network; outside Docker it is empty, so only loopback counts.
+- The **`Host`** header must be a local name: `localhost`, `127.0.0.1`, `::1`, `api`,
+  `host.docker.internal`, `*.localhost` or anything in
+  `LOCAL_ALLOWED_HOSTS`. This defeats DNS rebinding.
+- Any **`Origin`** header must be the dashboard's own (`localhost`, `127.0.0.1` or `[::1]` on
+  `DASHBOARD_PORT`, or the origin of `PUBLIC_DASHBOARD_URL`) or listed in `LOCAL_ALLOWED_ORIGINS`, so a
+  website you visit, even a page on another localhost port, cannot drive your staqly with
+  cross-site requests.
+- When the dashboard is exposed to the network (`staqly serve --expose`, or Docker, where
+  the image defaults to `DASHBOARD_EXPOSED=true`), requests arriving through the **dashboard proxy**
+  are never trusted as local: every browser needs a session from a one-time link.
+
+A request that fails these checks gets `403 not_local`.
+
+<Callout title="Need per-agent permissions locally?">
+Local mode gives every local client full access. To limit what an agent can do, run in
+cloud mode on localhost and give the agent a scoped API key.
+</Callout>
+
+## Cloud mode
+
+`STAQLY_MODE=cloud` turns the same app into a hosted, multi-tenant service:
+
+- **Signup** creates a workspace on a 7-day **Pro trial**, plus an **admin API key** (named
+  "Admin key", scope `admin`), a recovery key and a browser session. Both keys are shown once.
+  Signup is public and rate-limited to 5 workspaces per hour per client IP, unless
+  `SETUP_TOKEN` is set.
+- **API keys** (`stk_...`) are scoped; only their SHA-256 hashes are stored. Manage them under
+  **API keys** in the sidebar. Give agents their own scoped key without `admin`. See
+  [Authentication & scopes](/api/authentication).
+- The **dashboard** signs in with the admin API key (**Sign in with your API key** at `/login`),
+  then uses an HttpOnly session cookie and a CSRF token. Agent keys without `admin` can never
+  open the dashboard.
+- The **recovery key** is the way back in when the admin key is lost (**Lost your key?** on the
+  sign-in screen). It works once: it signs this browser in, creates a new admin key and a new
+  recovery key, and signs out every other session. On Free (one API key) the old admin keys
+  are revoked; on Pro they keep working.
+- **Plans** limit each workspace; over a limit the API answers
+  [`402 plan_limit_exceeded`](/api/errors#402-plan_limit_exceeded). See
+  [Plans & limits](/plans).
+- **Billing** is optional: with the `STRIPE_*` variables set, workspace admins upgrade to Pro by
+  card and manage the subscription in the Stripe portal. Without them the operator sets plans
+  with `set-plan`. See [Billing with Stripe](/self-hosting/billing).
+
+### Connecting clients to a cloud workspace
+
+Clients use the instance URL plus that workspace's API key:
+
+```bash tab="curl"
+curl https://staqly.example.com/v1/posts?status=scheduled \
+  -H "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+```bash tab="Claude Code"
+claude mcp add --transport http staqly https://staqly.example.com/mcp \
+  --header "Authorization: Bearer $STAQLY_API_KEY"
+```
+
+```bash tab="Codex"
+codex mcp add staqly --url https://staqly.example.com/mcp --bearer-token-env-var STAQLY_API_KEY
+```
+
+```ts tab="TypeScript SDK"
+import { Staqly } from '@staqly/sdk';
+
+const cloud = new Staqly({ baseUrl: 'https://staqly.example.com', apiKey: process.env.STAQLY_API_KEY });
+```
+
+Several workspaces means several keys: each key only sees its own workspace.
+
+## Defaults that depend on the mode
+
+| Variable | Local default | Cloud default | Description |
+|---|---|---|---|
+| `ADDR` | `127.0.0.1:3333` | `:3333` | The Docker image sets `:3333`; publish the port on `127.0.0.1` only |
+| `COOKIE_SECURE` | `false` | `true` | Set `false` in cloud mode only for plain-HTTP testing |
+| `WEBHOOK_ALLOW_PRIVATE` | `true` | `false` | Tenants must not reach the operator's network |
+| `LOCAL_TRUSTED_PEERS` | empty (loopback only); the documented `docker run` and compose set the private ranges | — | Peers that get keyless access |
+| `LOCAL_ALLOWED_ORIGINS` | empty | — | Extra browser origins accepted besides the dashboard |
+
+`WATCHER_ALLOW_PRIVATE` and `NOTIFY_ALLOW_PRIVATE` default to `false` in **both** modes.
+All variables: [Configuration](/self-hosting/configuration).
+
+## Moving local data to the cloud
+
+A cloud server runs from a checkout with `make cloud`
+([Cloud deployment](/self-hosting/cloud-deployment)), so the restore there uses the repository's
+script. See [Backup & restore](/self-hosting/backup-and-restore) for details.
+
+<Steps>
+<Step>
+
+### Back up locally
+
+Take a database backup and an uploads archive as described in
+[Backup & restore](/self-hosting/backup-and-restore#back-up) (binary or Docker).
+
+</Step>
+<Step>
+
+### Restore on the server
+
+Copy both files into the checkout on the server as `backups/from-local/workspace.db` and
+`backups/from-local/uploads.tar.gz`, start the stack in cloud mode, then run
+`make restore BACKUP=backups/from-local`.
+
+</Step>
+<Step>
+
+### Sign in
+
+Get a recovery key for the restored workspace: `docker exec staqly server workspaces`, then
+`docker exec staqly server recovery-key {WORKSPACE_ID}`. At `/login`, choose **Lost your key?**
+and enter it: staqly signs you in and shows a new admin API key and a new recovery key once.
+Save both.
+
+</Step>
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Cloud deployment" href="/self-hosting/cloud-deployment">Run a cloud-mode instance on a server.</Card>
+  <Card title="Authentication & scopes" href="/api/authentication">API keys, scopes and browser sessions.</Card>
+  <Card title="Plans & limits" href="/plans">What each cloud plan allows.</Card>
+  <Card title="Security model" href="/self-hosting/security">How staqly protects your data in both modes.</Card>
+</Cards>

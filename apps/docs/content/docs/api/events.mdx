@@ -1,0 +1,220 @@
+---
+title: Event types
+description: Look up every event staqly records, so you can read the activity log or subscribe a webhook or an alert to the right ones.
+---
+
+Every change in staqly (a post created, scheduled, published or failed, a channel connected, a
+schedule run) is recorded as an **event**. The same events feed the activity log, a post's
+history, [webhooks](/automation/webhooks) and [alerts](/automation/alerts). Use this page to
+pick the event types your automation should react to.
+
+## Read and subscribe to events
+
+<Steps>
+<Step>
+
+### See what happened
+
+List recent events, newest first (scope `events:read` in cloud mode):
+
+```bash
+curl -s "http://localhost:3333/v1/events?type=post.published"
+```
+
+Narrow the list with filters, for example one schedule's runs, or everything one API key did
+in the last week:
+
+```bash
+curl -s "http://localhost:3333/v1/events?schedule_id=sch_5k2nq8rx7bvm3dz4hcye"
+curl -s "http://localhost:3333/v1/events?actor_type=api_key&actor_id=key_r7zq2m4xk3pw6ta5ned2&from=2026-10-13&to=2026-10-20"
+```
+
+All filters are listed in [Pagination & search](/api/pagination-and-search#listing-events). To
+download the whole log as NDJSON or CSV, use `GET /v1/events/export` with the same filters
+(see [Data export](/self-hosting/data-export)).
+
+</Step>
+<Step>
+
+### Subscribe a webhook
+
+To be told about events as they happen, create a webhook with the event patterns you want
+(scope `webhooks:manage` in cloud mode):
+
+```bash
+curl -s -X POST http://localhost:3333/v1/webhooks -H 'Content-Type: application/json' \
+  -d '{"url":"https://example.com/hooks/staqly","events":["post.published","post.failed"]}'
+```
+
+Setup, signatures and retries are covered in [Webhooks](/automation/webhooks). Deliveries are
+at-least-once and can arrive out of order, and their body has no `seq`: order them by
+`created_at` ([Delivery guarantees](/automation/webhooks#delivery-guarantees)), or read this API
+when you need every event in exact `seq` order.
+
+</Step>
+</Steps>
+
+## Event shape
+
+Events are immutable. Each one has these fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Event ID, e.g. `evt_looiyqe5kfkjh4xedcnd` |
+| `seq` | integer | Monotonically increasing sequence number; the events cursor is based on it |
+| `type` | string | Event type, e.g. `post.published` (tables below) |
+| `collection_id` | string or `null` | The collection the event belongs to, if any |
+| `post_id` | string or `null` | The post the event is about, if any |
+| `channel_id` | string or `null` | The channel, for channel events and per-target post events |
+| `schedule_id` | string or `null` | The schedule, for schedule events |
+| `actor` | object | Who caused it: `type`, `id` and `name` (see [Actors](#actors)) |
+| `data` | object | Type-specific details (tables below) |
+| `created_at` | string | ISO-8601 UTC timestamp |
+
+```json
+{
+  "id": "evt_looiyqe5kfkjh4xedcnd",
+  "seq": 1042,
+  "type": "post.target_published",
+  "collection_id": "col_qjuybkx6355nz4no6pqk",
+  "post_id": "post_oalirbz67y4m4cqxq5dw",
+  "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a",
+  "schedule_id": null,
+  "actor": { "type": "system", "id": "publisher", "name": "Publisher" },
+  "data": {
+    "post": { "id": "post_oalirbz67y4m4cqxq5dw", "status": "publishing", "content": "v1.4 is out.", "targets": [ { "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a", "status": "published", "external_url": "https://t.me/my_channel/42" } ] },
+    "collection": { "id": "col_qjuybkx6355nz4no6pqk", "name": "Product updates" },
+    "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a",
+    "url": "https://t.me/my_channel/42",
+    "external_id": "42",
+    "error": ""
+  },
+  "created_at": "2026-10-20T07:00:04Z"
+}
+```
+
+Post events carry a snapshot: `data.post` (the post after the change, with its targets; before
+the deletion for `post.deleted`) and `data.collection` (`id`, `name`). Events about other
+objects carry them in `data` (`data.channel`, `data.schedule`, `data.webhook`).
+
+## Post events
+
+| Type | When | Extra `data` |
+|---|---|---|
+| `post.created` | A post was created (by anyone, including a schedule that fetched it) | — |
+| `post.updated` | Content, media, targets, tags, metadata or collection changed via `PATCH` | — |
+| `post.scheduled` | A publish time was set or moved (`POST .../schedule`, `PATCH` with `publish_at`, created as `scheduled`) | `publish_at`, `previous_publish_at` when moved |
+| `post.unscheduled` | The time was cleared: cancel, or `PATCH` with `publish_at: null` | — |
+| `post.publish_requested` | A target on [your own automation](/channels/your-own-automation) waits for a result | `channel`, `target` (`channel_id`, `content`, `settings`, `thread`), `timeout_seconds` |
+| `post.target_published` | One target was published | `channel_id`, `url`, `external_id` |
+| `post.target_failed` | One target failed: the platform refused, your automation reported a failure, or nothing was reported within the timeout (`error` *No result reported in time*) | `channel_id`, `error` |
+| `post.reply_published` | One [thread](/concepts#threads-comments-under-a-post) part was published as a reply on a channel | `channel_id`, `index`, `url`, `external_id` |
+| `post.reply_failed` | A reply was refused or ran out of retries; the parts after it are skipped | `channel_id`, `index`, `error` |
+| `post.published` | Every target is published | — |
+| `post.failed` | A target failed, so the post did | — |
+| `post.deleted` | A post was deleted (its history is kept) | — |
+| `post.purged` | A post and its history were [purged](/self-hosting/data-export#purge-a-post) | IDs and counts only |
+
+Per-target events also set `channel_id`, so `GET /v1/events?channel_id=...` is one channel's
+publishing history.
+
+## Channel and schedule events
+
+| Type | When | `data` |
+|---|---|---|
+| `channel.connected` | A channel was connected or reconnected | `channel` |
+| `channel.updated` | Renamed, settings changed, disabled or enabled | `channel` |
+| `channel.needs_reconnect` | A publish, a test or a token refresh failed with the stored credentials | `channel`, `error` |
+| `channel.disconnected` | A channel was removed | `channel` |
+| `schedule.created`, `schedule.updated`, `schedule.deleted` | A [schedule](/automation/schedules) was created, changed or deleted | `schedule` |
+| `schedule.ran` | A run finished | `schedule`, `result` (what it did, in words), `published_post_ids` |
+| `schedule.posts_requested` | A run found nothing to publish and the schedule asks an agent | `schedule`, `collection` |
+| `schedule.failed` | A run failed (the endpoint answered badly, a post was refused) | `schedule`, `error` |
+
+## Other events
+
+| Type | When | `data` |
+|---|---|---|
+| `collection.created`, `collection.updated`, `collection.deleted` | A collection was created, changed or deleted | `collection` |
+| `collection.archived` | A collection was archived (an update that set `archived`) | `collection` |
+| `webhook.created`, `webhook.updated` | A webhook was created or changed (the secret is never included) | `webhook`; `secret_rotated` on update |
+| `webhook.deleted` | A webhook was deleted | `webhook_id` |
+| `webhook.test` | *Send test* on a webhook (delivered to that webhook only) | Test payload |
+| `alert.created`, `alert.updated` | An [alert](/automation/alerts) was created or changed (secrets masked) | `alert` |
+| `alert.deleted` | An alert was deleted | `alert_id`, `type` |
+| `workspace.created` | The workspace was set up | `workspace` |
+| `workspace.updated` | The workspace was renamed | `name` |
+| `workspace.plan_changed` | The [plan](/plans) changed: Stripe subscription, operator `set-plan`, or switching back to Free | `from`, `to`, `expires_at`, `reason` (`stripe:<status>`, `operator`, `operator_comp`, `self_service`) |
+| `workspace.export_requested` | A [workspace export](/self-hosting/data-export) was requested | `export_id` |
+| `workspace.exported` | A workspace export finished | `export_id`, `size_bytes` |
+| `retention.events_pruned` | The [retention](/self-hosting/data-export#retention) worker deleted old events | `count`, `older_than_days`, `before` |
+| `api_key.created` | An API key was created (cloud), including the admin key a recovery issues | `api_key` (no secret) |
+| `api_key.rotated` | An API key was rotated | `old_key_id`, `new_key_id`, `name` |
+| `api_key.revoked` | An API key was revoked | `api_key_id` |
+| `session.signed_in` | A browser signed in to the dashboard with an admin API key (cloud; the actor is that key) | `user_agent`, `session_id`, `api_key_id` |
+| `session.recovered` | Someone signed in with the recovery key; a new admin key was created and every other session signed out | `user_agent`, `sessions_revoked`, `api_key_id` (the new admin key) |
+| `session.revoked` | A browser session signed out or was revoked | `session_id`, `reason` (`logout` or `revoked`) |
+| `recovery_key.rotated` | The recovery key was rotated (other sessions were signed out) | `sessions_revoked`; `via: "cli"` when rotated with `server recovery-key`, `via: "recovery"` when a recovery used it up |
+| `device_link.created` | A *Connect a device* link was created | `expires_at` |
+| `device.connected` | A *Connect a device* link was redeemed | `user_agent` |
+
+`webhook.*` events are recorded in the activity log but are **not delivered to webhooks**
+(except `webhook.test`, which goes only to the webhook being tested), so changing a webhook
+can't loop back to its receiver.
+
+### Audit events
+
+The credential events above (`api_key.*`, `session.*`, `recovery_key.*`, `device.*`,
+`device_link.*`) are **audit events**: `GET /v1/events` and `GET /v1/events/export` list them only
+for admins: dashboard sessions, local mode and keys with the `admin` scope. Other keys don't see
+them.
+
+Webhooks and alerts get audit events only when a pattern names their family
+(`"session.*"`, `"api_key.revoked"`), never through `"*"` or another glob, and only an admin may
+subscribe that way (`403` otherwise).
+
+## Matching events in webhooks
+
+Webhooks and alerts match `events` patterns against the type: exact names, `"*"`, or globs
+such as `"post.*"` and `"post.*_requested"`. Optionally restrict to `collection_ids`. See
+[Webhooks](/automation/webhooks).
+
+Patterns are checked when you save a webhook or alert (1 to 50 of them): an exact name must be
+one of the types on this page (custom events such as `post.shipped` are rejected), and a glob
+must stay inside a known family (`post.`, `channel.`, `schedule.`, `collection.`, `webhook.`,
+`alert.`...). A typo such as `post.publised` or `posts.*` is rejected with `422` instead of
+silently never matching.
+
+## Actors
+
+The `actor` field says who caused the event. Filter by it with `actor_type` and `actor_id`.
+
+| `actor.type` | Who | `actor.id` | `actor.name` |
+|---|---|---|---|
+| `local` | Anyone on this machine in local mode (agents, scripts, the CLI) | `local` | `Local` |
+| `session` | A signed-in browser | The session ID (`ses_d3k2m7q4xw5tz6pa6hbn`) | `Dashboard` |
+| `api_key` | An API key | The key ID (`key_r7zq2m4xk3pw6ta5ned2`) | The key's name |
+| `system` | staqly itself, acting on its own or for someone outside staqly | See below | See below |
+
+System actors:
+
+| `actor.id` | `actor.name` | What it does |
+|---|---|---|
+| `scheduler` | `Scheduler` | A schedule ran, picked posts or asked for them; a scheduled post's time arrived |
+| `publisher` | `Publisher` | A job published a target, or timed one out |
+| `channels` | `Channels` | A token refresh marked a channel as needing a reconnect |
+| `retention` | `Retention` | The retention worker pruned data |
+| `setup`, `local` | `Setup`, `Local setup` | The workspace was created (cloud signup, first local start) |
+| `recovery` | `Recovery key` | Sign-in with the recovery key (and the new admin key and recovery key it issues) |
+| `device-link` | `Connect a device` | A device link was redeemed |
+| `cli` | `Server CLI` | `server recovery-key` on the server |
+| `operator` | `Operator` | `server set-plan` on the server |
+| `stripe` | `Stripe` | A Stripe subscription change |
+
+## Next steps
+
+<Cards>
+  <Card title="Webhooks" href="/automation/webhooks">Deliver events to your own endpoint.</Card>
+  <Card title="Alerts" href="/automation/alerts">Turn events into messages.</Card>
+  <Card title="Activity" href="/dashboard/activity">Browse the activity log in the dashboard.</Card>
+</Cards>

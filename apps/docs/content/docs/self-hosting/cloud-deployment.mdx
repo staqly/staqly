@@ -1,0 +1,134 @@
+---
+title: Cloud deployment
+description: Run staqly on a server as a hosted service with many workspaces, API keys and sign-in, behind a TLS reverse proxy.
+---
+
+By default staqly is a single-user, local tool. Cloud mode turns the same software into a hosted
+service: anyone (or only people with a setup token) can create a workspace, agents use scoped
+API keys, and browsers sign in. Use it when a team shares one staqly, or when agents run on
+other machines. See [Local vs cloud](/local-vs-cloud) for the differences.
+
+Cloud deployments use Docker Compose from a checkout of the repository with the pre-built image
+`ghcr.io/staqly/staqly` (API, MCP and dashboard in one container) behind
+[Caddy](https://caddyserver.com) for HTTPS. Nothing is built on the server.
+
+<Callout title="Why not the binary?">
+`staqly serve` is made for one computer: the API always listens on `127.0.0.1`. Docker Compose
+gives you health checks, restarts, resource limits and the same image you deploy by tag.
+</Callout>
+
+## Deploy
+
+<Steps>
+<Step>
+
+### Get the repository
+
+On the server:
+
+```bash
+git clone https://github.com/staqly/staqly.git && cd staqly
+```
+
+</Step>
+<Step>
+
+### Configure
+
+Point your domain's DNS at the server and open ports 80 and 443. Then:
+
+```bash title=".env"
+STAQLY_DOMAIN=staqly.example.com   # Caddy gets a certificate for it
+POSTGRES_PASSWORD=...              # the bundled PostgreSQL's password (openssl rand -hex 24)
+# SETUP_TOKEN=change-me            # set to make signup private
+# STAQLY_VERSION=v0.1.0            # pin an image tag (default latest)
+# STRIPE_SECRET_KEY=sk_live_...  STRIPE_WEBHOOK_SECRET=whsec_...  STRIPE_PRICE_PRO=price_...   # card payments, see Billing
+# STAQLY_SECRET_KEY=...                                        # seals channel credentials (openssl rand -base64 32); keep it with the backups
+# PROVIDER_MASTODON_CLIENT_ID=... PROVIDER_MASTODON_CLIENT_SECRET=...   # the operator's OAuth app per platform
+```
+
+Cloud mode runs on **PostgreSQL 16 or newer**. `compose.cloud.yml` adds a `postgres` service
+(volume `postgres-data`) and points `DATABASE_URL` at it; with a managed database, set
+`DATABASE_URL` yourself and remove the service. Without a working `DATABASE_URL` the server does
+not start: there is no fallback to SQLite. Several server processes can share the database.
+
+Moving from a cloud server that ran on SQLite (or from a local install): start the new stack
+against an empty database, then `docker exec staqly server import-sqlite /data/workspace.db`
+copies everything in one transaction and checks the row counts; it refuses a database that
+already has data. See [Operator CLI](/self-hosting/operator-cli).
+
+`compose.cloud.yml` sets the rest: `STAQLY_MODE=cloud`, `DATABASE_URL`, `PUBLIC_API_URL` and
+`PUBLIC_DASHBOARD_URL` (`https://` + your domain), `TRUST_PROXY=true` and `COOKIE_SECURE=true`.
+Cloud mode also keeps webhooks off private addresses (`WEBHOOK_ALLOW_PRIVATE=false`). Watchers
+and alerts are public-internet-only in both modes. See
+[Local vs cloud](/local-vs-cloud#defaults-that-depend-on-the-mode) and
+[Configuration](/self-hosting/configuration).
+
+OAuth platforms need a developer app. Set `PROVIDER_<ID>_CLIENT_ID` and
+`PROVIDER_<ID>_CLIENT_SECRET` once per platform for every workspace, or let workspaces register
+their own under **Channels** ([Developer apps](/channels/developer-apps)). The redirect URL to
+register with each platform is `https://<STAQLY_DOMAIN>/channels/callback/<provider>`.
+
+</Step>
+<Step>
+
+### Start
+
+```bash
+make cloud     # = docker compose -f compose.yml -f compose.cloud.yml up -d --wait (after a pull)
+```
+
+This pulls `ghcr.io/staqly/staqly` (tag `STAQLY_VERSION`) and `caddy`, and starts both. Caddy
+(`deploy/Caddyfile`) gets the certificate, routes `/v1`, `/mcp`, `/openapi.yaml`, the probes (`/health`,
+`/livez`, `/readyz`) and `/metrics` (only with `METRICS_TOKEN`) to the API and everything else to the dashboard. Only Caddy publishes ports; staqly's stay inside
+the Docker network.
+
+</Step>
+<Step>
+
+### Create a workspace
+
+Open `https://staqly.example.com`. Signup creates a workspace on a **7-day Pro trial**, an
+**admin API key**, a recovery key and a browser session. Save both keys; they are shown once.
+Other browsers sign in at `/login` with the admin key (**Sign in with your API key**); if it is
+lost, **Lost your key?** takes the recovery key, which works once and issues a new admin key and
+recovery key (on Free, which allows one key, the old admin key is revoked). For agents, create scoped keys without `admin` under **API keys**. When the trial
+ends unpaid, the workspace becomes read-only until it pays or switches to Free.
+
+</Step>
+</Steps>
+
+## Network and firewall
+
+- With `compose.cloud.yml` only Caddy publishes ports (80, 443); the API and dashboard ports
+  are reachable from the Docker network only.
+- Using your own reverse proxy instead of Caddy: run `compose.yml` alone (API on
+  `127.0.0.1:3333`, dashboard on `:8080`; firewall `8080` so only the proxy reaches it) and route
+  `/v1/*`, `/mcp`, `/openapi.yaml`, `/health` and `/readyz` to `:3333`, everything else to `:8080`
+  (the dashboard relays its own `/api/*` calls to the API).
+
+## Signup, plans and rate limits
+
+- Signup is rate-limited to **5 workspaces per hour per client IP**. Without `TRUST_PROXY=true`
+  every user appears to come from the proxy's IP.
+- Set `SETUP_TOKEN` to allow only people with the token to create workspaces.
+- Workspaces pay for Pro by card when you configure Stripe: see
+  [Billing with Stripe](/self-hosting/billing). Without Stripe, or to comp a workspace, the
+  operator assigns plans with `docker exec staqly server set-plan` (`--until` for a fixed end date). See
+  [Plans & limits](/plans) and the [operator CLI](/self-hosting/operator-cli).
+- Stripe calls `POST /v1/billing/webhook`, so route `/v1/*` to the API (the Caddyfile above
+  does).
+
+## Logs
+
+Logs are JSON lines on stdout; behind Cloudflare, correlate them with edge logs by `cf_ray`.
+See [Logs & tracing](/self-hosting/logs-and-tracing#cloudflare).
+
+## Next steps
+
+<Cards>
+  <Card title="Moving local data to the cloud" href="/local-vs-cloud#moving-local-data-to-the-cloud">Bring an existing local install along.</Card>
+  <Card title="Monitoring" href="/self-hosting/monitoring">Health probes, metrics and rate limits.</Card>
+  <Card title="Security model" href="/self-hosting/security">What cloud mode protects and how.</Card>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Schedule backups on the server.</Card>
+</Cards>

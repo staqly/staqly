@@ -1,0 +1,68 @@
+# Real n8n suite (e2e/n8n/run.mjs): the dev stack built from this checkout
+# (compose.yml + compose.dev.yml, what `make dev` starts) and a real n8n from
+# integrations/n8n/compose.yml on its network; workflows are imported over
+# n8n's API and every side effect is checked over the staqly REST API.
+# No secrets. Locally: `make dev`, then `pnpm --filter @staqly/e2e test:n8n`.
+name: n8n
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 2 * * *" # nightly, catches new n8n behaviour without a push
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: Scenarios separated by spaces (empty = all), e.g. "demo signature"
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: n8n-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  n8n:
+    name: staqly + real n8n
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Results directory
+        # results.json lands in $TMPDIR/staqly-n8n-e2e/<run>/
+        run: echo "TMPDIR=$RUNNER_TEMP" >>"$GITHUB_ENV"
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      # the image compose.yml names (ghcr.io/staqly/staqly:latest), built from this
+      # checkout with the layer cache, so compose does not build it again
+      - name: staqly image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: ghcr.io/staqly/staqly:latest
+          cache-from: type=gha,scope=staqly
+          cache-to: type=gha,mode=max,scope=staqly
+      - name: Dev stack (make dev without the browser)
+        run: docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/e2e" }
+      - name: n8n suite
+        env: { SCENARIOS: "${{ inputs.scenarios }}" }
+        run: |
+          # shellcheck disable=SC2086 # word splitting on purpose: one argument per scenario name
+          pnpm --filter @staqly/e2e test:n8n $SCENARIOS
+      - name: staqly logs
+        if: failure()
+        run: docker compose -f compose.yml -f compose.dev.yml logs --no-color staqly | tail -n 300
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: n8n-results
+          path: ${{ runner.temp }}/staqly-n8n-e2e/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Stop the dev stack
+        if: always()
+        run: docker compose -f compose.yml -f compose.dev.yml down -v

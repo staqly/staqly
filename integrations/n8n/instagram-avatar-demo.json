@@ -1,0 +1,539 @@
+{
+  "name": "staqly – publish through n8n demo",
+  "nodes": [
+    {
+      "id": "5fb7e5c1-76fb-55c71-adbae-f26ba3abba1d",
+      "name": "Generate sample content",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7d7e0dcb-99e3-54eeb-aa2ff-a0b668b8d3c8",
+      "name": "Generate via webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "staqly-demo-generate",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "b1cb1ed0-b76a-5969c-a7711-792513602687"
+    },
+    {
+      "id": "71571527-c426-55bc5-ab050-c8827c96db9f",
+      "name": "Check demo token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Only callers that know the demo token may trigger generation over HTTP:\n//   curl -X POST http://localhost:5678/webhook/staqly-demo-generate -H 'X-Demo-Token: <token>'\n// Paste the token printed by integrations/n8n/setup-demo.sh below. While it is\n// empty the HTTP trigger is disabled (the manual trigger always works).\n// Needs NODE_FUNCTION_ALLOW_BUILTIN=crypto (the example compose sets it).\nconst DEMO_TOKEN = '';\nif (!DEMO_TOKEN) {\n  throw new Error('Demo token not configured: paste the X-Demo-Token printed by setup-demo.sh into DEMO_TOKEN in the \"Check demo token\" node');\n}\nconst crypto = require('crypto');\nconst digest = (s) => crypto.createHash('sha256').update(String(s)).digest();\nfor (const item of $input.all()) {\n  const given = (item.json.headers || {})['x-demo-token'] || '';\n  if (!crypto.timingSafeEqual(digest(given), digest(DEMO_TOKEN))) {\n    throw new Error('Invalid or missing X-Demo-Token header');\n  }\n}\nreturn $input.all();"
+      }
+    },
+    {
+      "id": "8851142d-a56f-5d885-ace66-8a165b33fee7",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "03414b6b-5a9d-5e7f8-a3ca3-51e36fb1e662",
+              "name": "apiBaseUrl",
+              "value": "http://api:3333",
+              "type": "string"
+            },
+            {
+              "id": "f47c1df9-4575-5c37a-a8b69-5bc23356b2d6",
+              "name": "collection",
+              "value": "Instagram Avatar",
+              "type": "string"
+            },
+            {
+              "id": "82259790-08d3-57ffc-a4de2-3a0f578d2403",
+              "name": "channel",
+              "value": "n8n publisher",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "aee4defe-5d7c-5b7e4-ad428-43e2aa20a303",
+      "name": "Ensure collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.apiBaseUrl }}/v1/collections",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.collection, description: \"AI avatar posts published through n8n (demo)\" }) }}"
+      }
+    },
+    {
+      "id": "6ae93a65-18c3-52fe3-a9075-978bd6237103",
+      "name": "Ensure channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').item.json.apiBaseUrl }}/v1/channels",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ provider: 'custom', name: $('Config').item.json.channel }) }}"
+      }
+    },
+    {
+      "id": "72b82650-436b-50b86-a547b-0fe5ba61e9b6",
+      "name": "Find channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').item.json.apiBaseUrl }}/v1/channels",
+        "options": {}
+      }
+    },
+    {
+      "id": "18b62d60-c8d1-5d5fc-a5e19-1966f40d7209",
+      "name": "Generation request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Picks the demo channel's id out of the channel list and carries the config along.\nconst cfg = $('Config').item.json;\nconst list = ($input.first().json.data || []);\nconst channel = list.find((c) => c.name === cfg.channel && c.provider === 'custom');\nif (!channel) throw new Error('Channel \"' + cfg.channel + '\" not found: run integrations/n8n/setup-demo.sh or create it in Channels');\nreturn [{ json: { apiBaseUrl: cfg.apiBaseUrl, collection: cfg.collection, channelId: channel.id } }];"
+      }
+    },
+    {
+      "id": "bbf2ae58-f0af-59f66-a7384-8dadbd78e4c0",
+      "name": "Mock AI Generator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Mock AI generator: stands in for prompt generation + image generation. It\n// produces a caption and a small PNG, with no external accounts. Replace this\n// node with real generation steps.\nconst IMAGES = [\"iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAAKa0lEQVR42u3d57ojRxWFYV0Jv7kIXwvB8ZxxJIMB4zhO4+wZB8wYg20cwEQTTbyxTatLLddWST5H3aoOe33Ps+5A7/dLUu2VfeXW3X3V72t+X/e71e82v9vz3WZ3+N3pd5ffmd+53xW/u7e7fb17it3rd5/f/X4P+H3D75vN7vh83/L7tt93/L7r9z2/7/v94E63B4v90O9Hfj/2e8jvJ9vdtd7Dfo/4Per3mN/jfk/4XU072+xJv6f8ni72jN+zftf8njt3e97vBb8X11uhH/2y+osA0I9+Jf0+APSjX0x/FgD60a+n315KAaAf/ZL62wDQj35V/UUA6Ee/kn4fAPrRL6Y/CwD96NfTby+nANCPfkn9bQDoR7+q/iIA9KNfSb8PAP3oF9OfBYB+9Ovpt1dSAOhHv6T+NgD0o19VfxEA+tGvpN8HgH70i+nPAkA/+vX026tXVuhHv6z+NgD0o19VfxEA+tGvpN8HgH70i+nPAkA/+vX02/UUAPrRL6m/DQD96FfVXwSAfvQr6fcBoB/9YvqzANCPfj39diMFgH70S+pvA0A/+lX17wSAfvRr6c8DQD/65fRvA0A/+hX122vrANCPflH9bQDoR7+q/iIA9KNfSb8PAP3oF9OfBYB+9Ovp7wJAP/ol9dvrTQDoR7+q/iIA9KNfSb8PAP3oF9OfBYB+9Ovp7wJAP/ol9dsbTQDoR7+q/iIA9KNfSb8PAP3oF9OfBYB+9Ovp7wJAP/ol9dubTQDoR7+q/iIA9KNfSb8PAP3oF9Nvb969Qj/6ZfV3AaAf/ZL67adNAOhHv6r+IgD0o19Jvw8A/egX058FgP5q+r/8pVuGDP319HcBoP/U+geiPxgD+k+q395qAkD/6fRXcr+vBPSfQH8RAPr76h+NvssA/cP0+wDQf7z+SdzvKQH9vfRnAaD/SP0zob+bAfqP0d8FgP5j9M+QvssA/ZfWbz9rAkB/IP2uAfRfpD8PAP0X6F8EfZcB+i/Svw0A/dH0uwbQf0B/CgD9MfVvGkD/Yf1dAOg/oH/R9PdkgH6v3242AaA/uv5NA+gv9O8LAP0R9e82gP6bewNAf1z9nzeA/pt7A0B/dP2bBtC/JwD0a+h3Dcjrt7dTAOhX0r9pAP1vpwDQr6d/twFV/UUAfNslGICwfh8A+gUb0NafBYB+GtDTbz9PAaCfBiT1twHw+34CUNVfBIB+GlDS7wNAPw2I6c8C4F/tBKCn395JAaCf7TSgob8NgPd82E4AMvrtnXtW6GeuASX9PgCZlwxRftkAouvPAuAdT7YTgIB++0UKAP1spwEN/W0AvGDOdgKQ0V8EgH6200Bo/T4AgdstyD4ugOj6swC4XMR2AhDQb79MAaCflQ0I6G8DkLnZiOmeAcTVXwQQ+mIppvsEEFq/D4B7vWwngOj6swDQz8oGouu3d1MA0fUTwNAAgupvAxDQb48QwIAA4upPAcTXTwD9Awit3wcQVz8B9Awguv4sgND6CeAEAUTUb++lAKLrJ4ChAQTV3wYgoN8eJYABAcTVXwQQVD8B9A8gtH4fQFz9BNAzgOj6swBC6yeA0wQQTr+9nwKIrp8AThBARP1tAAL67TECGBZAUP1FAEH1E8CgAOLq9wHE1U8A/QMIrT8LILR+AugZQHT9XQDR9RPACQKIqN9+1QQgoN8eJ4BhAQTVXwQQVD8BDAogrn4fQFz9BNA/gND6swBC6yeAngFE198FEF3/ek/QAPp39dsH965E9BPAoACC6i8CiKufAPoHEFe/DyC0fgLoGUBo/VkA0fWvd5UG0O/0dwFo6CeA4wIQ0G8fNgHI6LerZ8i+bAAa+osAQutPAzf6t/p9AAL67UkCuHwA8fVnAWjoT4M4+n0ASvoJ4BIBqOi3j5oAxPQTwEUBCOkvAhDQb0+tB3T0FwHI6CeALwpASX8WgJJ+GkC/D0BPvz1NAEUAevrt4yYASf1poBfXXwSgpJ8G0O8D0NNPAHsCUNKfBSCp355ZD/2y+rsAhPWLNyCu337dBCCvf71nz9AvqH9fAJL61QNQ1V8EoKpfsAH0FwFo61/v2hn6pfRnAaD/2mbo19Fvv0kBoP+aG/pF9LcBoN/rt+fOm6FfQX8RAPpb/SEbQH+p3weA/kz/es+foz+2/iwA9Bf6t+Pbrqj67ZMUAPoP61/vhXP0h9TfBoD+i/SnoT+e/iIA9B/Qv9mL58ujj/7D+n0A6L9Ifxr6w+i3T+5bof8o/Zu9NMcMNP/VPkS//TYFgP4j9W/Hez6L1t8GgP6++td7eTPe8Vyi/iIA9PfSv9kr56PTR/8g/T4A9A/Tn4/LRYvQnwWA/tPpt1ev5ONe72z12+9SAOivpt+u+93we63Y637or6m/DQD96FfVXwSAfvQr6fcBoB/9YvqzANCPfj399vsUAPrRL6m/DQD96FfVnweAfvTL6d8GgH70K+pPAaAf/aL67Q8pAPSjX1J/GwD60a+qvwgA/ehX0u8DQD/6xfRnAaAf/Xr67Y8pAPSjX1J/GwD60a+qvwgA/ehX0u8DQD/6xfRnAaAf/Xr67U8pAPSjX1J/GwD60a+qvwgA/ehX0u8DQD/6xfRnAaAf/Xr6uwDQj35J/fZpEwD60a+qvwgA/ehX0m+f3r9CP/pl9WcBoP9E+sc4DoD+E+nvAkB/X/1zOZGE/l767c9NAOg/Rv8yzqSi/3L6iwDQv0//Qs/Eb2JA/2H9PgD0Z/QXjf5gDOj3+rMA0B/X/Z4S0O8CkNcv4n5PCdr67S9NAML6Zd3vKUFSfxGAjH7Ef1EGMvp9ABr6UX5xBjL6swCi64d1nxKi6+8CCK0fx6fJIKJ++2sTQFz92D1lBhH1bwNAP7t0A4H0pwCi6Udq3QwC6c8CCKEfnaNmsHz9XQDL14/IaTJYuH77WxMA+tnABharvwhgafrxN5cMlqnfB4B+NrCBpenPAkA/G97A0vR3ASxKP85mn8Fi9NvfmwDQz07ewEL0FwGgn522gXnr9wGgn522gdnrzwJAP6vawCz1dwGgn1VtYK767R9NAOhntRuYq/59AaCf1WtgZvqLANDP6jUwP/0+APSz0RqYh/4sAPSz0RqYjX77LAWAfjZmA7PRb589sEI/m6yBqfUXAaCfjdbADPT7ANDPJmxgCv1ZAPy+n00YwET67Z8pAPSzCRuYTn8bAPrZtA1Mp78IgDcd2AQBTKbfB4B+NmEDU+jPAkA/m7aBKfTbv1IAvGTI5hPAiPrbANDP5tPAuPqLAHjDmU0YwOj6fQDoZ/NpYBT9WQBcr2DzCWAs/fbvFAD62XwaGFF/GwBX69hsA6isvwgA/Ww+DdTX7wPgXi+bTwCj6M8CGOtWO58uuziAsfTbf1IA6GezbaCm/jaAsfTbdQJgRwZQWX8RQE39BMCOC6C+fh8A+tmsGqivPwugsn4CYP0DqKbf/psCqK+fAFjPAGrqbwMYRT8BsD4BVNZfBIB+NqsGKuv3AVTTbzcIgA0LoI7+LICa+gmADQqgmn77Xwqgsn4CYP0DqKm/DaC+fgJgPQOorL8IoI5+AmB9A6irv9n/AS1B9dqBh17JAAAAAElFTkSuQmCC\", \"iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAALmUlEQVR42u3dVZcbVxqFYRlitmOIITF02+3E7CGHmTPMzDwTZmY2BIaZmZmZGbJqfkOucz1X0aGqUqu71SqpQGe/a+1/0M971aXztS458L+LDyR+J4adlFzkdnLYKWYXup0adprZBe2dHnaG3/ntnRl2lt95Z4edk+3cc8POCzs/OcftgtwuTM52uyjsYr+zLsntuX5nPi/s+WEvSM5I98KwFyWnu7047CVmp7X30txeZnZqey8Pe4XfKa/M7VV+J7867DVhr01OSve6sNebndjeG8Le6HegvTeFvdnvOW8Je2u2Z78t7O1h70ie5fbO3N6VPNPt3WHvMXtGe+8Nu9Rvf3uXhV3ut++KsCtzuyrZ63Z12DVme9q7NrfrzHa3d33YDX67bsztJr+dN4fdEnZrsiPdbWG3Jye43RF2p9nxbneF3W22vb17wu71a6Ef/bL6t9+XBoB+9Ovpn/ABoB/9kvptAOhHv6r+XADoR7+e/on7XQDoR7+kfhsA+tGvqt8EgH70y+qfeMAFgH70S+rfZgJAP/pV9ecCQD/69fRve9AFgH70S+q3AaAf/ar6fQDoR7+m/m0PJS30o19WfwgA/eiX1L/VBIB+9KvqzwWAfvTr6d/6sAsA/eiX1G8DQD/6VfX7ANCPfk39Ww8mLfSjX1a/DQD96FfVP54FgH706+kfP+QCQD/6JfXbANCPflX9WQDoR7+g/vHDNgD0o19TvwkA/eiX1W8DQD/6VfWPZQGgH/16+seOuADQj35J/TYA9KNfVX8WAPrRL6h/7BEbAPrRr6nfBIB+9MvqzwWAfvTr6d/yqAsA/eiX1G8DQD/6VfV3BIB+9Kvp3/JYCAD96BfU7wNAP/o19ZsA0I9+Wf25ANCPfj39mx93AaAf/ZL6bQDoR7+q/lwA6Ee/nv7N73MBoB/9kvptAOhHv6p+EwD60S+rf/P7XQDoR7+k/k0mAPSjX1V/ZwDoR7+Y/k0fSANAP/r19IcA0I9+Sf02APSjX1W/CQD96JfVv+mDLgD0o19S/0YTAPpL1v//p54cZOgvT38uAPQPVf+A6Kcb+oerf+OHXADoH5L+ktx3D/1D0W8DQP8w9FdGvyMD9A+mPwsA/cX01+K+e+gvpn/jh20A6C+gvyH0J2eA/n70mwDQ36/+BtLvyAD9s9bfGQD6R1+/G/pnqf+4j6QBoL+X/pGg35EB+nvpDwGgPzr9vgH0z6jfBoD+SPW7oX8G/VkA6J9S/0jT78gA/VPpP+6jNgD0x63fN4D+Lv0mAPQr6HdD/yT9uQDQH7t+3wD6c/qP/ZgLAP0a+n0D6A/6bQDoV9Lvhn6nPxcA+mX0+wbQ397HXQDoF9OfNaCt3waAftkA5PWbANCvqd9NXP+xn0gDQL9sA8L6N/gA0C/egKp+GwDf9xOAqv5cAOgXb0BS/4ZPugDQz556UlC/DYBftbM0ADH9JgD0s6wBMf0bPuUC4D0flgagpH+9CQD9LDcp/bkAlF4yRHmPAGT0r/+0C4B3PFkagJJ+GwD6WXcDGvp9ALxgzjoCkNG//jNJC/2seyL6bQBKt1uQ3UcAAvrXdQTA5SKWBqChf91n0wDQz7obiF1/CEDjZiOm+wtAQL8NQOZiKab7DSB6/T4A7vWy7inoX/e5pIV+Nm0Dseu3AQjoJ4DiAUStf20WQNT69xNAsQBi17/28y6A2PXvv4wAigcQsX4bgIB+AigcQNz6swDi1k8AxRa9/rVfsAFEr3//5QRQKIDY9ZsAFPQTwEABxKu/M4B49RNA8QCi1n/MF9MAota/7woCKBRA7PpDALHrJ4BBAohYvw1AQD8BFA4gbv1ZAHHr33clARRZ9PqP+ZINIHr9BDBQAPHqNwEo6CeA4gFErT8XQNT6CaBgALHrX/NlF0Ds+vddRQADBRCrfhuAgP69BDBAABHrzwUQtX4CKBxA3PrXfMUFELv+vVcTQJFFr98GIKCfAAYKIF79JgAF/WbX0AD6J+tf89U0gNj1E0CRAGLXv9oHIKB/DwH0G4CAfhuAhv491xJAoQCi1p8LIHb9brBGf17/6q+5ADT0E0B/AQjotwHI6N9zHQHMOgAN/T4AEf3t7aYB9Of0r/560pLSv/t6Aug9Hf02ACX9bhBHv9O/KgtARv/uGwigVwAy+ld9wwWgpJ8AegSgpN8GIKa/vV030gD6OwOQ0k8AvQPQ0L/qmzYANf00gH6n3wSgqX/XTQQwTQBK+m0AkvrdQC+uf2UWgJ7+nTebQV9Z/8pvuQBU9RNAFoCkfhuAsP6dt5ihX1Z/FoCsfrNbE/Rr6l/5bRuAuP4ddugX1G8CQL9uAPL6cwFo699xmxn61fQf/R0XAPrdbk/QL6XfBoD+oP8EO/Tr6O8IAP1md5ihX0T/0d8NAaA/1W92Z4J+Bf0+APRP0t/e8dE1gP5u/SYA9E+p3+yuBP1x688FgP4u/X53J/y3K1b9K77nAkD/9Prb2z6yDaB/Zv02APT30r/9HjP0x6c/FwD6Z9Rvdq8Z3/fHpH/F910A6J+dfrP7EvRHo98GgP5+9E+E8av2CPSbANBfQP/E/X685zPS+lf8wAWA/kL6Jx5Itrk9WE8Jau94Dl3/chMA+gfW7/dQdRlIvWBenv7OANA/mP72tro9XFYJOpeLqtG//IdpAOgfnn6/g2bjBweNQeReby36QwDoL03/+KGww35j7R0Je8Rvy6Nhj2Xz9NFfmn4bAPrRr6rfBIB+9MvqX/4jFwD60S+pf5kJAP3oV9WfCwD96NfTv+zHLgD0o19Svw0A/ehX1e8DQD/6NfUv+0nSQj/6ZfXbANCPflX9S7MA0I9+Pf1Lf+oCQD/6JfXbANCPflX9WQDoR7+g/qU/swGgH/2a+k0A6Ee/rH4bAPrRr6p/SRYA+tGvp3/Jz10A6Ee/pH4bAPrRr6o/CwD96BfUv+QXNgD0o19TvwkA/eiX1Z8LAP3o19O/+JcuAPSjX1K/DQD96FfV3xkA+tEvpn/xr9IA0I9+Pf0hAPQPT38FxwHQPyz9NgD0D6C/ISeS0F9MvwkA/X3pH4kzqeifpf7Fv3YBoH9G/SN6Jt7HgP7p9S8yAaB/Kv0jjX66oX+S/lwA6Lf6o3TfPfQ7/Yt+4wKQ1y/ifooStPXbAIT1y7rvnqZ+H4CgfsRPnYGY/kW/TVpq+lHeczr6bQAa+mFdpITY9S/sCCBS/TgeNIN49S/8XRpAjPqxO8RFqT8EgH42mwai028DiE4/UktdTPp9ANHoR2d1GUShf+Hvk1Yc+hFZTwYjrt8GgH42wEZa/4IsgNHUj7+mZDCa+hf8wQWAfjaMBkZOvw0A/WxIGzn9WQAjpB9nTc9gdPQv+KMNAP1syA2MiH4TAPpZGRsJ/Z0BoJ8Nt4HG6z/qT2kA6GclNdBg/SEA9LPS1mT9NgD0s7IbaKr+LAD0s9IbaJ7+o/5sA0A/q6KB5uk3AaCfVbam6c8FgH5WWQON0T//Ly4A9LMqG2iMfhsA+lnla4j+XADoZxU30AD98//qAkA/q6WBuvXbAPi+n9UaQI36TQDoZzWuXv3z/5YGgH5WYwM16Z/nA+BNB1ZjAPXptwGgnzWkgcr15wJAP6u3gTr0z/u7C4CXDFndq0W/DQD9rCENVK7fBMAbzqxZAVSof94/XADoZw1poFr9c00AXK9gTQqgSv25ANDPmrEq9c/9pwuAq3WsgQGUr98GgH7WwAYq0e8D4F4va1YAVemf+6+kVfGtdv66bDYBVKM/BIB+1rBVo3+OCaAq/eOHCID1GUDJ+nMBlK+fAFh/AZSvf86/XQDoZw1soHz9NoBK9BMAKxBA2fp9ABXoHz9MAKy/VaB/zn+SVjX6CYAVD6A0/TYA9LMmN1Cq/iyAMvUTACsYQNn6/+sCKFn/GAGwAQIoUb8JoHz9Y0cIgBUMoFz9WQBl6icAVmyl63/CBVCyfgJgAwVQnv4nkqcBKZN1ZXW2+NoAAAAASUVORK5CYII=\", \"iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAAKwklEQVR42u3d55ocxRmG4TkFnONIYrUrIQmhrKMzxpgVxtj+j3POOYkggghCQg444GywAQecjsFTNV3TVdW92pmeTvO9z3e9Z6D7+aXZrsltD33stoc+muzjlX3C7U3xPlnZp4q9ebFPz/aRZJ8p95b5PlvZ55K9dbbPV/aF2R6M97YvVvalyr784NuzfaWyr8724XfE+1plXy/3zvm+Udk3k71rtm/N9kCyb6f7zgPvzvbdyr7n9p5435/vQ+V+UOy9i/2wsh+Vm87348ouz3f/fAdme7iyR/IdfLSyxyq74nboyqVyj1f2RLHbF3uysqfKbc13db7dck8nOzzbM8km6Ee/rP7Dz2YBoB/9SvrTANCPfjH9UQDoR7+e/hAA+tEvqd8HgH70q+qvCwD96JfRf/i5LAD0o19J/3YSAPrRL6Y/CgD96NfTHwJAP/ol9fsA0I9+Vf1FAOhHv6b+7Wu7E/SjX1Z/GgD60S+mPwoA/ejX0x8CQD/6JfVvX7tvgn70y+qvCwD96JfRv/18FgD60a+kPw0A/egX079TBoB+9OvpDwGgH/2S+n0A6Ee/qv4yAPSjX1D/znUfAPrRr6nfBYB+9MvqjwJAP/r19IcA0I9+Sf0+APSjX1X/PAD0o19U/86NLAD0o19JfxoA+tEvpj8KAP3o19N/pAgA/eiX1O8DQD/6VfUnAaAf/Wr6j7wQAkA/+gX1FwGgH/2a+l0A6Ee/rP4QAPrRL6nfB4B+9KvqrwsA/eiX0X/kZhYA+tGvpD8NAP3oF9MfBYB+9OvpDwGgH/2S+o/e/OAE/eiX1Z8HgH70S+k/+pMoAPSjX01/GQD60S+ovwgA/ejX1O8CQD/6ZfX7ANCPflX9dQGgH/0y+o/+NAsA/ehX0p8GgH70i+mPAkA/+vX0hwDQ36n+9Q793en3AaC/C/3dHPrb1T8PAP3t6e/r0N+K/jt+lgaA/ub6hzj0r6k/CQD9DfRPx3Hob6a/DAD9q+qfju/Qv6r+IgD0r6R/Ou5D//L6XQDot6S/aAD9y+mvCwD9e+ifbtqhf1/9d/w8CwD9VvQXDaD/lvrTANBvS39NA+hP9UcBoL9O/9TKob9WfwgA/ab1Fw2gv6LfB4B+Af2LBtC/XwDoN6p/fuhP9mIWAPpN6y8aQH/QfywJAP0C+kMD6Hf6owDQL6O/bEBefwgA/WL6iwbk9R978d4J+glAVr8LAP2a+hcNKOs/9ossAPTrnbL+NAD004CY/igAft9PAHr6QwDopwFJ/T4A9HPVBjT01wXAX7UTgIz+Y7/MAkA/DSjpTwPgez4EIKb/eBkA+jl/UvpDAGJfMkT5UgEI6PcB8B1PrhqAhv55AOjn0gZk9B//1b0TvmDO7R2Acf1pAOjnkgbs648CEHm7hVs2AAn9IQBeLuKqAQjo9wGgn6ttQEB/XQCG32zkVjkF/cd/nQVg+8VSrlkAdvWnAfBeL1cNwLT+KAD0c9UGrOs/UQRgXj8BtBKAOf0+AAX9BLB+ABb1JwFY1n+ZANYLwKj+Ey+FAIzrJ4B1ArCrvwjAvv7L96O5YQCm9bsAJPQTQLMArOsPAZjXTwBrBGBY/4mXPjBR0H+AAJoGYFt/XQAW9R94mACanHn9J36TBWBUPwGsFYBd/WkAdvUTQPMATOuPAjCtnwAaBmBdfwjAun4CaCcAc/rvdAEI6CeAFgKwqD8PwKr+A48QwHoBGNV/52+jAAzrJ4C1ArCrvwzAtn4CaB6Aaf1FAOb1E0DDAKzrdwEo6CeANQOwqt8HIKCfANYJwLD+eQD29R981A3Q6M/3uywAu/oJoEEA5vWnAZjWTwCrnoL+KADr+gmgSQDW9YcABPS7PUYD6E/0+wBk9BPACgFo6D+ZB2BaPwE0D8Co/pO/jwOwrp8G0J/pjwLQ0E8AKwdgWn8IQEb/wStuEEd/FICY/kNXLqF8qQAE9LsA1PQTwFIBaOg/+YcsAAH9NID+hf40ABn9hx4ngL0DUNIfBaCkfz64oz8EoKefAGoC0NPvA5DUTwPo97tnIqv/0BNu0FfWf/KPWQBi+gmgNgAd/XclAejpv90P/bL6owBU9bs9eQn9mvpDANr650O/oH4fAPoJQFV/EQD6BRtAv9uf7pmgv9hTbuiX0p8GIK9fpAH0L/RHAaDfb8sP/SL6QwDoj/RvXXVDv4J+HwD6K/q3ru7Ohn7z+hcBoD/Xb6wB9Nfqv+vPLgD01+vferoY/9tlVX8aAPrr9G90A+i/tf5TZQDo31v/4dme2UW/Pf0hAPTvp38xft9vSb8PAP1L63d7dhf9ZvSXAaB/Sf2LjZG+5F+1r6P/1Ms+APSvqr/Yc7sjoo/+1fW7ANDfWP92tCHdo7+p/igA9K+h3+2a2zD00d9UfwgA/W3oD7tvtq7cy7xc1I9+HwD629a//bzbTtia6EXe6x1Ef10A6G9Vv9v1ym4UO7LYC5XdLIf+jvSfeiULAP3oV9KfBoB+9IvpjwJAP/r19IcA0I9+Sf2nXQDoR7+q/tOvvH+CfvTL6j/9lxAA+tEvqL8IAP3o19TvAkA/+mX1hwDQj35J/T4A9KNfVX9dAOhHv4z+03/NAkA/+pX0pwGgH/1i+qMA0I9+Pf0hAPSjX1K/DwD96FfVfyYEgH70K+o/86oLAP3oF9VfBoB+9AvqLwJAP/o19bsA0I9+Wf0+APSjX1V/XQDoR7+M/jOvZQGgH/1K+tMA0I9+Mf1RAOhHv57+EAD60S+p3weA/lb19/A4APrb0l8TAPpX0j+SJ5LQ30z/2dfTANC/r/6NeCYV/UvqTwJA/176p5t86L+F/jIA9Gf6pxYP/Zn+IgD0LzbVOPSXAaBfx31NCdr6z75+90RZ/5QLp6n/7N+yAGT0I/5WGcjoTwPQ0I/y/TOQ0R8FYF0/rBucef0hANP6cbxuBnb1+wDs6sdumxlY1F8XAPq5/Rswov/s37MATOhHascZ2NF/Lglg8/Wjs7ezoT8KYMP1I3KwDDZZfwgA/VzjBjZZvw9gk/Xjb1wZbJr+IgD0cy00sIH6z/3j7gn6ubZu4/SnAWyIfpxtQAYboj8KAP1ciw1siP4QAPq57hoYsX4fAPq57hoYt/66ANDPtdjAuPWf+2cWAPq5DhoYrf40APRz3dxo9Z8vA0A/12kDo9QfAkA/12cDo9HvA0A/12cDY9JfBoB+rqcGxqT//Bs+APRz/TcwBv0uAPRz/d9I9EcBoJ/ruYER6A8BoJ8btoGB9PsA+H0/N2wAw+k//8b7JujnhmxgUP3n/5UFgH5u0AZ61p8GwDcduEED6F9/FAD6uUEbGET/hSIA9HND3yD6fQB8yZAbVwD96U8CQD83ggZ61X/h3yEAvuHMjSCAvvUXAaCfG0sD/ep3AfB6BTfSALrXHwJAPze2BnrR7wPg1TpubAH0pX8RAPq5EV1v+i/8xwXAe73ciAPoUn8aQC9vtfOvy60QQMf6owDQz42tge71hwB60U8A3AoB9KL/ogugL/071wmAaxpAN/rzANDPjbGBzvRf/G8UQKf6CYBrGECX+ssAutZPAFyTADrWXwTQg34C4FYOoHv9LgD0c6O9rvX7ALrXTwDcugF0o78SQDf6CYBbK4DO9F/8XxxAZ/p3bhAA1zSALvVHAXSpnwC4hgF0rD8E0LF+AuDaCKB9/bP9H3K2FCoS38VcAAAAAElFTkSuQmCC\", \"iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAAMLklEQVR42u3d93tUVR7H8fOfre4qECBtJr2oq6vuioIKAoIKKipIh9B7h9ADCRC6vffee+9ddp9n9px7zp3NQ7JJ5mbunTvn+/4+n/9gXu+fCPeo/4ya8O9gF8xu1PvT7aY/gv0+aqLdb2aT9H41u/mXcD+PvsXup9G32v1oNvkHtynfh/tu9G1637pN/cZuzLSvw301Zrrel2a3633hNuPzYJ+NmWn3qdkdep/oVdyp93GwjyrusvvQbJbeB2az3w/3XsXddu9W3KP3jt3Ye992m/NWuDfH3qf3htn9eq+7PfBasFfN5uq9ojdunt7Lbg++FOzFcfPtXjBboPe82cLnwj07bpHdM+MX2z1ttuSpcE+OX2r3xPhleo+7LX/MrePRYI/oVa7Qe9hspd5DbqvOBztXudrurNkavTPBTleutTtVtc7upNl6vV6zDSfCHa/aaHesapNej9vmbrvqLUfDHaneqtfltu2w2/ZDwQ6a7dA7YLZTb79dza59wfbW7LbrNNujt8esc3e4XTV77Xaa7dthV7t/e7httQfsttYe1Nvidmiz2+FNwTaadeltqO1S6Ee/WP0bMkcU+tEvVr8JAP3oF6t/fRAA+tEvVL8LAP3ol6l/feaoQj/6xepfFwaAfvRL1G8DQD/6hepfqwNAP/rF6l+b6VboR79Y/SYA9KNfrP41+QDQj36B+tdkehT60S9WvwkA/egXq391EAD60S9UvwsA/eiXqX9V5phCP/rF6rcBoB/9QvWbANCPfrH6V2aOK/SjX6x+FwD60S9TvwkA/egXq39FPgD0o1+g/hXZEwr96Ber3wSAfvSL1d+RDwD96BeovyPbq9CPfrH6l+sA0I9+sfptAOhHv1D9JgD0o1+s/mXZkwr96Ber3waAfvQL1W8CQD/6xepfmj2l0I9+sfpdAOhHv0z9S3QA6Ee/WP0uAPSjX6b+JdnTCv3oF6t/cRgA+tEvUb8NAP3oF6rfBIB+9IvVvyh7RqEf/WL1BwGgH/1S9S/UAaAf/WL1L6w7q9CPfrH6XQDoR79M/Qt0AOhHv1j9LgD0o1+m/gV15xT60S9W//wgAPSjX6h+FwD60S9T//y68wr96Ber/8EwAPSjX6J+GwD60S9U/zwdAPrRL1b/vLqHFPrRL1a/CQD96Berf24+APSjX6D+uXUPK/THrT83skN/fPpNAOiPQ38unkN/cfU/EASA/qLpzyV16C+KfhcA+keuP1eKQ/8I9d9f94hC/0j059Jx6I+mPwgA/ZH059J36C9UvwsA/QXpz6X70D98/ffVP6rQ75P+sAH0D0u/CwD9w9GfK7dD/5D6TQDo91J/vgH0D6J/Tj4A9Pun3x76B9E/p/4xhf5B9Od8OfQPqN8EgH7v9dtDf3/99wYBoN9//fbQf5F+FwD6JejPN4D+vP576h9X6Jej3x768/ptAOgXpN8e+q1+EwD6pem3h369u+ufUOgXqD9sQLp+FwD6ZQaAfhMA+mXqDxsQrX92PgD0iz3J+mfXP6nQz4nVP0sHwN/3c2L1uwDQz8nUP6v+KYV+zp5A/Xe5APhf7ZwLQJb+IAD0c+FJ028C4Hs+XN8AROm/s+FphX6u74nSbwMQ9yVDlA8egBz9JgC+48n1PVH672h4RqGf69eAFP0uAL5gzvU9Ofpn6gDQz/U/IfpdAHLebkF2QQF4r39mw7OKl4u4AQOQoH9GEAD6uQFOgn4XgJA3GzFdaADe65/R8JyS82Ippgs6CfpvDwPgvV6uXwAC9NsA0M8NfN7rn64DkKC/lwAiBuC5/ukNzysJ+nurNqA5wnmv3wQgQf8JAhhBAB7rnxYE4L9+AogcgN/6XQDe6yeAaOe9/mkNLygJ+o9XbURz5AA81j/VBCBAPwFEDsBv/S4A7/UTQLTzXv/UxheVBP3HqjahOVoAfuu/LQzAc/0EEO28128D8F9/DwFED8Bn/VN0ABL0E0DUADzXP6XxJSVBf0/VZjRHOO/1mwAk6O8mgBEE4LH+yfkA/NZPAJED8Fv/5MaXlQT93dVb0BzhvNdvApCg/ygBRA3Ab/23BgH4r58Aop33+l0A3usngIgB+K7/lsZXlAT9R6q3ojlaAH7rtwH4r1+viwbQ30+/CUCIfgIo9CTov7nxVSVEf1f1NkwXHoDn+l0AEvQfJoCCA/BfvwlAiP5g22GN/r76J+UDkKD/EAEM+4Ton9T4mpKjnwAKDMB//RN1AHL0HzTbAW705/X/LwAh+glgeAFI0T+x6XUlSv8Bs50QR7/Vf5MOQJp+Ahj8ROm3AcjSv58AhgpAjn4TgDT9ZjW7gI5+vRub3lAC9e8jgP9z0vS7AKTp19tbsxvu6DcByNRPAAMFIE7/hHwA0vTrddKAeP0Tmt5UYvV31uzRg75k/TfoACTr30MAYQAy9bsAxOrfU9O5u6YT/WL139D0lhKuf7fsBoTr/1cYgGj9u2r26qFfoH4bAPqFBoB+EwD69Xaa7UO/NP3/bHpbod/q3xEM/aL02wDQ7/TvqN2/vXY/+uXov14HgP6++rf73gD6++q/vukdhf6L9G+rPaCHfgn6TQDo769fb2vtQfR7r/86EwD6B9Kvt8WjBtA/oH4XAPoH1B/s0ObaQ/xrl6/6r2t+V6F/cP3BDqPfS/3XBgGgfwj9m4Kh3z/9LgD0D6l/o1mXHn/f75P+a5vfU+gfvv4Nepkj6PdG/z/CANA/XP1664Olkv559Bek3waA/oL1r88cXRcsJfQFfs+nKPqv0QGgP7L+tWbdemsy3SVxL+07nkXXf03z+wr9I9e/JtOjtzrTkyD9c+gfuX4TAPqLpV9vVeaYXUzu5bxclIz+q/MBoL+I+ldmjtut0MueGCF6Ie/1lkT/1c0fKPTHql+vw6x3ebhl2ZN2S7On9Ja4nV4cblH2jN5Cvbqz6I9VvwkA/egXq//vQQDoR79Q/S4A9KNfpv6rmj9U6Ee/WP0uAPSjX6Z+EwD60S9W/5X5ANCPfoH6r2z+SKEf/WL1mwDQj36x+q/IB4B+9AvUf0XLxwr96Ber3wSAfvSL1d8eBIB+9AvV7wJAP/pl6m9r+UShH/1i9dsA0I9+ofpNAOhHv1j9rS2fKvSjX6x+FwD60S9TvwkA/egXq78lHwD60S9Qf0vLZwr96Berv1kHgH70i9XvAkA/+mXqb275XKEf/WL1N4UBoB/9EvXbANCPfqH6TQDoR79Y/Y0tXyj0F1d/Ao8DoL9Y+oMA0D8C/Sl5Ign90fQ36ADQX5D+sngmFf3D1N/Q+qVC/5D6c+V86B9EvwsA/f3153w89F+kv14HgP6++nMyDv1WvwsA/TmpJ1x/fetXSrL+HBeeTP11YQDi9CN+wJOm3wYgSz/Khzw5+k0AQvTDOsJ5rz/b+rXyXj+OR3ge67cBeKsfu0U8L/VndADo54Z5/unPtH6j/NOP1FjPJ/0mAJ/0ozOx80N/bRCAD/oRWZIrd/0uAPRzka+s9de2fqvKWj/+UnJlqr8mCAD9XBGuHPW7ANDPFeXKTn9163eq7PTjLOVXRvrDANDPFfXKRX8QAPq5WBooA/1VOgD0czFd+vVXtX2v0M/FdynXbwJAPxfrpVl/ZT4A9HOxNpBO/ZVtPyj0cwlcOvWbANDPJXMp1D8+CAD9XFINpEy/CwD9XGKXKv3j2n5U6OcSvvTotwGgn0v6UqLfBIB+rlQNlFz/2LafFPq5Ul3J9bsA+Pt+riRXcv0mAPRzJW2glPor8gGgnyvVlVB/RdvPim86cCUPoFT6x+gA0M+V/Eql3waAfq70VxL9JgC+ZMilJIDk9Y9u+0Whn0vJJa8/CIBvOHNpCSBp/SYA9HPpuYT1j2r/VfF6BZeqAJLU7wJAP5eeS1K/CYBX67hUXZL6L88HgH4uTQ0kpP/y9t8U7/VyabvE9F+mA0j4rXZ+XW54ASSh3wWAfi5tl4z+y9p/V4npJwCuoAAS0P+3MIAk9HcQADfsS0a/DQD9XEobiFu/CSAZ/R3ZXn5RrqBLQP9f2/9QyehfTgBcoQHEr98GkIR+AuAiBBC3/kt1AOjnUntx67+0/U+VgH4C4CIHEKt+E0AC+pdlT/JbchEubv2XBAHErp8AuMgBxKrfBRC3fgLgol3c+i9pv6AS0L80e4rfkoscQHz6/9J+4b+QTqGUWadyMgAAAABJRU5ErkJggg==\"];\nconst SUBJECTS = ['golden hour rooftop portrait', 'neon city night walk', 'cozy cafe morning', 'beach sunset, film grain', 'minimal studio portrait'];\nconst out = [];\nfor (const [i, item] of $input.all().entries()) {\n  const req = item.json;\n  const seed = Math.floor(Math.random() * 1e6);\n  const subject = SUBJECTS[seed % SUBJECTS.length];\n  const prompt = 'photorealistic AI avatar, ' + subject + ', 35mm, soft light';\n  const caption = 'New day, new vibe: ' + subject + ' #aiavatar';\n  out.push({\n    json: {\n      request: req,\n      post: {\n        content: 'Avatar post: ' + subject + '\\n' + caption,\n        source: 'n8n:instagram-avatar-demo',\n        external_ref: 'gen-' + seed,\n        tags: ['avatar', 'demo'],\n        metadata: { prompt, seed, model: 'mock-higgsfield-v1', inspiration: 'mock-trend-scan' },\n      },\n    },\n    binary: { data: { data: IMAGES[seed % IMAGES.length], mimeType: 'image/png', fileName: 'avatar-' + seed + '.png' } },\n    pairedItem: i,\n  });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "ef8a36f0-79a3-5be2b-a0ea2-bc8af788998c",
+      "name": "Upload media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.request.apiBaseUrl }}/v1/media",
+        "options": {},
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a7cb2698-4a91-596b7-af63a-dd5300d562ab",
+      "name": "Create post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Generation request').item.json.apiBaseUrl }}/v1/posts",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ collection: $('Generation request').item.json.collection, ...$('Mock AI Generator').item.json.post, media: [$json.id], targets: [{ channel_id: $('Generation request').item.json.channelId }], publish_now: true }) }}"
+      }
+    },
+    {
+      "id": "1f15f556-7183-52fd8-ac9ec-3b2f0315f855",
+      "name": "Staqly events",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        320
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "staqly-publish",
+        "responseMode": "onReceived",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "webhookId": "dcc1d103-dd20-5c336-afcc5-fa5f804996de"
+    },
+    {
+      "id": "70434919-571a-5abfd-aff06-1e06c1350827",
+      "name": "Verify & parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// Verifies the staqly signature, rejects stale and replayed events, then\n// parses the event. Fails closed: without CONFIG.webhookSecret nothing is\n// processed. Paste the secret printed by integrations/n8n/setup-demo.sh\n// (or shown in Staqly → Webhooks). Verification needs the 'crypto' builtin:\n// set NODE_FUNCTION_ALLOW_BUILTIN=crypto on n8n (the example compose does).\nconst CONFIG = {\n  apiBaseUrl: 'http://api:3333',   // n8n on the host: http://localhost:3333\n  webhookSecret: '',\n  toleranceSeconds: 300,\n  dedupeSize: 500,                 // how many recent X-Staqly-Event-Id values to remember\n};\nif (!CONFIG.webhookSecret) {\n  throw new Error('Webhook secret not configured: paste the webhook secret from setup-demo.sh into CONFIG.webhookSecret in the \"Verify & parse\" node');\n}\nconst crypto = require('crypto');\n// Deliveries are at-least-once: remember recent event IDs (persisted for\n// active workflows) and drop repeats.\nconst state = $getWorkflowStaticData('global');\nif (!Array.isArray(state.staqlyEventIds)) state.staqlyEventIds = [];\nconst seen = state.staqlyEventIds;\nconst out = [];\nfor (const [i, item] of $input.all().entries()) {\n  const raw = item.binary && item.binary.data\n    ? await this.helpers.getBinaryDataBuffer(i, 'data')\n    : Buffer.from(JSON.stringify(item.json.body));\n  const h = item.json.headers || {};\n  const ts = String(h['x-staqly-timestamp'] || '');\n  if (!/^\\d+$/.test(ts)) throw new Error('Missing or invalid X-Staqly-Timestamp');\n  if (Math.abs(Math.floor(Date.now() / 1000) - Number(ts)) > CONFIG.toleranceSeconds) {\n    throw new Error('Stale Staqly webhook: timestamp outside the tolerance window');\n  }\n  const expected = Buffer.from('sha256=' + crypto.createHmac('sha256', CONFIG.webhookSecret).update(ts + '.').update(raw).digest('hex'));\n  const given = Buffer.from(String(h['x-staqly-signature'] || ''));\n  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n    throw new Error('Invalid Staqly signature');\n  }\n  const event = JSON.parse(raw.toString('utf8'));\n  const eventId = String(h['x-staqly-event-id'] || event.id || '');\n  if (eventId) {\n    if (seen.includes(eventId)) continue; // duplicate delivery: already handled\n    seen.push(eventId);\n    if (seen.length > CONFIG.dedupeSize) seen.splice(0, seen.length - CONFIG.dedupeSize);\n  }\n  const post = (event.data && event.data.post) || {};\n  const channel = (event.data && event.data.channel) || {};\n  const target = (event.data && event.data.target) || {};\n  out.push({ json: { config: CONFIG, verified: true, event, post, channel, target }, pairedItem: i });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "c53ba569-16f3-53a95-aebb2-a569f2444b93",
+      "name": "Route by event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "publish_requested",
+                    "leftValue": "={{ $json.event.type }}",
+                    "rightValue": "post.publish_requested",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "publish"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "published",
+                    "leftValue": "={{ $json.event.type }}",
+                    "rightValue": "post.published",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "id": "failed",
+                    "leftValue": "={{ $json.event.type }}",
+                    "rightValue": "post.failed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "outcome"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      }
+    },
+    {
+      "id": "787d2e4a-cf5b-55fe3-a3173-f4ea4f39791a",
+      "name": "Mock Publisher",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// Mock Instagram publisher: pretends to post the picture + caption of this\n// target. Replace with the real Instagram Graph API call in production. The\n// text to publish is the target's own (data.target.content): the post's text,\n// or what the composer gave this channel.\nreturn $input.all().map((item, i) => {\n  const src = $('Verify & parse').itemMatching(i).json;\n  const postId = '17' + String(Math.abs([...src.post.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7))).padStart(14, '0');\n  return {\n    json: { instagram_post_id: postId, instagram_url: 'https://instagram.example/p/' + postId, caption: src.target.content,\n            media: (src.post.media_items || []).map((m) => m.url), published_at: new Date().toISOString() },\n    pairedItem: i,\n  };\n});"
+      }
+    },
+    {
+      "id": "be2fe475-f30e-5f316-a7b87-bb164b14bb49",
+      "name": "Report result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Verify & parse').item.json.config.apiBaseUrl }}/v1/posts/{{ $('Verify & parse').item.json.post.id }}/targets/{{ $('Verify & parse').item.json.channel.id }}/result",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'published', url: $json.instagram_url, external_id: $json.instagram_post_id }) }}"
+      }
+    },
+    {
+      "id": "1db67e17-6ba0-5ce02-ad902-2a21791a1fae",
+      "name": "Record outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// post.published / post.failed: where it ended up, per channel. Hook your\n// own logging, a team chat message or a ticket here.\nreturn $input.all().map((item, i) => {\n  const { event, post } = item.json;\n  return { json: {\n    post_id: post.id, status: post.status, type: event.type,\n    links: (post.targets || []).filter((t) => t.external_url).map((t) => ({ channel: t.channel_name, url: t.external_url })),\n    errors: (post.targets || []).filter((t) => t.error).map((t) => ({ channel: t.channel_name, error: t.error })),\n  }, pairedItem: i };\n});"
+      }
+    }
+  ],
+  "connections": {
+    "Generate sample content": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate via webhook": {
+      "main": [
+        [
+          {
+            "node": "Check demo token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check demo token": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Ensure collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure collection": {
+      "main": [
+        [
+          {
+            "node": "Ensure channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure channel": {
+      "main": [
+        [
+          {
+            "node": "Find channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find channel": {
+      "main": [
+        [
+          {
+            "node": "Generation request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generation request": {
+      "main": [
+        [
+          {
+            "node": "Mock AI Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock AI Generator": {
+      "main": [
+        [
+          {
+            "node": "Upload media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload media": {
+      "main": [
+        [
+          {
+            "node": "Create post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Staqly events": {
+      "main": [
+        [
+          {
+            "node": "Verify & parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify & parse": {
+      "main": [
+        [
+          {
+            "node": "Route by event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by event": {
+      "main": [
+        [
+          {
+            "node": "Mock Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Publisher": {
+      "main": [
+        [
+          {
+            "node": "Report result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "staqlyPublishDemo",
+  "tags": []
+}

@@ -1,0 +1,332 @@
+---
+title: Webhooks
+description: Send publishing events and other staqly events to n8n or your own service as signed HTTP requests.
+---
+
+When a post is scheduled, published or fails, when a channel needs reconnecting or a
+schedule asks for new posts, something usually has to happen next: log it, tell the team,
+publish through your own tool. A webhook tells your automation about it. Staqly sends a signed
+JSON request to your URL for every event you subscribe to, and keeps retrying until your
+endpoint answers with a `2xx`.
+
+## Webhook, alert or poll?
+
+| You want to | Use |
+|---|---|
+| Run code when something happens (n8n, a script, your own service) | A **webhook** (this page) |
+| Tell a person that a post went out or failed, or a channel needs reconnecting | [Alerts](/automation/alerts) |
+| Publish through your own tool and let staqly wait for the result | A channel on [your own automation](/channels/your-own-automation): subscribe to `post.publish_requested`, or poll `GET /v1/work` |
+
+## How webhooks work
+
+1. Something happens in staqly, such as a post being published. Staqly records an
+   [event](/api/events).
+2. For every active webhook whose `events` and `collection_ids` match, staqly queues a
+   **delivery**.
+3. A background worker sends the delivery as a `POST` with a JSON body and an
+   `X-Staqly-Signature` header.
+4. Your endpoint verifies the signature, does its work and answers `2xx`. Anything else is
+   [retried](#retries).
+
+## Setting up a webhook
+
+<Steps>
+<Step>
+
+### Create the webhook
+
+Pick the URL that should receive events and the events you care about. Creating webhooks
+needs the `webhooks:manage` scope (the `admin` key from signup includes it; local mode and
+dashboard sessions have it implicitly).
+
+<Tabs items={["curl", "CLI", "Dashboard"]}>
+<Tab value="curl">
+
+```bash
+curl -s -X POST http://localhost:3333/v1/webhooks -H 'Content-Type: application/json' -d '{
+  "url": "https://example.com/hooks/staqly",
+  "description": "Publishing log",
+  "events": ["post.published", "post.failed"]
+}'
+```
+
+</Tab>
+<Tab value="CLI">
+
+```bash
+staqly webhooks create --url https://example.com/hooks/staqly --events post.published,post.failed
+```
+
+The CLI prints the signing secret once. See [CLI commands](/cli/commands) for all flags.
+
+</Tab>
+<Tab value="Dashboard">
+
+Open **Webhooks** in the sidebar and click **New webhook**. The form opens as a sheet: enter the
+endpoint URL (required, marked with `*`), pick the events (`*` for all, `post.*` for every post
+event; the list is grouped by family), optionally pick some collections (empty = all), set the timeout in seconds and the max
+attempts, and click **Create webhook**.
+
+Right after you create the webhook, its card shows the full signing secret once, with a copy
+button: *Copy the signing secret now. It is not shown again.* Click **Done** when you have
+stored it. After that the card shows only the masked secret. If you lose it, use
+**Rotate secret** in the webhook's **...** menu: the new secret is shown once in the same way.
+
+</Tab>
+</Tabs>
+
+</Step>
+<Step>
+
+### Save the signing secret
+
+The create response contains the signing **`secret`** (`whsec_...`). Store it now: it is
+returned in full **only** by the create request and by a rotation (`PATCH /v1/webhooks/{id}`
+with `{"rotate_secret": true}`). Every other response shows it masked (`whsec_****` plus the
+last 4 characters). Neither response is kept for [`Idempotency-Key`](/api/idempotency)
+replay.
+
+</Step>
+<Step>
+
+### Verify requests in your receiver
+
+Check the `X-Staqly-Signature` header on every request before you act on it. Copy-paste
+code for Node.js, Python, Go and the TypeScript SDK is in
+[Verifying signatures](#verifying-signatures).
+
+</Step>
+<Step>
+
+### Send a test event
+
+Click **Send test** on the webhook in the dashboard, or run:
+
+```bash
+curl -s -X POST http://localhost:3333/v1/webhooks/wh_lv5rc7rttjnfwnnsn4ny/test
+```
+
+This queues a `webhook.test` event for that webhook only. Then check the
+[delivery history](#delivery-history-and-testing) to see what your endpoint answered.
+
+</Step>
+</Steps>
+
+<Callout title="Receiver on the same machine or in Docker?">
+Staqly blocks loopback targets such as `http://localhost:5678` by default. If staqly runs
+directly on your machine (not in Docker) and the receiver listens on `localhost`, set
+`WEBHOOK_ALLOW_LOOPBACK=true`. If staqly runs in Docker, `localhost` is the staqly container
+itself: use `host.docker.internal` or the receiver's container name on a shared Docker network instead. For example, with the
+bundled n8n compose file the URL is `http://n8n:5678/webhook/staqly-demo` (Docker only). See
+[Network policy](#network-policy-ssrf-guard) and [n8n](/integrations/n8n).
+</Callout>
+
+## Webhook settings
+
+| Field | Default | Notes |
+|---|---|---|
+| `url` | — | Absolute `http(s)` URL, no credentials in it |
+| `description` | `""` | Free text, up to 500 characters |
+| `events` | `["*"]` | 1 to 50 patterns: `"*"`, a glob inside an event family (`"post.*"`, `"post.*_requested"`, `"schedule.*"`) or a [known event type](/api/events). Anything else, e.g. the typo `"post.publised"` or a custom event such as `"post.shipped"`, is refused with `422`. `"*"` leaves out the credential and session [audit events](/api/events#audit-events); name their family to get them (admin only) |
+| `collection_ids` | `[]` | Only events from these collections; empty = all |
+| `active` | `true` | Pause without deleting. Deliveries already queued for a paused webhook finish as `failed` ("webhook disabled"); re-enable and retry them to resend |
+| `timeout_ms` | `10000` | 1,000 – 60,000 (the dashboard asks for seconds, 1 – 60) |
+| `max_attempts` | `8` | 1 – 20 |
+
+Change any field with `PATCH /v1/webhooks/{id}`; delete a webhook with
+`DELETE /v1/webhooks/{id}`. See [Event types](/api/events) for everything you can subscribe
+to.
+
+Plan limits (cloud): **Free 3 webhooks, Pro unlimited**. Over the limit, creating
+a webhook returns `402 plan_limit_exceeded` with `details.limit = "webhooks"`. See
+[Plans](/plans).
+
+## The request
+
+```http
+POST <your url>
+Content-Type: application/json
+User-Agent: Staqly-Webhooks/1.0
+X-Staqly-Event: post.published
+X-Staqly-Event-Id: evt_looiyqe5kfkjh4xedcnd          # stable per event: deduplicate on this
+X-Staqly-Delivery: dlv_bgx4s2p4xnzimajdkoki          # stable across retries of one delivery
+X-Staqly-Timestamp: 1791800000    # unix seconds, when this attempt was signed
+X-Staqly-Signature: sha256=<hex HMAC-SHA256(secret, timestamp + "." + raw body)>
+```
+
+```json
+{
+  "id": "evt_looiyqe5kfkjh4xedcnd",
+  "type": "post.published",
+  "created_at": "2026-10-20T07:00:04.000000Z",
+  "workspace_id": "ws_4uvnnzgy5vvpo4hnqnco",
+  "delivery_id": "dlv_bgx4s2p4xnzimajdkoki",
+  "attempt": 1,
+  "actor": { "type": "system", "id": "publisher", "name": "Publisher" },
+  "data": {
+    "post": {
+      "id": "post_oalirbz67y4m4cqxq5dw", "status": "published", "content": "v1.4 is out.",
+      "publish_at": "2026-10-20T07:00:00Z", "published_at": "2026-10-20T07:00:04Z",
+      "targets": [ { "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a", "channel_name": "Announcements", "provider": "telegram", "status": "published", "external_url": "https://t.me/my_channel/42" } ]
+    },
+    "collection": { "id": "col_qjuybkx6355nz4no6pqk", "name": "Product updates" }
+  }
+}
+```
+
+- The payload is built from the **event snapshot** taken when the change happened, not the
+  post's current state.
+- `actor.type` is `local`, `session`, `api_key` or `system` (the scheduler, the publisher).
+- `post.publish_requested` adds `channel`, `target` and `timeout_seconds` for
+  [your own automation](/channels/your-own-automation).
+- Media URLs inside `data.post.media_items[].url` use `PUBLIC_API_URL` and require authentication.
+
+## Verifying signatures
+
+Compute `HMAC-SHA256(secret, "<X-Staqly-Timestamp>.<raw body>")`, hex-encode it, prefix
+`sha256=` and compare it in constant time with `X-Staqly-Signature`. Use the **raw** request
+body: re-serialized JSON will not match. Rejecting timestamps older than a few minutes
+protects against replays.
+
+```ts tab="Node.js"
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export function verifyStaqly(secret: string, rawBody: string, headers: Record<string, string | undefined>) {
+  const ts = headers['x-staqly-timestamp'] ?? '';
+  const sig = headers['x-staqly-signature'] ?? '';
+  if (!ts || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+  const expected = 'sha256=' + createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex');
+  return sig.length === expected.length && timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+}
+```
+
+```python tab="Python"
+import hashlib, hmac, time
+
+def verify_staqly(secret: str, raw_body: bytes, headers) -> bool:
+    ts = headers.get("X-Staqly-Timestamp", "")
+    sig = headers.get("X-Staqly-Signature", "")
+    if not ts or abs(time.time() - int(ts)) > 300:
+        return False
+    mac = hmac.new(secret.encode(), ts.encode() + b"." + raw_body, hashlib.sha256)
+    return hmac.compare_digest(sig, "sha256=" + mac.hexdigest())
+```
+
+```go tab="Go"
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"math"
+	"net/http"
+	"strconv"
+	"time"
+)
+
+func verifyStaqly(secret string, body []byte, h http.Header) bool {
+	ts := h.Get("X-Staqly-Timestamp")
+	n, err := strconv.ParseInt(ts, 10, 64)
+	if err != nil || math.Abs(float64(time.Now().Unix()-n)) > 300 {
+		return false
+	}
+	m := hmac.New(sha256.New, []byte(secret))
+	m.Write([]byte(ts + "."))
+	m.Write(body)
+	expected := "sha256=" + hex.EncodeToString(m.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(h.Get("X-Staqly-Signature")))
+}
+```
+
+```ts tab="TypeScript SDK"
+import { verifyWebhook } from '@staqly/sdk';
+
+// Pass the raw body and the request headers (Fetch Headers, Node headers or a plain object).
+// Returns the parsed event; throws WebhookVerificationError if the signature is invalid
+// or the timestamp is more than 300 s away (change with { tolerance }).
+const event = await verifyWebhook(secret, rawBody, req.headers);
+```
+
+The SDK also exports `isValidWebhook(secret, rawBody, headers)`, which returns `true` or
+`false` instead of throwing.
+
+## Delivery guarantees
+
+Delivery is **at-least-once** and **not ordered**:
+
+- The event and its delivery rows are written **in the same database transaction** as the
+  change (a transactional outbox). If the change commits, the delivery exists.
+- A background worker sends deliveries **outside** any transaction, several **in parallel**
+  (see [Retries](#retries)). It leases each one for 2 minutes before sending; if the process
+  dies mid-send, the delivery is sent again when the lease runs out. Pending deliveries
+  survive restarts.
+- So a receiver can see the same event twice. **Deduplicate on `X-Staqly-Event-Id`** (or the
+  body's `id`) when a side effect must not repeat.
+- And events can arrive **out of order**: parallel deliveries and retries mean a later event
+  (say `post.published`) can arrive before an earlier one of the same post (`post.scheduled`).
+  **Order by the body's `created_at`** (when the change happened, not when it was sent) and
+  ignore an event older than the last one you handled for that post. The webhook body has no
+  sequence number; when you need every event in exact order, read
+  [`GET /v1/events`](/api/events), whose `seq` grows with every event, for example with the
+  webhook only as the trigger.
+
+## Retries
+
+A delivery succeeds on any `2xx` response. Anything else (non-2xx, timeout, connection
+error) is retried with exponential backoff:
+
+| Setting | Value |
+|---|---|
+| First retry after | `WEBHOOK_RETRY_BASE` (default **15 s**) |
+| Growth | doubles every attempt, ±20 % jitter |
+| Cap | `WEBHOOK_RETRY_MAX` (default **1 h**) |
+| Gives up after | `max_attempts` (default **8**) → status `failed` |
+| Stops immediately on | **`410 Gone`** |
+
+The worker sends at most 4 requests at a time overall and 2 per workspace. A workspace whose
+receivers are slow is skipped (its deliveries stay due) instead of holding up everyone else.
+
+## Delivery history and testing
+
+The delivery history keeps the status, attempts, the last status code, the error and the
+first 2 KB of the last response. In **cloud mode** it keeps only the status code and a short
+reason, never the response body.
+
+| Where | How |
+|---|---|
+| Dashboard | **Webhooks** → select a webhook to see its last 50 deliveries (event, status, attempts, response, error, next attempt), refreshed every 3 s while one is pending and every 15 s otherwise; **Retry** re-queues any delivery that is not pending |
+| <Method m="GET" path="/v1/webhook-deliveries" /> | e.g. `?webhook_id=wh_lv5rc7rttjnfwnnsn4ny&status=failed` |
+| <Method m="POST" path="/v1/webhook-deliveries/{id}/retry" /> | re-queue a finished delivery |
+| <Method m="POST" path="/v1/webhooks/{id}/test" /> | queue a `webhook.test` event to this webhook only |
+
+The test endpoint is rate-limited per API key or session (burst 5, then 10 per minute;
+`429`). The CLI has the same commands: `staqly webhooks deliveries`, `staqly webhooks retry`
+and `staqly webhooks test`.
+
+## Network policy (SSRF guard)
+
+Webhook URLs are user input, so the worker restricts where it connects:
+
+- **Always blocked**: link-local addresses (including the `169.254.169.254` cloud metadata
+  endpoint), multicast, unspecified and reserved ranges. IPv6 forms that embed an IPv4 address
+  (NAT64, 6to4) are checked as that IPv4 address.
+- **Private** addresses (LAN, Docker networks such as `http://n8n:5678`; `100.64.0.0/10` counts
+  as private) are allowed by default **in local mode only** (`WEBHOOK_ALLOW_PRIVATE`, default
+  `true` in local and `false` in cloud mode).
+- **Loopback** (`127.0.0.1`) is blocked by default. Enable it with
+  `WEBHOOK_ALLOW_LOOPBACK=true` only when the API runs outside Docker and the receiver listens
+  on localhost. Inside Docker, `localhost` is the staqly container itself: use
+  `host.docker.internal` or the receiver's container name on a shared Docker network.
+- The check runs on the **resolved IP at connect time**, so DNS rebinding cannot sneak past
+  it. **Redirects are not followed** and no proxy is taken from the environment.
+
+A blocked target shows up in the delivery's `last_error`, for example
+`private destination 192.168.1.20 is not allowed (set WEBHOOK_ALLOW_PRIVATE=true)`.
+
+## Next steps
+
+<Cards>
+  <Card title="Event types" href="/api/events">Every event you can subscribe to, and what its data contains.</Card>
+  <Card title="n8n" href="/integrations/n8n">Receive staqly webhooks in an n8n workflow.</Card>
+  <Card title="Publish through n8n" href="/cookbook/publish-through-n8n">A channel on your own automation, driven by webhooks.</Card>
+  <Card title="Your own automation" href="/channels/your-own-automation">Report publishing results back to staqly.</Card>
+</Cards>

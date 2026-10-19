@@ -1,0 +1,192 @@
+---
+title: Quickstart
+description: Install staqly on your computer, connect a channel, write a post and publish it, in about five minutes.
+---
+
+This guide gets staqly running on your computer and walks you through the core loop: a post
+goes into a collection, a channel receives it, and a schedule keeps the collection publishing.
+You need no account and no API key. You only need macOS or Linux for the install script, or
+Docker on any system.
+
+## Get started in five steps
+
+<Steps>
+<Step>
+
+### Start staqly
+
+The install script is the recommended way: one binary runs the API, the MCP endpoint, the job
+queue and the dashboard. Docker is the alternative if you prefer containers.
+
+```bash tab="Install script (recommended)"
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh
+staqly serve   # API + MCP + dashboard in one process; Ctrl-C stops it
+```
+
+```bash tab="Docker"
+docker run -d --name staqly --restart unless-stopped \
+  -p 127.0.0.1:3333:3333 -p 8080:8080 \
+  -v staqly-data:/data \
+  -e LOCAL_TRUSTED_PEERS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7 \
+  --read-only --tmpfs /tmp:size=64m,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges:true \
+  --memory 640m --pids-limit 256 \
+  ghcr.io/staqly/staqly:latest
+docker exec staqly server connect-link   # prints a one-time sign-in link for the dashboard
+```
+
+The install script puts `staqly` in `~/.local/bin` after checking the release checksum.
+On Windows, download the `.zip` from the [releases](https://github.com/staqly/staqly/releases).
+Your data lives in `~/.local/share/staqly`. To keep staqly running in the background and start it
+with your computer, run `staqly service install`. More in [Run the binary](/self-hosting/binary).
+
+With Docker, one container runs the pre-built image `ghcr.io/staqly/staqly` with its data in the
+volume `staqly-data`; what each flag does is in [Run with Docker](/self-hosting/docker).
+
+Either way, staqly is now running here:
+
+| What | URL | Reachable from |
+|---|---|---|
+| Dashboard | http://localhost:8080 | this computer (`staqly serve`); your network with `--expose` or Docker |
+| REST API | http://localhost:3333 (contract at `/openapi.yaml`) | this computer only (`127.0.0.1`) |
+| MCP (Streamable HTTP) | http://localhost:3333/mcp | this computer only |
+
+The workspace is created automatically on first start.
+
+</Step>
+<Step>
+
+### Open the dashboard
+
+Open **http://localhost:8080**. There is no sign-up and no password:
+
+- `staqly serve` keeps the dashboard on this computer, so it opens straight away.
+- When the dashboard is reachable from your network (`staqly serve --expose`, or Docker, so
+  phones can use it), each browser signs in once with a **one-time link**: run
+  `staqly serve connect-link` or `docker exec staqly server connect-link` and open the link.
+- Links work once and expire after 5 minutes; sessions last 30 days.
+- To manage posts from your phone, see [Phones & tablets](/dashboard/phones-and-tablets).
+
+The dashboard opens on **Schedule**, the calendar. It is empty until a post has a time.
+
+</Step>
+<Step>
+
+### Connect a channel
+
+A **channel** is an account staqly publishes to. Open **Channels** in the sidebar and click
+**Add channel**. The drawer shows every platform staqly knows, grouped by kind; the ones not
+available yet carry a **Soon** badge. To try the whole loop without any external account, pick **Your own
+automation**: a channel that hands each post to your own script or n8n workflow and waits for
+its result ([how that works](/channels/your-own-automation)).
+
+The same from a terminal:
+
+```bash
+API=http://localhost:3333
+
+curl -s -X POST $API/v1/channels -H 'Content-Type: application/json' \
+  -d '{"provider":"custom","name":"My publisher"}'
+# → {"id":"ch_7h2kq9xw3nbvd5yhzm6a","provider":"custom","name":"My publisher","status":"connected", ...}
+```
+
+Token platforms take their credentials in `fields` (a bot token, an app password); what each
+one needs is in `GET /v1/providers`. OAuth platforms are connected in the dashboard with
+**Connect with ...**. See [Channels](/channels).
+
+</Step>
+<Step>
+
+### Write a post and publish it
+
+A **post** is one piece of content with one **target** per channel. Posts live in
+**collections**, which group related posts and own the schedules. Every workspace starts with a
+**Default** collection.
+
+In the dashboard, open **Posts** and click **New post**: click the channel avatars, type the
+text (a counter per channel shows how many characters that platform allows), insert media, and
+click **Publish now**, or set a **Publish time** and click **Schedule**.
+
+Scripts and agents on this machine call the API without credentials:
+
+```bash
+curl -s -X POST $API/v1/collections -H 'Content-Type: application/json' \
+  -d '{"name":"Product updates","description":"Release notes and tips"}'
+
+curl -s -X POST $API/v1/posts -H 'Content-Type: application/json' \
+  -d '{"collection":"Product updates","content":"v1.4 is out: schedules, channels and a calendar.","targets":[{"channel_id":"ch_7h2kq9xw3nbvd5yhzm6a"}],"publish_at":"2026-10-20T09:00:00Z","status":"scheduled"}'
+```
+
+The response is the new post:
+
+```json
+{
+  "id": "post_oalirbz67y4m4cqxq5dw",
+  "collection_id": "col_qjuybkx6355nz4no6pqk",
+  "collection_name": "Product updates",
+  "content": "v1.4 is out: schedules, channels and a calendar.",
+  "status": "scheduled",
+  "publish_at": "2026-10-20T09:00:00Z",
+  "targets": [{ "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a", "channel_name": "My publisher", "provider": "custom", "status": "pending" }],
+  "version": 1
+}
+```
+
+It now sits on the calendar. At 09:00 a job publishes each target; the post ends `published`
+when every channel confirmed, `failed` when one did not (retry that channel alone). Leave out
+`publish_at` and `status` for a draft, or send `"publish_now": true` to publish at once.
+
+</Step>
+<Step>
+
+### Connect your agent and set a schedule
+
+Add staqly to your coding agent as an MCP server. In local mode, no key is needed:
+
+```bash tab="Claude Code"
+claude mcp add --transport http staqly http://localhost:3333/mcp
+claude mcp list        # → staqly: http://localhost:3333/mcp (HTTP) - ✔ Connected
+```
+
+```bash tab="Codex"
+codex mcp add staqly --url http://localhost:3333/mcp
+```
+
+```json tab="OpenCode (opencode.json)"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "staqly": { "type": "remote", "url": "http://localhost:3333/mcp", "codemode": false, "timeout": { "execution": 200000 } }
+    }
+  }
+}
+```
+
+Then ask in plain language:
+
+> *"Draft five posts about the new release into Product updates, one per weekday."*
+> *"What is scheduled this week?"*
+> *"Publish the draft about the calendar now."*
+
+Instead of giving each post a time, let the collection do it. Open the collection's
+**Settings**, unfold **Schedules** and click **New schedule**: *At fixed times*, `09:00`,
+Monday to Friday, your time zone, the channels, **The next waiting post (oldest first)**. From
+now on every weekday morning the oldest draft goes out, and when none is left the schedule can
+**Ask my agent for new posts**, so your agent sees the request with `list_requested_work` and
+fills the collection again. Details: [Schedules](/automation/schedules).
+
+Other clients and options: [Connect agents](/agents).
+
+</Step>
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Concepts" href="/concepts">How collections, posts, targets, channels, schedules and jobs fit together.</Card>
+  <Card title="Channels" href="/channels">Every platform, how it connects and what it allows.</Card>
+  <Card title="Connect agents" href="/agents">Claude Code, Codex, OpenCode, other MCP clients, n8n and scripts.</Card>
+  <Card title="Your own automation" href="/channels/your-own-automation">Publish through n8n or a script and report the result.</Card>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">Manage the calendar from your phone with a QR code.</Card>
+</Cards>

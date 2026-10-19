@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Golden hour on a city rooftop">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b2a63"/>
+      <stop offset="0.38" stop-color="#b8577a"/>
+      <stop offset="0.68" stop-color="#f08a5d"/>
+      <stop offset="0.86" stop-color="#ffc677"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.62" cy="0.66" r="0.45">
+      <stop offset="0" stop-color="#fff1c9" stop-opacity="0.95"/>
+      <stop offset="0.35" stop-color="#ffcf87" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffcf87" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a4a6e"/>
+      <stop offset="1" stop-color="#6b3a5f"/>
+    </linearGradient>
+    <linearGradient id="near" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a2246"/>
+      <stop offset="1" stop-color="#24162f"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1224"/>
+      <stop offset="1" stop-color="#120b18"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="160" height="160" fill="url(#sky)"/>
+  <rect width="160" height="160" fill="url(#glow)"/>
+
+  <!-- clouds -->
+  <g fill="#ffd9b0" opacity="0.35">
+    <rect x="14" y="34" width="46" height="3" rx="1.5"/>
+    <rect x="26" y="40" width="30" height="2.5" rx="1.25"/>
+    <rect x="96" y="26" width="40" height="2.5" rx="1.25"/>
+    <rect x="108" y="31" width="24" height="2" rx="1"/>
+  </g>
+
+  <!-- sun -->
+  <circle cx="99" cy="104" r="15" fill="#fff4d6"/>
+  <circle cx="99" cy="104" r="22" fill="#ffe2a3" opacity="0.35"/>
+
+  <!-- far skyline -->
+  <path fill="url(#far)" d="M0 112h8v-10h7v6h6v-18h9v22h5v-14h8v14h6v-26h4v-6h4v6h3v26h7v-12h9v12h5v-20h10v20h6v-9h8v9h8v-16h9v16h7v-8h8v8h6v48H0z"/>
+
+  <!-- near skyline with lit windows -->
+  <path fill="url(#near)" d="M0 124h12v-20h14v20h8v-30h12v30h10v-16h10v16h12v-36l8-6 8 6v36h10v-22h14v22h8v-12h10v12h12v36H0z"/>
+  <g fill="#ffcf87" opacity="0.8">
+    <rect x="16" y="110" width="2" height="3"/>
+    <rect x="21" y="110" width="2" height="3"/>
+    <rect x="38" y="100" width="2" height="3"/>
+    <rect x="42" y="106" width="2" height="3"/>
+    <rect x="98" y="94" width="2" height="3"/>
+    <rect x="102" y="100" width="2" height="3"/>
+    <rect x="98" y="106" width="2" height="3"/>
+    <rect x="124" y="110" width="2" height="3"/>
+    <rect x="129" y="116" width="2" height="3"/>
+  </g>
+
+  <!-- rooftop ledge and railing -->
+  <rect y="132" width="160" height="28" fill="url(#roof)"/>
+  <rect y="130" width="160" height="3" fill="#2d1c38"/>
+  <g stroke="#2d1c38" stroke-width="1.5">
+    <line x1="0" y1="121" x2="160" y2="121"/>
+    <line x1="6" y1="121" x2="6" y2="131"/>
+    <line x1="30" y1="121" x2="30" y2="131"/>
+    <line x1="54" y1="121" x2="54" y2="131"/>
+    <line x1="132" y1="121" x2="132" y2="131"/>
+    <line x1="156" y1="121" x2="156" y2="131"/>
+  </g>
+
+  <!-- figure leaning on the railing, facing the sun -->
+  <g fill="#120b18">
+    <circle cx="74" cy="101" r="4.2"/>
+    <path d="M69.5 107c1.2-1.6 2.8-2.3 4.5-2.3s3.4.7 4.6 2.3l2.2 14h-13.6z"/>
+    <path d="M77 109l8 9.5-1.6 1.4-8.4-8.2z"/>
+    <rect x="70" y="121" width="3.2" height="10" rx="1"/>
+    <rect x="75.2" y="121" width="3.2" height="10" rx="1"/>
+  </g>
+  <!-- rim light on the figure -->
+  <path d="M78.2 98.6a4.2 4.2 0 0 1 0 4.8" stroke="#ffd59a" stroke-width="1" fill="none" opacity="0.9"/>
+  <path d="M78.8 108.5l1.8 11.5" stroke="#ffd59a" stroke-width="0.9" opacity="0.7"/>
+</svg>

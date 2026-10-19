@@ -1,0 +1,17 @@
+{
+  "$comment": "First-load JS per exported page, gzipped KB (scripts/bundle-size.mjs, `pnpm size` after `pnpm build`). ~5 % above the sizes of 2026-10-18; raise a budget only for a feature that needs it, after checking what grew (README: e2e/README.md#performance). 2026-10-18 evening: /collections is the same two-pane view as /collections/_ (same budget); the total grew with the calendar and date pickers, the notification bell, the collections pane and the watcher source modes. 2026-10-19: the total grew with the custom colour picker (HSV square, hue slider, hex field), the Actions section in the new-collection drawer and the clock columns of the date-time picker. 2026-10-19 posts pivot: /inbox, /collections and /items/_ are gone; /posts and /posts/_ are the two-pane view that replaced /collections (same 415 budget), /channels holds the platform grid with brand marks (360). The total grew with the post editor (Tiptap via editorcn), loaded only when the composer opens.",
+  "defaultRouteJsGzKB": 345,
+  "routes": {
+    "/posts": 415,
+    "/posts/_": 415,
+    "/channels": 360,
+    "/activity": 355,
+    "/settings": 350,
+    "/login": 340,
+    "/setup": 340,
+    "/connect": 275,
+    "/": 180
+  },
+  "cssGzKB": 33,
+  "totalJsGzKB": 1130
+}

@@ -1,0 +1,93 @@
+---
+title: Scripts & SDK
+description: Write, schedule and publish posts from shell scripts, the SDKs or any HTTP client.
+---
+
+Use the REST API when your automation is a script, a backend service or anything else that
+is not an MCP agent. Everything the dashboard and the agents do goes through this same API at
+`http://localhost:3333`. In local mode, scripts on this machine need no credentials; in cloud
+mode add `Authorization: Bearer stk_...`.
+
+## Example: list what is scheduled and publish a draft
+
+This example lists next week's calendar, creates a draft and publishes it. Set `CHANNEL` to a
+channel ID (`ch_7h2kq9xw3nbvd5yhzm6a`) first.
+
+```bash tab="curl"
+API=http://localhost:3333
+
+# the calendar for the next seven days
+curl -s "$API/v1/posts?status=scheduled&publish_after=2026-10-20&publish_before=2026-10-27"
+
+# a draft, then publish it now
+POST=$(curl -s -X POST $API/v1/posts -H 'Content-Type: application/json' \
+  -d "{\"collection\":\"Product updates\",\"content\":\"v1.4 is out.\",\"targets\":[{\"channel_id\":\"$CHANNEL\"}]}" | jq -r .id)
+curl -s -X POST $API/v1/posts/$POST/publish
+
+# history
+curl -s $API/v1/posts/$POST/events
+```
+
+```ts tab="TypeScript SDK"
+import { Staqly } from '@staqly/sdk';
+
+const staqly = new Staqly(); // local mode: http://localhost:3333, no key
+
+for await (const post of staqly.posts.iterate({ status: 'scheduled', publish_after: '2026-10-20', publish_before: '2026-10-27' })) {
+  console.log(post.publish_at, post.content);
+}
+
+const post = await staqly.posts.create({ collection: 'Product updates', content: 'v1.4 is out.', targets: [{ channel_id: channelId }] });
+await staqly.posts.publish(post.id);
+const done = await staqly.posts.waitForPublished(post.id);
+```
+
+```python tab="Python SDK"
+from staqly import Staqly
+
+with Staqly() as staqly:  # local mode: http://localhost:3333, no key
+    for post in staqly.posts.iterate(status="scheduled", publish_after="2026-10-20", publish_before="2026-10-27"):
+        print(post.publish_at, post.content)
+
+    post = staqly.posts.create("Product updates", content="v1.4 is out.", targets=[{"channel_id": channel_id}])
+    staqly.posts.publish(post.id)
+    done = staqly.posts.wait_for_published(post.id)
+```
+
+The SDKs install with `npm install @staqly/sdk` and `pip install staqly`; see the
+[TypeScript SDK](/sdk/typescript) and [Python SDK](/sdk/python) pages.
+
+To connect a channel first, see [Connect a channel](/quickstart#connect-a-channel) in the
+Quickstart.
+
+## Calling staqly from inside Docker
+
+With the [Docker image](/self-hosting/docker), put the script's container on a network with the
+`staqly` container and give it the alias `api`:
+
+```bash
+docker network create staqly-net
+docker network connect --alias api staqly-net staqly
+docker run --rm --network staqly-net curlimages/curl -s http://api:3333/v1/collections
+```
+
+`api` and `host.docker.internal` are recognized as local names; any other host name must be
+added to `LOCAL_ALLOWED_HOSTS`, otherwise keyless requests get `403 not_local`. Containers count
+as this machine only through the `LOCAL_TRUSTED_PEERS` setting of the
+[`docker run` command](/self-hosting/docker).
+
+## Loading demo data
+
+With a checkout of the [repository](https://github.com/staqly/staqly), `scripts/seed.sh` loads
+demo collections and posts through the public API, so events and webhooks fire as usual. It calls `http://localhost:3333`, so it works with
+`staqly serve` and Docker alike. In cloud mode:
+`STAQLY_API_URL=https://staqly.example.com STAQLY_API_KEY=stk_... scripts/seed.sh`.
+
+## Next steps
+
+<Cards>
+  <Card title="TypeScript SDK" href="/sdk/typescript">Typed client and `verifyWebhook`.</Card>
+  <Card title="Python SDK" href="/sdk/python">The same client for Python.</Card>
+  <Card title="API overview" href="/api">Conventions: errors, pagination, idempotency, uploads.</Card>
+  <Card title="CLI" href="/cli">The `staqly` command for shell scripts.</Card>
+</Cards>

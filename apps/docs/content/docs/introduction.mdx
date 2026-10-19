@@ -1,0 +1,89 @@
+---
+title: What is staqly?
+description: Learn what staqly does, how posts, channels and schedules fit together and where to start.
+---
+
+Staqly is a local-first post scheduler for people and their AI agents. You (or Claude Code,
+Codex, n8n, a script) write posts into **collections**, connect the accounts they should go to
+as **channels**, and either pick a time per post or let a **schedule** publish the next waiting
+post every morning. Staqly runs on your own computer and keeps your drafts, credentials and
+history there.
+
+Use staqly when content is produced faster than it is published: an agent drafts a week of
+posts overnight, you look them over in the calendar, and a schedule sends one out each day to
+the channels you chose.
+
+## What it does
+
+- **Holds the posts.** Text, media and per-channel variants, grouped in collections, each with
+  a status (`draft`, `scheduled`, `publishing`, `published` or `failed`) and a full history.
+- **Publishes them.** A post has one **target** per channel. At its time a durable job queue
+  publishes every target, retries failures and records the link to the published post.
+- **Keeps a rhythm.** A collection's schedules run once or on a rule (weekday mornings, every
+  few hours) and publish the next waiting post, chosen posts or everything that waits. When
+  nothing waits, a schedule can ask your agent for new posts or call an endpoint of yours.
+- **Tells you and your tools.** Alerts on Telegram, Slack, Discord, ntfy or email say when a
+  post went out or failed and when a channel needs reconnecting; signed webhooks deliver every
+  event to your own services.
+
+Everything runs on your machine: one binary (`staqly serve`, or the same app as one Docker
+container), one SQLite file, one uploads folder, credentials sealed with a key that never
+leaves it. No cloud account, no Redis, no Postgres.
+
+```mermaid
+flowchart LR
+  CC[Claude Code / Codex / OpenCode] -- MCP --> API
+  N8N[n8n / scripts / CLI / SDKs] -- REST --> API
+  B[Browser / phone] --> WEB
+  subgraph S[staqly serve, one binary]
+    WEB[Dashboard :8080] -- "/api proxy" --> API[API :3333<br/>REST · MCP · job queue]
+  end
+  API --> DB[(SQLite + uploads)]
+  API -- publishes --> CH[Your channels]
+  API -- signed webhooks --> HOOKS[n8n / your services]
+  API -- alerts --> NOTIFY[Telegram / Slack / Discord / ntfy / email]
+```
+
+## How it fits together
+
+<Cards>
+  <Card title="Posts land in collections" href="/concepts#posts">
+    An agent calls `create_post` over MCP, or n8n posts to the REST API. A post carries its
+    text, media, tags and one target per channel, with a text of its own per channel when needed.
+  </Card>
+  <Card title="Channels are where they go" href="/channels">
+    Connect an account once: a token platform such as Telegram or Bluesky, an OAuth platform
+    with your own developer app, or **your own automation** for anything staqly cannot reach itself.
+  </Card>
+  <Card title="Schedules set the rhythm" href="/automation/schedules">
+    Weekday mornings at 09:00, every six hours, or once on Friday: a schedule publishes the next
+    waiting post, and can ask your agent for more when the collection runs dry.
+  </Card>
+  <Card title="Everything is an event" href="/automation/webhooks">
+    Created, scheduled, published, failed, reconnect needed. Webhooks deliver them signed and
+    at least once; alerts turn the important ones into messages.
+  </Card>
+</Cards>
+
+## Two ways to run it
+
+Staqly runs in one of two modes. Most people want **local mode**, the default.
+
+| Aspect | **Local mode** (default) | **Cloud mode** |
+|---|---|---|
+| Who | You, on your own computer | A hosted, multi-tenant instance |
+| Credentials | None: only this machine can connect | Scoped API keys `stk_...`, browser sessions, recovery keys |
+| Workspaces | One, created automatically | Many: anyone (or only `SETUP_TOKEN` holders) can create one |
+| OAuth platforms | You register a developer app per platform once | The operator's apps, or your own |
+| Limits | Unlocked | Free or Pro ($30/mo, 7-day trial) |
+
+Read [Local vs cloud](/local-vs-cloud) for the details.
+
+## Where to next
+
+<Cards>
+  <Card title="Quickstart" href="/quickstart">Run staqly, connect a channel, write and publish your first post in five minutes.</Card>
+  <Card title="Concepts" href="/concepts">Workspaces, collections, posts, targets, channels, schedules, jobs, events.</Card>
+  <Card title="Connect agents" href="/agents">Claude Code, Codex, OpenCode, any MCP client, n8n, scripts.</Card>
+  <Card title="API reference" href="/api/reference">Every REST endpoint, generated from the OpenAPI 3.2 contract.</Card>
+</Cards>

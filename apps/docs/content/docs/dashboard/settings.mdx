@@ -1,0 +1,182 @@
+---
+title: Settings
+description: Rename your workspace, change the theme, manage signed-in devices, watch the job queue, and find backups, exports, integrations and webhooks.
+---
+
+**Settings** is where you manage the workspace itself, rather than its content: its name and
+look, which browsers and phones can sign in, the job queue, exports and backups. Open it
+from **Settings** under *Configure* in the sidebar or from the command palette
+(<Kbd>⌘</Kbd> <Kbd>K</Kbd>).
+
+## Common tasks
+
+- **Connect your phone**: **Settings → General → Devices → Connect a device**, or **Connect a
+  device** in the workspace menu. See
+  [Phones & tablets](/dashboard/phones-and-tablets).
+- **Sign out a lost device**: find it under **Devices** and sign it out.
+- **Back up your data**: **Settings → Backups** shows the commands for a local install
+  (`staqly serve backup <file>`, or `docker exec staqly server backup /data/backups/<file>` with
+  Docker); on a paid cloud plan it creates and lists downloadable backups (on Free it points to
+  the data-only export). See
+  [Backup & restore](/self-hosting/backup-and-restore).
+- **Download everything**: **Settings → Data & privacy → Export workspace** (on the Free plan
+  without the media files).
+- **See what the server is doing**: **Settings → System → Queue** lists publishing and schedule
+  jobs with a **Retry** for failed ones.
+- **Connect an agent**: open **Integrations** in the sidebar for copy-ready setup steps.
+
+## Settings tabs
+
+Settings has five tabs: **General**, **Plan & usage**, **Data & privacy**, **Backups** and
+**System**. Alerts have their own page, **Alerts** in the sidebar (see
+[Alerts](/automation/alerts)).
+
+### General
+
+| Section | What it does |
+|---|---|
+| **Workspace** | Rename the workspace. |
+| **Appearance** | Light, dark or system theme. |
+| **Devices** | Browsers and phones signed in to this workspace, with when each was last seen. **Sign out** any of them (it loses access at once and has to be connected again); **Connect a device** creates a new QR code. Signing a browser in again with a new link replaces its old entry, so each browser is listed once. |
+| **Recovery key** <Badge>cloud</Badge> | Rotate the recovery key, the way back in if you lose the admin API key (**Lost your key?** on the sign-in screen: it signs you in with a new admin key, **Admin key (recovered)**, and the recovery key is replaced by a new one, since each works once; on a plan with a key limit, such as Free, the old admin keys are revoked). Rotating signs out every other browser. The new key is shown once; store it somewhere safe. |
+| **Sign out** <Badge>cloud</Badge> | **Log out** ends the session in this browser. |
+
+How long a post on [your own automation](/channels/your-own-automation) may wait for a result is a
+collection setting (**Fail publishing if nothing is reported within** in
+[Collection settings](/dashboard/collections#collection-settings)); without one, the server's
+`PROCESSING_TIMEOUT` (default 1 hour) applies.
+
+With `staqly serve` on this computer only, nothing needs to sign in, so **Devices** may be
+empty. Once the dashboard is open to your network (`staqly serve --expose` or Docker), every
+browser that signed in appears there, this computer included.
+
+### Plan & usage
+
+The workspace's plan and this month's usage. See [Plan & usage](/dashboard/plan-and-usage).
+
+### Data & privacy
+
+| Section | What it does |
+|---|---|
+| **Activity log** | Download every event, oldest first, as JSONL (one JSON event per line, the full event shape; `.jsonl`) or CSV. For a filtered slice, use **Export** on the [Activity](/dashboard/activity) page. |
+| **Export workspace** | Build a ZIP with collections, posts, channels (without credentials), schedules, events, media files and webhooks. The card shows the progress; download it within 24 hours. API keys, sessions, the recovery key and channel credentials are never included; webhook secrets are redacted. |
+| **Retention & single posts** | A pointer to **Delete post** › **Also erase its history** in a post's **More** menu, which erases one post together with its history (see [Data export](/self-hosting/data-export#purge-a-post)), and to server-side retention of old events and deliveries. |
+| **Delete workspace** <Badge>cloud</Badge> | Permanently delete the workspace and everything in it, and sign out every device. Only a signed-in dashboard session can do this, and you confirm by typing the workspace name. Earlier backups still contain the data. |
+| **Delete all data** <Badge>local</Badge> | A local install has one workspace, so there is no delete button. The card shows how to remove the data instead: `staqly service uninstall` and `rm -rf ~/.local/share/staqly` with the binary, or `docker rm -f staqly` and `docker volume rm staqly-data` with Docker. |
+
+In cloud mode on the Free plan, **Export workspace** builds a data-only ZIP: the same files
+without the media files (`media.ndjson` still lists each file by id, name and type). A note
+under it says that files, backups and the activity log export come with Pro, and the
+**Activity log** card is not shown.
+
+See [Data export](/self-hosting/data-export).
+
+### Backups
+
+On a local install, the **Backup & restore** card shows the commands for a consistent copy of
+the database and the uploads, in two tabs:
+
+- **staqly serve**: `staqly serve backup ~/staqly-backup.db` (pass the same `--data` you run
+  Staqly with), then copy the `uploads` folder of the data directory.
+- **Docker**: `docker exec staqly server backup /data/backups/staqly-backup.db`, `docker cp` to
+  copy it out, and a `tar` of the uploads from the data volume.
+
+In cloud mode on a paid plan, the **Backups** card lists the workspace's backups
+(`GET /v1/workspace/exports`). **Create backup** builds a ZIP of the whole workspace
+(collections, posts, channels, schedules, events and media); when it is ready, **Download**
+works for 24 hours. On Free the tab says that backups come with Pro and links to the data-only
+export in **Data & privacy**.
+
+See [Backup & restore](/self-hosting/backup-and-restore).
+
+### System
+
+| Section | What it does |
+|---|---|
+| **Health** | Live readiness of the staqly API (*Ready* or *Not ready*, the version, and each check: database, migrations, background workers), refreshed every 30 seconds, with a **Check now** button. |
+| **Queue** | The background jobs: **Queued**, **Running**, **Failed** and **Done today** counts, a filter (all, failed, queued, running) and the latest jobs with their kind (*Publish a post*, *Publish on a channel*, *Run a schedule*, *Refresh a channel sign-in*), status, tries and last error. **Retry** queues a failed job again; the **×** cancels a queued one. Refreshes every few seconds. See [Jobs](/concepts#jobs). |
+| **Monitoring** | The monitoring endpoints with your instance's API URL: `/livez`, `/readyz` and `/metrics` (Prometheus; needs `METRICS_TOKEN` except for `curl` on the same machine in local mode). |
+
+See [Monitoring](/self-hosting/monitoring).
+
+## Integrations
+
+**Integrations** in the sidebar has two tabs: **Setup** (how to connect an agent) and **Agents &
+activity** (who is connected and what they did).
+
+On **Setup**:
+
+- **Connection**: your instance's agent URL and a **Test connection** button (it checks
+  `/health` and your session through the dashboard proxy and shows the version, workspace
+  and who you are signed in as). A local install only ever points agents at this computer,
+  keyless over HTTP (or **STDIO** inside the Docker container); cloud mode points them at its own
+  address with an API key. A local install never uses cloud API keys.
+- Tabs **Claude Code**, **Codex**, **OpenCode**, **n8n** and **REST & MCP**, each with a
+  copy-ready snippet using your instance's real URL (and, in cloud mode, the API key you
+  just created) and a **Full guide** link to these docs. `?tab=codex` opens a tab directly;
+  `?view=agents` opens Agents & activity.
+
+On **Agents & activity**:
+
+- **Agents** (MCP clients) and **API connections** (REST clients): everything that talked to this
+  workspace (see [Agents](/dashboard/agents)).
+- **Recent activity**: the latest agent events (in cloud mode: events triggered with API
+  keys). Select one to see only its events; **Show all** goes back.
+  **View all** opens [Activity](/dashboard/activity).
+
+In cloud mode **API keys** sits right under it in the sidebar.
+
+**API keys** <Badge>cloud</Badge>:
+
+- **Create API key**: a name (required), a set of [scopes](/api/authentication#scopes) and an
+  optional expiry. Presets fill in the scopes for you:
+
+  | Preset | Scopes |
+  |---|---|
+  | **Content agent** (default) | `collections:read`, `posts:read`, `posts:write`, `posts:publish`, `media:read`, `media:write` |
+  | **Publisher automation** | `posts:read`, `posts:publish` (reports results for your own automation) |
+  | **Read-only agent** | `collections:read`, `posts:read`, `channels:read`, `events:read` |
+  | **Full access** | Every scope, including `admin` |
+
+  Only **Full access** can delete: tick `posts:delete` (posts and media) or
+  `collections:delete` yourself for a key that should clean up.
+
+  The raw key is shown **once**.
+- Each key shows its state: *Active*, *Expired* or *Revoked*.
+- **Rotate** a key: revoke it and issue a replacement with the same name and scopes; the new
+  key is shown once.
+- **Revoke** a key.
+- The key from signup, **Admin key** (or **Admin key (recovered)** after a recovery), is listed
+  here too. Keys with `admin` sign in to the dashboard; keys without it, like the presets
+  above except **Full access**, work only for agents and can never open the dashboard. Don't
+  revoke your last admin key unless you still have the recovery key.
+
+Snippets on the integration pages include the key you just created. It is kept only in memory
+in that browser tab, never in local storage.
+
+## Webhooks
+
+**Webhooks** has its own sidebar entry: create, edit, test and delete endpoints, and browse
+the delivery history with manual retry. Each webhook is one row that starts with its
+**Active** / **Paused** switch (a paused webhook sends nothing; events in the meantime are
+skipped). The timeout is set in seconds. Click a delivery to see its full error and the
+receiver's response. See [Webhooks](/automation/webhooks).
+
+## Forms and messages
+
+These conventions hold across the dashboard (posts, collections, channels, schedules,
+webhooks, alerts, API keys):
+
+- **Required fields** are marked with a red `*` after their label.
+- **Invalid fields** turn red, with the message right under the field. Server-side errors
+  (for example a name that is already taken) appear on the field they belong to.
+- **Messages** (toasts such as *Webhook created* or an error) appear at the bottom right and
+  close on their own; each has a close button (**×**) to dismiss it right away.
+
+## Next steps
+
+<Cards>
+  <Card title="Phones & tablets" href="/dashboard/phones-and-tablets">Connect a phone with a QR code.</Card>
+  <Card title="Backup & restore" href="/self-hosting/backup-and-restore">Snapshots and how to restore them.</Card>
+  <Card title="Connect agents" href="/agents">Claude Code, Codex, n8n and scripts.</Card>
+</Cards>

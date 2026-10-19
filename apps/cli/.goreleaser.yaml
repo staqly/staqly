@@ -1,0 +1,50 @@
+# goreleaser v2 config for the staqly binary (CLI + `staqly serve`), run from
+# apps/cli. Published by .github/workflows/release.yml on v* tags.
+# Dry run: goreleaser release --snapshot --clean
+version: 2
+
+project_name: staqly
+
+git:
+
+before:
+  hooks:
+    # Embeds the dashboard (static export) into apps/api/web for `staqly serve`.
+    - make -C ../.. dashboard
+    - go test ./...
+
+builds:
+  - id: staqly
+    main: ./cmd/staqly
+    binary: staqly
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .ShortCommit }} -X main.date={{ .Date }}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: staqly
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    # No version in the name: releases/latest/download/staqly_<os>_<arch>.tar.gz
+    # is a stable URL for scripts/install.sh.
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    # Docs live in the monorepo (docs/cli.md); archives carry only the binary.
+    files: [none*]
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: git
+  filters:
+    exclude: ["^docs:", "^test:", "^chore:"]

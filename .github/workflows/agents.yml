@@ -1,0 +1,177 @@
+# Real-agent MCP suite (e2e/agent/run.mjs): real agent CLIs (Claude Code,
+# Codex, OpenCode) drive staqly over MCP and the end state is checked over
+# REST. Each matrix job runs one CLI as the main agent; multi-agent scenarios
+# bring in the other two. Environments:
+#   local  the dev stack built from this checkout (compose.yml + compose.dev.yml,
+#          what `make dev` starts; mailpit for the email scenario)
+#   cloud  `staqly serve` in cloud mode built from this checkout
+#          (e2e/agent/cloud-server.sh, the same script works locally)
+# It costs money: nightly and by hand only, one run at a time, the scenarios
+# and concurrency can be narrowed, and E2E_MAX_COST_USD stops a job early.
+#
+# Secrets (Settings -> Secrets and variables -> Actions); a missing one fails
+# the run, it is never skipped:
+#   ANTHROPIC_API_KEY  claude -p
+#   OPENAI_API_KEY     codex exec, and opencode run with an openai/* model
+# Optional variables: CLAUDE_MODEL, CODEX_MODEL, OPENCODE_MODEL, E2E_MAX_COST_USD.
+name: Real agents
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      agents:
+        description: Main agents, comma separated (claude, codex, opencode)
+        default: claude,codex,opencode
+      envs:
+        description: Environments, comma separated (local, cloud)
+        default: local,cloud
+      scenarios:
+        description: Scenarios separated by spaces (empty = all), e.g. "plan-expired race-approve"
+        default: ""
+      concurrency:
+        description: Scenarios run at once per job
+        default: "3"
+
+permissions:
+  contents: read
+
+# never two runs at once (cost); a scheduled run waits for a manual one
+concurrency:
+  group: real-agents
+  cancel-in-progress: false
+
+env:
+  # the CLI versions the suite was last checked with
+  CLAUDE_CODE_VERSION: 2.1.300
+  CODEX_VERSION: 0.162.1
+  OPENCODE_VERSION: 2.0.25
+
+jobs:
+  plan:
+    name: Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        env:
+          AGENTS: ${{ inputs.agents || 'claude,codex,opencode' }}
+          ENVS: ${{ inputs.envs || 'local,cloud' }}
+        run: |
+          list() { jq -cR 'split(",") | map(gsub("\\s"; "")) | map(select(. != ""))' <<<"$1"; }
+          agents=$(list "$AGENTS") envs=$(list "$ENVS")
+          if jq -e 'any(. as $a | ["claude","codex","opencode"] | index($a) | not)' <<<"$agents" >/dev/null ||
+            jq -e 'any(. as $e | ["local","cloud"] | index($e) | not)' <<<"$envs" >/dev/null ||
+            [ "$agents" = "[]" ] || [ "$envs" = "[]" ]; then
+            echo "::error::agents must be from claude,codex,opencode and envs from local,cloud (got '$AGENTS' / '$ENVS')"
+            exit 1
+          fi
+          echo "matrix=$(jq -cn --argjson agent "$agents" --argjson env "$envs" '{agent: $agent, env: $env}')" >>"$GITHUB_OUTPUT"
+
+  agents:
+    name: ${{ matrix.agent }} / ${{ matrix.env }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    # Cloud mode runs on PostgreSQL (e2e/agent/cloud-server.sh gives each run its own schema).
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env: { POSTGRES_USER: staqly, POSTGRES_PASSWORD: staqly, POSTGRES_DB: staqly }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U staqly" --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      STAQLY_E2E_DATABASE_URL: postgres://staqly:staqly@127.0.0.1:5432/staqly?sslmode=disable
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'sonnet' }}
+      CODEX_MODEL: ${{ vars.CODEX_MODEL || 'gpt-6.1-sol' }}
+      OPENCODE_MODEL: ${{ vars.OPENCODE_MODEL || 'openai/gpt-6.1-sol' }}
+      E2E_MAX_COST_USD: ${{ vars.E2E_MAX_COST_USD || '15' }}
+      E2E_CONCURRENCY: ${{ inputs.concurrency || '3' }}
+      AGENT_TIMEOUT_SECONDS: "600"
+      SCENARIOS: ${{ inputs.scenarios }}
+    steps:
+      - name: Secrets are set
+        run: |
+          # transcripts and results.json land in $TMPDIR/staqly-agent-e2e/<run>/
+          echo "TMPDIR=$RUNNER_TEMP" >>"$GITHUB_ENV"
+          missing=""
+          for s in ANTHROPIC_API_KEY OPENAI_API_KEY; do
+            if [ -z "${!s}" ]; then missing="$missing $s"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secrets:$missing (every job runs all three agent CLIs; see e2e/README.md)"
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        if: matrix.env == 'cloud'
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: |
+            apps/api/go.sum
+            apps/cli/go.sum
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/e2e" }
+      - name: Agent CLIs
+        run: |
+          npm install -g "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" "@openai/codex@$CODEX_VERSION" "@opencode/cli@$OPENCODE_VERSION"
+          printenv OPENAI_API_KEY | codex login --with-api-key
+          claude --version && codex --version && opencode --version
+
+      - uses: docker/setup-buildx-action@v4
+        if: matrix.env == 'local'
+      - name: staqly image
+        if: matrix.env == 'local'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: ghcr.io/staqly/staqly:latest
+          cache-from: type=gha,scope=staqly
+          cache-to: type=gha,mode=max,scope=staqly
+      - name: Dev stack (make dev without the browser)
+        if: matrix.env == 'local'
+        run: docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait
+      - name: Cloud server (e2e/agent/cloud-server.sh)
+        if: matrix.env == 'cloud'
+        run: e2e/agent/cloud-server.sh start >/dev/null
+
+      - name: Real-agent suite
+        run: |
+          # shellcheck disable=SC2086 # word splitting on purpose: one argument per scenario name
+          node e2e/agent/run.mjs --agent=${{ matrix.agent }} --env=${{ matrix.env }} $SCENARIOS
+
+      - name: Server logs
+        if: failure()
+        run: |
+          if [ "${{ matrix.env }}" = local ]; then
+            docker compose -f compose.yml -f compose.dev.yml logs --no-color staqly | tail -n 300
+          else
+            tail -n 300 "$TMPDIR/staqly-agent-cloud/server.log"
+          fi
+      # results.json and transcripts; not the generated MCP configs (they hold the run's API keys)
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: agents-${{ matrix.agent }}-${{ matrix.env }}
+          path: |
+            ${{ runner.temp }}/staqly-agent-e2e/*/results.json
+            ${{ runner.temp }}/staqly-agent-e2e/*/*.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Stop staqly
+        if: always()
+        run: |
+          if [ "${{ matrix.env }}" = local ]; then
+            docker compose -f compose.yml -f compose.dev.yml down -v
+          else
+            e2e/agent/cloud-server.sh stop
+          fi

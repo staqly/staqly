@@ -1,0 +1,166 @@
+---
+title: Monitoring
+description: Check that staqly is healthy, scrape its Prometheus metrics, trace a failed request and understand its rate limits.
+---
+
+Staqly has built-in health checks and Prometheus metrics, so you can watch it with the tools you
+already use — no extra services or agents. You need this page when you run staqly for others
+(cloud mode), want alerts when webhooks back up, or are chasing a failed request. Everything
+works the same with the binary and with Docker; only how Prometheus reaches the API differs.
+
+## Quick check
+
+```bash
+curl -s http://localhost:3333/readyz
+```
+
+```json
+{"status":"ok","checks":{"database":"ok","migrations":"ok","workers":"ok"}}
+```
+
+## Request IDs
+
+Every response carries **`X-Request-Id`** — your own if you sent one, otherwise a generated
+one. Error bodies include it as `request_id` (and `trace_id` when the request sent a W3C
+`traceparent` header); it appears in the logs. Quote it when reporting a
+problem.
+
+```json
+{ "error": { "code": "not_found", "message": "post not found" }, "request_id": "my-req-1" }
+```
+
+Log format, fields and correlation with Cloudflare are in
+[Logs & tracing](/self-hosting/logs-and-tracing).
+
+## Health endpoints
+
+| Endpoint | Use for | Checks |
+|---|---|---|
+| `GET /health` | Simple uptime checks | DB ping, version |
+| `GET /livez` | Liveness (Docker, Kubernetes) | Only that the process answers — never touches the DB, so a slow disk doesn't cause restarts |
+| `GET /readyz` | Readiness, load balancers | DB ping, all embedded migrations applied, background workers alive |
+
+`/readyz` returns `200 {"status":"ok","checks":{"database":"ok","migrations":"ok","workers":"ok"}}`
+or `503` with `"status":"unavailable"`. `migrations` can be `pending (N < M)`; `workers` is
+`stale` when the heartbeat (every 5 s) is older than 30 s, or `stopped` after shutdown.
+
+The `staqly` image already has a Docker health check on `/health` and the dashboard. To use
+`/readyz` instead, add these flags to your `docker run` command:
+
+```bash
+--health-cmd "wget -qO- http://127.0.0.1:3333/readyz || exit 1" \
+  --health-interval 15s --health-timeout 3s --health-retries 3
+```
+
+## Prometheus metrics
+
+`GET /metrics` serves the Prometheus text format. A request is allowed when it comes
+**directly from this machine** (loopback peer, local `Host`, no forwarding headers or `Origin`)
+**or** sends `Authorization: Bearer <METRICS_TOKEN>`. Everything else gets a plain `404`.
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+A Prometheus on the same computer scrapes `127.0.0.1:3333` directly; no token needed:
+
+```yaml title="prometheus.yml"
+scrape_configs:
+  - job_name: staqly
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["127.0.0.1:3333"]
+```
+
+</Tab>
+<Tab value="Docker">
+
+Prometheus in Docker reaches the API over a Docker network, which doesn't count as direct
+from this machine. Start staqly with `-e METRICS_TOKEN=...` (a long random value), put
+Prometheus on the same network as the `staqly` container (`docker network create monitoring`,
+`docker network connect monitoring staqly`) and send the token:
+
+```yaml title="prometheus.yml"
+scrape_configs:
+  - job_name: staqly
+    scrape_interval: 30s
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/staqly_metrics_token   # contains METRICS_TOKEN
+    static_configs:
+      - targets: ["staqly:3333"]
+```
+
+</Tab>
+</Tabs>
+
+| Metric | Type | Labels |
+|---|---|---|
+| `http_requests_total` | counter | `method`, `route` (pattern, e.g. `/v1/posts/{id}`), `status` |
+| `http_request_duration_seconds` | histogram | `method`, `route` |
+| `staqly_rate_limited_total` | counter | `scope` (`ip`, `principal`) |
+| `staqly_webhook_deliveries` | gauge | `status` (`pending`, `succeeded`, `failed`) |
+| `staqly_webhook_outbox_oldest_pending_seconds` | gauge | — (outbox lag) |
+| `staqly_webhook_outbox_due` | gauge | — (worker backlog) |
+| `staqly_jobs_total` | counter | `kind` (`publish_post`, `publish_target`, `target_timeout`, `run_schedule`, `refresh_channel`), `result` (`done`, `retry`, `failed`) |
+| `staqly_publish_attempts_total` | counter | `provider`, `result` (`published`, `failed`) |
+| `staqly_webhook_attempts_total` | counter | `result` (`succeeded`, `retry`, `failed`) |
+| `staqly_webhook_attempt_duration_seconds` | histogram | — |
+| `staqly_notifications_total` | counter | `channel_type` (`telegram`, `slack`, `discord`, `ntfy`, `email`), `result` (`ok`, `error`) |
+| `staqly_metrics_db_up` | gauge | — |
+| `staqly_build_info` | gauge | `version`, `mode` |
+| `process_start_time_seconds`, `go_*` | various | — |
+
+Labels never contain IDs, URLs, keys or workspace names. DB gauges are computed per scrape, so
+15–60 s intervals are plenty.
+
+**Useful queries**
+
+```text
+sum by (route) (rate(http_requests_total[5m]))                                   # request rate
+sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))   # error ratio
+histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))
+staqly_webhook_outbox_oldest_pending_seconds                                      # webhook lag
+sum by (provider, result) (increase(staqly_publish_attempts_total[1d]))          # publishes per day, by platform
+sum by (kind) (rate(staqly_jobs_total{result="failed"}[1h]))                     # failing jobs
+sum by (channel_type) (rate(staqly_notifications_total{result="error"}[15m]))    # failing alerts
+```
+
+**Suggested alerts**: outbox lag `> 900` for 10 min (above `WEBHOOK_RETRY_MAX`);
+`increase(staqly_jobs_total{result="failed"}[30m]) > 3`;
+`increase(staqly_notifications_total{result="error"}[30m]) > 3`; 5xx ratio above 1 % for 5 min; `up == 0` or
+`/readyz` failing.
+
+## Rate limits
+
+In-memory token buckets in the single API process. Memory is bounded (at most 100k tracked
+keys per limiter); when full, refilled and least recently used buckets are evicted first, so
+spraying random keys can't reset an offender's bucket.
+
+| Limiter | Applies to | Key | Default |
+|---|---|---|---|
+| Sensitive (`ip`) | `POST /v1/sessions/recover`, `POST /v1/sessions/api-key`, `POST /v1/device-links/redeem`, `POST /v1/workspaces`, the OAuth callback | client IP + endpoint | 10/min, burst 10 |
+| API (`principal`) | everything else under `/v1` and `/mcp` — **cloud mode only** | API key or session | 600/min, burst 100 |
+| Test sends | `POST /v1/webhooks/{id}/test`, `POST /v1/alerts/{id}/test`, `POST /v1/channels/{id}/test`, both modes | API key or session | 10/min, burst 5 |
+
+Local mode has no per-principal limit; probes and `/metrics` are never limited. The cloud signup
+cap (5 per hour per IP) applies as well. Over a limit: `429` with `Retry-After`:
+
+```json
+{ "error": { "code": "rate_limited", "message": "too many requests; retry after 6s" } }
+```
+
+| Variable | Default | Description |
+|---|---|---|
+| `RATE_LIMIT_DISABLED` | `false` | Turn the limits off (the signup cap stays) |
+| `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_BURST` | `10` / same | Sensitive endpoints, per IP |
+| `RATE_LIMIT_AUTH_PER_MINUTE` / `RATE_LIMIT_AUTH_BURST` | `600` / `100` | Authenticated API, per principal |
+| `TRUST_PROXY` | `false` | Take the client IP from the **right-most** `X-Forwarded-For` entry (the one your proxy appends) — only behind your own proxy. IPv6 clients are limited per /64 |
+
+## Next steps
+
+<Cards>
+  <Card title="Logs & tracing" href="/self-hosting/logs-and-tracing">Log fields and following one request.</Card>
+  <Card title="Troubleshooting" href="/self-hosting/troubleshooting">Common errors and fixes.</Card>
+  <Card title="Configuration" href="/self-hosting/configuration#observability">Observability settings.</Card>
+</Cards>

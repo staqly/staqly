@@ -1,0 +1,448 @@
+'use client'
+
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  ArrowRight,
+  Bot,
+  CheckCheck,
+  CreditCard,
+  Download,
+  KeyRound,
+  LifeBuoy,
+  Lock,
+  MailX,
+  Webhook,
+} from 'lucide-react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+
+import { Callout } from '@/components/common/callout'
+import { AckCheckbox, useAckGate } from '@/components/common/confirm-name-field'
+import { ErrorState } from '@/components/common/error-state'
+import { SecretField } from '@/components/common/secret-field'
+import { PlanBadge } from '@/components/plans/plan-badge'
+import { EVERY_PLAN, PlanGrid } from '@/components/plans/plan-cards'
+import { Button } from '@/components/ui/button'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { api, ApiError, setCsrfToken, type SetupResult } from '@/lib/api'
+import { fieldsOf, setFormApiError } from '@/lib/form-errors'
+import { downloadText } from '@/lib/format'
+import { planName } from '@/lib/notify'
+import { usePlans, useSetupStatus } from '@/lib/queries'
+import { rememberApiKey } from '@/lib/session-key'
+import { cn } from '@/lib/utils'
+import { zodResolver } from '@/lib/zod'
+
+import { PublicShell } from './public-shell'
+
+const schema = z.object({
+  name: z.string().trim().max(100, 'At most 100 characters'),
+  setup_token: z.string(),
+})
+
+type Values = z.infer<typeof schema>
+
+const NAME_INPUT_ID = 'workspace-name'
+
+const POINTS = [
+  { Icon: Bot, text: 'n8n, Claude Code, Codex and scripts drop their output into collections.' },
+  { Icon: CheckCheck, text: 'Write once, pick the channels, set a time. Staqly publishes and retries for you.' },
+  { Icon: Webhook, text: 'Signed webhooks and MCP tell your agents what you decided.' },
+]
+
+export function SetupFlow() {
+  const status = useSetupStatus()
+  const router = useRouter()
+  const [result, setResult] = useState<SetupResult | null>(null)
+  const local = status.data?.mode === 'local'
+  // Stripe is configured: paid plans can be bought after sign-up (Settings → Plan & usage).
+  const billing = !!status.data?.billing_enabled
+
+  // Local mode has no onboarding: the workspace exists and localhost is trusted.
+  useEffect(() => {
+    if (local) {
+      router.replace('/schedule')
+    }
+  }, [local, router])
+
+  const signIn = (
+    <Button asChild variant="ghost" className="pointer-coarse:h-11">
+      <Link href="/login">
+        Sign in <ArrowRight />
+      </Link>
+    </Button>
+  )
+
+  if (result) {
+    return (
+      <PublicShell className="max-w-xl pt-6 sm:pt-10">
+        <SecretsStep result={result} billing={billing} />
+      </PublicShell>
+    )
+  }
+
+  if (status.isPending || local) {
+    return (
+      <PublicShell className="pt-10">
+        <Skeleton className="mx-auto h-72 w-full max-w-md rounded-2xl" />
+      </PublicShell>
+    )
+  }
+
+  if (status.error) {
+    return (
+      <PublicShell className="max-w-md pt-10">
+        <ErrorState title="Cannot reach the staqly API" error={status.error} onRetry={() => status.refetch()} />
+      </PublicShell>
+    )
+  }
+
+  const tokenRequired = !!status.data.setup_token_required
+  // Older servers did not report signup_open; treat them as open.
+  const closed = status.data.signup_open === false && !tokenRequired
+
+  if (closed) {
+    return (
+      <PublicShell nav={signIn} className="max-w-md pt-10">
+        <SignupClosed />
+      </PublicShell>
+    )
+  }
+
+  return (
+    <PublicShell nav={signIn}>
+      <CreateWorkspace tokenRequired={tokenRequired} billing={billing} onDone={setResult} />
+    </PublicShell>
+  )
+}
+
+function SignupClosed() {
+  return (
+    <div className="grid gap-4 rounded-2xl border bg-card p-6 text-center shadow-sm">
+      <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-muted">
+        <Lock className="size-5 text-muted-foreground" />
+      </span>
+      <h1 className="text-xl font-semibold tracking-tight">Sign-ups are closed on this server</h1>
+      <p className="text-sm text-muted-foreground">
+        Ask the operator for an invite, or sign in to an existing workspace with its API key.
+      </p>
+      <Button asChild size="lg" className="h-11">
+        <Link href="/login">
+          Sign in to a workspace <ArrowRight />
+        </Link>
+      </Button>
+    </div>
+  )
+}
+
+function focusForm() {
+  const el = document.getElementById(NAME_INPUT_ID)
+
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el?.focus({ preventScroll: true })
+}
+
+function CreateWorkspace({
+  tokenRequired,
+  billing,
+  onDone,
+}: {
+  tokenRequired: boolean
+  billing: boolean
+  onDone: (r: SetupResult) => void
+}) {
+  const plans = usePlans()
+
+  return (
+    <div className="grid gap-14 pt-4 sm:pt-10 lg:gap-20">
+      <section className="grid items-center gap-8 lg:grid-cols-[1.1fr_1fr] lg:gap-14">
+        <div className="max-w-xl">
+          <div className="mb-4 inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground shadow-xs backdrop-blur">
+            <span className="inline-flex items-center gap-1">
+              <CreditCard className="size-3.5 text-brand" /> No card
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <MailX className="size-3.5 text-brand" /> No email
+            </span>
+            <span>Ready in seconds</span>
+          </div>
+          <h1 className="text-[2.1rem] leading-[1.08] font-semibold tracking-tight text-balance sm:text-5xl">
+            Create your free workspace
+          </h1>
+          <p className="mt-4 text-base text-muted-foreground sm:text-lg">
+            The workspace for everything your AI agents create. Agents store their work; you review, approve and send
+            feedback — and they pick it up automatically.
+          </p>
+          <ul className="mt-6 hidden gap-3 sm:grid">
+            {POINTS.map(({ Icon, text }) => (
+              <li key={text} className="flex items-start gap-3 text-sm">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border bg-card shadow-xs">
+                  <Icon className="size-3.5 text-brand" />
+                </span>
+                <span className="pt-1 text-muted-foreground">{text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <WorkspaceForm tokenRequired={tokenRequired} onDone={onDone} />
+      </section>
+
+      <section aria-labelledby="pricing-heading" className="grid gap-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <div className="text-xs font-semibold tracking-[0.18em] text-brand uppercase">Pricing</div>
+          <h2 id="pricing-heading" className="mt-2 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+            Start free. Grow when your agents do.
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground sm:text-base">{EVERY_PLAN}.</p>
+        </div>
+        {plans.error ? (
+          <ErrorState title="Could not load plans" error={plans.error} onRetry={() => plans.refetch()} />
+        ) : (
+          <PlanGrid
+            plans={plans.data}
+            loading={plans.isLoading}
+            className="mx-auto w-full max-w-5xl"
+            renderCta={(p) =>
+              p.price_usd_month === 0 ? (
+                <Button size="lg" variant="outline" className="h-11" onClick={focusForm}>
+                  Start free <ArrowRight />
+                </Button>
+              ) : billing ? (
+                <Button
+                  size="lg"
+                  variant={p.highlight ? 'default' : 'outline'}
+                  className={cn('h-11', p.highlight && 'bg-brand-gradient text-[#052817]')}
+                  onClick={focusForm}
+                >
+                  Upgrade after sign-up <ArrowRight />
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  disabled
+                  title="Paid plans are not available yet"
+                  className={cn('h-11', p.highlight && 'bg-brand-gradient text-[#052817] disabled:opacity-90')}
+                >
+                  Upgrade — coming soon
+                </Button>
+              )
+            }
+          />
+        )}
+        <p className="text-center text-xs text-muted-foreground">
+          {billing
+            ? 'Every workspace starts with a 7-day Pro trial. Upgrade any time under Settings → Plan & usage; payment runs on Stripe, never on this page.'
+            : 'Every workspace starts with a 7-day Pro trial; afterwards choose Free in Settings → Plan & usage. You will never be asked for payment details here.'}
+        </p>
+      </section>
+    </div>
+  )
+}
+
+function WorkspaceForm({ tokenRequired, onDone }: { tokenRequired: boolean; onDone: (r: SetupResult) => void }) {
+  'use no memo' // React Hook Form register()/reset() must not be memoised by the React Compiler
+
+  const qc = useQueryClient()
+  const [rateLimited, setRateLimited] = useState(false)
+  const form = useForm<Values>({
+    resolver: zodResolver(
+      tokenRequired ? schema.extend({ setup_token: z.string().trim().min(1, 'Setup token is required') }) : schema,
+    ),
+    defaultValues: { name: '', setup_token: '' },
+  })
+  const { register, handleSubmit, formState, setError } = form
+
+  const setup = useMutation({
+    mutationFn: (v: Values) =>
+      api.setup({
+        name: v.name.trim() || undefined,
+        ...(tokenRequired ? { setup_token: v.setup_token.trim() } : {}),
+      }),
+    onSuccess: (res) => {
+      setCsrfToken(res.csrf_token)
+      // A new workspace: never keep a key remembered for the previous one.
+      rememberApiKey(res.api_key.key ? { id: res.api_key.id, name: res.api_key.name, key: res.api_key.key } : null)
+      // A new workspace means a new session: drop anything cached for the previous one.
+      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'setup' && q.queryKey[0] !== 'plans' })
+      onDone(res)
+    },
+    onError: (err) => {
+      // A 403 is about the setup token only when this server asks for one; otherwise it is toasted below.
+      if (err instanceof ApiError && err.status === 403 && tokenRequired) {
+        setError('setup_token', { message: err.message }, { shouldFocus: true })
+
+        return
+      }
+
+      if (err instanceof ApiError && err.isRateLimited) {
+        setRateLimited(true)
+
+        return
+      }
+
+      setFormApiError(err, setError, fieldsOf('name', 'setup_token'))
+    },
+  })
+
+  return (
+    <form
+      onSubmit={handleSubmit((v) => {
+        setRateLimited(false)
+        setup.mutate(v)
+      })}
+      className="relative grid gap-5 rounded-2xl border bg-card/90 p-5 shadow-xl shadow-black/[0.04] backdrop-blur sm:p-7 dark:shadow-black/30"
+      noValidate
+      aria-label="Create workspace"
+    >
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">Name your workspace</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          You&apos;ll get an admin API key to sign in with and a recovery key for when you lose it.
+        </p>
+      </div>
+      <FieldGroup className="gap-4">
+        <Field data-invalid={!!formState.errors.name}>
+          <FieldLabel htmlFor={NAME_INPUT_ID}>Workspace name</FieldLabel>
+          <Input
+            id={NAME_INPUT_ID}
+            autoComplete="organization"
+            placeholder="e.g. Acme Studio"
+            className="h-11 text-base sm:text-sm"
+            aria-invalid={!!formState.errors.name}
+            {...register('name')}
+          />
+          <FieldError errors={[formState.errors.name]} />
+        </Field>
+        {tokenRequired && (
+          <Field data-invalid={!!formState.errors.setup_token}>
+            <FieldLabel htmlFor="setup-token" required>
+              Setup token
+            </FieldLabel>
+            <Input
+              id="setup-token"
+              type="password"
+              autoComplete="off"
+              className="h-11 font-mono text-base sm:text-sm"
+              aria-invalid={!!formState.errors.setup_token}
+              aria-required
+              {...register('setup_token')}
+            />
+            <FieldDescription>This server requires the SETUP_TOKEN configured by its operator.</FieldDescription>
+            <FieldError errors={[formState.errors.setup_token]} />
+          </Field>
+        )}
+      </FieldGroup>
+      {rateLimited && (
+        <Callout role="alert">
+          Too many workspaces were created from your network recently. Please wait a few minutes and try again.
+        </Callout>
+      )}
+      <Button
+        type="submit"
+        size="lg"
+        disabled={setup.isPending}
+        className="h-11 bg-brand-gradient text-[#052817] shadow-md shadow-emerald-500/25 hover:brightness-105"
+      >
+        {setup.isPending ? 'Creating workspace...' : 'Create free workspace'} <ArrowRight />
+      </Button>
+      <p className="text-center text-xs text-muted-foreground">
+        Already have one?{' '}
+        <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+          Sign in with your API key
+        </Link>
+      </p>
+    </form>
+  )
+}
+
+function SecretsStep({ result, billing }: { result: SetupResult; billing: boolean }) {
+  const router = useRouter()
+  const ack = useAckGate('ack-recovery', 'Confirm that you saved your API key and recovery key')
+  const apiKey = result.api_key.key ?? ''
+  const plan = result.workspace.plan ?? 'free'
+
+  function download() {
+    downloadText(
+      `staqly-${result.workspace.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-keys.txt`,
+      [
+        `staqly workspace: ${result.workspace.name} (${result.workspace.id})`,
+        `Created: ${result.workspace.created_at}`,
+        '',
+        `API key (${result.api_key.name}; scopes: ${result.api_key.scopes.join(', ')}). Signs you in to the dashboard:`,
+        apiKey,
+        '',
+        'Recovery key. For when you lose the API key; works once and is replaced by a new one when used:',
+        result.recovery_key,
+        '',
+        'Store this file in a password manager and delete it from your downloads folder.',
+      ].join('\n'),
+    )
+  }
+
+  return (
+    <div
+      className="grid gap-6 rounded-2xl border bg-card p-5 shadow-xl shadow-black/[0.04] sm:p-7"
+      data-testid="setup-secrets"
+    >
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Save your keys</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Workspace <span className="font-medium text-foreground">{result.workspace.name}</span> is ready. These keys
+          are shown <strong>only once</strong>.
+        </p>
+        <p className="mt-3 rounded-lg bg-muted/60 px-3 py-2 text-sm leading-relaxed" data-testid="setup-plan">
+          <PlanBadge plan={plan} className="mr-1.5 align-[1px]" />
+          <span>
+            Your workspace is on the <strong>{planName(plan)}</strong> plan
+            {plan !== 'free'
+              ? '.'
+              : billing
+                ? ' — no card needed. Upgrade any time under Settings → Plan & usage.'
+                : ' — no card needed. Upgrades are coming soon.'}
+          </span>
+        </p>
+      </div>
+
+      <div className="grid gap-2">
+        <Label className="flex flex-wrap items-center gap-1.5">
+          <KeyRound className="size-3.5" /> API key
+          <span className="font-normal text-muted-foreground">(admin, signs you in to the dashboard)</span>
+        </Label>
+        <SecretField value={apiKey} label="API key" />
+      </div>
+
+      <div className="grid gap-2">
+        <Label className="flex flex-wrap items-center gap-1.5">
+          <LifeBuoy className="size-3.5" /> Recovery key
+          <span className="font-normal text-muted-foreground">(for when you lose the API key, keep offline)</span>
+        </Label>
+        <SecretField value={result.recovery_key} label="Recovery key" />
+      </div>
+
+      <Callout role="alert">
+        The API key is how you <strong>sign in to this workspace</strong> from a new browser. Lost it? The recovery key
+        gets you back in once, with a new API key and a new recovery key. Staqly stores only hashes and cannot show
+        either again. Lose both and you may be <strong>permanently locked out</strong>. For agents, create a scoped key
+        without admin in Settings.
+      </Callout>
+
+      <Button type="button" variant="outline" size="lg" className="h-11" onClick={download}>
+        <Download /> Download keys as .txt
+      </Button>
+
+      <AckCheckbox {...ack.checkbox} className="min-h-11 rounded-lg border p-3">
+        I have saved my API key and recovery key
+      </AckCheckbox>
+
+      <Button size="lg" className="h-11" onClick={() => ack.confirm(() => router.replace('/schedule'))}>
+        Open dashboard <ArrowRight />
+      </Button>
+    </div>
+  )
+}

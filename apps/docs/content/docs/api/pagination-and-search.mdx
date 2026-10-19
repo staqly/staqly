@@ -1,0 +1,120 @@
+---
+title: Pagination & search
+description: Filter, sort, search and page through posts and events with the REST API.
+---
+
+Use these parameters whenever you need more than one post back: a report of what went out
+last week, the calendar for the next seven days, or a search for one phrase across every
+collection.
+
+## Find and page through posts
+
+<Steps>
+<Step>
+
+### Filter the list
+
+`GET /v1/posts` lists every collection; `GET /v1/collections/{id}/posts` lists one (`{id}` may
+be the exact name). Add [filters](#post-filters) as query parameters:
+
+```bash
+# the calendar for the next week, soonest first
+curl -s "http://localhost:3333/v1/posts?status=scheduled&publish_after=2026-10-20&publish_before=2026-10-27"
+
+# what one channel published, newest first
+curl -s "http://localhost:3333/v1/posts?channel_id=ch_7h2kq9xw3nbvd5yhzm6a&status=published&sort=publish_desc"
+
+# drafts waiting in one collection, in the order a schedule picks them
+curl -s "http://localhost:3333/v1/collections/Product%20updates/posts?status=draft&sort=created_asc"
+```
+
+In cloud mode, add `-H "Authorization: Bearer stk_..."` (scope `posts:read`).
+
+</Step>
+<Step>
+
+### Search by text (optional)
+
+`q` matches words of the content (case-insensitive substring match) and combines with every
+filter:
+
+```bash
+curl -s "http://localhost:3333/v1/posts?q=calendar&status=published"
+```
+
+</Step>
+<Step>
+
+### Follow `next_cursor`
+
+Every list answers `{"data": [...], "next_cursor": "..."}`. Pass the cursor back as `cursor`
+to get the next page; a missing or `null` cursor means you reached the end. The SDKs do this
+for you:
+
+```ts
+for await (const post of staqly.posts.iterate({ status: 'published' })) {
+  console.log(post.id)
+}
+```
+
+</Step>
+</Steps>
+
+## How cursors work
+
+- `limit` defaults to 50 and is capped at 200.
+- Cursors are opaque strings; don't build or parse them.
+- Pagination is keyset-based (sort value + ID), so pages don't shift or repeat when new posts
+  arrive while you page.
+
+## Post filters
+
+Both post list endpoints need `posts:read`.
+
+| Parameter | Meaning |
+|---|---|
+| `collection_id` | Only this collection: an id or an exact name (on `GET /v1/posts`) |
+| `status` | `draft`, `scheduled`, `publishing`, `published` or `failed` |
+| `channel_id` | Posts with a target on this channel |
+| `tag` | Posts carrying this tag |
+| `publish_after`, `publish_before` | `publish_at` range (RFC 3339 or `YYYY-MM-DD`; `after` inclusive, `before` exclusive). Posts without a time never match: this is the calendar |
+| `q` | Words of the content |
+| `sort` | `publish_asc` (default: soonest first, posts without a time last), `publish_desc`, `created_desc`, `created_asc`, `updated_desc` |
+| `limit`, `cursor` | Paging |
+
+`GET /v1/tags` lists the workspace's tags with how many posts carry each, most used first.
+
+## Listing events
+
+`GET /v1/events` returns the activity log, newest first, with the same `limit` / `cursor` paging
+(`limit` defaults to 50, capped at 200). It needs `events:read`; audit events are listed for
+admins only ([Event types](/api/events#audit-events)).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | No | Only events about this post |
+| `channel_id` | string | No | Only events about this channel (channel events and per-target post events) |
+| `schedule_id` | string | No | Only events about this schedule |
+| `collection_id` | string | No | Only events of this collection |
+| `type` | string | No | Exact event type, e.g. `post.published` |
+| `type_prefix` | string | No | Literal type prefix, e.g. `post.` or `webhook.` |
+| `actor_type` | string | No | `local`, `session`, `api_key` or `system` |
+| `actor_id` | string | No | One actor, e.g. an API key ID (`key_r7zq2m4xk3pw6ta5ned2`) or a session ID |
+| `agent` | string | No | Events caused by this [agent](/dashboard/agents), by name (`claude-code`); repeatable |
+| `from`, `to` | string | No | Created at or after `from`, before `to` (RFC 3339 or `YYYY-MM-DD`) |
+| `since`, `until` | integer | No | By sequence number: `seq` greater than `since`, at most `until` |
+| `limit`, `cursor` | | No | Paging |
+
+`GET /v1/posts/{id}/events` is the one post's history (the same shape, that post only).
+
+## Listing webhook deliveries
+
+`GET /v1/webhook-deliveries` returns the latest deliveries (filter by `webhook_id`, `post_id`
+and `status`; `limit` up to 200). See [Webhooks](/automation/webhooks#delivery-history-and-testing).
+
+## Next steps
+
+<Cards>
+  <Card title="Posts reference" href="/api/reference/posts">Every post endpoint and its parameters.</Card>
+  <Card title="Event types" href="/api/events">What each event carries.</Card>
+</Cards>

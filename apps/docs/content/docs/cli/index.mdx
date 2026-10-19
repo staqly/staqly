@@ -1,0 +1,221 @@
+---
+title: staqly CLI
+description: Install the staqly command, write your first post and put it on the calendar from a terminal.
+---
+
+The `staqly` command writes, schedules and publishes posts, connects channels, manages
+schedules and watches the queue, all from a terminal or a script. The same binary also runs the
+whole staqly server with `staqly serve`.
+
+Pick the CLI for shell scripts, cron jobs and quick checks. Use an [SDK](/sdk/typescript) inside
+a TypeScript or Python program, [MCP](/mcp) when an AI agent such as Claude Code talks to staqly
+directly, and the [REST API](/api) from any other language.
+
+## Get started
+
+<Steps>
+<Step>
+### Install the binary
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | sh
+```
+
+The script installs the latest release for macOS or Linux (amd64, arm64) to `~/.local/bin/staqly`
+and checks the download against the release's `checksums.txt`. Make sure `~/.local/bin` is on
+your `PATH`, then confirm it works:
+
+```bash
+staqly version
+```
+
+</Step>
+<Step>
+### Start a server (or point to one)
+
+If staqly isn't running yet, start it on this computer. It needs no Docker and no account:
+
+```bash
+staqly serve
+```
+
+The API and MCP endpoint listen on `http://localhost:3333`, the dashboard on
+`http://localhost:8080`. Leave it running and open a second terminal.
+
+Already running staqly in Docker or in the cloud? Skip this step. For a cloud server, save its
+URL and key once with `staqly login --url https://staqly.example.com --key stk_...`.
+
+</Step>
+<Step>
+### Connect a channel and write a post
+
+```bash
+staqly channels connect custom --name "My publisher"      # or a token platform with --field
+staqly collections create "Product updates"
+staqly posts create "Product updates" --content "v1.4 is out." --channel "My publisher" --publish-at "+1h"
+```
+
+`posts create` prints the new post with its ID and status (`scheduled` here, because of `--publish-at`).
+
+</Step>
+<Step>
+### Watch it go out
+
+```bash
+staqly schedule                 # the calendar for the next 7 days
+staqly posts get post_oalirbz67y4m4cqxq5dw
+staqly jobs list --status failed
+```
+
+Open the dashboard at `http://localhost:8080` to see the same on the **Schedule** page.
+
+</Step>
+</Steps>
+
+## Other ways to install
+
+**Windows.** Download the `.zip` for your CPU from the
+[releases page](https://github.com/staqly/staqly/releases) and put `staqly.exe` on your `PATH`.
+
+**A specific version or folder.** The install script reads two environment variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `STAQLY_VERSION` | latest release | Release tag to install, e.g. `v0.2.0` |
+| `STAQLY_INSTALL_DIR` | `~/.local/bin` | Where to put the binary |
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh | STAQLY_VERSION=v0.2.0 sh
+```
+
+**From a checkout of the repository.** Requires Go and Node:
+
+```bash
+make dashboard   # embeds the dashboard for `staqly serve`
+cd apps/cli
+make build       # → apps/cli/bin/staqly
+make install     # → $GOBIN, or ~/go/bin
+```
+
+**Shell completion:**
+
+```bash
+source <(staqly completion bash)        # or zsh
+staqly completion fish > ~/.config/fish/completions/staqly.fish
+```
+
+## Run the server
+
+`staqly serve` runs the API, MCP endpoint, job queue and dashboard in one process.
+
+```bash
+staqly serve                                         # dashboard on this computer only
+staqly serve --expose                                # dashboard reachable from phones and tablets
+staqly serve --data ~/staqly-data --port 4333 --dashboard-port 9090
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--data` | `~/.local/share/staqly` (or `STAQLY_DATA_DIR`) | Folder for the SQLite database, uploads and `secret.key` |
+| `--port` | `3333` | API and MCP port, always bound to `127.0.0.1` |
+| `--dashboard-port` | `8080` | Dashboard port |
+| `--expose` | off | Serve the dashboard on all network interfaces; each browser signs in once with a link from `staqly serve connect-link` |
+
+With a subcommand, `staqly serve` runs an operator task against the same data instead:
+`connect-link`, `backup <file>`, `workspaces`, `stats`, `recovery-key` and `set-plan`. See
+[Run the binary](/self-hosting/binary) and [Operator CLI](/self-hosting/operator-cli).
+
+## Connect to a server
+
+By default the CLI talks to a local server at `http://localhost:3333` without a key. To use
+another server, pass flags, set environment variables, or save a profile.
+
+| Setting | Flag | Environment | Profile field | Default |
+|---|---|---|---|---|
+| API base URL | `--api-url` (alias `--url`) | `STAQLY_API_URL` | `url` | `http://localhost:3333` |
+| API key | `--key` | `STAQLY_API_KEY` | `key` | none (local mode is keyless) |
+| Profile | `--profile` | `STAQLY_PROFILE` | `current` | `default` |
+| Config file | none | `STAQLY_CONFIG` | none | `$XDG_CONFIG_HOME/staqly/config.json`, else `~/.config/staqly/config.json` |
+
+The first one set wins, in this order: **flag, environment variable, selected profile, default**.
+
+<Callout type="warn" title="--url means something else for some commands">
+`webhooks create` and `webhooks update` (the receiver URL) and `schedules create` /
+`schedules update` (the endpoint URL) use `--url` for their own field. Set the API address
+with `--api-url` or `STAQLY_API_URL` there.
+</Callout>
+
+### Save servers as profiles
+
+```bash
+staqly login                                                  # local server, keyless → profile "default"
+staqly login --url https://staqly.example.com --key stk_... --profile work
+echo "$KEY" | staqly login --url https://staqly.example.com --key - --profile ci
+staqly profiles                 # list (keys masked); * marks the current one
+staqly profiles use work        # switch
+staqly status --profile ci      # use a profile for one command
+staqly logout --profile ci      # remove a profile
+```
+
+`login` checks the credentials against `GET /v1/session` before saving (skip with
+`--no-verify`), writes the config file (folder `0700`, file `0600`) and makes the profile
+current. Without `--key` it uses `STAQLY_API_KEY` or asks for the key at a hidden prompt.
+
+### How keys are protected
+
+- A key stored in a profile is only sent to **that profile's own URL**. If `--api-url` or
+  `STAQLY_API_URL` points somewhere else, the CLI sends no key and prints a note. Pass `--key` or
+  `STAQLY_API_KEY` to authenticate against the other server.
+- The CLI warns when a key would travel over plain `http://` to a host other than `localhost`.
+  Use `https://` for remote servers.
+- Channel credentials passed with `--field` go straight to the API and are never written to
+  the config file.
+
+## Output formats
+
+- Human-readable tables by default. Colors only appear on a terminal; `NO_COLOR=1`, `TERM=dumb`
+  or `--no-color` turn them off.
+- `--json` prints the API response unchanged. Streaming commands (`events tail --follow`)
+  print one JSON object per line (NDJSON).
+- With `--json`, errors go to stderr as
+  `{"error":{"code","status","message","fields","details","retry_after_seconds"}}`.
+- Text from the server (post content, channel names, error messages) is treated as untrusted.
+  Human output strips control characters, ANSI / OSC escape sequences and Unicode bidi overrides
+  before printing. `--json` keeps the data intact but writes C1 controls and bidi overrides as
+  `\uXXXX` escapes, so it is still safe to view in a terminal.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success. With `--wait` (`posts create --now --wait`, `posts publish --wait`, `posts retry --wait`): **published** |
+| `1` | Error: API, network, failed confirmation, or some posts of a multi-post command failed |
+| `2` | With `--wait`: the post **failed** on a channel |
+| `3` | With `--wait`: the wait **timed out** (still publishing) |
+| `64` | Usage error: unknown command or flag, missing arguments |
+| `130` | Interrupted (<Kbd>Ctrl</Kbd>+<Kbd>C</Kbd>). `--follow` exits `0` on Ctrl-C |
+
+## Error messages
+
+The CLI turns API errors into plain-language hints:
+
+| Status | What it tells you |
+|---|---|
+| `401` | Pass `--key` or run `staqly login` |
+| `402` | The plan limit you hit, with usage and maximum |
+| `403 not_local` | A keyless request came from another machine |
+| `403` (scope) | Which scope the key is missing |
+| `409` | The post or channel changed, or the state is already set |
+| `422` | Each invalid field, including the channel a text is too long for |
+| `429` | How long to wait (`Retry-After`) |
+
+When the server can't be reached, the error names the URL it tried.
+
+## Next steps
+
+<Cards>
+  <Card title="Commands" href="/cli/commands">Every command with its flags and examples.</Card>
+  <Card title="Scripting recipes" href="/cli/scripting">Cron jobs, closing the loop, shell loops.</Card>
+  <Card title="Run the binary" href="/self-hosting/binary">Run `staqly serve` as a background service.</Card>
+  <Card title="Connect an agent" href="/agents">Let Claude Code, Codex or n8n use staqly.</Card>
+</Cards>

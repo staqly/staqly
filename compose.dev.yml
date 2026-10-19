@@ -1,0 +1,46 @@
+# Development stack: `make dev` = compose.yml + this file.
+#   - builds the staqly image from this checkout
+#   - readable debug logs; webhooks, alerts, schedule endpoints and your own
+#     automation may reach the Docker network (mailpit, n8n, your receivers)
+#   - mailpit catches every email alert: http://localhost:8025
+#     (email alert: host mailpit, port 1025, tls "none")
+#   - stripe (opt in): forwards Stripe test-mode events to the API.
+#     Set in .env: STAQLY_MODE=cloud, STRIPE_SECRET_KEY (an sk_test_ key),
+#     STRIPE_PRICE_PRO, COMPOSE_PROFILES=stripe, and the secret from
+#     `make stripe-secret` as STRIPE_WEBHOOK_SECRET.
+# `make up` uses compose.yml alone; cloud servers add compose.cloud.yml (`make cloud`).
+
+services:
+  staqly:
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+      WEBHOOK_ALLOW_PRIVATE: ${WEBHOOK_ALLOW_PRIVATE:-true}
+      NOTIFY_ALLOW_PRIVATE: ${NOTIFY_ALLOW_PRIVATE:-true}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PUBLIC_DASHBOARD_URL: ${PUBLIC_DASHBOARD_URL:-http://localhost:${DASHBOARD_PORT:-8080}}
+
+  mailpit:
+    image: axllent/mailpit:v1.31
+    container_name: staqly-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"   # web UI with every caught email
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
+  stripe:
+    image: stripe/stripe-cli:v1.54.0
+    container_name: staqly-stripe
+    profiles: [stripe]
+    restart: unless-stopped
+    environment:
+      STRIPE_API_KEY: ${STRIPE_SECRET_KEY:-}
+    command: >-
+      listen --skip-verify
+      --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted
+      --forward-to http://staqly:3333/v1/billing/webhook
+    depends_on:
+      staqly:
+        condition: service_healthy

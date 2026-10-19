@@ -1,0 +1,41 @@
+{
+  "name": "@staqly/web",
+  "license": "AGPL-3.0-only",
+  "version": "0.1.0",
+  "private": true,
+  "description": "staqly.ai landing page (Next.js, static export)",
+  "scripts": {
+    "dev": "next dev -p 8070",
+    "build": "next build && node scripts/check-links.mjs",
+    "preview": "pnpm dlx serve@latest out -l 8070",
+    "check-links": "node scripts/check-links.mjs",
+    "lint": "oxlint --deny-warnings",
+    "typecheck": "next typegen && tsc --noEmit",
+    "format": "oxlint --fix --quiet; oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "@staqly/brand": "workspace:*",
+    "geist": "^1.7.2",
+    "lucide-react": "^1.56.0",
+    "next": "^16.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@staqly/check-links": "workspace:*",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

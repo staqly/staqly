@@ -1,0 +1,191 @@
+---
+title: Errors
+description: Understand an error response from staqly and decide whether to fix, retry or give up.
+---
+
+Every error from the REST API uses one JSON shape with a stable `code`. Read this page when you write error handling for an automation, or when a call
+fails and you want to know why.
+
+## Handle an error
+
+<Steps>
+<Step>
+### Read the `code`, not the message
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "targets.ch_7h2kq9xw3nbvd5yhzm6a.content: 312 characters, Bluesky allows 300",
+    "fields": { "targets.ch_7h2kq9xw3nbvd5yhzm6a.content": "312 characters, Bluesky allows 300" }
+  }
+}
+```
+
+Switch on `error.code`; the `message` is for humans and may change.
+</Step>
+<Step>
+### Decide what to do
+
+| The code is | Do this |
+|---|---|
+| `validation_failed`, `bad_request` | Fix the request (see `fields`); don't retry as is |
+| `unauthorized`, `forbidden`, `not_local` | Fix the credentials or the key's [scopes](/api/authentication#scopes) |
+| `conflict`, `post_changed`, `app_not_configured`, `provider_soon` | Reload the post or channel; often the state already changed, or the platform is not ready |
+| `rate_limited`, `busy`, `timeout`, `idempotency_in_progress` | Wait (`Retry-After` when present) and retry |
+| `plan_limit_exceeded` | Don't retry — the plan or month has to change |
+| `plan_expired`, `payment_required` | Don't retry — the workspace is read-only until it is paid or switched to Free |
+| `not_available`, `not_configured` | Don't retry — the feature is off on this instance |
+| `internal`, `bad_gateway`, `payment_provider_error` | Retry later; report it with the `request_id` |
+
+The [full list](#error-codes) is below.
+</Step>
+<Step>
+### Keep the `request_id` when reporting a problem
+
+Error responses also carry a top-level `request_id` (the same value as the `X-Request-Id`
+header) and, when the request sent a W3C `traceparent` header, its `trace_id`. They find the
+matching log lines — see [Logs & tracing](/self-hosting/logs-and-tracing#following-one-request).
+
+```json
+{
+  "error": { "code": "not_found", "message": "post not found" },
+  "request_id": "api-1/abc-000042",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+}
+```
+</Step>
+</Steps>
+
+## Error shape
+
+| Field | Meaning |
+|---|---|
+| `error.code` | Stable, machine-readable; switch on this, not on `message` |
+| `error.message` | Human-readable explanation |
+| `error.fields` | Per-field problems (validation errors) |
+| `error.details` | Structured data for some errors (plan limits) |
+| `request_id` | Same as the `X-Request-Id` response header |
+| `trace_id` | Present when the request sent a `traceparent` header |
+
+## Error codes
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `bad_request` | Malformed JSON or unknown fields in the body |
+| 401 | `unauthorized` | Missing, invalid, expired or revoked credentials |
+| 401 | `invalid_link` | Device-link token is not valid |
+| 402 | `plan_limit_exceeded` | Over a cloud plan limit — see below |
+| 402 | `plan_expired` | The Pro trial or paid period ended unpaid: the workspace is read-only (reads and exports still work) until it is paid or switched to Free — see [Plans](/plans#the-pro-trial) |
+| 402 | `payment_required` | `POST /v1/workspace/plan` asked for a paid plan. Upgrade with `POST /v1/billing/checkout` when [billing](/self-hosting/billing) is enabled; otherwise the operator changes the plan |
+| 403 | `forbidden` | The key lacks a scope (*"missing required scope posts:publish"*), or the operation isn't available to this caller |
+| 403 | `not_local` | Local mode refused a credential-less request that doesn't provably come from this machine |
+| 403 | `csrf_failed` | A cookie-authenticated unsafe request without a valid `X-CSRF-Token` |
+| 404 | `not_found` | Unknown ID (or one in another workspace) |
+| 409 | `conflict` | State conflict, see below |
+| 409 | `post_changed` | A `PATCH` sent an `expected_version` older than the post's `version`: someone edited it meanwhile. Reload and retry |
+| 409 | `app_not_configured` | An OAuth flow started for a platform without a developer app (the workspace's or the server's); see [Developer apps](/channels/developer-apps) |
+| 409 | `provider_soon` | The platform is in the catalog but not available in this build yet |
+| 409 | `not_available` | Billing is not enabled on this instance (`/v1/billing*`), or plans were asked for on a local install |
+| 409 | `idempotency_in_progress` | A request with the same `Idempotency-Key` is still running |
+| 410 | `link_used` / `link_expired` | A device link was already used / is older than 5 minutes |
+| 410 | `gone` | A workspace export is no longer available |
+| 413 | `too_large` | Body or file over the limit |
+| 415 | `unsupported_media_type` | Upload type not allowed (e.g. SVG, HTML), or a request content type other than JSON / multipart |
+| 422 | `validation_failed` | Invalid input; see `fields`. A target over its provider's limits is keyed `targets.<channel_id>.content` or `targets.<channel_id>.settings.<key>` |
+| 422 | `idempotency_mismatch` | `Idempotency-Key` reused with a different request |
+| 429 | `rate_limited` | Too many requests — see [rate limits](/self-hosting/monitoring#rate-limits). The `Retry-After` header says how many seconds to wait |
+| 500 | `internal` | Unexpected server error (logged server-side with the `request_id`) |
+| 502 | `payment_provider_error` | Stripe rejected a checkout or portal request — retry later; the operator sees the reason in the logs |
+| 502 | `bad_gateway` | The dashboard's `/api` proxy can't reach the API |
+| 503 | `timeout` | A listing ran longer than 5 seconds; retry, or add filters |
+| 503 | `busy` | The database was locked by another process (e.g. a backup); retry after `Retry-After` (1 s) |
+
+## Common errors in detail
+
+### 402 `plan_limit_exceeded`
+
+Cloud workspaces are limited by their [plan](/plans). The error tells you which limit
+was hit:
+
+```json
+{
+  "error": {
+    "code": "plan_limit_exceeded",
+    "message": "The Free plan allows 50 posts per month; upgrade the workspace plan to continue.",
+    "details": { "limit": "posts_per_month", "max": 50, "used": 50, "plan": "free" }
+  }
+}
+```
+
+| `details.limit` | Triggered by |
+|---|---|
+| `posts_per_month` | Creating a post (people, agents, duplicates, posts a schedule fetched from your endpoint) |
+| `channels` | Connecting a channel |
+| `alerts` | Creating an alert |
+| `webhooks` | Creating a webhook |
+| `api_keys` | Creating an API key |
+| `storage_bytes` | Uploading a file |
+| `max_upload_bytes` | Uploading a file larger than the plan allows |
+| `data_export` | An activity log export (`GET /v1/events/export`) on a plan without data export (no `max` / `used`); the workspace export works on every plan, data only on Free |
+
+Don't retry a 402 automatically — it won't succeed until the plan changes or the month rolls
+over.
+
+### 403 `not_local`
+
+The message explains which check failed — the peer address, the `Host` header (*"Host evil.example is
+not a local name (add it to LOCAL_ALLOWED_HOSTS)"*), a cross-site `Origin`, or a browser that
+isn't connected. See [Authentication](/api/authentication#local-mode-no-credentials).
+
+### 409 `conflict`
+
+| Message | Meaning |
+|---|---|
+| *this post is published; duplicate it to post it again* | Published posts are read-only |
+| *this post is being published right now* | Wait for the publish to settle |
+| *only a scheduled post can be taken off the schedule* | Cancel applies to `scheduled` posts |
+| *only a failed target can be retried* | The target is pending, publishing or published |
+| *this target is not waiting for a result (it is published)* | `POST .../targets/{channel}/result` for a target that is not `publishing` |
+| *only targets on your own automation take reported results* | The target's channel is not provider `custom` |
+| *a channel this post is already published on cannot be removed* | A `PATCH` to `targets` dropped a published target |
+| *post was modified (version 3, expected 2)* | Your `expected_version` is stale; reload and retry (`post_changed`) |
+| *this channel needs reconnecting: send its credential fields again or go through its sign-in page* | Enabling a channel in `needs_reconnect` |
+| *this channel's provider is not part of this build* | The provider is `soon` |
+| *only a failed job can be retried*, *only a queued job can be cancelled* | Job state |
+| *collection is already archived*, *collection is not archived* | You asked for the state it already has (see below) |
+| *the Default collection cannot be archived* / *deleted* | Every workspace keeps its Default collection |
+| *a collection with this name already exists* | Collection names are unique per workspace |
+| *collection is archived* | Archived collections are read-only |
+
+A state that is already set can't be set again. Archiving an archived collection, unarchiving an
+active one, enabling an enabled webhook or alert (or disabling a disabled one), revoking a
+revoked API key or session, reporting a result a target already has, retrying a job that is
+not failed, cancelling a job that is not queued, and choosing the plan the workspace is already
+on all answer `409` and change nothing: no new version, no event, no webhook. A `PATCH` that
+changes other fields as well is accepted; the unchanged state field is then ignored.
+
+### 422 on posts and targets
+
+| Message (field) | Meaning |
+|---|---|
+| *must be in the future* / *must be within a year* (`publish_at`) | The time is in the past or too far out |
+| *a scheduled post needs a time* (`publish_at`) | `status: scheduled` without `publish_at` |
+| *add at least one channel before scheduling* / *before publishing* (`targets`) | Add a channel first |
+| *channel ch_... is listed twice*, *unknown channel*, *this channel is turned off* (`targets`, `targets.<channel_id>`) | Fix the target list |
+| *this channel's provider is not part of this build* (`targets.<channel_id>`) | The provider is `soon` |
+| *312 characters, Bluesky allows 300* (`targets.<channel_id>.content`) | The text (the target's own, else the post's) is over the provider's limit |
+| a missing or wrong provider setting (`targets.<channel_id>.settings.<key>`) | See the provider's `settings_fields` |
+| *unknown media id*, *the same file is listed twice*, *at most N files* (`media`) | Fix the media list |
+| *set times (HH:MM) with optional weekdays and tz, or every_minutes (5 to 10080)* (`rule`) | A recurring schedule's rule is incomplete |
+| *unknown event pattern post.shipped; ...* | A webhook or alert subscribed to an event that doesn't exist |
+
+`GET /v1/posts/{id}/preview` reports the same problems as `warnings` per target without failing.
+
+## Next steps
+
+<Cards>
+  <Card title="Idempotency" href="/api/idempotency">Retry safely without creating duplicates.</Card>
+  <Card title="Authentication & scopes" href="/api/authentication">Fix `401` and `403` errors.</Card>
+  <Card title="Troubleshooting" href="/self-hosting/troubleshooting">Common problems and their fixes.</Card>
+</Cards>
