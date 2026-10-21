@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -148,18 +147,4 @@ func (s *Server) previewMedia(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", m.MimeType)
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	serveMediaFile(w, r, f, m)
-}
-
-// redactPreviewToken keeps preview tokens out of request logs: /v1/previews/<token>/... is logged with the token
-// replaced.
-func redactPreviewToken(path string) string {
-	const prefix = "/v1/previews/"
-	if !strings.HasPrefix(path, prefix) {
-		return path
-	}
-	rest := path[len(prefix):]
-	if i := strings.IndexByte(rest, '/'); i >= 0 {
-		return prefix + "REDACTED" + rest[i:]
-	}
-	return prefix + "REDACTED"
 }

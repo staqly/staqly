@@ -21,7 +21,8 @@ UPDATE posts SET status = ?, published_at = COALESCE(?, published_at), updated_a
 
 -- name: RepeatOfPost :one
 -- The copy a repeating post already made (none: sql.ErrNoRows).
-SELECT id FROM posts WHERE repeat_of = ? LIMIT 1;
+-- The repeat_of <> '' term lets the partial index posts_repeat_of answer it (a bound value alone can't).
+SELECT id FROM posts WHERE repeat_of = ? AND repeat_of <> '' LIMIT 1;
 
 -- name: DeletePost :execrows
 DELETE FROM posts WHERE workspace_id = ? AND id = ?;

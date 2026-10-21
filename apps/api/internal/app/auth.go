@@ -841,6 +841,9 @@ func (s *Service) RevokeAPIKey(ctx context.Context, p Principal, id string) erro
 	if err := p.require(ScopeAdmin); err != nil {
 		return err
 	}
+	if err := s.notOwnersKey(ctx, p, id); err != nil {
+		return err
+	}
 	return s.tx(ctx, func(q *db.Queries) error {
 		n, err := q.RevokeAPIKey(ctx, db.RevokeAPIKeyParams{RevokedAt: nullStr(s.now()), WorkspaceID: p.WorkspaceID, ID: id})
 		if err != nil {
@@ -857,6 +860,23 @@ func (s *Service) RevokeAPIKey(ctx context.Context, p Principal, id string) erro
 	})
 }
 
+// notOwnersKey: an admin manages admins' and editors' keys, not an owner's (an owner's key can carry the
+// account owner's billing rights), as with an owner's sessions and membership.
+func (s *Service) notOwnersKey(ctx context.Context, p Principal, id string) error {
+	owners, err := s.ownersHiddenFrom(ctx, p)
+	if err != nil || len(owners) == 0 {
+		return err
+	}
+	k, err := s.Q.GetAPIKey(ctx, db.GetAPIKeyParams{WorkspaceID: p.WorkspaceID, ID: id})
+	if err != nil {
+		return nil // missing keys answer as before (404) in the write
+	}
+	if k.CreatedByUserID.Valid && owners[k.CreatedByUserID.String] {
+		return forbidden("only an owner revokes or rotates an owner's key")
+	}
+	return nil
+}
+
 // RotateAPIKey revokes a key and issues a replacement with the same name and scopes.
 func (s *Service) RotateAPIKey(ctx context.Context, p Principal, id string) (APIKey, error) {
 	if err := p.require(ScopeAdmin); err != nil {
@@ -864,6 +884,9 @@ func (s *Service) RotateAPIKey(ctx context.Context, p Principal, id string) (API
 	}
 	if s.Cfg.Mode == ModeLocal {
 		return APIKey{}, errLocalNoKeys() // a rotation mints a key like CreateAPIKey
+	}
+	if err := s.notOwnersKey(ctx, p, id); err != nil {
+		return APIKey{}, err
 	}
 	var key APIKey
 	err := s.tx(ctx, func(q *db.Queries) error {
