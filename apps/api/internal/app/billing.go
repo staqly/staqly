@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -357,7 +358,18 @@ func (s *Service) GetBilling(ctx context.Context, p Principal) (Billing, error) 
 // CheckoutSession starts a Stripe Checkout for a plan billed monthly or yearly and returns its URL. A workspace
 // that already pays switches its subscription to that price instead (Stripe prorates the difference) and gets
 // the billing page back.
-func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, interval string, returnTo ...string) (string, error) {
+// CheckoutOptions: where Stripe sends the person back (`welcome`: the dashboard's welcome steps) and a promotion
+// code typed in staqly (a switch of a live subscription never opens Checkout, whose own code box needs none).
+type CheckoutOptions struct {
+	ReturnTo      string
+	PromotionCode string
+}
+
+func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, interval string, opts ...CheckoutOptions) (string, error) {
+	var opt CheckoutOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
 	if err := s.requireAccountOwner(ctx, p); err != nil {
 		return "", err
 	}
@@ -376,10 +388,16 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	if err != nil {
 		return "", err
 	}
+	promo := ""
+	if code := strings.TrimSpace(opt.PromotionCode); code != "" {
+		if promo, err = s.promotionCodeID(ctx, code, plan, price); err != nil {
+			return "", err
+		}
+	}
 	if w.SubscriptionStatus.Valid && liveSubscription(w.SubscriptionStatus.String) && w.StripeSubscriptionID.Valid {
-		err := s.switchSubscription(ctx, w.ID, w.StripeSubscriptionID.String, price, plan.ID, interval)
+		err := s.switchSubscription(ctx, w.ID, w.StripeSubscriptionID.String, price, plan.ID, interval, promo)
 		if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok {
-			err = s.switchSubscription(ctx, w.ID, w.StripeSubscriptionID.String, found, plan.ID, interval)
+			err = s.switchSubscription(ctx, w.ID, w.StripeSubscriptionID.String, found, plan.ID, interval, promo)
 		}
 		if err != nil {
 			return "", err
@@ -396,7 +414,7 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	}
 	back := s.planPageURL()
 	success, cancel := back+"?checkout=success", back+"?checkout=canceled"
-	if len(returnTo) > 0 && returnTo[0] == "welcome" { // started from the welcome steps: back to them
+	if opt.ReturnTo == "welcome" { // started from the welcome steps: back to them
 		welcome := strings.TrimRight(firstNonEmpty(s.Cfg.PublicDashboardURL, s.Cfg.PublicURL), "/") + "/welcome"
 		success, cancel = welcome+"?step=done&checkout=success", welcome+"?step=plan"
 	}
@@ -418,8 +436,13 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		"customer_update[address]":   {"auto"},
 		"success_url":                {success},
 		"cancel_url":                 {cancel},
-		// Discount codes made in Stripe (Coupons, then a promotion code) can be entered at checkout.
-		"allow_promotion_codes": {"true"},
+	}
+	// Discount codes made in Stripe (Coupons, then a promotion code): the one typed in staqly, else Checkout's
+	// own code box (Stripe takes one or the other).
+	if promo != "" {
+		form.Set("discounts[0][promotion_code]", promo)
+	} else {
+		form.Set("allow_promotion_codes", "true")
 	}
 	// Only Starter has a trial, Stripe's own: 7 days with a card required, cancelled if no card is on file when
 	// it ends; trialOffer says who gets it (once per workspace, one at a time per account). Plus, Pro and
@@ -519,7 +542,9 @@ func (s *Service) ensureCustomer(ctx context.Context, w db.GetWorkspaceBillingRo
 
 // switchSubscription moves a live subscription to another price (plan or interval); Stripe prorates.
 // The plan changes here when Stripe's subscription.updated event arrives.
-func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscriptionID, price, planID, interval string) error {
+// With a promotion code (its id), the code's discount replaces the subscription's; with the same price only the
+// code is applied.
+func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscriptionID, price, planID, interval, promo string) error {
 	var sub stripeSubscription
 	if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(subscriptionID), nil, &sub); err != nil {
 		return err
@@ -529,20 +554,105 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 		return &Error{Code: "conflict", Status: 409, Message: "the subscription has no item to change; use the billing portal"}
 	}
 	if sub.Items.Data[i].Price.ID == price {
-		return &Error{Code: "conflict", Status: 409, Message: "the workspace is already on this plan and interval"}
+		if promo == "" {
+			return &Error{Code: "conflict", Status: 409, Message: "the workspace is already on this plan and interval"}
+		}
+		return s.stripe(ctx, "POST", "/v1/subscriptions/"+url.PathEscape(subscriptionID),
+			url.Values{"discounts[0][promotion_code]": {promo}}, nil)
 	}
 	seats, err := s.seatCount(ctx, s.Q, workspaceID)
 	if err != nil {
 		return err
 	}
-	return s.stripe(ctx, "POST", "/v1/subscriptions/"+url.PathEscape(subscriptionID), url.Values{
+	form := url.Values{
 		"items[0][id]":              {sub.Items.Data[i].ID},
 		"items[0][price]":           {price},
 		"items[0][quantity]":        {strconv.FormatInt(seats, 10)},
 		"proration_behavior":        {"create_prorations"},
 		"metadata[staqly_plan]":     {planID},
 		"metadata[staqly_interval]": {interval},
-	}, nil)
+	}
+	if promo != "" {
+		form.Set("discounts[0][promotion_code]", promo)
+	}
+	// Leaving the trial for another plan: the trial ends now and the new plan is charged at once; the change
+	// waits for that payment (a pending update), so a card that fails leaves the trial as it was.
+	trial := sub.Status == "trialing"
+	if trial {
+		form.Set("trial_end", "now")
+		form.Set("proration_behavior", "always_invoice")
+		form.Set("payment_behavior", "pending_if_incomplete")
+	}
+	var out struct {
+		PendingUpdate json.RawMessage `json:"pending_update"`
+	}
+	if err := s.stripe(ctx, "POST", "/v1/subscriptions/"+url.PathEscape(subscriptionID), form, &out); err != nil {
+		return err
+	}
+	if trial && len(out.PendingUpdate) > 0 && string(out.PendingUpdate) != "null" {
+		return &Error{Code: "payment_failed", Status: 402, Message: "the payment for the new plan didn't go through, so the trial stays as it was: check the card in Manage billing and try again"}
+	}
+	return nil
+}
+
+// promotionCodeID: the id of the active promotion code `code` (as typed), checked against the plan the person
+// picked: a code limited to other plans is refused here rather than giving nothing at Stripe.
+func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, price string) (string, error) {
+	notValid := invalid("promotion_code", "this code isn't valid (or has been used up)")
+	var list struct {
+		Data []struct {
+			ID     string          `json:"id"`
+			Coupon json.RawMessage `json:"coupon"` // before API 2025-09: the coupon (an object)
+			// From API 2025-09: promotion.coupon (an id).
+			Promotion struct {
+				Coupon string `json:"coupon"`
+			} `json:"promotion"`
+		} `json:"data"`
+	}
+	q := url.Values{"code": {code}, "active": {"true"}, "limit": {"1"}}
+	if err := s.stripe(ctx, "GET", "/v1/promotion_codes?"+q.Encode(), nil, &list); err != nil {
+		return "", err
+	}
+	if len(list.Data) == 0 {
+		return "", notValid
+	}
+	pc := list.Data[0]
+	couponID := pc.Promotion.Coupon
+	if couponID == "" {
+		var c struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(pc.Coupon, &c) == nil {
+			couponID = c.ID
+		}
+	}
+	if couponID == "" {
+		return pc.ID, nil
+	}
+	var coupon struct {
+		Valid     bool `json:"valid"`
+		AppliesTo *struct {
+			Products []string `json:"products"`
+		} `json:"applies_to"`
+	}
+	if err := s.stripe(ctx, "GET", "/v1/coupons/"+url.PathEscape(couponID)+"?expand[]=applies_to", nil, &coupon); err != nil {
+		return "", err
+	}
+	if !coupon.Valid {
+		return "", notValid
+	}
+	if coupon.AppliesTo != nil && len(coupon.AppliesTo.Products) > 0 {
+		var pr struct {
+			Product string `json:"product"`
+		}
+		if err := s.stripe(ctx, "GET", "/v1/prices/"+url.PathEscape(price), nil, &pr); err != nil {
+			return "", err
+		}
+		if !slices.Contains(coupon.AppliesTo.Products, pr.Product) {
+			return "", invalid("promotion_code", fmt.Sprintf("this code doesn't apply to the %s plan", plan.Name))
+		}
+	}
+	return pc.ID, nil
 }
 
 // PortalSession opens the Stripe customer portal (payment method, invoices,
