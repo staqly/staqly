@@ -458,6 +458,27 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/BadGateway" }
 
+  /v1/billing/sync:
+    post:
+      operationId: syncBilling
+      tags: [billing]
+      summary: Read the subscription from Stripe now (admin)
+      description: |
+        Asks Stripe for the workspace's subscription and applies it, as its webhook would, then
+        answers like `GET /v1/billing`. The dashboard calls it when it comes back from Checkout, so a
+        paid workspace opens even when the webhook is late or lost; a background job does the same
+        every 10 minutes for workspaces whose plan may be out of date.
+      responses:
+        "200":
+          description: Billing status after the sync
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Billing" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
   /v1/billing/webhook:
     post:
       operationId: stripeWebhook

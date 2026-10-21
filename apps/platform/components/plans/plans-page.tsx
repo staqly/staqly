@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Clock } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 
 import { PublicShell } from '@/components/auth/public-shell'
@@ -22,8 +22,8 @@ import { cn } from '@/lib/utils'
 export function usePlanActions() {
   const qc = useQueryClient()
   const checkout = useMutation({
-    mutationFn: ({ plan, interval }: { plan: string; interval: BillingInterval }) =>
-      api.billingCheckout(plan, interval),
+    mutationFn: ({ plan, interval, welcome }: { plan: string; interval: BillingInterval; welcome?: boolean }) =>
+      api.billingCheckout(plan, interval, welcome ? 'welcome' : undefined),
     onSuccess: ({ url }) => {
       void qc.invalidateQueries({ queryKey: qk.billing })
       window.location.assign(url)
@@ -49,6 +49,8 @@ export function PlansPage() {
   const payer = accountsEnabled ? accountOwner : canManagePeople
   const usage = useUsage()
   const router = useRouter()
+  // Opened from the welcome's last step: Stripe comes back to the end of the welcome.
+  const fromWelcome = useSearchParams().get('from') === 'welcome'
   const [now] = useState(Date.now)
   const trialEnds = usage.data?.trial_ends_at
   const trialDays = trialEnds ? daysLeft(trialEnds, now) : 0
@@ -110,7 +112,7 @@ export function PlansPage() {
         variant={p.highlight ? 'default' : 'outline'}
         className={cn('w-full', p.highlight && 'bg-brand-gradient text-[#052817]')}
         disabled={checkout.isPending}
-        onClick={() => checkout.mutate({ plan: p.id, interval })}
+        onClick={() => checkout.mutate({ plan: p.id, interval, welcome: fromWelcome })}
       >
         {label}
       </Button>

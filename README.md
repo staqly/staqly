@@ -45,7 +45,7 @@
   <img alt="Medium" src="https://cdn.simpleicons.org/medium/8b949e" width="26">&nbsp;
   <img alt="DEV" src="https://cdn.simpleicons.org/devdotto/8b949e" width="26">&nbsp;
   <img alt="Hashnode" src="https://cdn.simpleicons.org/hashnode" width="26">
-  <br><sub>and LinkedIn, Slack, Google Business and more: <a href="https://docs.staqly.ai/channels">35 platforms in the catalog</a></sub>
+  <br><sub>and LinkedIn, Slack, Google Business and more: <a href="https://docs.staqly.ai/channels">34 platforms in the catalog</a></sub>
 </p>
 
 <p align="center">

@@ -20,7 +20,7 @@ import { browserTimeZone } from '@/lib/time-zone'
 
 /**
  * The account owner adds a workspace; it opens right away. With billing it has no plan yet, so it opens on the
- * plan picker (Stripe Checkout from there); without billing on the schedule. A modal, not a drawer: one field.
+ * welcome, whose last step is the plan (Stripe Checkout); without billing on the schedule. A modal, not a drawer: one field.
  */
 export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [name, setName] = useState('')
@@ -32,7 +32,7 @@ export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOp
 
       await api.switchWorkspace(w.id)
     },
-    onSuccess: () => window.location.assign(paid ? '/plans' : '/schedule'),
+    onSuccess: () => window.location.assign(paid ? '/welcome' : '/schedule'),
     onError: (e) => setError(errorMessage(e)),
   })
 
@@ -43,7 +43,7 @@ export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOp
           <DialogTitle>New workspace</DialogTitle>
           <DialogDescription>
             {paid
-              ? 'It starts empty and you are its owner. Next you choose its plan; billing is per workspace.'
+              ? 'It starts empty and you are its owner. Next you set it up and choose its plan; billing is per workspace.'
               : 'It starts empty, with a free 7-day Starter trial. You are its owner.'}
           </DialogDescription>
         </DialogHeader>

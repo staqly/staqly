@@ -7,42 +7,42 @@ import {
   Bot,
   CalendarClock,
   Check,
-  KeyRound,
+  Loader2,
   PartyPopper,
   PenLine,
   Sparkles,
-  UserPlus,
   Users,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { PublicShell } from '@/components/auth/public-shell'
 import { ConnectForm } from '@/components/channels/add-channel-sheet'
-import { ChannelAvatar } from '@/components/channels/channel-avatars'
 import { ProviderGrid } from '@/components/channels/provider-grid'
 import { Callout } from '@/components/common/callout'
 import { CodeBlock } from '@/components/common/code-block'
 import { NativeSelect } from '@/components/common/native-select'
 import { SecretField } from '@/components/common/secret-field'
-import { money } from '@/components/plans/plan-cards'
+import { SkeletonList } from '@/components/common/skeleton-list'
+import { IntervalToggle, monthly, money, TAGLINES } from '@/components/plans/plan-cards'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { api, errorMessage, type Role } from '@/lib/api'
+import { api, errorMessage, type BillingInterval, type Plan, type Role } from '@/lib/api'
 import { usePublicApiUrl } from '@/lib/config'
+import { formatBytes } from '@/lib/format'
 import { ProviderTile } from '@/lib/providers'
 import { qk, useBilling, useChannels, useMode, usePlans, useProviders, useRole, useSession } from '@/lib/queries'
 import { ROLE_LABELS } from '@/lib/roles'
 import { SCOPE_PRESETS } from '@/lib/scope-presets'
-import { rememberApiKey } from '@/lib/session-key'
+import { rememberApiKey, useRememberedApiKey, type RememberedKey } from '@/lib/session-key'
 import { browserTimeZone } from '@/lib/time-zone'
 import { cn } from '@/lib/utils'
-import { readWelcomeDraft, writeWelcomeDraft, type WelcomeGoal } from '@/lib/welcome'
+import { readWelcomeDraft, writeWelcomeDraft, type WelcomeDraft, type WelcomeGoal } from '@/lib/welcome'
 
-type StepId = 'you' | 'trial' | 'workspace' | 'channel' | 'agent' | 'team' | 'joined' | 'done'
+type StepId = 'you' | 'workspace' | 'channel' | 'agent' | 'team' | 'plan' | 'joined' | 'done'
 
 const GOALS: { id: WelcomeGoal; title: string; text: string; Icon: typeof Sparkles }[] = [
   {
@@ -68,8 +68,10 @@ function personName(...candidates: (string | undefined)[]) {
 }
 
 /**
- * The welcome: a full-screen wizard outside the app shell, shown once after sign-up (and on a fresh local
- * install), reopened from the user menu. Each step is optional past the first; Skip for now ends it.
+ * The welcome: a full-screen wizard outside the app shell, shown once after sign-up, for every new workspace and
+ * reopened from the user menu. Its steps only collect (the draft, lib/welcome.ts); nothing is written until the
+ * end. With billing and no plan yet, the last step is the plan (Stripe Checkout), and the workspace is set up
+ * once the payment is in: renamed, people invited, the agent's key made, then the chosen platforms connected.
  */
 export function WelcomeWizard() {
   const router = useRouter()
@@ -82,32 +84,35 @@ export function WelcomeWizard() {
   const hasPerson = !!s?.user?.id
   const member = accountsEnabled && hasPerson && !accountOwner
   const canInvite = !isLocal && accountsEnabled && canManagePeople
-  const [draft, setDraft] = useState(readWelcomeDraft)
+  const [stored, setDraft] = useState(readWelcomeDraft)
+  // A draft from another workspace (one set up in this tab before) starts over.
+  const draft = stored.workspace && s && stored.workspace !== s.workspace.id ? {} : stored
   const goal = draft.goal ?? (isLocal ? 'agents' : 'creator')
   // Connect an agent and Invite your team are separate, skippable steps; a team goal asks for people first.
   const extra: StepId[] = !canInvite ? ['agent'] : goal === 'team' ? ['team', 'agent'] : ['agent', 'team']
-  // With billing, a new workspace has no plan until its owner starts one: the trial comes right after the first
-  // step, before anything that writes to the workspace.
+  // With billing, a workspace has no plan until its owner pays (or starts Starter's trial with a card): the plan
+  // is the last step, and the workspace is set up only after it.
   const billing = useBilling({ enabled: !isLocal && accountOwner })
-  const needsPlan = !!billing.data?.enabled && !billing.data.subscription_status && billing.data.suspended
+  const needsPlan = !!billing.data?.enabled && !billing.data.subscription_status
+  // Until billing has answered, nothing is written and nothing is skipped.
+  const billingKnown = isLocal || !accountOwner || billing.isFetched
+  const requested = params.get('step') as StepId | null
   const steps: StepId[] = member
     ? ['you', 'joined']
     : [
         ...(hasPerson ? (['you'] as const) : []),
-        ...(needsPlan || params.get('step') === 'trial' ? (['trial'] as const) : []),
         'workspace',
         'channel',
         ...extra,
+        ...(needsPlan || requested === 'plan' ? (['plan'] as const) : []),
         'done',
       ]
-  const requested = params.get('step') as StepId | null
   const [step, setStep] = useState<StepId>(requested && steps.includes(requested) ? requested : steps[0]!)
-  const [summary, setSummary] = useState({ key: false, invites: 0 })
   const heading = useRef<HTMLHeadingElement>(null)
   const index = steps.indexOf(step)
 
-  const update = (next: Partial<typeof draft>) => {
-    const d = { ...draft, ...next }
+  const update = (next: Partial<WelcomeDraft>) => {
+    const d = { ...draft, ...next, workspace: s?.workspace.id }
 
     setDraft(d)
     writeWelcomeDraft(d)
@@ -143,9 +148,13 @@ export function WelcomeWizard() {
     <PublicShell
       className="flex flex-col items-center pt-6 sm:pt-12"
       nav={
-        <Button variant="ghost" size="sm" disabled={finish.isPending} onClick={() => finish.mutate('/schedule')}>
-          Skip for now
-        </Button>
+        // Without a plan there is nothing to skip to: the app opens once the workspace has one.
+        billingKnown &&
+        !needsPlan && (
+          <Button variant="ghost" size="sm" disabled={finish.isPending} onClick={() => finish.mutate('/schedule')}>
+            Skip for now
+          </Button>
+        )
       }
     >
       <div className="w-full max-w-2xl">
@@ -168,27 +177,37 @@ export function WelcomeWizard() {
               }}
             />
           )}
-          {step === 'trial' && <TrialStep heading={heading} onBack={back} onSkip={next} started={!needsPlan} />}
           {step === 'workspace' && (
             <WorkspaceStep
               heading={heading}
-              name={s.workspace.name}
-              timezone={s.workspace.timezone}
+              name={draft.workspaceName ?? s.workspace.name}
               canRename={canManagePeople || isLocal}
               onBack={back}
-              onDone={next}
+              onDone={(workspaceName) => {
+                update({ workspaceName })
+                next()
+              }}
             />
           )}
           {step === 'channel' && (
-            <ChannelStep heading={heading} error={params.get('error')} onBack={back} onDone={next} />
+            <ChannelStep
+              heading={heading}
+              chosen={draft.providers ?? []}
+              onBack={back}
+              onDone={(providers) => {
+                update({ providers })
+                next()
+              }}
+            />
           )}
           {step === 'agent' && (
             <AgentStep
               heading={heading}
               isLocal={isLocal}
+              tool={draft.agent}
               onBack={back}
-              onDone={(key) => {
-                setSummary((x) => ({ ...x, key: x.key || key }))
+              onDone={(agent) => {
+                update({ agent })
                 next()
               }}
             />
@@ -196,13 +215,15 @@ export function WelcomeWizard() {
           {step === 'team' && (
             <TeamStep
               heading={heading}
+              invites={draft.invites}
               onBack={back}
               onDone={(invites) => {
-                setSummary((x) => ({ ...x, invites: x.invites + invites }))
+                update({ invites })
                 next()
               }}
             />
           )}
+          {step === 'plan' && <PlanStep heading={heading} draft={draft} onBack={back} />}
           {step === 'joined' && (
             <JoinedStep
               heading={heading}
@@ -216,8 +237,11 @@ export function WelcomeWizard() {
           {step === 'done' && (
             <DoneStep
               heading={heading}
-              workspace={s.workspace.name}
-              summary={summary}
+              draft={draft}
+              workspace={s.workspace}
+              isLocal={isLocal}
+              waitForPlan={needsPlan || !billingKnown}
+              onApplied={(applied) => update({ applied })}
               busy={finish.isPending}
               onFinish={(to) => finish.mutate(to)}
             />
@@ -377,51 +401,35 @@ function YouStep({
 function WorkspaceStep({
   heading,
   name: initial,
-  timezone,
   canRename,
   onBack,
   onDone,
 }: {
   heading: React.RefObject<HTMLHeadingElement | null>
   name: string
-  timezone: string
   canRename: boolean
   onBack?: () => void
-  onDone: () => void
+  onDone: (name: string) => void
 }) {
-  const qc = useQueryClient()
   const [name, setName] = useState(initial)
-  // A new cloud workspace starts in UTC: it takes this browser's zone here (Settings can change it later).
-  const zone = timezone === 'UTC' && browserTimeZone() !== 'UTC' ? browserTimeZone() : undefined
-  const rename = useMutation({
-    mutationFn: () => api.updateWorkspace({ name: name.trim(), timezone: zone }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.session })
-      onDone()
-    },
-  })
+  const [tried, setTried] = useState(false)
 
   return (
     <form
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
+        setTried(true)
 
-        if (!canRename || (name.trim() === initial && !zone)) {
-          onDone()
-
-          return
-        }
-
-        if (name.trim()) {
-          rename.mutate()
+        if (name.trim() || !canRename) {
+          onDone(name.trim() || initial)
         }
       }}
     >
       <StepHeader heading={heading} title="Name your workspace">
         Posts, channels and people live in a workspace. Most people name it after their brand or client.
       </StepHeader>
-      <Field className="mt-8" data-invalid={!!rename.error || !name.trim()}>
+      <Field className="mt-8" data-invalid={tried && !name.trim()}>
         <FieldLabel htmlFor="welcome-workspace" required>
           Workspace name
         </FieldLabel>
@@ -431,16 +439,16 @@ function WorkspaceStep({
           value={name}
           disabled={!canRename}
           placeholder="Acme Studio"
+          aria-required
+          aria-invalid={tried && !name.trim()}
           onChange={(e) => setName(e.target.value)}
         />
         <FieldDescription>You can rename it later in Settings.</FieldDescription>
-        <FieldError>
-          {!name.trim() ? 'Give the workspace a name.' : rename.error && errorMessage(rename.error)}
-        </FieldError>
+        <FieldError>{tried && !name.trim() ? 'Give the workspace a name.' : null}</FieldError>
       </Field>
       <Actions onBack={onBack}>
-        <Button type="submit" className={bigButton} disabled={rename.isPending}>
-          {rename.isPending ? 'Saving...' : 'Continue'} <ArrowRight />
+        <Button type="submit" className={bigButton}>
+          Continue <ArrowRight />
         </Button>
       </Actions>
     </form>
@@ -449,78 +457,49 @@ function WorkspaceStep({
 
 function ChannelStep({
   heading,
-  error,
+  chosen,
   onBack,
   onDone,
 }: {
   heading: React.RefObject<HTMLHeadingElement | null>
-  error: string | null
+  chosen: string[]
   onBack?: () => void
-  onDone: () => void
+  onDone: (providers: string[]) => void
 }) {
   const providers = useProviders()
-  const channels = useChannels()
-  const [picked, setPicked] = useState<string | null>(null)
-  const provider = providers.data?.find((p) => p.id === picked) ?? null
-  const connected = channels.data ?? []
+  const [picked, setPicked] = useState(() => new Set(chosen))
+
+  const toggle = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+
+      if (!next.delete(id)) {
+        next.add(id)
+      }
+
+      return next
+    })
 
   return (
     <div>
-      <StepHeader heading={heading} title="Connect your first channel">
-        Where your posts go. Connect one now and add the rest whenever you like.
+      <StepHeader heading={heading} title="Where do you post?">
+        Pick the platforms your posts go to. You connect them in the last step, once the workspace is ready.
       </StepHeader>
-      {error && (
-        <p role="alert" className="mt-6 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
-          The channel was not connected: {error}
-        </p>
-      )}
-      {connected.length > 0 && (
-        <ul className="mt-6 grid gap-2" aria-label="Connected channels">
-          {connected.map((c) => (
-            <li key={c.id} className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm">
-              <ChannelAvatar channel={c} className="size-7" />
-              <span className="min-w-0 flex-1 truncate font-medium">{c.name}</span>
-              <span className="inline-flex items-center gap-1 text-xs text-brand-strong">
-                <Check className="size-3.5" /> Connected
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
       <div className="mt-6 rounded-2xl border bg-card p-4 sm:p-5">
-        {provider ? (
-          <div className="grid gap-4">
-            <div className="flex items-center gap-2">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="-ml-2"
-                aria-label="Back to platforms"
-                onClick={() => setPicked(null)}
-              >
-                <ArrowLeft />
-              </Button>
-              <ProviderTile id={provider.id} name={provider.name} className="size-7" />
-              <h2 className="font-semibold">Connect {provider.name}</h2>
-            </div>
-            <ConnectForm
-              provider={provider}
-              reconnect={null}
-              oauthReturnTo="/welcome?step=channel"
-              onDone={() => setPicked(null)}
-            />
-          </div>
-        ) : (
-          <ProviderGrid providers={providers.data ?? []} onPick={(p) => setPicked(p.id)} />
-        )}
+        <ProviderGrid providers={providers.data ?? []} selected={picked} onPick={(p) => toggle(p.id)} />
       </div>
       <Actions onBack={onBack}>
-        {connected.length === 0 && (
-          <Button type="button" variant="ghost" onClick={onDone} className={bigButton}>
+        {picked.size === 0 && (
+          <Button type="button" variant="ghost" onClick={() => onDone([])} className={bigButton}>
             I&apos;ll do it later
           </Button>
         )}
-        <Button type="button" className={bigButton} variant={connected.length ? 'default' : 'outline'} onClick={onDone}>
+        <Button
+          type="button"
+          className={bigButton}
+          variant={picked.size ? 'default' : 'outline'}
+          onClick={() => onDone([...picked])}
+        >
           Continue <ArrowRight />
         </Button>
       </Actions>
@@ -531,28 +510,31 @@ function ChannelStep({
 function AgentStep({
   heading,
   isLocal,
+  tool: initial,
   onBack,
   onDone,
 }: {
   heading: React.RefObject<HTMLHeadingElement | null>
   isLocal: boolean
+  tool?: 'claude' | 'codex'
   onBack?: () => void
-  onDone: (key: boolean) => void
+  onDone: (tool: 'claude' | 'codex' | undefined) => void
 }) {
-  const [key, setKey] = useState(false)
+  const [tool, setTool] = useState<'claude' | 'codex'>(initial ?? 'claude')
 
   return (
     <div>
       <StepHeader heading={heading} title="Connect an agent">
         Let Claude Code or Codex write posts into your collections, put them on the calendar and refill them when they
         run dry.
+        {!isLocal && ' Its key is made in the last step, ready to paste.'}
       </StepHeader>
-      <AgentPanel isLocal={isLocal} onKey={() => setKey(true)} />
+      <AgentPanel isLocal={isLocal} tool={tool} onTool={setTool} />
       <Actions onBack={onBack}>
-        <Button type="button" variant="ghost" className={bigButton} onClick={() => onDone(false)}>
+        <Button type="button" variant="ghost" className={bigButton} onClick={() => onDone(undefined)}>
           Skip
         </Button>
-        <Button type="button" className={bigButton} onClick={() => onDone(key)}>
+        <Button type="button" className={bigButton} onClick={() => onDone(tool)}>
           Continue <ArrowRight />
         </Button>
       </Actions>
@@ -562,50 +544,87 @@ function AgentStep({
 
 function TeamStep({
   heading,
+  invites,
   onBack,
   onDone,
 }: {
   heading: React.RefObject<HTMLHeadingElement | null>
+  invites?: WelcomeDraft['invites']
   onBack?: () => void
-  onDone: (invites: number) => void
+  onDone: (invites: WelcomeDraft['invites']) => void
 }) {
-  const [invites, setInvites] = useState(0)
+  const [emails, setEmails] = useState(invites?.emails.join(', ') ?? '')
+  const [role, setRole] = useState<'admin' | 'editor' | 'viewer'>(invites?.role ?? 'editor')
+  const list = emails
+    .split(/[\s,;]+/)
+    .map((e) => e.trim())
+    .filter(Boolean)
 
   return (
-    <div>
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault()
+        onDone(list.length ? { emails: list, role } : undefined)
+      }}
+    >
       <StepHeader heading={heading} title="Invite your team">
-        They get an email, sign in as that address and join with the role you pick.
+        They get an email once the workspace is ready, sign in as that address and join with the role you pick.
       </StepHeader>
-      <InvitePanel onSent={(n) => setInvites((x) => x + n)} />
+      <div className="mt-6 grid gap-4 rounded-2xl border bg-card p-4 sm:p-5">
+        <Field>
+          <FieldLabel htmlFor="welcome-emails">Email addresses</FieldLabel>
+          <Textarea
+            id="welcome-emails"
+            rows={3}
+            placeholder="ana@example.com, sam@example.com"
+            value={emails}
+            onChange={(e) => setEmails(e.target.value)}
+          />
+          <FieldDescription>Separate them with commas or new lines.</FieldDescription>
+        </Field>
+        <Field className="w-44">
+          <FieldLabel htmlFor="welcome-role">Role</FieldLabel>
+          <NativeSelect
+            id="welcome-role"
+            value={role}
+            onChange={(e) => setRole(e.target.value as 'admin' | 'editor' | 'viewer')}
+          >
+            {(['editor', 'viewer', 'admin'] as const).map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r]}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+      </div>
       <Actions onBack={onBack}>
-        <Button type="button" variant="ghost" className={bigButton} onClick={() => onDone(0)}>
+        <Button type="button" variant="ghost" className={bigButton} onClick={() => onDone(undefined)}>
           Skip
         </Button>
-        <Button type="button" className={bigButton} onClick={() => onDone(invites)}>
-          Continue <ArrowRight />
+        <Button type="submit" className={bigButton}>
+          {list.length ? `Invite ${list.length} when ready` : 'Continue'} <ArrowRight />
         </Button>
       </Actions>
-    </div>
+    </form>
   )
 }
 
-function AgentPanel({ isLocal, onKey }: { isLocal: boolean; onKey: () => void }) {
+/** How to add staqly to the agent: the command, with the key once there is one. */
+function AgentPanel({
+  isLocal,
+  tool,
+  onTool,
+  apiKey,
+}: {
+  isLocal: boolean
+  tool: 'claude' | 'codex'
+  onTool?: (tool: 'claude' | 'codex') => void
+  apiKey?: string
+}) {
   const mcpUrl = `${usePublicApiUrl()}/mcp`
-  const [tool, setTool] = useState<'claude' | 'codex'>('claude')
-  const [key, setKey] = useState<string | null>(null)
-  const create = useMutation({
-    mutationFn: () =>
-      api.createApiKey({ name: tool === 'claude' ? 'Claude Code' : 'Codex', scopes: SCOPE_PRESETS[0]!.scopes }),
-    onSuccess: (k) => {
-      if (k.key) {
-        rememberApiKey({ id: k.id, name: k.name, key: k.key })
-        setKey(k.key)
-        onKey()
-      }
-    },
-  })
   const auth = !isLocal
-  const shownKey = key ?? '<YOUR_API_KEY>'
+  const shownKey = apiKey ?? '<YOUR_API_KEY>'
   const code =
     tool === 'claude'
       ? `claude mcp add --transport http staqly ${mcpUrl}${auth ? ` --header "Authorization: Bearer ${shownKey}"` : ''}`
@@ -613,45 +632,36 @@ function AgentPanel({ isLocal, onKey }: { isLocal: boolean; onKey: () => void })
 
   return (
     <div className="mt-6 grid gap-4 rounded-2xl border bg-card p-4 sm:p-5">
-      <div role="tablist" aria-label="Agent" className="inline-flex w-fit rounded-lg border bg-muted/50 p-0.5">
-        {(
-          [
-            ['claude', 'Claude Code'],
-            ['codex', 'Codex'],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tool === id}
-            onClick={() => setTool(id)}
-            className={cn(
-              'h-7 rounded-md px-3 text-sm font-medium transition-colors pointer-coarse:h-10',
-              tool === id ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {auth && !key && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed p-3">
-          <p className="text-sm text-muted-foreground">
-            Your agent signs in with its own key that can write and publish posts.
-          </p>
-          <Button type="button" variant="outline" disabled={create.isPending} onClick={() => create.mutate()}>
-            <KeyRound /> {create.isPending ? 'Creating...' : 'Create a key for it'}
-          </Button>
+      {onTool && (
+        <div role="tablist" aria-label="Agent" className="inline-flex w-fit rounded-lg border bg-muted/50 p-0.5">
+          {(
+            [
+              ['claude', 'Claude Code'],
+              ['codex', 'Codex'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tool === id}
+              onClick={() => onTool(id)}
+              className={cn(
+                'h-7 rounded-md px-3 text-sm font-medium transition-colors pointer-coarse:h-10',
+                tool === id ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       )}
-      {create.error && <p className="text-sm text-destructive">{errorMessage(create.error)}</p>}
-      {key && (
+      {apiKey && (
         <>
           <Callout tone="warning" role="status">
             Your API key is shown only now. Copy it and keep it somewhere safe; it&apos;s already in the command below.
           </Callout>
-          <SecretField value={key} label="Your API key" />
+          <SecretField value={apiKey} label="Your API key" />
         </>
       )}
       <CodeBlock code={code} title="Run this in your terminal" />
@@ -662,87 +672,403 @@ function AgentPanel({ isLocal, onKey }: { isLocal: boolean; onKey: () => void })
   )
 }
 
-function InvitePanel({ onSent }: { onSent: (n: number) => void }) {
-  const [emails, setEmails] = useState('')
-  const [role, setRole] = useState<Role>('editor')
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
-  const send = useMutation({
-    mutationFn: async () => {
-      const list = emails
-        .split(/[\s,;]+/)
-        .map((e) => e.trim())
-        .filter(Boolean)
-      const failed: string[] = []
-      let sent = 0
-
-      for (const email of list) {
-        try {
-          // One at a time: each invitation is its own request and its own error.
-          // eslint-disable-next-line no-await-in-loop
-          await api.invite(email, role)
-          sent++
-        } catch (e) {
-          failed.push(`${email}: ${errorMessage(e)}`)
-        }
-      }
-
-      return { sent, failed }
-    },
-    onSuccess: ({ sent, failed }) => {
-      onSent(sent)
-      setEmails(failed.map((f) => f.split(':')[0]).join(', '))
-      setMessage(
-        failed.length
-          ? { ok: false, text: `${sent} sent. Not sent: ${failed.join('; ')}` }
-          : { ok: true, text: `${sent} ${sent === 1 ? 'invitation' : 'invitations'} sent.` },
-      )
-    },
+/**
+ * The last step without a plan: one choice among the four plans (Plus picked to start with), monthly or yearly,
+ * then one button that says what happens next. Starter starts with its 7-day trial when the workspace still has
+ * it (card required, nothing charged until it ends). "Compare all plans" opens the full comparison. Stripe
+ * Checkout comes back to the end of the wizard.
+ */
+function PlanStep({
+  heading,
+  draft,
+  onBack,
+}: {
+  heading: React.RefObject<HTMLHeadingElement | null>
+  draft: WelcomeDraft
+  onBack?: () => void
+}) {
+  const plans = usePlans()
+  const billing = useBilling()
+  const trial = billing.data?.trial === 'available'
+  const [interval, setInterval] = useState<BillingInterval>('month')
+  const [chosen, setChosen] = useState<string | null>(null)
+  const list = plans.data ?? NO_PLANS
+  const picked = list.find((p) => p.id === chosen) ?? list.find((p) => p.highlight) ?? list[0]
+  const withTrial = trial && picked?.id === 'starter'
+  const start = useMutation({
+    mutationFn: (plan: string) => api.billingCheckout(plan, interval, 'welcome'),
+    onSuccess: ({ url }) => window.location.assign(url),
   })
 
   return (
-    <form
-      noValidate
-      className="mt-6 grid gap-4 rounded-2xl border bg-card p-4 sm:p-5"
-      onSubmit={(e) => {
-        e.preventDefault()
-
-        if (emails.trim()) {
-          send.mutate()
-        }
-      }}
-    >
-      <Field>
-        <FieldLabel htmlFor="welcome-emails">Email addresses</FieldLabel>
-        <Textarea
-          id="welcome-emails"
-          rows={3}
-          placeholder="ana@example.com, sam@example.com"
-          value={emails}
-          onChange={(e) => setEmails(e.target.value)}
-        />
-        <FieldDescription>Separate them with commas or new lines.</FieldDescription>
-      </Field>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <Field className="w-44">
-          <FieldLabel htmlFor="welcome-role">Role</FieldLabel>
-          <NativeSelect id="welcome-role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            {(['editor', 'viewer', 'admin'] as const).map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABELS[r]}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Button type="submit" variant="outline" disabled={send.isPending || !emails.trim()}>
-          <UserPlus /> {send.isPending ? 'Sending...' : 'Send invitations'}
-        </Button>
+    <div>
+      <StepHeader heading={heading} title="Choose a plan">
+        {draft.workspaceName ? `${draft.workspaceName} opens` : 'Your workspace opens'} as soon as the payment is
+        through. Every plan has unlimited posts, MCP and the REST API; cancel anytime.
+      </StepHeader>
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+        <IntervalToggle value={interval} onChange={setInterval} />
+        <span className="text-xs text-muted-foreground">Per user a month, excl. VAT</span>
       </div>
-      {message && (
-        <p role="status" className={cn('text-sm', message.ok ? 'text-brand-strong' : 'text-destructive')}>
-          {message.text}
+      <div role="radiogroup" aria-label="Plan" className="mt-4 grid gap-2.5">
+        {plans.isPending && <SkeletonList count={4} className="h-20 rounded-2xl" />}
+        {list.map((p) => {
+          const on = p.id === picked?.id
+          const l = p.limits
+
+          return (
+            <button
+              key={p.id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setChosen(p.id)}
+              data-testid={`welcome-plan-${p.id}`}
+              className={cn(
+                'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 rounded-2xl border bg-card px-4 py-3.5 text-left transition-colors outline-none hover:border-foreground/20 focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-5',
+                on && 'border-brand bg-brand-soft/30 ring-1 ring-brand hover:border-brand',
+              )}
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  'flex size-5 items-center justify-center rounded-full border-2 transition-colors',
+                  on ? 'border-brand bg-brand text-[#052817]' : 'border-muted-foreground/40',
+                )}
+              >
+                {on && <Check className="size-3" strokeWidth={3} />}
+              </span>
+              <span className="grid min-w-0 gap-0.5">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{p.name}</span>
+                  {p.highlight && (
+                    <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[11px] font-semibold text-[#052817]">
+                      Most popular
+                    </span>
+                  )}
+                  {trial && p.id === 'starter' && (
+                    <span className="rounded-full border border-brand/40 px-2 py-0.5 text-[11px] font-medium text-brand-strong">
+                      7 days free
+                    </span>
+                  )}
+                </span>
+                <span className="text-sm text-muted-foreground">{TAGLINES[p.id]}</span>
+                <span className="text-xs text-muted-foreground">
+                  {[
+                    l.channels < 0 ? 'Unlimited channels' : `${l.channels} channels`,
+                    l.x_posts_per_period ? `${l.x_posts_per_period.toLocaleString('en-US')} X posts` : '',
+                    l.storage_bytes < 0 ? 'Unlimited storage' : `${formatBytes(l.storage_bytes)} storage`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </span>
+              <span className="text-right">
+                <span className="block text-2xl font-semibold tracking-tight tabular-nums">
+                  {money(monthly(p, interval), p.currency)}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {interval === 'year' ? `${money(p.price_year, p.currency)} a year` : 'a month'}
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      {start.error && (
+        <p role="alert" className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          {errorMessage(start.error)}
         </p>
       )}
-    </form>
+      {withTrial && (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Add a card at Stripe; nothing is charged until the 7 days end, and you can cancel before.
+        </p>
+      )}
+      <Actions onBack={onBack}>
+        <Button type="button" variant="ghost" className={bigButton} asChild>
+          <Link href="/plans?from=welcome">Compare all plans</Link>
+        </Button>
+        <Button
+          type="button"
+          className={cn(bigButton, 'bg-brand-gradient text-[#052817] hover:brightness-110')}
+          disabled={!picked || start.isPending}
+          onClick={() => picked && start.mutate(picked.id)}
+          data-testid={withTrial ? 'start-trial' : 'choose-plan'}
+        >
+          {start.isPending
+            ? 'Opening checkout...'
+            : withTrial
+              ? 'Start 7-day free trial'
+              : picked
+                ? `Continue with ${picked.name}`
+                : 'Continue'}{' '}
+          <ArrowRight />
+        </Button>
+      </Actions>
+    </div>
+  )
+}
+
+const NO_PLANS: Plan[] = []
+
+type Applied = NonNullable<WelcomeDraft['applied']>
+
+/** Writes what the wizard collected: the workspace's name and zone, the invitations and the agent's key. */
+async function applyDraft(
+  draft: WelcomeDraft,
+  workspace: { name: string; timezone: string },
+  isLocal: boolean,
+): Promise<{ applied: Applied; key?: RememberedKey }> {
+  // A new cloud workspace starts in UTC: it takes this browser's zone (Settings can change it later).
+  const zone = workspace.timezone === 'UTC' && browserTimeZone() !== 'UTC' ? browserTimeZone() : undefined
+  const name = draft.workspaceName?.trim()
+
+  if ((name && name !== workspace.name) || zone) {
+    await api.updateWorkspace({ name: name || undefined, timezone: zone })
+  }
+
+  const failed: string[] = []
+  let invited = 0
+
+  for (const email of draft.invites?.emails ?? []) {
+    // One at a time: each invitation is its own request and its own error.
+    // eslint-disable-next-line no-await-in-loop
+    await api.invite(email, draft.invites!.role).then(
+      () => invited++,
+      (e: unknown) => failed.push(`${email}: ${errorMessage(e)}`),
+    )
+  }
+
+  let key: RememberedKey | undefined
+
+  if (draft.agent && !isLocal) {
+    const k = await api.createApiKey({
+      name: draft.agent === 'claude' ? 'Claude Code' : 'Codex',
+      scopes: SCOPE_PRESETS[0]!.scopes,
+    })
+
+    key = k.key ? { id: k.id, name: k.name, key: k.key } : undefined
+  }
+
+  return { applied: { keyCreated: !!key, invited, failed }, key }
+}
+
+/**
+ * The end: waits for the plan when the workspace just came back from Stripe (its webhook lands a moment later),
+ * sets the workspace up once, then offers the chosen platforms to connect and the way into the app.
+ */
+function DoneStep({
+  heading,
+  draft,
+  workspace,
+  isLocal,
+  waitForPlan,
+  onApplied,
+  busy,
+  onFinish,
+}: {
+  heading: React.RefObject<HTMLHeadingElement | null>
+  draft: WelcomeDraft
+  workspace: { id: string; name: string; timezone: string }
+  isLocal: boolean
+  waitForPlan: boolean
+  onApplied: (applied: Applied) => void
+  busy: boolean
+  onFinish: (to: string) => void
+}) {
+  const qc = useQueryClient()
+  const channels = useChannels({ enabled: !waitForPlan })
+  const providers = useProviders()
+  const key = useRememberedApiKey()
+  const [connecting, setConnecting] = useState<string | null>(null)
+  const [waited, setWaited] = useState(0)
+  const started = useRef(false)
+  const apply = useMutation({
+    mutationFn: () => applyDraft(draft, workspace, isLocal),
+    onSuccess: ({ applied, key: made }) => {
+      if (made) {
+        rememberApiKey(made)
+      }
+
+      onApplied(applied)
+      void qc.invalidateQueries({ queryKey: qk.session })
+    },
+  })
+  const { mutate } = apply
+  const timedOut = waitForPlan && waited >= 30
+
+  // Back from Stripe: every 2 s (a minute at most) the server reads the subscription from Stripe, so the workspace
+  // opens even when Stripe's webhook is late or lost.
+  useEffect(() => {
+    if (!waitForPlan || timedOut) {
+      return
+    }
+
+    const t = setInterval(() => {
+      setWaited((n) => n + 1)
+      void api.syncBilling().then(
+        (b) => {
+          qc.setQueryData(qk.billing, b)
+          void qc.invalidateQueries({ queryKey: qk.usage })
+        },
+        () => void qc.invalidateQueries({ queryKey: qk.billing }),
+      )
+    }, 2000)
+
+    return () => clearInterval(t)
+  }, [waitForPlan, timedOut, qc])
+
+  useEffect(() => {
+    if (!waitForPlan && !draft.applied && !started.current) {
+      started.current = true
+      mutate()
+    }
+  }, [waitForPlan, draft.applied, mutate])
+
+  const applied = draft.applied
+
+  if (waitForPlan || (!applied && !apply.error)) {
+    return (
+      <div>
+        <StepHeader heading={heading} title={timedOut ? 'Still waiting for the payment' : 'Setting up your workspace'}>
+          {timedOut
+            ? 'Stripe has not confirmed the payment yet. If you paid, it shows up in a moment; otherwise choose a plan again.'
+            : 'Your workspace opens as soon as the payment is confirmed. This takes a few seconds.'}
+        </StepHeader>
+        {timedOut ? (
+          <Actions>
+            <Button type="button" variant="outline" className={bigButton} asChild>
+              <Link href="/welcome?step=plan">Choose a plan</Link>
+            </Button>
+            <Button type="button" className={bigButton} onClick={() => setWaited(0)}>
+              Check again
+            </Button>
+          </Actions>
+        ) : (
+          <div role="status" className="mt-8 flex items-center gap-3 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" aria-hidden /> Setting up...
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (apply.error) {
+    return (
+      <div>
+        <StepHeader heading={heading} title="Something went wrong">
+          {errorMessage(apply.error)}
+        </StepHeader>
+        <Actions>
+          <Button type="button" className={bigButton} onClick={() => mutate()} disabled={apply.isPending}>
+            Try again
+          </Button>
+        </Actions>
+      </div>
+    )
+  }
+
+  const connected = channels.data ?? []
+  const toConnect = (providers.data ?? []).filter(
+    (p) => draft.providers?.includes(p.id) && !connected.some((c) => c.provider === p.id),
+  )
+  const provider = toConnect.find((p) => p.id === connecting) ?? null
+  const items: { done: boolean; text: string }[] = [
+    { done: true, text: `Workspace ${draft.workspaceName || workspace.name} is ready` },
+    ...(applied?.invited
+      ? [{ done: true, text: `${applied.invited} ${applied.invited === 1 ? 'invitation' : 'invitations'} sent` }]
+      : []),
+    ...(applied?.failed.length ? [{ done: false, text: `Not sent: ${applied.failed.join('; ')}` }] : []),
+    ...(connected.length
+      ? [{ done: true, text: `${connected.length} ${connected.length === 1 ? 'channel' : 'channels'} connected` }]
+      : []),
+  ]
+
+  return (
+    <div>
+      <div className="flex size-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-strong">
+        <PartyPopper className="size-6 motion-safe:animate-[bounce_1s_ease-in-out_2]" />
+      </div>
+      <div className="mt-6">
+        <StepHeader heading={heading} title="You are all set">
+          {toConnect.length
+            ? 'Connect the platforms you picked, then write your first post.'
+            : 'Write your first post or open the calendar and plan the week.'}
+        </StepHeader>
+      </div>
+      <ul className="mt-8 grid gap-2">
+        {items.map((it) => (
+          <li key={it.text} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm">
+            <span
+              className={cn(
+                'flex size-6 shrink-0 items-center justify-center rounded-full',
+                it.done ? 'bg-brand text-[#052817]' : 'bg-muted text-muted-foreground',
+              )}
+            >
+              {it.done ? <Check className="size-3.5" /> : <CalendarClock className="size-3.5" />}
+            </span>
+            <span className="min-w-0 wrap-anywhere">{it.text}</span>
+          </li>
+        ))}
+      </ul>
+      {toConnect.length > 0 && (
+        <div className="mt-6 rounded-2xl border bg-card p-4 sm:p-5">
+          {provider ? (
+            <div className="grid gap-4">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="-ml-2"
+                  aria-label="Back to platforms"
+                  onClick={() => setConnecting(null)}
+                >
+                  <ArrowLeft />
+                </Button>
+                <ProviderTile id={provider.id} name={provider.name} className="size-7" />
+                <h2 className="font-semibold">Connect {provider.name}</h2>
+              </div>
+              <ConnectForm
+                provider={provider}
+                reconnect={null}
+                oauthReturnTo="/welcome?step=done"
+                onDone={() => setConnecting(null)}
+              />
+            </div>
+          ) : (
+            <ul className="grid gap-2" aria-label="Platforms to connect">
+              {toConnect.map((p) => (
+                <li key={p.id} className="flex items-center gap-3 text-sm">
+                  <ProviderTile id={p.id} name={p.name} className="size-7" />
+                  <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setConnecting(p.id)}>
+                    Connect
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {draft.agent && (applied?.keyCreated || isLocal) && (
+        <AgentPanel isLocal={isLocal} tool={draft.agent} apiKey={key?.key} />
+      )}
+      <Actions>
+        <Button
+          type="button"
+          variant="outline"
+          className={bigButton}
+          disabled={busy}
+          onClick={() => onFinish('/posts?compose=1')}
+        >
+          <PenLine /> Write your first post
+        </Button>
+        <Button type="button" className={bigButton} disabled={busy} onClick={() => onFinish('/schedule')}>
+          Go to the calendar <ArrowRight />
+        </Button>
+      </Actions>
+    </div>
   )
 }
 
@@ -781,137 +1107,6 @@ function JoinedStep({
         <Button type="button" className={bigButton} disabled={busy} onClick={onDone}>
           Go to the calendar <ArrowRight />
         </Button>
-      </Actions>
-    </div>
-  )
-}
-
-function DoneStep({
-  heading,
-  workspace,
-  summary,
-  busy,
-  onFinish,
-}: {
-  heading: React.RefObject<HTMLHeadingElement | null>
-  workspace: string
-  summary: { key: boolean; invites: number }
-  busy: boolean
-  onFinish: (to: string) => void
-}) {
-  const channels = useChannels()
-  const n = channels.data?.length ?? 0
-  const items: { done: boolean; text: string }[] = [
-    { done: true, text: `Workspace ${workspace} is ready` },
-    {
-      done: n > 0,
-      text: n > 0 ? `${n} ${n === 1 ? 'channel' : 'channels'} connected` : 'No channel yet: add one from Channels',
-    },
-    { done: summary.key, text: summary.key ? 'An agent key is ready' : 'Agents can join later from Integrations' },
-    ...(summary.invites
-      ? [{ done: true, text: `${summary.invites} ${summary.invites === 1 ? 'invitation' : 'invitations'} sent` }]
-      : []),
-  ]
-
-  return (
-    <div>
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-strong">
-        <PartyPopper className="size-6 motion-safe:animate-[bounce_1s_ease-in-out_2]" />
-      </div>
-      <div className="mt-6">
-        <StepHeader heading={heading} title="You are all set">
-          Write your first post or open the calendar and plan the week.
-        </StepHeader>
-      </div>
-      <ul className="mt-8 grid gap-2">
-        {items.map((it) => (
-          <li key={it.text} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm">
-            <span
-              className={cn(
-                'flex size-6 shrink-0 items-center justify-center rounded-full',
-                it.done ? 'bg-brand text-[#052817]' : 'bg-muted text-muted-foreground',
-              )}
-            >
-              {it.done ? <Check className="size-3.5" /> : <CalendarClock className="size-3.5" />}
-            </span>
-            {it.text}
-          </li>
-        ))}
-      </ul>
-      <Actions>
-        <Button
-          type="button"
-          variant="outline"
-          className={bigButton}
-          disabled={busy}
-          onClick={() => onFinish('/posts?compose=1')}
-        >
-          <PenLine /> Write your first post
-        </Button>
-        <Button type="button" className={bigButton} disabled={busy} onClick={() => onFinish('/schedule')}>
-          Go to the calendar <ArrowRight />
-        </Button>
-      </Actions>
-    </div>
-  )
-}
-
-/**
- * Billing on, no subscription yet: Starter's 7-day trial (card required, nothing charged until it ends) through
- * Stripe Checkout, which comes back to the next step. Other plans from the plan page.
- */
-function TrialStep({
-  heading,
-  onBack,
-  onSkip,
-  started,
-}: {
-  heading: React.RefObject<HTMLHeadingElement | null>
-  onBack?: () => void
-  onSkip: () => void
-  started: boolean
-}) {
-  const plans = usePlans()
-  const starter = plans.data?.find((p) => p.id === 'starter')
-  const start = useMutation({
-    mutationFn: () => api.billingCheckout('starter', 'month', 'welcome'),
-    onSuccess: ({ url }) => window.location.assign(url),
-  })
-  const price = starter ? money(starter.price_month, starter.currency) : ''
-
-  return (
-    <div>
-      <StepHeader heading={heading} title={started ? 'Your trial has started' : 'Start your 7-day free trial'}>
-        {started
-          ? 'Starter is yours for 7 days. Nothing is charged until the trial ends; cancel anytime in Settings, Plan & usage.'
-          : `Try Starter for 7 days. Add a card now; nothing is charged until the trial ends${price ? `, then ${price} per user a month, excl. VAT` : ''}. Cancel anytime. Until a plan starts, the workspace can be read but not changed.`}
-      </StepHeader>
-      {start.error && (
-        <p role="alert" className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
-          {errorMessage(start.error)}
-        </p>
-      )}
-      <Actions onBack={onBack}>
-        {started ? (
-          <Button type="button" className={bigButton} onClick={onSkip}>
-            Continue <ArrowRight />
-          </Button>
-        ) : (
-          <>
-            <Button type="button" variant="outline" className={bigButton} asChild>
-              <Link href="/plans">See all plans</Link>
-            </Button>
-            <Button
-              type="button"
-              className={bigButton}
-              disabled={start.isPending}
-              onClick={() => start.mutate()}
-              data-testid="start-trial"
-            >
-              {start.isPending ? 'Opening checkout...' : 'Start free trial'} <ArrowRight />
-            </Button>
-          </>
-        )}
       </Actions>
     </div>
   )

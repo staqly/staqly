@@ -15,6 +15,7 @@ import (
 //	GET  /v1/billing/details   subscription period, cards on file and invoices, read from Stripe (admin)
 //	POST /v1/billing/checkout  Stripe Checkout URL for a plan and interval, or a switch of the live subscription (admin)
 //	POST /v1/billing/portal    Stripe customer portal URL (admin)
+//	POST /v1/billing/sync      read the subscription from Stripe now, then the status (admin; back from Checkout)
 //	GET  /v1/billing/x-posts   posts to X this period: included, used, bought credits left (posts:read)
 //	POST /v1/billing/credits/checkout  Stripe Checkout URL for a bundle of extra X posts (account owner)
 //	GET  /v1/billing/addons    add-ons on sale and which the workspace has (admin)
@@ -27,6 +28,7 @@ func init() {
 		r.Get("/billing/details", s.getBillingDetails)
 		r.Post("/billing/checkout", s.billingCheckout)
 		r.Post("/billing/portal", s.billingURL(s.svc.PortalSession))
+		r.Post("/billing/sync", s.syncBilling)
 		r.Get("/billing/x-posts", s.getXPosts)
 		r.Post("/billing/credits/checkout", s.creditsCheckout)
 		r.Get("/billing/addons", s.listAddons)
@@ -40,6 +42,15 @@ func init() {
 
 func (s *Server) getBilling(w http.ResponseWriter, r *http.Request) {
 	b, err := s.svc.GetBilling(r.Context(), principal(r))
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, 200, b)
+}
+
+func (s *Server) syncBilling(w http.ResponseWriter, r *http.Request) {
+	b, err := s.svc.SyncBilling(r.Context(), principal(r))
 	if err != nil {
 		writeErr(w, r, err)
 		return

@@ -955,6 +955,8 @@ export const api = {
       json: { plan, interval, ...(returnTo ? { return_to: returnTo } : {}) },
     }),
   billingPortal: () => request<{ url: string }>('/v1/billing/portal', { method: 'POST' }),
+  /** Reads the subscription from Stripe now (back from Checkout, before or without its webhook). */
+  syncBilling: () => request<Billing>('/v1/billing/sync', { method: 'POST' }),
   /** Posts to X this period: included, used and bought ones left. */
   xPosts: () => request<XPosts>('/v1/billing/x-posts'),
   /** Buys a bundle of extra posts to X (Stripe Checkout URL). */

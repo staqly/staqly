@@ -14,6 +14,7 @@ import {
   CreditCard,
   Gauge,
   Images,
+  Lock,
   LogOut,
   Menu,
   PenSquare,
@@ -820,8 +821,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <AppSidebar />
         <SidebarInset id="main" tabIndex={-1} className="min-w-0 pb-(--mobile-chrome-bottom) outline-none md:pb-0">
           {isMobile && <MobileHeader />}
-          <NoPlanBanner />
-          {children}
+          <PlanGate>{children}</PlanGate>
         </SidebarInset>
         {isMobile && <MobileTabBar />}
       </SidebarProvider>
@@ -833,42 +833,49 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * Cloud with billing: a workspace without a live plan (never started, or ended) is read-only. A bar on every
- * page says so and leads to the plans: Starter's trial for a new workspace, any plan after one ended.
+ * Cloud with billing: a workspace opens only with a live plan (paid, or Starter's trial with a card). One that never
+ * had one sends its owner to the welcome first (NoPlanGate), whose last step is the plan. One whose plan ended or whose
+ * payment failed shows only that, with the way to Plan & usage (the one page that stays open), where paying unlocks it.
  */
-function NoPlanBanner() {
+function PlanGate({ children }: { children: ReactNode }) {
   const { isLocal } = useMode()
   const { canManagePeople } = useRole()
   const usage = useUsage()
   const billing = useBilling({ enabled: !isLocal && canManagePeople })
+  const pathname = usePathname()
+  // The account owner of a workspace that never had a plan doesn't get here: NoPlanGate sends them to the welcome.
+  const locked = !isLocal && !!usage.data?.suspended
+  const neverStarted = locked && !!billing.data?.enabled && !billing.data.subscription_status
+  const billingPage = pathname.startsWith('/settings/plan') || pathname.startsWith('/settings/billing')
 
-  if (isLocal || !usage.data?.suspended) {
-    return null
+  if (!locked || (billingPage && canManagePeople)) {
+    return children
   }
 
-  const neverStarted = !!billing.data?.enabled && !billing.data.subscription_status
-
   return (
-    <div
-      role="status"
-      data-testid="no-plan-banner"
-      className="flex flex-wrap items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm sm:px-6"
-    >
-      <p className="min-w-0">
-        <span className="font-medium">
-          {neverStarted ? 'Start your 7-day free trial to use this workspace.' : 'This workspace is read-only.'}
-        </span>{' '}
-        <span className="text-muted-foreground">
-          {neverStarted
-            ? 'Starter: card required, nothing charged for 7 days, cancel anytime.'
-            : 'You can read and export everything; choose a plan to keep working.'}
+    <div className="flex flex-1 items-center justify-center px-4 py-16" data-testid="plan-locked">
+      <div className="grid max-w-md justify-items-center gap-4 text-center">
+        <span className="flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+          <Lock className="size-6" aria-hidden />
         </span>
-      </p>
-      {canManagePeople && (
-        <Button asChild size="sm">
-          <Link href="/plans">{neverStarted ? 'Start free trial' : 'Choose a plan'}</Link>
-        </Button>
-      )}
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {neverStarted ? 'This workspace has no plan yet' : 'This workspace is locked'}
+        </h1>
+        <p className="text-sm text-pretty text-muted-foreground">
+          {neverStarted
+            ? 'It opens once the account owner chooses a plan for it.'
+            : canManagePeople
+              ? 'Its plan ended or the last payment did not go through. Pay in Plan & usage and the workspace opens again right away, with everything in it.'
+              : 'Its plan ended or the last payment did not go through. An owner or admin can pay in Plan & usage; the workspace opens again right away.'}
+        </p>
+        {canManagePeople && !neverStarted && (
+          <Button asChild>
+            <Link href="/settings/plan">
+              <CreditCard /> Go to billing
+            </Link>
+          </Button>
+        )}
+      </div>
     </div>
   )
 }

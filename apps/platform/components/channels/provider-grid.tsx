@@ -1,5 +1,7 @@
 'use client'
 
+import { Check } from 'lucide-react'
+
 import { Badge } from '@/components/ui/badge'
 import { ProviderTile } from '@/lib/providers'
 import { cn } from '@/lib/utils'
@@ -34,7 +36,6 @@ const GROUPS: { title: string; ids: string[] }[] = [
       'mastodon',
       'pinterest',
       'tumblr',
-      'vk',
       'mewe',
     ],
   },
@@ -62,10 +63,13 @@ function groupProviders<T extends { id: string }>(providers: T[]) {
 export function ProviderGrid({
   providers,
   onPick,
+  selected,
   className,
 }: {
   providers: ProviderCard[]
   onPick: (provider: ProviderCard) => void
+  /** Pick several (the welcome): the chosen ones are pressed. */
+  selected?: ReadonlySet<string>
   className?: string
 }) {
   return (
@@ -89,11 +93,13 @@ export function ProviderGrid({
                     type="button"
                     onClick={() => onPick(p)}
                     disabled={soon}
+                    aria-pressed={selected ? selected.has(p.id) : undefined}
                     aria-label={soon ? `${p.name}, coming soon` : p.name}
                     data-testid={`provider-${p.id}`}
                     className={cn(
                       'relative flex h-28 w-full flex-col items-center justify-center gap-1.5 rounded-xl border bg-card px-2 pt-4 pb-2 text-center text-xs font-medium transition-colors outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                      soon && 'cursor-default opacity-60 hover:bg-card',
+                      soon && 'cursor-default text-muted-foreground hover:bg-card',
+                      selected?.has(p.id) && 'border-2 border-brand bg-brand-soft hover:bg-brand-soft',
                     )}
                   >
                     {/* The badge sits in the card's corner, clear of the mark (pt-5 leaves it room). */}
@@ -102,7 +108,13 @@ export function ProviderGrid({
                         Soon
                       </Badge>
                     )}
-                    <ProviderTile id={p.id} name={p.name} className="size-8" />
+                    {selected?.has(p.id) && (
+                      <Check
+                        aria-hidden
+                        className="absolute top-1.5 left-1.5 size-4 rounded-full bg-brand p-0.5 text-[#052817]"
+                      />
+                    )}
+                    <ProviderTile id={p.id} name={p.name} className="size-11" />
                     <span className="line-clamp-3 w-full leading-tight" title={p.name}>
                       {p.name}
                     </span>

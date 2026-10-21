@@ -33,13 +33,13 @@ describe('new workspace', () => {
   beforeEach(() => vi.stubGlobal('location', { ...window.location, assign }))
   afterEach(() => assign.mockReset())
 
-  it('with billing: opens the plan picker for the new workspace', async () => {
+  it('with billing: opens the welcome, whose last step is the plan', async () => {
     const api = render(true)
     const user = userEvent.setup()
 
     await user.type(screen.getByLabelText(/Name/), 'Client work')
     await user.click(await screen.findByRole('button', { name: 'Create and choose a plan' }))
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('/plans'))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/welcome'))
     expect(api.find('POST', '/v1/session/workspace')[0].body).toEqual({ workspace_id: 'ws_new' })
   })
 
