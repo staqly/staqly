@@ -3,10 +3,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Bell, CheckCircle2, ExternalLink, Info, XCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { api } from '@/lib/api'
 import { timeAgo } from '@/lib/format'
 import { notificationsFor, readSeenSeq, writeSeenSeq, type Notification } from '@/lib/notifications'
@@ -71,33 +71,24 @@ export function useNotifications() {
 
 export type NotificationsState = ReturnType<typeof useNotifications>
 
-/**
- * The list in a popover. `children` is its trigger, or with `anchor` only the element it opens next to (the bell
- * in the user menu, which opens it from a menu item).
- */
+/** The list in a popover; `children` is its trigger. */
 export function NotificationsPopover({
   notes,
   open,
   onOpenChange,
-  anchor = false,
   side = 'bottom',
   align = 'end',
-  keepOpenWithin,
   children,
 }: {
   notes: NotificationsState
   open: boolean
   onOpenChange: (o: boolean) => void
-  anchor?: boolean
   side?: 'bottom' | 'right'
   align?: 'start' | 'end'
-  /** Clicks inside these elements (an open menu beside the list) do not close the list. */
-  keepOpenWithin?: string
   children: ReactNode
 }) {
   const router = useRouter()
   const { list, unread, seenSeq, markRead } = notes
-  const anchorEl = useRef<HTMLDivElement>(null)
 
   function change(o: boolean) {
     onOpenChange(o)
@@ -118,35 +109,15 @@ export function NotificationsPopover({
 
   return (
     <Popover open={open} onOpenChange={change}>
-      {anchor ? (
-        <PopoverAnchor asChild ref={anchorEl}>
-          {children}
-        </PopoverAnchor>
-      ) : (
-        <PopoverTrigger asChild>{children}</PopoverTrigger>
-      )}
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent
-        // Radix returns focus to a Trigger only; beside the user menu (which stays open) focus goes back to the bell
-        // in it, not to the page behind the menu.
-        onCloseAutoFocus={(e) => {
-          if (anchor && anchorEl.current?.isConnected) {
-            e.preventDefault()
-            anchorEl.current.focus({ preventScroll: true })
-          }
-        }}
         side={side}
         align={align}
-        // Beside a menu: clear of its edge rather than over it.
+        // Beside the sidebar: clear of its edge rather than over it.
         sideOffset={side === 'right' ? 12 : undefined}
         collisionPadding={8}
         className="w-[min(100vw-1rem,24rem)] p-0"
         aria-label="Notifications"
-        data-notifications=""
-        onInteractOutside={(e) => {
-          if (keepOpenWithin && (e.target as Element | null)?.closest?.(keepOpenWithin)) {
-            e.preventDefault()
-          }
-        }}
       >
         <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
           <h2 className="text-sm font-semibold">Notifications</h2>
@@ -209,7 +180,7 @@ export function NotificationsPopover({
   )
 }
 
-/** The bell button of the phone top bar; on desktop the list opens from the user menu. */
+/** The bell button of the phone top bar; on desktop the list opens from Notifications in the sidebar. */
 export function NotificationsBell({ className }: { className?: string }) {
   const notes = useNotifications()
   const [open, setOpen] = useState(false)

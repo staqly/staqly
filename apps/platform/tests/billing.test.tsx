@@ -317,7 +317,11 @@ function shell(
   client.setQueryData(qk.session, { ...sessionFixture('cloud'), role: 'owner', accounts_enabled: true, onboarded })
   mockApi({
     'GET /v1/collections': { data: [] },
-    'GET /v1/workspace/usage': { ...usage(plan), plan_expires_at: trial ? '2026-10-27T10:00:00Z' : null },
+    'GET /v1/workspace/usage': {
+      ...usage(plan),
+      plan_expires_at: trial ? '2026-10-27T10:00:00Z' : null,
+      trial_ends_at: trial ? inDays(3) : null,
+    },
     'GET /v1/billing': billing,
     'GET /v1/plans': { data: PLANS },
   })
@@ -350,6 +354,15 @@ describe('user menu', () => {
     await user.click((await screen.findAllByTestId('user-menu-trigger'))[0])
     menu = await screen.findByRole('menu')
     expect(within(menu).queryByTestId('menu-getting-started')).not.toBeInTheDocument()
+  })
+
+  it('in the trial: the sidebar counts the days down and leads to the plans', async () => {
+    shell()
+
+    const banner = await screen.findByTestId('trial-banner')
+
+    expect(banner).toHaveTextContent('3 days left in your trial')
+    expect(within(banner).getByRole('link', { name: /Upgrade/ })).toHaveAttribute('href', '/plans')
   })
 
   it('in the trial: a highlighted Choose a plan and Billing', async () => {

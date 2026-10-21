@@ -1,9 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useState } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { NotificationsBell, NotificationsPopover, useNotifications } from '@/components/shell/notifications-bell'
+import { NotificationsBell } from '@/components/shell/notifications-bell'
 import type { StashEvent } from '@/lib/api'
 import { notificationFor } from '@/lib/notifications'
 
@@ -36,20 +35,6 @@ const reconnect = event({
   data: { channel: { name: 'News bot' }, error: 'Token revoked' },
 })
 const edited = event({ type: 'post.updated', seq: 8, data: postData })
-
-/** The bell beside a menu: the list only anchored to it, opened by the button itself. */
-function Anchored() {
-  const notes = useNotifications()
-  const [open, setOpen] = useState(false)
-
-  return (
-    <NotificationsPopover notes={notes} open={open} onOpenChange={setOpen} anchor>
-      <button type="button" onClick={() => setOpen((o) => !o)}>
-        Bell
-      </button>
-    </NotificationsPopover>
-  )
-}
 
 beforeEach(() => localStorage.clear())
 
@@ -92,20 +77,6 @@ describe('notifications', () => {
     expect(key && localStorage.getItem(key)).toBe('12')
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByTestId('notifications-list')).not.toBeInTheDocument())
-  })
-
-  it('opened beside a menu (anchored), Escape gives focus back to the bell, not to the page', async () => {
-    mockApi({ 'GET /v1/events': { data: [published] } })
-    const user = userEvent.setup()
-
-    renderWithProviders(<Anchored />, { mode: 'local' })
-    const bell = screen.getByRole('button', { name: 'Bell' })
-
-    await user.click(bell)
-    await screen.findByTestId('notifications-list')
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByTestId('notifications-list')).not.toBeInTheDocument())
-    expect(bell).toHaveFocus()
   })
 
   it('says when there is nothing to show', async () => {

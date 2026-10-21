@@ -211,7 +211,7 @@ describe('media folders and tags', () => {
 
     expect(clients).toHaveAttribute('aria-expanded', 'true')
     // Root heads the tree: every folder sits inside it.
-    expect(within(tree).getByRole('treeitem', { name: /Root/ })).toHaveAttribute('aria-level', '1')
+    expect(within(tree).getByRole('treeitem', { name: /^\// })).toHaveAttribute('aria-level', '1')
     expect(clients).toHaveAttribute('aria-level', '2')
     expect(within(tree).getByRole('treeitem', { name: /ACME/ })).toHaveAttribute('aria-level', '3')
     clients.focus()
@@ -232,9 +232,9 @@ describe('media folders and tags', () => {
     await waitFor(() => expect(listed('mfd_a', 'hero')).toBe(true))
 
     // Root lists the files in no folder.
-    await user.click(within(tree).getByRole('treeitem', { name: /Root/ }))
+    await user.click(within(tree).getByRole('treeitem', { name: /^\// }))
     await waitFor(() => expect(listed('root')).toBe(true))
-    expect(screen.getByTestId('media-place')).toHaveTextContent('Root')
+    expect(screen.getByTestId('media-place')).toHaveTextContent('/')
   })
 
   it('hides Tags while no file has one', async () => {
@@ -244,7 +244,7 @@ describe('media folders and tags', () => {
       'GET /v1/workspace/usage': usage(PLANS[1]!),
     })
     renderWithProviders(<MediaPage />, { mode: 'cloud' })
-    await screen.findByRole('treeitem', { name: /Root/ })
+    await screen.findByRole('treeitem', { name: /^\// })
     expect(screen.queryByTestId('media-tags')).toBeNull()
     expect(screen.queryByText('Tags')).toBeNull()
   })
