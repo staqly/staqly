@@ -1,9 +1,6 @@
 <p align="center">
   <a href="https://staqly.ai">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/brand/staqly-logo-dark.svg">
-      <img src="assets/brand/staqly-logo-light.svg" alt="staqly" width="280">
-    </picture>
+    <img src="assets/brand/staqly-logo-dark.svg#gh-dark-mode-only" alt="staqly" width="280"><img src="assets/brand/staqly-logo-light.svg#gh-light-mode-only" alt="staqly" width="280">
   </a>
 </p>
 
@@ -32,30 +29,27 @@
 
 <p align="center"><strong>Publish today</strong> to <strong>X</strong> and through your own automation: n8n, Make, Zapier or a script of yours.<br><strong>More native platforms, rolling out:</strong></p>
 <p align="center">
-  <picture><source media="(prefers-color-scheme: dark)" srcset="https://cdn.simpleicons.org/x/white"><img alt="X" src="https://cdn.simpleicons.org/x" width="26"></picture>&nbsp;
+  <img alt="X" src="https://cdn.simpleicons.org/x/white#gh-dark-mode-only" width="26"><img alt="X" src="https://cdn.simpleicons.org/x#gh-light-mode-only" width="26">&nbsp;
   <img alt="Bluesky" src="https://cdn.simpleicons.org/bluesky" width="26">&nbsp;
   <img alt="Mastodon" src="https://cdn.simpleicons.org/mastodon" width="26">&nbsp;
-  <picture><source media="(prefers-color-scheme: dark)" srcset="https://cdn.simpleicons.org/threads/white"><img alt="Threads" src="https://cdn.simpleicons.org/threads" width="26"></picture>&nbsp;
+  <img alt="Threads" src="https://cdn.simpleicons.org/threads/white#gh-dark-mode-only" width="26"><img alt="Threads" src="https://cdn.simpleicons.org/threads#gh-light-mode-only" width="26">&nbsp;
   <img alt="Instagram" src="https://cdn.simpleicons.org/instagram" width="26">&nbsp;
   <img alt="Facebook" src="https://cdn.simpleicons.org/facebook" width="26">&nbsp;
   <img alt="YouTube" src="https://cdn.simpleicons.org/youtube" width="26">&nbsp;
-  <picture><source media="(prefers-color-scheme: dark)" srcset="https://cdn.simpleicons.org/tiktok/white"><img alt="TikTok" src="https://cdn.simpleicons.org/tiktok" width="26"></picture>&nbsp;
+  <img alt="TikTok" src="https://cdn.simpleicons.org/tiktok/white#gh-dark-mode-only" width="26"><img alt="TikTok" src="https://cdn.simpleicons.org/tiktok#gh-light-mode-only" width="26">&nbsp;
   <img alt="Pinterest" src="https://cdn.simpleicons.org/pinterest" width="26">&nbsp;
   <img alt="Reddit" src="https://cdn.simpleicons.org/reddit" width="26">&nbsp;
   <img alt="Discord" src="https://cdn.simpleicons.org/discord" width="26">&nbsp;
   <img alt="Telegram" src="https://cdn.simpleicons.org/telegram" width="26">&nbsp;
   <img alt="WordPress" src="https://cdn.simpleicons.org/wordpress" width="26">&nbsp;
-  <picture><source media="(prefers-color-scheme: dark)" srcset="https://cdn.simpleicons.org/medium/white"><img alt="Medium" src="https://cdn.simpleicons.org/medium" width="26"></picture>&nbsp;
-  <picture><source media="(prefers-color-scheme: dark)" srcset="https://cdn.simpleicons.org/devdotto/white"><img alt="DEV" src="https://cdn.simpleicons.org/devdotto" width="26"></picture>&nbsp;
+  <img alt="Medium" src="https://cdn.simpleicons.org/medium/white#gh-dark-mode-only" width="26"><img alt="Medium" src="https://cdn.simpleicons.org/medium#gh-light-mode-only" width="26">&nbsp;
+  <img alt="DEV" src="https://cdn.simpleicons.org/devdotto/white#gh-dark-mode-only" width="26"><img alt="DEV" src="https://cdn.simpleicons.org/devdotto#gh-light-mode-only" width="26">&nbsp;
   <img alt="Hashnode" src="https://cdn.simpleicons.org/hashnode" width="26">
   <br><sub>and LinkedIn, Slack, Google Business and more: <a href="https://docs.staqly.ai/channels">35 platforms in the catalog</a></sub>
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/schedule-a-post-light.gif">
-    <img src="assets/screenshots/schedule-a-post-dark.gif" alt="Scheduling a post in staqly: click a free hour on the calendar, pick a channel and a collection, write the post and press Schedule" width="860">
-  </picture>
+  <img src="assets/screenshots/schedule-a-post-light.gif#gh-dark-mode-only" alt="Scheduling a post in staqly: click a free hour on the calendar, pick a channel and a collection, write the post and press Schedule" width="860"><img src="assets/screenshots/schedule-a-post-dark.gif#gh-light-mode-only" alt="Scheduling a post in staqly: click a free hour on the calendar, pick a channel and a collection, write the post and press Schedule" width="860">
 </p>
 
 ## Why staqly

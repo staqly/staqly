@@ -30,8 +30,7 @@ export default function Page() {
         title="Check your posting schedule before it runs."
       >
         <p className="mt-5 max-w-2xl text-lg text-muted-foreground">
-          Build a plan or paste one: weekdays and times, or a list of dates. See how busy each platform gets, where
-          posts crowd together, when your audience is asleep and what a clock change does to it.
+          See where posts pile up, when your audience sleeps and what a clock change does.
         </p>
       </PageHero>
       <section className={`${wrap} py-10 sm:py-14`}>

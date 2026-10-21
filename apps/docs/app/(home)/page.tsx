@@ -143,7 +143,7 @@ function Hero() {
         aria-hidden
         className="sq-glow absolute -top-40 left-1/2 -z-10 h-[28rem] w-[min(56rem,140vw)] -translate-x-1/2"
       />
-      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-5 pt-16 pb-16 sm:px-8 sm:pt-24 lg:grid-cols-[1.05fr_1fr] lg:gap-10 lg:pb-24">
+      <div className="mx-auto grid w-full max-w-7xl items-center gap-12 px-5 pt-12 pb-12 sm:px-8 sm:pt-16 lg:grid-cols-[1fr_1fr] lg:gap-12 lg:pb-16">
         <div className="min-w-0">
           <Link
             href="/cookbook/agent-fills-a-collection"
@@ -153,16 +153,14 @@ function Hero() {
             <span className="truncate">Let an agent fill a collection, publish every morning</span>
             <ArrowRight className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
           </Link>
-          <h1 className="text-[2.6rem] leading-[1.04] font-semibold tracking-[-0.045em] text-balance sm:text-6xl lg:text-[4.1rem]">
-            The local-first social media scheduler for people and their{' '}
-            <span className="sq-gradient-text">AI agents</span>.
+          <h1 className="text-[2.4rem] leading-[1.05] font-semibold tracking-[-0.045em] text-balance sm:text-5xl lg:text-[3.4rem]">
+            Social media scheduling for you and your <span className="sq-gradient-text">AI agents</span>.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-fd-muted-foreground">
-            Staqly is a local-first social media scheduler for people and their AI agents: you and your agents write
-            posts into collections, connect the channels they go to, and a schedule publishes the next one every
-            morning. REST, MCP and signed webhooks included.
+            Write posts with your agents, set a schedule, and Staqly publishes them on time. MCP, REST and webhooks
+            included.
           </p>
-          <div className="mt-9 flex flex-wrap items-center gap-3">
+          <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
               href="/quickstart"
               className="sq-rainbow inline-flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-semibold shadow-[0_8px_24px_-8px_color-mix(in_oklch,var(--brand)_70%,transparent)] transition hover:brightness-110"
@@ -182,18 +180,6 @@ function Hero() {
               Read the docs <ArrowRight className="size-4" />
             </Link>
           </div>
-          <dl className="mt-10 grid max-w-lg grid-cols-3 gap-4 border-t border-fd-border pt-6 text-sm">
-            {[
-              ['1', 'Go process'],
-              ['1', 'SQLite file'],
-              ['1', 'access token'],
-            ].map(([n, label]) => (
-              <div key={label}>
-                <dt className="text-2xl font-semibold tracking-tight tabular-nums">{n}</dt>
-                <dd className="mt-0.5 text-fd-muted-foreground">{label}</dd>
-              </div>
-            ))}
-          </dl>
         </div>
         <HeroDemo basePath={env.basePath} />
       </div>

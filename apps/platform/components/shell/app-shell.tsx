@@ -419,7 +419,7 @@ function SidebarTrial() {
   return (
     <>
       {/* Collapsed sidebar: the clock alone, the days in its tooltip. */}
-      <SidebarMenu className="mb-2 hidden group-data-[collapsible=icon]:flex">
+      <SidebarMenu className="hidden group-data-[collapsible=icon]:flex">
         <SidebarMenuItem>
           {canManagePeople ? (
             <SidebarMenuButton asChild tooltip={`${left}: choose a plan`} className="text-brand">
@@ -435,7 +435,7 @@ function SidebarTrial() {
         </SidebarMenuItem>
       </SidebarMenu>
       <div
-        className="mb-3 grid gap-2 rounded-lg border border-brand/30 bg-brand-soft/60 p-3 text-xs group-data-[collapsible=icon]:hidden"
+        className="grid gap-2 rounded-lg border border-brand/30 bg-brand-soft/60 p-3 text-xs group-data-[collapsible=icon]:hidden"
         data-testid="trial-banner"
       >
         <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -584,7 +584,6 @@ function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup className="mt-auto">
-          <SidebarTrial />
           <SidebarGroupLabel>Automation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -618,6 +617,7 @@ function AppSidebar() {
         {/* Theme lives in Settings and ⌘K; collapsing in the sidebar edge (rail) and ⌘B. Phones have the bell in
             the top bar. Plan & usage is in the workspace menu. */}
         <SidebarNotifications />
+        <SidebarTrial />
         <UserMenu />
       </SidebarFooter>
       <SidebarRail />

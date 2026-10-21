@@ -3,7 +3,7 @@ import Link from 'next/link'
 
 import { ComparePicker, CompareTable } from '@/components/compare-table'
 import { CtaButtons, PageHero } from '@/components/site'
-import { FAQ, TRIAL_DAYS } from '@/lib/plans'
+import { FAQ } from '@/lib/plans'
 import { ldJson, pageMeta } from '@/lib/seo'
 import { wrap } from '@/lib/site'
 
@@ -25,9 +25,7 @@ export default function ComparePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(faqLd) }} />
       <PageHero eyebrow={<Link href="/pricing">Pricing</Link>} title="Compare plans">
         <p className="mt-5 max-w-2xl text-lg text-muted-foreground">
-          Every plan has unlimited posts, the calendar, MCP, the REST API and the full history. They differ in how many
-          channels, alerts, webhooks and API keys they hold and in storage. Starter comes with a {TRIAL_DAYS}-day free
-          trial (card required, cancel anytime). Prices are per user, excl. VAT.
+          Unlimited posts on every plan. The bigger ones add channels, automations and storage.
         </p>
         <CtaButtons />
       </PageHero>
