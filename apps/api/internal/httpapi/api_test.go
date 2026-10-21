@@ -403,9 +403,11 @@ func TestSignInWithAPIKey(t *testing.T) {
 	// A key can't be created already expired (422); one that expires meanwhile can't sign in.
 	e.do(e.browser, "POST", "/v1/api-keys", "", map[string]any{"name": "soon", "scopes": []string{"admin"}, "expires_at": "2000-01-01T00:00:00Z"}, 422, nil, "X-CSRF-Token", e.csrf)
 	e.do(e.browser, "POST", "/v1/api-keys", "", map[string]any{"name": "soon", "scopes": []string{"admin"},
-		"expires_at": time.Now().UTC().Add(300 * time.Millisecond).Format(time.RFC3339Nano)}, 201, &expiring, "X-CSRF-Token", e.csrf)
-	time.Sleep(400 * time.Millisecond)
+		"expires_at": time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)}, 201, &expiring, "X-CSRF-Token", e.csrf)
+	// Two hours later on the server's clock (no wall-clock race on a slow runner).
+	e.svc.Now = func() time.Time { return time.Now().Add(2 * time.Hour) }
 	signIn(expiring.Key, 401)
+	e.svc.Now = time.Now
 
 	// Recorded in the activity log as the key that signed in, without the key itself.
 	var evs struct{ Data []app.Event }

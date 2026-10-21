@@ -763,6 +763,18 @@ class Posts(_Resource):
         )
         return _model(PostComment, r)
 
+    def delete_comment(
+        self, post_id: str, comment_id: str, *, request_options: RequestOptions | None = None
+    ) -> None:
+        """Removes a comment; removing a thread's first comment removes its replies."""
+        self._http.request(
+            RequestSpec(
+                "DELETE",
+                f"/v1/posts/{_q(post_id)}/comments/{_q(comment_id)}",
+                options=_opts(request_options),
+            )
+        )
+
     def history(
         self,
         post_id: str,

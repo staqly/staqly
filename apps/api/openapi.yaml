@@ -2194,6 +2194,14 @@ paths:
       tags: [posts]
       security: []
       summary: Reopen a resolved feedback thread from the preview page (no credentials)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 80, description: "Who reopens it (optional; the same body as resolve)" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PostComment" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
