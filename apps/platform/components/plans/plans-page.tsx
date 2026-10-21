@@ -1,15 +1,18 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { X } from 'lucide-react'
+import { ArrowLeft, Clock } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 import { PublicShell } from '@/components/auth/public-shell'
+import { daysLeft, shortDate } from '@/components/billing/billing-format'
 import { ErrorState } from '@/components/common/error-state'
 import { EVERY_PLAN, IntervalToggle, PlanGrid } from '@/components/plans/plan-cards'
 import { Button } from '@/components/ui/button'
 import { api, type BillingInterval, type Plan } from '@/lib/api'
+import { pluralize } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { LIVE_SUBSCRIPTION } from '@/lib/plans'
 import { qk, useBilling, useBillingDetails, useMode, usePlans, useRole, useUsage } from '@/lib/queries'
@@ -45,6 +48,10 @@ export function PlansPage() {
   // The account owner pays; a workspace without an account is paid for by its admins.
   const payer = accountsEnabled ? accountOwner : canManagePeople
   const usage = useUsage()
+  const router = useRouter()
+  const [now] = useState(Date.now)
+  const trialEnds = usage.data?.trial_ends_at
+  const trialDays = trialEnds ? daysLeft(trialEnds, now) : 0
   const plans = usePlans({ enabled: !isLocal })
   const billing = useBilling({ enabled: !isLocal })
   const subscribed = LIVE_SUBSCRIPTION.includes(billing.data?.subscription_status ?? '')
@@ -133,15 +140,35 @@ export function PlansPage() {
   return (
     <PublicShell
       className="flex flex-col items-center pt-8 sm:pt-14"
-      nav={
-        <Button asChild variant="ghost" size="icon" aria-label="Close">
-          <Link href={BACK}>
-            <X />
+      back={
+        <Button asChild variant="ghost" size="icon" aria-label="Back" className="group">
+          <Link
+            href={BACK}
+            onClick={(e) => {
+              // Back to where the plans were opened from (the sidebar, Plan & usage); Plan & usage on a fresh tab.
+              if (window.history.length > 1) {
+                e.preventDefault()
+                router.back()
+              }
+            }}
+          >
+            <ArrowLeft className="group-hover:animate-nudge-left motion-reduce:group-hover:animate-none" />
           </Link>
         </Button>
       }
     >
       <div className="max-w-xl text-center">
+        {trialEnds && (
+          <p
+            className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand-soft/60 px-3 py-1 text-sm font-medium"
+            data-testid="plans-trial-ends"
+          >
+            <Clock className="size-4 text-brand" aria-hidden />
+            {trialDays === 0
+              ? 'Your free trial ends today'
+              : `Your free trial ends on ${shortDate(trialEnds)}, in ${pluralize(trialDays, 'day')}`}
+          </p>
+        )}
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Choose your plan</h1>
         <p className="mt-3 text-sm text-muted-foreground">
           {EVERY_PLAN}. Prices are per user: everyone in the workspace counts, whatever their role.{' '}
