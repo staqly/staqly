@@ -122,6 +122,8 @@ func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause e
 		if err := s.finishTarget(ctx, p.PostID, p.ChannelID, "failed", providers.Result{}, cause.Error()); err != nil {
 			s.logger(ctx).Error("target not settled after failed job", "err", err)
 		}
+	case "publish_post":
+		s.scheduledPublishFailed(ctx, a.WorkspaceID, p.PostID, cause)
 	case "run_schedule":
 		s.scheduleFailed(ctx, p.ScheduleID, cause)
 	case "publish_reply":
@@ -129,6 +131,32 @@ func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause e
 		if err := s.replyEnded(ctx, p.PostID, p.ChannelID, p.Index, providers.Result{}, cause.Error()); err != nil {
 			s.logger(ctx).Error("reply not settled after failed job", "err", err)
 		}
+	}
+}
+
+// scheduledPublishFailed: a scheduled post whose publishing could not start after every attempt is failed
+// (post.failed, which alerts), instead of staying "scheduled" with nothing left to publish it. It can be
+// edited and scheduled again.
+func (s *Service) scheduledPublishFailed(ctx context.Context, workspaceID, postID string, cause error) {
+	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
+	err := s.tx(ctx, func(q *db.Queries) error {
+		row, err := q.GetPostByID(ctx, postID)
+		if isNoRows(err) || (err == nil && row.Status != "scheduled") {
+			return nil // published by hand, unscheduled or deleted meanwhile
+		}
+		if err != nil {
+			return err
+		}
+		if err := q.SetPostStatus(ctx, db.SetPostStatusParams{Status: "failed", PublishedAt: nullStr(""), UpdatedAt: s.now(), ID: postID}); err != nil {
+			return err
+		}
+		data := s.postEventData(ctx, q, workspaceID, postID, nil)
+		data["error"] = "Publishing could not start at the scheduled time: " + cause.Error()
+		_, err = s.emit(ctx, q, sys, "post.failed", row.CollectionID, postID, data)
+		return err
+	})
+	if err != nil {
+		s.logger(ctx).Error("scheduled post not failed after its job failed", "post_id", postID, "err", err)
 	}
 }
 

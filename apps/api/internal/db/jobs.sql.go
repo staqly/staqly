@@ -108,6 +108,42 @@ func (q *Queries) ListLegacyJobs(ctx context.Context) ([]Job, error) {
 	return items, nil
 }
 
+const listStaleJobRequeues = `-- name: ListStaleJobRequeues :many
+SELECT "key", workspace_id, kind, payload, run_at, max_attempts, created_at FROM job_requeues WHERE created_at < ? ORDER BY created_at LIMIT 200
+`
+
+// Requeues older than a minute: their run should have picked them up (see sweepJobRequeues).
+func (q *Queries) ListStaleJobRequeues(ctx context.Context, createdAt string) ([]JobRequeue, error) {
+	rows, err := q.db.QueryContext(ctx, listStaleJobRequeues, createdAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []JobRequeue
+	for rows.Next() {
+		var i JobRequeue
+		if err := rows.Scan(
+			&i.Key,
+			&i.WorkspaceID,
+			&i.Kind,
+			&i.Payload,
+			&i.RunAt,
+			&i.MaxAttempts,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertJobRequeue = `-- name: UpsertJobRequeue :exec
 
 INSERT INTO job_requeues (key, workspace_id, kind, payload, run_at, max_attempts, created_at)
