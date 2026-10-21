@@ -453,6 +453,12 @@ func (s *Service) RetryJob(ctx context.Context, p Principal, id string) (Job, er
 	return s.GetJob(ctx, p, id)
 }
 
+// cancellableJobKinds: the work people start (publishing, schedules, repeats, replies, reposts). The rest is
+// staqly's own bookkeeping that must run: seat and entitlement sync with Stripe (cancelling it would leave the
+// subscription wrong), alerts, a custom target's timeout, a channel's token refresh.
+var cancellableJobKinds = map[string]bool{"publish_post": true, "publish_target": true, "run_schedule": true,
+	"repeat_post": true, "publish_reply": true, "repost": true}
+
 // CancelJob takes a queued job out of the queue.
 func (s *Service) CancelJob(ctx context.Context, p Principal, id string) (Job, error) {
 	if err := p.require(ScopePostsPublish); err != nil {
@@ -464,6 +470,9 @@ func (s *Service) CancelJob(ctx context.Context, p Principal, id string) (Job, e
 	}
 	if jobStatus(r.State) != "queued" {
 		return Job{}, conflict("only a queued job can be cancelled")
+	}
+	if _, test := testJobKinds[r.Kind]; !cancellableJobKinds[r.Kind] && !test {
+		return Job{}, conflict("this is staqly's own work (billing, alerts, timeouts) and can't be cancelled")
 	}
 	if _, err := s.river.JobCancel(ctx, r.ID); err != nil {
 		return Job{}, err

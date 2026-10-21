@@ -158,16 +158,3 @@ func (s *Server) connectLinkOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 	land(url.Values{"connected": {firstNonEmptyStr(ch.Handle, ch.Name)}, "workspace": {workspace}})
 }
-
-// redactConnectLinkToken keeps connect-link tokens out of request logs (/v1/connect-links/<token>/...).
-func redactConnectLinkToken(path string) string {
-	const prefix = "/v1/connect-links/"
-	if !strings.HasPrefix(path, prefix) || strings.HasPrefix(path, prefix+"oauth/") {
-		return path
-	}
-	rest := path[len(prefix):]
-	if i := strings.IndexByte(rest, '/'); i >= 0 {
-		return prefix + "REDACTED" + rest[i:]
-	}
-	return prefix + "REDACTED"
-}

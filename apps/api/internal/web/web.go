@@ -26,6 +26,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/staqly/staqly/apps/api/internal/logctx"
 )
 
 // MaxProxyBodyBytes caps proxied request bodies (the API's default upload limit is 100 MB).
@@ -229,7 +231,7 @@ func apiProxy(upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken s
 				errorJSON(w, http.StatusRequestEntityTooLarge, "too_large", "request body too large")
 			case r.Context().Err() != nil: // the browser went away
 			default:
-				log.Error("api proxy", "method", r.Method, "path", r.URL.Path, "err", err)
+				log.Error("api proxy", "method", r.Method, "path", logctx.RedactPath(r.URL.Path), "err", err)
 				errorJSON(w, http.StatusBadGateway, "bad_gateway", "The staqly API is not reachable.")
 			}
 		},

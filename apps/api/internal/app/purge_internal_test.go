@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"strings"
 	"testing"
+	"time"
 )
 
 // PurgePost on PostgreSQL may run its transaction again (serialization retry): only the run that commits
@@ -62,5 +63,24 @@ func TestScheduledPostFailsWhenItsJobDoes(t *testing.T) {
 	}
 	if len(evs.Data) != 1 || !strings.Contains(fmt.Sprint(evs.Data[0].Data), "database is locked") {
 		t.Fatalf("post.failed event: %+v", evs.Data)
+	}
+}
+
+// Staqly's own work (here the seat sync with Stripe) can't be cancelled through the API: only what people
+// start can.
+func TestOwnJobsCannotBeCancelled(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	if err := s.QueueJob(ctx, p.WorkspaceID, "sync_seats", "sync_seats:"+p.WorkspaceID, map[string]any{}, s.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	jobs := jobsByKey(t, s, "sync_seats:"+p.WorkspaceID)
+	if len(jobs) != 1 {
+		t.Fatalf("sync_seats jobs: %d", len(jobs))
+	}
+	_, err := s.CancelJob(ctx, p, jobPublicID(jobs[0].ID))
+	var e *Error
+	if !errors.As(err, &e) || e.Status != 409 {
+		t.Fatalf("cancel a seat sync: %v, want 409", err)
 	}
 }

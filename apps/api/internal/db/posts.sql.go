@@ -548,10 +548,11 @@ func (q *Queries) PostsReferencingMedia(ctx context.Context, arg PostsReferencin
 }
 
 const repeatOfPost = `-- name: RepeatOfPost :one
-SELECT id FROM posts WHERE repeat_of = ? LIMIT 1
+SELECT id FROM posts WHERE repeat_of = ? AND repeat_of <> '' LIMIT 1
 `
 
 // The copy a repeating post already made (none: sql.ErrNoRows).
+// The repeat_of <> ” term lets the partial index posts_repeat_of answer it (a bound value alone can't).
 func (q *Queries) RepeatOfPost(ctx context.Context, repeatOf string) (string, error) {
 	row := q.db.QueryRowContext(ctx, repeatOfPost, repeatOf)
 	var id string
