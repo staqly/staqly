@@ -175,6 +175,12 @@ describe('an invitation link while the server is down', () => {
   })
 })
 
+function SessionProbe() {
+  useSession()
+
+  return <p>probe</p>
+}
+
 describe('a 401 in the cloud', () => {
   it('sends to sign-in with the page and its query, so sign-in comes back to exactly that', async () => {
     mockApi({
@@ -185,15 +191,9 @@ describe('a 401 in the cloud', () => {
     nav.set('/integrations')
     window.history.replaceState(null, '', '/integrations?tab=codex')
 
-    function Probe() {
-      useSession()
-
-      return <p>probe</p>
-    }
-
     render(
       <Providers>
-        <Probe />
+        <SessionProbe />
       </Providers>,
     )
     await vi.waitFor(() =>

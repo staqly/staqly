@@ -233,7 +233,9 @@ func (s *Service) enqueue(ctx context.Context, q *db.Queries, workspaceID, kind,
 		return q.UpsertJobRequeue(ctx, db.UpsertJobRequeueParams{Key: key, WorkspaceID: workspaceID, Kind: kind,
 			Payload: mustJSON(pl), RunAt: formatTime(runAt), MaxAttempts: maxAttempts, CreatedAt: s.now()})
 	}
-	return nil
+	// The latest request wins: an older requeue of the key must not come back (the sweep) over this job.
+	_, err = q.DeleteJobRequeue(ctx, key)
+	return err
 }
 
 // QueueJob queues a job outside any other write (tools and tests).

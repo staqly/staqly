@@ -141,8 +141,8 @@ func (s *Service) scheduledPublishFailed(ctx context.Context, workspaceID, postI
 	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
 	err := s.tx(ctx, func(q *db.Queries) error {
 		row, err := q.GetPostByID(ctx, postID)
-		if isNoRows(err) || (err == nil && row.Status != "scheduled") {
-			return nil // published by hand, unscheduled or deleted meanwhile
+		if isNoRows(err) || (err == nil && (row.Status != "scheduled" || (row.PublishAt.Valid && row.PublishAt.String > s.now()))) {
+			return nil // published by hand, unscheduled, rescheduled (its new run is queued) or deleted meanwhile
 		}
 		if err != nil {
 			return err

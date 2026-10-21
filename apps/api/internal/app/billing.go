@@ -390,7 +390,12 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	}
 	promo := ""
 	if code := strings.TrimSpace(opt.PromotionCode); code != "" {
-		if promo, err = s.promotionCodeID(ctx, code, plan, price); err != nil {
+		promo, err = s.promotionCodeID(ctx, code, plan, price)
+		if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok { // a stale STRIPE_PRICE_* (as below)
+			price = found
+			promo, err = s.promotionCodeID(ctx, code, plan, price)
+		}
+		if err != nil {
 			return "", err
 		}
 	}
