@@ -12,10 +12,8 @@ import (
 	"strings"
 )
 
-// Discord: messages through a channel webhook (one-tap links in the text),
-// or — with an application (bot token, channel, application ID, public key) —
-// as a bot message with buttons handled at
-// POST /v1/integrations/discord/interactions (Ed25519-verified).
+// Discord: messages through a channel webhook, or as a bot message (bot token and channel).
+// Alerts only: nothing comes back from Discord.
 
 func (s *Service) discordBase() string {
 	return strings.TrimRight(s.Env("DISCORD_API_BASE", "https://discord.com/api/v10"), "/")

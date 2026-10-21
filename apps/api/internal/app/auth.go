@@ -311,10 +311,6 @@ func (s *Service) GetWorkspace(ctx context.Context, p Principal) (Workspace, err
 	return out, nil
 }
 
-func (s *Service) RenameWorkspace(ctx context.Context, p Principal, name string) (Workspace, error) {
-	return s.UpdateWorkspace(ctx, p, WorkspaceUpdate{Name: &name})
-}
-
 func (s *Service) UpdateWorkspace(ctx context.Context, p Principal, in WorkspaceUpdate) (Workspace, error) {
 	if err := p.require(ScopeAdmin); err != nil {
 		return Workspace{}, err

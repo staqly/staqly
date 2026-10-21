@@ -42,10 +42,6 @@ import (
 // are protocol endpoints rather than JSON APIs.
 var notInRouter = map[string]bool{
 	"GET /livez": true, "GET /readyz": true, "GET /metrics": true,
-	"GET /v1/decide/{token}": true, "POST /v1/decide/{token}": true,
-	"POST /v1/integrations/telegram/{channel_id}": true,
-	"POST /v1/integrations/slack/interactions":    true,
-	"POST /v1/integrations/discord/interactions":  true,
 }
 
 type contractSpec struct {

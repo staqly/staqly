@@ -517,6 +517,14 @@ CASES = [
         204,
     ),
     Case(
+        "posts.delete_comment",
+        lambda c: c.posts.delete_comment("pst_1", "cmt_1"),
+        "DELETE",
+        "/v1/posts/pst_1/comments/cmt_1",
+        None,
+        204,
+    ),
+    Case(
         "posts.comments",
         lambda c: c.posts.comments("pst_1"),
         "GET",

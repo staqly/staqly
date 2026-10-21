@@ -8742,7 +8742,14 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Who reopens it (optional; the same body as resolve) */
+                    name?: string;
+                };
+            };
+        };
         responses: {
             /** @description OK */
             200: {
