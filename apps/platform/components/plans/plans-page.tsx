@@ -11,6 +11,8 @@ import { daysLeft, shortDate } from '@/components/billing/billing-format'
 import { ErrorState } from '@/components/common/error-state'
 import { EVERY_PLAN, IntervalToggle, PlanGrid } from '@/components/plans/plan-cards'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { api, type BillingInterval, type Plan } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
@@ -22,8 +24,17 @@ import { cn } from '@/lib/utils'
 export function usePlanActions() {
   const qc = useQueryClient()
   const checkout = useMutation({
-    mutationFn: ({ plan, interval, welcome }: { plan: string; interval: BillingInterval; welcome?: boolean }) =>
-      api.billingCheckout(plan, interval, welcome ? 'welcome' : undefined),
+    mutationFn: ({
+      plan,
+      interval,
+      welcome,
+      promotionCode,
+    }: {
+      plan: string
+      interval: BillingInterval
+      welcome?: boolean
+      promotionCode?: string
+    }) => api.billingCheckout(plan, interval, welcome ? 'welcome' : undefined, promotionCode),
     onSuccess: ({ url }) => {
       void qc.invalidateQueries({ queryKey: qk.billing })
       window.location.assign(url)
@@ -73,6 +84,11 @@ export function PlansPage() {
   // Starter's 7-day trial (card required) goes to each workspace once, one workspace of an account at a time.
   const trial = billing.data?.trial
   const trialHere = canPay && !subscribed && trial === 'available'
+  // Leaving Starter's trial for another plan ends the trial and charges the new plan at once.
+  const trialing = billing.data?.subscription_status === 'trialing'
+  // A promotion code typed here: a plan switch never opens Stripe Checkout, whose own code box covers new plans.
+  const [code, setCode] = useState('')
+  const promotionCode = code.trim() || undefined
 
   const cta = (p: Plan, current: boolean) => {
     const withTrial = trialHere && p.id === 'starter'
@@ -88,7 +104,16 @@ export function PlansPage() {
             : `Switch to ${interval === 'year' ? 'yearly' : 'monthly'}`
 
     if (current && interval === paidInterval) {
-      return (
+      return promotionCode && canPay && payer ? (
+        <Button
+          variant="outline"
+          className="w-full"
+          disabled={checkout.isPending}
+          onClick={() => checkout.mutate({ plan: p.id, interval, promotionCode })}
+        >
+          Apply the code to this plan
+        </Button>
+      ) : (
         <Button variant="outline" disabled className="w-full">
           Your current plan
         </Button>
@@ -112,14 +137,23 @@ export function PlansPage() {
         variant={p.highlight ? 'default' : 'outline'}
         className={cn('w-full', p.highlight && 'bg-brand-gradient text-[#052817]')}
         disabled={checkout.isPending}
-        onClick={() => checkout.mutate({ plan: p.id, interval, welcome: fromWelcome })}
+        onClick={() => checkout.mutate({ plan: p.id, interval, welcome: fromWelcome, promotionCode })}
       >
         {label}
       </Button>
     )
 
     if (subscribed) {
-      return button
+      return trialing ? (
+        <div className="grid gap-1.5">
+          {button}
+          <p className="text-center text-xs text-muted-foreground" data-testid={`plan-charge-${p.id}`}>
+            Your trial ends now and {p.name} is charged today; it starts once the payment goes through.
+          </p>
+        </div>
+      ) : (
+        button
+      )
     }
 
     // Before the first subscription: say what happens at Stripe, so nobody is charged by surprise.
@@ -184,6 +218,23 @@ export function PlansPage() {
         </p>
       </div>
       {!isLocal && <IntervalToggle value={interval} onChange={setChosen} className="mt-8" />}
+      {!isLocal && canPay && payer && (
+        <div className="mt-4 flex items-center gap-2">
+          <Label htmlFor="promotion-code" className="text-sm font-normal text-muted-foreground">
+            Promotion code
+          </Label>
+          <Input
+            id="promotion-code"
+            className="h-8 w-44 font-mono uppercase"
+            placeholder="Optional"
+            autoComplete="off"
+            maxLength={100}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            data-testid="promotion-code"
+          />
+        </div>
+      )}
       <div className="mt-8 w-full max-w-6xl">
         {isLocal ? (
           <p className="text-center text-sm text-muted-foreground">A local install has no plans and no limits.</p>

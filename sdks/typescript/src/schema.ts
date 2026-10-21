@@ -4830,7 +4830,8 @@ export interface components {
         };
         /**
          * @description `plan_limit_exceeded` (a plan limit; `details` has limit, max, used, plan),
-         *     `plan_expired` (the workspace is suspended and read-only), `payment_required`, or `x_posts_exhausted` (this
+         *     `plan_expired` (the workspace is suspended and read-only), `payment_required`, `payment_failed` (a plan
+         *     change that charges at once, such as leaving the trial, wasn't paid: nothing changed), or `x_posts_exhausted` (this
          *     period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end).
          */
         PaymentRequired: {
@@ -5338,6 +5339,8 @@ export interface operations {
                      * @enum {string}
                      */
                     return_to?: "welcome";
+                    /** @description A promotion code made in Stripe, checked for the chosen plan (422 under promotion_code when unknown, used up or for another plan). Without a live subscription it goes on the Checkout session (whose own code box is then off); with one it goes on the subscription, also when the plan stays the same. */
+                    promotion_code?: string;
                 };
             };
         };
@@ -5352,6 +5355,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];

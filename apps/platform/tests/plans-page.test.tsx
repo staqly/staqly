@@ -104,6 +104,32 @@ describe('plan picker', () => {
     await user.click(screen.getByRole('radio', { name: /yearly/i }))
     expect(within(plus).getByRole('button', { name: 'Switch to yearly' })).toBeEnabled()
   })
+
+  it('a promotion code goes with a switch, and can be applied to the current plan', async () => {
+    const api = render(true)
+    const user = userEvent.setup()
+
+    const plus = await screen.findByTestId('plan-plus')
+
+    await waitFor(() => expect(within(plus).getByRole('button', { name: 'Your current plan' })).toBeDisabled())
+    await user.type(screen.getByLabelText('Promotion code'), 'BIZ-5UUS-DUQR')
+    await user.click(within(screen.getByTestId('plan-business')).getByRole('button', { name: 'Upgrade to Business' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({
+        plan: 'business',
+        interval: 'month',
+        promotion_code: 'BIZ-5UUS-DUQR',
+      }),
+    )
+    await user.click(within(plus).getByRole('button', { name: 'Apply the code to this plan' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[1]?.body).toEqual({
+        plan: 'plus',
+        interval: 'month',
+        promotion_code: 'BIZ-5UUS-DUQR',
+      }),
+    )
+  })
 })
 
 describe('per user pricing', () => {

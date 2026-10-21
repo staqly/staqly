@@ -949,10 +949,15 @@ export const api = {
       startingAfter ? `/v1/billing/details?starting_after=${encodeURIComponent(startingAfter)}` : '/v1/billing/details',
     ),
   /** Pays for a plan (Stripe Checkout URL), or switches a paying workspace to it (billing page URL). */
-  billingCheckout: (plan: string, interval: BillingInterval, returnTo?: 'welcome') =>
+  billingCheckout: (plan: string, interval: BillingInterval, returnTo?: 'welcome', promotionCode?: string) =>
     request<{ url: string }>('/v1/billing/checkout', {
       method: 'POST',
-      json: { plan, interval, ...(returnTo ? { return_to: returnTo } : {}) },
+      json: {
+        plan,
+        interval,
+        ...(returnTo ? { return_to: returnTo } : {}),
+        ...(promotionCode ? { promotion_code: promotionCode } : {}),
+      },
     }),
   billingPortal: () => request<{ url: string }>('/v1/billing/portal', { method: 'POST' }),
   /** Reads the subscription from Stripe now (back from Checkout, before or without its webhook). */

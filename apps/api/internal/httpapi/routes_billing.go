@@ -81,14 +81,16 @@ func (s *Server) billingURL(f func(ctx context.Context, p app.Principal) (string
 // billingCheckout: {"plan": "plus", "interval": "year"}; both optional (Pro, monthly), an empty body too.
 func (s *Server) billingCheckout(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Plan     string `json:"plan"`
-		Interval string `json:"interval"`
-		ReturnTo string `json:"return_to"`
+		Plan          string `json:"plan"`
+		Interval      string `json:"interval"`
+		ReturnTo      string `json:"return_to"`
+		PromotionCode string `json:"promotion_code"`
 	}
 	if r.ContentLength != 0 && !decode(w, r, &in) {
 		return
 	}
-	u, err := s.svc.CheckoutSession(r.Context(), principal(r), in.Plan, in.Interval, in.ReturnTo)
+	u, err := s.svc.CheckoutSession(r.Context(), principal(r), in.Plan, in.Interval,
+		app.CheckoutOptions{ReturnTo: in.ReturnTo, PromotionCode: in.PromotionCode})
 	if err != nil {
 		writeErr(w, r, err)
 		return
