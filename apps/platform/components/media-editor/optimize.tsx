@@ -169,16 +169,6 @@ export function OptimizeDialog({
             </Label>
           </RadioGroup>
         )}
-        {!canExpand && strategy !== 'AI expand' && (
-          <p className="text-xs text-muted-foreground">
-            AI expand uses your workspace&apos;s OpenAI key:{' '}
-            {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- leaves the isolated editor page */}
-            <a className="text-brand underline-offset-2 hover:underline" href="/integrations/ai">
-              set up AI
-            </a>
-            .
-          </p>
-        )}
         <div className="grid grid-cols-2 gap-3">
           <figure className="flex flex-col gap-1">
             <figcaption className="text-xs text-muted-foreground">
