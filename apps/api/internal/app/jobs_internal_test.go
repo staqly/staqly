@@ -363,3 +363,20 @@ func TestJobsSweepQueuesLeftoverRequeues(t *testing.T) {
 		t.Fatalf("the requeue is gone once queued: %v", err)
 	}
 }
+
+// A new job for a key replaces an older requeue of it: the sweep must not bring the older request back over it.
+func TestJobsNewJobReplacesAnOlderRequeue(t *testing.T) {
+	s, _ := queueTest(t)
+	ctx := context.Background()
+	if err := s.Q.UpsertJobRequeue(ctx, db.UpsertJobRequeueParams{Key: "newer:1", WorkspaceID: "ws_test", Kind: "test_fast",
+		Payload: `{"post_id":"older"}`, RunAt: formatTime(s.Now()), MaxAttempts: 3, CreatedAt: formatTime(s.Now().Add(-2 * time.Minute))}); err != nil {
+		t.Fatal(err)
+	}
+	enqueueAt(t, s, "test_fast", "newer:1", s.Now().Add(time.Hour), map[string]any{"post_id": "newer"})
+	if _, err := s.Q.GetJobRequeue(ctx, "newer:1"); !isNoRows(err) {
+		t.Fatalf("the older requeue is gone: %v", err)
+	}
+	if n := s.sweepJobRequeues(ctx); n != 0 {
+		t.Fatalf("swept %d", n)
+	}
+}

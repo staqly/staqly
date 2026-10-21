@@ -49,7 +49,16 @@ func TestScheduledPostFailsWhenItsJobDoes(t *testing.T) {
 	if len(jobs) != 1 || jobs[0].MaxAttempts != jobMaxAttempts {
 		t.Fatalf("publish_post job: %+v, want %d attempts", jobs, jobMaxAttempts)
 	}
-	s.jobFailed(ctx, "publish_post", jobArgs{WorkspaceID: p.WorkspaceID, Payload: jobPayload{PostID: post.ID}}, errors.New("database is locked"))
+	failed := jobArgs{WorkspaceID: p.WorkspaceID, Payload: jobPayload{PostID: post.ID}}
+	// Rescheduled meanwhile (its time is still ahead): left alone, its new run is queued.
+	s.jobFailed(ctx, "publish_post", failed, errors.New("database is locked"))
+	if got, err := s.GetPost(ctx, p, post.ID); err != nil || got.Status != "scheduled" {
+		t.Fatalf("a post scheduled for later: %q %v", got.Status, err)
+	}
+	// At its time.
+	later := time.Now().Add(2 * time.Hour)
+	s.Now = func() time.Time { return later }
+	s.jobFailed(ctx, "publish_post", failed, errors.New("database is locked"))
 	got, err := s.GetPost(ctx, p, post.ID)
 	if err != nil {
 		t.Fatal(err)

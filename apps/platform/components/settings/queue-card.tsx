@@ -17,6 +17,17 @@ import { cn } from '@/lib/utils'
 
 import { SettingsCard } from './settings-card'
 
+// The work people start; the rest (Stripe seat sync, alerts, timeouts, token refreshes) is staqly's own and the
+// server refuses to cancel it (app.cancellableJobKinds).
+const CANCELLABLE = new Set([
+  'publish_post',
+  'publish_target',
+  'run_schedule',
+  'repeat_post',
+  'publish_reply',
+  'repost',
+])
+
 const KIND_LABELS: Record<string, string> = {
   publish_post: 'Publish a post',
   publish_target: 'Publish on a channel',
@@ -83,7 +94,7 @@ function JobRow({ job }: { job: Job }) {
             <RotateCcw /> Retry
           </Button>
         )}
-        {job.status === 'queued' && (
+        {job.status === 'queued' && CANCELLABLE.has(job.kind) && (
           <Button
             size="sm"
             variant="ghost"
