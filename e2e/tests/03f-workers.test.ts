@@ -123,9 +123,13 @@ describe('the clock (one shared minute)', () => {
 
     expect(late.status).toBe(409)
     // The timeout job is done; a target settled in time takes its queued timeout job out of the queue instead.
-    const timeoutJob = (await agent.jobs({ kind: 'target_timeout' })).find((j) => j.payload.post_id === stuck.id)
-
-    expect(timeoutJob?.status).toBe('done')
+    // The queue records the job as done a moment after it failed the post (River completes it after the run).
+    await expect
+      .poll(
+        async () => (await agent.jobs({ kind: 'target_timeout' })).find((j) => j.payload.post_id === stuck.id)?.status,
+        { timeout: 10_000 },
+      )
+      .toBe('done')
     const quick = await agent.createPost(timed.id, {
       content: 'answered in time',
       targets: [{ channel_id: channel.id }],
