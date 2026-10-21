@@ -15,7 +15,7 @@ import { PageContainer } from '@/components/common/page-header'
 import { usePlanActions } from '@/components/plans/plans-page'
 import { SettingsHeader } from '@/components/settings/settings-header'
 import { Skeleton } from '@/components/ui/skeleton'
-import { POST_STATUSES, UNLIMITED, type WorkspaceUsage } from '@/lib/api'
+import { api, POST_STATUSES, UNLIMITED, type WorkspaceUsage } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
 import { qk, useAddons, useBilling, useBillingDetails, useMode, useRole, useUsage, useXPosts } from '@/lib/queries'
 import { POST_STATUS_META } from '@/lib/status'
@@ -247,11 +247,18 @@ function useCheckoutReturn() {
       toast.success(result === 'success' ? 'Payment received' : 'Plan changed', {
         description: 'The new plan shows here in a moment.',
       })
+      // The server reads the subscription from Stripe itself, so the plan shows (and a locked workspace opens)
+      // even when Stripe's webhook is late or lost.
       setTimeout(() => {
-        void qc.invalidateQueries({ queryKey: qk.usage })
-        void qc.invalidateQueries({ queryKey: qk.billing })
-        void qc.invalidateQueries({ queryKey: qk.billingDetails })
-      }, 3000)
+        void api
+          .syncBilling()
+          .catch(() => undefined)
+          .then(() => {
+            void qc.invalidateQueries({ queryKey: qk.usage })
+            void qc.invalidateQueries({ queryKey: qk.billing })
+            void qc.invalidateQueries({ queryKey: qk.billingDetails })
+          })
+      }, 1500)
     }
 
     if (result || credits) {

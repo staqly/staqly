@@ -94,7 +94,7 @@ export function HeroDemoClient({ basePath = '', tiles }: { basePath?: string; ti
         </div>
         <div
           key={shownIndex}
-          className="min-h-[9.5rem] space-y-1.5 overflow-hidden px-4 pt-3 pb-12 font-mono text-[12px] leading-relaxed whitespace-nowrap sm:text-[12.5px]"
+          className="min-h-[10.5rem] space-y-1.5 overflow-hidden px-4 pt-3 pb-12 font-mono text-[12px] leading-relaxed whitespace-nowrap sm:text-[12.5px]"
         >
           <p className="sq-demo-in truncate">
             <span className="text-brand">❯</span> “{s.prompt}”
@@ -123,54 +123,19 @@ export function HeroDemoClient({ basePath = '', tiles }: { basePath?: string; ti
         </div>
       </div>
 
-      {/* The calendar's side: the post card */}
-      <div className="relative z-10 -mt-9 ml-3 sm:ml-10">
-        <div
-          key={shownIndex}
-          className="sq-demo-card relative rounded-2xl border border-border bg-background p-4 shadow-[0_40px_90px_-30px_rgb(0_0_0/0.6)] sm:bg-background/95 sm:p-5 sm:backdrop-blur"
-        >
-          <div className="flex items-center gap-2 text-xs">
-            <span className="rounded-full border border-[color-mix(in_oklch,var(--brand)_35%,transparent)] bg-brand-soft px-2.5 py-0.5 font-medium text-brand-strong">
-              {s.collection}
-            </span>
-            <span className="flex min-w-0 items-center gap-1 truncate text-muted-foreground">
-              <Repeat className="size-3 shrink-0" /> {s.schedule}
-            </span>
-          </div>
-
-          <div className="mt-3 flex gap-3">
-            {s.image && (
-              <img
-                src={`${basePath}${s.image}`}
-                alt=""
-                width={160}
-                height={160}
-                className="size-20 shrink-0 rounded-xl ring-1 ring-border sm:size-24"
-              />
-            )}
-            <p className="min-w-0 flex-1 text-sm leading-relaxed">{s.content}</p>
-          </div>
-
-          <ul className="mt-4 space-y-1.5">
-            {s.targets.map((t) => (
-              <li
-                key={t.channel}
-                className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2.5 py-1.5 text-xs"
-              >
-                {tiles[t.id]}
-                <span className="font-medium">{t.channel}</span>
-                <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
-                  {published ? t.link : t.chars}
-                </span>
-                <TargetMark phase={shownPhase} />
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-4">
-            <Status phase={shownPhase} slot={s.slot} />
-          </div>
-        </div>
+      {/* The calendar's side: the post card. Every scenario's card sits in the same grid cell (only the shown one
+          visible), so the demo is always as tall as its tallest card and nothing around it moves. */}
+      <div className="relative z-10 -mt-9 ml-3 grid grid-cols-1 sm:ml-10">
+        {scenarios.map((x, i) => (
+          <PostCard
+            key={i === shownIndex ? `shown-${i}` : i}
+            s={x}
+            phase={i === shownIndex ? shownPhase : 'writing'}
+            shown={i === shownIndex}
+            tiles={tiles}
+            basePath={basePath}
+          />
+        ))}
       </div>
 
       <div className="mt-5 flex items-center justify-center gap-2">
@@ -180,6 +145,70 @@ export function HeroDemoClient({ basePath = '', tiles }: { basePath?: string; ti
             className={`h-1.5 rounded-full transition-colors ${i === shownIndex ? 'w-6 bg-brand' : 'w-1.5 bg-border'}`}
           />
         ))}
+      </div>
+    </div>
+  )
+}
+
+function PostCard({
+  s,
+  phase,
+  shown,
+  tiles,
+  basePath,
+}: {
+  s: (typeof scenarios)[number]
+  phase: Phase
+  shown: boolean
+  tiles: Record<string, ReactNode>
+  basePath: string
+}) {
+  const published = phase === 'published'
+
+  return (
+    <div
+      className={`relative col-start-1 row-start-1 rounded-2xl border border-border bg-background p-4 shadow-[0_40px_90px_-30px_rgb(0_0_0/0.6)] sm:bg-background/95 sm:p-5 sm:backdrop-blur ${shown ? 'sq-demo-card' : 'invisible'}`}
+    >
+      <div className="flex items-center gap-2 text-xs">
+        <span className="rounded-full border border-[color-mix(in_oklch,var(--brand)_35%,transparent)] bg-brand-soft px-2.5 py-0.5 font-medium text-brand-strong">
+          {s.collection}
+        </span>
+        <span className="flex min-w-0 items-center gap-1 truncate text-muted-foreground">
+          <Repeat className="size-3 shrink-0" /> {s.schedule}
+        </span>
+      </div>
+
+      <div className="mt-3 flex gap-3">
+        {s.image && (
+          <img
+            src={`${basePath}${s.image}`}
+            alt=""
+            width={160}
+            height={160}
+            className="size-20 shrink-0 rounded-xl ring-1 ring-border sm:size-24"
+          />
+        )}
+        <p className="min-w-0 flex-1 text-sm leading-relaxed">{s.content}</p>
+      </div>
+
+      <ul className="mt-4 space-y-1.5">
+        {s.targets.map((t) => (
+          <li
+            key={t.channel}
+            className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2.5 py-1.5 text-xs"
+          >
+            {tiles[t.id]}
+            <span className="shrink-0 font-medium whitespace-nowrap">{t.channel}</span>
+            <span className="ml-auto min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+              {published ? t.link : t.chars}
+            </span>
+            <TargetMark phase={phase} />
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-4">
+        <Status phase={phase} slot={s.slot} />
       </div>
     </div>
   )

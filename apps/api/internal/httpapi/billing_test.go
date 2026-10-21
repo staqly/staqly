@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -103,7 +104,7 @@ func TestStripeBillingLifecycle(t *testing.T) {
 	sub := map[string]any{"id": "sub_1", "customer": "cus_1", "status": "active",
 		"metadata": map[string]string{"workspace_id": ws.ID}, "items": map[string]any{"data": []any{item}}}
 	var calls []string
-	var switched, checkout url.Values
+	var switched, checkout, customer url.Values
 	stripe := httptest.NewServer(subsFirst(func(w http.ResponseWriter, r *http.Request) {
 		if u, _, _ := r.BasicAuth(); u != "sk_test_1" {
 			t.Errorf("stripe auth = %q", u)
@@ -119,6 +120,9 @@ func TestStripeBillingLifecycle(t *testing.T) {
 			}
 			fmt.Fprintf(w, `{"data":[{"id":"price_%s"}]}`, strings.TrimPrefix(key, "staqly_"))
 		case "POST /v1/customers":
+			customer = r.Form
+			fmt.Fprint(w, `{"id":"cus_1"}`)
+		case "POST /v1/customers/cus_1":
 			fmt.Fprint(w, `{"id":"cus_1"}`)
 		case "POST /v1/checkout/sessions":
 			checkout = r.Form
@@ -166,8 +170,14 @@ func TestStripeBillingLifecycle(t *testing.T) {
 		checkout.Get("subscription_data[trial_period_days]") != "" || // Plus is paid from the first day
 		checkout.Get("tax_id_collection[enabled]") != "true" || checkout.Get("billing_address_collection") != "required" ||
 		checkout.Get("automatic_tax[enabled]") != "true" || checkout.Get("payment_method_collection") != "always" ||
+		checkout.Get("allow_promotion_codes") != "true" ||
 		!strings.HasSuffix(checkout.Get("success_url"), "/settings/plan?checkout=success") {
 		t.Errorf("checkout form = %v", checkout)
+	}
+	// The customer is findable in Stripe: the workspace's id and name.
+	if customer.Get("metadata[workspace_id]") == "" || !strings.HasPrefix(customer.Get("description"), "staqly workspace ws_") ||
+		customer.Get("business_name") == "" {
+		t.Errorf("customer form = %v", customer)
 	}
 	// Starter: Stripe's 7-day trial with a card required (cancelled if no card is on file at its end).
 	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter", "interval": "month"}, 200, &out)
@@ -240,8 +250,11 @@ func TestStripeBillingLifecycle(t *testing.T) {
 		t.Fatalf("canceled subscription should suspend: %+v", b)
 	}
 	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, &out) // paying again works while suspended
-	if strings.Count(strings.Join(calls, ","), "POST /v1/customers") != 1 {
+	if strings.Count(strings.Join(calls, ",")+",", "POST /v1/customers,") != 1 {
 		t.Fatalf("customer must be created once: %v", calls)
+	}
+	if !slices.Contains(calls, "POST /v1/customers/cus_1") {
+		t.Fatalf("a later checkout brings the customer's details up to date: %v", calls)
 	}
 	// A price looked up once is cached (the usage read adds Plus monthly, for its live amount); STRIPE_PRICE_*
 	// overrides the lookup.

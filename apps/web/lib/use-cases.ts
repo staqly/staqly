@@ -60,7 +60,7 @@ list_requested_work → {"kind":"posts","schedule":{"name":"Weekday mornings"}, 
     problem:
       'Posting the same announcement to four platforms means four tabs, four character limits and four places where a typo can slip in after the first one went out.',
     steps: [
-      'Connect the channels once: sign in to X, and add anything else as your own automation (an n8n workflow or a script). More platforms are on the way.',
+      'Connect the channels once: sign in to X, and add anything else as your own automation (an n8n workflow or a script).',
       'Write the post, click the channel avatars, and open a channel’s tab to shorten or retitle it.',
       'The preview lists what a platform objects to: too long, media missing, a title required.',
       'Schedule it or publish now. Each channel publishes on its own; one failure does not stop the others.',

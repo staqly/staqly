@@ -1,12 +1,13 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { WelcomeGate } from '@/components/onboarding/welcome-redirect'
 import { WelcomeWizard } from '@/components/onboarding/welcome-wizard'
 import { qk } from '@/lib/queries'
 
 import { nav } from './navigation'
+import { PLANS } from './plans-fixtures'
 import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
 
 const routes = {
@@ -34,10 +35,18 @@ function render(extra: Record<string, unknown>, ui = <WelcomeWizard />) {
 }
 
 describe('welcome wizard', () => {
-  beforeEach(() => nav.set('/welcome'))
+  beforeEach(() => {
+    nav.set('/welcome')
+    sessionStorage.clear()
+  })
 
-  it('walks a new owner through name, goal, workspace, channel and the next step, then finishes', async () => {
-    const api = mockApi(routes)
+  it('collects everything first and sets the workspace up only at the end', async () => {
+    const api = mockApi({
+      ...routes,
+      'PATCH /v1/workspace': { body: { id: 'ws_1', name: 'Acme' } },
+      'POST /v1/invitations': { status: 201, body: {} },
+      'POST /v1/api-keys': { status: 201, body: { id: 'key_1', name: 'Claude Code', key: 'stk_agent_secret' } },
+    })
     const user = userEvent.setup()
 
     render({})
@@ -50,22 +59,91 @@ describe('welcome wizard', () => {
 
     expect(await screen.findByRole('heading', { name: 'Name your workspace' })).toBeInTheDocument()
     expect(screen.getByLabelText(/Workspace name/)).toHaveValue('Test WS')
+    await user.clear(screen.getByLabelText(/Workspace name/))
+    await user.type(screen.getByLabelText(/Workspace name/), 'Acme')
     await user.click(screen.getByRole('button', { name: /Continue/ }))
 
-    expect(await screen.findByRole('heading', { name: 'Connect your first channel' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Where do you post?' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /do it later/ }))
 
-    // The team goal asks for people first; connecting an agent is its own step after it. Both can be skipped.
+    // The team goal asks for people first; connecting an agent is its own step after it.
     expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Skip' }))
+    await user.type(screen.getByLabelText('Email addresses'), 'sam@example.com')
+    await user.click(screen.getByRole('button', { name: /Invite 1 when ready/ }))
     expect(await screen.findByRole('heading', { name: 'Connect an agent' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Skip' }))
+    // Nothing was written on the way.
+    expect(api.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
+    await user.click(screen.getByRole('button', { name: /Continue/ }))
 
     expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
+    expect(api.find('PATCH', '/v1/workspace')[0].body).toMatchObject({ name: 'Acme' })
+    expect(api.find('POST', '/v1/invitations')[0].body).toEqual({ email: 'sam@example.com', role: 'editor' })
+    expect(api.find('POST', '/v1/api-keys')).toHaveLength(1)
+    expect(screen.getByText('1 invitation sent')).toBeInTheDocument()
+    expect(screen.getAllByText(/stk_agent_secret/).length).toBeGreaterThan(0)
+
     await user.click(screen.getByRole('button', { name: /Go to the calendar/ }))
     await waitFor(() => expect(api.find('POST', '/v1/session/onboarded')).toHaveLength(1))
     expect(api.find('POST', '/v1/session/onboarded')[0].body).toEqual({ name: 'Ana' })
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/schedule', undefined))
+  })
+
+  it('without a plan: the plan is the last step, with no way around it', async () => {
+    const api = mockApi({
+      ...routes,
+      'GET /v1/billing': { enabled: true, subscription_status: null, suspended: true, trial: 'available' },
+      'GET /v1/plans': { data: PLANS },
+      'POST /v1/billing/checkout': { url: 'https://checkout.stripe.test/cs_1' },
+    })
+    const assign = vi.fn<(url: string) => void>()
+
+    vi.stubGlobal('location', { ...window.location, assign })
+    nav.set('/welcome', 'step=team')
+    render({})
+    const user = userEvent.setup()
+
+    // Invite your team is the last step before the plan (a creator's agent step comes before it).
+    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Skip' }))
+
+    expect(await screen.findByRole('heading', { name: 'Choose a plan' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Compare all plans/ })).toHaveAttribute('href', '/plans?from=welcome')
+    await user.click(await screen.findByTestId('welcome-plan-starter'))
+    await user.click(screen.getByTestId('start-trial'))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/cs_1'))
+    expect(api.find('POST', '/v1/billing/checkout')[0].body).toEqual({
+      plan: 'starter',
+      interval: 'month',
+      return_to: 'welcome',
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it('back from Stripe: waits for the plan, then sets the workspace up', async () => {
+    let paid = false
+    const api = mockApi({
+      ...routes,
+      'GET /v1/billing': () => ({ enabled: true, subscription_status: paid ? 'trialing' : null, suspended: !paid }),
+      // Back from Stripe the wizard asks the server to read the subscription from Stripe (no webhook needed).
+      'POST /v1/billing/sync': () => ({
+        enabled: true,
+        subscription_status: paid ? 'trialing' : null,
+        suspended: !paid,
+      }),
+      'GET /v1/workspace/usage': { suspended: false },
+      'PATCH /v1/workspace': { body: { id: 'ws_1', name: 'Acme' } },
+    })
+
+    sessionStorage.setItem('staqly:welcome', JSON.stringify({ name: 'Ana', workspaceName: 'Acme' }))
+    nav.set('/welcome', 'step=done&checkout=success')
+    render({})
+    expect(await screen.findByRole('heading', { name: 'Setting up your workspace' })).toBeInTheDocument()
+    expect(api.find('PATCH', '/v1/workspace')).toHaveLength(0)
+    paid = true
+    expect(await screen.findByRole('heading', { name: 'You are all set' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(api.find('PATCH', '/v1/workspace')[0].body).toMatchObject({ name: 'Acme' })
+    expect(api.find('POST', '/v1/billing/sync').length).toBeGreaterThan(0)
   })
 
   it('an invited member gets the short version: their name and their role', async () => {
@@ -95,14 +173,6 @@ describe('welcome wizard', () => {
     await user.click(await screen.findByRole('button', { name: 'Skip for now' }))
     await waitFor(() => expect(api.find('POST', '/v1/session/onboarded')).toHaveLength(1))
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/schedule', undefined))
-  })
-
-  it('comes back to the channel step after an OAuth platform', async () => {
-    mockApi(routes)
-    nav.set('/welcome', 'step=channel&error=access%20denied')
-    render({})
-    expect(await screen.findByRole('heading', { name: 'Connect your first channel' })).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('access denied')
   })
 })
 

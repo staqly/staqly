@@ -101,7 +101,8 @@ describe('media library page', () => {
 
     await user.click(within(pane).getByRole('button', { name: /All files/ }))
     await user.click((await screen.findAllByRole('button', { name: 'Sunset.png' }))[0]!)
-    const drawer = await screen.findByTestId('media-detail')
+    // The detail drawer is loaded on first use: give a slow CI runner time to compile it.
+    const drawer = await screen.findByTestId('media-detail', {}, { timeout: 5000 })
 
     // Above the tabs: the preview, one line of facts; the ID sits in the header with a copy button.
     expect(within(drawer).getByTestId('media-facts')).toHaveTextContent('PNG · 2 KB · 1080 × 1350 · 4:5')

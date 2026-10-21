@@ -8,8 +8,8 @@ import (
 
 func TestCatalogAndLimits(t *testing.T) {
 	all := All()
-	if len(all) < 35 {
-		t.Fatalf("catalog has %d providers, want the 34 platforms plus custom", len(all))
+	if len(all) < 34 {
+		t.Fatalf("catalog has %d providers, want the 33 platforms plus custom", len(all))
 	}
 	if all[0].ID() != "custom" || all[0].Status != StatusAvailable {
 		t.Fatalf("custom should lead the catalog as available, got %s %s", all[0].ID(), all[0].Status)

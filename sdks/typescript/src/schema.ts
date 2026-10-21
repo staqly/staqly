@@ -291,6 +291,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/billing/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read the subscription from Stripe now (admin)
+         * @description Asks Stripe for the workspace's subscription and applies it, as its webhook would, then
+         *     answers like `GET /v1/billing`. The dashboard calls it when it comes back from Checkout, so a
+         *     paid workspace opens even when the webhook is late or lost; a background job does the same
+         *     every 10 minutes for workspaces whose plan may be out of date.
+         */
+        post: operations["syncBilling"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/billing/webhook": {
         parameters: {
             query?: never;
@@ -5503,6 +5526,30 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    syncBilling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Billing status after the sync */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Billing"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
             502: components["responses"]["BadGateway"];
         };
