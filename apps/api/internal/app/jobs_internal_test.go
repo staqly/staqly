@@ -315,3 +315,51 @@ func TestJobsLegacyRowsCarriedOver(t *testing.T) {
 		t.Fatalf("old rows left: %d", len(rows))
 	}
 }
+
+// A key queued again just as its run returns (River completes jobs in batches a moment later) still runs
+// again: the run completes itself together with the requeue check, so the new request is never left unread.
+func TestJobsQueuedAsTheRunEndsStillRuns(t *testing.T) {
+	s, _ := queueTest(t)
+	var runs atomic.Int32
+	returned := make(chan struct{}, 4)
+	testJobKinds["test_count"] = func(context.Context, jobArgs) error {
+		runs.Add(1)
+		returned <- struct{}{}
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() { s.RunJobs(ctx); close(stopped) }()
+	defer func() { cancel(); <-stopped }()
+
+	enqueueAt(t, s, "test_count", "end:1", s.Now(), nil)
+	<-returned
+	// Right after the run returned, before River's completer flushes (every 50 ms).
+	enqueueAt(t, s, "test_count", "end:1", s.Now(), map[string]any{"post_id": "again"})
+	waitFor(t, "the second run", func() bool { return runs.Load() == 2 })
+	if _, err := s.Q.GetJobRequeue(context.Background(), "end:1"); !isNoRows(err) {
+		t.Fatalf("no requeue may be left behind: %v", err)
+	}
+}
+
+// A requeue no run picked up (a last failed attempt, a stopped process) is queued by the sweep.
+func TestJobsSweepQueuesLeftoverRequeues(t *testing.T) {
+	s, _ := queueTest(t)
+	ctx := context.Background()
+	var runs atomic.Int32
+	testJobKinds["test_count"] = func(context.Context, jobArgs) error { runs.Add(1); return nil }
+	if err := s.Q.UpsertJobRequeue(ctx, db.UpsertJobRequeueParams{Key: "left:1", WorkspaceID: "ws_test", Kind: "test_count",
+		Payload: "{}", RunAt: formatTime(s.Now()), MaxAttempts: 3, CreatedAt: formatTime(s.Now().Add(-2 * time.Minute))}); err != nil {
+		t.Fatal(err)
+	}
+	if n := s.sweepJobRequeues(ctx); n != 1 {
+		t.Fatalf("swept %d, want 1", n)
+	}
+	s.RunDueJobsOnce(ctx)
+	if runs.Load() != 1 {
+		t.Fatalf("the leftover key ran %d times, want 1", runs.Load())
+	}
+	if _, err := s.Q.GetJobRequeue(ctx, "left:1"); !isNoRows(err) {
+		t.Fatalf("the requeue is gone once queued: %v", err)
+	}
+}

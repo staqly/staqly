@@ -26,3 +26,7 @@ DELETE FROM job_requeues WHERE key = ?;
 
 -- name: DeleteWorkspaceJobRequeues :exec
 DELETE FROM job_requeues WHERE workspace_id = ?;
+
+-- name: ListStaleJobRequeues :many
+-- Requeues older than a minute: their run should have picked them up (see sweepJobRequeues).
+SELECT * FROM job_requeues WHERE created_at < ? ORDER BY created_at LIMIT 200;

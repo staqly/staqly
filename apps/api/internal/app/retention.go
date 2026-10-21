@@ -283,6 +283,9 @@ func (s *Service) PurgePost(ctx context.Context, p Principal, id string) (PurgeR
 	res := PurgeResult{PostID: id}
 	var mediaFiles []string
 	err := s.tx(ctx, func(q *db.Queries) error {
+		// fn may run again on PostgreSQL: only the run that commits counts (a file kept on the retry, now used
+		// by another post, must not be removed after the commit).
+		mediaFiles, res = nil, PurgeResult{PostID: id}
 		row, err := q.GetPost(ctx, db.GetPostParams{WorkspaceID: p.WorkspaceID, ID: id})
 		if isNoRows(err) {
 			return notFound("post")
