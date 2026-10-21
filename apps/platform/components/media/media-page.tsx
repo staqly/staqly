@@ -24,6 +24,7 @@ import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { Callout } from '@/components/common/callout'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { FilterButton } from '@/components/common/filter-button'
@@ -882,16 +883,19 @@ export function MediaPage() {
             in view (sticky) under a long one. */}
         <div className="flex flex-1 flex-col px-4 py-4 sm:px-6">
           {trash && items.length > 0 && (
-            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-              <p className="min-w-0 flex-1 text-muted-foreground">
-                Files here are deleted for good after 30 days and still count toward your storage until then.
-              </p>
-              {canWrite && (
-                <Button variant="outline" onClick={() => setPurgingIds([])} disabled={purging}>
-                  <Trash2 /> Empty Deleted
-                </Button>
-              )}
-            </div>
+            <Callout
+              tone="warning"
+              className="mb-4 items-center"
+              action={
+                canWrite && (
+                  <Button variant="outline" size="sm" onClick={() => setPurgingIds([])} disabled={purging}>
+                    <Trash2 /> Empty Deleted
+                  </Button>
+                )
+              }
+            >
+              Files here are deleted for good after 30 days and still count toward your storage until then.
+            </Callout>
           )}
           {content}
           {actionBar}
