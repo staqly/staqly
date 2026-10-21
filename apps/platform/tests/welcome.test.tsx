@@ -146,6 +146,27 @@ describe('welcome wizard', () => {
     expect(api.find('POST', '/v1/billing/sync').length).toBeGreaterThan(0)
   })
 
+  it('setting up again after a failure counts people already invited as invited', async () => {
+    const api = mockApi({
+      ...routes,
+      'POST /v1/invitations': {
+        status: 409,
+        body: { error: { code: 'already_invited', message: 'ana@example.com already has an open invitation' } },
+      },
+    })
+
+    sessionStorage.setItem(
+      'staqly:welcome',
+      JSON.stringify({ name: 'Ana', invites: { emails: ['ana@example.com'], role: 'editor' } }),
+    )
+    nav.set('/welcome', 'step=done')
+    render({})
+    expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
+    expect(api.find('POST', '/v1/invitations')).toHaveLength(1)
+    expect(screen.getByText('1 invitation sent')).toBeInTheDocument()
+    expect(screen.queryByText(/Not sent/)).not.toBeInTheDocument()
+  })
+
   it('an invited member gets the short version: their name and their role', async () => {
     const api = mockApi(routes)
     const user = userEvent.setup()
