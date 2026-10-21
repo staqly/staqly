@@ -25,7 +25,7 @@ import { TerminalCard } from '@/components/terminal'
 import { ToolPreview } from '@/components/tool-preview'
 import { ToolCards } from '@/components/tools/tool-cards'
 import { UseCaseCards } from '@/components/use-case-cards'
-import { FROM, PLANS, eur } from '@/lib/plans'
+import { PLANS } from '@/lib/plans'
 import { HOME_TITLE, SITE_LD, ldJson, pageMeta } from '@/lib/seo'
 import {
   APP,
@@ -40,7 +40,6 @@ import {
   btnPrimary,
   btnSecondary,
   wrap,
-  SELF_HOST,
 } from '@/lib/site'
 import { allCases } from '@/lib/use-cases'
 
@@ -63,9 +62,8 @@ function Hero() {
             Your agents write the posts. <span className="sq-gradient-text">Staqly keeps the rhythm.</span>
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground">
-            The post scheduler for creators. You and Claude Code, Codex or n8n write posts into collections, and a
-            schedule publishes them at the times your audience is online: to X, and to any other platform through your
-            own n8n workflow or script. Instagram, TikTok, YouTube and more are on the way.
+            Plan a month of posts in one sitting with Claude Code, Codex or n8n. Staqly publishes each one when your
+            audience is online: on X today, with Instagram, TikTok and YouTube on the way.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <a href={SIGNUP} className={btnPrimary}>
@@ -75,13 +73,6 @@ function Hero() {
               See how it works
             </Link>
           </div>
-          <p className="mt-4 text-sm text-muted-foreground">
-            Starter free for 7 days · card required, cancel anytime · then from {eur(FROM)} per user a month, excl. VAT
-            ·{' '}
-            <a href={SELF_HOST} className="underline-offset-4 hover:text-foreground hover:underline">
-              or self-host the Community Edition
-            </a>
-          </p>
           <div className="mt-8 flex flex-wrap gap-2 text-xs font-medium text-muted-foreground">
             {['MCP + REST API', 'Hosted, ready in a minute', 'Open source, AGPL-3.0'].map((b) => (
               <span key={b} className="rounded-md border border-border bg-card px-2.5 py-1">
