@@ -174,3 +174,31 @@ describe('an invitation link while the server is down', () => {
     expect(await screen.findByText(/This invitation link is not valid/)).toBeInTheDocument()
   })
 })
+
+describe('a 401 in the cloud', () => {
+  it('sends to sign-in with the page and its query, so sign-in comes back to exactly that', async () => {
+    mockApi({
+      'GET /v1/setup': { initialized: true, mode: 'cloud', signup_open: true, setup_token_required: false },
+      'GET /v1/session': UNAUTHORIZED,
+    })
+    nav.reset()
+    nav.set('/integrations')
+    window.history.replaceState(null, '', '/integrations?tab=codex')
+
+    function Probe() {
+      useSession()
+
+      return <p>probe</p>
+    }
+
+    render(
+      <Providers>
+        <Probe />
+      </Providers>,
+    )
+    await vi.waitFor(() =>
+      expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fintegrations%3Ftab%3Dcodex', undefined),
+    )
+    window.history.replaceState(null, '', '/')
+  })
+})

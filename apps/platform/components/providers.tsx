@@ -112,7 +112,9 @@ export function Providers({ children }: { children: ReactNode }) {
     }
 
     client.removeQueries({ predicate: (q) => q.queryKey[0] !== SETUP_KEY[0] })
-    const next = path && path !== '/' ? `?next=${encodeURIComponent(path)}` : ''
+    // With its query (?tab=, ?compose=1, ?step=): sign-in comes back to exactly where the session ran out.
+    const back = path === window.location.pathname ? path + window.location.search : path
+    const next = back && back !== '/' ? `?next=${encodeURIComponent(back)}` : ''
 
     router.replace('/login' + next)
   }

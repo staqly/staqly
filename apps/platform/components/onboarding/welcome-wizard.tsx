@@ -30,7 +30,7 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { api, errorMessage, type BillingInterval, type Plan, type Role } from '@/lib/api'
+import { api, ApiError, errorMessage, type BillingInterval, type Plan, type Role } from '@/lib/api'
 import { usePublicApiUrl } from '@/lib/config'
 import { formatBytes } from '@/lib/format'
 import { ProviderTile } from '@/lib/providers'
@@ -244,6 +244,7 @@ export function WelcomeWizard() {
               onApplied={(applied) => update({ applied })}
               busy={finish.isPending}
               onFinish={(to) => finish.mutate(to)}
+              onChoosePlan={() => go('plan')}
             />
           )}
         </div>
@@ -362,7 +363,7 @@ function YouStep({
               <label
                 key={id}
                 htmlFor={`welcome-goal-${id}`}
-                className="relative grid cursor-pointer gap-3 rounded-2xl border bg-card p-4 transition-colors hover:border-foreground/20 has-checked:border-brand has-checked:bg-brand-soft/40 has-focus-visible:ring-3 has-focus-visible:ring-ring/50"
+                className="relative grid cursor-pointer gap-3 rounded-2xl border bg-card p-4 transition-colors hover:border-foreground/20 has-checked:border-brand has-checked:bg-brand-soft/40 has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50"
               >
                 <input
                   id={`welcome-goal-${id}`}
@@ -725,7 +726,7 @@ function PlanStep({
               onClick={() => setChosen(p.id)}
               data-testid={`welcome-plan-${p.id}`}
               className={cn(
-                'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 rounded-2xl border bg-card px-4 py-3.5 text-left transition-colors outline-none hover:border-foreground/20 focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-5',
+                'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 rounded-2xl border bg-card px-4 py-3.5 text-left transition-colors outline-none hover:border-foreground/20 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-5',
                 on && 'border-brand bg-brand-soft/30 ring-1 ring-brand hover:border-brand',
               )}
             >
@@ -836,7 +837,9 @@ async function applyDraft(
     // eslint-disable-next-line no-await-in-loop
     await api.invite(email, draft.invites!.role).then(
       () => invited++,
-      (e: unknown) => failed.push(`${email}: ${errorMessage(e)}`),
+      // Already invited (a retry after a later step failed, or a reload mid-way) counts as invited.
+      (e: unknown) =>
+        e instanceof ApiError && e.code === 'already_invited' ? invited++ : failed.push(`${email}: ${errorMessage(e)}`),
     )
   }
 
@@ -867,6 +870,7 @@ function DoneStep({
   onApplied,
   busy,
   onFinish,
+  onChoosePlan,
 }: {
   heading: React.RefObject<HTMLHeadingElement | null>
   draft: WelcomeDraft
@@ -876,6 +880,8 @@ function DoneStep({
   onApplied: (applied: Applied) => void
   busy: boolean
   onFinish: (to: string) => void
+  /** Back to the plan step (a soft navigation alone keeps this step on screen). */
+  onChoosePlan: () => void
 }) {
   const qc = useQueryClient()
   const channels = useChannels({ enabled: !waitForPlan })
@@ -938,8 +944,8 @@ function DoneStep({
         </StepHeader>
         {timedOut ? (
           <Actions>
-            <Button type="button" variant="outline" className={bigButton} asChild>
-              <Link href="/welcome?step=plan">Choose a plan</Link>
+            <Button type="button" variant="outline" className={bigButton} onClick={onChoosePlan}>
+              Choose a plan
             </Button>
             <Button type="button" className={bigButton} onClick={() => setWaited(0)}>
               Check again

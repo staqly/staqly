@@ -71,7 +71,16 @@ function useCountdown(at: number) {
       return
     }
 
-    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    // Stops at 0, so the form doesn't re-render every second while the code step stays open.
+    const id = window.setInterval(() => {
+      const t = Date.now()
+
+      setNow(t)
+
+      if (t >= at) {
+        window.clearInterval(id)
+      }
+    }, 1000)
 
     return () => window.clearInterval(id)
   }, [at])

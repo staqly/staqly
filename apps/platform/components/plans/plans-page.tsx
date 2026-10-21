@@ -60,8 +60,11 @@ export function PlansPage() {
   const payer = accountsEnabled ? accountOwner : canManagePeople
   const usage = useUsage()
   const router = useRouter()
+  const params = useSearchParams()
   // Opened from the welcome's last step: Stripe comes back to the end of the welcome.
-  const fromWelcome = useSearchParams().get('from') === 'welcome'
+  const fromWelcome = params.get('from') === 'welcome'
+  // The billing period picked on the pricing page (staqly.ai → sign-up → here).
+  const askedInterval = params.get('interval')
   const [now] = useState(Date.now)
   const trialEnds = usage.data?.trial_ends_at
   const trialDays = trialEnds ? daysLeft(trialEnds, now) : 0
@@ -69,12 +72,14 @@ export function PlansPage() {
   const billing = useBilling({ enabled: !isLocal })
   const subscribed = LIVE_SUBSCRIPTION.includes(billing.data?.subscription_status ?? '')
   const details = useBillingDetails({ enabled: !isLocal && subscribed })
-  const paidInterval: BillingInterval | undefined = subscribed
-    ? details.data?.subscription?.interval === 'year'
-      ? 'year'
-      : 'month'
-    : undefined
-  const [chosen, setChosen] = useState<BillingInterval | null>(null)
+  // The paid period is known once the details are in: no guess meanwhile, so a yearly plan never reads as
+  // monthly (and its own button never offers a switch to what it already is).
+  const paidInterval: BillingInterval | undefined =
+    subscribed && details.data ? (details.data.subscription?.interval === 'year' ? 'year' : 'month') : undefined
+  const periodUnknown = subscribed && !details.data
+  const [chosen, setChosen] = useState<BillingInterval | null>(
+    askedInterval === 'year' || askedInterval === 'month' ? askedInterval : null,
+  )
   const interval = chosen ?? paidInterval ?? 'month'
   const { checkout } = usePlanActions()
   const plan = usage.data?.plan
@@ -102,6 +107,14 @@ export function PlansPage() {
           : p.price_month < plan.price_month
             ? `Switch to ${p.name}`
             : `Switch to ${interval === 'year' ? 'yearly' : 'monthly'}`
+
+    if (current && periodUnknown) {
+      return (
+        <Button variant="outline" disabled className="w-full">
+          Your current plan
+        </Button>
+      )
+    }
 
     if (current && interval === paidInterval) {
       return promotionCode && canPay && payer ? (
