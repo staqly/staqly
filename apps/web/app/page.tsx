@@ -132,10 +132,8 @@ function Channels() {
         <Eyebrow>Channels</Eyebrow>
         <H2>X today. Any platform through your automation.</H2>
         <p className="mt-4 text-muted-foreground">
-          Connect X once and every post can go there, with its own text and the platform&apos;s limits checked before it
-          leaves. Anything else goes through your own automation: Staqly hands the post to an n8n workflow or a script
-          and records the link it sends back. The platforms marked Soon are not available yet; the composer already
-          knows their limits and settings, so posts for them can be prepared.
+          Post to X directly. Reach any other platform through n8n or a script of yours, with more native platforms on
+          the way.
         </p>
       </div>
       <ul className="mt-8 grid grid-cols-2 gap-3 sm:mt-12 sm:grid-cols-3 lg:grid-cols-4">
@@ -199,10 +197,7 @@ function HowItWorks() {
         <div className="max-w-2xl">
           <Eyebrow>How it works</Eyebrow>
           <H2>Write. Schedule. Publish.</H2>
-          <p className="mt-4 text-muted-foreground">
-            Posts live in collections, collections have schedules, schedules publish to channels. Everything else, from
-            per-channel text to retries and alerts, follows from that.
-          </p>
+          <p className="mt-4 text-muted-foreground">Write once, set a rhythm, and let Staqly post on time.</p>
         </div>
         <ol className="mt-8 sm:mt-12 grid gap-4 md:grid-cols-3">
           {steps.map((s, i) => (
@@ -340,8 +335,7 @@ function ConnectAgent() {
           <Eyebrow>Connect your agent</Eyebrow>
           <H2>One line. Then just ask.</H2>
           <p className="mt-4 text-muted-foreground">
-            Create a workspace, copy your API key and add staqly to your agent over MCP. It can then write posts, put
-            them on the calendar and refill a collection when a schedule asks.
+            Add Staqly to your agent and ask for a week of posts. They land on your calendar, ready to go out.
           </p>
           <ul className="mt-7 space-y-2.5">
             {[
@@ -411,8 +405,7 @@ function Safety() {
         <Eyebrow>Why it&apos;s safe</Eyebrow>
         <H2>Your accounts, your keys, your say.</H2>
         <p className="mt-4 text-muted-foreground">
-          Staqly holds the calendar and the credentials on the server it runs on, ours or yours when you self-host, and
-          publishes exactly what is on it.
+          Nothing goes out that is not on your calendar, and your logins stay encrypted.
         </p>
       </div>
       <div className="mt-8 sm:mt-12 grid gap-4 sm:grid-cols-2">
@@ -478,9 +471,7 @@ function OpenSource() {
           <Eyebrow>Open source</Eyebrow>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">AGPL-3.0, self-hostable, no lock-in.</h2>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-            The whole app is open source. Prefer to run it on your own machine or server? Staqly Community Edition is
-            one binary with no plan limits that runs in the background on macOS or Linux (or one Docker container): one
-            workspace, opened with the access token it prints at start. You take care of backups and updates yourself.
+            The whole app is open source. Prefer your own machine? Run the free Community Edition, no plan limits.
           </p>
           <a href={`${DOCS}/quickstart`} className={`mt-6 ${arrowLink} pointer-coarse:mt-3.5`}>
             Community Edition quickstart <ArrowRight className="size-4" />

@@ -16,10 +16,7 @@ export default function UseCasesPage() {
   return (
     <main id="main" className="flex-1">
       <PageHero eyebrow="Use cases" title="What people use staqly for.">
-        <p className="mt-5 max-w-2xl text-lg text-muted-foreground">
-          Six ways a collection, a schedule and a few channels replace copying posts around by hand, whether the posts
-          come from you, an agent or a script.
-        </p>
+        <p className="mt-5 max-w-2xl text-lg text-muted-foreground">Six ways to stop copying posts around by hand.</p>
       </PageHero>
       <section aria-labelledby="all-cases" className={`${wrap} py-12 sm:py-16`}>
         <h2 id="all-cases" className="sr-only">

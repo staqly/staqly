@@ -26,17 +26,25 @@ export function PublicShell({
         aria-hidden
         className="pointer-events-none absolute top-[-200px] left-1/2 -z-10 h-[440px] w-[min(900px,140vw)] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(60_235_122/0.16),transparent)] blur-2xl"
       />
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 sm:px-6 sm:pt-5 lg:px-8">
-        <div className="flex items-center gap-1">
+      {/* The way back sits in the page's corner; the logo then stands in the middle. */}
+      {back && (
+        <div className="absolute top-[max(0.75rem,env(safe-area-inset-top))] left-2 flex min-h-11 items-center sm:top-5 sm:left-4">
           {back}
-          <Link
-            href="/"
-            className="flex min-h-11 items-center rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            aria-label="Staqly home"
-          >
-            <Logo className="text-lg" markClassName="size-8" />
-          </Link>
         </div>
+      )}
+      <header
+        className={cn(
+          'mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 sm:px-6 sm:pt-5 lg:px-8',
+          back && 'justify-center',
+        )}
+      >
+        <Link
+          href="/"
+          className="flex min-h-11 items-center rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          aria-label="Staqly home"
+        >
+          <Logo className="text-lg" markClassName="size-8" />
+        </Link>
         {nav}
       </header>
       <main
