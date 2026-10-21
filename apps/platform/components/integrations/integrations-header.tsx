@@ -14,7 +14,7 @@ export function IntegrationsHeader({
   agentsHref = '/integrations?view=agents',
   actions,
 }: {
-  active: 'setup' | 'agents' | 'keys' | 'ai'
+  active: 'setup' | 'agents' | 'keys'
   setupHref?: string
   agentsHref?: string
   actions?: ReactNode
@@ -36,7 +36,6 @@ export function IntegrationsHeader({
           { href: setupHref, label: 'Setup', active: active === 'setup' },
           { href: agentsHref, label: 'Agents & activity', active: active === 'agents', testId: 'agents-tab' },
           ...(isLocal ? [] : [{ href: '/integrations/api-keys', label: 'API keys', active: active === 'keys' }]),
-          { href: '/integrations/ai', label: 'AI', active: active === 'ai', testId: 'ai-tab' },
         ]}
       />
     </>

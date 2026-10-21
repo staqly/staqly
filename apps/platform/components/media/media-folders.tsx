@@ -98,7 +98,7 @@ export function folderPath(folders: MediaFolder[], id: string) {
 
 /** The label of a place: a library entry's name or a folder's path. */
 export function placeLabel(folders: MediaFolder[], place: Place) {
-  return place === ROOT ? 'Root' : (LIBRARY.find((l) => l.key === place)?.label ?? folderPath(folders, place))
+  return place === ROOT ? '/' : (LIBRARY.find((l) => l.key === place)?.label ?? folderPath(folders, place))
 }
 
 /** While dragging files: a compact chip (the first thumbnail and the name, or "3 files") under the pointer. */
@@ -190,14 +190,15 @@ function LibraryNav({ tree, place, tag, canWrite, onPlace, onTag, onNewFolder, o
     {
       id: ROOT,
       parent_id: '',
-      name: 'Root',
+      name: '/',
       files: tree?.root_files ?? 0,
       created_at: '',
       depth: 0,
-      hasChildren: folders.length > 0,
+      // ponytail: the top level is always open, so it has no chevron and sits flush left.
+      hasChildren: false,
     },
   ]
-  let hideBelow = collapsed.has(ROOT) ? 0 : Infinity
+  let hideBelow = Infinity
 
   for (const f of folderTree(folders)) {
     if (f.depth + 1 > hideBelow) {
@@ -387,23 +388,25 @@ function LibraryNav({ tree, place, tag, canWrite, onPlace, onTag, onNewFolder, o
                   onPlace(r.id)
                 }}
                 onKeyDown={(e) => onKeyDown(e, i)}
-                style={{ paddingLeft: `${0.25 + r.depth * 0.875}rem` }}
+                style={r.id === ROOT ? undefined : { paddingLeft: `${0.25 + (r.depth - 1) * 0.875}rem` }}
                 className={cn(ROW, 'gap-1.5', rowState(r.id === place, dropKey === r.id))}
               >
-                <span
-                  aria-hidden
-                  className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-                  onClick={(e) => {
-                    if (r.hasChildren) {
-                      e.stopPropagation()
-                      setOpen(r.id, !open)
-                    }
-                  }}
-                >
-                  {r.hasChildren && (
-                    <ChevronRight className={cn('size-3.5 transition-transform', open && 'rotate-90')} />
-                  )}
-                </span>
+                {r.id !== ROOT && (
+                  <span
+                    aria-hidden
+                    className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+                    onClick={(e) => {
+                      if (r.hasChildren) {
+                        e.stopPropagation()
+                        setOpen(r.id, !open)
+                      }
+                    }}
+                  >
+                    {r.hasChildren && (
+                      <ChevronRight className={cn('size-3.5 transition-transform', open && 'rotate-90')} />
+                    )}
+                  </span>
+                )}
                 {r.id === place ? (
                   <FolderOpen className="size-4 shrink-0 text-brand" aria-hidden />
                 ) : (
@@ -415,11 +418,6 @@ function LibraryNav({ tree, place, tag, canWrite, onPlace, onTag, onNewFolder, o
             )
           })}
         </ul>
-        {folders.length === 0 && (
-          <p className="px-2 text-xs text-muted-foreground">
-            Folders only organize the library: a file stays in every post that uses it.
-          </p>
-        )}
       </Section>
 
       {tags.length > 0 && (

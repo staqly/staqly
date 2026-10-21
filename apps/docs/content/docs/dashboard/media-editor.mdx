@@ -62,26 +62,6 @@ From the arrow beside it:
 Leaving with unsaved changes asks first. Opened from a post, **Back to the post** returns there with the saved
 picture.
 
-## AI with your own key
-
-**AI** in the editor's bar makes a picture from a description (added as a layer), changes the picture by a
-description (the result as a layer on top, so hiding or deleting it goes back), removes an area you paint over,
-and extends the picture to a placement's shape (a new version). Each request shows its progress and can be
-canceled or retried. Without a key these are off, with a **Set up AI** link for admins.
-
-These tools use your workspace's own OpenAI account: an admin adds an API key under **Integrations → AI**. Staqly checks the key with OpenAI (which costs nothing), stores it encrypted and never shows it
-again (only its last four characters). OpenAI bills the calls to that key; staqly does not.
-
-- A picture is sent to OpenAI only when someone clicks an AI action.
-- The image model decides what is possible: `gpt-image-1` (the default) generates, edits by prompt, changes a
-  marked area and extends a picture; `dall-e-3` only generates. Actions the model can't do are off, with the
-  reason.
-- At most 30 AI pictures per 10 minutes per workspace. Self-hosted servers can turn the AI tools off with
-  `AI_DISABLED=true`.
-
-The API: `GET`, `PUT` and `DELETE /v1/ai`, `POST /v1/ai/images/generate` and `/v1/ai/images/edit`. See the
-[API reference](/api).
-
 ## Licenses
 
 The editor is based on [OpenGPEX](https://github.com/gpex-cloud/opengpex), Copyright (C) 2026 The OpenGPEX

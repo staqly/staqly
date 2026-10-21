@@ -186,102 +186,89 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
           </Button>
         </Section>
 
-        {status.isPending ? null : noKey ? (
-          <Callout
-            tone="info"
-            action={
-              st?.can_manage ? (
-                <Button size="sm" variant="outline" asChild>
-                  {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- leaves the isolated editor page */}
-                  <a href="/integrations/ai">Set up AI</a>
+        {/* ponytail: the OpenAI tools show only for a workspace that already has a key; adding one has no page yet. */}
+        {!noKey && (
+          <>
+            {st?.reason && <Callout tone="warning">{st.reason}</Callout>}
+
+            <Section title="Describe" icon={<ImagePlus />}>
+              <Textarea
+                aria-label="Description"
+                placeholder="A bright, modern office in the background"
+                value={prompt}
+                maxLength={4000}
+                onChange={(e) => setPrompt(e.target.value)}
+                disabled={noKey || disabled}
+              />
+              <div className="flex flex-wrap gap-2">
+                <NativeSelect
+                  aria-label="Shape of a new picture"
+                  value={shape}
+                  onChange={(e) => setShape(e.target.value)}
+                  className="w-28"
+                  disabled={noKey || disabled}
+                >
+                  <option value="1x1">Square</option>
+                  <option value="3x2">Landscape</option>
+                  <option value="2x3">Portrait</option>
+                </NativeSelect>
+                <Button
+                  onClick={generate}
+                  disabled={!caps?.generate || !prompt.trim() || disabled}
+                  data-testid="ai-generate"
+                >
+                  Make it
                 </Button>
-              ) : undefined
-            }
-          >
-            {st?.can_manage
-              ? 'Making and changing pictures by a description uses your own OpenAI key.'
-              : 'An admin can add an OpenAI key under Integrations to make and change pictures by a description.'}
-          </Callout>
-        ) : (
-          st?.reason && <Callout tone="warning">{st.reason}</Callout>
+                <Button
+                  variant="outline"
+                  onClick={edit}
+                  disabled={!caps?.edit || !prompt.trim() || !hasPicture || disabled}
+                  title={caps && !caps.edit ? `${st?.model} cannot change pictures` : undefined}
+                >
+                  Change the picture
+                </Button>
+              </div>
+            </Section>
+
+            <Section title="Remove an object" icon={<Eraser />}>
+              <p className="text-muted-foreground">Paint over what should go; the AI fills in what was behind it.</p>
+              <Button
+                variant="outline"
+                disabled={!caps?.inpaint || !hasPicture || disabled}
+                onClick={async () => setMasking((await picture()).blob)}
+              >
+                <Eraser /> Mark what to remove
+              </Button>
+            </Section>
+
+            <Section title="Extend to a shape" icon={<Maximize2 />}>
+              <div className="flex flex-wrap gap-2">
+                <NativeSelect
+                  aria-label="Target shape"
+                  value={expandTo}
+                  onChange={(e) => setExpandTo(e.target.value)}
+                  className="w-44"
+                  disabled={!caps?.expand || disabled}
+                >
+                  {[...new Set(PLACEMENTS.map((p) => `${p.w}:${p.h}`))].map((r) => {
+                    const [w, h] = r.split(':').map(Number)
+                    const names = PLACEMENTS.filter((p) => `${p.w}:${p.h}` === r).map((p) => `${p.platform} ${p.name}`)
+
+                    return (
+                      <option key={r} value={r}>
+                        {ratioLabel(w!, h!)} · {names[0]}
+                        {names.length > 1 ? ` +${names.length - 1}` : ''}
+                      </option>
+                    )
+                  })}
+                </NativeSelect>
+                <Button variant="outline" onClick={expand} disabled={!caps?.expand || !hasPicture || disabled}>
+                  Extend
+                </Button>
+              </div>
+            </Section>
+          </>
         )}
-
-        <Section title="Describe" icon={<ImagePlus />}>
-          <Textarea
-            aria-label="Description"
-            placeholder="A bright, modern office in the background"
-            value={prompt}
-            maxLength={4000}
-            onChange={(e) => setPrompt(e.target.value)}
-            disabled={noKey || disabled}
-          />
-          <div className="flex flex-wrap gap-2">
-            <NativeSelect
-              aria-label="Shape of a new picture"
-              value={shape}
-              onChange={(e) => setShape(e.target.value)}
-              className="w-28"
-              disabled={noKey || disabled}
-            >
-              <option value="1x1">Square</option>
-              <option value="3x2">Landscape</option>
-              <option value="2x3">Portrait</option>
-            </NativeSelect>
-            <Button
-              onClick={generate}
-              disabled={!caps?.generate || !prompt.trim() || disabled}
-              data-testid="ai-generate"
-            >
-              Make it
-            </Button>
-            <Button
-              variant="outline"
-              onClick={edit}
-              disabled={!caps?.edit || !prompt.trim() || !hasPicture || disabled}
-              title={caps && !caps.edit ? `${st?.model} cannot change pictures` : undefined}
-            >
-              Change the picture
-            </Button>
-          </div>
-        </Section>
-
-        <Section title="Remove an object" icon={<Eraser />}>
-          <p className="text-muted-foreground">Paint over what should go; the AI fills in what was behind it.</p>
-          <Button
-            variant="outline"
-            disabled={!caps?.inpaint || !hasPicture || disabled}
-            onClick={async () => setMasking((await picture()).blob)}
-          >
-            <Eraser /> Mark what to remove
-          </Button>
-        </Section>
-
-        <Section title="Extend to a shape" icon={<Maximize2 />}>
-          <div className="flex flex-wrap gap-2">
-            <NativeSelect
-              aria-label="Target shape"
-              value={expandTo}
-              onChange={(e) => setExpandTo(e.target.value)}
-              className="w-44"
-              disabled={!caps?.expand || disabled}
-            >
-              {[...new Set(PLACEMENTS.map((p) => `${p.w}:${p.h}`))].map((r) => {
-                const [w, h] = r.split(':').map(Number)
-                const names = PLACEMENTS.filter((p) => `${p.w}:${p.h}` === r).map((p) => `${p.platform} ${p.name}`)
-
-                return (
-                  <option key={r} value={r}>
-                    {ratioLabel(w!, h!)} · {names[0]}
-                    {names.length > 1 ? ` +${names.length - 1}` : ''}
-                  </option>
-                )
-              })}
-            </NativeSelect>
-            <Button variant="outline" onClick={expand} disabled={!caps?.expand || !hasPicture || disabled}>
-              Extend
-            </Button>
-          </div>
-        </Section>
 
         {ai.busy && (
           <div role="status" className="flex items-center gap-2 rounded-lg border p-3">
