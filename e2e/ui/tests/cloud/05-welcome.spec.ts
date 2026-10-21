@@ -1,9 +1,9 @@
 import { expect, ready, test } from '../../lib/fixtures.js'
 import { state } from '../../lib/state.js'
 
-// The welcome wizard of a brand-new account: it opens on its own after the first sign-in, walks through the
-// person's name, their goal, the workspace's name, a first channel and an agent key, and never comes back on its
-// own once finished (the user menu reopens it).
+// The welcome wizard of a brand-new account: it opens on its own after the first sign-in, collects the person's
+// name, their goal, the workspace's name, the platforms and an agent, sets the workspace up at the end (here
+// without billing, so without the plan step), and never comes back on its own once finished.
 test.use({ storageState: { cookies: [], origins: [] } })
 
 const email = `welcome-${Date.now().toString(36)}@example.com`
@@ -42,26 +42,27 @@ test('welcome: a new account goes through the wizard once', async ({ page }) => 
   await page.getByLabel(/Workspace name/).fill('Wanda Studio')
   await page.getByRole('button', { name: /Continue/ }).click()
 
-  // A first channel inline: your own automation, posts sent to an endpoint of yours.
-  await ready(page, 'Connect your first channel')
+  // The platforms are only picked here; they are connected at the end.
+  await ready(page, 'Where do you post?')
   await page.getByRole('button', { name: 'Your own automation' }).click()
-  await page.getByRole('textbox', { name: /^Name/ }).fill('My n8n')
-  await page.getByPlaceholder('https://n8n.example.com/webhook/staqly').fill('https://n8n.example.com/webhook/staqly')
-  await page.getByTestId('connect-channel').click()
-  await expect(page.getByRole('list', { name: 'Connected channels' })).toContainText('My n8n')
+  await expect(page.getByRole('button', { name: 'Your own automation' })).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: /Continue/ }).click()
 
-  // The agents goal puts the agent first; its key lands in the command.
+  // The agents goal puts the agent first; its key is made at the end.
   await ready(page, 'Connect an agent')
-  await page.getByRole('button', { name: 'Create a key for it' }).click()
-  await expect(page.getByText(/Bearer stk_/)).toBeVisible()
   await page.getByRole('button', { name: /Continue/ }).click()
 
   // Inviting the team is its own step after the agent, and can be skipped.
   await ready(page, 'Invite your team')
   await page.getByRole('button', { name: 'Skip', exact: true }).click()
 
+  // Set up at the end: the agent's key in its command, then the picked platform connected inline.
   await ready(page, 'You are all set')
+  await expect(page.getByText(/Bearer stk_/)).toBeVisible()
+  await page.getByRole('list', { name: 'Platforms to connect' }).getByRole('button', { name: 'Connect' }).click()
+  await page.getByRole('textbox', { name: /^Name/ }).fill('My n8n')
+  await page.getByPlaceholder('https://n8n.example.com/webhook/staqly').fill('https://n8n.example.com/webhook/staqly')
+  await page.getByTestId('connect-channel').click()
   await expect(page.getByText('1 channel connected')).toBeVisible()
   await page.getByRole('button', { name: /Go to the calendar/ }).click()
   await ready(page, 'Schedule')

@@ -127,6 +127,10 @@ func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) 
 		return c, c.err
 	}
 	remember := func(c priceCacheEntry) (priceCacheEntry, error) {
+		// A request that was canceled or timed out says nothing about Stripe: the next caller asks again.
+		if c.err != nil && ctx.Err() != nil {
+			return c, c.err
+		}
 		priceIDs.Lock()
 		priceIDs.m[cacheKey] = c
 		priceIDs.Unlock()
@@ -394,7 +398,7 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	success, cancel := back+"?checkout=success", back+"?checkout=canceled"
 	if len(returnTo) > 0 && returnTo[0] == "welcome" { // started from the welcome steps: back to them
 		welcome := strings.TrimRight(firstNonEmpty(s.Cfg.PublicDashboardURL, s.Cfg.PublicURL), "/") + "/welcome"
-		success, cancel = welcome+"?step=workspace&checkout=success", welcome+"?step=trial"
+		success, cancel = welcome+"?step=done&checkout=success", welcome+"?step=plan"
 	}
 	var cs struct {
 		URL string `json:"url"`
@@ -414,6 +418,8 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		"customer_update[address]":   {"auto"},
 		"success_url":                {success},
 		"cancel_url":                 {cancel},
+		// Discount codes made in Stripe (Coupons, then a promotion code) can be entered at checkout.
+		"allow_promotion_codes": {"true"},
 	}
 	// Only Starter has a trial, Stripe's own: 7 days with a card required, cancelled if no card is on file when
 	// it ends; trialOffer says who gets it (once per workspace, one at a time per account). Plus, Pro and
@@ -460,9 +466,41 @@ func (s *Service) unpinnedPrice(ctx context.Context, plan Plan, interval string,
 	return pr.id, true
 }
 
-// ensureCustomer: the workspace's Stripe customer, made on its first checkout.
+// customerDetails: who a workspace's Stripe customer is, so it can be found in Stripe: the workspace (its name as
+// the business, its id in the description and metadata) and the person who pays, the account owner (their name and
+// the email they sign in with: Google or an email code). Checkout may still change `name` to the cardholder's.
+func (s *Service) customerDetails(ctx context.Context, w db.GetWorkspaceBillingRow) url.Values {
+	v := url.Values{
+		"name":                   {w.Name},
+		"business_name":          {w.Name},
+		"description":            {"staqly workspace " + w.ID},
+		"metadata[workspace_id]": {w.ID},
+	}
+	if ws, err := s.Q.GetWorkspace(ctx, w.ID); err == nil && ws.AccountID.Valid {
+		if acc, err := s.Q.GetAccount(ctx, ws.AccountID.String); err == nil {
+			v.Set("metadata[account_id]", acc.ID)
+			if u, err := s.Q.GetUser(ctx, acc.OwnerUserID); err == nil {
+				if u.Email != "" {
+					v.Set("email", u.Email)
+				}
+				if person := firstNonEmpty(acc.Name, u.Name); person != "" && !strings.Contains(person, "@") {
+					v.Set("individual_name", person)
+				}
+			}
+		}
+	}
+	return v
+}
+
+// ensureCustomer: the workspace's Stripe customer, made on its first checkout and brought up to date (workspace,
+// payer's name and email) on every later one.
 func (s *Service) ensureCustomer(ctx context.Context, w db.GetWorkspaceBillingRow) (string, error) {
+	details := s.customerDetails(ctx, w)
 	if w.StripeCustomerID.Valid && w.StripeCustomerID.String != "" {
+		// Best effort: a customer that can't be updated still checks out.
+		if err := s.stripe(ctx, "POST", "/v1/customers/"+url.PathEscape(w.StripeCustomerID.String), details, nil); err != nil {
+			s.logger(ctx).Warn("billing: customer details not updated", "err", err)
+		}
 		return w.StripeCustomerID.String, nil
 	}
 	var c struct {
@@ -470,10 +508,10 @@ func (s *Service) ensureCustomer(ctx context.Context, w db.GetWorkspaceBillingRo
 	}
 	// Concurrent first checkouts (a double click, two tabs) get the same customer back: Stripe answers a repeated
 	// idempotency key (24 hours) with the first result. The key covers the parameters, as Stripe refuses a key
-	// reused with others (a renamed workspace).
-	name := sha256.Sum256([]byte(w.Name))
-	key := "staqly-customer-" + w.ID + "-" + hex.EncodeToString(name[:8])
-	if err := s.stripeKeyed(ctx, "POST", "/v1/customers", url.Values{"name": {w.Name}, "metadata[workspace_id]": {w.ID}}, &c, key); err != nil {
+	// reused with others (a renamed workspace, another email).
+	sum := sha256.Sum256([]byte(details.Encode()))
+	key := "staqly-customer-" + w.ID + "-" + hex.EncodeToString(sum[:8])
+	if err := s.stripeKeyed(ctx, "POST", "/v1/customers", details, &c, key); err != nil {
 		return "", err
 	}
 	return c.ID, s.W.SetStripeCustomer(ctx, db.SetStripeCustomerParams{StripeCustomerID: nullStr(c.ID), UpdatedAt: s.now(), ID: w.ID})

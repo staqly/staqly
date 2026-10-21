@@ -205,6 +205,16 @@ func TestPlansShowStripeAmounts(t *testing.T) {
 	if lookups != n {
 		t.Fatalf("found prices are cached: %d lookups, then %d", n, lookups)
 	}
+
+	// A canceled request (a page left while it loaded) leaves no failure behind for the next caller.
+	e.svc.Cfg.Billing.SecretKey = "sk_test_canceled" // a fresh cache key
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	e.svc.LivePlans(canceled)
+	e.do(nil, "GET", "/v1/plans", e.key, nil, 200, &plans)
+	if p := price("plus"); p.PriceMonth != 31 {
+		t.Fatalf("after a canceled lookup the next one asks Stripe again: %+v", p)
+	}
 }
 
 // The landing page lists the same prices as the server (apps/web/lib/plans.ts mirrors Plans).

@@ -142,7 +142,7 @@ export const COMPARE: { category: string; rows: CompareRow[] }[] = [
     rows: [
       {
         label: 'Connected channels',
-        hint: 'X and your own automation today; more platforms are on the way',
+        hint: 'X directly, every other platform through your own automation',
         values: ['5', '15', '40', 'Unlimited'],
       },
       {

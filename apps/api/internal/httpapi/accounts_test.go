@@ -942,13 +942,14 @@ func itoa(n int) string { return strconv.Itoa(n) }
 // card makes it read-only again, and a workspace that had a subscription gets no second trial.
 func TestCardRequiredTrial(t *testing.T) {
 	e := newAccountsEnv(t, "")
-	var checkout url.Values
+	var checkout, customer url.Values
 	stripe := httptest.NewServer(subsFirst(func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
 			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":1500,"currency":"eur"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
 		case "POST /v1/customers":
+			customer = r.Form
 			fmt.Fprint(w, `{"id":"cus_t"}`)
 		case "POST /v1/checkout/sessions":
 			checkout = r.Form
@@ -976,6 +977,11 @@ func TestCardRequiredTrial(t *testing.T) {
 	if checkout.Get("subscription_data[trial_period_days]") != "7" || checkout.Get("payment_method_collection") != "always" ||
 		checkout.Get("automatic_tax[enabled]") != "true" {
 		t.Fatalf("starter checkout: %v", checkout)
+	}
+	// The customer is the workspace (id, name) paid for by its owner: their sign-in email and name.
+	if customer.Get("email") != ana.Email || customer.Get("individual_name") != ana.Name ||
+		customer.Get("metadata[workspace_id]") != ws {
+		t.Fatalf("customer: %v", customer)
 	}
 	trialEnd := time.Now().Add(7 * 24 * time.Hour).Unix()
 	sub := map[string]any{"id": "sub_t", "customer": "cus_t", "status": "trialing", "metadata": map[string]string{"workspace_id": ws},

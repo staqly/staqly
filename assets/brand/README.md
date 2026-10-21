@@ -15,6 +15,7 @@ source, the gradient stops were sampled from it, and the wordmark is an outline 
 |---|---|
 | `staqly-logo-source.png` | Original artwork (1254×1254, on near-black). Reference only. |
 | `staqly-logo-dark.svg` / `staqly-logo-light.svg` | Stacked logo (mark above wordmark). **dark** = for dark backgrounds (off-white wordmark), **light** = for light/white backgrounds (graphite wordmark, deeper greens). Transparent background. |
+| `staqly-logo-readme.svg` | Stacked logo with a mid-green wordmark that reads on light and dark backgrounds: the GitHub README (GitHub shows `<picture>` by the system color scheme, not its own theme, and no longer honors `#gh-dark-mode-only`). |
 | `staqly-logo-{dark,light}@{512,1024,2048}.png` | PNG exports of the stacked logo, transparent, width in px. |
 | `staqly-logo-horizontal-dark.svg` / `-light.svg` | Horizontal lockup (mark left of the wordmark) for headers and READMEs. |
 | `staqly-logo-horizontal-{dark,light}@{512,1024,2048}.png` | PNG exports of the horizontal lockup. |

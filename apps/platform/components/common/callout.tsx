@@ -1,13 +1,14 @@
-import { CircleAlert, Info, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { CircleAlert, CircleCheck, Info, TriangleAlert, type LucideIcon } from 'lucide-react'
 
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
-type CalloutTone = 'neutral' | 'info' | 'warning' | 'danger'
+type CalloutTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
 const ICONS: Record<CalloutTone, LucideIcon> = {
   neutral: Info,
   info: Info,
+  success: CircleCheck,
   warning: TriangleAlert,
   danger: CircleAlert,
 }

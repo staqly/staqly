@@ -8,8 +8,9 @@
  * dashboard and the Fumadocs preset tune them differently.
  */
 
-/* Classes used by the shared logo. */
+/* Classes used by the shared logo and the provider marks (their colour per theme, the halo on dark tiles). */
 @source './src/logo.tsx';
+@source './src/providers.tsx';
 
 :root {
   --brand: oklch(0.52 0.13 152);

@@ -1,15 +1,28 @@
 /**
- * The welcome wizard (/welcome) keeps two things in this tab while it runs, because connecting an OAuth platform
- * leaves the page: what the person said so far (their name and goal) and where the platform's callback should
- * send them back. Nothing here is a source of truth: the server stores whether the wizard is done.
+ * The welcome wizard (/welcome) keeps two things in this tab while it runs, because Stripe Checkout and an OAuth
+ * platform leave the page: what the person chose so far (the draft) and where the platform's callback should send
+ * them back. Nothing here is a source of truth: the server stores whether the wizard is done.
  */
 import { safeNextPath } from './safe'
 
 export type WelcomeGoal = 'creator' | 'team' | 'agents'
 
+/**
+ * Everything the wizard collects before the workspace has a plan; nothing is written until the end (after
+ * Stripe Checkout when there is no plan yet), then `applied` keeps a reload or an OAuth return from writing twice.
+ */
 export interface WelcomeDraft {
   name?: string
   goal?: WelcomeGoal
+  workspaceName?: string
+  /** Platforms to connect once the workspace is ready (provider ids). */
+  providers?: string[]
+  agent?: 'claude' | 'codex'
+  invites?: { emails: string[]; role: 'admin' | 'editor' | 'viewer' }
+  /** The workspace this draft belongs to: a draft from another workspace is dropped. */
+  workspace?: string
+  // The agent key itself stays in memory only (lib/session-key.ts), never in storage.
+  applied?: { keyCreated: boolean; invited: number; failed: string[] }
 }
 
 const DRAFT = 'staqly:welcome'

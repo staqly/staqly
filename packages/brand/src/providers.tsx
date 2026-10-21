@@ -1,4 +1,5 @@
 import { Workflow, type LucideIcon } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import {
   siBluesky,
   siDevdotto,
@@ -22,7 +23,6 @@ import {
   siTiktok,
   siTumblr,
   siTwitch,
-  siVk,
   siWordpress,
   siX,
   siYoutube,
@@ -37,7 +37,9 @@ import { classes } from './classes'
  * icon here gets a lettered badge in its colour.
  */
 interface Look {
-  icon?: SimpleIcon
+  icon?: SimpleIcon | { title: string; path: string }
+  /** A mark in several colours (Slack): one path per colour on a 24 x 24 box. */
+  parts?: { d: string; color: string }[]
   /** Brand colour as #rrggbb; icons that are black get a neutral treatment in dark mode. */
   color: string
   /** The badge letters when there is no icon. */
@@ -46,11 +48,36 @@ interface Look {
   glyph?: LucideIcon
 }
 
+// ponytail: simple-icons dropped LinkedIn and Slack at the companies' request; their official marks are kept
+// here as paths (the same 24 x 24 box), the only brand marks not taken from simple-icons.
+const LINKEDIN = {
+  title: 'LinkedIn',
+  path: 'M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z',
+}
+const SLACK = [
+  {
+    color: '#E01E5A',
+    d: 'M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z',
+  },
+  {
+    color: '#36C5F0',
+    d: 'M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z',
+  },
+  {
+    color: '#2EB67D',
+    d: 'M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312z',
+  },
+  {
+    color: '#ECB22E',
+    d: 'M15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z',
+  },
+]
+
 const LOOKS: Record<string, Look> = {
   custom: { color: '#22c55e', glyph: Workflow },
   x: { icon: siX, color: '#000000' },
-  linkedin: { color: '#0A66C2', letters: 'in' },
-  linkedin_page: { color: '#0A66C2', letters: 'in' },
+  linkedin: { icon: LINKEDIN, color: '#0A66C2' },
+  linkedin_page: { icon: LINKEDIN, color: '#0A66C2' },
   reddit: { icon: siReddit, color: '#FF4500' },
   instagram: { icon: siInstagram, color: '#FF0069' },
   instagram_standalone: { icon: siInstagram, color: '#FF0069' },
@@ -62,7 +89,7 @@ const LOOKS: Record<string, Look> = {
   pinterest: { icon: siPinterest, color: '#BD081C' },
   dribbble: { icon: siDribbble, color: '#EA4C89' },
   discord: { icon: siDiscord, color: '#5865F2' },
-  slack: { color: '#4A154B', letters: '#' },
+  slack: { parts: SLACK, color: '#4A154B' },
   kick: { icon: siKick, color: '#53FC19' },
   twitch: { icon: siTwitch, color: '#9146FF' },
   mastodon: { icon: siMastodon, color: '#6364FF' },
@@ -71,7 +98,6 @@ const LOOKS: Record<string, Look> = {
   farcaster: { icon: siFarcaster, color: '#855DCD' },
   telegram: { icon: siTelegram, color: '#26A5E4' },
   nostr: { color: '#8E30EB', letters: 'N' },
-  vk: { icon: siVk, color: '#0077FF' },
   medium: { icon: siMedium, color: '#000000' },
   devto: { icon: siDevdotto, color: '#0A0A0A' },
   hashnode: { icon: siHashnode, color: '#2962FF' },
@@ -95,9 +121,35 @@ function isBlack(color: string) {
   return /^#0[0-9a-f]0[0-9a-f]0[0-9a-f]$/i.test(color) || color === '#000000'
 }
 
+/** Relative luminance (0 black, 1 white) of a #rrggbb colour. */
+function luminance(color: string) {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(color.slice(i, i + 2), 16) / 255
+
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+}
+
+/**
+ * The brand colour per theme, as CSS variables for THEMED: a very light one (Kick's green) is deepened on light
+ * backgrounds, a very dark one (Tumblr's slate, MeWe's navy) lifted on dark ones; the rest stay as the brand has them.
+ */
+function themed(color: string): CSSProperties {
+  const l = luminance(color)
+
+  return {
+    '--mark': l > 0.5 ? `color-mix(in oklch, ${color} 65%, black)` : color,
+    '--mark-dark': l < 0.08 ? `color-mix(in oklch, ${color} 45%, white)` : color,
+  } as CSSProperties
+}
+
+const THEMED = 'text-(color:--mark) [.dark_&]:text-(color:--mark-dark)'
+
 /**
  * The provider's brand mark, sized by the `size-*` class you pass (default 16 px). Black marks render in
- * the current text colour so they stay visible on dark backgrounds.
+ * the current text colour so they stay visible on dark backgrounds; others take their colour per theme (themed).
  */
 export function ProviderIcon({ id, name, className }: { id: string; name?: string; className?: string }) {
   const look = providerLook(id)
@@ -109,10 +161,25 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
       <Glyph
         role="img"
         aria-label={name ?? id}
-        className={classes('shrink-0', ['size-4'], className)}
-        style={{ color: look.color }}
+        className={classes(`shrink-0 ${THEMED}`, ['size-4'], className)}
+        style={themed(look.color)}
         strokeWidth={2.25}
       />
+    )
+  }
+
+  if (look.parts) {
+    return (
+      <svg
+        role="img"
+        aria-label={name ?? id}
+        viewBox="0 0 24 24"
+        className={classes('shrink-0', ['size-4'], className)}
+      >
+        {look.parts.map((p) => (
+          <path key={p.color} d={p.d} fill={p.color} />
+        ))}
+      </svg>
     )
   }
 
@@ -122,13 +189,13 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
         role="img"
         aria-label={name ?? id}
         className={classes(
-          'inline-flex shrink-0 items-center justify-center rounded-full text-[0.55em] leading-none font-bold text-white',
+          'inline-flex shrink-0 items-center justify-center rounded-full leading-none font-bold text-white [container-type:size]',
           ['size-4'],
           className,
         )}
         style={{ background: look.color }}
       >
-        {look.letters ?? (name ?? id).slice(0, 1).toUpperCase()}
+        <span className="text-[55cqh]">{look.letters ?? (name ?? id).slice(0, 1).toUpperCase()}</span>
       </span>
     )
   }
@@ -138,8 +205,12 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
       role="img"
       aria-label={name ?? look.icon.title}
       viewBox="0 0 24 24"
-      className={classes('shrink-0', ['size-4'], className)}
-      style={isBlack(look.color) ? undefined : { color: look.color }}
+      className={classes(
+        isBlack(look.color) ? 'shrink-0 text-foreground' : `shrink-0 ${THEMED}`,
+        ['size-4'],
+        className,
+      )}
+      style={isBlack(look.color) ? undefined : themed(look.color)}
       fill="currentColor"
     >
       <path d={look.icon.path} />
@@ -149,17 +220,22 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
 
 /**
  * A round tile with the mark on a tinted background: the "Add channel" grid, channel rows and the stacked
- * avatars on calendar chips (when a channel has no profile picture).
+ * avatars on calendar chips (when a channel has no profile picture). In dark mode a soft white halo sits behind
+ * the mark, so it stands out from the dark tile.
  */
 export function ProviderTile({ id, name, className }: { id: string; name?: string; className?: string }) {
   const look = providerLook(id)
 
   return (
     <span
-      className={classes('inline-flex shrink-0 items-center justify-center', ['size-9', 'rounded-full'], className)}
+      className={classes(
+        'relative isolate inline-flex shrink-0 items-center justify-center [.dark_&]:before:absolute [.dark_&]:before:inset-[18%] [.dark_&]:before:-z-10 [.dark_&]:before:rounded-full [.dark_&]:before:bg-white/15 [.dark_&]:before:blur-[6px]',
+        ['size-9', 'rounded-full'],
+        className,
+      )}
       style={{ background: `color-mix(in oklch, ${look.color} 18%, var(--muted))` }}
     >
-      <ProviderIcon id={id} name={name} className="size-[55%]" />
+      <ProviderIcon id={id} name={name} className="size-[60%]" />
     </span>
   )
 }
