@@ -10,6 +10,7 @@ import {
   CalendarClock,
   Check,
   ChevronsUpDown,
+  Clock,
   CreditCard,
   Gauge,
   Images,
@@ -33,6 +34,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
+import { daysLeft } from '@/components/billing/billing-format'
 import { PlanBadge } from '@/components/plans/plan-badge'
 import { NewWorkspaceDialog } from '@/components/settings/new-workspace-dialog'
 import { UserAvatar } from '@/components/settings/user-avatar'
@@ -67,6 +69,7 @@ import {
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { api, setCsrfToken } from '@/lib/api'
+import { pluralize } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { LIVE_SUBSCRIPTION } from '@/lib/plans'
 import { qk, useBilling, useMode, usePlans, useRole, useSession, useSwitchWorkspace, useUsage } from '@/lib/queries'
@@ -395,6 +398,61 @@ function UserMenu() {
   )
 }
 
+const TRIAL_DAYS = 7
+
+/** In the trial: the days left, counting down, and for owners and admins the way to a plan. */
+function SidebarTrial() {
+  const { isLocal } = useMode()
+  const { canManagePeople } = useRole()
+  const usage = useUsage()
+  const { setOpenMobile } = useSidebar()
+  const [now] = useState(Date.now)
+  const ends = usage.data?.trial_ends_at
+
+  if (isLocal || !ends) {
+    return null
+  }
+
+  const days = daysLeft(ends, now)
+  const left = days === 0 ? 'Your trial ends today' : `${pluralize(days, 'day')} left in your trial`
+
+  return (
+    <div
+      className="mx-2 mb-1 grid gap-2 rounded-lg border border-brand/30 bg-brand-soft/60 p-3 text-xs group-data-[collapsible=icon]:hidden"
+      data-testid="trial-banner"
+    >
+      <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+        <Clock className="size-4 shrink-0 text-brand" aria-hidden /> {left}
+      </p>
+      <div
+        role="progressbar"
+        aria-label="Trial days left"
+        aria-valuemin={0}
+        aria-valuemax={TRIAL_DAYS}
+        aria-valuenow={Math.min(days, TRIAL_DAYS)}
+        className="h-1.5 overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          className="h-full rounded-full bg-brand"
+          style={{ width: `${(Math.min(days, TRIAL_DAYS) / TRIAL_DAYS) * 100}%` }}
+        />
+      </div>
+      <p className="text-muted-foreground">
+        {canManagePeople
+          ? 'Pick a plan to keep posting without a break and get more channels.'
+          : 'Ask an owner or admin to pick a plan before it ends.'}
+      </p>
+      {canManagePeople && (
+        <Button size="sm" asChild onClick={() => setOpenMobile(false)}>
+          <Link href="/plans">
+            <Sparkles /> Upgrade
+          </Link>
+        </Button>
+      )}
+    </div>
+  )
+}
+
 /** Notifications above the user menu, the list beside the sidebar: one panel, never next to another menu. */
 function SidebarNotifications() {
   const notes = useNotifications()
@@ -540,6 +598,7 @@ function AppSidebar() {
       <SidebarFooter className="in-data-[mobile=true]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {/* Theme lives in Settings and ⌘K; collapsing in the sidebar edge (rail) and ⌘B. Phones have the bell in
             the top bar. Plan & usage is in the workspace menu. */}
+        <SidebarTrial />
         <SidebarNotifications />
         <UserMenu />
       </SidebarFooter>
