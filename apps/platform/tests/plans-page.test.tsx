@@ -34,7 +34,10 @@ function render(paying: boolean, trial = paying ? 'none' : 'available') {
 
   const api = mockApi({
     'GET /v1/plans': { data: PLANS },
-    'GET /v1/workspace/usage': usage(paying ? PLANS[1] : PLANS[0]),
+    'GET /v1/workspace/usage': {
+      ...usage(paying ? PLANS[1] : PLANS[0]),
+      trial_ends_at: paying ? null : new Date(Date.now() + 3 * 86_400_000 - 60_000).toISOString(),
+    },
     'GET /v1/billing': {
       enabled: true,
       plan: paying ? 'plus' : 'starter',
@@ -71,6 +74,8 @@ describe('plan picker', () => {
 
     const plus = await screen.findByTestId('plan-plus')
 
+    expect(screen.getByTestId('plans-trial-ends')).toHaveTextContent(/Your free trial ends on .+, in 3 days/)
+    expect(screen.getByRole('link', { name: 'Back' })).toBeInTheDocument()
     expect(within(plus).getByText('€29')).toBeInTheDocument()
     expect(screen.queryByText('Your current plan')).not.toBeInTheDocument() // nothing is paid for yet
     await user.click(screen.getByRole('radio', { name: /yearly/i }))

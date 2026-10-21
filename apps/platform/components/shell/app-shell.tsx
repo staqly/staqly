@@ -417,39 +417,57 @@ function SidebarTrial() {
   const left = days === 0 ? 'Your trial ends today' : `${pluralize(days, 'day')} left in your trial`
 
   return (
-    <div
-      className="mx-2 mb-1 grid gap-2 rounded-lg border border-brand/30 bg-brand-soft/60 p-3 text-xs group-data-[collapsible=icon]:hidden"
-      data-testid="trial-banner"
-    >
-      <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-        <Clock className="size-4 shrink-0 text-brand" aria-hidden /> {left}
-      </p>
+    <>
+      {/* Collapsed sidebar: the clock alone, the days in its tooltip. */}
+      <SidebarMenu className="mb-2 hidden group-data-[collapsible=icon]:flex">
+        <SidebarMenuItem>
+          {canManagePeople ? (
+            <SidebarMenuButton asChild tooltip={`${left}: choose a plan`} className="text-brand">
+              <Link href="/plans" data-testid="trial-icon">
+                <Clock /> <span>{left}</span>
+              </Link>
+            </SidebarMenuButton>
+          ) : (
+            <SidebarMenuButton tooltip={left} className="text-brand" data-testid="trial-icon">
+              <Clock /> <span>{left}</span>
+            </SidebarMenuButton>
+          )}
+        </SidebarMenuItem>
+      </SidebarMenu>
       <div
-        role="progressbar"
-        aria-label="Trial days left"
-        aria-valuemin={0}
-        aria-valuemax={TRIAL_DAYS}
-        aria-valuenow={Math.min(days, TRIAL_DAYS)}
-        className="h-1.5 overflow-hidden rounded-full bg-muted"
+        className="mb-3 grid gap-2 rounded-lg border border-brand/30 bg-brand-soft/60 p-3 text-xs group-data-[collapsible=icon]:hidden"
+        data-testid="trial-banner"
       >
+        <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+          <Clock className="size-4 shrink-0 text-brand" aria-hidden /> {left}
+        </p>
         <div
-          className="h-full rounded-full bg-brand"
-          style={{ width: `${(Math.min(days, TRIAL_DAYS) / TRIAL_DAYS) * 100}%` }}
-        />
+          role="progressbar"
+          aria-label="Trial days left"
+          aria-valuemin={0}
+          aria-valuemax={TRIAL_DAYS}
+          aria-valuenow={Math.min(days, TRIAL_DAYS)}
+          className="h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className="h-full rounded-full bg-brand"
+            style={{ width: `${(Math.min(days, TRIAL_DAYS) / TRIAL_DAYS) * 100}%` }}
+          />
+        </div>
+        <p className="text-muted-foreground">
+          {canManagePeople
+            ? 'Pick a plan to keep posting without a break and get more channels.'
+            : 'Ask an owner or admin to pick a plan before it ends.'}
+        </p>
+        {canManagePeople && (
+          <Button size="sm" asChild onClick={() => setOpenMobile(false)}>
+            <Link href="/plans">
+              <Sparkles /> Upgrade
+            </Link>
+          </Button>
+        )}
       </div>
-      <p className="text-muted-foreground">
-        {canManagePeople
-          ? 'Pick a plan to keep posting without a break and get more channels.'
-          : 'Ask an owner or admin to pick a plan before it ends.'}
-      </p>
-      {canManagePeople && (
-        <Button size="sm" asChild onClick={() => setOpenMobile(false)}>
-          <Link href="/plans">
-            <Sparkles /> Upgrade
-          </Link>
-        </Button>
-      )}
-    </div>
+    </>
   )
 }
 
@@ -566,6 +584,7 @@ function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup className="mt-auto">
+          <SidebarTrial />
           <SidebarGroupLabel>Automation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -598,7 +617,6 @@ function AppSidebar() {
       <SidebarFooter className="in-data-[mobile=true]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {/* Theme lives in Settings and ⌘K; collapsing in the sidebar edge (rail) and ⌘B. Phones have the bell in
             the top bar. Plan & usage is in the workspace menu. */}
-        <SidebarTrial />
         <SidebarNotifications />
         <UserMenu />
       </SidebarFooter>
