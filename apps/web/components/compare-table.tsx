@@ -121,7 +121,7 @@ export function CompareTable() {
             >
               <span className="block text-lg font-semibold tracking-tight text-foreground">Compare plans</span>
               <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                Every plan has unlimited posts, MCP and the REST API.
+                Every plan has unlimited posts, MCP and the REST API. Prices per user, {VAT_NOTE}.
               </span>
               <div className="mt-4">
                 <IntervalToggle value={interval} onChange={setInterval} />
@@ -154,14 +154,13 @@ export function CompareTable() {
                       )}
                     </div>
                     <div className="mt-1.5 text-base font-bold text-foreground">{p.name}</div>
-                    <div className="mt-1 flex items-baseline gap-1 text-foreground">
-                      <span className="text-3xl font-semibold tracking-tight tabular-nums">
-                        {eur(perMonth(p, interval))}
-                      </span>
-                      <span className="text-xs text-muted-foreground">per user / month</span>
+                    {/* Narrow columns: the price, then one short line each, never wrapping into the button. */}
+                    <div className="mt-1 text-3xl font-semibold tracking-tight text-foreground tabular-nums">
+                      {eur(perMonth(p, interval))}
                     </div>
-                    <div className="mt-0.5 h-4 text-xs text-muted-foreground tabular-nums">
-                      {interval === 'year' ? `${eur(p.year)} per user, billed yearly` : 'Billed monthly'}, {VAT_NOTE}
+                    <div className="text-xs whitespace-nowrap text-muted-foreground">per user / month</div>
+                    <div className="mt-2 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-foreground/80 tabular-nums">
+                      {interval === 'year' ? `${eur(p.year)} a year` : 'Billed monthly'}
                     </div>
                     <a
                       href={signupFor(p.id, interval)}
