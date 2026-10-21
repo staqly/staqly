@@ -10,6 +10,7 @@ import {
   CalendarClock,
   Check,
   ChevronsUpDown,
+  Clock,
   CreditCard,
   Gauge,
   Images,
@@ -33,6 +34,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
+import { daysLeft } from '@/components/billing/billing-format'
 import { PlanBadge } from '@/components/plans/plan-badge'
 import { NewWorkspaceDialog } from '@/components/settings/new-workspace-dialog'
 import { UserAvatar } from '@/components/settings/user-avatar'
@@ -57,6 +59,7 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -66,6 +69,7 @@ import {
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { api, setCsrfToken } from '@/lib/api'
+import { pluralize } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { LIVE_SUBSCRIPTION } from '@/lib/plans'
 import { qk, useBilling, useMode, usePlans, useRole, useSession, useSwitchWorkspace, useUsage } from '@/lib/queries'
@@ -87,9 +91,6 @@ const ShellContext = createContext<ShellContextValue>({
   openCommandPalette: () => {},
   openConnectDevice: () => {},
 })
-
-/** Inside the notifications list (beside the user menu). */
-const inNotes = (t: EventTarget | null) => !!(t as Element | null)?.closest?.('[data-notifications]')
 
 export function useShell() {
   return useContext(ShellContext)
@@ -313,10 +314,6 @@ function UserMenu() {
   const detail = (user?.email !== name && user?.email) || (isLocal ? 'This computer' : roleLabel)
   // A local install has no welcome: its empty pages guide instead.
   const showGettingStarted = !isLocal && session.data?.onboarded === false
-  const notes = useNotifications()
-  const [notesOpen, setNotesOpen] = useState(false)
-  // The bell keeps the menu open and shows the list beside it; closing the menu closes the list too.
-  const [menuOpen, setMenuOpen] = useState(false)
   const go = (href: string) => {
     setOpenMobile(false)
     router.push(href)
@@ -325,32 +322,15 @@ function UserMenu() {
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu
-          modal={false}
-          open={menuOpen}
-          onOpenChange={(o) => {
-            setMenuOpen(o)
-
-            if (!o) {
-              setNotesOpen(false)
-            }
-          }}
-        >
+        <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
               tooltip={name}
-              aria-label={`Account menu, ${name}${notes.unread > 0 ? `, ${notes.unread} unread notifications` : ''}`}
+              aria-label={`Account menu, ${name}`}
               data-testid="user-menu-trigger"
-              className="relative"
             >
               <UserAvatar name={name} src={user?.avatar_url} className="size-8 rounded-lg" logo />
-              {notes.unread > 0 && (
-                <span
-                  aria-hidden
-                  className="absolute top-1.5 left-8 size-2.5 rounded-full bg-brand ring-2 ring-sidebar"
-                />
-              )}
               <div className="grid min-w-0 flex-1 text-left leading-tight">
                 <span className="truncate text-sm font-medium" data-testid="user-name">
                   {name}
@@ -364,57 +344,11 @@ function UserMenu() {
             side="top"
             align="start"
             className="w-[min(16rem,calc(100vw-1rem))] [&_[role=menuitem]]:pointer-coarse:min-h-11"
-            data-user-menu=""
-            // Working in the list beside the menu does not close the menu.
-            onInteractOutside={(e) => {
-              if (inNotes(e.target)) {
-                e.preventDefault()
-              }
-            }}
-            onFocusOutside={(e) => {
-              if (inNotes(e.target)) {
-                e.preventDefault()
-              }
-            }}
           >
-            {/* Who is signed in, with the bell beside them: it opens the list next to the menu, which stays open. */}
-            <div className="flex items-center gap-2 pr-1">
-              <DropdownMenuLabel className="grid min-w-0 flex-1 py-2 leading-tight">
-                <span className="truncate text-sm font-semibold text-foreground">{name}</span>
-                <span className="truncate text-xs font-normal text-muted-foreground">{detail}</span>
-              </DropdownMenuLabel>
-              <NotificationsPopover
-                notes={notes}
-                open={notesOpen}
-                onOpenChange={setNotesOpen}
-                side="right"
-                align="start"
-                anchor
-                keepOpenWithin="[data-user-menu]"
-              >
-                <DropdownMenuItem
-                  data-testid="notifications-bell"
-                  aria-label={notes.label}
-                  data-unread={notes.unread}
-                  className="relative size-8 shrink-0 justify-center p-0 pointer-coarse:size-11"
-                  aria-expanded={notesOpen}
-                  onSelect={(e) => {
-                    e.preventDefault()
-                    setNotesOpen((o) => !o)
-                  }}
-                >
-                  <Bell />
-                  {notes.unread > 0 && (
-                    <span
-                      aria-hidden
-                      className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-emerald-700 px-1 text-center text-[10px] leading-4 font-semibold text-white tabular-nums dark:bg-brand dark:text-brand-foreground"
-                    >
-                      {notes.count}
-                    </span>
-                  )}
-                </DropdownMenuItem>
-              </NotificationsPopover>
-            </div>
+            <DropdownMenuLabel className="grid min-w-0 py-2 leading-tight">
+              <span className="truncate text-sm font-semibold text-foreground">{name}</span>
+              <span className="truncate text-xs font-normal text-muted-foreground">{detail}</span>
+            </DropdownMenuLabel>
             {(showGettingStarted || upgradeLabel) && <DropdownMenuSeparator />}
             {/* Until the welcome wizard is finished or skipped: first, outlined so it never reads as the plan row. */}
             {showGettingStarted && (
@@ -459,6 +393,116 @@ function UserMenu() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  )
+}
+
+const TRIAL_DAYS = 7
+
+/** In the trial: the days left, counting down, and for owners and admins the way to a plan. */
+function SidebarTrial() {
+  const { isLocal } = useMode()
+  const { canManagePeople } = useRole()
+  const usage = useUsage()
+  const { setOpenMobile } = useSidebar()
+  const [now] = useState(Date.now)
+  const ends = usage.data?.trial_ends_at
+
+  if (isLocal || !ends) {
+    return null
+  }
+
+  const days = daysLeft(ends, now)
+  const left = days === 0 ? 'Your trial ends today' : `${pluralize(days, 'day')} left in your trial`
+
+  return (
+    <>
+      {/* Collapsed sidebar: the clock alone, the days in its tooltip. */}
+      <SidebarMenu className="mb-2 hidden group-data-[collapsible=icon]:flex">
+        <SidebarMenuItem>
+          {canManagePeople ? (
+            <SidebarMenuButton asChild tooltip={`${left}: choose a plan`} className="text-brand">
+              <Link href="/plans" data-testid="trial-icon">
+                <Clock /> <span>{left}</span>
+              </Link>
+            </SidebarMenuButton>
+          ) : (
+            <SidebarMenuButton tooltip={left} className="text-brand" data-testid="trial-icon">
+              <Clock /> <span>{left}</span>
+            </SidebarMenuButton>
+          )}
+        </SidebarMenuItem>
+      </SidebarMenu>
+      <div
+        className="mb-3 grid gap-2 rounded-lg border border-brand/30 bg-brand-soft/60 p-3 text-xs group-data-[collapsible=icon]:hidden"
+        data-testid="trial-banner"
+      >
+        <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+          <Clock className="size-4 shrink-0 text-brand" aria-hidden /> {left}
+        </p>
+        <div
+          role="progressbar"
+          aria-label="Trial days left"
+          aria-valuemin={0}
+          aria-valuemax={TRIAL_DAYS}
+          aria-valuenow={Math.min(days, TRIAL_DAYS)}
+          className="h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className="h-full rounded-full bg-brand"
+            style={{ width: `${(Math.min(days, TRIAL_DAYS) / TRIAL_DAYS) * 100}%` }}
+          />
+        </div>
+        <p className="text-muted-foreground">
+          {canManagePeople
+            ? 'Pick a plan to keep posting without a break and get more channels.'
+            : 'Ask an owner or admin to pick a plan before it ends.'}
+        </p>
+        {canManagePeople && (
+          <Button size="sm" asChild onClick={() => setOpenMobile(false)}>
+            <Link href="/plans">
+              <Sparkles /> Upgrade
+            </Link>
+          </Button>
+        )}
+      </div>
+    </>
+  )
+}
+
+/** Notifications above the user menu, the list beside the sidebar: one panel, never next to another menu. */
+function SidebarNotifications() {
+  const notes = useNotifications()
+  const [open, setOpen] = useState(false)
+
+  return (
+    <SidebarMenu className="in-data-[mobile=true]:hidden">
+      <SidebarMenuItem>
+        <NotificationsPopover notes={notes} open={open} onOpenChange={setOpen} side="right" align="end">
+          <SidebarMenuButton
+            tooltip="Notifications"
+            aria-label={notes.label}
+            data-testid="notifications-bell"
+            data-unread={notes.unread}
+            isActive={open}
+            className="relative"
+          >
+            <Bell />
+            <span>Notifications</span>
+            {notes.unread > 0 && (
+              <span
+                aria-hidden
+                className="absolute top-1 left-5 hidden size-2 rounded-full bg-brand ring-2 ring-sidebar group-data-[collapsible=icon]:block"
+              />
+            )}
+          </SidebarMenuButton>
+        </NotificationsPopover>
+        {notes.unread > 0 && (
+          <SidebarMenuBadge className="rounded-full bg-brand-soft px-1.5 text-brand-strong">
+            {notes.count}
+          </SidebarMenuBadge>
+        )}
       </SidebarMenuItem>
     </SidebarMenu>
   )
@@ -540,6 +584,7 @@ function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup className="mt-auto">
+          <SidebarTrial />
           <SidebarGroupLabel>Automation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -570,8 +615,9 @@ function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="in-data-[mobile=true]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-        {/* Theme lives in Settings and ⌘K; collapsing in the sidebar edge (rail) and ⌘B. Notifications open from
-            the user menu on desktop; phones have the bell in the top bar. Plan & usage is in the workspace menu. */}
+        {/* Theme lives in Settings and ⌘K; collapsing in the sidebar edge (rail) and ⌘B. Phones have the bell in
+            the top bar. Plan & usage is in the workspace menu. */}
+        <SidebarNotifications />
         <UserMenu />
       </SidebarFooter>
       <SidebarRail />

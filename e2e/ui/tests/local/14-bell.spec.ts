@@ -14,11 +14,10 @@ test.describe('notification bell', () => {
 
     await page.goto('/schedule')
     await ready(page, 'Schedule')
-    // On desktop the unread count rides on the user menu, which opens the list.
-    const bell = page.getByTestId('user-menu-trigger')
+    const bell = page.locator('[data-testid=notifications-bell]:visible')
 
     // Other seeded runs may be unread too: at least this one.
-    await expect(bell).toHaveAttribute('aria-label', /\d+ unread notifications/)
+    await expect(bell).toHaveAttribute('aria-label', /\d+ unread/)
     await openNotifications(page)
     const list = page.getByTestId('notifications-list')
     const row = list.getByRole('listitem').filter({ hasText: `“${title}” was published` })
@@ -26,7 +25,7 @@ test.describe('notification bell', () => {
     await expect(row).toBeVisible()
     // Still unread while the list is open (the row carries a dot); Mark all as read clears the count, also after a
     // reload.
-    await expect(bell).toHaveAttribute('aria-label', /\d+ unread notifications/)
+    await expect(bell).toHaveAttribute('aria-label', /\d+ unread/)
     await expect(row.getByRole('img', { name: 'New' })).toBeVisible()
     await page.getByRole('button', { name: 'Mark all as read' }).click()
     await expect(bell).not.toHaveAttribute('aria-label', /unread/)

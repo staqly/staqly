@@ -244,16 +244,8 @@ export function routes({
     {
       name: 'bell',
       path: '/schedule',
-      // Phones: the top bar bell; wider screens: Notifications in the user menu.
-      open: async (p) => {
-        if ((await p.locator('[data-testid=notifications-bell]:visible').count()) > 0) {
-          return click(p, '[data-testid=notifications-bell]:visible')
-        }
-
-        await click(p, '[data-testid=user-menu-trigger]')
-        await p.getByRole('menuitem', { name: /Notifications/ }).click()
-        await p.waitForTimeout(400)
-      },
+      // Phones: the top bar bell; wider screens: Notifications in the sidebar.
+      open: (p) => click(p, '[data-testid=notifications-bell]:visible'),
     },
     { name: 'welcome', path: '/welcome' },
     { name: 'login', path: '/login', public: true, local: true },

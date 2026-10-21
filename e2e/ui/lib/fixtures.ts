@@ -130,16 +130,7 @@ export async function apiKeySignIn(page: Page, key: string, next = '/schedule'):
   await page.goto(next)
 }
 
-/** Opens the notifications list: the bell in the phone top bar, or Notifications in the desktop user menu. */
+/** Opens the notifications list: the bell in the phone top bar, or Notifications in the desktop sidebar. */
 export async function openNotifications(page: Page): Promise<void> {
-  const bell = page.locator('[data-testid=notifications-bell]:visible')
-
-  if ((await bell.count()) > 0) {
-    await bell.first().click()
-
-    return
-  }
-
-  await page.getByTestId('user-menu-trigger').click()
-  await page.getByRole('menuitem', { name: /Notifications/ }).click()
+  await page.locator('[data-testid=notifications-bell]:visible').first().click()
 }

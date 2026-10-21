@@ -24,6 +24,7 @@ import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { Callout } from '@/components/common/callout'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { FilterButton } from '@/components/common/filter-button'
@@ -42,6 +43,7 @@ import {
   folderAndBelow,
   folderPath,
   isExternalFileDrag,
+  LIBRARY,
   LibraryPane,
   LibrarySheet,
   type Place,
@@ -95,6 +97,61 @@ const TagsDialog = dynamic(() => import('@/components/media/media-tags-dialog').
 
 const PAGE = 60
 const WEEK = 7 * 24 * 3600 * 1000
+
+/** Each library view: the line under its title and what it says while empty (upload: offers Upload files). */
+const VIEWS: Record<string, { about: string; title: string; description: string; upload?: boolean }> = {
+  all: {
+    about: 'Pictures, videos and audio for your posts. Drop or paste files to upload.',
+    title: 'No media yet',
+    description:
+      'Upload pictures, videos and audio once and use them in any post. Drop files here, paste them or pick them.',
+    upload: true,
+  },
+  recent: {
+    about: 'Files uploaded in the last 7 days, newest first.',
+    title: 'Nothing uploaded this week',
+    description: 'Files you upload show up here for 7 days, so the latest ones are easy to find.',
+    upload: true,
+  },
+  image: {
+    about: 'Pictures and GIFs in the library.',
+    title: 'No images yet',
+    description: 'Upload pictures or GIFs once and use them in any post.',
+    upload: true,
+  },
+  video: {
+    about: 'Videos in the library.',
+    title: 'No videos yet',
+    description: 'Upload a video once and use it in any post.',
+    upload: true,
+  },
+  audio: {
+    about: 'Audio files in the library.',
+    title: 'No audio yet',
+    description: 'Upload music, voice-overs or podcast clips once and use them in any post.',
+    upload: true,
+  },
+  unused: {
+    about: 'Files no post uses. Safe to clean up.',
+    title: 'Nothing unused',
+    description: 'Every file in the library is used in at least one post.',
+  },
+  duplicates: {
+    about: 'The same file uploaded more than once. Keep one copy, the rest move to Deleted.',
+    title: 'No duplicates',
+    description: 'Every file in the library is uploaded only once.',
+  },
+  deleted: {
+    about: 'Files you deleted. Restore one to bring it back.',
+    title: 'Nothing deleted',
+    description: 'Files you delete wait here for 30 days, so you can restore them before they go for good.',
+  },
+  [ROOT]: {
+    about: 'Files in no folder.',
+    title: 'No files outside folders',
+    description: 'Every file is in a folder. Drop files on / to take them out.',
+  },
+}
 const KINDS: Place[] = ['image', 'video', 'audio']
 const NO_FOLDERS: MediaFolder[] = []
 const NO_ITEMS: MediaLibraryItem[] = []
@@ -537,10 +594,8 @@ export function MediaPage() {
         <h1 className="truncate text-xl font-semibold tracking-tight" data-testid="media-place">
           {folder ? folder.name : placeLabel(folders, place)}
         </h1>
-        {place === 'all' ? (
-          <p className="truncate text-sm text-muted-foreground">
-            Pictures, videos and audio for your posts. Drop or paste files to upload.
-          </p>
+        {!folder && VIEWS[place] ? (
+          <p className="truncate text-sm text-muted-foreground">{VIEWS[place].about}</p>
         ) : (
           folder && (
             // Where the folder sits: All files / parent / ... / this one; every step but the current one opens it.
@@ -731,33 +786,26 @@ export function MediaPage() {
           title: 'This folder is empty',
           description: 'Drag files onto the folder on the left, or select files and choose Move to folder.',
         }
-      : place === ROOT
-        ? {
-            title: 'No files outside folders',
-            description: 'Every file is in a folder. Drop files on Root to take them out.',
-          }
-        : place === 'unused'
-          ? { title: 'Nothing unused', description: 'Every file is used in a post.' }
-          : place === 'all'
-            ? {
-                title: 'No media yet',
-                description:
-                  'Upload pictures, videos and audio once and use them in any post. Drop files here, paste them or pick them.',
-              }
-            : { title: `No ${placeLabel(folders, place).toLowerCase()}`, description: 'Nothing here yet.' }
+      : (VIEWS[place] ?? { title: 'Nothing here', description: 'No files here yet.' })
+
+  const EmptyIcon = (!searching && !folder && LIBRARY.find((l) => l.key === place)?.icon) || Images
 
   const content = isLoading ? (
-    <SkeletonList count={6} className="h-40 rounded-xl" />
+    // A view opened the first time loads in a blink: the placeholders only fade in if it takes longer, so they never flash.
+    <div className="grid animate-in gap-4 fade-in [animation-delay:300ms] [animation-fill-mode:both]">
+      <SkeletonList count={6} className="h-40 rounded-xl" />
+    </div>
   ) : error ? (
     <ErrorState error={error} onRetry={() => refetch()} />
   ) : items.length === 0 ? (
     <EmptyState
-      icon={<Images />}
+      icon={<EmptyIcon />}
       title={empty.title}
       description={empty.description}
       action={
         !searching &&
-        place === 'all' &&
+        !folder &&
+        VIEWS[place]?.upload &&
         canWrite && (
           <Button onClick={() => input.current?.click()}>
             <Upload /> Upload files
@@ -835,16 +883,19 @@ export function MediaPage() {
             in view (sticky) under a long one. */}
         <div className="flex flex-1 flex-col px-4 py-4 sm:px-6">
           {trash && items.length > 0 && (
-            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-              <p className="min-w-0 flex-1 text-muted-foreground">
-                Files here are deleted for good after 30 days and still count toward your storage until then.
-              </p>
-              {canWrite && (
-                <Button variant="outline" onClick={() => setPurgingIds([])} disabled={purging}>
-                  <Trash2 /> Empty Deleted
-                </Button>
-              )}
-            </div>
+            <Callout
+              tone="warning"
+              className="mb-4 items-center"
+              action={
+                canWrite && (
+                  <Button variant="outline" size="sm" onClick={() => setPurgingIds([])} disabled={purging}>
+                    <Trash2 /> Empty Deleted
+                  </Button>
+                )
+              }
+            >
+              Files here are deleted for good after 30 days and still count toward your storage until then.
+            </Callout>
           )}
           {content}
           {actionBar}
