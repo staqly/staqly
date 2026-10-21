@@ -74,8 +74,7 @@ export default function AgentsPage() {
     <main id="main" className="flex-1">
       <PageHero eyebrow="Agents" title="Give your agent a calendar to write into.">
         <p className="mt-5 max-w-2xl text-lg text-muted-foreground">
-          Staqly speaks MCP. Add it to Claude Code, Codex, OpenCode, Cursor or any MCP client and your agent can write
-          posts with a version per channel, schedule them, and refill a collection when its schedule runs dry.
+          Add Staqly to Claude Code, Codex or Cursor in one line. Your agent writes the posts, Staqly puts them on time.
         </p>
         <CtaButtons />
       </PageHero>
