@@ -50,7 +50,7 @@ wants its access token, which it prints when it starts. Put it in `STAQLY_API_KE
 ```ts
 import { Staqly } from "@staqly/sdk";
 
-const staqly = new Staqly(); // http://localhost:3333, the token from STAQLY_API_KEY
+const staqly = new Staqly(); // $STAQLY_API_URL (Staqly Cloud: https://app.staqly.ai; default http://localhost:3333) and $STAQLY_API_KEY
 
 const [channel] = await staqly.channels.list(); // connected in the dashboard
 const post = await staqly.posts.create({

@@ -5,12 +5,14 @@ import { ArrowLeft, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
+import { Callout } from '@/components/common/callout'
 import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ApiError, errorMessage, setCsrfToken, type EmailCodeSent } from '@/lib/api'
 import { safeNextPath } from '@/lib/safe'
 import { rememberApiKey } from '@/lib/session-key'
+import { cn } from '@/lib/utils'
 
 /** Plain words for the errors of sending and checking a code. */
 export function codeErrorMessage(err: unknown): string {
@@ -185,6 +187,7 @@ export function EmailCodeForm({
   compact?: boolean
 }) {
   const [code, setCode] = useState('')
+  const [focused, setFocused] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [resendAt, setResendAt] = useState(() => Date.now() + sent.resend_in * 1000)
@@ -262,32 +265,51 @@ export function EmailCodeForm({
           <FieldLabel htmlFor="sign-in-code" required>
             Code
           </FieldLabel>
-          <Input
-            id="sign-in-code"
-            ref={input}
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]*"
-            placeholder="123456"
-            className={
-              compact
-                ? 'text-center font-mono tracking-[0.4em] placeholder:tracking-[0.4em]'
-                : 'h-12 text-center font-mono text-2xl tracking-[0.5em] placeholder:tracking-[0.5em]'
-            }
-            value={code}
-            aria-invalid={!!error}
-            aria-required
-            onChange={(e) => {
-              const digits = e.target.value.replace(/\D/g, '').slice(0, 6)
+          {/* Six boxes, one per digit, under one real input (typing, paste and the phone's code autofill all work). */}
+          <div className="relative">
+            <div aria-hidden className="grid grid-cols-6 gap-2">
+              {Array.from({ length: 6 }, (_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'flex items-center justify-center rounded-lg border bg-background font-mono font-semibold tabular-nums shadow-xs transition-colors',
+                    compact ? 'h-10 text-lg' : 'h-14 text-2xl',
+                    error && 'border-destructive',
+                    focused && i === Math.min(code.length, 5) && 'border-brand ring-3 ring-brand/25',
+                  )}
+                >
+                  {code[i] ?? ''}
+                </div>
+              ))}
+            </div>
+            <Input
+              id="sign-in-code"
+              ref={input}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              className="absolute inset-0 h-full rounded-lg border-0 bg-transparent text-transparent caret-transparent shadow-none outline-none selection:bg-transparent focus-visible:border-0 focus-visible:ring-0 aria-invalid:ring-0 dark:bg-transparent"
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              value={code}
+              aria-invalid={!!error}
+              aria-required
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, '').slice(0, 6)
 
-              setCode(digits)
+                setCode(digits)
 
-              if (digits.length === 6) {
-                submit(digits)
-              }
-            }}
-          />
-          {notice && !error ? <FieldDescription role="status">{notice}</FieldDescription> : null}
+                if (digits.length === 6) {
+                  submit(digits)
+                }
+              }}
+            />
+          </div>
+          {notice && !error ? (
+            <Callout tone="success" size="xs" role="status">
+              {notice}
+            </Callout>
+          ) : null}
           <FieldError>{error}</FieldError>
         </Field>
         <Button

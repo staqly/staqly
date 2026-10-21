@@ -82,6 +82,43 @@ func (q *Queries) InsertStripeEvent(ctx context.Context, arg InsertStripeEventPa
 	return result.RowsAffected()
 }
 
+const listBillingToReconcile = `-- name: ListBillingToReconcile :many
+SELECT id, stripe_customer_id FROM workspaces
+WHERE stripe_customer_id IS NOT NULL AND stripe_customer_id <> ''
+  AND (subscription_status IS NULL OR plan_expires_at < ?1)
+ORDER BY id LIMIT 500
+`
+
+type ListBillingToReconcileRow struct {
+	ID               string         `json:"id"`
+	StripeCustomerID sql.NullString `json:"stripe_customer_id"`
+}
+
+// Workspaces whose plan may be out of date with Stripe (a webhook lost or not yet in): a customer without a
+// subscription on record (a checkout that may have completed), or a plan whose period has ended.
+func (q *Queries) ListBillingToReconcile(ctx context.Context, now sql.NullString) ([]ListBillingToReconcileRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBillingToReconcile, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBillingToReconcileRow
+	for rows.Next() {
+		var i ListBillingToReconcileRow
+		if err := rows.Scan(&i.ID, &i.StripeCustomerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setStripeCustomer = `-- name: SetStripeCustomer :exec
 UPDATE workspaces SET stripe_customer_id = ?, updated_at = ? WHERE id = ?
 `

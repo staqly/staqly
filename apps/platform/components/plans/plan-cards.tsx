@@ -10,7 +10,7 @@ export { money }
 
 export const EVERY_PLAN = 'Signed webhooks, full history and MCP on every plan'
 
-const TAGLINES: Record<string, string> = {
+export const TAGLINES: Record<string, string> = {
   starter: 'For one creator and a few accounts.',
   plus: 'For a creator or a small team posting every day.',
   pro: 'For teams and agents running many channels.',
@@ -18,7 +18,7 @@ const TAGLINES: Record<string, string> = {
 }
 
 /** The price per month shown on a card: billed monthly, or the yearly price spread over twelve months. */
-function monthly(plan: Plan, interval: BillingInterval) {
+export function monthly(plan: Plan, interval: BillingInterval) {
   return interval === 'year' ? Math.round((plan.price_year / 12) * 100) / 100 : plan.price_month
 }
 

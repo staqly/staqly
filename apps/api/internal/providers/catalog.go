@@ -37,7 +37,6 @@ func init() {
 		{"farcaster", "Farcaster", AuthToken, Limits{MaxChars: 320, MaxMedia: 2, MediaKinds: img}},
 		{"telegram", "Telegram", AuthToken, Limits{MaxChars: 4096, MaxMedia: 10, MediaKinds: imgVid}},
 		{"nostr", "Nostr", AuthToken, Limits{MaxChars: 0, MaxMedia: 4, MediaKinds: img}},
-		{"vk", "VK", AuthOAuth2, Limits{MaxChars: 16000, MaxMedia: 10, MediaKinds: imgVid}},
 		{"medium", "Medium", AuthToken, Limits{MaxChars: 0, MaxMedia: 1, MediaKinds: img, NeedsTitle: true}},
 		{"devto", "Dev.to", AuthToken, Limits{MaxChars: 0, MaxMedia: 1, MediaKinds: img, NeedsTitle: true}},
 		{"hashnode", "Hashnode", AuthToken, Limits{MaxChars: 0, MaxMedia: 1, MediaKinds: img, NeedsTitle: true}},

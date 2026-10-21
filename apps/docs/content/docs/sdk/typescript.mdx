@@ -27,10 +27,17 @@ The package is ESM-only. CommonJS code can still `require('@staqly/sdk')` on Nod
 
 </Step>
 <Step>
-### Start staqly
+### Point it at staqly
 
-Run a server on your computer with [`staqly serve`](/cli#run-the-server) (or Docker) and give
-the SDK its access token, which staqly prints at start, in `STAQLY_API_KEY`:
+**Staqly Cloud:** create an API key (**Integrations → API keys**) and set both variables:
+
+```bash
+export STAQLY_API_URL=https://app.staqly.ai
+export STAQLY_API_KEY=stk_...
+```
+
+**Community Edition:** run [`staqly serve`](/cli#run-the-server) (or Docker); the SDK's default
+address is `http://localhost:3333`, and its key is the access token staqly prints at start:
 
 ```bash
 export STAQLY_API_KEY=$(staqly serve token)   # Docker: $(docker exec staqly server token)
@@ -43,7 +50,7 @@ export STAQLY_API_KEY=$(staqly serve token)   # Docker: $(docker exec staqly ser
 ```ts title="publish.ts"
 import { Staqly } from '@staqly/sdk'
 
-const staqly = new Staqly() // http://localhost:3333, the token from STAQLY_API_KEY
+const staqly = new Staqly() // $STAQLY_API_URL (default http://localhost:3333) and $STAQLY_API_KEY
 
 const channel = await staqly.channels.connect({ provider: 'custom', name: 'My publisher' })
 await staqly.collections.create({ name: 'Product updates' })

@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
 
-import { useSession } from '@/lib/queries'
+import { useBilling, useRole, useSession, useUsage } from '@/lib/queries'
 
 /** A local install has no welcome: /welcome opens the calendar there, whose empty state guides instead. */
 export function NoWelcomeLocally({ children }: { children: ReactNode }) {
@@ -38,4 +38,29 @@ export function WelcomeGate({ children }: { children: ReactNode }) {
   }, [pending, router])
 
   return pending ? null : children
+}
+
+/**
+ * Cloud with billing: the account owner of a workspace that never had a plan goes to the welcome (its last step is
+ * the plan) before any of the app renders, so the sidebar never flashes. Billing is asked only for a locked
+ * workspace; others wait just for the usage, which the app reads anyway.
+ */
+export function NoPlanGate({ children }: { children: ReactNode }) {
+  const session = useSession()
+  const { accountOwner } = useRole()
+  const router = useRouter()
+  const cloudOwner = session.data?.mode === 'cloud' && accountOwner
+  const usage = useUsage()
+  const locked = cloudOwner && !!usage.data?.suspended
+  const billing = useBilling({ enabled: locked })
+  const toWelcome = locked && !!billing.data?.enabled && !billing.data.subscription_status
+  const waiting = cloudOwner && (usage.isPending || (locked && billing.isPending))
+
+  useEffect(() => {
+    if (toWelcome) {
+      router.replace('/welcome')
+    }
+  }, [toWelcome, router])
+
+  return waiting || toWelcome ? null : children
 }

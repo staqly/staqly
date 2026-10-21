@@ -43,7 +43,7 @@ The compare page on staqly.ai lists the same limits side by side.
 
 ## The Starter trial
 
-1. A new workspace has no plan yet: the welcome steps (or the banner on every page) offer
+1. A new workspace has no plan yet and doesn't open until it has one: the last welcome step offers
    **Starter free for 7 days**. The trial is Stripe's: you add a card at checkout, nothing is
    charged until it ends, and you can cancel anytime before. Only Starter has a trial; Plus, Pro and
    Business are paid from the first day.
@@ -51,14 +51,15 @@ The compare page on staqly.ai lists the same limits side by side.
    add while another of yours is still in its trial is charged on the day you choose its plan (the plan
    picker says so under the button, before Stripe opens). `GET /v1/billing` reports it as `trial`:
    `available`, `used`, `other_workspace` or `none`.
-3. A workspace you add (**New workspace**) opens on the plan picker; cancelling Stripe's checkout brings
-   you back to it.
+3. A workspace you add (**New workspace**) opens on the welcome steps, the plan last; cancelling Stripe's
+   checkout brings you back to that step.
 4. Choose a plan any time: **Settings → Plan & usage → Choose a plan**, the user menu, or
    `POST /v1/billing/checkout` with the plan and interval.
 5. Until a plan starts, and after one ends (a trial cancelled for want of a card, an unpaid renewal,
-   a cancellation), the workspace is **read-only**:
-   - you can still **read and export** everything (dashboard, `GET` requests, read-only MCP
-     tools, the workspace export);
+   a cancellation), the workspace is **locked**:
+   - the dashboard shows only that, with **Go to billing** (Settings → Plan & usage) for owners and
+     admins; paying there opens it again as soon as Stripe confirms;
+   - the API still answers reads (`GET` requests, read-only MCP tools, the workspace export);
    - every change (new posts, publishing, channels, schedules and so on) answers
      **402 `plan_expired`**, and schedules stop running;
    - your data stays; paying for a plan lifts the suspension when Stripe confirms.

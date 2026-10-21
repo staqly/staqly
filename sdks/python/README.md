@@ -48,7 +48,7 @@ wants its access token, which it prints when it starts. Put it in `STAQLY_API_KE
 ```python
 from staqly import Staqly
 
-staqly = Staqly()  # http://localhost:3333, the token from STAQLY_API_KEY
+staqly = Staqly()  # $STAQLY_API_URL (Staqly Cloud: https://app.staqly.ai; default http://localhost:3333) and $STAQLY_API_KEY
 
 channel = staqly.channels.list()[0]  # connected in the dashboard
 post = staqly.posts.create(

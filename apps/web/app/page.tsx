@@ -63,7 +63,7 @@ function Hero() {
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground">
             Plan a month of posts in one sitting with Claude Code, Codex or n8n. Staqly publishes each one when your
-            audience is online: on X today, with Instagram, TikTok and YouTube on the way.
+            audience is online, on every platform you use.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <a href={SIGNUP} className={btnPrimary}>
@@ -130,32 +130,19 @@ function Channels() {
     <section id="channels" className={`${wrap} scroll-mt-16 py-14 sm:py-20`}>
       <div className="max-w-2xl">
         <Eyebrow>Channels</Eyebrow>
-        <H2>X today. Any platform through your automation.</H2>
+        <H2>Every platform your audience is on.</H2>
         <p className="mt-4 text-muted-foreground">
-          Post to X directly. Reach any other platform through n8n or a script of yours, with more native platforms on
-          the way.
+          Post to X directly, and to every other platform through your own n8n workflow or script.
         </p>
       </div>
       <ul className="mt-8 grid grid-cols-2 gap-3 sm:mt-12 sm:grid-cols-3 lg:grid-cols-4">
-        {channelsLive.map(([id, name]) => (
+        {[...channelsLive, ...channelsSoon].map(([id, name]) => (
           <li
             key={id}
             className="flex h-14 min-w-0 items-center gap-3 rounded-2xl border border-[color-mix(in_oklch,var(--brand)_40%,transparent)] bg-card px-4 font-semibold tracking-tight"
           >
             <ProviderTile id={id} name={name} className="size-8 shrink-0 rounded-lg" />
             <span className="truncate">{name}</span>
-          </li>
-        ))}
-        {channelsSoon.map(([id, name]) => (
-          <li
-            key={id}
-            className="flex h-14 min-w-0 items-center gap-3 rounded-2xl border border-dashed border-border px-4 font-semibold tracking-tight text-muted-foreground"
-          >
-            <ProviderTile id={id} name={name} className="size-8 shrink-0 rounded-lg" />
-            <span className="truncate">{name}</span>
-            <span className="ml-auto shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium">
-              Soon
-            </span>
           </li>
         ))}
       </ul>
@@ -493,7 +480,7 @@ const faqs: [string, string][] = [
   ],
   [
     'Which platforms can it publish to?',
-    'Today X, and any other platform through your own automation: an n8n workflow or a script that publishes the post and sends the link back. Instagram, TikTok, YouTube, LinkedIn and the other platforms on the channel list are not available yet; the composer already knows their limits and settings, so posts for them can be prepared.',
+    "X directly, and Instagram, TikTok, YouTube, LinkedIn and every other platform through your own automation: an n8n workflow or a script that publishes the post and sends the link back. The composer knows each platform's limits and settings.",
   ],
   [
     'Can I use it without an AI agent?',
