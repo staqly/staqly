@@ -1,6 +1,9 @@
 import { Logo } from '@staqly/brand/logo'
 import { Bot, CalendarClock, Send } from 'lucide-react'
 
+import { env } from '@/lib/env'
+import { cn } from '@/lib/utils'
+
 const FEATURES = [
   {
     Icon: Send,
@@ -19,13 +22,29 @@ const FEATURES = [
   },
 ]
 
+// The logo leads to the landing page, which is another site: a plain link, not next/link.
+function HomeLogo({ className }: { className?: string }) {
+  return (
+    <a
+      href={env.siteUrl}
+      aria-label="Staqly home"
+      className={cn(
+        'flex min-h-11 w-fit items-center rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+        className,
+      )}
+    >
+      <Logo className="text-lg" markClassName="size-8" />
+    </a>
+  )
+}
+
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-svh lg:grid-cols-[1.05fr_1fr]">
       <aside className="relative hidden overflow-hidden border-r bg-sidebar lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_left,black_30%,transparent_75%)]" />
         <div className="pointer-events-none absolute -top-32 -left-32 size-96 rounded-full bg-brand/20 blur-3xl" />
-        <Logo className="relative text-lg" markClassName="size-8" />
+        <HomeLogo className="relative" />
         <div className="relative max-w-lg">
           {/* A tagline, not the page's heading: the form beside it has the one h1 ("Sign in..."). */}
           <p className="text-4xl leading-[1.1] font-semibold tracking-tight text-balance">
@@ -49,18 +68,15 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
             ))}
           </ul>
         </div>
-        <div className="relative text-xs text-muted-foreground">
-          Open source · Works with Claude Code, Codex and n8n · Your channels, your data
-        </div>
+        {/* Keeps the tagline centred: the aside lays out logo, copy and this spacer with justify-between. */}
+        <div aria-hidden />
       </aside>
       <main className="relative isolate flex min-h-svh flex-col items-center justify-center overflow-x-clip px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-10">
         <div
           aria-hidden
           className="pointer-events-none absolute top-[-160px] left-1/2 -z-10 h-[360px] w-[140vw] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(60_235_122/0.13),transparent)] blur-2xl lg:hidden"
         />
-        <div className="mb-8 lg:hidden">
-          <Logo className="text-lg" markClassName="size-8" />
-        </div>
+        <HomeLogo className="mb-8 lg:hidden" />
         <div className="w-full max-w-md">{children}</div>
       </main>
     </div>

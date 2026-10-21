@@ -135,8 +135,9 @@ export function Providers({ children }: { children: ReactNode }) {
     }
   })
 
+  // Dark until the user picks otherwise in the theme menu (light, dark or system).
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <QueryClientProvider client={client}>
         <TooltipProvider delayDuration={300}>
           {children}
