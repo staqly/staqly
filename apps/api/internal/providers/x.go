@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -39,7 +41,7 @@ func init() {
 	Register(X{NewBase("x", "X", AuthOAuth2, Limits{MaxChars: 280, MaxMedia: 4, MediaKinds: []string{"image", "gif", "video"},
 		// The X API bills a post with a link at a higher rate and X shows it to fewer people: links never reach
 		// X as links. They are removed, or kept as readable text (example[.]com) if the channel says so.
-		Links: LinksRemove, LinkModes: []string{LinksRemove, LinksDefang}})}, StatusAvailable)
+		Links: LinksRemove, LinkModes: []string{LinksRemove, LinksDefang}, XWeighted: true})}, StatusAvailable)
 }
 
 func (X) SettingsFields() []Field {
@@ -243,6 +245,7 @@ var _ MetricsReader = X{}
 func (X) Metrics(ctx context.Context, c Credentials, externalID string) (Metrics, error) {
 	var out struct {
 		Data struct {
+			ID            string `json:"id"`
 			PublicMetrics struct {
 				Impressions int64 `json:"impression_count"`
 				Likes       int64 `json:"like_count"`
@@ -261,6 +264,9 @@ func (X) Metrics(ctx context.Context, c Credentials, externalID string) (Metrics
 	req.Header.Set("Authorization", "Bearer "+c["access_token"])
 	if err := xDo(ctx, req, &out); err != nil {
 		return Metrics{}, err
+	}
+	if out.Data.ID == "" { // X answers 200 with only an errors list for a post that is gone
+		return Metrics{}, &Failure{Kind: ErrRejected, Msg: "X: the post is not there any more"}
 	}
 	m := out.Data.PublicMetrics
 	return Metrics{Impressions: &m.Impressions, Likes: &m.Likes, Reposts: &m.Reposts, Replies: &m.Replies,
@@ -328,13 +334,55 @@ func (x X) tweet(ctx context.Context, c Credentials, p PostContent, s Settings, 
 		} `json:"data"`
 	}
 	if err := xDo(ctx, req, &out); err != nil {
-		return Result{}, err
+		// A retry after a lost answer (a restart, the job's time ran out) is refused as a duplicate: when the
+		// account's latest posts hold this text, that is the post, published.
+		if !strings.Contains(err.Error(), xDuplicateMsg) {
+			return Result{}, err
+		}
+		id := x.recentWithText(ctx, token, c["user_id"], p.Text)
+		if id == "" {
+			return Result{}, err
+		}
+		out.Data.ID = id
 	}
 	user := c["username"]
 	if user == "" {
 		user = "i/web"
 	}
 	return Result{ExternalID: out.Data.ID, URL: "https://x.com/" + user + "/status/" + out.Data.ID}, nil
+}
+
+const xDuplicateMsg = "this text was already posted"
+
+var xTrailingLink = regexp.MustCompile(`(\s*https://t\.co/\S+)+$`)
+
+// recentWithText finds the account's latest post with this text ("" when none or X can't be asked). X writes
+// &, < and > as entities and appends a t.co link for attached media.
+func (X) recentWithText(ctx context.Context, token, userID, text string) string {
+	if userID == "" {
+		return ""
+	}
+	var out struct {
+		Data []struct {
+			ID   string `json:"id"`
+			Text string `json:"text"`
+		} `json:"data"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, xAPI+"/2/users/"+url.PathEscape(userID)+"/tweets?max_results=5", nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	if xDo(ctx, req, &out) != nil {
+		return ""
+	}
+	want := strings.TrimSpace(text)
+	for _, t := range out.Data {
+		if strings.TrimSpace(xTrailingLink.ReplaceAllString(html.UnescapeString(t.Text), "")) == want {
+			return t.ID
+		}
+	}
+	return ""
 }
 
 // upload sends one file: pictures in a single request, videos (and GIFs) in 1 MiB chunks, then waits
@@ -507,7 +555,7 @@ func xError(status int, body string) error {
 	case status >= 500, has("Service Unavailable"):
 		return &Failure{Msg: fmt.Sprintf("X is unavailable (%d); staqly tries again in a few minutes", status)}
 	case has("duplicate"), has("You are not allowed to create a Tweet"):
-		return rejected("this text was already posted; change it and try again")
+		return rejected(xDuplicateMsg + "; change it and try again")
 	case has("usage-capped"):
 		return rejected("the app reached its monthly X API cap")
 	case has("user-suspended"):

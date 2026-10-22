@@ -690,6 +690,11 @@ func (s *Service) planPageURL() string {
 
 // liveSubscription: statuses in which the customer still has (or is about to
 // have) a paid plan.
+// cancellableSubscription: any status but the two that are over for good.
+func cancellableSubscription(status string) bool {
+	return status != "" && status != "canceled" && status != "incomplete_expired"
+}
+
 func liveSubscription(status string) bool {
 	switch status {
 	case "active", "trialing", "past_due", "incomplete":
@@ -998,7 +1003,9 @@ func (s *Service) cancelSubscription(ctx context.Context, workspaceID string) er
 		return nil
 	}
 	w, err := s.Q.GetWorkspaceBilling(ctx, workspaceID)
-	if err != nil || !w.StripeSubscriptionID.Valid || !liveSubscription(w.SubscriptionStatus.String) {
+	// Every subscription Stripe could still bill or resume, unpaid and paused included (not only the live
+	// ones): after the workspace is gone nobody could reach it to cancel.
+	if err != nil || !w.StripeSubscriptionID.Valid || !cancellableSubscription(w.SubscriptionStatus.String) {
 		return err
 	}
 	return s.stripe(ctx, "DELETE", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String), nil, nil)

@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/staqly/staqly/apps/api/internal/blob"
 	"github.com/staqly/staqly/apps/api/internal/db"
@@ -141,7 +142,17 @@ func cleanOriginalName(name string) string {
 		name = "upload"
 	}
 	if len(name) > 200 {
-		name = name[:200]
+		// Cut on a character boundary and keep the extension: a byte cut split é in two and lost ".png".
+		ext := filepath.Ext(name)
+		if len(ext) > 16 {
+			ext = ""
+		}
+		base := strings.TrimSuffix(name, ext)
+		for len(base)+len(ext) > 200 {
+			_, size := utf8.DecodeLastRuneInString(base)
+			base = base[:len(base)-size]
+		}
+		name = base + ext
 	}
 	return name
 }
@@ -288,6 +299,13 @@ func (s *Service) DeleteMedia(ctx context.Context, p Principal, id string) error
 		return notFound("media")
 	}
 	err = s.tx(ctx, func(q *db.Queries) error {
+		// As for the trash: a scheduled or publishing post keeps its files, or it would go out without them.
+		if n, err := upcomingUses(ctx, q, p.WorkspaceID, id); err != nil {
+			return err
+		} else if n > 0 {
+			return conflict(fmt.Sprintf("%s is used by %d scheduled %s; remove it from %s first", m.OriginalName, n,
+				plural(n, "post", "posts"), plural(n, "that post", "those posts")))
+		}
 		if _, err := q.DeleteMedia(ctx, db.DeleteMediaParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 			return err
 		}
@@ -563,6 +581,7 @@ func (s *Service) DeleteMediaMany(ctx context.Context, p Principal, ids []string
 	if err := p.require(ScopePostsDelete); err != nil {
 		return nil, nil, err
 	}
+	ids = uniqueIDs(ids)
 	if len(ids) == 0 || len(ids) > 200 {
 		return nil, nil, invalid("ids", "1 to 200 media ids")
 	}

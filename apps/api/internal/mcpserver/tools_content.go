@@ -73,8 +73,9 @@ type updateCollectionIn struct {
 	Description *string `json:"description,omitempty" jsonschema:"new description"`
 	Icon        *string `json:"icon,omitempty" jsonschema:"icon name"`
 	Color       *string `json:"color,omitempty" jsonschema:"accent colour, e.g. #7c3aed"`
-	// ProcessingTimeoutSeconds: a number of seconds or null (back to the server default); any, so null is seen.
-	ProcessingTimeoutSeconds any   `json:"processing_timeout_seconds,omitempty" jsonschema:"how long a post on your own automation waits for a reported result before it fails, 60-86400 seconds, or null for the server default"`
+	// ProcessingTimeoutSeconds: a number of seconds, or an empty string for the server default. Not null: unset
+	// arguments arrive as null from some clients and are dropped (dropNullArgs), so null can't mean "clear".
+	ProcessingTimeoutSeconds any   `json:"processing_timeout_seconds,omitempty" jsonschema:"how long a post on your own automation waits for a reported result before it fails, 60-86400 seconds, or an empty string for the server default"`
 	Archived                 *bool `json:"archived,omitempty" jsonschema:"true archives, false unarchives"`
 }
 
@@ -84,8 +85,10 @@ func (t *tools) updateCollection(ctx context.Context, _ *mcp.CallToolRequest, in
 		return nil, nil, err
 	}
 	ci := app.CollectionInput{Name: in.Name, Description: in.Description, Icon: in.Icon, Color: in.Color, Archived: in.Archived}
-	if in.ProcessingTimeoutSeconds != nil {
-		ci.ProcessingTimeoutSeconds, _ = json.Marshal(in.ProcessingTimeoutSeconds)
+	if v := in.ProcessingTimeoutSeconds; v == "" {
+		ci.ProcessingTimeoutSeconds = json.RawMessage("null")
+	} else if v != nil {
+		ci.ProcessingTimeoutSeconds, _ = json.Marshal(v)
 	}
 	return nil0(t.svc.UpdateCollection(ctx, t.principal(ctx), id, ci))
 }

@@ -126,6 +126,12 @@ func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause e
 		s.scheduledPublishFailed(ctx, a.WorkspaceID, p.PostID, cause)
 	case "run_schedule":
 		s.scheduleFailed(ctx, p.ScheduleID, cause)
+	case "refresh_channel":
+		// The platform kept failing the token refresh: the channel needs a person to reconnect it.
+		row, err := s.Q.GetChannelByID(ctx, p.ChannelID)
+		if err == nil {
+			_ = s.channelNeedsReconnect(ctx, row, cause)
+		}
 	case "publish_reply":
 		// The post is out; its thread stops at this part.
 		if err := s.replyEnded(ctx, p.PostID, p.ChannelID, p.Index, providers.Result{}, cause.Error()); err != nil {
@@ -171,6 +177,11 @@ func (s *Service) runPublishPost(ctx context.Context, workspaceID, postID string
 	}
 	if row.Status != "scheduled" {
 		return nil // unscheduled or published by hand meanwhile
+	}
+	if s.suspended(ctx, workspaceID) {
+		// A read-only workspace publishes nothing: the post fails with why (post.failed alerts).
+		s.scheduledPublishFailed(ctx, workspaceID, postID, ErrSuspended)
+		return nil
 	}
 	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
 	return s.tx(ctx, func(q *db.Queries) error {
@@ -476,6 +487,19 @@ func (s *Service) CancelJob(ctx context.Context, p Principal, id string) (Job, e
 	}
 	if _, err := s.river.JobCancel(ctx, r.ID); err != nil {
 		return Job{}, err
+	}
+	// Settle what the job would have done, or the post waits for it for good: a target fails (Retry brings it
+	// back), a reply ends its thread, a scheduled post goes back to draft as if taken off the schedule.
+	var a jobArgs
+	_ = json.Unmarshal(r.EncodedArgs, &a)
+	switch r.Kind {
+	case "publish_target", "publish_reply":
+		s.jobFailed(ctx, r.Kind, a, errors.New("the job was cancelled"))
+	case "publish_post":
+		var e *Error
+		if _, err := s.CancelPost(ctx, p, a.Payload.PostID); err != nil && !errors.As(err, &e) {
+			return Job{}, err // a conflict (not scheduled any more) or a deleted post needs nothing
+		}
 	}
 	return s.GetJob(ctx, p, id)
 }

@@ -879,8 +879,14 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 		}
 		thread := parseThread(row.Thread)
 		if in.Thread != nil {
+			was := mustJSON(thread)
 			if thread, err = s.checkThread(ctx, q, p.WorkspaceID, *in.Thread, had); err != nil {
 				return err
+			}
+			// Replies follow the post's thread part by part: once the post is out on a channel, a changed thread
+			// would rewrite (or drop) the comments still going out under it there.
+			if mustJSON(thread) != was && slices.ContainsFunc(current, func(t db.ListTargetsRow) bool { return t.Status == "published" }) {
+				return conflict("this post is already published on a channel, so its comments can't be changed")
 			}
 		}
 		if err := checkThreadLimits(thread, chans); err != nil {
@@ -1122,6 +1128,7 @@ func (s *Service) DeletePosts(ctx context.Context, p Principal, ids []string) (d
 	if len(ids) == 0 || len(ids) > 200 {
 		return nil, nil, invalid("ids", "1 to 200 post ids")
 	}
+	ids = uniqueIDs(ids) // an id listed twice is deleted once, not reported as missing the second time
 	deleted, missing = []string{}, []string{}
 	for _, id := range ids {
 		switch err := s.DeletePost(ctx, p, id); {
@@ -1184,6 +1191,9 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	}
 	if err != nil {
 		return err
+	}
+	if s.suspended(ctx, row.WorkspaceID) {
+		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, ErrSuspended.Message)
 	}
 	ch, err := s.Q.GetChannelByID(ctx, channelID)
 	if err != nil {
@@ -1377,8 +1387,9 @@ func (s *Service) settlePost(ctx context.Context, q *db.Queries, p Principal, wo
 	if err != nil {
 		return err
 	}
-	open, failed := int64(0), int64(0)
+	open, failed, total := int64(0), int64(0), int64(0)
 	for _, c := range counts {
+		total += c.N
 		switch c.Status {
 		case "pending", "publishing":
 			open += c.N
@@ -1394,7 +1405,7 @@ func (s *Service) settlePost(ctx context.Context, q *db.Queries, p Principal, wo
 		return err
 	}
 	status, typ := "published", "post.published"
-	if failed > 0 {
+	if failed > 0 || total == 0 { // no targets left: every channel it was for was removed, so nothing went out
 		status, typ = "failed", "post.failed"
 	}
 	now := s.now()
@@ -1411,7 +1422,11 @@ func (s *Service) settlePost(ctx context.Context, q *db.Queries, p Principal, wo
 			return err
 		}
 	}
-	_, err = s.emit(ctx, q, p, typ, row.CollectionID, postID, s.postEventData(ctx, q, workspaceID, postID, nil))
+	data := s.postEventData(ctx, q, workspaceID, postID, nil)
+	if total == 0 {
+		data["error"] = "none of its channels exist any more"
+	}
+	_, err = s.emit(ctx, q, p, typ, row.CollectionID, postID, data)
 	return err
 }
 

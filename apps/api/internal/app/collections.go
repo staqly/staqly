@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -207,7 +209,12 @@ func (s *Service) PostsCollection(ctx context.Context, p Principal, idOrName str
 // findCollection is FindCollection without the scope check (see getCollection).
 func (s *Service) findCollection(ctx context.Context, p Principal, idOrName string) (Collection, error) {
 	if strings.HasPrefix(idOrName, "col_") {
-		return s.getCollection(ctx, p, idOrName)
+		c, err := s.getCollection(ctx, p, idOrName)
+		var e *Error
+		if !errors.As(err, &e) || e.Status != 404 {
+			return c, err
+		}
+		// Not an id after all: a collection may be named col_news.
 	}
 	if p.WorkspaceID == "" {
 		return Collection{}, ErrUnauthorized
@@ -216,16 +223,21 @@ func (s *Service) findCollection(ctx context.Context, p Principal, idOrName stri
 	if err != nil {
 		return Collection{}, err
 	}
-	for _, r := range rows {
-		if strings.EqualFold(r.Name, strings.TrimSpace(idOrName)) {
-			out := []Collection{toCollection(r)}
-			if err := s.decorateCollections(ctx, p.WorkspaceID, out); err != nil {
-				return Collection{}, err
-			}
-			return out[0], nil
-		}
+	// The exact name first: names differing only in non-ASCII case (Żółw, żółw) can both exist, and the
+	// case-insensitive match is only for a name that has no exact one.
+	name := strings.TrimSpace(idOrName)
+	match := slices.IndexFunc(rows, func(r db.Collection) bool { return r.Name == name })
+	if match < 0 {
+		match = slices.IndexFunc(rows, func(r db.Collection) bool { return strings.EqualFold(r.Name, name) })
 	}
-	return Collection{}, notFound("collection")
+	if match < 0 {
+		return Collection{}, notFound("collection")
+	}
+	out := []Collection{toCollection(rows[match])}
+	if err := s.decorateCollections(ctx, p.WorkspaceID, out); err != nil {
+		return Collection{}, err
+	}
+	return out[0], nil
 }
 
 func (s *Service) ListCollections(ctx context.Context, p Principal, includeArchived bool) ([]Collection, error) {

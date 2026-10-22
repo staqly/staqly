@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -126,6 +127,55 @@ func (s *Service) localTokenHash() ([]byte, error) {
 	return c.hash, nil
 }
 
+// localTokenSeenPath records (as SHA-256, never the token) the access token browsers last signed in with.
+func (s *Service) localTokenSeenPath() string { return s.localTokenPath() + ".seen" }
+
+// SignOutIfTokenChanged runs at start: when the access token is not the one browsers signed in with (a new
+// STAQLY_LOCAL_TOKEN, or an access_token file replaced while the server was down), every browser is signed out,
+// as `server token --rotate` does. The first start that records the token signs nobody out.
+func (s *Service) SignOutIfTokenChanged(ctx context.Context) (int64, error) {
+	if s.Cfg.Mode != ModeLocal {
+		return 0, nil
+	}
+	h, err := s.localTokenHash()
+	if err != nil || h == nil {
+		return 0, err
+	}
+	cur := hex.EncodeToString(h)
+	seen, err := os.ReadFile(s.localTokenSeenPath())
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return 0, err
+	}
+	var revoked int64
+	if len(seen) > 0 && strings.TrimSpace(string(seen)) != cur {
+		p, err := s.LocalPrincipal(ctx)
+		if err != nil {
+			return 0, err
+		}
+		sys := Principal{WorkspaceID: p.WorkspaceID, Kind: PrincipalSystem, ID: "server", Name: "Server"}
+		err = s.tx(ctx, func(q *db.Queries) error {
+			var err error
+			if revoked, err = q.RevokeOtherSessions(ctx, db.RevokeOtherSessionsParams{RevokedAt: nullStr(s.now()), WorkspaceID: p.WorkspaceID, KeepID: ""}); err != nil {
+				return err
+			}
+			_, err = s.emit(ctx, q, sys, "access_token.rotated", "", "", map[string]any{"sessions_revoked": revoked})
+			return err
+		})
+		if err != nil {
+			return 0, err
+		}
+	}
+	return revoked, s.rememberLocalToken(cur)
+}
+
+// rememberLocalToken writes the token's hash as the one browsers sign in with.
+func (s *Service) rememberLocalToken(hash string) error {
+	if err := os.MkdirAll(filepath.Dir(s.localTokenSeenPath()), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(s.localTokenSeenPath(), []byte(hash+"\n"), 0o600)
+}
+
 // AuthenticateLocalToken resolves the access token of a local install to the local principal (everything
 // in the one workspace). Not a local token: ok is false and the caller tries API keys.
 func (s *Service) AuthenticateLocalToken(ctx context.Context, raw string) (p Principal, ok bool, err error) {
@@ -217,5 +267,10 @@ func (s *Service) RotateLocalToken(ctx context.Context, p Principal, keepSession
 		_, err = s.emit(ctx, q, p, "access_token.rotated", "", "", map[string]any{"sessions_revoked": revoked})
 		return err
 	})
+	if err == nil {
+		// The browser that rotated it keeps its session: the next start must not sign it out again.
+		h := sha256.Sum256([]byte(tok))
+		err = s.rememberLocalToken(hex.EncodeToString(h[:]))
+	}
 	return tok, revoked, err
 }

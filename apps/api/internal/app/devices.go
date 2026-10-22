@@ -50,7 +50,9 @@ func (s *Service) CreateDeviceLink(ctx context.Context, p Principal, origin stri
 	now := s.Now().UTC()
 	exp := formatTime(now.Add(deviceLinkTTL))
 	err = s.tx(ctx, func(q *db.Queries) error {
-		_ = q.PurgeDeviceLinks(ctx, formatTime(now.Add(-time.Hour)))
+		if err := q.PurgeDeviceLinks(ctx, formatTime(now.Add(-time.Hour))); err != nil { // a failed statement aborts a PostgreSQL transaction
+			return err
+		}
 		if err := q.CreateDeviceLink(ctx, db.CreateDeviceLinkParams{ID: newID("dvl"), WorkspaceID: p.WorkspaceID,
 			TokenHash: hashSecret(token), CreatedBy: p.Kind + ":" + p.ID, CreatedAt: formatTime(now), ExpiresAt: exp, UserID: p.UserID}); err != nil {
 			return err

@@ -10,12 +10,16 @@ import (
 	"time"
 )
 
-// importOrder lists the tables in foreign-key order (referenced tables first).
+// importOrder lists every application table in foreign-key order (referenced tables first);
+// TestImportOrderCoversEveryTable fails when a migration adds a table that isn't here.
 var importOrder = []string{
-	"installation", "workspaces", "api_keys", "sessions", "collections", "media", "events", "webhooks",
-	"webhook_deliveries", "idempotency_keys", "usage_counters", "device_links", "notification_channels",
-	"notification_outbox", "workspace_exports", "stripe_events", "agents", "channels", "provider_apps",
-	"posts", "post_targets", "preview_links", "post_comments", "schedules", "jobs", "channel_links",
+	"installation", "users", "accounts", "workspaces", "user_identities", "passkeys", "passkey_challenges",
+	"email_codes", "workspace_members", "workspace_invitations", "api_keys", "sessions", "collections",
+	"media_folders", "media", "media_projects", "events", "webhooks", "webhook_deliveries", "idempotency_keys",
+	"usage_counters", "usage_events", "credit_grants", "device_links", "notification_channels",
+	"notification_outbox", "workspace_exports", "workspace_ai", "stripe_events", "agents", "channel_groups",
+	"channels", "provider_apps", "posts", "post_targets", "preview_links", "post_comments", "schedules", "jobs",
+	"job_requeues", "channel_links",
 }
 
 // ImportReport is how many rows each table received; NULReplaced counts text values whose NUL characters
