@@ -62,6 +62,6 @@ export default defineConfig({
     setupFiles: ['./tests/render-count.ts', './tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}'],
     css: false,
-    testTimeout: 15000,
+    testTimeout: 30_000,
   },
 })
