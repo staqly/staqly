@@ -520,8 +520,13 @@ func linkedinError(status int, body string) error {
 		return &Failure{Msg: "LinkedIn rate limit reached; staqly tries again in a few minutes"}
 	case status >= 500:
 		return &Failure{Msg: fmt.Sprintf("LinkedIn is unavailable (%d); staqly tries again in a few minutes", status)}
+	case status == http.StatusForbidden && strings.Contains(detail, "partnerApiSocialActions"):
+		// For whoever runs the server: "Share on LinkedIn" posts, but comments need the app approved for
+		// LinkedIn's Community Management API.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn does not let this server's app comment yet (" + detail + ")"}
 	case status == http.StatusForbidden:
-		return &Failure{Kind: ErrRejected, Msg: "LinkedIn refused it (" + detail + "); check that the app has the \"Share on LinkedIn\" product"}
+		// For whoever runs the server: the app needs the "Share on LinkedIn" product.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn refused it (" + detail + ")"}
 	case strings.Contains(body, "processing"), strings.Contains(body, "not ready"):
 		return &Failure{Msg: "LinkedIn is still processing the media; staqly tries again in a few minutes"}
 	case status >= 400:
