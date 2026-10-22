@@ -150,7 +150,7 @@ publishing history.
 | `workspace.updated` | The workspace was renamed or its time zone changed | `name`, `timezone` (the fields that changed) |
 | `workspace.plan_changed` | The [plan](/plans) changed: a Stripe subscription, or set by the operator | `from`, `to`, `expires_at`, `reason` (`stripe:<status>`, `operator`, `operator_comp`) |
 | `workspace.credits_added` | A bought bundle of extra posts to X was paid for (Stripe Checkout) | `provider` (`x`), `posts`, `expires_at` (the end of the billing period) |
-| `workspace.account_attached` | A workspace without an account joined one: its first owner accepted an owner invitation (e.g. one the operator handed over) | `account_id`, `owner_user_id`, `sessions_revoked`, `api_keys_adopted`, `connect_links_expired` |
+| `workspace.account_attached` | A workspace without people got its first owner: they accepted an owner invitation (e.g. one the operator handed over) | `account_id`, `owner_user_id`, `sessions_revoked`, `api_keys_adopted`, `connect_links_expired` |
 | `workspace.export_requested` | A [workspace export](/self-hosting/data-export) was requested | `export_id` |
 | `workspace.exported` | A workspace export finished | `export_id`, `size_bytes` |
 | `retention.events_pruned` | The [retention](/self-hosting/data-export#retention) worker deleted old events | `count`, `older_than_days`, `before` |

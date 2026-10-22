@@ -131,7 +131,7 @@ func TestEmailSignInCreatesAccountThenSignsInAgain(t *testing.T) {
 		t.Fatalf("verify: %+v %q", res, first)
 	}
 	s := e.session(p)
-	if s.User.Email != "zoe@example.com" || s.Role != app.RoleOwner || !s.AccountOwner || len(s.Workspaces) != 1 {
+	if s.User.Email != "zoe@example.com" || s.Role != app.RoleOwner || len(s.Workspaces) != 1 {
 		t.Fatalf("session: %+v", s)
 	}
 	// Single use: the same code again is dead.
@@ -238,7 +238,7 @@ func TestEmailSignInAfterGoogleIsOnePerson(t *testing.T) {
 	e, _ := newEmailEnv(t, "")
 	g := e.session(e.mustSignIn(ana, ""))
 	m := e.session(e.emailSignIn(ana.Email, nil))
-	if g.User.ID != m.User.ID || g.Workspace.ID != m.Workspace.ID || !m.AccountOwner {
+	if g.User.ID != m.User.ID || g.Workspace.ID != m.Workspace.ID || m.Role != app.RoleOwner {
 		t.Fatalf("two people for one address: google %+v email %+v", g.User, m.User)
 	}
 }
@@ -258,7 +258,7 @@ func TestEmailCodeAcceptsInvitation(t *testing.T) {
 	clock.add(31 * time.Second)
 	zoe := e.emailSignIn("zoe@example.com", map[string]any{"invite": tok})
 	s := e.session(zoe)
-	if s.Workspace.ID != ws || s.Role != app.RoleEditor || s.AccountOwner || len(s.Workspaces) != 1 {
+	if s.Workspace.ID != ws || s.Role != app.RoleEditor || len(s.Workspaces) != 1 {
 		t.Fatalf("invited: %+v", s)
 	}
 	// The editor cannot manage people.

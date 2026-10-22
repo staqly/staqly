@@ -275,7 +275,7 @@ function useCheckoutReturn() {
  */
 export function PlanUsagePage() {
   const { isLocal } = useMode()
-  const { canManagePeople, accountOwner } = useRole()
+  const { canManagePeople, isOwner } = useRole()
   const manage = !isLocal && canManagePeople
   const usage = useUsage()
   const billing = useBilling({ enabled: manage })
@@ -296,8 +296,8 @@ export function PlanUsagePage() {
   const d = details.data
   const sub = d?.subscription ?? null
   const payOnline = !!b?.enabled
-  const canBuy = accountOwner && payOnline
-  const portalOpen = accountOwner && payOnline && !!b?.has_customer
+  const canBuy = isOwner && payOnline
+  const portalOpen = isOwner && payOnline && !!b?.has_customer
 
   const summary = u ? (
     <PlanSummary

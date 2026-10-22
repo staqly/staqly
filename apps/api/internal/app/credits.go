@@ -237,7 +237,7 @@ func (s *Service) checkXForPost(ctx context.Context, q *db.Queries, postID strin
 
 // CreditsCheckout starts a Stripe Checkout (one-time payment) for a bundle of extra posts and returns its URL.
 func (s *Service) CreditsCheckout(ctx context.Context, p Principal, provider string, posts int64) (string, error) {
-	if err := s.requireAccountOwner(ctx, p); err != nil {
+	if err := s.requireOwner(ctx, p); err != nil {
 		return "", err
 	}
 	if !s.BillingEnabled() {

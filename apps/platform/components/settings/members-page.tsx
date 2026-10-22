@@ -146,7 +146,7 @@ function MembersCard() {
         <ul className="grid divide-y" data-testid="members">
           {members.data.data.map((m) => {
             // Admins never touch owners; nobody demotes the account owner.
-            const locked = m.account_owner || (m.role === 'owner' && myRole !== 'owner')
+            const locked = m.role === 'owner' && myRole !== 'owner'
             const roles = assignable(myRole)
 
             return (
@@ -158,11 +158,7 @@ function MembersCard() {
                     {m.you && <span className="text-muted-foreground"> (you)</span>}
                   </p>
                   {/* An email-code sign-in has the address as the name: show it once. */}
-                  {(m.email !== m.name || m.account_owner) && (
-                    <p className="truncate text-xs text-muted-foreground">
-                      {[m.email !== m.name && m.email, m.account_owner && 'account owner'].filter(Boolean).join(' · ')}
-                    </p>
-                  )}
+                  {m.email !== m.name && <p className="truncate text-xs text-muted-foreground">{m.email}</p>}
                 </div>
                 {locked ? (
                   <span className="text-sm text-muted-foreground">{ROLE_LABELS[m.role]}</span>
@@ -181,7 +177,7 @@ function MembersCard() {
                     ))}
                   </NativeSelect>
                 )}
-                {!m.account_owner && (m.you || !locked) && (
+                {(m.you || !locked) && (
                   <Button variant="ghost" size="sm" onClick={() => setRemoving(m)}>
                     {m.you ? 'Leave' : 'Remove'}
                   </Button>

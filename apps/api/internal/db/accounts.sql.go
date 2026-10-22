@@ -78,17 +78,6 @@ func (q *Queries) AdoptAPIKeys(ctx context.Context, arg AdoptAPIKeysParams) (int
 	return result.RowsAffected()
 }
 
-const countAccountWorkspaces = `-- name: CountAccountWorkspaces :one
-SELECT COUNT(*) FROM workspaces WHERE account_id = ?
-`
-
-func (q *Queries) CountAccountWorkspaces(ctx context.Context, accountID sql.NullString) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countAccountWorkspaces, accountID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countMembers = `-- name: CountMembers :one
 SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ?
 `
@@ -110,29 +99,6 @@ func (q *Queries) CountOwners(ctx context.Context, workspaceID string) (int64, e
 	var count int64
 	err := row.Scan(&count)
 	return count, err
-}
-
-const createAccount = `-- name: CreateAccount :exec
-INSERT INTO accounts (id, owner_user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-`
-
-type CreateAccountParams struct {
-	ID          string `json:"id"`
-	OwnerUserID string `json:"owner_user_id"`
-	Name        string `json:"name"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-}
-
-func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) error {
-	_, err := q.db.ExecContext(ctx, createAccount,
-		arg.ID,
-		arg.OwnerUserID,
-		arg.Name,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	return err
 }
 
 const createIdentity = `-- name: CreateIdentity :exec
@@ -287,40 +253,6 @@ func (q *Queries) ExpireAnonymousDeviceLinks(ctx context.Context, arg ExpireAnon
 	return result.RowsAffected()
 }
 
-const getAccount = `-- name: GetAccount :one
-SELECT id, owner_user_id, name, created_at, updated_at FROM accounts WHERE id = ?
-`
-
-func (q *Queries) GetAccount(ctx context.Context, id string) (Account, error) {
-	row := q.db.QueryRowContext(ctx, getAccount, id)
-	var i Account
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerUserID,
-		&i.Name,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getAccountByOwner = `-- name: GetAccountByOwner :one
-SELECT id, owner_user_id, name, created_at, updated_at FROM accounts WHERE owner_user_id = ?
-`
-
-func (q *Queries) GetAccountByOwner(ctx context.Context, ownerUserID string) (Account, error) {
-	row := q.db.QueryRowContext(ctx, getAccountByOwner, ownerUserID)
-	var i Account
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerUserID,
-		&i.Name,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getInvitation = `-- name: GetInvitation :one
 SELECT id, workspace_id, email, role, token_hash, invited_by, created_at, updated_at, expires_at, accepted_at, accepted_by, revoked_at FROM workspace_invitations WHERE workspace_id = ? AND id = ?
 `
@@ -454,50 +386,6 @@ func (q *Queries) GetUserNotificationPrefs(ctx context.Context, id string) (stri
 	return notification_prefs, err
 }
 
-const listAccountWorkspaces = `-- name: ListAccountWorkspaces :many
-SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, account_id, onboarded_at, entitlements, timezone FROM workspaces WHERE account_id = ? ORDER BY created_at, id
-`
-
-func (q *Queries) ListAccountWorkspaces(ctx context.Context, accountID sql.NullString) ([]Workspace, error) {
-	rows, err := q.db.QueryContext(ctx, listAccountWorkspaces, accountID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Workspace
-	for rows.Next() {
-		var i Workspace
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.RecoveryVerifier,
-			&i.RecoveryRotatedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Plan,
-			&i.PlanExpiresAt,
-			&i.StripeCustomerID,
-			&i.StripeSubscriptionID,
-			&i.SubscriptionStatus,
-			&i.ProcessingTimeoutSeconds,
-			&i.AccountID,
-			&i.OnboardedAt,
-			&i.Entitlements,
-			&i.Timezone,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMembers = `-- name: ListMembers :many
 SELECT m.workspace_id, m.user_id, m.role, m.created_at, m.updated_at, u.email, u.name, u.avatar_url
 FROM workspace_members m JOIN users u ON u.id = m.user_id
@@ -591,17 +479,16 @@ func (q *Queries) ListOpenInvitations(ctx context.Context, workspaceID string) (
 }
 
 const listUserWorkspaces = `-- name: ListUserWorkspaces :many
-SELECT w.id, w.name, w.account_id, m.role
+SELECT w.id, w.name, m.role
 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
 WHERE m.user_id = ?
 ORDER BY w.created_at, w.id
 `
 
 type ListUserWorkspacesRow struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	AccountID sql.NullString `json:"account_id"`
-	Role      string         `json:"role"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"`
 }
 
 func (q *Queries) ListUserWorkspaces(ctx context.Context, userID string) ([]ListUserWorkspacesRow, error) {
@@ -613,12 +500,7 @@ func (q *Queries) ListUserWorkspaces(ctx context.Context, userID string) ([]List
 	var items []ListUserWorkspacesRow
 	for rows.Next() {
 		var i ListUserWorkspacesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.AccountID,
-			&i.Role,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.Role); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -785,25 +667,6 @@ func (q *Queries) SetUserNotificationPrefs(ctx context.Context, arg SetUserNotif
 	return err
 }
 
-const setWorkspaceAccount = `-- name: SetWorkspaceAccount :execrows
-UPDATE workspaces SET account_id = ?, updated_at = ? WHERE id = ? AND account_id IS NULL
-`
-
-type SetWorkspaceAccountParams struct {
-	AccountID sql.NullString `json:"account_id"`
-	UpdatedAt string         `json:"updated_at"`
-	ID        string         `json:"id"`
-}
-
-// A workspace joins an account once (a workspace from before accounts, claimed by its first owner).
-func (q *Queries) SetWorkspaceAccount(ctx context.Context, arg SetWorkspaceAccountParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, setWorkspaceAccount, arg.AccountID, arg.UpdatedAt, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const touchIdentity = `-- name: TouchIdentity :exec
 UPDATE user_identities SET email = ?, last_login_at = ? WHERE provider = ? AND subject = ?
 `
@@ -822,21 +685,6 @@ func (q *Queries) TouchIdentity(ctx context.Context, arg TouchIdentityParams) er
 		arg.Provider,
 		arg.Subject,
 	)
-	return err
-}
-
-const updateAccountName = `-- name: UpdateAccountName :exec
-UPDATE accounts SET name = ?, updated_at = ? WHERE id = ?
-`
-
-type UpdateAccountNameParams struct {
-	Name      string `json:"name"`
-	UpdatedAt string `json:"updated_at"`
-	ID        string `json:"id"`
-}
-
-func (q *Queries) UpdateAccountName(ctx context.Context, arg UpdateAccountNameParams) error {
-	_, err := q.db.ExecContext(ctx, updateAccountName, arg.Name, arg.UpdatedAt, arg.ID)
 	return err
 }
 

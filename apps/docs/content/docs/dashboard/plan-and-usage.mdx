@@ -11,7 +11,7 @@ no limits and no billing: the plan is always *Unlocked*.
 Open **Settings → Plan & usage**, **Plan & usage** (or **Billing**, for those who manage it) in the user menu, or search for *Plan & usage* in the
 command palette (<Kbd>⌘</Kbd> <Kbd>K</Kbd>). Everyone in the workspace sees the plan and the usage;
 the billing (next payment, add-ons, card and invoices) and its buttons are for owners and admins,
-and paying is for the account owner.
+and paying is for the workspace's owners.
 
 ## The plan
 
@@ -19,7 +19,7 @@ The top of the page names the plan (*Starter*, *Plus*, *Pro* or *Business*) and 
 
 | Status | What it means | Buttons |
 |---|---|---|
-| *Trial · N days left* | Starter's free 7-day trial (card required), once per workspace and one workspace of an account at a time. It counts down to the end of the trial; the card on file is charged then. | **Manage billing**, **Change plan** |
+| *Trial · N days left* | Starter's free 7-day trial (card required), once per workspace and one workspace per owner at a time. It counts down to the end of the trial; the card on file is charged then. | **Manage billing**, **Change plan** |
 | *Active* | A subscription is paid. | **Manage billing**, **Change plan** |
 | *Payment failed* | Stripe could not charge the card; the plan runs until the end of the paid period plus a few days. | **Manage billing** |
 | *Ends* a date | The subscription is set to stop and will not renew. | **Manage billing**, **Change plan** |
@@ -45,7 +45,7 @@ a limit raised by an add-on says so (*15 + 10 from Channels pack*). Below the me
 ## Add-ons and extra X posts (cloud)
 
 - **Extra X posts**: the posts bought on top of the plan's monthly X posts, how many are left and
-  when they expire. **Buy more X posts** (account owner) opens the bundles (200 for €10, 1,000 for
+  when they expire. **Buy more X posts** (owners) opens the bundles (200 for €10, 1,000 for
   €40, 4,000 for €150, excl. VAT) and Stripe Checkout; they appear when Stripe confirms the payment.
 - **Add-ons** (owners and admins): each with its price per month or year. **Add** charges the rest
   of the billing period now; **Remove** stops it and credits the unused rest on the next invoice.
@@ -65,8 +65,8 @@ The page reads Stripe each time it opens. Staqly stores no card data.
 
 | Where | How |
 |---|---|
-| **Choose a plan**, **Change plan** | Opens the plan picker with a **Monthly / Yearly** switch. Without a subscription, a plan opens Stripe Checkout; with one, it switches the subscription at once (Stripe prorates). After paying you come back to **Plan & usage**; the plan changes as soon as Stripe confirms (a toast says *Payment received* or *Plan changed*). Paying needs the account owner. |
-| **Manage billing** | Opens the Stripe customer portal: change the card, download invoices or cancel. Shown to the account owner once the workspace has a Stripe customer. |
+| **Choose a plan**, **Change plan** | Opens the plan picker with a **Monthly / Yearly** switch. Without a subscription, a plan opens Stripe Checkout; with one, it switches the subscription at once (Stripe prorates). After paying you come back to **Plan & usage**; the plan changes as soon as Stripe confirms (a toast says *Payment received* or *Plan changed*). Paying needs an owner of the workspace. |
+| **Manage billing** | Opens the Stripe customer portal: change the card, download invoices or cancel. Shown to owners once the workspace has a Stripe customer. |
 
 Every plan can download a workspace export in **Settings → Data & privacy**. On Starter it is
 data only, without the media files; backups, the export with the files and the activity log

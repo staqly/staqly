@@ -11,16 +11,14 @@ each workspace. Staqly Community Edition has one person and no accounts: its bro
 
 ## The model
 
-- **Person**: someone who signed in. Staqly identifies them by their sign-in method (their Google
-  account, or the address an email code was sent to), never by the email address alone: a Google
-  account and an email code for the same address are two people until the person links them (see
+- **Person**: someone who signed in. The verified email address is the person: Google, an email
+  code and a passkey for the same address all sign in to the same person, whichever came first (see
   [Sign-in methods](#sign-in-methods)). Staqly stores their name, address and picture, and no Google
-  tokens.
-- **Account**: what a new person gets at their first sign-in. It has exactly one owner and holds
-  workspaces and their plans.
-- **Workspace**: posts, channels, schedules, webhooks and API keys. It belongs to one account.
+  tokens. They set their name under **Settings → Account → Profile**.
+- **Workspace**: posts, channels, schedules, webhooks, API keys and its own plan. A new person gets
+  a first one, **My workspace**, which they own.
 - **Member**: a person with a role in a workspace. One person can be a member of many workspaces,
-  in their own account and in others.
+  and switches between them from the sidebar or **Settings → Account → Workspaces**.
 
 ## Roles
 
@@ -31,9 +29,9 @@ each workspace. Staqly Community Edition has one person and no accounts: its bro
 | Admin | Everything in the workspace: channels, webhooks, alerts, API keys, sessions, members and invitations. |
 | Owner | Like an admin, and also makes, demotes and removes owners. |
 
-The **account owner** is an owner in every workspace of their account. Only they create and
-delete workspaces and manage billing. Nobody can demote or remove them, and a workspace always
-keeps at least one owner.
+Owners pay for the workspace (plans, extra X posts, add-ons) and may delete it. A workspace always
+keeps at least one owner. An owner creates more workspaces with **New workspace** and owns those
+too; where people join by invitation only, only someone who owns a workspace may.
 
 Roles map onto the same [scopes](/api/authentication#scopes) as API keys, checked in one place
 for the REST API, MCP and the dashboard. The dashboard hides what a role cannot do, but the
@@ -68,7 +66,7 @@ invites also gets the link to pass on themselves.
 
 Open [app.staqly.ai/signup](https://app.staqly.ai/signup) (**Create an account** on the sign-in
 page) and continue with Google or an email code; signing in on `/login` with a new address works
-the same way. You get an account with a first workspace, named **My workspace**, and land in the
+the same way. You get a first workspace, named **My workspace**, and land in the
 welcome, which names the workspace, offers the plans and connects a first channel. The workspace
 starts once a plan is chosen: Starter with a 7-day trial, card required. See
 [Plans](/plans#the-starter-trial).
@@ -79,7 +77,7 @@ recovery key: API keys are for agents (**Integrations → API keys**).
 ## Sign in with an email code
 
 **Continue with email** sends a 6-digit code to the address. Entering it signs the person in;
-a new address gets an account and a first workspace, like a first Google sign-in.
+a new address gets a first workspace, like a first Google sign-in.
 
 - The code works once, for 10 minutes. Five wrong tries end it, and a new code replaces the
   previous one.
@@ -131,7 +129,7 @@ and moves it.
 browser in as the same person with a QR code: one use, 5 minutes, and it creates a session of its
 own with the person's current role.
 
-People in an account have no recovery key: their way back in is another sign-in method, so keep
+People who sign in have no recovery key: their way back in is another sign-in method, so keep
 at least two (for example an email address and a passkey).
 
 ## How sign-in is protected

@@ -47,9 +47,9 @@ export function WelcomeGate({ children }: { children: ReactNode }) {
  */
 export function NoPlanGate({ children }: { children: ReactNode }) {
   const session = useSession()
-  const { accountOwner } = useRole()
+  const { isOwner } = useRole()
   const router = useRouter()
-  const cloudOwner = session.data?.mode === 'cloud' && accountOwner
+  const cloudOwner = session.data?.mode === 'cloud' && isOwner
   const usage = useUsage()
   const locked = cloudOwner && !!usage.data?.suspended
   const billing = useBilling({ enabled: locked })

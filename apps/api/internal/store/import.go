@@ -13,7 +13,7 @@ import (
 // importOrder lists every application table in foreign-key order (referenced tables first);
 // TestImportOrderCoversEveryTable fails when a migration adds a table that isn't here.
 var importOrder = []string{
-	"installation", "users", "accounts", "workspaces", "user_identities", "passkeys", "passkey_challenges",
+	"installation", "users", "workspaces", "user_identities", "passkeys", "passkey_challenges",
 	"email_codes", "workspace_members", "workspace_invitations", "api_keys", "sessions", "collections",
 	"media_folders", "media", "media_projects", "events", "webhooks", "webhook_deliveries", "idempotency_keys",
 	"usage_counters", "usage_events", "credit_grants", "device_links", "notification_channels",

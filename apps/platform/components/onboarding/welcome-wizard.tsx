@@ -79,10 +79,10 @@ export function WelcomeWizard() {
   const qc = useQueryClient()
   const session = useSession()
   const { isLocal } = useMode()
-  const { accountsEnabled, accountOwner, role, canManagePeople } = useRole()
+  const { accountsEnabled, isOwner, role, canManagePeople } = useRole()
   const s = session.data
   const hasPerson = !!s?.user?.id
-  const member = accountsEnabled && hasPerson && !accountOwner
+  const member = accountsEnabled && hasPerson && !isOwner
   const canInvite = !isLocal && accountsEnabled && canManagePeople
   const [stored, setDraft] = useState(readWelcomeDraft)
   // A draft from another workspace (one set up in this tab before) starts over.
@@ -92,10 +92,10 @@ export function WelcomeWizard() {
   const extra: StepId[] = !canInvite ? ['agent'] : goal === 'team' ? ['team', 'agent'] : ['agent', 'team']
   // With billing, a workspace has no plan until its owner pays (or starts Starter's trial with a card): the plan
   // is the last step, and the workspace is set up only after it.
-  const billing = useBilling({ enabled: !isLocal && accountOwner })
+  const billing = useBilling({ enabled: !isLocal && isOwner })
   const needsPlan = !!billing.data?.enabled && !billing.data.subscription_status
   // Until billing has answered, nothing is written and nothing is skipped.
-  const billingKnown = isLocal || !accountOwner || billing.isFetched
+  const billingKnown = isLocal || !isOwner || billing.isFetched
   const requested = params.get('step') as StepId | null
   const steps: StepId[] = member
     ? ['you', 'joined']
@@ -135,7 +135,6 @@ export function WelcomeWizard() {
       // Done in the cache before leaving, so the calendar doesn't send the person straight back here.
       qc.setQueryData(qk.session, (old: typeof s) => (old ? { ...old, onboarded: true } : old))
       void qc.invalidateQueries({ queryKey: qk.session })
-      void qc.invalidateQueries({ queryKey: qk.account })
       router.replace(to)
     },
   })

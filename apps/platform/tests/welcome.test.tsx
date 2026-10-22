@@ -25,7 +25,6 @@ function render(extra: Record<string, unknown>, ui = <WelcomeWizard />) {
     ...sessionFixture('cloud'),
     user: { id: 'usr_1', name: 'ana@example.com', email: 'ana@example.com', avatar_url: '' },
     accounts_enabled: true,
-    account_owner: true,
     role: 'owner',
     onboarded: false,
     ...extra,
@@ -172,7 +171,6 @@ describe('welcome wizard', () => {
     const user = userEvent.setup()
 
     render({
-      account_owner: false,
       role: 'editor',
       user: { id: 'usr_2', name: 'Sam', email: 's@x.io', avatar_url: '' },
     })
