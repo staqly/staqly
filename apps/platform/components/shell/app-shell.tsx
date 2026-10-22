@@ -1,7 +1,7 @@
 'use client'
 
 import { LogoMark } from '@staqly/brand/logo'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   Bell,
@@ -73,7 +73,7 @@ import { api, setCsrfToken } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { LIVE_SUBSCRIPTION } from '@/lib/plans'
-import { qk, useBilling, useMode, usePlans, useRole, useSession, useSwitchWorkspace, useUsage } from '@/lib/queries'
+import { useBilling, useMode, usePlans, useRole, useSession, useSwitchWorkspace, useUsage } from '@/lib/queries'
 import { rememberApiKey } from '@/lib/session-key'
 import { cn } from '@/lib/utils'
 import { useXPostsWarnings } from '@/lib/x-posts'
@@ -148,7 +148,7 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
   const { openConnectDevice } = useShell()
   const { setOpenMobile } = useSidebar()
   const logout = useLogout()
-  const { accountsEnabled, accountOwner, canManagePeople } = useRole()
+  const { accountsEnabled, isOwner, canManagePeople } = useRole()
   const openWorkspace = useSwitchWorkspace()
   const [creating, setCreating] = useState(false)
   const others = session.data?.workspaces ?? []
@@ -252,7 +252,7 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
                   {w.current && <Check className="ml-auto" aria-label="Open now" />}
                 </DropdownMenuItem>
               ))}
-              {accountOwner && (
+              {isOwner && (
                 <DropdownMenuItem onSelect={() => setCreating(true)}>
                   <Plus /> New workspace
                 </DropdownMenuItem>
@@ -271,7 +271,7 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
           </>
         )}
       </DropdownMenuContent>
-      {accountOwner && creating && <NewWorkspaceDialog open={creating} onOpenChange={setCreating} />}
+      {isOwner && creating && <NewWorkspaceDialog open={creating} onOpenChange={setCreating} />}
     </DropdownMenu>
   )
 }
@@ -307,9 +307,7 @@ function UserMenu() {
       : !paying && (usage.data?.suspended || usage.data?.plan_expires_at)
         ? 'Choose a plan'
         : nextPlan && `Upgrade to ${nextPlan.name}`
-  // Cloud accounts: the name set in Settings > Account wins over the sign-in identity's name.
-  const account = useQuery({ queryKey: qk.account, queryFn: api.account, enabled: accountsEnabled })
-  const name = account.data?.name || user?.name || (isLocal ? 'System' : 'Signed in')
+  const name = user?.name || (isLocal ? 'System' : 'Signed in')
   // People who sign in with an email code have the address as their name: show it once.
   const roleLabel = role ? role.charAt(0).toUpperCase() + role.slice(1) : ''
   const detail = (user?.email !== name && user?.email) || (isLocal ? 'This computer' : roleLabel)

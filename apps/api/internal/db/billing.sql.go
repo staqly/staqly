@@ -10,15 +10,17 @@ import (
 	"database/sql"
 )
 
-const countOtherAccountTrials = `-- name: CountOtherAccountTrials :one
-SELECT COUNT(*) FROM workspaces
-WHERE account_id = (SELECT w.account_id FROM workspaces w WHERE w.id = ?1)
-  AND id <> ?1 AND subscription_status = 'trialing'
+const countOwnersOtherTrials = `-- name: CountOwnersOtherTrials :one
+SELECT COUNT(*) FROM workspaces w
+WHERE w.id <> ?1 AND w.subscription_status = 'trialing'
+  AND EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = w.id AND m.role = 'owner'
+    AND m.user_id IN (SELECT o.user_id FROM workspace_members o WHERE o.workspace_id = ?1 AND o.role = 'owner'))
 `
 
-// Other workspaces of the same account whose Stripe trial is running (one trial at a time per account).
-func (q *Queries) CountOtherAccountTrials(ctx context.Context, workspaceID string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countOtherAccountTrials, workspaceID)
+// Other workspaces, owned by one of this workspace's owners, whose Stripe trial is running (one trial at a
+// time per person).
+func (q *Queries) CountOwnersOtherTrials(ctx context.Context, workspaceID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOwnersOtherTrials, workspaceID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

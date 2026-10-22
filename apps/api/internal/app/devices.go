@@ -29,9 +29,9 @@ func (s *Service) CreateDeviceLink(ctx context.Context, p Principal, origin stri
 	if p.Kind != PrincipalSession && p.Kind != PrincipalLocal && p.Kind != PrincipalSystem {
 		return DeviceLink{}, &Error{Code: "forbidden", Status: 403, Message: "device links can only be created from the dashboard"}
 	}
-	// In an account workspace the link signs in its maker (their role is read on every request as usual);
+	// In a workspace with people the link signs in its maker (their role is read on every request as usual);
 	// without a person behind the session there is no one to sign in.
-	if p.UserID == "" && s.workspaceHasAccount(ctx, p.WorkspaceID) {
+	if p.UserID == "" && s.workspaceHasPeople(ctx, s.Q, p.WorkspaceID) {
 		return DeviceLink{}, forbidden("sign in as a person to connect another device")
 	}
 	base := s.Cfg.PublicDashboardURL
@@ -136,8 +136,12 @@ func (s *Service) RedeemDeviceLink(ctx context.Context, token, userAgent, curren
 			}
 			ns, _, err = s.createUserSession(ctx, q, link.WorkspaceID, link.UserID, userAgent)
 		} else {
-			// A link from before the workspace joined an account signs no one in now.
-			if ws, err := q.GetWorkspace(ctx, link.WorkspaceID); err != nil || ws.AccountID.Valid {
+			// A link from before the workspace had people signs no one in now.
+			n, err := q.CountMembers(ctx, link.WorkspaceID)
+			if err != nil {
+				return err
+			}
+			if n > 0 {
 				return &Error{Code: "invalid_link", Status: 401, Message: "this connect link is not valid"}
 			}
 			ns, err = s.createSession(ctx, q, link.WorkspaceID, userAgent)

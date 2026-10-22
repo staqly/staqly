@@ -181,7 +181,7 @@ func (s *Service) Setup(ctx context.Context, name, setupToken, userAgent string)
 		}
 		sys := Principal{WorkspaceID: ws.ID, Kind: PrincipalSystem, ID: "setup", Name: "Setup"}
 		// No expiry, unlike CreateAPIKey's year: this key is how a workspace from before accounts signs in to the
-		// dashboard (the recovery key replaces it when lost). Account workspaces never get one (Setup is legacy only).
+		// dashboard (the recovery key replaces it when lost). Workspaces with people never get one (Setup is legacy only).
 		key, err := s.createKey(ctx, q, sys, "Admin key", AdminKeyScopes, nil)
 		if err != nil {
 			return err
@@ -389,7 +389,7 @@ func (s *Service) AuthenticateAPIKey(ctx context.Context, raw string) (Principal
 		if err != nil {
 			return Principal{}, ErrUnauthorized
 		}
-		p.Scopes, p.UserID, p.Role, p.AccountOwner = intersectScopes(scopes, up.Scopes), up.UserID, up.Role, up.AccountOwner
+		p.Scopes, p.UserID, p.Role = intersectScopes(scopes, up.Scopes), up.UserID, up.Role
 	}
 	return p, nil
 }
@@ -470,7 +470,7 @@ func (s *Service) SignInWithAPIKey(ctx context.Context, rawKey, userAgent string
 	if err != nil {
 		return NewSession{}, &Error{Code: "unauthorized", Status: 401, Message: "invalid, revoked or expired API key"}
 	}
-	if p.UserID != "" || s.workspaceHasAccount(ctx, p.WorkspaceID) {
+	if p.UserID != "" || s.workspaceHasPeople(ctx, s.Q, p.WorkspaceID) {
 		return NewSession{}, s.signInWithAccount()
 	}
 	if !p.Has(ScopeAdmin) {
@@ -516,8 +516,9 @@ func (s *Service) Recover(ctx context.Context, recoveryKey, userAgent string) (R
 	if err != nil {
 		return RecoverResult{}, invalidKey
 	}
-	if ws.AccountID.Valid {
-		// An account workspace signs in with Google; a recovery key would open a session without a role.
+	if s.workspaceHasPeople(ctx, s.Q, ws.ID) {
+		// A workspace with people signs in with Google or an email code; a recovery key would open a session
+		// without a role.
 		return RecoverResult{}, s.signInWithAccount()
 	}
 	next := newRecoveryKey()
@@ -537,7 +538,7 @@ func (s *Service) Recover(ctx context.Context, recoveryKey, userAgent string) (R
 			return err
 		}
 		// Never blocked by the plan's key limit: recovery must always restore access. No expiry, like Setup's key:
-		// it is the sign-in credential of a workspace from before accounts (account workspaces refuse recovery).
+		// it is the sign-in credential of a workspace from before accounts (workspaces with people refuse recovery).
 		key, err := s.insertKey(ctx, q, sys, "Admin key (recovered)", AdminKeyScopes, nil)
 		if err != nil {
 			return err
@@ -602,8 +603,8 @@ func (s *Service) RotateRecoveryKey(ctx context.Context, p Principal) (string, e
 	if p.Kind != PrincipalSession {
 		return "", &Error{Code: "forbidden", Status: 403, Message: "recovery key can only be rotated from a dashboard session"}
 	}
-	if p.UserID != "" || s.workspaceHasAccount(ctx, p.WorkspaceID) {
-		return "", conflict("people in an account recover access with their sign-in methods (email code, Google or a passkey), not a recovery key")
+	if p.UserID != "" || s.workspaceHasPeople(ctx, s.Q, p.WorkspaceID) {
+		return "", conflict("people recover access with their sign-in methods (email code, Google or a passkey), not a recovery key")
 	}
 	key, _, err := s.replaceRecoveryKey(ctx, p, p.ID, nil)
 	return key, err
@@ -673,7 +674,7 @@ func (s *Service) RevokeSession(ctx context.Context, p Principal, id string) err
 	return s.revokeSession(ctx, p, id, "revoked")
 }
 
-// ownersHiddenFrom: the owners (and the account owner) of the workspace whose sessions p may not see or end,
+// ownersHiddenFrom: the owners of the workspace whose sessions p may not see or end,
 // like admins never change or remove owners. Empty for owners, and for principals without a role (local
 // mode, sessions and keys from before accounts: they hold the whole workspace).
 func (s *Service) ownersHiddenFrom(ctx context.Context, p Principal) (map[string]bool, error) {
@@ -689,13 +690,6 @@ func (s *Service) ownersHiddenFrom(ctx context.Context, p Principal) (map[string
 		if m.Role == RoleOwner {
 			owners[m.UserID] = true
 		}
-	}
-	acc, err := s.accountOwnerOf(ctx, s.Q, p.WorkspaceID)
-	if err != nil {
-		return nil, err
-	}
-	if acc != "" {
-		owners[acc] = true
 	}
 	return owners, nil
 }
@@ -861,7 +855,7 @@ func (s *Service) RevokeAPIKey(ctx context.Context, p Principal, id string) erro
 }
 
 // notOwnersKey: an admin manages admins' and editors' keys, not an owner's (an owner's key can carry the
-// account owner's billing rights), as with an owner's sessions and membership.
+// owners' billing rights), as with an owner's sessions and membership.
 func (s *Service) notOwnersKey(ctx context.Context, p Principal, id string) error {
 	owners, err := s.ownersHiddenFrom(ctx, p)
 	if err != nil || len(owners) == 0 {
@@ -917,10 +911,10 @@ func (s *Service) RotateAPIKey(ctx context.Context, p Principal, id string) (API
 	return key, err
 }
 
-// signInWithAccount: a workspace in an account opens only with a person's sign-in, never with an API key or a
+// signInWithAccount: a workspace with people opens only with a person's sign-in, never with an API key or a
 // recovery key. The message names the methods this server offers.
 func (s *Service) signInWithAccount() *Error {
-	return &Error{Code: "sign_in_with_account", Status: 403, Message: "this workspace belongs to an account: " + s.accountSignInMethods()}
+	return &Error{Code: "sign_in_with_account", Status: 403, Message: "this workspace has people who sign in: " + s.accountSignInMethods()}
 }
 
 // accountSignInMethods: "sign in with Google, an email code or a passkey", as far as this server offers them.

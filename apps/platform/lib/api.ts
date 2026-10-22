@@ -17,7 +17,7 @@ export type Scope = Schemas['Scope']
 export type Session = Schemas['Session']
 export type Role = Schemas['Role']
 export type MyWorkspace = Schemas['MyWorkspace']
-export type Account = Schemas['Account']
+export type User = Schemas['User']
 export type NotificationPrefs = Schemas['NotificationPrefs']
 export type NotificationChoice = Schemas['NotificationChoice']
 export type Member = Schemas['Member']
@@ -637,13 +637,12 @@ export const api = {
     request<Workspace>('/v1/workspace', { method: 'PATCH', json: body }),
   rotateRecoveryKey: () => request<{ recovery_key?: string }>('/v1/recovery-key/rotate', { method: 'POST' }),
 
-  // Cloud accounts (sign-in with Google, workspaces, members, invitations).
-  createAccountWorkspace: (name: string, timezone?: string) =>
+  // People in cloud mode (sign-in, workspaces, members, invitations).
+  createWorkspace: (name: string, timezone?: string) =>
     request<MyWorkspace>('/v1/account/workspaces', { method: 'POST', json: { name, timezone } }),
   switchWorkspace: (workspace_id: string) =>
     request<void>('/v1/session/workspace', { method: 'POST', json: { workspace_id } }),
-  account: () => request<Account>('/v1/account'),
-  renameAccount: (name: string) => request<Account>('/v1/account', { method: 'PATCH', json: { name } }),
+  renameMe: (name: string) => request<User>('/v1/account', { method: 'PATCH', json: { name } }),
   notificationPrefs: () => request<NotificationPrefs>('/v1/account/notifications'),
   setNotificationPrefs: (body: { scope?: NotificationPrefs['scope']; events?: NotificationChoice[] }) =>
     request<NotificationPrefs>('/v1/account/notifications', { method: 'PUT', json: body }),

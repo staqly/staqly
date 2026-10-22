@@ -18,7 +18,7 @@ func (s *Service) Onboarded(ctx context.Context, p Principal) bool {
 }
 
 // FinishOnboarding marks the welcome wizard done (finished or skipped). name, when given, is how the person
-// wants to be called: their account's name when they own one (the sidebar shows it), else their own.
+// wants to be called.
 func (s *Service) FinishOnboarding(ctx context.Context, p Principal, name string) error {
 	if p.Kind != PrincipalSession && p.Kind != PrincipalLocal {
 		return forbidden("the welcome is finished from the dashboard")
@@ -33,13 +33,6 @@ func (s *Service) FinishOnboarding(ctx context.Context, p Principal, name string
 			return q.SetWorkspaceOnboarded(ctx, db.SetWorkspaceOnboardedParams{OnboardedAt: nullStr(now), UpdatedAt: now, ID: p.WorkspaceID})
 		}
 		if name != "" {
-			if acc, err := q.GetAccountByOwner(ctx, p.UserID); err == nil {
-				if err := q.UpdateAccountName(ctx, db.UpdateAccountNameParams{Name: name, UpdatedAt: now, ID: acc.ID}); err != nil {
-					return err
-				}
-			} else if !isNoRows(err) {
-				return err
-			}
 			if err := q.SetUserName(ctx, db.SetUserNameParams{Name: name, UpdatedAt: now, ID: p.UserID}); err != nil {
 				return err
 			}

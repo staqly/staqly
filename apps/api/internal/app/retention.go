@@ -208,7 +208,7 @@ func (s *Service) DeleteWorkspace(ctx context.Context, p Principal, confirm stri
 	if p.Kind != PrincipalSession {
 		return &Error{Code: "forbidden", Status: 403, Message: "deleting a workspace requires a signed-in dashboard session (API keys cannot do this)"}
 	}
-	if err := s.requireAccountOwner(ctx, p); err != nil {
+	if err := s.requireOwner(ctx, p); err != nil {
 		return err
 	}
 	// A large workspace takes a while to cascade-delete; a client that gives

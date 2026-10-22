@@ -13,12 +13,11 @@ import { makeClient, mockApi, renderWithProviders, sessionFixture } from './util
 
 const ANA = { id: 'usr_1', name: 'Ana Owner', email: 'ana@example.com', avatar_url: '' }
 
-function accountSession(role: string, accountOwner: boolean) {
+function accountSession(role: string) {
   return {
     ...sessionFixture('cloud'),
     user: ANA,
     role,
-    account_owner: accountOwner,
     accounts_enabled: true,
     workspaces: [
       { id: 'ws_1', name: 'Test WS', role, current: true },
@@ -62,7 +61,7 @@ describe('sign-in with Google', () => {
 
 describe('the signed-in person in the sidebar', () => {
   it('cloud: Google name and address, Sign out, and the workspace switcher', async () => {
-    const { client, routes } = shell(accountSession('owner', true))
+    const { client, routes } = shell(accountSession('owner'))
     const api = mockApi({ ...routes, 'DELETE /v1/session': { status: 204 } })
     const user = userEvent.setup()
 
@@ -124,10 +123,10 @@ describe('the signed-in person in the sidebar', () => {
 })
 
 describe('members', () => {
-  it('an admin changes roles up to admin and never touches the account owner', async () => {
+  it('an admin changes roles up to admin and never touches an owner', async () => {
     const client = makeClient()
 
-    client.setQueryData(qk.session, accountSession('admin', false))
+    client.setQueryData(qk.session, accountSession('admin'))
     const api = mockApi({
       'GET /v1/members': {
         data: [
@@ -137,7 +136,6 @@ describe('members', () => {
             email: 'ana@example.com',
             avatar_url: '',
             role: 'owner',
-            account_owner: true,
             you: false,
             created_at: '2026-10-19T00:00:00Z',
           },
@@ -147,7 +145,6 @@ describe('members', () => {
             email: 'cleo@example.com',
             avatar_url: '',
             role: 'editor',
-            account_owner: false,
             you: false,
             created_at: '2026-10-19T00:00:00Z',
           },
@@ -160,7 +157,6 @@ describe('members', () => {
         email: 'cleo@example.com',
         avatar_url: '',
         role: 'admin',
-        account_owner: false,
         you: false,
         created_at: '2026-10-19T00:00:00Z',
       },
@@ -182,7 +178,7 @@ describe('members', () => {
   it('per user pricing: the seats billed and what one more person costs while the workspace pays', async () => {
     const client = makeClient()
 
-    client.setQueryData(qk.session, accountSession('owner', true))
+    client.setQueryData(qk.session, accountSession('owner'))
     mockApi({
       'GET /v1/members': {
         data: [
@@ -192,7 +188,6 @@ describe('members', () => {
             email: 'ana@example.com',
             avatar_url: '',
             role: 'owner',
-            account_owner: true,
             you: true,
             created_at: '2026-10-19T00:00:00Z',
           },

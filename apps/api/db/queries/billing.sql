@@ -14,11 +14,13 @@ SELECT id FROM workspaces WHERE stripe_customer_id = ?;
 -- name: InsertStripeEvent :execrows
 INSERT OR IGNORE INTO stripe_events (id, created_at) VALUES (?, ?);
 
--- name: CountOtherAccountTrials :one
--- Other workspaces of the same account whose Stripe trial is running (one trial at a time per account).
-SELECT COUNT(*) FROM workspaces
-WHERE account_id = (SELECT w.account_id FROM workspaces w WHERE w.id = sqlc.arg(workspace_id))
-  AND id <> sqlc.arg(workspace_id) AND subscription_status = 'trialing';
+-- name: CountOwnersOtherTrials :one
+-- Other workspaces, owned by one of this workspace's owners, whose Stripe trial is running (one trial at a
+-- time per person).
+SELECT COUNT(*) FROM workspaces w
+WHERE w.id <> sqlc.arg(workspace_id) AND w.subscription_status = 'trialing'
+  AND EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = w.id AND m.role = 'owner'
+    AND m.user_id IN (SELECT o.user_id FROM workspace_members o WHERE o.workspace_id = sqlc.arg(workspace_id) AND o.role = 'owner'));
 
 -- name: ListBillingToReconcile :many
 -- Workspaces whose plan may be out of date with Stripe (a webhook lost or not yet in): a customer without a

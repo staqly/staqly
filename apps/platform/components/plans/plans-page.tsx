@@ -55,9 +55,9 @@ const BACK = '/settings/plan'
 /** Full-screen plan picker: Starter, Plus, Pro and Business, billed monthly or yearly. */
 export function PlansPage() {
   const { isLocal } = useMode()
-  const { accountOwner, accountsEnabled, canManagePeople } = useRole()
+  const { isOwner, accountsEnabled, canManagePeople } = useRole()
   // The account owner pays; a workspace without an account is paid for by its admins.
-  const payer = accountsEnabled ? accountOwner : canManagePeople
+  const payer = accountsEnabled ? isOwner : canManagePeople
   const usage = useUsage()
   const router = useRouter()
   const params = useSearchParams()

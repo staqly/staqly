@@ -233,12 +233,11 @@ func (e *acctEnv) as(p *person, method, path string, body any, want int, out any
 }
 
 type sessionOut struct {
-	Workspace    app.Workspace     `json:"workspace"`
-	User         app.User          `json:"user"`
-	Role         string            `json:"role"`
-	AccountOwner bool              `json:"account_owner"`
-	Workspaces   []app.MyWorkspace `json:"workspaces"`
-	Principal    struct {
+	Workspace  app.Workspace     `json:"workspace"`
+	User       app.User          `json:"user"`
+	Role       string            `json:"role"`
+	Workspaces []app.MyWorkspace `json:"workspaces"`
+	Principal  struct {
 		Scopes []string `json:"scopes"`
 	} `json:"principal"`
 }
@@ -301,21 +300,17 @@ func TestGoogleSignInCreatesAccountAndWorkspace(t *testing.T) {
 		t.Fatalf("landing: %q", loc)
 	}
 	s := e.session(p)
-	if s.User.Email != ana.Email || s.User.Name != ana.Name || s.User.AvatarURL == "" || s.Role != app.RoleOwner || !s.AccountOwner ||
+	if s.User.Email != ana.Email || s.User.Name != ana.Name || s.User.AvatarURL == "" || s.Role != app.RoleOwner ||
 		len(s.Workspaces) != 1 || !s.Workspaces[0].Current || len(s.Principal.Scopes) != len(app.AllScopes) {
 		t.Fatalf("session: %+v", s)
 	}
 	first := s.Workspace.ID
 
-	// The account, renamed; a second workspace; switching between them.
-	var acc app.Account
-	e.as(p, "GET", "/v1/account", nil, 200, &acc)
-	if acc.Owner.Email != ana.Email || len(acc.Workspaces) != 1 {
-		t.Fatalf("account: %+v", acc)
-	}
-	e.as(p, "PATCH", "/v1/account", map[string]any{"name": "Ana's studio"}, 200, &acc)
-	if acc.Name != "Ana's studio" {
-		t.Fatalf("rename: %+v", acc)
+	// The person renamed; a second workspace; switching between them.
+	var me app.User
+	e.as(p, "PATCH", "/v1/account", map[string]any{"name": "Ana B."}, 200, &me)
+	if me.Name != "Ana B." || me.Email != ana.Email {
+		t.Fatalf("rename: %+v", me)
 	}
 	var ws app.MyWorkspace
 	e.as(p, "POST", "/v1/account/workspaces", map[string]any{"name": "Bad zone", "timezone": "Nowhere/Land"}, 422, nil)
@@ -432,10 +427,9 @@ func TestGoogleSignUpClosedBySetupToken(t *testing.T) {
 	// Invited people join without the token; they never get an account of their own.
 	_, tok := e.invite(owner, bob.Email, app.RoleEditor)
 	bobP := e.mustSignIn(bob, "invite="+url.QueryEscape(tok))
-	if s := e.session(bobP); s.Role != app.RoleEditor || s.AccountOwner {
+	if s := e.session(bobP); s.Role != app.RoleEditor {
 		t.Fatalf("invited: %+v", s)
 	}
-	e.as(bobP, "GET", "/v1/account", nil, 404, nil)
 	e.as(bobP, "POST", "/v1/account/workspaces", map[string]any{"name": "Mine"}, 403, nil)
 }
 
@@ -805,10 +799,8 @@ func TestRoleMatrix(t *testing.T) {
 		{"list members", "GET", static("/v1/members"), nil, app.RoleAdmin, 200},
 		{"list invitations", "GET", static("/v1/invitations"), nil, app.RoleAdmin, 200},
 		{"invite", "POST", static("/v1/invitations"), func() any { return map[string]any{"email": uniq() + "@example.com", "role": app.RoleViewer} }, app.RoleAdmin, 201},
-		{"create workspace", "POST", static("/v1/account/workspaces"), func() any { return map[string]any{"name": uniq()} }, "account-owner", 201},
-		{"read account", "GET", static("/v1/account"), nil, "account-owner", 200},
 	}
-	rank := map[string]int{app.RoleViewer: 0, app.RoleEditor: 1, app.RoleAdmin: 2, app.RoleOwner: 3, "account-owner": 3}
+	rank := map[string]int{app.RoleViewer: 0, app.RoleEditor: 1, app.RoleAdmin: 2, app.RoleOwner: 3}
 	for _, a := range actions {
 		for role, p := range people {
 			want := a.ok
@@ -845,8 +837,8 @@ func TestRoleRules(t *testing.T) {
 	ids := map[string]string{}
 	for _, m := range members.Data {
 		ids[m.Email] = m.UserID
-		if m.Email == ana.Email && (!m.AccountOwner || m.Role != app.RoleOwner) {
-			t.Fatalf("account owner: %+v", m)
+		if m.Email == ana.Email && m.Role != app.RoleOwner {
+			t.Fatalf("owner: %+v", m)
 		}
 	}
 	if len(ids) != 4 {
@@ -855,8 +847,8 @@ func TestRoleRules(t *testing.T) {
 	// Admins manage up to admin; they never grant or touch the owner role.
 	e.as(admin, "POST", "/v1/invitations", map[string]any{"email": "o@example.com", "role": app.RoleOwner}, 403, nil)
 	e.as(admin, "PATCH", "/v1/members/"+ids[cleo.Email], map[string]any{"role": app.RoleOwner}, 403, nil)
-	e.as(admin, "PATCH", "/v1/members/"+ids[ana.Email], map[string]any{"role": app.RoleViewer}, 409, nil) // account owner
-	e.as(admin, "DELETE", "/v1/members/"+ids[ana.Email], nil, 409, nil)
+	e.as(admin, "PATCH", "/v1/members/"+ids[ana.Email], map[string]any{"role": app.RoleViewer}, 403, nil) // an owner
+	e.as(admin, "DELETE", "/v1/members/"+ids[ana.Email], nil, 403, nil)
 	e.as(admin, "PATCH", "/v1/members/"+ids[dan.Email], map[string]any{"role": app.RoleEditor}, 200, nil)
 	// Editors and viewers manage nobody; API keys never manage people.
 	e.as(editor, "PATCH", "/v1/members/"+ids[dan.Email], map[string]any{"role": app.RoleViewer}, 403, nil)

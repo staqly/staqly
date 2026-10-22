@@ -67,7 +67,7 @@ export interface paths {
         put?: never;
         /**
          * Create a cloud workspace (with billing it has no plan until a subscription starts; without billing the server-side trial)
-         * @description Without cloud accounts (AUTH_DEV_SIGNIN) only; with Google sign-in new people start at GET /v1/auth/google/start (409 here) and account owners add workspaces with POST /v1/account/workspaces. Cloud mode only; each call" creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, an admin API key (scope `admin`, the credential that signs in to the dashboard; see POST /v1/sessions/api-key), a single-use recovery key and a browser session cookie. Secrets are returned only in this response.
+         * @description Without cloud accounts (AUTH_DEV_SIGNIN) only; with Google sign-in new people start at GET /v1/auth/google/start (409 here) and signed-in people add workspaces with POST /v1/account/workspaces. Cloud mode only; each call" creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, an admin API key (scope `admin`, the credential that signs in to the dashboard; see POST /v1/sessions/api-key), a single-use recovery key and a browser session cookie. Secrets are returned only in this response.
          */
         post: operations["createWorkspace"];
         delete?: never;
@@ -163,7 +163,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Pay for a plan, or switch the subscription to another plan (account owner)
+         * Pay for a plan, or switch the subscription to another plan (a workspace owner)
          * @description Without a live subscription: returns a Stripe Checkout URL for the plan billed monthly or yearly;
          *     open it in a browser to pay. Prices are per seat (the members) and exclude VAT (Stripe Tax adds it from
          *     the billing address). Starter starts Stripe's 7-day trial with a card required (nothing is charged until
@@ -215,7 +215,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Buy extra posts to X (account owner)
+         * Buy extra posts to X (a workspace owner)
          * @description Returns a Stripe Checkout URL (one-time payment) for a bundle; the posts are added when Stripe reports the payment.
          */
         post: operations["createCreditsCheckout"];
@@ -257,12 +257,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Add an add-on to the subscription (account owner)
+         * Add an add-on to the subscription (a workspace owner)
          * @description Adds it to the live subscription in the subscription's interval, charged at once for the rest of the period with the card on file. Its features apply when Stripe reports them (seconds).
          */
         post: operations["addAddon"];
         /**
-         * Remove an add-on (account owner)
+         * Remove an add-on (a workspace owner)
          * @description Removes it from the subscription now; the unused rest of the period is credited on the next invoice.
          */
         delete: operations["removeAddon"];
@@ -875,15 +875,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The signed-in person's account (account owners only) */
-        get: operations["getAccount"];
+        get?: never;
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Rename the account (account owner) */
-        patch: operations["renameAccount"];
+        /** Change the signed-in person's name (how members, the activity log and emails show them) */
+        patch: operations["renameMe"];
         trace?: never;
     };
     "/v1/account/workspaces": {
@@ -895,8 +894,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Add a workspace to the account (account owner; with billing it has no plan until a subscription starts, see GET /v1/billing trial) */
-        post: operations["createAccountWorkspace"];
+        /** Create a workspace the signed-in person owns (where people join by invitation only, someone who owns a workspace already); with billing it has no plan until a subscription starts, see GET /v1/billing trial */
+        post: operations["createMyWorkspace"];
         delete?: never;
         options?: never;
         head?: never;
@@ -938,7 +937,7 @@ export interface paths {
         head?: never;
         /**
          * Change a member's role (admins up to admin; owners any role)
-         * @description Signed-in people only (not API keys). The last owner and the account owner keep the owner role (409).
+         * @description Signed-in people only (not API keys). The last owner keeps the owner role (409).
          */
         patch: operations["updateMember"];
         trace?: never;
@@ -3594,7 +3593,7 @@ export interface components {
         Role: "owner" | "admin" | "editor" | "viewer";
         User: {
             id: string;
-            /** @description The Google name; in the Community Edition the computer's user name */
+            /** @description The person's name (from Google or set by them); in the Community Edition the computer's user name */
             name: string;
             email: string;
             avatar_url: string;
@@ -3637,20 +3636,12 @@ export interface components {
             role: components["schemas"]["Role"];
             current: boolean;
         };
-        Account: {
-            id: string;
-            name: string;
-            owner: components["schemas"]["User"];
-            workspaces: components["schemas"]["MyWorkspace"][];
-            created_at: string;
-        };
         Member: {
             user_id: string;
             name: string;
             email: string;
             avatar_url: string;
             role: components["schemas"]["Role"];
-            account_owner: boolean;
             you: boolean;
             created_at: string;
         };
@@ -6686,33 +6677,7 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
-    getAccount: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Account"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    renameAccount: {
+    renameMe: {
         parameters: {
             query?: never;
             header?: {
@@ -6741,7 +6706,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Account"];
+                    "application/json": components["schemas"]["User"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -6753,7 +6718,7 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
-    createAccountWorkspace: {
+    createMyWorkspace: {
         parameters: {
             query?: never;
             header?: {
@@ -7152,8 +7117,6 @@ export interface operations {
                         csrf_token: string;
                         user?: components["schemas"]["User"];
                         role?: components["schemas"]["Role"];
-                        /** @description Owns the account this workspace belongs to (creates and deletes workspaces, billing) */
-                        account_owner?: boolean;
                         /** @description Cloud accounts with Google sign-in are on */
                         accounts_enabled?: boolean;
                         /** @description Workspaces this person can switch to */

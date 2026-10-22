@@ -275,9 +275,8 @@ const (
 )
 
 // trialOffer: Starter's 7-day Stripe trial (card required) goes to each workspace once (one that ever had a
-// subscription doesn't get it again), and to one workspace of an account at a time: a workspace started while
-// another of the same account is still trialing pays from the first day. Workspaces without an account (local
-// mode) have no others.
+// subscription doesn't get it again), and to one workspace per person at a time: a workspace whose owner already
+// trials another one pays from the first day. Workspaces without people (local mode) have no others.
 func (s *Service) trialOffer(ctx context.Context, q *db.Queries, w db.GetWorkspaceBillingRow) (string, error) {
 	switch {
 	case !s.BillingEnabled() || (w.SubscriptionStatus.Valid && liveSubscription(w.SubscriptionStatus.String)):
@@ -285,7 +284,7 @@ func (s *Service) trialOffer(ctx context.Context, q *db.Queries, w db.GetWorkspa
 	case w.StripeSubscriptionID.Valid && w.StripeSubscriptionID.String != "":
 		return TrialUsed, nil
 	}
-	n, err := q.CountOtherAccountTrials(ctx, w.ID)
+	n, err := q.CountOwnersOtherTrials(ctx, w.ID)
 	if err != nil {
 		return "", err
 	}
@@ -370,7 +369,7 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	if len(opts) > 0 {
 		opt = opts[0]
 	}
-	if err := s.requireAccountOwner(ctx, p); err != nil {
+	if err := s.requireOwner(ctx, p); err != nil {
 		return "", err
 	}
 	if !s.BillingEnabled() {
@@ -495,7 +494,7 @@ func (s *Service) unpinnedPrice(ctx context.Context, plan Plan, interval string,
 }
 
 // customerDetails: who a workspace's Stripe customer is, so it can be found in Stripe: the workspace (its name as
-// the business, its id in the description and metadata) and the person who pays, the account owner (their name and
+// the business, its id in the description and metadata) and the person who pays, its first owner (their name and
 // the email they sign in with: Google or an email code). Checkout may still change `name` to the cardholder's.
 func (s *Service) customerDetails(ctx context.Context, w db.GetWorkspaceBillingRow) url.Values {
 	v := url.Values{
@@ -504,17 +503,19 @@ func (s *Service) customerDetails(ctx context.Context, w db.GetWorkspaceBillingR
 		"description":            {"staqly workspace " + w.ID},
 		"metadata[workspace_id]": {w.ID},
 	}
-	if ws, err := s.Q.GetWorkspace(ctx, w.ID); err == nil && ws.AccountID.Valid {
-		if acc, err := s.Q.GetAccount(ctx, ws.AccountID.String); err == nil {
-			v.Set("metadata[account_id]", acc.ID)
-			if u, err := s.Q.GetUser(ctx, acc.OwnerUserID); err == nil {
-				if u.Email != "" {
-					v.Set("email", u.Email)
-				}
-				if person := firstNonEmpty(acc.Name, u.Name); person != "" && !strings.Contains(person, "@") {
-					v.Set("individual_name", person)
-				}
+	// The customer's contact: the workspace's first owner.
+	if members, err := s.Q.ListMembers(ctx, w.ID); err == nil {
+		for _, m := range members {
+			if m.Role != RoleOwner {
+				continue
 			}
+			if m.Email != "" {
+				v.Set("email", m.Email)
+			}
+			if m.Name != "" && !strings.Contains(m.Name, "@") {
+				v.Set("individual_name", m.Name)
+			}
+			break
 		}
 	}
 	return v
@@ -663,7 +664,7 @@ func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, p
 // PortalSession opens the Stripe customer portal (payment method, invoices,
 // cancel) and returns its URL.
 func (s *Service) PortalSession(ctx context.Context, p Principal) (string, error) {
-	if err := s.requireAccountOwner(ctx, p); err != nil {
+	if err := s.requireOwner(ctx, p); err != nil {
 		return "", err
 	}
 	if !s.BillingEnabled() {

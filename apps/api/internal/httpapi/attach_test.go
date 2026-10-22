@@ -35,7 +35,7 @@ func (e *acctEnv) attachAndClaim(wsID, email string) *person {
 		e.t.Fatalf("invitation: %+v", inv)
 	}
 	owner := e.emailSignIn(email, map[string]any{"invite": inviteToken(e.t, inv.Link)})
-	if s := e.session(owner); s.Workspace.ID != wsID || s.Role != app.RoleOwner || !s.AccountOwner || s.User.Email != email {
+	if s := e.session(owner); s.Workspace.ID != wsID || s.Role != app.RoleOwner || s.User.Email != email {
 		e.t.Fatalf("after accepting: %+v", s)
 	}
 	return owner
@@ -114,7 +114,7 @@ func TestAttachWorkspace(t *testing.T) {
 	}
 
 	// Attached once: a second attach is refused.
-	if _, err := e.svc.AttachWorkspace(ctx, ws, "bob@example.com"); err == nil || !strings.Contains(err.Error(), "already belongs to an account") {
+	if _, err := e.svc.AttachWorkspace(ctx, ws, "bob@example.com"); err == nil || !strings.Contains(err.Error(), "has people already") {
 		t.Fatalf("attach twice: %v", err)
 	}
 }

@@ -19,11 +19,12 @@ import (
 	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
-// Cloud accounts (docs/accounts.md). People sign in with Google (OpenID Connect: state, nonce and PKCE,
-// a verified ID token, Google's immutable `sub` as the identity, never the email address). An account is
-// the billing and ownership boundary with one owner; its workspaces hold the content. A person's role in
-// a workspace maps onto the existing scopes here, in one place, so REST, MCP and the dashboard keep a
-// single authorization path (Principal.Has / require). Local mode never reaches any of this.
+// People in cloud mode (docs/accounts.md): users and workspaces, joined by workspace_members with a role.
+// People sign in with Google (OpenID Connect: state, nonce and PKCE, a verified ID token) or an email code;
+// the verified address is the person, so both reach the same user. A workspace is the billing and content
+// boundary; its owners pay and may delete it. A person's role in a workspace maps onto the existing scopes
+// here, in one place, so REST, MCP and the dashboard keep a single authorization path (Principal.Has /
+// require). Local mode never reaches any of this.
 
 const (
 	RoleOwner  = "owner"
@@ -41,7 +42,7 @@ func roleRank(role string) int { return slices.Index(Roles, role) }
 //   - viewer: read only;
 //   - editor: write, schedule and publish content, use the connected channels; no members, keys or channels;
 //   - admin and owner: everything in the workspace (admin covers every scope); what tells them apart is
-//     who may change owners (owners only), and account-level actions belong to the account owner.
+//     who may change owners, pay and delete the workspace (owners only).
 var RoleScopes = map[string][]string{
 	RoleViewer: {ScopeCollectionsRead, ScopePostsRead, ScopeMediaRead, ScopeEventsRead, ScopeChannelsRead},
 	RoleEditor: {ScopeCollectionsRead, ScopeCollectionsWrite, ScopePostsRead, ScopePostsWrite, ScopePostsDelete,
@@ -219,7 +220,7 @@ func loginErr(code, msg string) *Error { return &Error{Code: code, Status: 401, 
 // CompleteGoogleLogin checks the callback against the sealed state, exchanges the code (with the PKCE
 // verifier), verifies the ID token (signature, issuer, audience, expiry, nonce), then signs the person in:
 // an invitation they came with is accepted, a returning person lands in their workspace, a new person gets
-// an account and a first workspace (when sign-ups are open). Always a fresh session (no fixation).
+// a first workspace (when sign-ups are open). Always a fresh session (no fixation).
 func (s *Service) CompleteGoogleLogin(ctx context.Context, sealedState, state, code, userAgent string) (LoginResult, error) {
 	if err := googleOnly(s); err != nil {
 		return LoginResult{}, err
@@ -301,7 +302,7 @@ func (s *Service) signInIdentityTx(ctx context.Context, q *db.Queries, id Identi
 }
 
 // signInUserTx opens a session for a person whose sign-in was verified (`via`: google, email, passkey): the
-// invitation is accepted, a returning person lands in their workspace, a new one gets an account.
+// invitation is accepted, a returning person lands in their workspace, a new one gets a first workspace.
 func (s *Service) signInUserTx(ctx context.Context, q *db.Queries, user db.User, st loginState, userAgent, via string) (LoginResult, error) {
 	var err error
 	next := SafeNext(st.Next)
@@ -317,15 +318,11 @@ func (s *Service) signInUserTx(ctx context.Context, q *db.Queries, user db.User,
 			return LoginResult{}, err
 		}
 		if wsID == "" {
-			_, accErr := q.GetAccountByOwner(ctx, user.ID)
-			if accErr != nil && !isNoRows(accErr) {
-				return LoginResult{}, accErr
-			}
-			if accErr != nil && !s.signupAllowed(st.SetupToken) {
+			if !s.signupAllowed(st.SetupToken) {
 				return LoginResult{}, &Error{Code: "signup_closed", Status: 403,
 					Message: "this staqly accepts new people by invitation: ask a workspace admin to invite " + user.Email}
 			}
-			if wsID, err = s.createAccount(ctx, q, user); err != nil {
+			if wsID, err = s.createFirstWorkspace(ctx, q, user); err != nil {
 				return LoginResult{}, err
 			}
 		}
@@ -453,18 +450,10 @@ func (s *Service) homeWorkspace(ctx context.Context, q *db.Queries, userID strin
 	return rows[0].ID, nil
 }
 
-// createAccount: a new person's account and first workspace, created together (they own both).
-func (s *Service) createAccount(ctx context.Context, q *db.Queries, user db.User) (string, error) {
+// createFirstWorkspace: a person without a workspace gets one, which they own.
+func (s *Service) createFirstWorkspace(ctx context.Context, q *db.Queries, user db.User) (string, error) {
 	now := s.now()
-	acc, err := q.GetAccountByOwner(ctx, user.ID) // an owner who deleted every workspace keeps the account
-	if isNoRows(err) {
-		acc = db.Account{ID: newID("acc"), OwnerUserID: user.ID, Name: displayName(user), CreatedAt: now, UpdatedAt: now}
-		err = q.CreateAccount(ctx, db.CreateAccountParams{ID: acc.ID, OwnerUserID: user.ID, Name: acc.Name, CreatedAt: now, UpdatedAt: now})
-	}
-	if err != nil {
-		return "", err
-	}
-	ws, err := s.createCloudWorkspace(ctx, q, "My workspace", acc.ID, "")
+	ws, err := s.createCloudWorkspace(ctx, q, "My workspace", "")
 	if err != nil {
 		return "", err
 	}
@@ -474,10 +463,9 @@ func (s *Service) createAccount(ctx context.Context, q *db.Queries, user db.User
 	return ws.ID, nil
 }
 
-// createCloudWorkspace: a workspace on the free trial with its default collection (accountID "" for the
-// sign-up from before accounts), in time zone tz (checked; "" = UTC). No recovery key: account workspaces
-// sign in with Google.
-func (s *Service) createCloudWorkspace(ctx context.Context, q *db.Queries, name, accountID, tz string) (db.Workspace, error) {
+// createCloudWorkspace: a workspace on the free trial with its default collection, in time zone tz
+// (checked; "" = UTC). No recovery key: its people sign in with Google or an email code.
+func (s *Service) createCloudWorkspace(ctx context.Context, q *db.Queries, name, tz string) (db.Workspace, error) {
 	now := s.now()
 	ws := db.Workspace{ID: newID("ws"), Name: name, Plan: "pro", RecoveryRotatedAt: now, CreatedAt: now, UpdatedAt: now}
 	if err := q.CreateWorkspace(ctx, db.CreateWorkspaceParams{ID: ws.ID, Name: name, RecoveryVerifier: hashSecret(randomString(32)),
@@ -490,12 +478,6 @@ func (s *Service) createCloudWorkspace(ctx context.Context, q *db.Queries, name,
 	if _, err := q.SetWorkspacePlan(ctx, db.SetWorkspacePlanParams{Plan: planID,
 		PlanExpiresAt: sql.NullString{String: ends, Valid: true}, UpdatedAt: now, ID: ws.ID}); err != nil {
 		return db.Workspace{}, err
-	}
-	if accountID != "" {
-		if _, err := q.SetWorkspaceAccount(ctx, db.SetWorkspaceAccountParams{AccountID: nullStr(accountID), UpdatedAt: now, ID: ws.ID}); err != nil {
-			return db.Workspace{}, err
-		}
-		ws.AccountID = nullStr(accountID)
 	}
 	if err := s.setWorkspaceTimezone(ctx, q, &ws, tz); err != nil {
 		return db.Workspace{}, err
@@ -524,33 +506,20 @@ func (s *Service) createUserSession(ctx context.Context, q *db.Queries, workspac
 }
 
 // userPrincipal: what a signed-in person may do in a workspace, recomputed on every request (a role
-// change or a removal takes effect at once). The account owner is an owner in every account workspace.
+// change or a removal takes effect at once).
 func (s *Service) userPrincipal(ctx context.Context, q *db.Queries, userID, workspaceID string) (Principal, error) {
 	user, err := q.GetUser(ctx, userID)
 	if err != nil {
 		return Principal{}, ErrUnauthorized
 	}
-	ws, err := q.GetWorkspace(ctx, workspaceID)
-	if err != nil {
+	m, err := q.GetMember(ctx, db.GetMemberParams{WorkspaceID: workspaceID, UserID: userID})
+	if isNoRows(err) {
 		return Principal{}, ErrUnauthorized
 	}
-	role := ""
-	if m, err := q.GetMember(ctx, db.GetMemberParams{WorkspaceID: workspaceID, UserID: userID}); err == nil {
-		role = m.Role
-	} else if !isNoRows(err) {
+	if err != nil {
 		return Principal{}, err
 	}
-	owner := false
-	if ws.AccountID.Valid {
-		if acc, err := q.GetAccount(ctx, ws.AccountID.String); err == nil && acc.OwnerUserID == userID {
-			owner, role = true, RoleOwner
-		}
-	}
-	if role == "" {
-		return Principal{}, ErrUnauthorized
-	}
-	return Principal{WorkspaceID: workspaceID, Name: displayName(user), UserID: userID, Role: role, AccountOwner: owner,
-		Scopes: RoleScopes[role]}, nil
+	return Principal{WorkspaceID: workspaceID, Name: displayName(user), UserID: userID, Role: m.Role, Scopes: RoleScopes[m.Role]}, nil
 }
 
 // ---- who am I, workspaces ----
@@ -602,25 +571,12 @@ func (s *Service) ListMyWorkspaces(ctx context.Context, p Principal) ([]MyWorksp
 		return []MyWorkspace{{ID: ws.ID, Name: ws.Name, Role: role, Current: true}}, nil
 	}
 	out := []MyWorkspace{}
-	seen := map[string]bool{}
 	rows, err := s.Q.ListUserWorkspaces(ctx, p.UserID)
 	if err != nil {
 		return nil, err
 	}
-	if acc, err := s.Q.GetAccountByOwner(ctx, p.UserID); err == nil {
-		owned, err := s.Q.ListAccountWorkspaces(ctx, nullStr(acc.ID))
-		if err != nil {
-			return nil, err
-		}
-		for _, w := range owned {
-			seen[w.ID] = true
-			out = append(out, MyWorkspace{ID: w.ID, Name: w.Name, Role: RoleOwner, Current: w.ID == p.WorkspaceID})
-		}
-	}
 	for _, r := range rows {
-		if !seen[r.ID] {
-			out = append(out, MyWorkspace{ID: r.ID, Name: r.Name, Role: r.Role, Current: r.ID == p.WorkspaceID})
-		}
+		out = append(out, MyWorkspace{ID: r.ID, Name: r.Name, Role: r.Role, Current: r.ID == p.WorkspaceID})
 	}
 	return out, nil
 }
@@ -645,20 +601,27 @@ func (s *Service) SwitchWorkspace(ctx context.Context, p Principal, workspaceID 
 	})
 }
 
-// CreateAccountWorkspace: only the account owner adds a workspace to their account; they own it. timezone
-// is an IANA name ("" = UTC; the dashboard sends the browser's).
-func (s *Service) CreateAccountWorkspace(ctx context.Context, p Principal, name, timezone string) (MyWorkspace, error) {
+// CreateWorkspace: a signed-in person adds a workspace and owns it. timezone is an IANA name ("" = UTC; the
+// dashboard sends the browser's).
+func (s *Service) CreateWorkspace(ctx context.Context, p Principal, name, timezone string) (MyWorkspace, error) {
 	if err := accountsOnly(s); err != nil {
 		return MyWorkspace{}, err
 	}
 	if p.Kind != PrincipalSession || p.UserID == "" {
-		return MyWorkspace{}, forbidden("only the account owner, signed in, creates workspaces")
+		return MyWorkspace{}, forbidden("only a signed-in person creates workspaces")
 	}
-	acc, err := s.Q.GetAccountByOwner(ctx, p.UserID)
-	if err != nil {
-		return MyWorkspace{}, forbidden("only the account owner creates workspaces; ask them to add one")
+	// Where people join by invitation only, someone invited doesn't start workspaces of their own: an owner
+	// (someone who signed up, or was made one) does.
+	if !s.signupAllowed("") {
+		rows, err := s.Q.ListUserWorkspaces(ctx, p.UserID)
+		if err != nil {
+			return MyWorkspace{}, err
+		}
+		if !slices.ContainsFunc(rows, func(r db.ListUserWorkspacesRow) bool { return r.Role == RoleOwner }) {
+			return MyWorkspace{}, forbidden("on this staqly an owner of a workspace creates new ones; ask yours")
+		}
 	}
-	name, err = trimmed(name, "name", 100, true)
+	name, err := trimmed(name, "name", 100, true)
 	if err != nil {
 		return MyWorkspace{}, err
 	}
@@ -669,7 +632,7 @@ func (s *Service) CreateAccountWorkspace(ctx context.Context, p Principal, name,
 	}
 	var out MyWorkspace
 	err = s.tx(ctx, func(q *db.Queries) error {
-		ws, err := s.createCloudWorkspace(ctx, q, name, acc.ID, timezone)
+		ws, err := s.createCloudWorkspace(ctx, q, name, timezone)
 		if err != nil {
 			return err
 		}
@@ -683,81 +646,44 @@ func (s *Service) CreateAccountWorkspace(ctx context.Context, p Principal, name,
 	return out, err
 }
 
-// ---- account ----
-
-type Account struct {
-	ID         string        `json:"id"`
-	Name       string        `json:"name"`
-	Owner      User          `json:"owner"`
-	Workspaces []MyWorkspace `json:"workspaces"`
-	CreatedAt  string        `json:"created_at"`
-}
-
-// GetAccount: the signed-in person's own account (only owners have one).
-func (s *Service) GetAccount(ctx context.Context, p Principal) (Account, error) {
+// RenameMe changes the signed-in person's name (how members, the activity log and emails show them).
+func (s *Service) RenameMe(ctx context.Context, p Principal, name string) (User, error) {
 	if err := accountsOnly(s); err != nil {
-		return Account{}, err
+		return User{}, err
 	}
-	if p.UserID == "" {
-		return Account{}, notFound("account")
-	}
-	if p.Kind != PrincipalSession { // a key carries its creator's id, but the account is the person's
-		return Account{}, forbidden("only the account owner, signed in, opens the account")
-	}
-	acc, err := s.Q.GetAccountByOwner(ctx, p.UserID)
-	if err != nil {
-		return Account{}, notFound("account")
-	}
-	ws, err := s.Q.ListAccountWorkspaces(ctx, nullStr(acc.ID))
-	if err != nil {
-		return Account{}, err
-	}
-	out := Account{ID: acc.ID, Name: acc.Name, Owner: s.CurrentUser(ctx, p), CreatedAt: acc.CreatedAt, Workspaces: []MyWorkspace{}}
-	for _, w := range ws {
-		out.Workspaces = append(out.Workspaces, MyWorkspace{ID: w.ID, Name: w.Name, Role: RoleOwner, Current: w.ID == p.WorkspaceID})
-	}
-	return out, nil
-}
-
-func (s *Service) RenameAccount(ctx context.Context, p Principal, name string) (Account, error) {
-	if _, err := s.GetAccount(ctx, p); err != nil {
-		return Account{}, err
+	if p.Kind != PrincipalSession || p.UserID == "" {
+		return User{}, forbidden("only a signed-in person changes their name")
 	}
 	name, err := trimmed(name, "name", 100, true)
 	if err != nil {
-		return Account{}, err
+		return User{}, err
 	}
-	acc, _ := s.Q.GetAccountByOwner(ctx, p.UserID)
 	if err := s.tx(ctx, func(q *db.Queries) error {
-		return q.UpdateAccountName(ctx, db.UpdateAccountNameParams{Name: name, UpdatedAt: s.now(), ID: acc.ID})
+		return q.SetUserName(ctx, db.SetUserNameParams{Name: name, UpdatedAt: s.now(), ID: p.UserID})
 	}); err != nil {
-		return Account{}, err
+		return User{}, err
 	}
-	return s.GetAccount(ctx, p)
+	return s.CurrentUser(ctx, p), nil
 }
 
-// requireAccountOwner: actions on the account itself (delete a workspace, billing). Workspaces from before
-// accounts keep their old rule (an admin dashboard session).
-func (s *Service) requireAccountOwner(ctx context.Context, p Principal) error {
+// requireOwner: what only a workspace's owners do (billing, credits, deleting the workspace); an API key may
+// when the person who made it is an owner now. A workspace from before accounts, without people yet, keeps
+// its old rule (an admin dashboard session or key).
+func (s *Service) requireOwner(ctx context.Context, p Principal) error {
 	if err := p.require(ScopeAdmin); err != nil {
 		return err
 	}
-	ws, err := s.Q.GetWorkspace(ctx, p.WorkspaceID)
-	if err != nil {
-		return err
-	}
-	if !ws.AccountID.Valid {
+	if p.Role == RoleOwner || !s.workspaceHasPeople(ctx, s.Q, p.WorkspaceID) {
 		return nil
 	}
-	if p.AccountOwner {
-		return nil
-	}
-	if p.Kind == PrincipalAPIKey && p.UserID != "" {
-		if acc, err := s.Q.GetAccount(ctx, ws.AccountID.String); err == nil && acc.OwnerUserID == p.UserID {
-			return nil // a key the account owner created
-		}
-	}
-	return forbidden("only the account owner can do this")
+	return forbidden("only an owner of this workspace can do this")
+}
+
+// workspaceHasPeople: the workspace has members with roles (a workspace from before accounts has none until its
+// first owner accepts the invitation `server attach-workspace` sends).
+func (s *Service) workspaceHasPeople(ctx context.Context, q *db.Queries, workspaceID string) bool {
+	n, err := q.CountMembers(ctx, workspaceID)
+	return err == nil && n > 0
 }
 
 // ---- members ----
@@ -768,10 +694,8 @@ type Member struct {
 	Email     string `json:"email"`
 	AvatarURL string `json:"avatar_url"`
 	Role      string `json:"role"`
-	// AccountOwner: owns the account; always an owner here, cannot be removed or demoted.
-	AccountOwner bool   `json:"account_owner"`
-	You          bool   `json:"you"`
-	CreatedAt    string `json:"created_at"`
+	You       bool   `json:"you"`
+	CreatedAt string `json:"created_at"`
 }
 
 // requirePeopleManager: members and invitations are managed by people (never API keys, so a key cannot
@@ -803,20 +727,6 @@ func canAssign(actor Principal, current, next string) error {
 	return nil
 }
 
-// accountOwnerOf: the user who owns the workspace's account ("" for a workspace without one). Errors are
-// returned, never swallowed: on PostgreSQL a failed read aborts the surrounding transaction.
-func (s *Service) accountOwnerOf(ctx context.Context, q *db.Queries, workspaceID string) (string, error) {
-	ws, err := q.GetWorkspace(ctx, workspaceID)
-	if err != nil || !ws.AccountID.Valid {
-		return "", err
-	}
-	acc, err := q.GetAccount(ctx, ws.AccountID.String)
-	if err != nil {
-		return "", err
-	}
-	return acc.OwnerUserID, nil
-}
-
 func (s *Service) ListMembers(ctx context.Context, p Principal) ([]Member, error) {
 	if err := accountsOnly(s); err != nil {
 		return nil, err
@@ -828,22 +738,14 @@ func (s *Service) ListMembers(ctx context.Context, p Principal) ([]Member, error
 	if err != nil {
 		return nil, err
 	}
-	owner, err := s.accountOwnerOf(ctx, s.Q, p.WorkspaceID)
-	if err != nil {
-		return nil, err
-	}
 	out := []Member{}
 	for _, r := range rows {
 		name := r.Name
 		if name == "" {
 			name = r.Email
 		}
-		role := r.Role
-		if r.UserID == owner {
-			role = RoleOwner
-		}
-		out = append(out, Member{UserID: r.UserID, Name: name, Email: r.Email, AvatarURL: r.AvatarUrl, Role: role,
-			AccountOwner: r.UserID == owner, You: r.UserID == p.UserID, CreatedAt: r.CreatedAt})
+		out = append(out, Member{UserID: r.UserID, Name: name, Email: r.Email, AvatarURL: r.AvatarUrl, Role: r.Role,
+			You: r.UserID == p.UserID, CreatedAt: r.CreatedAt})
 	}
 	return out, nil
 }
@@ -862,13 +764,6 @@ func (s *Service) UpdateMemberRole(ctx context.Context, p Principal, userID, rol
 		}
 		if err != nil {
 			return err
-		}
-		owner, err := s.accountOwnerOf(ctx, q, p.WorkspaceID)
-		if err != nil {
-			return err
-		}
-		if userID == owner && role != RoleOwner {
-			return &Error{Code: "account_owner", Status: 409, Message: "the account owner is always an owner of its workspaces"}
 		}
 		if err := canAssign(p, m.Role, role); err != nil {
 			return err
@@ -908,7 +803,7 @@ func (s *Service) memberOut(ctx context.Context, p Principal, userID string) (Me
 }
 
 // RemoveMember: admins remove editors and viewers (and other admins), owners anyone; everyone may leave.
-// Their sessions in this workspace end at once; the last owner and the account owner stay.
+// Their sessions in this workspace end at once; the last owner stays.
 func (s *Service) RemoveMember(ctx context.Context, p Principal, userID string) error {
 	// A key carries its creator's user id, but leaving is a person's own act (people are managed by people).
 	self := p.Kind == PrincipalSession && p.UserID != "" && p.UserID == userID
@@ -926,13 +821,6 @@ func (s *Service) RemoveMember(ctx context.Context, p Principal, userID string) 
 		}
 		if err != nil {
 			return err
-		}
-		owner, err := s.accountOwnerOf(ctx, q, p.WorkspaceID)
-		if err != nil {
-			return err
-		}
-		if userID == owner {
-			return &Error{Code: "account_owner", Status: 409, Message: "the account owner cannot be removed from the account's workspaces"}
 		}
 		if !self && m.Role == RoleOwner && p.Role != RoleOwner {
 			return forbidden("only owners remove an owner")
@@ -1221,7 +1109,7 @@ var (
 
 // acceptInvitation (in the caller's transaction): single use, for the invited address only, idempotent for
 // the person who already accepted it. A workspace from before accounts that gets its first owner this way
-// joins that person's account (created for them if they have none), so it gains an account owner.
+// becomes a workspace with people (firstOwnerJoined).
 func (s *Service) acceptInvitation(ctx context.Context, q *db.Queries, user db.User, token string) (string, error) {
 	inv, err := q.GetInvitationByHash(ctx, hashSecret(strings.TrimSpace(token)))
 	if isNoRows(err) {
@@ -1261,6 +1149,10 @@ func (s *Service) acceptInvitation(ctx context.Context, q *db.Queries, user db.U
 	if n == 0 {
 		return "", errInvitationInvalid // accepted concurrently by someone else
 	}
+	people, err := q.CountMembers(ctx, inv.WorkspaceID) // none: a workspace from before accounts gets its first owner
+	if err != nil {
+		return "", err
+	}
 	if _, err := q.AddMember(ctx, db.AddMemberParams{WorkspaceID: inv.WorkspaceID, UserID: user.ID, Role: inv.Role, CreatedAt: now, UpdatedAt: now}); err != nil {
 		return "", err
 	}
@@ -1277,24 +1169,8 @@ func (s *Service) acceptInvitation(ctx context.Context, q *db.Queries, user db.U
 			return "", err
 		}
 	}
-	ws, err := q.GetWorkspace(ctx, inv.WorkspaceID)
-	if err != nil {
-		return "", err
-	}
-	if !ws.AccountID.Valid && inv.Role == RoleOwner {
-		acc, err := q.GetAccountByOwner(ctx, user.ID)
-		if isNoRows(err) {
-			acc = db.Account{ID: newID("acc"), OwnerUserID: user.ID, Name: displayName(user)}
-			if err := q.CreateAccount(ctx, db.CreateAccountParams{ID: acc.ID, OwnerUserID: user.ID, Name: acc.Name, CreatedAt: now, UpdatedAt: now}); err != nil {
-				return "", err
-			}
-		} else if err != nil {
-			return "", err
-		}
-		if _, err := q.SetWorkspaceAccount(ctx, db.SetWorkspaceAccountParams{AccountID: nullStr(acc.ID), UpdatedAt: now, ID: ws.ID}); err != nil {
-			return "", err
-		}
-		if err := s.attachedToAccount(ctx, q, ws.ID, acc.ID, user); err != nil {
+	if people == 0 && inv.Role == RoleOwner {
+		if err := s.firstOwnerJoined(ctx, q, inv.WorkspaceID, user); err != nil {
 			return "", err
 		}
 	}
@@ -1319,8 +1195,3 @@ func isUniqueViolation(err error) bool {
 var ErrAccountsMisconfigured = errors.New("cloud mode needs a way to sign in: Google (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, " +
 	"with PUBLIC_DASHBOARD_URL or GOOGLE_REDIRECT_URL), email codes (MAIL_SMTP_HOST and MAIL_FROM), or both; " +
 	"for development only, AUTH_DEV_SIGNIN=true")
-
-func (s *Service) workspaceHasAccount(ctx context.Context, workspaceID string) bool {
-	ws, err := s.Q.GetWorkspace(ctx, workspaceID)
-	return err == nil && ws.AccountID.Valid
-}
