@@ -553,11 +553,14 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 		return err
 	}
 
-	// 1. What waits.
+	// 1. What waits (nothing in a read-only workspace: the run is recorded and the next one still queued, so
+	// the schedule picks up again once the plan is paid).
 	var waiting []db.Post
 	onePerRun := false
-	switch r.Pick {
-	case "selected":
+	paused := s.suspended(ctx, r.WorkspaceID)
+	switch {
+	case paused:
+	case r.Pick == "selected":
 		var rows []db.Post
 		if len(postIDs) > 0 {
 			if rows, err = s.Q.PostsByIDs(ctx, db.PostsByIDsParams{WorkspaceID: r.WorkspaceID, Ids: mustJSON(uniqueIDs(postIDs))}); err != nil {
@@ -569,7 +572,7 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 				waiting = append(waiting, p)
 			}
 		}
-	case "all":
+	case r.Pick == "all":
 		if waiting, err = s.Q.WaitingPosts(ctx, db.WaitingPostsParams{WorkspaceID: r.WorkspaceID, CollectionID: r.CollectionID, Limit: 200}); err != nil {
 			return err
 		}
@@ -585,7 +588,9 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 	// 2. Nothing waiting: ask, or fetch.
 	result := ""
 	var sourceErr error
-	if len(waiting) == 0 {
+	if paused {
+		result = "skipped: the workspace's plan has ended"
+	} else if len(waiting) == 0 {
 		switch r.Source {
 		case "agent":
 			result = "asked for posts"

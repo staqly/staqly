@@ -79,8 +79,8 @@ func (s *Service) runRepeatPost(ctx context.Context, workspaceID, postID string)
 	if err != nil {
 		return err
 	}
-	if row.Status != "published" || row.RepeatEvery == "" {
-		return nil
+	if row.Status != "published" || row.RepeatEvery == "" || s.suspended(ctx, workspaceID) {
+		return nil // a read-only workspace makes no new copies
 	}
 	if _, err := s.Q.RepeatOfPost(ctx, postID); err == nil {
 		return nil // already repeated (the post settled twice)
