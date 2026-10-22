@@ -138,6 +138,7 @@ type EmailCode struct {
 	ExpiresAt  string         `json:"expires_at"`
 	VerifiedAt sql.NullString `json:"verified_at"`
 	UsedAt     sql.NullString `json:"used_at"`
+	Client     string         `json:"client"`
 }
 
 type Event struct {

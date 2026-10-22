@@ -323,6 +323,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		if ray := r.Header.Get("CF-Ray"); logctx.ValidCFRay(ray) {
 			attrs = append(attrs, "cf_ray", ray)
 		}
+		ctx = app.WithClientIP(ctx, s.clientIP(r))
 		path := logctx.RedactPath(r.URL.Path)
 		attrs = append(attrs, "method", r.Method, "path", path)
 		l := s.log.With(attrs...)

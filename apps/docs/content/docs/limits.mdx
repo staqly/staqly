@@ -116,7 +116,7 @@ See [Webhooks](/automation/webhooks) and [Alerts](/automation/alerts).
 |---|---|---|
 | Per client IP | sign-in with an API key or recovery key, Google's callback, email codes (start and check), invitations, device links, creating a workspace | 10 per minute, burst 10 |
 | Per key or session <Badge>cloud</Badge> | everything else under `/v1` and `/mcp` | 600 per minute, burst 100 |
-| Email codes | one per address every 30 seconds, 5 per address per hour, 20 per client IP per hour | fixed |
+| Email codes | one per address every 30 seconds; per address and client IP 5 an hour and 15 a day; 60 per address a day; 20 per client IP per hour | fixed |
 | Passkey sign-ins | 30 per client IP per 10 minutes | fixed |
 | New workspaces <Badge>cloud</Badge> | 5 per client IP per hour | fixed |
 
