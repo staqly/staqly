@@ -137,8 +137,8 @@ at least two (for example an email address and a passkey).
 ## How sign-in is protected
 
 - Google sign-in uses OpenID Connect with state, nonce and PKCE. The ID token's signature, issuer,
-  audience, expiry and nonce are verified, and the person is identified by their Google account ID,
-  never merged by email address. The sign-in state rides in a short-lived, sealed, HttpOnly cookie,
+  audience, expiry and nonce are verified, and Google must say the address is verified. The address is
+  the person: Google and an email code for the same address sign into one account, whichever came first. The sign-in state rides in a short-lived, sealed, HttpOnly cookie,
   and the redirect after sign-in only goes to a path on the dashboard.
 - A person's role is read on every request, so a demotion or removal applies at once; removal also
   ends their sessions in that workspace and turns off the API keys they created.

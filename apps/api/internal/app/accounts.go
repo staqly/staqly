@@ -400,6 +400,18 @@ func (s *Service) upsertUser(ctx context.Context, q *db.Queries, id Identity) (d
 		picture = ""
 	}
 	u, err := q.GetUserByIdentity(ctx, db.GetUserByIdentityParams{Provider: id.Provider, Subject: id.Subject})
+	if isNoRows(err) && email != "" {
+		// The address is the person: a verified one (Google's email_verified, an email code that reached the
+		// inbox) that already has an account signs into it, and this sign-in method is added to it.
+		if u, err = q.OldestUserByEmail(ctx, email); err == nil {
+			if err := q.CreateIdentity(ctx, db.CreateIdentityParams{Provider: id.Provider, Subject: id.Subject, UserID: u.ID, Email: email,
+				CreatedAt: now, LastLoginAt: nullStr(now)}); err != nil {
+				return db.User{}, err
+			}
+		} else if !isNoRows(err) {
+			return db.User{}, err
+		}
+	}
 	switch {
 	case isNoRows(err):
 		u = db.User{ID: newID("usr"), Email: email, Name: name, AvatarUrl: picture, CreatedAt: now, UpdatedAt: now, LastLoginAt: nullStr(now)}
@@ -412,8 +424,10 @@ func (s *Service) upsertUser(ctx context.Context, q *db.Queries, id Identity) (d
 	case err != nil:
 		return db.User{}, err
 	}
-	// Providers without a name or picture (an email code) keep what the person already has.
-	if name == "" {
+	// The person's name stays as it is (a provider's name only fills an empty one: signing in with Google
+	// doesn't rename "Jane Doe" to the Google profile's "J. D."); providers without a picture (an
+	// email code) keep the one the person has.
+	if u.Name != "" {
 		name = u.Name
 	}
 	if picture == "" && id.Provider != ProviderGoogle {

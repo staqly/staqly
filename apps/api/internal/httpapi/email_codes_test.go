@@ -232,13 +232,14 @@ func TestEmailCodesPerIPLimit(t *testing.T) {
 	}
 }
 
-// A Google identity and an email identity with the same address are two people unless linked.
-func TestEmailSignInNeverMergesWithGoogle(t *testing.T) {
+// A Google identity and an email code for the same address are one person: the code signs into the account
+// Google made.
+func TestEmailSignInAfterGoogleIsOnePerson(t *testing.T) {
 	e, _ := newEmailEnv(t, "")
 	g := e.session(e.mustSignIn(ana, ""))
 	m := e.session(e.emailSignIn(ana.Email, nil))
-	if g.User.ID == m.User.ID || g.Workspace.ID == m.Workspace.ID || !m.AccountOwner {
-		t.Fatalf("merged: google %+v email %+v", g.User, m.User)
+	if g.User.ID != m.User.ID || g.Workspace.ID != m.Workspace.ID || !m.AccountOwner {
+		t.Fatalf("two people for one address: google %+v email %+v", g.User, m.User)
 	}
 }
 
@@ -436,4 +437,28 @@ func TestEmailCodeConcurrentGuesses(t *testing.T) {
 		t.Fatalf("%d tries counted as wrong, at most 5 allowed", wrongAnswers)
 	}
 	e.verifyCode("race@example.com", code, nil, 410, nil)
+}
+
+// Was a bug: signing up with an email code, then with Google for the same address, made a second, empty
+// account. The address is the person: both sign in to the one account, which keeps its name.
+func TestEmailCodeThenGoogleIsOnePerson(t *testing.T) {
+	e, _ := newEmailEnv(t, "")
+	byCode := e.emailSignIn("jane@example.com", nil)
+	first := e.session(byCode)
+	if _, err := e.svc.DB.Exec(`UPDATE users SET name = 'Jane Doe' WHERE email = 'jane@example.com'`); err != nil {
+		t.Fatal(err)
+	}
+	byGoogle := e.mustSignIn(fakeIdentity{Sub: "sub-jane", Email: "Jane@Example.com", Name: "J. D."}, "")
+	again := e.session(byGoogle)
+	if again.Workspace.ID != first.Workspace.ID {
+		t.Fatalf("Google after an email code: workspace %s, want %s", again.Workspace.ID, first.Workspace.ID)
+	}
+	var n int
+	if err := e.svc.DB.QueryRow(`SELECT COUNT(*) FROM users WHERE email = 'jane@example.com'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("people with the address: %d %v", n, err)
+	}
+	var name string
+	if err := e.svc.DB.QueryRow(`SELECT name FROM users WHERE email = 'jane@example.com'`).Scan(&name); err != nil || name != "Jane Doe" {
+		t.Fatalf("name after Google: %q %v", name, err)
+	}
 }
