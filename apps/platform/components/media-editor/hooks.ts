@@ -13,14 +13,12 @@ import * as P from './protocols'
 async function retrying<R>(fn: () => Promise<R>): Promise<R> {
   for (let attempt = 0; ; attempt++) {
     try {
-      // oxlint-disable-next-line no-await-in-loop
       return await fn()
     } catch (e) {
       if (attempt >= 20 || !/before init/i.test(String((e as Error)?.message))) {
         throw e
       }
 
-      // oxlint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 500))
     }
   }
