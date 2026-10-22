@@ -92,7 +92,7 @@ func (q *Queries) SearchMedia(ctx context.Context, s MediaSearch) ([]MediaRow, b
 		add("m.folder_id = ?", s.Folder)
 	}
 	if s.Tag != "" {
-		add("instr(m.tags, ?) > 0", `"`+strings.ReplaceAll(s.Tag, `"`, `\"`)+`"`)
+		add("instr(m.tags, ?) > 0", jsonTag(s.Tag))
 	}
 	if qs := strings.TrimSpace(s.Query); qs != "" {
 		esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(qs)

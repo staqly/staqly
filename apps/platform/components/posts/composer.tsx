@@ -59,7 +59,7 @@ import { apiFieldErrors } from '@/lib/form-errors'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { applyLinks, linksNotice } from '@/lib/links'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { charCount, isLocked, postTitle } from '@/lib/posts'
+import { charCount, isLocked, postTitle, xLength } from '@/lib/posts'
 import { ProviderIcon } from '@/lib/providers'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
 import {
@@ -115,7 +115,10 @@ interface Count {
 function countFor(channel: Channel, text: string, provider?: Provider): Count {
   const out = applyLinks(channel.links, text)
 
-  return { channel, n: charCount(out.text), max: provider?.limits?.max_chars ?? 0, links: out.found }
+  // X counts its own way (CJK and emoji 2, a link 23): the API checks that length, so the counter shows it.
+  const n = channel.provider === 'x' ? xLength(out.text) : charCount(out.text)
+
+  return { channel, n, max: provider?.limits?.max_chars ?? 0, links: out.found }
 }
 
 /** Under the editor: every picked channel that changes this text's links, named, with the links. */

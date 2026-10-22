@@ -123,7 +123,7 @@ func checkThreadLimits(parts []ThreadPart, chans map[string]db.Channel) error {
 		}
 		l := e.Limits()
 		for i, part := range parts {
-			if n := utf8.RuneCountInString(part.Content); l.MaxChars > 0 && n > l.MaxChars {
+			if n := providers.TextLength(l, part.Content); l.MaxChars > 0 && n > l.MaxChars {
 				return invalid(threadField(i, "content"), fmt.Sprintf("at most %d characters for %s (%d)", l.MaxChars, ch.Name, n))
 			}
 			if len(part.Media) > l.MaxMedia {
@@ -243,6 +243,9 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 	replies := repliesFor(len(parts), target.Replies)
 	if index >= len(parts) || replies[index].Status == "published" || replies[index].Status == "skipped" {
 		return nil
+	}
+	if s.suspended(ctx, row.WorkspaceID) {
+		return s.replyEnded(ctx, postID, channelID, index, providers.Result{}, ErrSuspended.Message)
 	}
 	ch, err := s.Q.GetChannelByID(ctx, channelID)
 	if err != nil {

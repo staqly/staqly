@@ -148,10 +148,21 @@ func (l LinkedIn) Exchange(ctx context.Context, app App, redirect, code string, 
 // token stays as it is until it runs out; then the channel needs reconnecting.
 func (l LinkedIn) Refresh(ctx context.Context, app App, c Credentials) (Credentials, error) {
 	if c["refresh_token"] == "" {
-		if exp, ok := credentialsExpiry(c); ok && exp.After(time.Now().Add(2*time.Minute)) {
-			return c, nil
+		exp, ok := credentialsExpiry(c)
+		if !ok || !exp.After(time.Now().Add(2*time.Minute)) {
+			return nil, &Failure{Kind: ErrReauth, Msg: "LinkedIn signs apps out after 60 days; reconnect the account"}
 		}
-		return nil, &Failure{Kind: ErrReauth, Msg: "LinkedIn signs apps out after 60 days; reconnect the account"}
+		// Still in date: ask LinkedIn whether it still takes it (the member may have removed the app), so a
+		// channel test or a scheduled check finds out before a post does.
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, linkedinAPI+"/v2/userinfo", nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+c["access_token"])
+		if _, err := linkedinDo(ctx, req, nil); err != nil {
+			return nil, err
+		}
+		return c, nil
 	}
 	t, err := l.token(ctx, app, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {c["refresh_token"]}})
 	if err != nil {
@@ -286,7 +297,8 @@ func linkedinCommentPost(urn string) string {
 
 func linkedinPostURL(urn string) string { return "https://www.linkedin.com/feed/update/" + urn + "/" }
 
-var linkedinHashtag = regexp.MustCompile(`\\#((?:[\p{L}\p{N}]|\\_)+)`)
+// A hashtag starts the text or follows a space or an opening parenthesis: docs#install in a link is no hashtag.
+var linkedinHashtag = regexp.MustCompile(`(^|\s|\\\()\\#((?:[\p{L}\p{N}]|\\_)+)`)
 
 // linkedinText writes plain text in LinkedIn's "little text" format: its reserved characters are escaped (or
 // LinkedIn cuts the post at the first one) and hashtags become hashtag templates, so they stay links.
@@ -299,9 +311,7 @@ func linkedinText(s string) string {
 		b.WriteRune(r)
 	}
 	// "\#tag" -> "{hashtag|\#|tag}"; the tag's own escaped underscores ("\_") stay escaped inside the template.
-	return linkedinHashtag.ReplaceAllStringFunc(b.String(), func(m string) string {
-		return `{hashtag|\#|` + m[2:] + `}`
-	})
+	return linkedinHashtag.ReplaceAllString(b.String(), `$1{hashtag|\#|$2}`)
 }
 
 // upload sends one file and returns its URN: pictures in one PUT, videos in the parts LinkedIn asks for, then

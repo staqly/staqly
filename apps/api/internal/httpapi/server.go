@@ -579,9 +579,11 @@ func (s *Server) idempotency(next http.Handler) http.Handler {
 		cw := &captureWriter{ResponseWriter: w}
 		next.ServeHTTP(cw, r.WithContext(context.WithValue(ctx, noStoreKey{}, &secret)))
 		if secret || cw.overflow || cw.status >= 500 || cw.status == statusClientClosed ||
-			cw.status == 409 && strings.Contains(string(cw.buf), "concurrently") {
-			// Secret-bearing, too large to replay, a transient failure, or the client
-			// hung up (writeErr's 499): release, so a retry with the same key runs again.
+			cw.status == 409 && strings.Contains(string(cw.buf), "concurrently") ||
+			cw.status == http.StatusTooManyRequests || cw.status == http.StatusPaymentRequired {
+			// Secret-bearing, too large to replay, a transient failure, the client hung up (writeErr's 499),
+			// or an answer that changes with time (429: wait and retry; 402: until the plan is upgraded):
+			// release, so a retry with the same key runs again.
 			return
 		}
 		if err := s.svc.W.CompleteIdempotencyKey(bg, db.CompleteIdempotencyKeyParams{StatusCode: sqlInt(cw.status),

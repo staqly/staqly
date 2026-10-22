@@ -82,7 +82,7 @@ func (q *Queries) SearchPosts(ctx context.Context, s PostSearch) ([]Post, string
 		add("EXISTS (SELECT 1 FROM post_targets t WHERE t.post_id = p.id AND t.channel_id = ?)", s.ChannelID)
 	}
 	if s.Tag != "" {
-		add("instr(p.tags, ?) > 0", `"`+strings.ReplaceAll(s.Tag, `"`, `\"`)+`"`)
+		add("instr(p.tags, ?) > 0", jsonTag(s.Tag))
 	}
 	if s.PublishAfter != "" {
 		add("p.publish_at >= ?", s.PublishAfter)
@@ -218,4 +218,11 @@ func (q *Queries) PostExtras(ctx context.Context, workspaceID string, ids []stri
 		out[id] = e
 	}
 	return out, rows.Err()
+}
+
+// jsonTag is a tag as it is stored in a JSON tags list (json.Marshal: quotes, backslashes, and &, < and > as
+// \u0026...), so instr finds R&D too.
+func jsonTag(tag string) string {
+	b, _ := json.Marshal(tag)
+	return string(b)
 }

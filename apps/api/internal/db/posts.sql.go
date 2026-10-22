@@ -547,6 +547,35 @@ func (q *Queries) PostsReferencingMedia(ctx context.Context, arg PostsReferencin
 	return count, err
 }
 
+const publishingPostsOfChannel = `-- name: PublishingPostsOfChannel :many
+SELECT DISTINCT t.post_id FROM post_targets t JOIN posts p ON p.id = t.post_id
+WHERE t.channel_id = ? AND p.status = 'publishing' AND t.status IN ('pending', 'publishing')
+`
+
+// Posts still publishing to this channel (its target open): settled when the channel is removed.
+func (q *Queries) PublishingPostsOfChannel(ctx context.Context, channelID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, publishingPostsOfChannel, channelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var post_id string
+		if err := rows.Scan(&post_id); err != nil {
+			return nil, err
+		}
+		items = append(items, post_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const repeatOfPost = `-- name: RepeatOfPost :one
 SELECT id FROM posts WHERE repeat_of = ? AND repeat_of <> '' LIMIT 1
 `

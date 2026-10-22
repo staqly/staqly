@@ -114,6 +114,11 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 		if localToken, err = svc.EnsureLocalToken(); err != nil {
 			return fmt.Errorf("access token: %w", err)
 		}
+		if n, err := svc.SignOutIfTokenChanged(ctx); err != nil {
+			return fmt.Errorf("access token: %w", err)
+		} else if n > 0 {
+			log.Info("the access token changed: browsers signed out", "sessions", n)
+		}
 	} else if cfg.App.SetupToken == "" {
 		log.Info("cloud mode: public signup is open (7-day Pro trial); set SETUP_TOKEN to restrict it")
 	}

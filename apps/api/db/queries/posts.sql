@@ -81,6 +81,11 @@ WHERE post_id = ? AND channel_id = ?;
 UPDATE post_targets SET status = 'pending', external_id = '', external_url = '', error = '', attempts = 0, published_at = NULL, updated_at = ?
 WHERE post_id = ? AND status <> 'published';
 
+-- name: PublishingPostsOfChannel :many
+-- Posts still publishing to this channel (its target open): settled when the channel is removed.
+SELECT DISTINCT t.post_id FROM post_targets t JOIN posts p ON p.id = t.post_id
+WHERE t.channel_id = ? AND p.status = 'publishing' AND t.status IN ('pending', 'publishing');
+
 -- name: CountTargetsByStatus :many
 SELECT status, COUNT(*) AS n FROM post_targets WHERE post_id = ? GROUP BY status;
 

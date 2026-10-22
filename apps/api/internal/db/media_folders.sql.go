@@ -223,6 +223,45 @@ func (q *Queries) OldestTwin(ctx context.Context, arg OldestTwinParams) (string,
 	return id, err
 }
 
+const postsCarryingMedia = `-- name: PostsCarryingMedia :many
+SELECT id, media, thread FROM posts WHERE workspace_id = ?1 AND (instr(media, ?2) > 0 OR instr(thread, ?2) > 0)
+`
+
+type PostsCarryingMediaParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Quoted      string `json:"quoted"`
+}
+
+type PostsCarryingMediaRow struct {
+	ID     string `json:"id"`
+	Media  string `json:"media"`
+	Thread string `json:"thread"`
+}
+
+// Posts with a file in their files or a comment (the id quoted, as it is in the JSON).
+func (q *Queries) PostsCarryingMedia(ctx context.Context, arg PostsCarryingMediaParams) ([]PostsCarryingMediaRow, error) {
+	rows, err := q.db.QueryContext(ctx, postsCarryingMedia, arg.WorkspaceID, arg.Quoted)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PostsCarryingMediaRow
+	for rows.Next() {
+		var i PostsCarryingMediaRow
+		if err := rows.Scan(&i.ID, &i.Media, &i.Thread); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const purgeableMedia = `-- name: PurgeableMedia :many
 SELECT id, workspace_id, storage_name FROM media WHERE deleted_at IS NOT NULL AND deleted_at < ?1
 ORDER BY deleted_at LIMIT ?2
@@ -288,7 +327,7 @@ func (q *Queries) ReparentMediaFolders(ctx context.Context, arg ReparentMediaFol
 
 const repointPostMedia = `-- name: RepointPostMedia :exec
 UPDATE posts SET media = replace(media, ?1, ?2), thread = replace(thread, ?1, ?2),
-  updated_at = ?3
+  version = version + 1, updated_at = ?3
 WHERE workspace_id = ?4 AND (instr(media, ?1) > 0 OR instr(thread, ?1) > 0)
 `
 
@@ -361,6 +400,29 @@ func (q *Queries) SetMediaTags(ctx context.Context, arg SetMediaTagsParams) (int
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const setPostMediaLists = `-- name: SetPostMediaLists :exec
+UPDATE posts SET media = ?1, thread = ?2, updated_at = ?3 WHERE workspace_id = ?4 AND id = ?5
+`
+
+type SetPostMediaListsParams struct {
+	Media       string `json:"media"`
+	Thread      string `json:"thread"`
+	UpdatedAt   string `json:"updated_at"`
+	WorkspaceID string `json:"workspace_id"`
+	ID          string `json:"id"`
+}
+
+func (q *Queries) SetPostMediaLists(ctx context.Context, arg SetPostMediaListsParams) error {
+	_, err := q.db.ExecContext(ctx, setPostMediaLists,
+		arg.Media,
+		arg.Thread,
+		arg.UpdatedAt,
+		arg.WorkspaceID,
+		arg.ID,
+	)
+	return err
 }
 
 const trashMedia = `-- name: TrashMedia :execrows

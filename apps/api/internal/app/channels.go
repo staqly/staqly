@@ -763,11 +763,27 @@ func (s *Service) DeleteChannel(ctx context.Context, p Principal, id string) err
 		if err != nil {
 			return err
 		}
+		// Posts still publishing to it lose that target with the channel (ON DELETE CASCADE): their other targets
+		// decide how they end, or they would wait for this one for good.
+		publishing, err := q.PublishingPostsOfChannel(ctx, id)
+		if err != nil {
+			return err
+		}
 		if _, err := q.DeleteChannel(ctx, db.DeleteChannelParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 			return err
 		}
 		if err := s.cancelJobs(ctx, q, "refresh_channel:"+id); err != nil {
 			return err
+		}
+		for _, postID := range publishing {
+			for _, k := range []string{"publish_target:", "target_timeout:"} {
+				if err := s.cancelJobs(ctx, q, k+postID+":"+id); err != nil {
+					return err
+				}
+			}
+			if err := s.settlePost(ctx, q, p, p.WorkspaceID, postID); err != nil {
+				return err
+			}
 		}
 		_, err = s.emitRef(ctx, q, p, "channel.disconnected", Ref{Channel: id}, map[string]any{"channel": toChannelOut(row)})
 		return err
@@ -805,7 +821,9 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		}
 		fresh, err := e.Refresh(cctx, app, creds)
 		if err != nil {
-			s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
+			if errors.Is(err, providers.ErrReauth) { // a platform that can't be reached now is no reason to reconnect
+				s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
+			}
 			return map[string]any{"ok": false, "error": err.Error()}, nil
 		}
 		if sealed, err := s.seal(fresh); err == nil {
@@ -888,8 +906,11 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
 	defer cancel()
 	fresh, err := e.Refresh(cctx, app, creds)
-	if err != nil {
+	if errors.Is(err, providers.ErrReauth) {
 		return s.channelNeedsReconnect(ctx, row, err)
+	}
+	if err != nil {
+		return err // the platform could not be reached: the job tries again; its last failure needs reconnecting
 	}
 	sealed, err := s.seal(fresh)
 	if err != nil {
@@ -960,9 +981,13 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
 	defer cancel()
 	fresh, err := e.Refresh(cctx, app, creds)
-	if err != nil {
+	if errors.Is(err, providers.ErrReauth) {
 		_ = s.channelNeedsReconnect(ctx, row, err)
 		return nil, &providers.Failure{Kind: providers.ErrReauth, Msg: "the sign-in expired and could not be renewed: " + err.Error()}
+	}
+	if err != nil {
+		// Not reachable right now: the publish is retried, the channel stays connected.
+		return nil, &providers.Failure{Msg: "the sign-in could not be renewed right now: " + err.Error()}
 	}
 	sealed, err := s.seal(fresh)
 	if err != nil {

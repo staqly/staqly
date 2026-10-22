@@ -143,6 +143,8 @@ type Limits struct {
 	// Image is what the platform refuses in a picture (its API's documented limits); nil when it states none.
 	// The composer and the media editor check pictures against it; recommended shapes are not rules.
 	Image *ImageRules `json:"image,omitempty"`
+	// XWeighted: MaxChars is X's weighted length (TextLength), not characters.
+	XWeighted bool `json:"-"`
 }
 
 // ImageRules are a platform's hard limits for one picture. Zero values mean no limit.
@@ -379,8 +381,8 @@ func invalid(field, msg string) error { return &ValidationError{Field: field, Ms
 
 // CheckLimits is the shared validation every provider starts with.
 func CheckLimits(l Limits, p PostContent, s Settings) error {
-	if l.MaxChars > 0 && utf8.RuneCountInString(p.Text) > l.MaxChars {
-		return invalid("content", fmt.Sprintf("at most %d characters for this channel (%d)", l.MaxChars, utf8.RuneCountInString(p.Text)))
+	if n := TextLength(l, p.Text); l.MaxChars > 0 && n > l.MaxChars {
+		return invalid("content", fmt.Sprintf("at most %d characters for this channel (%d)", l.MaxChars, n))
 	}
 	if len(p.Media) > l.MaxMedia {
 		if l.MaxMedia == 0 {
@@ -397,7 +399,7 @@ func CheckLimits(l Limits, p PostContent, s Settings) error {
 	if l.NeedsLink && s["link"] == "" {
 		return invalid("link", "this channel needs a link")
 	}
-	if p.Text == "" && len(p.Media) == 0 && s["title"] == "" {
+	if strings.TrimSpace(p.Text) == "" && len(p.Media) == 0 && s["title"] == "" {
 		return invalid("content", "write something or add media")
 	}
 	return nil

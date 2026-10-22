@@ -108,7 +108,7 @@ Update a collection: name, description, icon, colour, the wait for your own auto
 | `description` | string | No | New description |
 | `icon` | string | No | Icon name |
 | `name` | string | No | New name |
-| `processing_timeout_seconds` | object | No | How long a post on your own automation waits for a reported result before it fails, 60-86400 seconds, or null for the server default |
+| `processing_timeout_seconds` | object | No | How long a post on your own automation waits for a reported result before it fails, 60-86400 seconds, or an empty string for the server default |
 
 ### `delete_collection`
 Permanently delete a collection with its posts and schedules. confirm must equal the collection name. *Destructive* · `collections:delete` (the `:write` scope alone is not enough)
@@ -178,7 +178,7 @@ Create a post in a collection: content, media (ids from upload_media), targets (
 | `thread` | object[] | No | Replies published under the post, in order (at most 25): `content`, `media`, `delay_seconds` |
 
 ### `update_post`
-Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (null clears), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. · `posts:write`
+Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (an empty string clears it), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. · `posts:write`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -189,7 +189,7 @@ Edit a draft, scheduled or failed post: content, media, targets (the full list r
 | `media` | string[] | No |  |
 | `metadata` | object | No |  |
 | `post_id` | string | <Required /> | Post ID (post_...) |
-| `publish_at` | object | No | RFC3339 in the future, or null to clear |
+| `publish_at` | object | No | RFC3339 in the future, or an empty string to clear it (back to a draft) |
 | `repeat_every` | string | No | 1d to 6d, 1w, 2w or 1mo; an empty string stops repeating |
 | `tags` | string[] | No |  |
 | `thread` | object[] | No | Replaces the replies; [] clears them |

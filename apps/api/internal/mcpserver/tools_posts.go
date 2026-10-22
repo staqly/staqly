@@ -37,7 +37,7 @@ func (t *tools) addPostTools(s *mcp.Server) {
 	add(s, t, &mcp.Tool{Name: "get_post", Description: "Get one post with its targets (status, link, error per channel).", Annotations: ro()}, t.getPost)
 	add(s, t, &mcp.Tool{Name: "list_posts", Description: "List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; sort created_desc lists the newest first.", Annotations: ro()}, t.listPosts)
 	add(s, t, &mcp.Tool{Name: "search_posts", Description: "Find posts whose content contains a text, with the same filters as list_posts.", Annotations: ro()}, t.searchPosts)
-	add(s, t, &mcp.Tool{Name: "update_post", Description: "Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (null clears), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. Requires posts:write.",
+	add(s, t, &mcp.Tool{Name: "update_post", Description: "Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (an empty string clears it), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. Requires posts:write.",
 		Annotations: wr()}, t.updatePost)
 	add(s, t, &mcp.Tool{Name: "schedule_post", Description: "Set when a post goes out (RFC3339, in the future) and make it scheduled; the post needs at least one target. Requires posts:publish.",
 		Annotations: wr()}, t.schedulePost)
@@ -281,7 +281,7 @@ type updatePostIn struct {
 	Content         *string        `json:"content,omitempty"`
 	Media           *[]string      `json:"media,omitempty"`
 	Targets         *[]targetIn    `json:"targets,omitempty" jsonschema:"replaces the whole list"`
-	PublishAt       any            `json:"publish_at,omitempty" jsonschema:"RFC3339 in the future, or null to clear"`
+	PublishAt       any            `json:"publish_at,omitempty" jsonschema:"RFC3339 in the future, or an empty string to clear it (back to a draft)"`
 	Tags            *[]string      `json:"tags,omitempty"`
 	Metadata        map[string]any `json:"metadata,omitempty"`
 	ExternalRef     *string        `json:"external_ref,omitempty"`

@@ -553,10 +553,14 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 		return err
 	}
 
-	// 1. What waits.
+	// 1. What waits (nothing in a read-only workspace: the run is recorded and the next one still queued, so
+	// the schedule picks up again once the plan is paid).
 	var waiting []db.Post
-	switch r.Pick {
-	case "selected":
+	onePerRun := false
+	paused := s.suspended(ctx, r.WorkspaceID)
+	switch {
+	case paused:
+	case r.Pick == "selected":
 		var rows []db.Post
 		if len(postIDs) > 0 {
 			if rows, err = s.Q.PostsByIDs(ctx, db.PostsByIDsParams{WorkspaceID: r.WorkspaceID, Ids: mustJSON(uniqueIDs(postIDs))}); err != nil {
@@ -568,20 +572,25 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 				waiting = append(waiting, p)
 			}
 		}
-	case "all":
+	case r.Pick == "all":
 		if waiting, err = s.Q.WaitingPosts(ctx, db.WaitingPostsParams{WorkspaceID: r.WorkspaceID, CollectionID: r.CollectionID, Limit: 200}); err != nil {
 			return err
 		}
 	default:
-		if waiting, err = s.Q.WaitingPosts(ctx, db.WaitingPostsParams{WorkspaceID: r.WorkspaceID, CollectionID: r.CollectionID, Limit: 1}); err != nil {
+		// The next one that can go out: an older draft this run can't publish (no channels, refused) is passed
+		// over instead of holding every later one back.
+		if waiting, err = s.Q.WaitingPosts(ctx, db.WaitingPostsParams{WorkspaceID: r.WorkspaceID, CollectionID: r.CollectionID, Limit: 200}); err != nil {
 			return err
 		}
+		onePerRun = true
 	}
 
 	// 2. Nothing waiting: ask, or fetch.
 	result := ""
 	var sourceErr error
-	if len(waiting) == 0 {
+	if paused {
+		result = "skipped: the workspace's plan has ended"
+	} else if len(waiting) == 0 {
 		switch r.Source {
 		case "agent":
 			result = "asked for posts"
@@ -599,7 +608,7 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 				sourceErr = err
 				result = "endpoint failed: " + truncateRunes(err.Error(), 200)
 			} else {
-				waiting = created
+				waiting, onePerRun = created, false // what the endpoint answers all goes out
 			}
 		default:
 			result = "nothing to publish"
@@ -609,9 +618,13 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 	// 3. Publish what we have.
 	published := []string{}
 	for _, p := range waiting {
+		if onePerRun && len(published) > 0 {
+			break // pick next: one waiting post per run (what an endpoint answers all goes out, as before)
+		}
+		nowhere := false
 		started := false // set by the run that commits (on PostgreSQL fn may run again after a serialization failure)
 		err := s.tx(ctx, func(q *db.Queries) error {
-			started = false
+			started, nowhere = false, false
 			cur, err := q.GetPostByID(ctx, p.ID)
 			if err != nil || cur.Status == "publishing" || cur.Status == "published" {
 				return err
@@ -625,7 +638,8 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 			}
 			if len(targets) == 0 {
 				if len(channels) == 0 {
-					return nil // nowhere to send it
+					nowhere = true
+					return nil
 				}
 				in := make([]PostTargetInput, 0, len(channels))
 				for _, ch := range channels {
@@ -651,6 +665,9 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 		})
 		if err == nil && started {
 			published = append(published, p.ID)
+		}
+		if nowhere && result == "" {
+			result = "skipped " + p.ID + ": it has no channels and the schedule names none"
 		}
 		if err != nil {
 			s.logger(ctx).Warn("schedule could not publish a post", "schedule_id", r.ID, "post_id", p.ID, "err", err)
@@ -773,7 +790,8 @@ func (s *Service) fetchPostsFromEndpoint(ctx context.Context, sys Principal, r d
 	return out, nil
 }
 
-// enabledChannels keeps the channels whose platform is not turned off on this server.
+// enabledChannels keeps the channels that still exist and whose platform is not turned off on this server (a
+// schedule keeps naming a channel that was removed; publishing to it would fail every run).
 func (s *Service) enabledChannels(ctx context.Context, workspaceID string, ids []string) ([]string, error) {
 	if len(ids) == 0 {
 		return ids, nil
@@ -782,9 +800,9 @@ func (s *Service) enabledChannels(ctx context.Context, workspaceID string, ids [
 	if err != nil {
 		return nil, err
 	}
-	off := map[string]bool{}
+	on := map[string]bool{}
 	for _, r := range rows {
-		off[r.ID] = !s.providerEnabled(r.Provider)
+		on[r.ID] = s.providerEnabled(r.Provider)
 	}
-	return slices.DeleteFunc(slices.Clone(ids), func(id string) bool { return off[id] }), nil
+	return slices.DeleteFunc(slices.Clone(ids), func(id string) bool { return !on[id] }), nil
 }

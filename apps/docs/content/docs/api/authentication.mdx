@@ -60,7 +60,7 @@ start. Every request needs it, also from this computer:
   new one, the old one stops working at once and every browser is signed out. A signed-in dashboard
   shows it (masked) under **Integrations** and rotates it there (`GET /v1/access-token`,
   `POST /v1/access-token/rotate`, which keeps the calling browser signed in).
-- `STAQLY_LOCAL_TOKEN` fixes the token instead of the file (tests, CI); rotating then answers `409`.
+- `STAQLY_LOCAL_TOKEN` fixes the token instead of the file (tests, CI); rotating then answers `409`. To change it, set a new value and restart: the server sees the token changed and signs every browser out, as a rotation does (it keeps a hash of the token in `DATA_DIR/access_token.seen`, never the token).
 - `docker exec -i staqly mcp-stdio` needs no token: it opens the database itself.
 
 A request without the token, or with a wrong one, gets `401 unauthorized`; the message says where to
