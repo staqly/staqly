@@ -68,7 +68,7 @@ func (q *Queries) ChannelActivity(ctx context.Context, arg ChannelActivityParams
 }
 
 const channelsByIDs = `-- name: ChannelsByIDs :many
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id FROM channels WHERE workspace_id = ? AND id IN (SELECT value FROM json_each(?))
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments FROM channels WHERE workspace_id = ? AND id IN (SELECT value FROM json_each(?))
 `
 
 type ChannelsByIDsParams struct {
@@ -100,6 +100,7 @@ func (q *Queries) ChannelsByIDs(ctx context.Context, arg ChannelsByIDsParams) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.GroupID,
+			&i.Comments,
 		); err != nil {
 			return nil, err
 		}
@@ -256,7 +257,7 @@ func (q *Queries) ExportAllChannels(ctx context.Context, workspaceID string) ([]
 }
 
 const getChannel = `-- name: GetChannel :one
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id FROM channels WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments FROM channels WHERE workspace_id = ? AND id = ?
 `
 
 type GetChannelParams struct {
@@ -282,12 +283,13 @@ func (q *Queries) GetChannel(ctx context.Context, arg GetChannelParams) (Channel
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.GroupID,
+		&i.Comments,
 	)
 	return i, err
 }
 
 const getChannelByID = `-- name: GetChannelByID :one
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id FROM channels WHERE id = ?
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments FROM channels WHERE id = ?
 `
 
 func (q *Queries) GetChannelByID(ctx context.Context, id string) (Channel, error) {
@@ -308,6 +310,7 @@ func (q *Queries) GetChannelByID(ctx context.Context, id string) (Channel, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.GroupID,
+		&i.Comments,
 	)
 	return i, err
 }
@@ -334,7 +337,7 @@ func (q *Queries) GetProviderApp(ctx context.Context, arg GetProviderAppParams) 
 }
 
 const listChannels = `-- name: ListChannels :many
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id FROM channels WHERE workspace_id = ? ORDER BY provider, name COLLATE NOCASE, id
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments FROM channels WHERE workspace_id = ? ORDER BY provider, name COLLATE NOCASE, id
 `
 
 func (q *Queries) ListChannels(ctx context.Context, workspaceID string) ([]Channel, error) {
@@ -361,6 +364,7 @@ func (q *Queries) ListChannels(ctx context.Context, workspaceID string) ([]Chann
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.GroupID,
+			&i.Comments,
 		); err != nil {
 			return nil, err
 		}
@@ -400,6 +404,20 @@ func (q *Queries) ListProviderApps(ctx context.Context, workspaceID string) ([]s
 		return nil, err
 	}
 	return items, nil
+}
+
+const setChannelComments = `-- name: SetChannelComments :exec
+UPDATE channels SET comments = ? WHERE id = ?
+`
+
+type SetChannelCommentsParams struct {
+	Comments int64  `json:"comments"`
+	ID       string `json:"id"`
+}
+
+func (q *Queries) SetChannelComments(ctx context.Context, arg SetChannelCommentsParams) error {
+	_, err := q.db.ExecContext(ctx, setChannelComments, arg.Comments, arg.ID)
+	return err
 }
 
 const setChannelCredentials = `-- name: SetChannelCredentials :exec

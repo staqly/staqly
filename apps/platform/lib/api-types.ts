@@ -4276,6 +4276,8 @@ export interface components {
             /** @description The channel group it belongs to (every channel is in exactly one; the Default group unless moved) */
             group_id: string;
             last_error: string;
+            /** @description A post's comments go out under it on this channel: its platform takes comments and this connection may post them (a LinkedIn connection needs the Community Management API). False: they are not sent here. */
+            comments: boolean;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */

@@ -461,7 +461,7 @@ function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
                       publishing: 'Publishing',
                       published: 'Published',
                       failed: 'Failed',
-                      skipped: 'Not sent (this platform takes no comments)',
+                      skipped: 'Not sent (no comments on this channel)',
                     }[r.status]
                   }
                 </span>
@@ -482,6 +482,35 @@ function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
         </ol>
       )}
     </div>
+  )
+}
+
+/**
+ * Over the comments: the picked channels that won't post them (a platform without comments, or a connection not
+ * allowed to, like LinkedIn without its Community Management API), so nobody finds out after the post went out.
+ * Your own automation is left out: it gets the comments with the post.
+ */
+function CommentsNotice({
+  parts,
+  picked,
+  providers,
+}: {
+  parts: ThreadPart[]
+  picked: Channel[]
+  providers: Provider[]
+}) {
+  const without = picked.filter((c) => !c.comments && c.provider !== 'custom')
+
+  if (!parts.some((p) => p.content.trim() || p.media.length) || !without.length) {
+    return null
+  }
+
+  const named = without.map((c) => `${c.name} (${providers.find((p) => p.id === c.provider)?.name ?? c.provider})`)
+
+  return (
+    <Callout tone="warning" size="xs" data-testid="comments-notice">
+      {named.join(', ')} can't post comments: the post goes out there without them.
+    </Callout>
   )
 }
 
@@ -1695,6 +1724,7 @@ export function ComposerForm({
               </div>
 
               {/* Comments belong to the post as a whole: written on the shared tab, shown read only per channel. */}
+              {!active && <CommentsNotice parts={thread} picked={picked} providers={providerList} />}
               {!active && (
                 <ThreadEditor
                   parts={thread}

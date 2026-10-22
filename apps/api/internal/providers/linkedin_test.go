@@ -143,6 +143,14 @@ func TestLinkedInConnect(t *testing.T) {
 	if profile.Name != "Jane Doe" || profile.AvatarURL != "https://media.licdn.com/jane.jpg" {
 		t.Fatalf("profile %+v", profile)
 	}
+	// "Share on LinkedIn" posts but may not comment; the Community Management API's w_member_social_feed may.
+	if !profile.NoComments {
+		t.Fatal("a token without w_member_social_feed may comment")
+	}
+	f.scope = "openid,profile,w_member_social_feed"
+	if _, profile, err = li.Exchange(context.Background(), app, "https://app.example/cb", "code3", nil); err != nil || profile.NoComments {
+		t.Fatalf("with w_member_social_feed: %+v %v", profile, err)
+	}
 
 	// An app without "Share on LinkedIn" gets a token that cannot post: say what to add.
 	f.scope = "openid,profile"
