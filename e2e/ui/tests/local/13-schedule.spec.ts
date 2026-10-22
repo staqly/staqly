@@ -180,7 +180,9 @@ test.describe('the schedule', () => {
     await page.getByRole('option', { name: col.name }).click()
     await composer.getByTestId('post-content').fill('Written from the calendar')
     await pickChannels(page, composer, col.channel.name)
-    await composer.getByTestId('schedule-post').click()
+    // Schedule opens the calendar with the slot's time picked; its own Schedule sends the post.
+    await composer.getByTestId('date-time-picker').click()
+    await page.getByRole('dialog', { name: 'Pick a date and time' }).getByRole('button', { name: 'Schedule' }).click()
     await expect(composer).toBeHidden()
     await expect(slot2.getByTestId('schedule-entry').filter({ hasText: 'Written from the calendar' })).toBeVisible()
     expect(written.id).toBeTruthy()
