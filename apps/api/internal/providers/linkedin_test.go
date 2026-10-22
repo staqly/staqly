@@ -294,3 +294,12 @@ func TestLinkedInComments(t *testing.T) {
 		t.Fatalf("second comment on %v", f.comment["object"])
 	}
 }
+
+// Comments need more than posting: LinkedIn's refusal says so, without naming the server's settings.
+func TestLinkedInCommentPermission(t *testing.T) {
+	err := linkedinError(http.StatusForbidden, `{"status":403,"message":"Not enough permissions to access: partnerApiSocialActions.CREATE.20260901"}`)
+	var fail *Failure
+	if !errors.As(err, &fail) || fail.Kind != ErrRejected || !strings.Contains(fail.Msg, "comment") || strings.Contains(fail.Msg, "PROVIDER_") {
+		t.Fatalf("%v", err)
+	}
+}
