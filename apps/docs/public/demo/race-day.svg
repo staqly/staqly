@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="A runner on an empty road at sunrise">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e3a5f"/>
+      <stop offset="0.45" stop-color="#4f7fb0"/>
+      <stop offset="0.75" stop-color="#f3b48a"/>
+      <stop offset="0.9" stop-color="#ffd8a8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.62" r="0.42">
+      <stop offset="0" stop-color="#fff3d6" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffd8a8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hills" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d5a73"/>
+      <stop offset="1" stop-color="#2b4257"/>
+    </linearGradient>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f4a3a"/>
+      <stop offset="1" stop-color="#1b2c22"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b5f6b"/>
+      <stop offset="1" stop-color="#2a2d35"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="160" height="160" fill="url(#sky)"/>
+  <rect width="160" height="160" fill="url(#glow)"/>
+
+  <!-- sun rising behind the hills -->
+  <circle cx="80" cy="98" r="14" fill="#fff4d6"/>
+  <circle cx="80" cy="98" r="22" fill="#ffe2a3" opacity="0.3"/>
+
+  <!-- clouds -->
+  <g fill="#ffe6c9" opacity="0.4">
+    <rect x="18" y="30" width="38" height="3" rx="1.5"/>
+    <rect x="28" y="36" width="22" height="2.5" rx="1.25"/>
+    <rect x="104" y="40" width="36" height="2.5" rx="1.25"/>
+  </g>
+
+  <path fill="url(#hills)" d="M0 104c18-10 34-12 52-6s30 4 44-2 34-10 64 2v62H0z"/>
+  <path fill="url(#field)" d="M0 112h160v48H0z"/>
+
+  <!-- the road to the horizon -->
+  <path fill="url(#road)" d="M74 112h12l42 48H32z"/>
+  <g fill="#ffe2a3" opacity="0.85">
+    <path d="M79.4 116h1.2l.3 5h-1.8z"/>
+    <path d="M79 126h2l.5 7h-3z"/>
+    <path d="M78.4 139h3.2l.8 10h-4.8z"/>
+  </g>
+
+  <!-- kilometre post -->
+  <rect x="118" y="120" width="3" height="16" fill="#e5e7eb"/>
+  <rect x="114" y="116" width="11" height="7" rx="1" fill="#f8fafc"/>
+  <rect x="116" y="118.5" width="7" height="2" rx="1" fill="#ef4444"/>
+
+  <!-- the runner, mid-stride -->
+  <g fill="#14161c">
+    <circle cx="66" cy="113" r="3.4"/>
+    <path d="M64.2 117.2l3.6-.6 2.4 10.4-3.4.8z"/>
+    <path d="M65 119l-6.4 5.2 1.6 1.8 6-4.2z"/>
+    <path d="M68.4 119.4l5.2 3.4-1.2 2-5.4-2.8z"/>
+    <path d="M66.8 126.4l-5.2 8.8 2.4 1.2 5.6-8.4z"/>
+    <path d="M68.6 126.6l3.4 6.2-1 5.4 2.6.4 1.4-6.4-3.8-6.8z"/>
+  </g>
+  <rect x="64.6" y="118.6" width="4.2" height="3.4" rx="0.6" fill="#f97316"/>
+</svg>
