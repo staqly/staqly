@@ -8,7 +8,20 @@ name: Cross-client
 on:
   push:
     branches: [main]
+  # Only when what it drives changed (nothing here is a required check, so a skipped run doesn't block a merge).
   pull_request:
+    paths:
+      - apps/api/**
+      - apps/cli/**
+      - sdks/**
+      - e2e/cross-client/**
+      - e2e/package.json
+      - .github/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - turbo.json
+      - .nvmrc
   workflow_dispatch:
 
 permissions:
