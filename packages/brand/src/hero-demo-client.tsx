@@ -194,11 +194,12 @@ function PostCard({
       <ul className="mt-4 space-y-1.5">
         {s.targets.map((t) => (
           <li
-            key={t.channel}
+            key={t.id + t.channel}
             className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2.5 py-1.5 text-xs"
           >
             {tiles[t.id]}
             <span className="shrink-0 font-medium whitespace-nowrap">{t.channel}</span>
+            {t.via && <span className="shrink-0 whitespace-nowrap text-muted-foreground">via {t.via}</span>}
             <span className="ml-auto min-w-0 truncate font-mono text-[11px] text-muted-foreground">
               {published ? t.link : t.chars}
             </span>
