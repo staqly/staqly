@@ -4,7 +4,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { MobileMenu } from '@/components/mobile-menu'
-import { DOCS, GITHUB, SIGNUP, btnPrimary, btnSecondary, wrap, SELF_HOST } from '@/lib/site'
+import { DOCS, GITHUB, SIGNUP, btnPrimary, btnSecondary, wrap, wrapWide, SELF_HOST } from '@/lib/site'
 import { TOOLS } from '@/lib/tools'
 
 function GitHubIcon({ className }: { className?: string }) {
@@ -36,7 +36,7 @@ const navLinks: [string, string][] = [
 export function Nav() {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-md">
-      <div className={`${wrap} flex h-16 items-center gap-3 lg:gap-8`}>
+      <div className={`${wrapWide} flex h-16 items-center gap-3 lg:gap-8`}>
         <Link href="/" aria-label="Staqly home" className="flex min-h-10 items-center">
           <Logo colorway="dark" wordmarkClassName="text-[18px]" />
         </Link>

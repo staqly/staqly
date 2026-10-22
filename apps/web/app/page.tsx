@@ -40,6 +40,7 @@ import {
   btnPrimary,
   btnSecondary,
   wrap,
+  wrapWide,
 } from '@/lib/site'
 import { allCases } from '@/lib/use-cases'
 
@@ -52,20 +53,20 @@ function Hero() {
         className="sq-glow absolute -top-40 left-1/2 -z-10 h-[28rem] w-[min(56rem,140vw)] -translate-x-1/2"
       />
       <div
-        className={`${wrap} grid items-center gap-12 pt-16 pb-16 sm:pt-24 lg:grid-cols-[1.05fr_1fr] lg:gap-10 lg:pb-24`}
+        className={`${wrapWide} grid items-center gap-12 pt-12 pb-12 sm:pt-16 lg:grid-cols-[1fr_1fr] lg:gap-12 lg:pb-16`}
       >
         <div className="min-w-0">
-          <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
-            <span className="size-1.5 rounded-full bg-brand" /> The post scheduler for people and their agents
+          <p className="mb-7 inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
+            <span className="size-1.5 shrink-0 rounded-full bg-brand" /> The post scheduler for people and their agents
           </p>
-          <h1 className="text-[2.6rem] leading-[1.04] font-semibold tracking-[-0.045em] text-balance sm:text-6xl lg:text-[4.1rem]">
+          <h1 className="text-[2.4rem] leading-[1.05] font-semibold tracking-[-0.045em] text-balance sm:text-5xl lg:text-[3.4rem]">
             Your agents write the posts. <span className="sq-gradient-text">Staqly keeps the rhythm.</span>
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground">
             Plan a month of posts in one sitting with Claude Code, Codex or n8n. Staqly publishes each one when your
             audience is online, on every platform you use.
           </p>
-          <div className="mt-9 flex flex-wrap items-center gap-3">
+          <div className="mt-8 flex flex-wrap items-center gap-3">
             <a href={SIGNUP} className={btnPrimary}>
               Start free trial <ArrowRight className="size-4" />
             </a>
@@ -73,7 +74,7 @@ function Hero() {
               See how it works
             </Link>
           </div>
-          <div className="mt-8 flex flex-wrap gap-2 text-xs font-medium text-muted-foreground">
+          <div className="mt-6 flex flex-wrap gap-2 text-xs font-medium text-muted-foreground">
             {['MCP + REST API', 'Hosted, ready in a minute', 'Open source, AGPL-3.0'].map((b) => (
               <span key={b} className="rounded-md border border-border bg-card px-2.5 py-1">
                 {b}
