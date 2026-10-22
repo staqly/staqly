@@ -1095,12 +1095,11 @@ CASES = [
                 "email": "ana@example.com",
                 "avatar_url": "",
                 "role": "owner",
-                "account_owner": True,
                 "you": False,
                 "created_at": "2026-10-19T00:00:00Z",
             }
         ),
-        check=lambda r: r[0].role == "owner" and r[0].account_owner,
+        check=lambda r: r[0].role == "owner" and not r[0].you,
     ),
     Case("plans.list", lambda c: c.plans.list(), "GET", "/v1/plans", lst(PLAN)),
     Case(
