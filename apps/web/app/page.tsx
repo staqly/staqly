@@ -101,6 +101,7 @@ function Integrations() {
 // StatusAvailable (x.go, custom.go); every other catalog entry is "soon" and is never shown as available.
 const channelsLive: [string, string][] = [
   ['x', 'X'],
+  ['linkedin', 'LinkedIn'],
   ['custom', 'Your own automation'],
 ]
 // Not built yet (catalog.go), the creator platforms first.
@@ -111,7 +112,6 @@ const channelsSoon: [string, string][] = [
   ['threads', 'Threads'],
   ['facebook', 'Facebook'],
   ['pinterest', 'Pinterest'],
-  ['linkedin', 'LinkedIn'],
   ['bluesky', 'Bluesky'],
   ['mastodon', 'Mastodon'],
   ['telegram', 'Telegram'],
@@ -133,7 +133,7 @@ function Channels() {
         <Eyebrow>Channels</Eyebrow>
         <H2>Every platform your audience is on.</H2>
         <p className="mt-4 text-muted-foreground">
-          Post to X directly, and to every other platform through your own n8n workflow or script.
+          Post to X and LinkedIn directly, and to every other platform through your own n8n workflow or script.
         </p>
       </div>
       <ul className="mt-8 grid grid-cols-2 gap-3 sm:mt-12 sm:grid-cols-3 lg:grid-cols-4">
@@ -481,7 +481,7 @@ const faqs: [string, string][] = [
   ],
   [
     'Which platforms can it publish to?',
-    "X directly, and Instagram, TikTok, YouTube, LinkedIn and every other platform through your own automation: an n8n workflow or a script that publishes the post and sends the link back. The composer knows each platform's limits and settings.",
+    "X and LinkedIn directly, and Instagram, TikTok, YouTube and every other platform through your own automation: an n8n workflow or a script that publishes the post and sends the link back. The composer knows each platform's limits and settings.",
   ],
   [
     'Can I use it without an AI agent?',
