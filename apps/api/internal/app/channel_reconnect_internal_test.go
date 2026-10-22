@@ -18,8 +18,8 @@ type fakeOAuth struct {
 }
 
 func (f *fakeOAuth) Refresh(_ context.Context, _ providers.App, c providers.Credentials) (providers.Credentials, error) {
-	if f.fail {
-		return nil, errors.New("invalid_grant: refresh token revoked")
+	if f.fail { // what providers answer for a revoked sign-in (X: invalid_grant)
+		return nil, &providers.Failure{Kind: providers.ErrReauth, Msg: "invalid_grant: refresh token revoked"}
 	}
 	out := providers.Credentials{}
 	for k, v := range c {

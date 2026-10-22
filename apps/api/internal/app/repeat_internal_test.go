@@ -64,3 +64,16 @@ func TestNextOccurrenceAcrossDST(t *testing.T) {
 		t.Errorf("1mo across DST: %v", got.UTC())
 	}
 }
+
+// A monthly repeat keeps the day it started on: Jan 31 goes Feb 28 and then Mar 31 (the copy from Feb 28 knows
+// the chain began on the 31st), also when it catches up over several months.
+func TestMonthlyRepeatKeepsItsDay(t *testing.T) {
+	jan31 := time.Date(2026, 1, 31, 9, 0, 0, 0, time.UTC)
+	feb28 := time.Date(2026, 2, 28, 9, 0, 0, 0, time.UTC)
+	if got := nextOccurrenceOn(feb28, "1mo", feb28, 31); !got.Equal(time.Date(2026, 3, 31, 9, 0, 0, 0, time.UTC)) {
+		t.Fatalf("the copy of Feb 28 from a Jan 31 chain: %v, want Mar 31", got)
+	}
+	if got := nextOccurrence(jan31, "1mo", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)); !got.Equal(time.Date(2026, 3, 31, 9, 0, 0, 0, time.UTC)) {
+		t.Fatalf("catching up from Jan 31: %v, want Mar 31", got)
+	}
+}
