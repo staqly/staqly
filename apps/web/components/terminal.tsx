@@ -69,7 +69,6 @@ export function TerminalCard({ title = 'Terminal', code }: { title?: string; cod
       <pre
         ref={ref}
         data-run={run || undefined}
-        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region must take focus
         tabIndex={0}
         className="sq-term overflow-x-auto p-4 font-mono text-[12px] leading-6 sm:p-5 sm:text-[13px] sm:leading-7"
       >

@@ -99,7 +99,6 @@ describe('render budgets: the media library (60 files)', () => {
 
     for (let i = 1; i <= 10; i++) {
       act(() => upload.progress(i / 11))
-      // oxlint-disable-next-line eslint/no-await-in-loop -- one progress event per frame
       await frame()
     }
 

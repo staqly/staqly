@@ -41,9 +41,7 @@ async function saveVersions(
 
   for (const f of chosen) {
     // One at a time: each is a full-size encode and upload.
-    // oxlint-disable-next-line no-await-in-loop
     const blob = await makeVariant(facts, f, { kind: 'crop' }, providerOf(f))
-    // oxlint-disable-next-line no-await-in-loop
     const media = await api.uploadMedia(
       blob,
       `${base} - ${f.platform} ${f.name} ${f.label.replace(':', 'x')}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`,
