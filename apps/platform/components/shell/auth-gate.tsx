@@ -13,9 +13,10 @@ import { useSession, useSetupStatus } from '@/lib/queries'
 // Only a browser that is not signed in needs the form: out of every page's first load.
 const LocalSignIn = dynamic(() => import('@/components/auth/local-sign-in').then((m) => m.LocalSignIn))
 
+/** The wait before the dashboard: invisible for a quick load (no flash), shown when it is slow (appear-when-slow). */
 function Splash({ label = 'Loading workspace...' }: { label?: string }) {
   return (
-    <div className="flex min-h-svh items-center justify-center">
+    <div className="appear-when-slow flex min-h-svh items-center justify-center" role="status">
       <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
         <LogoMark className="size-9 animate-pulse" />
         {label}

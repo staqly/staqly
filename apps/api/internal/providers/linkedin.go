@@ -141,7 +141,9 @@ func (l LinkedIn) Exchange(ctx context.Context, app App, redirect, code string, 
 	creds := t.into(Credentials{}, time.Now())
 	creds["person_id"] = me.Sub
 	// The profile's public address needs a permission only partners get, so the channel shows the name.
-	return creds, Profile{Name: me.Name, AvatarURL: me.Picture}, nil
+	// Comments need w_member_social_feed (the Community Management API); "Share on LinkedIn" only posts.
+	noComments := t.Scope != "" && !strings.Contains(t.Scope, "w_member_social_feed")
+	return creds, Profile{Name: me.Name, AvatarURL: me.Picture, NoComments: noComments}, nil
 }
 
 // Refresh renews the token with a refresh token when LinkedIn gave one (approved partner apps). Without one the
@@ -259,7 +261,7 @@ func (l LinkedIn) Reply(ctx context.Context, c Credentials, parentExternalID str
 	if len(p.Media) > 0 {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "LinkedIn comments take text only"}
 	}
-	req, err := linkedinJSON(ctx, token, http.MethodPost, linkedinAPI+"/rest/socialActions/"+url.PathEscape(post)+"/comments",
+	req, err := linkedinJSON(ctx, token, http.MethodPost, linkedinAPI+"/rest/socialActions/"+linkedinURN(post)+"/comments",
 		map[string]any{"actor": "urn:li:person:" + person, "object": post, "message": map[string]string{"text": p.Text}})
 	if err != nil {
 		return Result{}, err
@@ -294,6 +296,10 @@ func linkedinCommentPost(urn string) string {
 	}
 	return urn
 }
+
+// linkedinURN is a URN as a path segment: LinkedIn wants its colons encoded (urn%3Ali%3Ashare%3A1), and answers
+// "Syntax exception in path variables" to urn:li:share:1, which url.PathEscape leaves as it is.
+func linkedinURN(urn string) string { return url.QueryEscape(urn) }
 
 func linkedinPostURL(urn string) string { return "https://www.linkedin.com/feed/update/" + urn + "/" }
 
@@ -394,7 +400,7 @@ func (l LinkedIn) upload(ctx context.Context, token, owner string, m MediaFile) 
 			Status                  string `json:"status"`
 			ProcessingFailureReason string `json:"processingFailureReason"`
 		}
-		req, err := linkedinJSON(ctx, token, http.MethodGet, linkedinAPI+"/rest/videos/"+url.PathEscape(v.Video), nil)
+		req, err := linkedinJSON(ctx, token, http.MethodGet, linkedinAPI+"/rest/videos/"+linkedinURN(v.Video), nil)
 		if err != nil {
 			return "", err
 		}
@@ -500,14 +506,29 @@ func linkedinError(status int, body string) error {
 		}
 	}
 	switch {
+	// The token endpoint: the app's keys (a wrong Client ID or Secret) or the sign-in's code, not the account.
+	case e.Error == "invalid_client", e.Error == "unauthorized_client":
+		// For whoever runs the server: PROVIDER_LINKEDIN_CLIENT_ID and _SECRET don't match the app's Auth tab.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn did not accept this server's app (" + detail + ")"}
+	case e.Error == "invalid_redirect_uri", strings.Contains(detail, "redirect_uri"):
+		// For whoever runs the server: the app's Authorized redirect URLs need <dashboard>/channels/callback/linkedin.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn did not accept the return address (" + detail + ")"}
+	case e.Error == "invalid_request", e.Error == "invalid_grant" && status == http.StatusBadRequest:
+		// LinkedIn answers a sign-in code it doesn't know (used, expired) with 401 invalid_request.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn did not accept the sign-in (" + detail + "); connect again"}
 	case status == http.StatusUnauthorized, e.Error == "invalid_grant", strings.Contains(body, "REVOKED_ACCESS_TOKEN"), strings.Contains(body, "EXPIRED_ACCESS_TOKEN"):
-		return &Failure{Kind: ErrReauth, Msg: "LinkedIn no longer accepts this account's sign-in; reconnect it"}
+		return &Failure{Kind: ErrReauth, Msg: "LinkedIn no longer accepts this account's sign-in (" + detail + "); reconnect it"}
 	case status == http.StatusTooManyRequests:
 		return &Failure{Msg: "LinkedIn rate limit reached; staqly tries again in a few minutes"}
 	case status >= 500:
 		return &Failure{Msg: fmt.Sprintf("LinkedIn is unavailable (%d); staqly tries again in a few minutes", status)}
+	case status == http.StatusForbidden && strings.Contains(detail, "partnerApiSocialActions"):
+		// For whoever runs the server: "Share on LinkedIn" posts, but comments need the app approved for
+		// LinkedIn's Community Management API.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn hasn't enabled comments for this connection yet (" + detail + "). The post itself is live"}
 	case status == http.StatusForbidden:
-		return &Failure{Kind: ErrRejected, Msg: "LinkedIn refused it (" + detail + "); check that the app has the \"Share on LinkedIn\" product"}
+		// For whoever runs the server: the app needs the "Share on LinkedIn" product.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn refused it (" + detail + ")"}
 	case strings.Contains(body, "processing"), strings.Contains(body, "not ready"):
 		return &Failure{Msg: "LinkedIn is still processing the media; staqly tries again in a few minutes"}
 	case status >= 400:

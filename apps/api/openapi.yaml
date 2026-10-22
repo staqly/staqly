@@ -4865,7 +4865,7 @@ components:
     Channel:
       type: object
       description: A connected account. Credentials are stored sealed and never returned.
-      required: [id, provider, name, handle, avatar_url, profile_url, status, settings, links, group_id, last_error, created_at, updated_at]
+      required: [id, provider, name, handle, avatar_url, profile_url, status, settings, links, group_id, last_error, comments, created_at, updated_at]
       properties:
         id: { type: string }
         provider: { type: string, description: Provider id (see GET /v1/providers) }
@@ -4878,6 +4878,7 @@ components:
         links: { $ref: "#/components/schemas/LinksMode", description: "What this channel does with the links in a post's text: settings.links, else the provider's limits.links" }
         group_id: { type: string, description: "The channel group it belongs to (every channel is in exactly one; the Default group unless moved)" }
         last_error: { type: string }
+        comments: { type: boolean, description: "A post's comments go out under it on this channel: its platform takes comments and this connection may post them (a LinkedIn connection needs the Community Management API). False: they are not sent here." }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         activity: { $ref: "#/components/schemas/ChannelActivity" }

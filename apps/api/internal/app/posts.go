@@ -1229,6 +1229,9 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	// The channel's links mode applies to what it receives; the post keeps its text as written.
 	links := channelLinks(ch)
 	text, _ = providers.ApplyLinks(links, text)
+	if ch.Provider != "custom" { // your own automation gets the tags as they are, in "tags"
+		text = providers.AppendHashtags(text, tags)
+	}
 	for i := range thread {
 		thread[i].Text, _ = providers.ApplyLinks(links, thread[i].Text)
 	}
@@ -1566,6 +1569,9 @@ func (s *Service) PreviewPost(ctx context.Context, p Principal, id string) (Post
 			tp.Links = channelLinks(ch)
 			var found []string
 			tp.Text, found = providers.ApplyLinks(tp.Links, text)
+			if ch.Provider != "custom" {
+				tp.Text = providers.AppendHashtags(tp.Text, post.Tags)
+			}
 			text = tp.Text
 			if len(found) > 0 {
 				tp.LinksFound = found

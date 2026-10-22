@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { LibraryBig, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -64,14 +64,17 @@ function LibraryPicker({
     return () => clearTimeout(t)
   }, [search])
 
-  // Pictures and videos only: what a post can carry.
+  // Pictures and videos only: what a post can carry. A new search keeps the last results until its own arrive,
+  // so typing doesn't flash the loading line.
   const images = useQuery({
     queryKey: mediaKeys.picker('image', q),
     queryFn: ({ signal }) => api.mediaLibrary({ q: q || undefined, kind: 'image', limit: 120 }, signal),
+    placeholderData: keepPreviousData,
   })
   const videos = useQuery({
     queryKey: mediaKeys.picker('video', q),
     queryFn: ({ signal }) => api.mediaLibrary({ q: q || undefined, kind: 'video', limit: 120 }, signal),
+    placeholderData: keepPreviousData,
   })
   const imageData = images.data?.data
   const videoData = videos.data?.data

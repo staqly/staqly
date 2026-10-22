@@ -874,6 +874,8 @@ class Channel(StaqlyModel):
     settings: dict[str, Any] = Field(default_factory=dict)
     #: What this channel does with the links in a post: keep, remove or defang (``example[.]com``).
     links: str = "keep"
+    #: A post's comments go out under it here: the platform takes comments and this connection may post them.
+    comments: bool = False
     #: The channel group it belongs to (every channel is in exactly one; Default unless moved).
     group_id: str = ""
     last_error: str = ""
