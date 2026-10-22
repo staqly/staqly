@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 )
 
 // Telegram: alerts as Bot API messages (sendMessage) to a chat the bot can
@@ -107,13 +108,19 @@ func telegramText(msg *notifyMessage, previewMax int) string {
 		return b.String()
 	}
 	fmt.Fprintf(&b, "🔔 <b>%d updates</b>", len(msg.Entries))
+	// sendMessage takes at most 4096 characters (as shown, without the markup): the entries that don't fit
+	// become "...and N more" instead of a message Telegram refuses (and a batch that fails again and again).
+	shown := 20
 	for i, e := range msg.Entries {
-		if i == 15 {
-			fmt.Fprintf(&b, "\n\n...and %d more", len(msg.Entries)-15)
+		title, meta, p := truncateRunes(e.Title, 120), eventLabel(e)+" · "+entryMeta(e), truncateRunes(e.Preview, min(previewMax, 120))
+		n := utf8.RuneCountInString(title) + utf8.RuneCountInString(meta) + utf8.RuneCountInString(p) + 12
+		if i == 15 || shown+n > 3900 {
+			fmt.Fprintf(&b, "\n\n...and %d more", len(msg.Entries)-i)
 			break
 		}
-		fmt.Fprintf(&b, "\n\n<b>#%d %s</b>\n<i>%s · %s</i>", i+1, tgEsc(truncateRunes(e.Title, 120)), tgEsc(eventLabel(e)), tgEsc(entryMeta(e)))
-		if p := truncateRunes(e.Preview, min(previewMax, 120)); p != "" {
+		shown += n
+		fmt.Fprintf(&b, "\n\n<b>#%d %s</b>\n<i>%s</i>", i+1, tgEsc(title), tgEsc(meta))
+		if p != "" {
 			b.WriteString("\n" + tgEsc(p))
 		}
 	}

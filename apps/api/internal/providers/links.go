@@ -25,6 +25,8 @@ var linkRe = xurls.Relaxed()
 var (
 	schemeRe = regexp.MustCompile(`(?i)^https?://`)
 	spacesRe = regexp.MustCompile(`[ \t]{2,}`)
+	// A markdown link, [text](url): its text stays when the url goes.
+	markdownLinkRe = regexp.MustCompile(`\[([^\]\n]+)\]\(([^)\s]+)\)`)
 )
 
 // ApplyLinks rewrites text for a links mode and returns the links it changed, as written. Email addresses and
@@ -34,6 +36,17 @@ func ApplyLinks(mode, text string) (string, []string) {
 		return text, nil
 	}
 	var found []string
+	text = markdownLinkRe.ReplaceAllStringFunc(text, func(m string) string {
+		g := markdownLinkRe.FindStringSubmatch(m)
+		if !isWebLink(g[2]) {
+			return m
+		}
+		found = append(found, g[2])
+		if mode == LinksRemove {
+			return g[1]
+		}
+		return g[1] + " (" + defang(g[2]) + ")"
+	})
 	out := linkRe.ReplaceAllStringFunc(text, func(u string) string {
 		if !isWebLink(u) {
 			return u
@@ -55,12 +68,27 @@ func ApplyLinks(mode, text string) (string, []string) {
 	return out, found
 }
 
-// isWebLink: an http(s) link or a bare host (example.com/x), not an email or another scheme.
+// isWebLink: an http(s) link or a bare host (example.com/x), not an email or another scheme. A bare name on a
+// two-letter top-level domain without a path (README.md, setup.py, deploy.sh) is a file name, not a link: X
+// links those only with a scheme or a path (.co is the exception), so they stay as written.
 func isWebLink(u string) bool {
 	if schemeRe.MatchString(u) {
 		return true
 	}
-	return !strings.Contains(u, "://") && !strings.Contains(u, "@") && !strings.Contains(strings.ToLower(u), "mailto:")
+	if strings.Contains(u, "://") || strings.Contains(strings.ToLower(u), "mailto:") {
+		return false
+	}
+	host, path, _ := strings.Cut(u, "/")
+	if strings.Contains(host, "@") {
+		return false // an email address (mastodon.social/@staqly is a link: the @ is in the path)
+	}
+	if path == "" && !strings.HasPrefix(strings.ToLower(host), "www.") {
+		tld := host[strings.LastIndex(host, ".")+1:]
+		if len(tld) == 2 && !strings.EqualFold(tld, "co") {
+			return false
+		}
+	}
+	return true
 }
 
 // defang drops the scheme and brackets the dots of the host: https://www.example.com:8080/a.b?q=1 becomes

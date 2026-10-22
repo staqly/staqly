@@ -29,6 +29,7 @@ type fakeX struct {
 	tweetCode int // status for POST /2/tweets (0 = 201)
 	tweetBody string
 	appends   int
+	timeline  string // the text of the account's latest post (GET /2/users/42/tweets)
 }
 
 func (f *fakeX) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +83,9 @@ func (f *fakeX) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"data":{"id":"1790000000000000000","text":"hi"}}`))
+	case r.URL.Path == "/2/users/42/tweets" && f.timeline != "":
+		b, _ := json.Marshal(map[string]any{"data": []map[string]string{{"id": "1789", "text": f.timeline}}})
+		_, _ = w.Write(b)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -220,6 +224,16 @@ func TestXPublish(t *testing.T) {
 			t.Errorf("%d: got %v", tc.code, err)
 		}
 	}
+
+	// A retry after a lost answer is refused as a duplicate; the account's latest post with the text is the
+	// post, published (X writes & as &amp; and appends the media link).
+	f.timeline = "Q&amp;A is live https://t.co/abc"
+	f.tweetCode, f.tweetBody = 403, `{"detail":"You are not allowed to create a Tweet with duplicate content.","status":403}`
+	connected := Credentials{"access_token": "at", "username": "jumpthebear", "user_id": "42"}
+	if res, err := e.Publish(ctx, connected, PostContent{Text: "Q&A is live"}, nil); err != nil || res.ExternalID != "1789" {
+		t.Fatalf("duplicate after a lost answer: %+v %v", res, err)
+	}
+	f.timeline = ""
 
 	// Disclosures ride on the post as booleans; off sends nothing.
 	f.tweetCode = 0
