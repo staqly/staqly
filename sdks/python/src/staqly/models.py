@@ -403,8 +403,6 @@ class Member(StaqlyModel):
     email: str
     avatar_url: str = ""
     role: str
-    #: Owns the account the workspace belongs to (always an owner, cannot be removed).
-    account_owner: bool = False
     you: bool = False
     created_at: datetime
 
@@ -417,7 +415,6 @@ class Whoami(StaqlyModel):
     user: User | None = None
     #: The caller's role in this workspace (owner, admin, editor, viewer).
     role: str = ""
-    account_owner: bool = False
     accounts_enabled: bool = False
     workspaces: list[MyWorkspace] = Field(default_factory=list)
     #: The dashboard's welcome wizard is done for this person (or local install).
