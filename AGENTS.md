@@ -28,7 +28,7 @@ code that requires attribution.
 ```bash
 pnpm install       # once: the whole workspace (Turborepo + pnpm; Go and Python packages have package.json wrappers)
 pnpm check         # format:check, lint, typecheck, test of every package (turbo, cached)
-pnpm turbo run test --filter=@staqly/api   # one package (api, cli, dashboard, sdk, sdk-python; docs and web have no tests)
+pnpm turbo run test --filter=@staqly/api   # one package (api, cli, dashboard, sdk, sdk-python, web: the tools' logic; docs has none)
 pnpm gen           # sqlc queries, dashboard API types, TypeScript SDK schema
 pnpm test:e2e      # Docker end-to-end suite (e2e/, compose.e2e.yml)
 pnpm --filter @staqly/e2e test:cross-client   # live, no Docker: TS + Python SDKs, CLI, curl, MCP against `staqly serve` (e2e/cross-client)
@@ -57,6 +57,7 @@ Run `test:ui-responsive` for dashboard layout changes.
 | `ci.yml` | push to `main`, pull requests | `pnpm check` tasks per package, generated code up to date, the Docker e2e suite |
 | `cross-client.yml` | push to `main`, pull requests | `pnpm --filter @staqly/e2e test:cross-client` (Go, uv, Node; no secrets) |
 | `n8n.yml` | push to `main`, nightly, by hand | the dev stack built from the checkout + a real n8n: `test:n8n` (no secrets) |
+| `ui.yml` | nightly, by hand | the dashboard in a real browser: `test:ui` (flows, axe) and `test:ui-responsive` against `staqly serve` built from the checkout (no secrets) |
 | `docs.yml`, `release.yml`, `codeql.yml` | docs changes on `main`; `v*` tags; pushes, pull requests and weekly | docs site; binaries + image, then (stable tags, this repository only) a `repository_dispatch` `staqly-release` to the repository in the variable `DEPLOY_DISPATCH_REPO` with the secret `DEPLOY_DISPATCH_TOKEN` (fails when either is missing); code scanning |
 
 The landing page (`apps/web`) is built and hosted outside this repository's workflows. The real-agent

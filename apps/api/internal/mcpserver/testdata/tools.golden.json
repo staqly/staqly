@@ -1598,6 +1598,10 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "cursor": {
+          "description": "next_cursor of the previous page (500 comments a page), for later comments",
+          "type": "string"
+        },
         "post_id": {
           "description": "post ID (post_...)",
           "type": "string"
@@ -1755,6 +1759,10 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "cursor": {
+          "description": "next_cursor of the previous page, for older deliveries",
+          "type": "string"
+        },
         "limit": {
           "description": "max deliveries (default 50, max 200)",
           "type": "integer"

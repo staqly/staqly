@@ -1160,4 +1160,16 @@ describe('pagination', () => {
 
     expect(seqs).toEqual([1])
   })
+
+  it('posts.comments follows every page', async () => {
+    const comment = (i: number) => ({ id: `cmt_${i}`, post_id: 'pst_1', body: `#${i}` })
+    const { c, calls } = client(
+      json({ data: [comment(1), comment(2)], next_cursor: 'c2' }),
+      json({ data: [comment(3)] }),
+    )
+
+    expect((await c.posts.comments('pst_1')).map((x) => x.body)).toEqual(['#1', '#2', '#3'])
+    expect(calls[0]!.url.searchParams.get('cursor')).toBeNull()
+    expect(calls[1]!.url.searchParams.get('cursor')).toBe('c2')
+  })
 })

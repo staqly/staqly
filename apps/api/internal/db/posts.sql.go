@@ -548,10 +548,11 @@ func (q *Queries) PostsReferencingMedia(ctx context.Context, arg PostsReferencin
 }
 
 const repeatOfPost = `-- name: RepeatOfPost :one
-SELECT id FROM posts WHERE repeat_of = ? LIMIT 1
+SELECT id FROM posts WHERE repeat_of = ? AND repeat_of <> '' LIMIT 1
 `
 
 // The copy a repeating post already made (none: sql.ErrNoRows).
+// The repeat_of <> ” term lets the partial index posts_repeat_of answer it (a bound value alone can't).
 func (q *Queries) RepeatOfPost(ctx context.Context, repeatOf string) (string, error) {
 	row := q.db.QueryRowContext(ctx, repeatOfPost, repeatOf)
 	var id string
@@ -779,8 +780,15 @@ func (q *Queries) UpsertTarget(ctx context.Context, arg UpsertTargetParams) erro
 const waitingCustomTargets = `-- name: WaitingCustomTargets :many
 SELECT t.post_id, t.channel_id, t.updated_at, p.collection_id FROM post_targets t
 JOIN channels c ON c.id = t.channel_id JOIN posts p ON p.id = t.post_id
-WHERE p.workspace_id = ? AND t.status = 'publishing' AND c.provider = 'custom' ORDER BY t.updated_at, t.post_id
+WHERE p.workspace_id = ?1 AND t.status = 'publishing' AND c.provider = 'custom'
+ORDER BY t.updated_at, t.post_id, t.channel_id
+LIMIT ?2
 `
+
+type WaitingCustomTargetsParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	Lim         int64  `json:"lim"`
+}
 
 type WaitingCustomTargetsRow struct {
 	PostID       string `json:"post_id"`
@@ -790,8 +798,8 @@ type WaitingCustomTargetsRow struct {
 }
 
 // Custom targets a person's automation still owes a result for (list_requested_work, GET /work).
-func (q *Queries) WaitingCustomTargets(ctx context.Context, workspaceID string) ([]WaitingCustomTargetsRow, error) {
-	rows, err := q.db.QueryContext(ctx, waitingCustomTargets, workspaceID)
+func (q *Queries) WaitingCustomTargets(ctx context.Context, arg WaitingCustomTargetsParams) ([]WaitingCustomTargetsRow, error) {
+	rows, err := q.db.QueryContext(ctx, waitingCustomTargets, arg.WorkspaceID, arg.Lim)
 	if err != nil {
 		return nil, err
 	}

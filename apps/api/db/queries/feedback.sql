@@ -24,7 +24,11 @@ UPDATE post_comments SET resolved_at = @resolved_at, resolved_by = @resolved_by
 WHERE workspace_id = @workspace_id AND post_id = @post_id AND id = @id AND parent_id = '';
 
 -- name: ListPostComments :many
-SELECT * FROM post_comments WHERE workspace_id = ? AND post_id = ? ORDER BY created_at, id;
+SELECT * FROM post_comments WHERE workspace_id = @workspace_id AND post_id = @post_id
+  -- Keyset: the page after (created_at, id) of the previous one's last row ('' = the first page).
+  AND (@after_at = '' OR created_at > @after_at OR (created_at = @after_at AND id > @after_id))
+ORDER BY created_at, id
+LIMIT @lim;
 
 -- name: CountRecentPreviewComments :one
 SELECT COUNT(*) FROM post_comments WHERE preview_id = @preview_id AND created_at > @since;

@@ -28,7 +28,6 @@ export function CodeBlock({
       )}
       {/* Focusable: a long line scrolls sideways (on phones most do), and keyboards scroll it with the arrow keys. */}
       <pre
-        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrolling region must be reachable by keyboard (WCAG 2.1.1)
         tabIndex={0}
         className={cn(
           'scrollbar-thin overflow-x-auto p-3 font-mono text-[12.5px] leading-relaxed focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',

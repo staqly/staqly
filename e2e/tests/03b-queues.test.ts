@@ -449,7 +449,8 @@ describe('the job queue', () => {
       { message: 'no publish_post job for the scheduled post' },
     )
 
-    expect(queued).toMatchObject({ key: `publish_post:${post.id}`, attempts: 0, max_attempts: 1 })
+    // The usual attempts: a run re-checks the post inside its write, so a retry never publishes twice.
+    expect(queued).toMatchObject({ key: `publish_post:${post.id}`, attempts: 0, max_attempts: 3 })
     expect(Date.parse(queued.run_at)).toBe(Date.parse(far))
     expect(await agent.get(`/v1/jobs/${queued.id}`)).toMatchObject({ id: queued.id })
     const stats = await agent.get<{

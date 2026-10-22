@@ -36,6 +36,9 @@ jobs:
         run: pnpm gen && git diff --exit-code internal/db
       - name: gofmt, vet + OpenAPI lint, tests (race, incl. OpenAPI contract test), build
         run: pnpm turbo run format:check lint test build --filter=@staqly/api
+      - name: Known vulnerabilities in code that is called (govulncheck)
+        working-directory: apps/api
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   # The same Go suite on PostgreSQL (cloud mode's database): every test opens a fresh schema
   # (internal/store/storetest), plus the schema drift check and the SQLite import.
@@ -69,6 +72,9 @@ jobs:
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/cli" }
       - run: pnpm turbo run format:check lint test build --filter=@staqly/cli
+      - name: Known vulnerabilities in code that is called (govulncheck)
+        working-directory: apps/cli
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: Release config is valid (goreleaser)
         uses: goreleaser/goreleaser-action@v7
         with: { version: "~> v2", workdir: apps/cli, args: check }
@@ -105,8 +111,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/web..." }
-      - name: Formatting, lint, types, build (static export + link check)
-        run: pnpm turbo run format:check lint typecheck build --filter=@staqly/web
+      - name: Formatting, lint, types, tools' logic (scripts/check-tools.mjs), build (static export + link check)
+        run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/web
       - name: SEO files are generated
         working-directory: apps/web
         run: test -s out/robots.txt && test -s out/sitemap.xml && test -s out/llms.txt

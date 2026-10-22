@@ -124,11 +124,12 @@ type listDeliveriesIn struct {
 	Status    string `json:"status,omitempty" jsonschema:"pending, succeeded or failed"`
 	PostID    string `json:"post_id,omitempty" jsonschema:"only deliveries of events about this post (post_...)"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"max deliveries (default 50, max 200)"`
+	Cursor    string `json:"cursor,omitempty" jsonschema:"next_cursor of the previous page, for older deliveries"`
 }
 
 func (t *tools) listDeliveries(ctx context.Context, _ *mcp.CallToolRequest, in listDeliveriesIn) (*mcp.CallToolResult, any, error) {
-	d, err := t.svc.ListDeliveries(ctx, t.principal(ctx), in.WebhookID, in.Status, in.PostID, in.Limit)
-	return nil, map[string]any{"deliveries": d}, err
+	d, err := t.svc.ListDeliveries(ctx, t.principal(ctx), in.WebhookID, in.Status, in.PostID, in.Limit, in.Cursor)
+	return nil, map[string]any{"deliveries": d.Data, "next_cursor": d.NextCursor}, err
 }
 
 type deliveryRef struct {

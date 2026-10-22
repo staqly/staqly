@@ -6,6 +6,7 @@ import { teamTotal } from '@/components/plans/plan-cards'
 import { PlansPage } from '@/components/plans/plans-page'
 import { qk } from '@/lib/queries'
 
+import { nav } from './navigation'
 import { PLANS, usage } from './plans-fixtures'
 import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
 
@@ -129,6 +130,19 @@ describe('plan picker', () => {
         promotion_code: 'BIZ-5UUS-DUQR',
       }),
     )
+  })
+})
+
+describe('from the pricing page', () => {
+  it('opens on the billing period picked there', async () => {
+    nav.set('/plans', 'plan=pro&interval=year')
+    render(false)
+
+    const plus = await screen.findByTestId('plan-plus')
+
+    expect(screen.getByRole('radio', { name: /yearly/i })).toHaveAttribute('aria-checked', 'true')
+    expect(within(plus).getByText('€23')).toBeInTheDocument()
+    nav.reset()
   })
 })
 

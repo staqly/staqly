@@ -7,9 +7,7 @@ import (
 )
 
 // Slack: Block Kit messages through an incoming webhook or chat.postMessage.
-// With the app's signing secret configured, Approve/Reject are interactive
-// buttons handled at POST /v1/integrations/slack/interactions; otherwise
-// they are one-tap decision links.
+// Alerts only: nothing comes back from Slack.
 
 func (s *Service) slackBase() string {
 	return strings.TrimRight(s.Env("SLACK_API_BASE", "https://slack.com/api"), "/")
