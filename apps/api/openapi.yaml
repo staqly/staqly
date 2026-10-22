@@ -4677,13 +4677,13 @@ components:
       type: object
       properties:
         collection: { type: string, description: Collection id or exact name }
-        content: { type: string, maxLength: 100000 }
+        content: { type: string, maxLength: 50000 }
         media: { type: array, maxItems: 20, items: { type: string }, description: Media ids from POST /v1/media }
         targets: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/PostTargetInput" } }
         publish_at: { type: [string, "null"], format: date-time, description: "In the future, at most a year ahead" }
         status: { type: string, enum: [draft, scheduled], description: "Default draft; scheduled needs publish_at and a target" }
         publish_now: { type: boolean, description: Publish right away (needs a target) }
-        tags: { type: array, maxItems: 50, items: { type: string, maxLength: 50 } }
+        tags: { type: array, maxItems: 20, items: { type: string, maxLength: 40 } }
         metadata: { type: object, additionalProperties: true }
         source: { type: string, maxLength: 100 }
         external_ref: { type: string, maxLength: 200 }
@@ -4695,11 +4695,11 @@ components:
       description: Fields left out stay as they are
       properties:
         collection: { type: string, description: Move the post to another collection (id or exact name) }
-        content: { type: string, maxLength: 100000 }
+        content: { type: string, maxLength: 50000 }
         media: { type: array, maxItems: 20, items: { type: string } }
         targets: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/PostTargetInput" }, description: Replaces the whole list }
         publish_at: { type: [string, "null"], format: date-time, description: "A time in the future, or null to clear it (a scheduled post becomes a draft)" }
-        tags: { type: array, maxItems: 50, items: { type: string, maxLength: 50 } }
+        tags: { type: array, maxItems: 20, items: { type: string, maxLength: 40 } }
         metadata: { type: object, additionalProperties: true }
         external_ref: { type: string, maxLength: 200 }
         repeat_every:

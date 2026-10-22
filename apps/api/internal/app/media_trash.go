@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -87,7 +88,7 @@ func (s *Service) KeepMedia(ctx context.Context, p Principal, id string) ([]stri
 		for {
 			twin, err := q.OldestTwin(ctx, db.OldestTwinParams{WorkspaceID: p.WorkspaceID, Sha256: keep.Sha256, ID: keep.ID})
 			if isNoRows(err) {
-				return nil
+				return s.dedupePostMedia(ctx, q, p.WorkspaceID, keep.ID, now)
 			} else if err != nil {
 				return err
 			}
@@ -102,6 +103,28 @@ func (s *Service) KeepMedia(ctx context.Context, p Principal, id string) ([]stri
 		}
 	})
 	return trashed, err
+}
+
+// dedupePostMedia: a post that carried two copies now names the kept file twice; it keeps it once (in its
+// files and in each comment), or it would publish the picture twice and no edit of it would save.
+func (s *Service) dedupePostMedia(ctx context.Context, q *db.Queries, ws, id, now string) error {
+	rows, err := q.PostsCarryingMedia(ctx, db.PostsCarryingMediaParams{WorkspaceID: ws, Quoted: `"` + id + `"`})
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		var media []string
+		_ = json.Unmarshal([]byte(r.Media), &media)
+		parts := parseThread(r.Thread)
+		for i := range parts {
+			parts[i].Media = uniqueIDs(parts[i].Media)
+		}
+		if err := q.SetPostMediaLists(ctx, db.SetPostMediaListsParams{Media: mustJSON(uniqueIDs(media)), Thread: mustJSON(parts),
+			UpdatedAt: now, WorkspaceID: ws, ID: r.ID}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // purgeTrashedMedia removes files that have been in Deleted for longer than MediaTrashDays, for good: the file

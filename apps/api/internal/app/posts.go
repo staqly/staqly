@@ -1128,6 +1128,7 @@ func (s *Service) DeletePosts(ctx context.Context, p Principal, ids []string) (d
 	if len(ids) == 0 || len(ids) > 200 {
 		return nil, nil, invalid("ids", "1 to 200 post ids")
 	}
+	ids = uniqueIDs(ids) // an id listed twice is deleted once, not reported as missing the second time
 	deleted, missing = []string{}, []string{}
 	for _, id := range ids {
 		switch err := s.DeletePost(ctx, p, id); {

@@ -65,5 +65,12 @@ ORDER BY created_at, id LIMIT 1;
 -- name: RepointPostMedia :exec
 -- Posts that carry one file (in their files or a comment) carry another instead (ids are quoted in the JSON).
 UPDATE posts SET media = replace(media, @from_quoted, @to_quoted), thread = replace(thread, @from_quoted, @to_quoted),
-  updated_at = @updated_at
+  version = version + 1, updated_at = @updated_at
 WHERE workspace_id = @workspace_id AND (instr(media, @from_quoted) > 0 OR instr(thread, @from_quoted) > 0);
+
+-- name: PostsCarryingMedia :many
+-- Posts with a file in their files or a comment (the id quoted, as it is in the JSON).
+SELECT id, media, thread FROM posts WHERE workspace_id = @workspace_id AND (instr(media, @quoted) > 0 OR instr(thread, @quoted) > 0);
+
+-- name: SetPostMediaLists :exec
+UPDATE posts SET media = @media, thread = @thread, updated_at = @updated_at WHERE workspace_id = @workspace_id AND id = @id;

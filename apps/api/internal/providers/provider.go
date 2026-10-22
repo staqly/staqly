@@ -399,7 +399,7 @@ func CheckLimits(l Limits, p PostContent, s Settings) error {
 	if l.NeedsLink && s["link"] == "" {
 		return invalid("link", "this channel needs a link")
 	}
-	if p.Text == "" && len(p.Media) == 0 && s["title"] == "" {
+	if strings.TrimSpace(p.Text) == "" && len(p.Media) == 0 && s["title"] == "" {
 		return invalid("content", "write something or add media")
 	}
 	return nil
