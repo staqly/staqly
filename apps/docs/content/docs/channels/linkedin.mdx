@@ -100,8 +100,9 @@ A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments 
 order and after their delays: for example the link that would otherwise lower the post's reach.
 Comments take text only.
 
-LinkedIn lets an app comment only once it has access to its **Community Management API**, which
-LinkedIn reviews; **Share on LinkedIn** alone publishes the post and LinkedIn refuses the comments
+LinkedIn lets an app comment only with the `w_member_social_feed` permission of its **Community
+Management API**, which LinkedIn reviews; **Share on LinkedIn** (`w_member_social`) only creates
+posts, so the post goes out and LinkedIn refuses the comments
 (`Not enough permissions to access: partnerApiSocialActions.CREATE`). The post still goes out; each
 refused comment shows its reason on the post's Delivery tab.
 
