@@ -141,9 +141,30 @@ describe('welcome wizard', () => {
     expect(await screen.findByRole('heading', { name: 'Setting up your workspace' })).toBeInTheDocument()
     expect(api.find('PATCH', '/v1/workspace')).toHaveLength(0)
     paid = true
-    expect(await screen.findByRole('heading', { name: 'You are all set' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
     expect(api.find('PATCH', '/v1/workspace')[0].body).toMatchObject({ name: 'Acme' })
     expect(api.find('POST', '/v1/billing/sync').length).toBeGreaterThan(0)
+  })
+
+  it('setting up again after a failure counts people already invited as invited', async () => {
+    const api = mockApi({
+      ...routes,
+      'POST /v1/invitations': {
+        status: 409,
+        body: { error: { code: 'already_invited', message: 'ana@example.com already has an open invitation' } },
+      },
+    })
+
+    sessionStorage.setItem(
+      'staqly:welcome',
+      JSON.stringify({ name: 'Ana', invites: { emails: ['ana@example.com'], role: 'editor' } }),
+    )
+    nav.set('/welcome', 'step=done')
+    render({})
+    expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
+    expect(api.find('POST', '/v1/invitations')).toHaveLength(1)
+    expect(screen.getByText('1 invitation sent')).toBeInTheDocument()
+    expect(screen.queryByText(/Not sent/)).not.toBeInTheDocument()
   })
 
   it('an invited member gets the short version: their name and their role', async () => {

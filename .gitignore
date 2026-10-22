@@ -28,3 +28,6 @@ coverage/
 
 # Agent worktrees (Claude Code)
 .claude/worktrees/
+
+# Playwright output (e2e/demo)
+e2e/test-results/

@@ -21,7 +21,8 @@ UPDATE posts SET status = ?, published_at = COALESCE(?, published_at), updated_a
 
 -- name: RepeatOfPost :one
 -- The copy a repeating post already made (none: sql.ErrNoRows).
-SELECT id FROM posts WHERE repeat_of = ? LIMIT 1;
+-- The repeat_of <> '' term lets the partial index posts_repeat_of answer it (a bound value alone can't).
+SELECT id FROM posts WHERE repeat_of = ? AND repeat_of <> '' LIMIT 1;
 
 -- name: DeletePost :execrows
 DELETE FROM posts WHERE workspace_id = ? AND id = ?;
@@ -87,7 +88,9 @@ SELECT status, COUNT(*) AS n FROM post_targets WHERE post_id = ? GROUP BY status
 -- Custom targets a person's automation still owes a result for (list_requested_work, GET /work).
 SELECT t.post_id, t.channel_id, t.updated_at, p.collection_id FROM post_targets t
 JOIN channels c ON c.id = t.channel_id JOIN posts p ON p.id = t.post_id
-WHERE p.workspace_id = ? AND t.status = 'publishing' AND c.provider = 'custom' ORDER BY t.updated_at, t.post_id;
+WHERE p.workspace_id = @workspace_id AND t.status = 'publishing' AND c.provider = 'custom'
+ORDER BY t.updated_at, t.post_id, t.channel_id
+LIMIT @lim;
 
 -- name: StripMediaFromPosts :exec
 -- Removes one media id from every post's media array (media is a JSON array of quoted ids).

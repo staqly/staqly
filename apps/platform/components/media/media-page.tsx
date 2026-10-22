@@ -390,7 +390,6 @@ export function MediaPage() {
       // Pages and batches one after another: each depends on the previous answer, and the server stays calm.
       if (ids === 'all') {
         for (let offset: number | undefined = 0; offset !== undefined;) {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- the next page starts where this one ended
           const page = await api.mediaLibrary({ deleted: true, limit: 200, offset })
 
           all.push(...page.data.map((m) => m.id))
@@ -401,7 +400,6 @@ export function MediaPage() {
       const deleted: string[] = []
 
       for (let i = 0; i < all.length; i += 200) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one batch at a time
         deleted.push(...(await api.deleteMediaMany(all.slice(i, i + 200), { permanent: true })).deleted)
       }
 

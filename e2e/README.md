@@ -111,6 +111,8 @@ as locally:
 | `cross-client.yml` | every push to `main` and pull request | Go, uv and Node; builds the TS SDK, then `pnpm --filter @staqly/e2e test:cross-client` | none |
 | `n8n.yml` | push to `main`, nightly, by hand (`scenarios` input) | the image built from the checkout (layer cache) as `ghcr.io/staqly/staqly:latest`, `docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait` (`make dev` without the browser), then `pnpm --filter @staqly/e2e test:n8n`; `results.json` as an artifact | none |
 
+| `ui.yml` | nightly, by hand | Go and Node, PostgreSQL as a service; `make dashboard`, Playwright's Chromium, then `UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui` and `pnpm --filter @staqly/e2e test:ui-responsive`; the report and traces as an artifact on failure | none |
+
 The real-agent suite (`e2e/agent/`) has no workflow: it costs money, so it runs only by hand (below).
 
 ## Real-agent MCP suite
@@ -309,7 +311,7 @@ for the server the error spec stops and restarts. `UI_BIN=/path/to/staqly`
 skips both builds, `UI_SKIP_DASHBOARD=1` reuses the export already in
 `apps/api/web`. Specs run one at a time against the shared servers; each one
 that changes data makes its own collection (with a channel and drafts of its
-own). Not part of `pnpm test:e2e` or CI.
+own). Not part of `pnpm test:e2e`; runs nightly in CI (`ui.yml`).
 
 | File | Covers |
 |---|---|

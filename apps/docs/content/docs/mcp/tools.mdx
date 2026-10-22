@@ -298,6 +298,7 @@ A post's feedback threads, oldest first: comments reviewers left on its preview 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `post_id` | string | <Required /> | Post ID (post_...) |
+| `cursor` | string | No | Next_cursor of the previous page (500 comments a page), for later comments |
 
 ### `reply_to_post_comment`
 Reply to a feedback thread of a post as the team. · `posts:write`
@@ -341,7 +342,7 @@ No inputs.
 ## Your own automation
 
 ### `list_requested_work`
-What people's setup asks your automation for: targets on your own automation waiting for report_publish_result (kind target, with the post and the channel) and schedules that found nothing to publish and ask for posts (kind posts; answer by creating draft posts in that collection). Oldest first. *Read-only* · `posts:read`
+What people's setup asks your automation for: targets on your own automation waiting for report_publish_result (kind target, with the post and the channel) and schedules that found nothing to publish and ask for posts (kind posts; answer by creating draft posts in that collection). Oldest first; the 100 oldest targets at most (a queue that drains as you report results, so ask again for the rest). *Read-only* · `posts:read`
 
 No inputs.
 
@@ -768,6 +769,7 @@ List webhook delivery attempts (status, response code, error), newest first. *Re
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
+| `cursor` | string | No | Next_cursor of the previous page, for older deliveries |
 | `limit` | integer | No | Max deliveries (default 50, max 200) |
 | `post_id` | string | No | Only deliveries of events about this post (post_...) |
 | `status` | string | No | Pending, succeeded or failed |

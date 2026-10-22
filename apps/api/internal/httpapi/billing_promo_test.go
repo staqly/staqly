@@ -144,3 +144,18 @@ func TestUpgradeFromTrialChargesNow(t *testing.T) {
 		t.Fatalf("failed payment: %+v", errBody.Error)
 	}
 }
+
+// An admin manages admins' and editors' keys, not an owner's: revoking or rotating one is refused (403), as
+// with an owner's sessions and membership. The owner still manages their own keys.
+func TestAdminCannotRevokeOrRotateAnOwnersKey(t *testing.T) {
+	e := newAccountsEnv(t, "")
+	owner, admin, _, _, _ := e.team()
+	var key app.APIKey
+	e.as(owner, "POST", "/v1/api-keys", map[string]any{"name": "billing", "scopes": []string{"admin"}}, 201, &key)
+	e.as(admin, "DELETE", "/v1/api-keys/"+key.ID, nil, 403, nil)
+	e.as(admin, "POST", "/v1/api-keys/"+key.ID+"/rotate", nil, 403, nil)
+	var own app.APIKey
+	e.as(admin, "POST", "/v1/api-keys", map[string]any{"name": "mine", "scopes": []string{"posts:read"}}, 201, &own)
+	e.as(admin, "DELETE", "/v1/api-keys/"+own.ID, nil, 204, nil)
+	e.as(owner, "DELETE", "/v1/api-keys/"+key.ID, nil, 204, nil)
+}

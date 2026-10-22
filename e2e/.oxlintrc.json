@@ -55,7 +55,8 @@
         "prev": "export",
         "next": "export"
       }
-    ]
+    ],
+    "no-await-in-loop": "off"
   },
   "overrides": [
     {

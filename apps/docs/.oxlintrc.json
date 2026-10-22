@@ -60,7 +60,9 @@
         "next": "export"
       }
     ],
-    "nextjs/no-img-element": "off"
+    "nextjs/no-img-element": "off",
+    "no-await-in-loop": "off",
+    "jsx-a11y/no-noninteractive-tabindex": "off"
   },
   "ignorePatterns": [".next/**", "out/**", ".source/**", "node_modules/**", "next-env.d.ts"],
   "jsPlugins": ["@stylistic/eslint-plugin"]

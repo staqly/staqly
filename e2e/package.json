@@ -15,7 +15,8 @@
     "format:check": "oxfmt --check",
     "test:cross-client": "vitest run --config cross-client/vitest.config.ts",
     "test:ui": "playwright test -c ui/playwright.config.ts",
-    "test:ui-responsive": "vitest run --config ui-responsive/vitest.config.ts"
+    "test:ui-responsive": "vitest run --config ui-responsive/vitest.config.ts",
+    "demo:gif": "playwright test -c demo/playwright.config.ts"
   },
   "dependencies": {
     "@staqly/sdk": "workspace:*"

@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -76,8 +75,8 @@ func (s *Server) revokePreviewLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listPostComments(w http.ResponseWriter, r *http.Request) {
-	out, err := s.svc.ListPostComments(r.Context(), principal(r), chi.URLParam(r, "id"))
-	respond(w, r, 200, map[string]any{"data": out}, err)
+	out, err := s.svc.ListPostComments(r.Context(), principal(r), chi.URLParam(r, "id"), qInt(r, "limit"), r.URL.Query().Get("cursor"))
+	respond(w, r, 200, out, err)
 }
 
 func (s *Server) addPostComment(w http.ResponseWriter, r *http.Request) {
@@ -148,18 +147,4 @@ func (s *Server) previewMedia(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", m.MimeType)
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	serveMediaFile(w, r, f, m)
-}
-
-// redactPreviewToken keeps preview tokens out of request logs: /v1/previews/<token>/... is logged with the token
-// replaced.
-func redactPreviewToken(path string) string {
-	const prefix = "/v1/previews/"
-	if !strings.HasPrefix(path, prefix) {
-		return path
-	}
-	rest := path[len(prefix):]
-	if i := strings.IndexByte(rest, '/'); i >= 0 {
-		return prefix + "REDACTED" + rest[i:]
-	}
-	return prefix + "REDACTED"
 }

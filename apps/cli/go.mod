@@ -1,6 +1,6 @@
 module github.com/staqly/staqly/apps/cli
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/staqly/staqly/apps/api v0.0.0

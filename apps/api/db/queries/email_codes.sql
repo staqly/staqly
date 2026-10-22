@@ -1,5 +1,5 @@
 -- name: CreateEmailCode :exec
-INSERT INTO email_codes (id, email, purpose, user_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO email_codes (id, email, purpose, user_id, code_hash, created_at, expires_at, client) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: CloseEmailCodes :exec
 -- A new code replaces the open one for the same address, purpose and person.
@@ -10,6 +10,10 @@ SELECT * FROM email_codes WHERE email = ? AND purpose = ? AND user_id = ? ORDER 
 
 -- name: CountEmailCodesSince :one
 SELECT COUNT(*) FROM email_codes WHERE email = ? AND created_at > ?;
+
+-- name: CountEmailCodesFromSince :one
+-- The codes one asker (client) had sent to an address.
+SELECT COUNT(*) FROM email_codes WHERE email = ? AND client = ? AND created_at > ?;
 
 -- name: SpendEmailCodeAttempt :execrows
 -- Every try counts before the comparison, so concurrent guesses cannot exceed the limit.

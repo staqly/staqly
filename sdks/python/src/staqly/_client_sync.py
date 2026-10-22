@@ -699,11 +699,23 @@ class Posts(_Resource):
     def comments(
         self, post_id: str, *, request_options: RequestOptions | None = None
     ) -> builtins.list[PostComment]:
-        """The post's feedback threads (reviewers' comments and the team's replies), oldest first."""
-        r = self._http.request(
-            RequestSpec("GET", f"/v1/posts/{_q(post_id)}/comments", options=_opts(request_options))
-        )
-        return _models(PostComment, r)
+        """The post's feedback threads (reviewers' comments and the team's replies), oldest first,
+        every page."""
+        out: builtins.list[PostComment] = []
+        cursor: str | None = None
+        while True:
+            r = self._http.request(
+                RequestSpec(
+                    "GET",
+                    f"/v1/posts/{_q(post_id)}/comments",
+                    params={"cursor": cursor},
+                    options=_opts(request_options),
+                )
+            )
+            out.extend(_models(PostComment, r))
+            cursor = r.json().get("next_cursor")
+            if not cursor:
+                return out
 
     def add_comment(
         self,
@@ -762,6 +774,18 @@ class Posts(_Resource):
             )
         )
         return _model(PostComment, r)
+
+    def delete_comment(
+        self, post_id: str, comment_id: str, *, request_options: RequestOptions | None = None
+    ) -> None:
+        """Removes a comment; removing a thread's first comment removes its replies."""
+        self._http.request(
+            RequestSpec(
+                "DELETE",
+                f"/v1/posts/{_q(post_id)}/comments/{_q(comment_id)}",
+                options=_opts(request_options),
+            )
+        )
 
     def history(
         self,
@@ -1163,6 +1187,7 @@ class Deliveries(_Resource):
         limit: int | None = None,
         request_options: RequestOptions | None = None,
     ) -> builtins.list[Delivery]:
+        """The most recent deliveries, newest first (``limit``: 50 by default, at most 200)."""
         r = self._http.request(
             RequestSpec(
                 "GET",

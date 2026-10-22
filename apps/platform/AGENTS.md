@@ -37,7 +37,11 @@ pnpm gen               # regenerate lib/api-types.ts from ../api/openapi.yaml
   (incl. hooks + React Compiler rules), jsx-a11y, nextjs, import, vitest
   (tests); categories correctness + suspicious = error, perf = warn.
   `react-perf` is not enabled — the React Compiler memoizes, so "new
-  function/object as prop" findings are noise. `jsx-a11y/prefer-tag-over-role`
+  function/object as prop" findings are noise. `no-await-in-loop` is off: our loops
+  await on purpose (pages that need the previous cursor, one upload or
+  invitation at a time). `jsx-a11y/no-noninteractive-tabindex` is off too: a
+  scrolling region takes `tabIndex={0}` so keyboards can reach it (axe's
+  scrollable-region-focusable, WCAG 2.1.1). `jsx-a11y/prefer-tag-over-role`
   is off because our ARIA widgets (radiogroups of buttons, listboxes, status
   regions, shadcn `role="group"`) are deliberate.
 * Suppress only one line with a reason:

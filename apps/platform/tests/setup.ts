@@ -4,8 +4,10 @@ import { afterEach, vi } from 'vitest'
 
 import { nav } from './navigation'
 
-// findBy*/waitFor give up after 1 s by default: too short when turbo runs every package's tests at once.
-configure({ asyncUtilTimeout: 5000 })
+// findBy*/waitFor give up after 1 s by default. CI runs these tests next to `next build` on 4 cores, where the first
+// open of a lazily loaded dialog or drawer (compiled on first import) took 7.5 s. They resolve as soon as the element
+// shows, so a long ceiling costs a passing test nothing; testTimeout (vitest.config.ts) stays above it.
+configure({ asyncUtilTimeout: 15_000 })
 
 vi.mock('next/navigation', async () => (await import('./navigation')).navigationModule)
 

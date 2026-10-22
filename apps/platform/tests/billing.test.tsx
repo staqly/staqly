@@ -158,7 +158,14 @@ describe('plan & usage', () => {
     await waitFor(() => expect(within(summary).getByTestId('plan-status')).toHaveTextContent('Active'))
     expect(within(summary).getByTestId('plan-facts')).toHaveTextContent('$30 per user / month')
     expect(within(summary).getByTestId('plan-facts')).toHaveTextContent('3 users')
-    expect(within(summary).getByTestId('next-payment')).toHaveTextContent('$90 on Nov 15, 2026')
+    // The day in this machine's time zone (10:00 UTC is the 16th at UTC+14, the 14th west of UTC-10).
+    const due = new Date(SUBSCRIPTION.current_period_end).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+
+    expect(within(summary).getByTestId('next-payment')).toHaveTextContent(`$90 on ${due}`)
     expect(within(summary).getByTestId('next-payment')).toHaveTextContent('3 users × $30, excl. VAT')
     expect(within(summary).getByRole('button', { name: /manage billing/i })).toBeInTheDocument()
     expect(within(summary).getByRole('link', { name: 'Change plan' })).toHaveAttribute('href', '/plans')

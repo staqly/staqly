@@ -117,7 +117,7 @@ func TestPostListsQueryCount(t *testing.T) {
 	}
 
 	c.n.Store(0)
-	work, err := s.ListRequestedWork(ctx, p)
+	work, err := s.ListRequestedWork(ctx, p, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func BenchmarkListRequestedWork(b *testing.B) {
 	ctx := context.Background()
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := s.ListRequestedWork(ctx, p); err != nil {
+		if _, err := s.ListRequestedWork(ctx, p, 0); err != nil {
 			b.Fatal(err)
 		}
 	}

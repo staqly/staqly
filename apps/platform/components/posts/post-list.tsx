@@ -601,7 +601,6 @@ async function eachPost(list: Post[], run: (p: Post) => Promise<Post | void>) {
   for (const p of list) {
     try {
       // One at a time on purpose: a long selection shouldn't burst into the per-minute request limit.
-      // oxlint-disable-next-line no-await-in-loop -- sequential by design
       const out = await run(p)
 
       done.push(out ?? p)

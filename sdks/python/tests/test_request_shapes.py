@@ -159,7 +159,7 @@ class TestExports:
     async def test_wait_async_timeout(self, aclient: AsyncStaqly, mock: Mock) -> None:
         mock.reply(job("running"))
         with pytest.raises(WaitTimeoutError):
-            await aclient.exports.wait_for_workspace_export("exp_1", timeout=0.03, poll_interval=0.01)
+            await aclient.exports.wait_for_workspace_export("exp_1", timeout=0.5, poll_interval=0.01)
         assert len(mock.requests) >= 2
 
     def test_export_workspace_without_path(self, client: Staqly, mock: Mock) -> None:

@@ -644,7 +644,9 @@ func (s *Service) schedulePublish(ctx context.Context, q *db.Queries, p Principa
 	if err := s.checkXForPost(ctx, q, postID, at); err != nil {
 		return err
 	}
-	if err := s.enqueue(ctx, q, workspaceID, "publish_post", "publish_post:"+postID, map[string]any{"post_id": postID}, at, 1); err != nil {
+	// Retried like any job (a database that is briefly busy at the scheduled minute): the run checks the
+	// post's state again inside its write, so a retry never publishes twice; the last failure fails the post.
+	if err := s.enqueue(ctx, q, workspaceID, "publish_post", "publish_post:"+postID, map[string]any{"post_id": postID}, at, 0); err != nil {
 		return err
 	}
 	extra := map[string]any{"publish_at": publishAt}
@@ -1586,7 +1588,10 @@ type WorkItem struct {
 	RequestedAt string     `json:"requested_at"`
 }
 
-func (s *Service) ListRequestedWork(ctx context.Context, p Principal) ([]WorkItem, error) {
+// ListRequestedWork lists what your automation owes, oldest first: posts waiting for a custom target's result
+// (the oldest limit of them: 100 by default, at most 500; it is a queue that drains as results come in) and
+// schedules asking for posts.
+func (s *Service) ListRequestedWork(ctx context.Context, p Principal, limit int) ([]WorkItem, error) {
 	if err := p.require(ScopePostsRead); err != nil {
 		return nil, err
 	}
@@ -1603,7 +1608,7 @@ func (s *Service) ListRequestedWork(ctx context.Context, p Principal) ([]WorkIte
 		cols[id] = c
 		return c
 	}
-	rows, err := s.Q.WaitingCustomTargets(ctx, p.WorkspaceID)
+	rows, err := s.Q.WaitingCustomTargets(ctx, db.WaitingCustomTargetsParams{WorkspaceID: p.WorkspaceID, Lim: int64(clampLimit(limit, 100, 500))})
 	if err != nil {
 		return nil, err
 	}

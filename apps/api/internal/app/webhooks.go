@@ -333,18 +333,35 @@ func (s *Service) TestWebhook(ctx context.Context, p Principal, id string) (Deli
 	return toDelivery(d), err
 }
 
-// ListDeliveries lists webhook deliveries, newest first; postID narrows them to events about one post.
-func (s *Service) ListDeliveries(ctx context.Context, p Principal, webhookID, status, postID string, limit int) ([]Delivery, error) {
+// DeliveryPage: one page of deliveries, newest first; NextCursor fetches the older ones.
+type DeliveryPage struct {
+	Data       []Delivery `json:"data"`
+	NextCursor string     `json:"next_cursor,omitempty"`
+}
+
+// ListDeliveries lists webhook deliveries, newest first, a page at a time; postID narrows them to events
+// about one post.
+func (s *Service) ListDeliveries(ctx context.Context, p Principal, webhookID, status, postID string, limit int, cursor string) (DeliveryPage, error) {
 	if err := p.require(ScopeWebhooksManage); err != nil {
-		return nil, err
+		return DeliveryPage{}, err
 	}
+	after, err := readKeysetCursor(cursor, 2)
+	if err != nil {
+		return DeliveryPage{}, err
+	}
+	lim := clampLimit(limit, 50, 200)
 	rows, err := s.Q.ListDeliveries(ctx, db.ListDeliveriesParams{WorkspaceID: p.WorkspaceID, WebhookID: optAny(webhookID),
-		Status: optAny(status), PostID: optAny(postID), Lim: int64(clampLimit(limit, 50, 200))})
-	out := []Delivery{}
-	for _, r := range rows {
-		out = append(out, toDelivery(r))
+		Status: optAny(status), PostID: optAny(postID), AfterAt: after[0], AfterID: after[1], Lim: int64(lim + 1)})
+	page := DeliveryPage{Data: []Delivery{}}
+	for i, r := range rows {
+		if i == lim {
+			last := rows[i-1]
+			page.NextCursor = keysetCursor(last.CreatedAt, last.ID)
+			break
+		}
+		page.Data = append(page.Data, toDelivery(r))
 	}
-	return out, err
+	return page, err
 }
 
 // RetryDelivery re-queues a finished (succeeded or failed) delivery.

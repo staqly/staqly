@@ -115,7 +115,6 @@ function DeliveryDialog({
               <div className="grid gap-1">
                 <div className="text-xs text-muted-foreground">Error</div>
                 <pre
-                  // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- it scrolls: keyboards need to reach it (WCAG 2.1.1)
                   tabIndex={0}
                   className={cn(
                     'max-h-48 overflow-auto rounded-lg border p-3 font-mono text-xs break-words whitespace-pre-wrap focus-visible:outline-2 focus-visible:outline-ring',
@@ -131,7 +130,6 @@ function DeliveryDialog({
               <div className="grid gap-1">
                 <div className="text-xs text-muted-foreground">Response body (first 2 KB)</div>
                 <pre
-                  // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- it scrolls: keyboards need to reach it (WCAG 2.1.1)
                   tabIndex={0}
                   className="max-h-64 overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs break-words whitespace-pre-wrap focus-visible:outline-2 focus-visible:outline-ring"
                 >

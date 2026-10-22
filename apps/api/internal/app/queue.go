@@ -233,7 +233,9 @@ func (s *Service) enqueue(ctx context.Context, q *db.Queries, workspaceID, kind,
 		return q.UpsertJobRequeue(ctx, db.UpsertJobRequeueParams{Key: key, WorkspaceID: workspaceID, Kind: kind,
 			Payload: mustJSON(pl), RunAt: formatTime(runAt), MaxAttempts: maxAttempts, CreatedAt: s.now()})
 	}
-	return nil
+	// The latest request wins: an older requeue of the key must not come back (the sweep) over this job.
+	_, err = q.DeleteJobRequeue(ctx, key)
+	return err
 }
 
 // QueueJob queues a job outside any other write (tools and tests).
@@ -332,7 +334,7 @@ func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 	// What follows is written with its own context: the run's budget running out must not lose it.
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jobWriteTimeout)
 	defer cancel()
-	requeued, rerr := s.requeueAfterRun(wctx, j)
+	requeued, rerr := s.requeueAfterRun(wctx, j, err == nil)
 	if rerr != nil {
 		s.logger(ctx).Error("job requeue failed", "err", rerr)
 	}
@@ -358,17 +360,27 @@ func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 
 // requeueAfterRun queues the key again when it was asked for while this run went on: the run completes
 // and the new job goes in one transaction (attempts start over, as for any fresh queueing).
-func (s *Service) requeueAfterRun(ctx context.Context, j *river.Job[jobArgs]) (bool, error) {
-	if _, err := s.Q.GetJobRequeue(ctx, j.Args.Key); isNoRows(err) {
-		return false, nil
-	} else if err != nil {
-		return false, err
+//
+// A run that succeeded is completed here too, in the same transaction as the check: River completes jobs
+// in batches a moment after they return, and a key queued in that gap would see the job still running,
+// leave a requeue and then nothing would read it. Completed here, a later enqueue finds no live job and
+// queues a new one; an earlier one left its requeue for this check.
+func (s *Service) requeueAfterRun(ctx context.Context, j *river.Job[jobArgs], succeeded bool) (bool, error) {
+	if !succeeded {
+		if _, err := s.Q.GetJobRequeue(ctx, j.Args.Key); isNoRows(err) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
 	}
 	done := false
 	err := s.tx(ctx, func(q *db.Queries) error {
 		done = false // fn may run again on PostgreSQL: only the run that commits counts
 		r, err := q.GetJobRequeue(ctx, j.Args.Key)
 		if isNoRows(err) {
+			if succeeded {
+				return s.completeTx(ctx, s.sqlTx(q), j)
+			}
 			return nil
 		}
 		if err != nil {
@@ -392,6 +404,41 @@ func (s *Service) requeueAfterRun(ctx context.Context, j *river.Job[jobArgs]) (b
 	return done, err
 }
 
+// sweepJobRequeues queues the keys of requeues no run picked up (a key queued again just as a last failed
+// attempt ended, or a process that stopped mid-run): delete, then enqueue, so a key whose job is running
+// right now simply gets its requeue back.
+func (s *Service) sweepJobRequeues(ctx context.Context) int {
+	rows, err := s.Q.ListStaleJobRequeues(ctx, formatTime(s.Now().Add(-time.Minute)))
+	if err != nil {
+		if ctx.Err() == nil {
+			s.logger(ctx).Error("job requeue sweep failed", "err", err)
+		}
+		return 0
+	}
+	swept := 0
+	for _, r := range rows {
+		err := s.tx(ctx, func(q *db.Queries) error {
+			n, err := q.DeleteJobRequeue(ctx, r.Key)
+			if err != nil || n == 0 {
+				return err // taken by a run meanwhile
+			}
+			runAt, perr := time.Parse(timeFormat, r.RunAt)
+			if perr != nil {
+				runAt = s.Now()
+			}
+			var pl jobPayload
+			_ = json.Unmarshal([]byte(r.Payload), &pl)
+			return s.enqueue(ctx, q, r.WorkspaceID, r.Kind, r.Key, pl, runAt, r.MaxAttempts)
+		})
+		if err != nil {
+			s.logger(ctx).Warn("job requeue sweep: not queued", "key", r.Key, "err", err)
+			continue
+		}
+		swept++
+	}
+	return swept
+}
+
 // RunJobs runs the queue until ctx ends: it first carries jobs of the queue before River over, then lets
 // River work. On shutdown running jobs get jobShutdownGrace to finish, then are cancelled (River puts them
 // back for the next start).
@@ -403,8 +450,19 @@ func (s *Service) RunJobs(ctx context.Context) {
 		s.logger(ctx).Error("job queue did not start", "err", err)
 		return
 	}
-	<-ctx.Done()
-	s.stopRiver(s.river)
+	sweep := time.NewTicker(time.Minute)
+	defer sweep.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			s.stopRiver(s.river)
+			return
+		case <-sweep.C:
+			if n := s.sweepJobRequeues(ctx); n > 0 {
+				s.logger(ctx).Info("job requeues swept", "keys", n)
+			}
+		}
+	}
 }
 
 func (s *Service) stopRiver(c *river.Client[*sql.Tx]) {
