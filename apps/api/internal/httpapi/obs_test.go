@@ -295,7 +295,7 @@ func TestObsLocalModeNotLimitedPerPrincipal(t *testing.T) {
 
 // Local installs record the person (LOCAL_USER_NAME, else the OS user) as the actor.
 func TestLocalActorName(t *testing.T) {
-	e := newObsEnv(t, false, false, map[string]string{"LOCAL_USER_NAME": "Piotr"})
+	e := newObsEnv(t, false, false, map[string]string{"LOCAL_USER_NAME": "Jane"})
 	if code, body, _ := e.req("POST", "/v1/collections", `{"name":"Mine"}`); code != 201 {
 		t.Fatalf("create: %d %s", code, body)
 	}
@@ -304,7 +304,7 @@ func TestLocalActorName(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &page); err != nil || len(page.Data) != 1 {
 		t.Fatalf("events: %s", body)
 	}
-	if a := page.Data[0].Actor; a.Type != "local" || a.Name != "Piotr" {
+	if a := page.Data[0].Actor; a.Type != "local" || a.Name != "Jane" {
 		t.Fatalf("actor: %+v", a)
 	}
 }

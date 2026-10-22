@@ -1,6 +1,10 @@
 -- name: GetUserByIdentity :one
 SELECT u.* FROM users u JOIN user_identities i ON i.user_id = u.id WHERE i.provider = ? AND i.subject = ?;
 
+-- name: OldestUserByEmail :one
+-- The person who has this (lowercased) address; the oldest when an earlier version made two.
+SELECT * FROM users WHERE email = ? ORDER BY created_at, id LIMIT 1;
+
 -- name: CreateIdentity :exec
 INSERT INTO user_identities (provider, subject, user_id, email, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?);
 

@@ -97,7 +97,7 @@ describe('the signed-in person in the sidebar', () => {
 
   it('local: the computer user, who signed in with the access token and can sign out', async () => {
     const { client, routes } = shell(
-      { ...sessionFixture('local'), user: { id: '', name: 'piotr', email: '', avatar_url: '' } },
+      { ...sessionFixture('local'), user: { id: '', name: 'jane', email: '', avatar_url: '' } },
       UNLOCKED,
     )
 
@@ -112,7 +112,7 @@ describe('the signed-in person in the sidebar', () => {
       { client },
     )
 
-    expect((await screen.findAllByTestId('user-name'))[0]).toHaveTextContent('piotr')
+    expect((await screen.findAllByTestId('user-name'))[0]).toHaveTextContent('jane')
     expect(screen.getAllByText('This computer').length).toBeGreaterThan(0)
     await user.click(screen.getAllByTestId('user-menu-trigger')[0])
     const menu = await screen.findByRole('menu')

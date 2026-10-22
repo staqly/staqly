@@ -632,6 +632,28 @@ func (q *Queries) ListUserWorkspaces(ctx context.Context, userID string) ([]List
 	return items, nil
 }
 
+const oldestUserByEmail = `-- name: OldestUserByEmail :one
+SELECT id, email, name, avatar_url, created_at, updated_at, last_login_at, onboarded_at, notification_prefs FROM users WHERE email = ? ORDER BY created_at, id LIMIT 1
+`
+
+// The person who has this (lowercased) address; the oldest when an earlier version made two.
+func (q *Queries) OldestUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRowContext(ctx, oldestUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastLoginAt,
+		&i.OnboardedAt,
+		&i.NotificationPrefs,
+	)
+	return i, err
+}
+
 const refreshInvitation = `-- name: RefreshInvitation :execrows
 UPDATE workspace_invitations SET token_hash = ?, expires_at = ?, updated_at = ?
 WHERE workspace_id = ? AND id = ? AND accepted_at IS NULL AND revoked_at IS NULL
