@@ -1,0 +1,54 @@
+# The dashboard in a real browser (e2e/ui: Playwright + axe, every page, dialog and menu in light and dark mode)
+# and every route at phone, tablet and desktop widths (e2e/ui-responsive), against `staqly serve` built from
+# this checkout: a local-mode server and a cloud-mode one on PostgreSQL. Nightly, not on every pull request
+# (about 15 minutes). No secrets. Locally the same commands (e2e/README.md).
+name: Dashboard in the browser
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    name: UI flows, accessibility and layouts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env: { POSTGRES_USER: staqly, POSTGRES_PASSWORD: staqly, POSTGRES_DB: staqly }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U staqly" --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      STAQLY_E2E_DATABASE_URL: postgres://staqly:staqly@127.0.0.1:5432/staqly?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
+      - uses: ./.github/actions/setup
+      - name: Chromium for Playwright
+        run: pnpm --filter @staqly/e2e exec playwright install --with-deps chromium
+      - name: Dashboard export the server embeds (make dashboard)
+        run: make dashboard
+      - name: UI flows and accessibility (test:ui)
+        run: UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui
+      - name: Layouts at phone, tablet and desktop widths (test:ui-responsive)
+        if: always()
+        run: pnpm --filter @staqly/e2e test:ui-responsive
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ui-report
+          path: |
+            e2e/ui/.report/
+            e2e/ui/.results/
+          if-no-files-found: ignore
+          retention-days: 14
