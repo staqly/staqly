@@ -73,20 +73,22 @@ article{padding:16px}.who{display:flex;gap:12px;align-items:center}.who img{widt
 <div class="via">Posted with staqly</div></article></main></body></html>`
 }
 
+const body = (req: IncomingMessage) =>
+  new Promise<string>((r) => {
+    let s = ''
+
+    req.on('data', (c) => (s += c))
+    req.on('end', () => r(s))
+  })
+
+function json(res: ServerResponse, status: number, v: unknown) {
+  res.writeHead(status, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(v))
+}
+
 async function startFakeX(): Promise<FakeX> {
   const posts = new Map<string, string>()
   let fake = ''
-  const body = (req: IncomingMessage) =>
-    new Promise<string>((r) => {
-      let s = ''
-
-      req.on('data', (c) => (s += c))
-      req.on('end', () => r(s))
-    })
-  const json = (res: ServerResponse, status: number, v: unknown) => {
-    res.writeHead(status, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify(v))
-  }
   const server: Server = createServer((req, res) => {
     const u = new URL(req.url ?? '/', fake)
 
