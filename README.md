@@ -27,7 +27,7 @@
   <a href="https://docs.staqly.ai/cli">CLI</a>
 </p>
 
-<p align="center"><strong>Publish today</strong> to <strong>X</strong> and through your own automation: n8n, Make, Zapier or a script of yours.<br><strong>More native platforms, rolling out:</strong></p>
+<p align="center"><strong>Publish today</strong> to <strong>X</strong>, <strong>LinkedIn</strong> and through your own automation: n8n, Make, Zapier or a script of yours.<br><strong>More native platforms, rolling out:</strong></p>
 <p align="center">
   <img alt="X" src="https://cdn.simpleicons.org/x/8b949e" width="26">&nbsp;
   <img alt="Bluesky" src="https://cdn.simpleicons.org/bluesky" width="26">&nbsp;
@@ -45,7 +45,7 @@
   <img alt="Medium" src="https://cdn.simpleicons.org/medium/8b949e" width="26">&nbsp;
   <img alt="DEV" src="https://cdn.simpleicons.org/devdotto/8b949e" width="26">&nbsp;
   <img alt="Hashnode" src="https://cdn.simpleicons.org/hashnode" width="26">
-  <br><sub>and LinkedIn, Slack, Google Business and more: <a href="https://docs.staqly.ai/channels">34 platforms in the catalog</a></sub>
+  <br><sub>and LinkedIn Pages, Slack, Google Business and more: <a href="https://docs.staqly.ai/channels">34 platforms in the catalog</a></sub>
 </p>
 
 <p align="center">

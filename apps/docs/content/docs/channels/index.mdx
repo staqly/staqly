@@ -3,9 +3,10 @@ title: Channels
 description: Connect the accounts staqly publishes to, see which platforms are available and what each one allows.
 ---
 
-A **channel** is an account staqly publishes to: an [X](/channels/x) account, or **your own
-automation** when staqly should hand the post to a script or n8n workflow instead. The other
-platforms (LinkedIn, Mastodon, Telegram and more) are in the catalog as **Soon**. Connect a channel once; from then on every post can target it, and a
+A **channel** is an account staqly publishes to: an [X](/channels/x) account, a
+[LinkedIn](/channels/linkedin) profile, or **your own automation** when staqly should hand the post
+to a script or n8n workflow instead. The other platforms (LinkedIn Pages, Mastodon, Telegram and
+more) are in the catalog as **Soon**. Connect a channel once; from then on every post can target it, and a
 collection's schedules can publish to it.
 
 ## Connect a channel
@@ -52,8 +53,7 @@ and a folded **Settings** card under the editor with that platform's options (wh
 community, labels, a last comment, accounts that repost it...). Platforms that are not built yet
 already list their settings, so their posts can be prepared: Instagram (post as feed, reel or story,
 collaborators, first comment), TikTok (who can watch, comments, duets, stitches, AI and branded
-content labels), YouTube (title, visibility, made for kids, tags, category, playlist), LinkedIn
-(visibility), Pinterest (title, board, link, alt text), Reddit (title, subreddit, flair, NSFW,
+content labels), YouTube (title, visibility, made for kids, tags, category, playlist), Pinterest (title, board, link, alt text), Reddit (title, subreddit, flair, NSFW,
 spoiler), Facebook (post, reel or story), Threads (who can reply), Dev.to and Medium (title, tags,
 original link), Lemmy (title, community, link). Each platform's page lists its settings.
 
@@ -96,7 +96,7 @@ listing them needs `channels:read`. Credentials are never returned by any call.
 
 `GET /v1/providers` (MCP `list_providers`, CLI `staqly channels providers`) lists every provider
 with its `auth`, `status`, `limits`, `credential_fields` and `settings_fields`. In this
-release **Your own automation** and **[X](/channels/x)** are available (X once the server has its app keys); every other platform is in the catalog as `soon`,
+release **Your own automation**, **[X](/channels/x)** and **[LinkedIn](/channels/linkedin)** are available (X and LinkedIn once the server has their app keys); every other platform is in the catalog as `soon`,
 so the dashboard already shows the whole grid and a post's preview can check the platform's
 limits.
 
@@ -104,7 +104,7 @@ limits.
 |---|---|---|---|---|---|
 | Your own automation | `custom` | nothing (`none`) | none | up to 10 images, videos, GIFs or files | — |
 | [X](/channels/x) (**available**) | `x` | OAuth | 280 | 4 pictures or 1 video | — |
-| LinkedIn | `linkedin` | OAuth | 3,000 | 9 | — |
+| [LinkedIn](/channels/linkedin) (**available**) | `linkedin` | OAuth | 3,000 | 9 pictures or 1 video | — |
 | LinkedIn Page | `linkedin_page` | OAuth | 3,000 | 9 | — |
 | Reddit | `reddit` | OAuth | 40,000 | 1 | a title |
 | Instagram Business (through a Facebook Page) | `instagram` | OAuth | 2,200 | 10 | media |
