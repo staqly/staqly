@@ -75,7 +75,7 @@ it by hand (e2e/README.md). Every workflow step runs a command that works the sa
   `Authorization: Bearer`, browsers trade it for a session (or use a connect
   link). Only `cmd/mcp-stdio` stays keyless (it opens the database itself). `cloud`: people sign in with Google or an email
   code (accounts, workspace members with roles owner/admin/editor/viewer,
-  invitations; identities are never merged by email), scoped API keys, sessions
+  invitations; the verified address is the person: Google and an email code for the same address sign into one account), scoped API keys, sessions
   + CSRF, plan limits (402); without Google or mail it refuses to start unless
   `AUTH_DEV_SIGNIN=true` (dev and tests only: email codes readable at
   `/v1/auth/email/dev-code`, plus the older setup-token / API-key / recovery-key

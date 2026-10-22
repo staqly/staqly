@@ -361,10 +361,11 @@ func TestGoogleSignInCreatesAccountAndWorkspace(t *testing.T) {
 		t.Fatalf("returning person: %+v", mine)
 	}
 
-	// The same email under another Google identity is another person (never merged by email).
+	// The address is the person: another Google identity with the same verified address signs into the same
+	// account (and keeps its name).
 	other := e.mustSignIn(fakeIdentity{Sub: "sub-ana-2", Email: ana.Email, Name: "Other Ana"}, "")
-	if s := e.session(other); s.Workspace.ID == first || s.Workspace.ID == ws.ID {
-		t.Fatalf("merged by email: %+v", s.Workspace)
+	if s := e.session(other); s.Workspace.ID != first && s.Workspace.ID != ws.ID {
+		t.Fatalf("the same address got another account: %+v", s.Workspace)
 	}
 
 	// Logout ends the session.
