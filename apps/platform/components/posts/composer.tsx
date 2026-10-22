@@ -1154,7 +1154,7 @@ function ComposerFooter({
           </ButtonGroup>
         </div>
       )}
-      {(error || inPast) && (
+      {(error || (inPast && !locked)) && (
         <FieldError className="basis-full text-right">{error ?? 'Pick a time in the future'}</FieldError>
       )}
     </div>

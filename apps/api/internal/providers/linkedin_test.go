@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -28,12 +29,14 @@ type fakeLinkedIn struct {
 	postCode int               // status for POST /rest/posts (0 = 201)
 	postBody string
 	polls    int
+	uris     []string // request URIs as sent (escaping included)
 }
 
 func (f *fakeLinkedIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, r.Method+" "+r.URL.Path)
+	f.uris = append(f.uris, r.RequestURI)
 	w.Header().Set("Content-Type", "application/json")
 	if strings.HasPrefix(r.URL.Path, "/rest/") {
 		f.version = r.Header.Get("LinkedIn-Version")
@@ -219,6 +222,9 @@ func TestLinkedInPublishMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The parts LinkedIn asked for, by their byte ranges; the post waits until the video is AVAILABLE.
+	if !slices.Contains(f.uris, "/rest/videos/urn%3Ali%3Avideo%3AC5F10AQ") {
+		t.Fatalf("video status path: %v", f.uris)
+	}
 	if f.puts["/upload/v1"] != "abcd" || f.puts["/upload/v2"] != "ef" || f.polls < 2 {
 		t.Fatalf("puts %v, polls %d", f.puts, f.polls)
 	}
@@ -275,6 +281,10 @@ func TestLinkedInComments(t *testing.T) {
 	}
 	if f.comment["object"] != "urn:li:share:7100" || f.comment["actor"] != "urn:li:person:782bbtaQ" {
 		t.Fatalf("comment %v", f.comment)
+	}
+	// LinkedIn refuses the URN with plain colons in the path ("Syntax exception in path variables").
+	if last := f.uris[len(f.uris)-1]; last != "/rest/socialActions/urn%3Ali%3Ashare%3A7100/comments" {
+		t.Fatalf("comment path %s", last)
 	}
 	// The next part names the comment before; it still comments on the post.
 	if _, err := r.Reply(context.Background(), linkedinCreds(), first.ExternalID, PostContent{Text: "and one more"}, nil); err != nil {

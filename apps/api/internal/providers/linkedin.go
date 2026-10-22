@@ -259,7 +259,7 @@ func (l LinkedIn) Reply(ctx context.Context, c Credentials, parentExternalID str
 	if len(p.Media) > 0 {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "LinkedIn comments take text only"}
 	}
-	req, err := linkedinJSON(ctx, token, http.MethodPost, linkedinAPI+"/rest/socialActions/"+url.PathEscape(post)+"/comments",
+	req, err := linkedinJSON(ctx, token, http.MethodPost, linkedinAPI+"/rest/socialActions/"+linkedinURN(post)+"/comments",
 		map[string]any{"actor": "urn:li:person:" + person, "object": post, "message": map[string]string{"text": p.Text}})
 	if err != nil {
 		return Result{}, err
@@ -294,6 +294,10 @@ func linkedinCommentPost(urn string) string {
 	}
 	return urn
 }
+
+// linkedinURN is a URN as a path segment: LinkedIn wants its colons encoded (urn%3Ali%3Ashare%3A1), and answers
+// "Syntax exception in path variables" to urn:li:share:1, which url.PathEscape leaves as it is.
+func linkedinURN(urn string) string { return url.QueryEscape(urn) }
 
 func linkedinPostURL(urn string) string { return "https://www.linkedin.com/feed/update/" + urn + "/" }
 
@@ -394,7 +398,7 @@ func (l LinkedIn) upload(ctx context.Context, token, owner string, m MediaFile) 
 			Status                  string `json:"status"`
 			ProcessingFailureReason string `json:"processingFailureReason"`
 		}
-		req, err := linkedinJSON(ctx, token, http.MethodGet, linkedinAPI+"/rest/videos/"+url.PathEscape(v.Video), nil)
+		req, err := linkedinJSON(ctx, token, http.MethodGet, linkedinAPI+"/rest/videos/"+linkedinURN(v.Video), nil)
 		if err != nil {
 			return "", err
 		}
