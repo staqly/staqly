@@ -71,16 +71,54 @@ function defang(u: string) {
 }
 
 /** What a channel with this links mode receives, and the links it changes (as written). */
+// A markdown link, [text](url): its text stays when the url goes.
+const MARKDOWN_LINK = /\[([^\]\n]+)\]\(([^)\s]+)\)/g
+
+/**
+ * A web link, as the API decides: a bare name on a two-letter top-level domain without a path (README.md,
+ * setup.py) is a file name, not a link (X links those only with a scheme or a path; .co is the exception).
+ */
+function isWebLink(u: string) {
+  if (/^https?:\/\//i.test(u)) {
+    return true
+  }
+
+  const tld = hostTld(u)
+
+  if (NOT_TLD.has(tld)) {
+    return false
+  }
+
+  const bare = !/[/?#]/.test(u)
+
+  return !(bare && tld.length === 2 && tld !== 'co' && !/^www\./i.test(u))
+}
+
+/** The web links in text, as written (no scheme needed). */
+export function findLinks(text: string): string[] {
+  return [...text.matchAll(LINK)].map((m) => trimLink(m[0])).filter(isWebLink)
+}
+
 export function applyLinks(mode: LinksMode | undefined, text: string): { text: string; found: string[] } {
   if (mode !== 'remove' && mode !== 'defang') {
     return { text, found: [] }
   }
 
   const found: string[] = []
-  let out = text.replace(LINK, (raw) => {
+  let out = text.replace(MARKDOWN_LINK, (m, label: string, url: string) => {
+    if (!isWebLink(url)) {
+      return m
+    }
+
+    found.push(url)
+
+    return mode === 'remove' ? label : `${label} (${defang(url)})`
+  })
+
+  out = out.replace(LINK, (raw) => {
     const u = trimLink(raw)
 
-    if (!/^https?:\/\//i.test(u) && NOT_TLD.has(hostTld(u))) {
+    if (!isWebLink(u)) {
       return raw
     }
 
