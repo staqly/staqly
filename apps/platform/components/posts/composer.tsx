@@ -76,7 +76,7 @@ import {
 } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 import { formatSchedule, formatTime, nextFullHour } from '@/lib/schedule'
-import { normalizeTag } from '@/lib/tags'
+import { appendHashtags, normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 import { xPostsWarning } from '@/lib/x-posts'
 
@@ -111,9 +111,13 @@ interface Count {
   links: string[]
 }
 
-/** A channel's count for this text, as the API will count it at publish time. */
-function countFor(channel: Channel, text: string, provider?: Provider): Count {
-  const out = applyLinks(channel.links, text)
+/**
+ * A channel's count for this text, as the API will count it at publish time: with the post's tags as hashtags
+ * at the end (not for your own automation, which gets them apart; comments get none).
+ */
+function countFor(channel: Channel, text: string, provider?: Provider, tags: readonly string[] = []): Count {
+  const links = applyLinks(channel.links, text)
+  const out = { ...links, text: channel.provider === 'custom' ? links.text : appendHashtags(links.text, tags) }
 
   // X counts its own way (CJK and emoji 2, a link 23): the API checks that length, so the counter shows it.
   const n = channel.provider === 'x' ? xLength(out.text) : charCount(out.text)
@@ -898,6 +902,8 @@ interface ChannelEditorProps {
   picked?: Channel[]
   overrides?: Record<string, Override>
   providers: Provider[]
+  /** The post's tags: they go out as hashtags, so they count. */
+  tags: string[]
   onText: (channelId: string | undefined, text: string) => void
   onMedia: Dispatch<SetStateAction<Media[]>>
 }
@@ -918,13 +924,14 @@ const ChannelEditor = memo(
     picked,
     overrides,
     providers,
+    tags,
     onText,
     onMedia,
   }: ChannelEditorProps) {
     const providerOf = (c: Channel) => providers.find((p) => p.id === c.provider)
     const counts = channel
-      ? [countFor(channel, value, providerOf(channel))]
-      : (picked ?? NO_CHANNELS).map((c) => countFor(c, overrides?.[c.id]?.content ?? value, providerOf(c)))
+      ? [countFor(channel, value, providerOf(channel), tags)]
+      : (picked ?? NO_CHANNELS).map((c) => countFor(c, overrides?.[c.id]?.content ?? value, providerOf(c), tags))
 
     return (
       <div
@@ -1420,7 +1427,8 @@ export function ComposerForm({
   const active = multi && tab !== 'all' ? picked.find((c) => c.id === tab) : undefined
   const shownTab = active?.id ?? 'all'
   const ownText = active ? (overrides[active.id]?.content ?? null) : null
-  const countsFor = (ch?: Channel): Count[] => (ch ? [ch] : picked).map((c) => countFor(c, textFor(c), providerOf(c)))
+  const countsFor = (ch?: Channel): Count[] =>
+    (ch ? [ch] : picked).map((c) => countFor(c, textFor(c), providerOf(c), tags))
   const { isLocal } = useMode()
   const xPosts = useXPosts({ enabled: !isLocal })
   const xOut = xPosts.data && !xPosts.data.unlimited && xPosts.data.left <= 0 ? xPostsWarning(xPosts.data) : ''
@@ -1677,6 +1685,7 @@ export function ComposerForm({
                     picked={ch ? undefined : picked}
                     overrides={ch ? undefined : overrides}
                     providers={providerList}
+                    tags={tags}
                     onText={onText}
                     onMedia={setMedia}
                   />
