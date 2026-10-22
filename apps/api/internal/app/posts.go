@@ -1192,6 +1192,9 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	if err != nil {
 		return err
 	}
+	if s.suspended(ctx, row.WorkspaceID) {
+		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, ErrSuspended.Message)
+	}
 	ch, err := s.Q.GetChannelByID(ctx, channelID)
 	if err != nil {
 		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, "channel was removed")

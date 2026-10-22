@@ -1226,7 +1226,14 @@ func (s *Service) acceptInvitation(ctx context.Context, q *db.Queries, user db.U
 	}
 	switch {
 	case inv.AcceptedAt.Valid && inv.AcceptedBy.String == user.ID:
-		return inv.WorkspaceID, nil // accepted already (a double click, a retry)
+		// Accepted already (a double click, a retry): fine while they are a member. Removed since, the old link
+		// is no way back in (it would sign them into a workspace that refuses every request).
+		if _, err := q.GetMember(ctx, db.GetMemberParams{WorkspaceID: inv.WorkspaceID, UserID: user.ID}); isNoRows(err) {
+			return "", errInvitationInvalid
+		} else if err != nil {
+			return "", err
+		}
+		return inv.WorkspaceID, nil
 	case inv.AcceptedAt.Valid || inv.RevokedAt.Valid:
 		return "", errInvitationInvalid
 	case inv.ExpiresAt <= s.now():

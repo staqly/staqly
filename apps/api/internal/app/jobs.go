@@ -178,6 +178,11 @@ func (s *Service) runPublishPost(ctx context.Context, workspaceID, postID string
 	if row.Status != "scheduled" {
 		return nil // unscheduled or published by hand meanwhile
 	}
+	if s.suspended(ctx, workspaceID) {
+		// A read-only workspace publishes nothing: the post fails with why (post.failed alerts).
+		s.scheduledPublishFailed(ctx, workspaceID, postID, ErrSuspended)
+		return nil
+	}
 	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
 	return s.tx(ctx, func(q *db.Queries) error {
 		// Again inside the write: a cancel, a Publish now or a new time may have committed since the read above.

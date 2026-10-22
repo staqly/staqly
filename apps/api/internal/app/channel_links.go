@@ -268,6 +268,10 @@ func (s *Service) linkAllows(ctx context.Context, l db.ChannelLink, providerID s
 
 // takeChannelLinkUse claims one use before connecting; release gives it back when connecting fails.
 func (s *Service) takeChannelLinkUse(ctx context.Context, l db.ChannelLink) (release func(), err error) {
+	// The link has no signed-in principal, so the API's read-only check for an ended plan doesn't reach here.
+	if err := s.CheckWritable(ctx, l.WorkspaceID); err != nil {
+		return nil, err
+	}
 	n, err := s.Q.UseChannelLink(ctx, db.UseChannelLinkParams{Now: s.now(), WorkspaceID: l.WorkspaceID, ID: l.ID})
 	if err != nil {
 		return nil, err

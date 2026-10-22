@@ -244,6 +244,9 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 	if index >= len(parts) || replies[index].Status == "published" || replies[index].Status == "skipped" {
 		return nil
 	}
+	if s.suspended(ctx, row.WorkspaceID) {
+		return s.replyEnded(ctx, postID, channelID, index, providers.Result{}, ErrSuspended.Message)
+	}
 	ch, err := s.Q.GetChannelByID(ctx, channelID)
 	if err != nil {
 		return s.replyEnded(ctx, postID, channelID, index, providers.Result{}, "channel was removed")

@@ -22,8 +22,11 @@ WHERE account_id = (SELECT w.account_id FROM workspaces w WHERE w.id = sqlc.arg(
 
 -- name: ListBillingToReconcile :many
 -- Workspaces whose plan may be out of date with Stripe (a webhook lost or not yet in): a customer without a
--- subscription on record (a checkout that may have completed), or a plan whose period has ended.
+-- subscription on record (a checkout that may have completed), or a plan whose period has ended. A live
+-- subscription past its period comes first (a renewal webhook lost: someone paying is read-only), then customers
+-- without one, then ended subscriptions, which match for good and would otherwise fill every round.
 SELECT id, stripe_customer_id FROM workspaces
 WHERE stripe_customer_id IS NOT NULL AND stripe_customer_id <> ''
   AND (subscription_status IS NULL OR plan_expires_at < sqlc.arg(now))
-ORDER BY id LIMIT 500;
+ORDER BY CASE WHEN subscription_status IS NULL THEN 1 WHEN subscription_status IN ('canceled', 'incomplete_expired') THEN 2 ELSE 0 END, id
+LIMIT 500;

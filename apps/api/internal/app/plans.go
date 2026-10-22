@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -205,6 +206,13 @@ func (s *Service) planState(ctx context.Context, q *db.Queries, workspaceID stri
 // still work) until a plan is paid for.
 var ErrSuspended = &Error{Code: "plan_expired", Status: 402,
 	Message: "The trial or subscription has ended, so this workspace is read-only. Choose a plan in Settings → Plan & usage to continue."}
+
+// suspended: the workspace is read-only (CheckWritable), for work that runs in the background: publishing,
+// schedules and repeats stop with it, as they do over the API. An error reading the plan counts as not
+// suspended (the work goes on; the request path still checks).
+func (s *Service) suspended(ctx context.Context, workspaceID string) bool {
+	return errors.Is(s.CheckWritable(ctx, workspaceID), ErrSuspended)
+}
 
 // CheckWritable returns ErrSuspended when the workspace may not change.
 func (s *Service) CheckWritable(ctx context.Context, workspaceID string) error {
