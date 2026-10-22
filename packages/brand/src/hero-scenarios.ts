@@ -16,8 +16,8 @@ export type Scenario = {
 }
 
 // Use cases of the landing page (apps/web/lib/use-cases.ts), as an agent would send them. staqly publishes to X
-// itself (apps/api/internal/providers); every other platform is a channel on your own automation (`custom`), so
-// it always says which one ("via n8n"), never that staqly posts there directly.
+// and LinkedIn itself (apps/api/internal/providers); every other platform is a channel on your own automation
+// (`custom`), so it always says which one ("via n8n"), never that staqly posts there directly.
 export const scenarios: Scenario[] = [
   {
     agent: 'claude',
@@ -55,7 +55,7 @@ export const scenarios: Scenario[] = [
     content: 'v1.4 is out: schedules per collection, a calendar you can drag, and alerts when a post fails.',
     targets: [
       { id: 'x', channel: 'X', chars: '41 / 280', link: 'x.com/staqly/...' },
-      { id: 'linkedin', channel: 'LinkedIn', via: 'Make', chars: '96 / 3,000', link: 'linkedin.com/feed/update/...' },
+      { id: 'linkedin', channel: 'LinkedIn', chars: '96 / 3,000', link: 'linkedin.com/feed/update/...' },
       { id: 'custom', channel: 'Newsletter', via: 'script', chars: '96 chars', link: 'example.com/news/v1-4' },
     ],
   },
