@@ -1475,3 +1475,23 @@ class TestPostHelpers:
         )
         assert ev.post is not None and ev.post.is_published
         assert ev.collection is not None and ev.collection.name == "A"
+
+
+def test_comments_follow_every_page(client: Staqly, mock: Mock) -> None:
+    def comment(i: int) -> dict[str, Any]:
+        return {
+            "id": f"cmt_{i}",
+            "post_id": "pst_1",
+            "author_name": "Ana",
+            "body": f"#{i}",
+            "created_at": "2026-10-20T10:00:00Z",
+        }
+
+    mock.reply(
+        jsonr({"data": [comment(1), comment(2)], "next_cursor": "c2"}),
+        jsonr({"data": [comment(3)]}),
+    )
+    got = client.posts.comments("pst_1")
+    assert [c.body for c in got] == ["#1", "#2", "#3"]
+    assert "cursor" not in query(mock.requests[0])
+    assert query(mock.requests[1])["cursor"] == "c2"

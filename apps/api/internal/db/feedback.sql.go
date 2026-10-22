@@ -174,16 +174,29 @@ func (q *Queries) GetPreviewLinkByHash(ctx context.Context, tokenHash string) (P
 }
 
 const listPostComments = `-- name: ListPostComments :many
-SELECT id, workspace_id, post_id, preview_id, author_name, author_email, body, quote, channel_id, created_at, parent_id, part, anchor_start, anchor_end, resolved_at, resolved_by, author_user FROM post_comments WHERE workspace_id = ? AND post_id = ? ORDER BY created_at, id
+SELECT id, workspace_id, post_id, preview_id, author_name, author_email, body, quote, channel_id, created_at, parent_id, part, anchor_start, anchor_end, resolved_at, resolved_by, author_user FROM post_comments WHERE workspace_id = ?1 AND post_id = ?2
+  -- Keyset: the page after (created_at, id) of the previous one's last row ('' = the first page).
+  AND (?3 = '' OR created_at > ?3 OR (created_at = ?3 AND id > ?4))
+ORDER BY created_at, id
+LIMIT ?5
 `
 
 type ListPostCommentsParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	PostID      string `json:"post_id"`
+	WorkspaceID string      `json:"workspace_id"`
+	PostID      string      `json:"post_id"`
+	AfterAt     interface{} `json:"after_at"`
+	AfterID     string      `json:"after_id"`
+	Lim         int64       `json:"lim"`
 }
 
 func (q *Queries) ListPostComments(ctx context.Context, arg ListPostCommentsParams) ([]PostComment, error) {
-	rows, err := q.db.QueryContext(ctx, listPostComments, arg.WorkspaceID, arg.PostID)
+	rows, err := q.db.QueryContext(ctx, listPostComments,
+		arg.WorkspaceID,
+		arg.PostID,
+		arg.AfterAt,
+		arg.AfterID,
+		arg.Lim,
+	)
 	if err != nil {
 		return nil, err
 	}

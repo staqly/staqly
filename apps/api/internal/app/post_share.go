@@ -451,24 +451,42 @@ func (s *Service) SetPreviewCommentResolved(ctx context.Context, token, id strin
 }
 
 // ListPostComments: the feedback reviewers left on the post's preview pages.
-func (s *Service) ListPostComments(ctx context.Context, p Principal, postID string) ([]PostComment, error) {
+// CommentPage: one page of a post's comments, oldest first; NextCursor fetches the later ones.
+type CommentPage struct {
+	Data       []PostComment `json:"data"`
+	NextCursor string        `json:"next_cursor,omitempty"`
+}
+
+// ListPostComments lists a post's comments, oldest first, a page at a time (500 by default, at most 1000).
+func (s *Service) ListPostComments(ctx context.Context, p Principal, postID string, limit int, cursor string) (CommentPage, error) {
 	if err := p.require(ScopePostsRead); err != nil {
-		return nil, err
+		return CommentPage{}, err
+	}
+	after, err := readKeysetCursor(cursor, 2)
+	if err != nil {
+		return CommentPage{}, err
 	}
 	post, _, err := s.loadPost(ctx, s.Q, p.WorkspaceID, postID)
 	if err != nil {
-		return nil, err
+		return CommentPage{}, err
 	}
-	rows, err := s.Q.ListPostComments(ctx, db.ListPostCommentsParams{WorkspaceID: p.WorkspaceID, PostID: postID})
+	lim := clampLimit(limit, 500, 1000)
+	rows, err := s.Q.ListPostComments(ctx, db.ListPostCommentsParams{WorkspaceID: p.WorkspaceID, PostID: postID,
+		AfterAt: after[0], AfterID: after[1], Lim: int64(lim + 1)})
 	if err != nil {
-		return nil, err
+		return CommentPage{}, err
 	}
 	texts := s.commentTexts(ctx, p.WorkspaceID, post)
-	out := make([]PostComment, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, toComment(r, true, texts))
+	page := CommentPage{Data: make([]PostComment, 0, min(len(rows), lim))}
+	for i, r := range rows {
+		if i == lim {
+			last := rows[i-1]
+			page.NextCursor = keysetCursor(last.CreatedAt, last.ID)
+			break
+		}
+		page.Data = append(page.Data, toComment(r, true, texts))
 	}
-	return out, nil
+	return page, nil
 }
 
 func (s *Service) DeletePostComment(ctx context.Context, p Principal, postID, id string) error {
@@ -546,7 +564,8 @@ func (s *Service) OpenPreview(ctx context.Context, token string) (PublicPreview,
 		}
 		out.Targets = append(out.Targets, pt)
 	}
-	comments, err := s.Q.ListPostComments(ctx, db.ListPostCommentsParams{WorkspaceID: l.WorkspaceID, PostID: l.PostID})
+	// The public page shows a post's first 1000 comments.
+	comments, err := s.Q.ListPostComments(ctx, db.ListPostCommentsParams{WorkspaceID: l.WorkspaceID, PostID: l.PostID, AfterAt: "", Lim: 1000})
 	if err != nil {
 		return PublicPreview{}, err
 	}

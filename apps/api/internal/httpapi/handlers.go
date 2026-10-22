@@ -558,8 +558,8 @@ func (s *Server) testWebhook(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listDeliveries(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	out, err := s.svc.ListDeliveries(r.Context(), principal(r), q.Get("webhook_id"), q.Get("status"), q.Get("post_id"), qInt(r, "limit"))
-	respond(w, r, 200, map[string]any{"data": out}, err)
+	out, err := s.svc.ListDeliveries(r.Context(), principal(r), q.Get("webhook_id"), q.Get("status"), q.Get("post_id"), qInt(r, "limit"), q.Get("cursor"))
+	respond(w, r, 200, out, err)
 }
 
 func (s *Server) retryDelivery(w http.ResponseWriter, r *http.Request) {
@@ -727,7 +727,7 @@ func (s *Server) retryTarget(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listWork(w http.ResponseWriter, r *http.Request) {
-	out, err := s.svc.ListRequestedWork(r.Context(), principal(r))
+	out, err := s.svc.ListRequestedWork(r.Context(), principal(r), qInt(r, "limit"))
 	respond(w, r, 200, map[string]any{"data": out}, err)
 }
 

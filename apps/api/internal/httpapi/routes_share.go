@@ -75,8 +75,8 @@ func (s *Server) revokePreviewLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listPostComments(w http.ResponseWriter, r *http.Request) {
-	out, err := s.svc.ListPostComments(r.Context(), principal(r), chi.URLParam(r, "id"))
-	respond(w, r, 200, map[string]any{"data": out}, err)
+	out, err := s.svc.ListPostComments(r.Context(), principal(r), chi.URLParam(r, "id"), qInt(r, "limit"), r.URL.Query().Get("cursor"))
+	respond(w, r, 200, out, err)
 }
 
 func (s *Server) addPostComment(w http.ResponseWriter, r *http.Request) {

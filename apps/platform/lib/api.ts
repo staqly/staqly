@@ -588,6 +588,24 @@ export async function request<T>(path: string, opts: RequestOptions = {}, retrie
 
 // ---- endpoints ----
 
+// A post's comments come 500 a page; the threads on screen need every one.
+async function allPostComments(id: string): Promise<{ data: PostComment[] }> {
+  const data: PostComment[] = []
+  let cursor: string | undefined
+
+  do {
+    const page: { data: PostComment[]; next_cursor?: string } = await request(
+      `/v1/posts/${encodeURIComponent(id)}/comments`,
+      { query: cursor ? { cursor } : {} },
+    )
+
+    data.push(...page.data)
+    cursor = page.next_cursor
+  } while (cursor)
+
+  return { data }
+}
+
 export const api = {
   health: () => request<Health>('/health', { public: true }),
   setupStatus: () => request<SetupStatus>('/v1/setup', { public: true }),
@@ -830,7 +848,8 @@ export const api = {
     request<void>(`/v1/posts/${encodeURIComponent(id)}/previews/${encodeURIComponent(previewId)}`, {
       method: 'DELETE',
     }),
-  postComments: (id: string) => request<{ data: PostComment[] }>(`/v1/posts/${encodeURIComponent(id)}/comments`),
+  /** Every page of the post's comments (threads need all of them). */
+  postComments: (id: string) => allPostComments(id),
   deletePostComment: (id: string, commentId: string) =>
     request<void>(`/v1/posts/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, {
       method: 'DELETE',

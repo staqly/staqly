@@ -2025,12 +2025,16 @@ paths:
     get:
       operationId: listPostComments
       tags: [posts]
-      summary: "The post's feedback threads: reviewers' comments from its preview pages (with their email) and the team's replies, oldest first (posts:read)"
+      summary: "The post's feedback threads: reviewers' comments from its preview pages (with their email) and the team's replies, oldest first, 500 a page by default (at most 1000) (posts:read)"
+      parameters:
+        - { name: limit, in: query, description: "Comments per page (default 500, at most 1000)", schema: { type: integer, minimum: 1, maximum: 1000 } }
+        - { $ref: "#/components/parameters/cursor" }
       responses:
-        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/PostComment" } } } } } } }
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/PostComment" } }, next_cursor: { type: string, description: "Later comments: pass it as cursor; absent on the last page" } } } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
     post:
       operationId: addPostComment
@@ -2323,7 +2327,7 @@ paths:
     get:
       operationId: listTags
       tags: [posts]
-      summary: List the workspace's post tags, most used first (posts:read)
+      summary: List the workspace's post tags, most used first, the 500 most used at most (posts:read)
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Tag" } } } } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -2339,6 +2343,10 @@ paths:
         Targets on your own automation (provider `custom`) that are publishing and wait for a result
         (`kind: target`, with the post and the channel), and schedules of `source: agent` whose last run
         found nothing to publish (`kind: posts`, with the schedule). Each entry says when it was requested.
+        Targets come oldest first, at most `limit` of them (100 by default, at most 500): it is a queue that
+        drains as results come in, so ask again for the rest.
+      parameters:
+        - { name: limit, in: query, description: "Waiting targets at most (default 100, at most 500)", schema: { type: integer, minimum: 1, maximum: 500 } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/WorkItem" } } } } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -3582,16 +3590,18 @@ paths:
     get:
       operationId: listWebhookDeliveries
       tags: [webhooks]
-      summary: Delivery history
+      summary: Delivery history, newest first (50 a page by default, at most 200; next_cursor for older ones)
       parameters:
         - { name: webhook_id, in: query, schema: { type: string } }
         - { name: status, in: query, schema: { type: string, enum: [pending, succeeded, failed] } }
         - { name: post_id, in: query, description: Only deliveries of events about this post, schema: { type: string } }
         - { $ref: "#/components/parameters/limit" }
+        - { $ref: "#/components/parameters/cursor" }
       responses:
-        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Delivery" } } } } } } }
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Delivery" } }, next_cursor: { type: string, description: "Older deliveries: pass it as cursor; absent on the last page" } } } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/webhook-deliveries/{id}/retry:
     parameters: [{ $ref: "#/components/parameters/id" }]
