@@ -171,7 +171,7 @@ schedule_post  {"post_id":"post_...","publish_at":"2026-10-21T09:00:00Z"}`}
         <div className={`${wrap} py-14 sm:py-20`}>
           <Eyebrow>Use cases</Eyebrow>
           <H2>See it applied.</H2>
-          <p className="mt-6 max-w-3xl text-lg leading-relaxed text-muted-foreground">
+          <p className="mt-6 max-w-5xl text-lg leading-relaxed text-muted-foreground">
             A week of posts from one prompt, one post in every channel&apos;s length, publishing through n8n, feeding a
             schedule from your own endpoint:{' '}
             <Link
