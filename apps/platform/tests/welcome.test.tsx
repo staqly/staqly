@@ -141,7 +141,7 @@ describe('welcome wizard', () => {
     expect(await screen.findByRole('heading', { name: 'Setting up your workspace' })).toBeInTheDocument()
     expect(api.find('PATCH', '/v1/workspace')).toHaveLength(0)
     paid = true
-    expect(await screen.findByRole('heading', { name: 'You are all set' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
     expect(api.find('PATCH', '/v1/workspace')[0].body).toMatchObject({ name: 'Acme' })
     expect(api.find('POST', '/v1/billing/sync').length).toBeGreaterThan(0)
   })
