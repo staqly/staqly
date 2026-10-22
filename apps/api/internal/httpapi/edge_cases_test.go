@@ -122,12 +122,15 @@ func TestUploadCutsLongNamesOnACharacter(t *testing.T) {
 func TestCollectionNameExactMatchFirst(t *testing.T) {
 	e := newEnv(t)
 	e.paid()
-	upper := e.collection("Żółw")
-	lower := e.collection("żółw") // SQLite NOCASE folds ASCII only: allowed
-	p := e.post("żółw", nil)
-	t.Logf("upper=%s lower=%s post went to %s", upper.ID, lower.ID, p.CollectionID)
-	if p.CollectionID != lower.ID {
-		t.Errorf("post addressed to collection %q landed in %q", "żółw", "Żółw")
+	e.collection("Żółw")
+	// SQLite's NOCASE folds ASCII only, so both names can exist there; PostgreSQL's lower() folds Unicode and
+	// refuses the second one (nothing to tell apart then).
+	var lower app.Collection
+	if st, _, _ := e.raw(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "żółw"}); st == 201 {
+		e.do(nil, "GET", "/v1/collections/"+url.PathEscape("żółw"), e.key, nil, 200, &lower)
+		if p := e.post("żółw", nil); p.CollectionID != lower.ID {
+			t.Errorf("post addressed to collection %q landed in %q", "żółw", "Żółw")
+		}
 	}
 	st, _, b := e.raw(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "col_news"})
 	t.Logf("create col_news: %d %s", st, b)
