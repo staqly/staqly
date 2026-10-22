@@ -158,7 +158,8 @@ func buildEmail(from *mail.Address, to []string, subject, text, htmlBody string,
 	hdr := func(k, v string) { fmt.Fprintf(&b, "%s: %s\r\n", k, v) }
 	hdr("From", from.String())
 	hdr("To", headerSafe(strings.Join(to, ", ")))
-	hdr("Subject", mime.QEncoding.Encode("utf-8", headerSafe(truncateRunes(subject, 180))))
+	// Encoded words go one per folded line: a long non-ASCII subject would exceed 998 octets on one line.
+	hdr("Subject", strings.ReplaceAll(mime.QEncoding.Encode("utf-8", headerSafe(truncateRunes(subject, 180))), " =?", "\r\n =?"))
 	hdr("Date", time.Now().UTC().Format(time.RFC1123Z))
 	domain := "staqly.local"
 	if _, d, ok := strings.Cut(from.Address, "@"); ok {

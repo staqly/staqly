@@ -47,6 +47,9 @@ func (f *fakeLinkedIn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			scope = "email,openid,profile,w_member_social"
 		}
 		_, _ = w.Write([]byte(`{"access_token":"at-` + f.form.Get("grant_type") + `","expires_in":5183999,"scope":"` + scope + `"}`))
+	case r.URL.Path == "/v2/userinfo" && r.Header.Get("Authorization") == "Bearer revoked":
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"serviceErrorCode":65601,"code":"REVOKED_ACCESS_TOKEN","status":401}`))
 	case r.URL.Path == "/v2/userinfo":
 		_, _ = w.Write([]byte(`{"sub":"782bbtaQ","name":"Jane Doe","picture":"https://media.licdn.com/jane.jpg"}`))
 	case r.URL.Path == "/rest/images" && r.URL.Query().Get("action") == "initializeUpload":
@@ -153,6 +156,10 @@ func TestLinkedInRefresh(t *testing.T) {
 	c := linkedinCreds()
 	if got, err := li.Refresh(context.Background(), app, c); err != nil || got["access_token"] != "at" {
 		t.Fatalf("valid token: %v %v", got, err)
+	}
+	// One LinkedIn no longer takes (the member removed the app) is found out too.
+	if _, err := li.Refresh(context.Background(), app, Credentials{"access_token": "revoked", "expires_at": c["expires_at"]}); !errors.Is(err, ErrReauth) {
+		t.Fatalf("revoked token: %v", err)
 	}
 	c["expires_at"] = time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
 	if _, err := li.Refresh(context.Background(), app, c); !errors.Is(err, ErrReauth) {

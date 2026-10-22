@@ -821,7 +821,9 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		}
 		fresh, err := e.Refresh(cctx, app, creds)
 		if err != nil {
-			s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
+			if errors.Is(err, providers.ErrReauth) { // a platform that can't be reached now is no reason to reconnect
+				s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
+			}
 			return map[string]any{"ok": false, "error": err.Error()}, nil
 		}
 		if sealed, err := s.seal(fresh); err == nil {

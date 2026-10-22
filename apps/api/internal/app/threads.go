@@ -123,7 +123,7 @@ func checkThreadLimits(parts []ThreadPart, chans map[string]db.Channel) error {
 		}
 		l := e.Limits()
 		for i, part := range parts {
-			if n := utf8.RuneCountInString(part.Content); l.MaxChars > 0 && n > l.MaxChars {
+			if n := providers.TextLength(l, part.Content); l.MaxChars > 0 && n > l.MaxChars {
 				return invalid(threadField(i, "content"), fmt.Sprintf("at most %d characters for %s (%d)", l.MaxChars, ch.Name, n))
 			}
 			if len(part.Media) > l.MaxMedia {
