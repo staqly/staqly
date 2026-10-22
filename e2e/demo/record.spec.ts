@@ -259,7 +259,9 @@ async function record(scheme: 'light' | 'dark') {
     await composer.getByTestId('post-content').click()
     await page.keyboard.type(POST_TEXT, { delay: 28 })
     await pause(page, 900)
-    await composer.getByTestId('schedule-post').click()
+    // Schedule opens the calendar with the slot's time picked; its own Schedule sends the post.
+    await composer.getByTestId('date-time-picker').click()
+    await page.getByRole('dialog', { name: 'Pick a date and time' }).getByRole('button', { name: 'Schedule' }).click()
     await expect(composer).toBeHidden()
     const entry = slot.getByTestId('schedule-entry').first()
 

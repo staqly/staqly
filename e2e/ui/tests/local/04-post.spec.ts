@@ -139,7 +139,7 @@ test.describe('the post', () => {
     // Clear it: without a time, Save changes makes it a draft again.
     await page.goto(`/posts/${post.id}`)
     await sheet(page).getByRole('button', { name: 'Clear schedule' }).click()
-    await expect(sheet(page).getByTestId('schedule-post')).toHaveCount(0)
+    await expect(sheet(page).getByTestId('publish-at-chip')).toHaveCount(0)
     await sheet(page).getByRole('button', { name: 'Save changes' }).click()
     await expect.poll(async () => (await getPost(api, post.id)).status).toBe('draft')
     expect((await getPost(api, post.id)).publish_at).toBeNull()

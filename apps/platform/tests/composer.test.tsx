@@ -76,14 +76,16 @@ async function pickChannels(user: ReturnType<typeof userEvent.setup>, ...ids: st
 }
 
 describe('composer', () => {
-  it('the calendar half of Publish now schedules: a quick pick, Repeat, Schedule; the chip clears it', async () => {
+  it('Schedule opens the calendar: a quick pick and Schedule send the post for that time', async () => {
     const api = mockApi({ ...routes, 'POST /v1/posts': post({ id: 'pst_9', status: 'scheduled' }) })
     const user = userEvent.setup()
 
     renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
     await pickChannels(user, 'ch_1')
     await user.type(screen.getByTestId('post-content'), 'Later')
-    await user.click(screen.getByRole('button', { name: 'Schedule for later' }))
+    // A new post offers both ways out side by side.
+    expect(screen.getByTestId('publish-now')).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Schedule' }))
     const picker = await screen.findByRole('dialog', { name: 'Pick a date and time' })
 
     await user.click(within(picker).getByRole('button', { name: 'Tomorrow 09:00' }))
@@ -96,21 +98,22 @@ describe('composer', () => {
     expect([at.getHours(), at.getMinutes()]).toEqual([9, 0])
   })
 
-  it('a picked time shows as a chip next to Schedule; clearing it brings back Publish now', async () => {
+  it('a picked time shows as a chip next to Publish now and Schedule; the chip clears it', async () => {
     mockApi(routes)
     const user = userEvent.setup()
 
     renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
     // No channel and no text yet: Schedule only sets the time.
-    await user.click(await screen.findByRole('button', { name: 'Schedule for later' }))
+    await user.click(await screen.findByRole('button', { name: 'Schedule' }))
     const picker = await screen.findByRole('dialog', { name: 'Pick a date and time' })
 
     await user.click(within(picker).getByRole('button', { name: 'In 1 hour' }))
     await user.click(within(picker).getByRole('button', { name: 'Schedule' }))
     expect(await screen.findByTestId('publish-at-chip')).toBeInTheDocument()
-    expect(screen.getByTestId('schedule-post')).toHaveTextContent('Schedule')
-    expect(screen.queryByTestId('publish-now')).not.toBeInTheDocument()
+    expect(screen.getByTestId('publish-now')).toBeInTheDocument()
+    expect(screen.getByTestId('date-time-picker')).toHaveTextContent('Schedule')
     await user.click(screen.getByRole('button', { name: 'Clear schedule' }))
+    expect(screen.queryByTestId('publish-at-chip')).not.toBeInTheDocument()
     expect(screen.getByTestId('publish-now')).toBeInTheDocument()
   })
 

@@ -509,7 +509,7 @@ function CommentsNotice({
 
   return (
     <Callout tone="warning" size="xs" data-testid="comments-notice">
-      {named.join(', ')} can't post comments: the post goes out there without them.
+      {`${named.join(', ')} can't post comments: the post goes out there without them.`}
     </Callout>
   )
 }
@@ -814,11 +814,14 @@ function ScheduleMenu({
   repeat,
   disabled,
   onApply,
+  label,
 }: {
   value: Date | null
   repeat: string
   disabled?: boolean
   onApply: (at: Date, repeat: string) => void
+  /** A text button ("Schedule") instead of the calendar half of the Save changes split button. */
+  label?: string
 }) {
   const [open, setOpen] = useState(false)
   const [at, setAt] = useState<Date | null>(null)
@@ -842,17 +845,23 @@ function ScheduleMenu({
       }}
     >
       <PopoverTrigger asChild>
-        <Button
-          type="button"
-          size="icon"
-          aria-label="Schedule for later"
-          aria-haspopup="dialog"
-          data-testid="date-time-picker"
-          disabled={disabled}
-          className="size-8 border-l border-l-primary-foreground/25 pointer-coarse:size-11"
-        >
-          <CalendarClock />
-        </Button>
+        {label ? (
+          <Button type="button" aria-haspopup="dialog" data-testid="date-time-picker" disabled={disabled}>
+            <CalendarClock /> {label}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="icon"
+            aria-label="Schedule for later"
+            aria-haspopup="dialog"
+            data-testid="date-time-picker"
+            disabled={disabled}
+            className="size-8 border-l border-l-primary-foreground/25 pointer-coarse:size-11"
+          >
+            <CalendarClock />
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent
         side="top"
@@ -869,9 +878,9 @@ function ScheduleMenu({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {REPEAT_OPTIONS.map(([v, label]) => (
+              {REPEAT_OPTIONS.map(([v, text]) => (
                 <SelectItem key={v} value={v}>
-                  {label}
+                  {text}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1174,37 +1183,37 @@ function ComposerFooter({
               </Button>
             </span>
           )}
-          {live ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onSave('now')}
-              disabled={busy || !canSend}
-              data-testid="publish-now"
-            >
-              <Send /> Publish now
-            </Button>
-          ) : (
+          {!live && (
             <Button type="button" variant="outline" onClick={() => onSave('draft')} disabled={busy || !canSaveDraft}>
               Save draft
             </Button>
           )}
-          <ButtonGroup aria-label="Publish">
-            {live ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onSave('now')}
+            disabled={busy || !canSend}
+            data-testid="publish-now"
+          >
+            <Send /> Publish now
+          </Button>
+          {live ? (
+            <ButtonGroup aria-label="Publish">
               <Button type="submit" disabled={busy || !canSend || inPast} data-testid="save-post">
                 {busy ? 'Saving...' : 'Save changes'}
               </Button>
-            ) : publishAt ? (
-              <Button type="submit" disabled={busy || !canSend || inPast} data-testid="schedule-post">
-                {busy ? 'Saving...' : 'Schedule'}
-              </Button>
-            ) : (
-              <Button type="submit" disabled={busy || !canSend} data-testid="publish-now">
-                <Send /> {busy ? 'Publishing...' : 'Publish now'}
-              </Button>
-            )}
-            <ScheduleMenu value={publishAt} repeat={repeatEvery} disabled={busy} onApply={onApplySchedule} />
-          </ButtonGroup>
+              <ScheduleMenu value={publishAt} repeat={repeatEvery} disabled={busy} onApply={onApplySchedule} />
+            </ButtonGroup>
+          ) : (
+            // Two ways out of a new post or a draft: now, or the calendar (with the time already picked, if any).
+            <ScheduleMenu
+              value={publishAt}
+              repeat={repeatEvery}
+              disabled={busy}
+              onApply={onApplySchedule}
+              label={busy && publishAt ? 'Saving...' : 'Schedule'}
+            />
+          )}
         </div>
       )}
       {(error || (inPast && !locked)) && (
