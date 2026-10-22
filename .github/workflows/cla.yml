@@ -1,6 +1,8 @@
 # Contributor License Agreement: every outside contributor accepts ICLA.md (individuals) or
 # CCLA.md (companies) once, by commenting on their first pull request. Signatures are stored in
-# signatures/cla.json on the cla-signatures branch (not main, which is protected).
+# signatures/cla.json of the private repository staqly/cla-signatures, written with the token in the
+# secret CLA_SIGNATURES_TOKEN (a classic token with the repo scope of an account that can push there).
+# Pull requests by the organization's owners, members and collaborators skip the check.
 # pull_request_target is safe here: the action never checks out or runs the pull request's code.
 name: CLA
 
@@ -18,16 +20,23 @@ permissions:
 
 jobs:
   cla:
-    if: github.event_name == 'pull_request_target' || github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
+    if: >-
+      (github.event_name == 'pull_request_target' &&
+        !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)) ||
+      (github.event.issue.pull_request &&
+        (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'))
     runs-on: ubuntu-latest
     steps:
       - uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_SIGNATURES_TOKEN }}
         with:
+          remote-organization-name: staqly
+          remote-repository-name: cla-signatures
           path-to-signatures: signatures/cla.json
           path-to-document: https://github.com/staqly/staqly/blob/main/ICLA.md
-          branch: cla-signatures
+          branch: main
           # web-flow: GitHub as the committer of bot and web-UI commits; their authors are still checked.
           allowlist: mits87,dependabot[bot],github-actions[bot],web-flow
           custom-notsigned-prcomment: >-
