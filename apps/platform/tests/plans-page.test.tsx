@@ -112,7 +112,14 @@ describe('plan picker', () => {
     const plus = await screen.findByTestId('plan-plus')
 
     await waitFor(() => expect(within(plus).getByRole('button', { name: 'Your current plan' })).toBeDisabled())
-    await user.type(screen.getByLabelText('Promotion code'), 'BIZ-5UUS-DUQR')
+    await user.click(screen.getByRole('button', { name: 'Have a promotion code?' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add a promotion code' })
+
+    // Enter applies; the modal closes and focus goes back to the page.
+    await user.type(within(dialog).getByLabelText(/Promotion code/), 'BIZ-5UUS-DUQR{Enter}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('promotion-code-applied')).toHaveTextContent('Code BIZ-5UUS-DUQR applied')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus())
     await user.click(within(screen.getByTestId('plan-business')).getByRole('button', { name: 'Upgrade to Business' }))
     await waitFor(() =>
       expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({
@@ -128,6 +135,45 @@ describe('plan picker', () => {
         interval: 'month',
         promotion_code: 'BIZ-5UUS-DUQR',
       }),
+    )
+  })
+
+  it('the promotion code modal: Cancel keeps nothing, an empty code asks for one, Remove clears it', async () => {
+    const api = render(true)
+    const user = userEvent.setup()
+
+    const plus = await screen.findByTestId('plan-plus')
+
+    await waitFor(() => expect(within(plus).getByRole('button', { name: 'Your current plan' })).toBeDisabled())
+    expect(screen.queryByLabelText(/Promotion code/)).not.toBeInTheDocument()
+
+    const link = screen.getByRole('button', { name: 'Have a promotion code?' })
+
+    await user.click(link)
+    let dialog = await screen.findByRole('dialog', { name: 'Add a promotion code' })
+
+    await user.type(within(dialog).getByLabelText(/Promotion code/), 'SPRING20')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByTestId('promotion-code-applied')).not.toBeInTheDocument()
+    await waitFor(() => expect(link).toHaveFocus())
+
+    await user.click(link)
+    dialog = await screen.findByRole('dialog', { name: 'Add a promotion code' })
+    await user.click(within(dialog).getByRole('button', { name: 'Apply' }))
+    expect(within(dialog).getByText('Type the code, such as SPRING20.')).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText(/Promotion code/), 'SPRING20')
+    await user.click(within(dialog).getByRole('button', { name: 'Apply' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('promotion-code-applied')).toHaveTextContent('Code SPRING20 applied')
+
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(screen.queryByTestId('promotion-code-applied')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Have a promotion code?' })).toHaveFocus()
+    expect(within(plus).getByRole('button', { name: 'Your current plan' })).toBeDisabled()
+    await user.click(within(screen.getByTestId('plan-pro')).getByRole('button', { name: 'Upgrade to Pro' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'pro', interval: 'month' }),
     )
   })
 })

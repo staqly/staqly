@@ -59,7 +59,7 @@ The compare page on staqly.ai lists the same limits side by side.
      starts when the payment goes through. If the card fails, nothing changes (the trial keeps running)
      and the plan page says so.
    - **Promotion codes:** Stripe Checkout has its own code box for a first plan. To switch plans with a
-     code, or apply one to the plan you have, type it under **Promotion code** on the plan page (or send
+     code, or apply one to the plan you have, use **Have a promotion code?** on the plan page (or send
      `promotion_code` to `POST /v1/billing/checkout`). A code made for other plans is refused with the reason.
 5. Until a plan starts, and after one ends (a trial cancelled for want of a card, an unpaid renewal,
    a cancellation), the workspace is **locked**:

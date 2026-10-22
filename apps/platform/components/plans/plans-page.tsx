@@ -4,15 +4,24 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 
 import { PublicShell } from '@/components/auth/public-shell'
 import { daysLeft, shortDate } from '@/components/billing/billing-format'
 import { ErrorState } from '@/components/common/error-state'
 import { EVERY_PLAN, IntervalToggle, PlanGrid } from '@/components/plans/plan-cards'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { api, type BillingInterval, type Plan } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
@@ -51,6 +60,121 @@ export function usePlanActions() {
 }
 
 const BACK = '/settings/plan'
+
+/**
+ * A promotion code for the plan buttons: a small link under the billing period that opens a short modal, then the
+ * applied code with Change and Remove. A modal, not a drawer: one field.
+ */
+function PromotionCode({ code, onChange }: { code: string | undefined; onChange: (code: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [error, setError] = useState('')
+  // The link, or Change once a code is applied: focus comes back here when the modal closes or the code is removed.
+  const trigger = useRef<HTMLButtonElement>(null)
+
+  const show = () => {
+    setDraft(code ?? '')
+    setError('')
+    setOpen(true)
+  }
+
+  const remove = () => {
+    flushSync(() => onChange(''))
+    trigger.current?.focus()
+  }
+
+  const triggerClass = 'h-auto p-0 text-sm font-normal pointer-coarse:-my-3 pointer-coarse:h-auto pointer-coarse:py-3'
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+      {code ? (
+        <>
+          <p role="status" data-testid="promotion-code-applied">
+            Code <span className="font-mono text-foreground uppercase">{code}</span> applied
+          </p>
+          <Button ref={trigger} type="button" variant="link" className={triggerClass} onClick={show}>
+            Change
+          </Button>
+          <Button
+            type="button"
+            variant="link"
+            className={cn(triggerClass, 'text-muted-foreground hover:text-foreground')}
+            onClick={remove}
+          >
+            Remove
+          </Button>
+        </>
+      ) : (
+        <Button ref={trigger} type="button" variant="link" className={triggerClass} onClick={show}>
+          Have a promotion code?
+        </Button>
+      )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          onCloseAutoFocus={(e) => {
+            // The link turns into Change when a code is applied: focus whichever is there now.
+            e.preventDefault()
+            trigger.current?.focus({ preventScroll: true })
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Add a promotion code</DialogTitle>
+            <DialogDescription>
+              Stripe checks the code when you choose a plan; one made for other plans is refused with the reason.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            noValidate
+            className="grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+
+              if (!draft.trim()) {
+                setError('Type the code, such as SPRING20.')
+
+                return
+              }
+
+              onChange(draft.trim())
+              setOpen(false)
+            }}
+          >
+            <Field data-invalid={!!error}>
+              <FieldLabel htmlFor="promotion-code" required>
+                Promotion code
+              </FieldLabel>
+              <Input
+                id="promotion-code"
+                className="font-mono uppercase"
+                placeholder="SPRING20"
+                autoComplete="off"
+                maxLength={100}
+                value={draft}
+                aria-required
+                aria-invalid={!!error}
+                onChange={(e) => {
+                  setDraft(e.target.value)
+
+                  if (error && e.target.value.trim()) {
+                    setError('')
+                  }
+                }}
+                data-testid="promotion-code"
+              />
+              <FieldError>{error}</FieldError>
+            </Field>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">Apply</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
 
 /** Full-screen plan picker: Starter, Plus, Pro and Business, billed monthly or yearly. */
 export function PlansPage() {
@@ -91,7 +215,7 @@ export function PlansPage() {
   const trialHere = canPay && !subscribed && trial === 'available'
   // Leaving Starter's trial for another plan ends the trial and charges the new plan at once.
   const trialing = billing.data?.subscription_status === 'trialing'
-  // A promotion code typed here: a plan switch never opens Stripe Checkout, whose own code box covers new plans.
+  // A promotion code applied here: a plan switch never opens Stripe Checkout, whose own code box covers new plans.
   const [code, setCode] = useState('')
   const promotionCode = code.trim() || undefined
 
@@ -231,23 +355,7 @@ export function PlansPage() {
         </p>
       </div>
       {!isLocal && <IntervalToggle value={interval} onChange={setChosen} className="mt-8" />}
-      {!isLocal && canPay && payer && (
-        <div className="mt-4 flex items-center gap-2">
-          <Label htmlFor="promotion-code" className="text-sm font-normal text-muted-foreground">
-            Promotion code
-          </Label>
-          <Input
-            id="promotion-code"
-            className="h-8 w-44 font-mono uppercase"
-            placeholder="Optional"
-            autoComplete="off"
-            maxLength={100}
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            data-testid="promotion-code"
-          />
-        </div>
-      )}
+      {!isLocal && canPay && payer && <PromotionCode code={promotionCode} onChange={setCode} />}
       <div className="mt-8 w-full max-w-6xl">
         {isLocal ? (
           <p className="text-center text-sm text-muted-foreground">A local install has no plans and no limits.</p>
