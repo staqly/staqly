@@ -570,10 +570,10 @@ export default function HomePage() {
     <main id="main" className="flex flex-1 flex-col">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(jsonLd) }} />
       <Hero />
-      <Integrations />
       <HowItWorks />
       <Channels />
       <ConnectAgent />
+      <Integrations />
       <Features />
       <Safety />
       <UseCasesTeaser />

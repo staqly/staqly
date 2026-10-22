@@ -219,23 +219,51 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
 }
 
 /**
- * A round tile with the mark on a tinted background: the "Add channel" grid, channel rows and the stacked
- * avatars on calendar chips (when a channel has no profile picture). In dark mode a soft white halo sits behind
- * the mark, so it stands out from the dark tile.
+ * The provider as an app icon (round unless `className` gives another radius): the "Add channel" grid, channel
+ * rows, the landing page and the stacked avatars on calendar chips (when a channel has no profile picture).
  */
 export function ProviderTile({ id, name, className }: { id: string; name?: string; className?: string }) {
   const look = providerLook(id)
+  const label = name ?? look.icon?.title ?? id
+  // Like an app icon: the brand colour fills the tile and the mark is white (black on a very light colour).
+  // A multi-colour mark (Slack) keeps its colours on white.
+  const background = look.parts ? '#ffffff' : id.startsWith('instagram') ? INSTAGRAM : look.color
+  const ink = luminance(look.color) > 0.5 ? '#000000' : '#ffffff'
+  let mark
+
+  if (look.parts) {
+    mark = <ProviderIcon id={id} className="size-[60%]" />
+  } else if (look.glyph) {
+    const Glyph = look.glyph
+
+    mark = <Glyph className="size-[60%]" strokeWidth={2.25} />
+  } else if (look.icon) {
+    mark = (
+      <svg viewBox="0 0 24 24" className="size-[56%]" fill="currentColor">
+        <path d={look.icon.path} />
+      </svg>
+    )
+  } else {
+    mark = (
+      <span className="text-[50cqh] leading-none font-bold">{look.letters ?? label.slice(0, 1).toUpperCase()}</span>
+    )
+  }
 
   return (
     <span
+      role="img"
+      aria-label={label}
       className={classes(
-        'relative isolate inline-flex shrink-0 items-center justify-center [.dark_&]:before:absolute [.dark_&]:before:inset-[18%] [.dark_&]:before:-z-10 [.dark_&]:before:rounded-full [.dark_&]:before:bg-white/15 [.dark_&]:before:blur-[6px]',
+        // A black tile (X, Threads, TikTok) would vanish on a dark page: a thin light ring outlines it there.
+        `inline-flex shrink-0 items-center justify-center [container-type:size] ${isBlack(look.color) ? '[.dark_&]:ring-1 [.dark_&]:ring-white/20' : ''}`,
         ['size-9', 'rounded-full'],
         className,
       )}
-      style={{ background: `color-mix(in oklch, ${look.color} 18%, var(--muted))` }}
+      style={{ background, color: ink }}
     >
-      <ProviderIcon id={id} name={name} className="size-[60%]" />
+      {mark}
     </span>
   )
 }
+
+const INSTAGRAM = 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%)'
