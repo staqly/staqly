@@ -227,15 +227,24 @@ export class Posts extends APIResource {
     })
   }
 
-  /** The post's feedback threads (reviewers' comments and the team's replies), oldest first. */
+  /** The post's feedback threads (reviewers' comments and the team's replies), oldest first: every page. */
   async comments(id: string, options?: RequestOptions): Promise<PostComment[]> {
-    const res = await this.http.request<{ data: PostComment[] }>({
-      method: 'GET',
-      path: `/v1/posts/${enc(id)}/comments`,
-      options,
-    })
+    const out: PostComment[] = []
+    let cursor: string | undefined
 
-    return res.data
+    do {
+      const res = await this.http.request<{ data: PostComment[]; next_cursor?: string }>({
+        method: 'GET',
+        path: `/v1/posts/${enc(id)}/comments`,
+        query: cursor ? { cursor } : {},
+        options,
+      })
+
+      out.push(...res.data)
+      cursor = res.next_cursor
+    } while (cursor)
+
+    return out
   }
 
   /** Removes a comment; removing a thread's first comment removes its replies. */

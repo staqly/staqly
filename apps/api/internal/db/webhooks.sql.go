@@ -258,8 +258,11 @@ WHERE webhook_deliveries.workspace_id = ?1
   AND (?3 IS NULL OR webhook_deliveries.status = ?3)
   AND (?4 IS NULL OR webhook_deliveries.event_id IN (
     SELECT ev.id FROM events ev WHERE ev.workspace_id = ?1 AND ev.item_id = ?4))
-ORDER BY webhook_deliveries.created_at DESC
-LIMIT ?5
+  -- Keyset: the page after (created_at, id) of the previous one's last row ('' = the first page).
+  AND (?5 = '' OR webhook_deliveries.created_at < ?5
+    OR (webhook_deliveries.created_at = ?5 AND webhook_deliveries.id < ?6))
+ORDER BY webhook_deliveries.created_at DESC, webhook_deliveries.id DESC
+LIMIT ?7
 `
 
 type ListDeliveriesParams struct {
@@ -267,6 +270,8 @@ type ListDeliveriesParams struct {
 	WebhookID   interface{} `json:"webhook_id"`
 	Status      interface{} `json:"status"`
 	PostID      interface{} `json:"post_id"`
+	AfterAt     interface{} `json:"after_at"`
+	AfterID     string      `json:"after_id"`
 	Lim         int64       `json:"lim"`
 }
 
@@ -276,6 +281,8 @@ func (q *Queries) ListDeliveries(ctx context.Context, arg ListDeliveriesParams) 
 		arg.WebhookID,
 		arg.Status,
 		arg.PostID,
+		arg.AfterAt,
+		arg.AfterID,
 		arg.Lim,
 	)
 	if err != nil {

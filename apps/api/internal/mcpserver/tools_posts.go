@@ -423,9 +423,14 @@ func (t *tools) revokePreviewLink(ctx context.Context, _ *mcp.CallToolRequest, i
 	return done(map[string]any{"revoked": true, "id": in.PreviewID}, t.svc.RevokePreviewLink(ctx, t.principal(ctx), in.PostID, in.PreviewID))
 }
 
-func (t *tools) listPostComments(ctx context.Context, _ *mcp.CallToolRequest, in postRef) (*mcp.CallToolResult, any, error) {
-	c, err := t.svc.ListPostComments(ctx, t.principal(ctx), in.PostID)
-	return nil, map[string]any{"comments": c}, err
+type listCommentsIn struct {
+	PostID string `json:"post_id" jsonschema:"post ID (post_...)"`
+	Cursor string `json:"cursor,omitempty" jsonschema:"next_cursor of the previous page (500 comments a page), for later comments"`
+}
+
+func (t *tools) listPostComments(ctx context.Context, _ *mcp.CallToolRequest, in listCommentsIn) (*mcp.CallToolResult, any, error) {
+	c, err := t.svc.ListPostComments(ctx, t.principal(ctx), in.PostID, 0, in.Cursor)
+	return nil, map[string]any{"comments": c.Data, "next_cursor": c.NextCursor}, err
 }
 
 type commentReplyIn struct {
@@ -473,7 +478,7 @@ func (t *tools) retryTarget(ctx context.Context, _ *mcp.CallToolRequest, in targ
 }
 
 func (t *tools) listRequestedWork(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
-	w, err := t.svc.ListRequestedWork(ctx, t.principal(ctx))
+	w, err := t.svc.ListRequestedWork(ctx, t.principal(ctx), 0) // the oldest 100: a queue that drains as results come in
 	return nil, map[string]any{"work": w}, err
 }
 

@@ -802,8 +802,8 @@ func TestWebhookSSRFPolicy(t *testing.T) {
 	defer func() { cancel(); <-done }()
 	svc.TestWebhook(context.Background(), p, wh.ID)
 	waitFor(t, func() bool {
-		d, _ := svc.ListDeliveries(context.Background(), p, wh.ID, "failed", "", 10)
-		return len(d) == 1 && strings.Contains(d[0].LastError, "loopback")
+		d, _ := svc.ListDeliveries(context.Background(), p, wh.ID, "failed", "", 10, "")
+		return len(d.Data) == 1 && strings.Contains(d.Data[0].LastError, "loopback")
 	})
 	if hit.Load() {
 		t.Fatal("loopback receiver was contacted despite policy")

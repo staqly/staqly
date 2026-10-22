@@ -1586,7 +1586,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** The post's feedback threads: reviewers' comments from its preview pages (with their email) and the team's replies, oldest first (posts:read) */
+        /** The post's feedback threads: reviewers' comments from its preview pages (with their email) and the team's replies, oldest first, 500 a page by default (at most 1000) (posts:read) */
         get: operations["listPostComments"];
         put?: never;
         /** Comment on the post's feedback as the team (a reply with parent_id, or a new thread) (posts:write) */
@@ -1886,7 +1886,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the workspace's post tags, most used first (posts:read) */
+        /** List the workspace's post tags, most used first, the 500 most used at most (posts:read) */
         get: operations["listTags"];
         put?: never;
         post?: never;
@@ -1908,6 +1908,8 @@ export interface paths {
          * @description Targets on your own automation (provider `custom`) that are publishing and wait for a result
          *     (`kind: target`, with the post and the channel), and schedules of `source: agent` whose last run
          *     found nothing to publish (`kind: posts`, with the schedule). Each entry says when it was requested.
+         *     Targets come oldest first, at most `limit` of them (100 by default, at most 500): it is a queue that
+         *     drains as results come in, so ask again for the rest.
          */
         get: operations["listRequestedWork"];
         put?: never;
@@ -2890,7 +2892,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Delivery history */
+        /** Delivery history, newest first (50 a page by default, at most 200; next_cursor for older ones) */
         get: operations["listWebhookDeliveries"];
         put?: never;
         post?: never;
@@ -8429,7 +8431,12 @@ export interface operations {
     };
     listPostComments: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Comments per page (default 500, at most 1000) */
+                limit?: number;
+                /** @description Opaque keyset cursor (the previous page's next_cursor) */
+                cursor?: components["parameters"]["cursor"];
+            };
             header?: never;
             path: {
                 id: components["parameters"]["id"];
@@ -8446,12 +8453,15 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["PostComment"][];
+                        /** @description Later comments: pass it as cursor; absent on the last page */
+                        next_cursor?: string;
                     };
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
         };
     };
@@ -9027,7 +9037,10 @@ export interface operations {
     };
     listRequestedWork: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Waiting targets at most (default 100, at most 500) */
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -11357,6 +11370,8 @@ export interface operations {
                 post_id?: string;
                 /** @description Page size (default 50, at most 200) */
                 limit?: components["parameters"]["limit"];
+                /** @description Opaque keyset cursor (the previous page's next_cursor) */
+                cursor?: components["parameters"]["cursor"];
             };
             header?: never;
             path?: never;
@@ -11372,11 +11387,14 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["Delivery"][];
+                        /** @description Older deliveries: pass it as cursor; absent on the last page */
+                        next_cursor?: string;
                     };
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
         };
     };

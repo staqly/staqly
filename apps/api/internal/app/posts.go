@@ -1588,7 +1588,10 @@ type WorkItem struct {
 	RequestedAt string     `json:"requested_at"`
 }
 
-func (s *Service) ListRequestedWork(ctx context.Context, p Principal) ([]WorkItem, error) {
+// ListRequestedWork lists what your automation owes, oldest first: posts waiting for a custom target's result
+// (the oldest limit of them: 100 by default, at most 500; it is a queue that drains as results come in) and
+// schedules asking for posts.
+func (s *Service) ListRequestedWork(ctx context.Context, p Principal, limit int) ([]WorkItem, error) {
 	if err := p.require(ScopePostsRead); err != nil {
 		return nil, err
 	}
@@ -1605,7 +1608,7 @@ func (s *Service) ListRequestedWork(ctx context.Context, p Principal) ([]WorkIte
 		cols[id] = c
 		return c
 	}
-	rows, err := s.Q.WaitingCustomTargets(ctx, p.WorkspaceID)
+	rows, err := s.Q.WaitingCustomTargets(ctx, db.WaitingCustomTargetsParams{WorkspaceID: p.WorkspaceID, Lim: int64(clampLimit(limit, 100, 500))})
 	if err != nil {
 		return nil, err
 	}

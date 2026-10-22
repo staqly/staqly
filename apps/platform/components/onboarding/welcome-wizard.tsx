@@ -834,7 +834,6 @@ async function applyDraft(
 
   for (const email of draft.invites?.emails ?? []) {
     // One at a time: each invitation is its own request and its own error.
-    // eslint-disable-next-line no-await-in-loop
     await api.invite(email, draft.invites!.role).then(
       () => invited++,
       // Already invited (a retry after a later step failed, or a reload mid-way) counts as invited.

@@ -43,7 +43,10 @@ WHERE webhook_deliveries.workspace_id = @workspace_id
   AND (sqlc.narg(status) IS NULL OR webhook_deliveries.status = sqlc.narg(status))
   AND (sqlc.narg(post_id) IS NULL OR webhook_deliveries.event_id IN (
     SELECT ev.id FROM events ev WHERE ev.workspace_id = @workspace_id AND ev.item_id = sqlc.narg(post_id)))
-ORDER BY webhook_deliveries.created_at DESC
+  -- Keyset: the page after (created_at, id) of the previous one's last row ('' = the first page).
+  AND (@after_at = '' OR webhook_deliveries.created_at < @after_at
+    OR (webhook_deliveries.created_at = @after_at AND webhook_deliveries.id < @after_id))
+ORDER BY webhook_deliveries.created_at DESC, webhook_deliveries.id DESC
 LIMIT @lim;
 
 -- name: GetDelivery :one
