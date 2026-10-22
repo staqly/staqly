@@ -523,7 +523,7 @@ func linkedinError(status int, body string) error {
 	case status == http.StatusForbidden && strings.Contains(detail, "partnerApiSocialActions"):
 		// For whoever runs the server: "Share on LinkedIn" posts, but comments need the app approved for
 		// LinkedIn's Community Management API.
-		return &Failure{Kind: ErrRejected, Msg: "LinkedIn does not let this server's app comment yet (" + detail + ")"}
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn hasn't enabled comments for this connection yet (" + detail + "). The post itself is live"}
 	case status == http.StatusForbidden:
 		// For whoever runs the server: the app needs the "Share on LinkedIn" product.
 		return &Failure{Kind: ErrRejected, Msg: "LinkedIn refused it (" + detail + ")"}

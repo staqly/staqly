@@ -59,7 +59,7 @@ import { apiFieldErrors } from '@/lib/form-errors'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { applyLinks, linksNotice } from '@/lib/links'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { charCount, isLocked, postTitle, xLength } from '@/lib/posts'
+import { charCount, isLocked, postTitle, splitDeliveryError, xLength } from '@/lib/posts'
 import { ProviderIcon } from '@/lib/providers'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
 import {
@@ -435,7 +435,7 @@ function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
           <RotateCcw /> Retry
         </Button>
       )}
-      {target.error && <span className="basis-full text-destructive wrap-anywhere">{target.error}</span>}
+      {target.error && <DeliveryError error={target.error} />}
       {(target.replies?.length ?? 0) > 0 && (
         <ol className="grid basis-full gap-1 border-l pl-3" aria-label={`Comments on ${target.channel_name}`}>
           {target.replies!.map((r) => {
@@ -471,13 +471,30 @@ function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
                     Open <ExternalLink className="size-3" aria-hidden />
                   </a>
                 )}
-                {r.error && <span className="basis-full text-destructive wrap-anywhere">{r.error}</span>}
+                {r.error && <DeliveryError error={r.error} />}
               </li>
             )
           })}
         </ol>
       )}
     </div>
+  )
+}
+
+/** Why a channel or a comment failed: the sentence first, the platform's own text folded under it. */
+function DeliveryError({ error }: { error: string }) {
+  const { summary, detail } = splitDeliveryError(error)
+
+  return (
+    <Callout tone="danger" size="xs" className="basis-full" data-testid="delivery-error">
+      <p>{summary}</p>
+      {detail && (
+        <details className="mt-1 text-muted-foreground">
+          <summary className="cursor-pointer select-none">Technical details</summary>
+          <code className="mt-1 block font-mono wrap-anywhere">{detail}</code>
+        </details>
+      )}
+    </Callout>
   )
 }
 
