@@ -59,7 +59,7 @@ import { apiFieldErrors } from '@/lib/form-errors'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { applyLinks, linksNotice } from '@/lib/links'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { charCount, isLocked, postTitle, xLength } from '@/lib/posts'
+import { charCount, isLocked, postTitle, splitDeliveryError, xLength } from '@/lib/posts'
 import { ProviderIcon } from '@/lib/providers'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
 import {
@@ -76,7 +76,7 @@ import {
 } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 import { formatSchedule, formatTime, nextFullHour } from '@/lib/schedule'
-import { normalizeTag } from '@/lib/tags'
+import { appendHashtags, normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 import { xPostsWarning } from '@/lib/x-posts'
 
@@ -111,9 +111,13 @@ interface Count {
   links: string[]
 }
 
-/** A channel's count for this text, as the API will count it at publish time. */
-function countFor(channel: Channel, text: string, provider?: Provider): Count {
-  const out = applyLinks(channel.links, text)
+/**
+ * A channel's count for this text, as the API will count it at publish time: with the post's tags as hashtags
+ * at the end (not for your own automation, which gets them apart; comments get none).
+ */
+function countFor(channel: Channel, text: string, provider?: Provider, tags: readonly string[] = []): Count {
+  const links = applyLinks(channel.links, text)
+  const out = { ...links, text: channel.provider === 'custom' ? links.text : appendHashtags(links.text, tags) }
 
   // X counts its own way (CJK and emoji 2, a link 23): the API checks that length, so the counter shows it.
   const n = channel.provider === 'x' ? xLength(out.text) : charCount(out.text)
@@ -435,7 +439,7 @@ function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
           <RotateCcw /> Retry
         </Button>
       )}
-      {target.error && <span className="basis-full text-destructive wrap-anywhere">{target.error}</span>}
+      {target.error && <DeliveryError error={target.error} />}
       {(target.replies?.length ?? 0) > 0 && (
         <ol className="grid basis-full gap-1 border-l pl-3" aria-label={`Comments on ${target.channel_name}`}>
           {target.replies!.map((r) => {
@@ -457,7 +461,7 @@ function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
                       publishing: 'Publishing',
                       published: 'Published',
                       failed: 'Failed',
-                      skipped: 'Not sent (this platform takes no comments)',
+                      skipped: 'Not sent (no comments on this channel)',
                     }[r.status]
                   }
                 </span>
@@ -471,13 +475,59 @@ function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
                     Open <ExternalLink className="size-3" aria-hidden />
                   </a>
                 )}
-                {r.error && <span className="basis-full text-destructive wrap-anywhere">{r.error}</span>}
+                {r.error && <DeliveryError error={r.error} />}
               </li>
             )
           })}
         </ol>
       )}
     </div>
+  )
+}
+
+/**
+ * Over the comments: the picked channels that won't post them (a platform without comments, or a connection not
+ * allowed to, like LinkedIn without its Community Management API), so nobody finds out after the post went out.
+ * Your own automation is left out: it gets the comments with the post.
+ */
+function CommentsNotice({
+  parts,
+  picked,
+  providers,
+}: {
+  parts: ThreadPart[]
+  picked: Channel[]
+  providers: Provider[]
+}) {
+  const without = picked.filter((c) => !c.comments && c.provider !== 'custom')
+
+  if (!parts.some((p) => p.content.trim() || p.media.length) || !without.length) {
+    return null
+  }
+
+  const named = without.map((c) => `${c.name} (${providers.find((p) => p.id === c.provider)?.name ?? c.provider})`)
+
+  return (
+    <Callout tone="warning" size="xs" data-testid="comments-notice">
+      {named.join(', ')} can't post comments: the post goes out there without them.
+    </Callout>
+  )
+}
+
+/** Why a channel or a comment failed: the sentence first, the platform's own text folded under it. */
+function DeliveryError({ error }: { error: string }) {
+  const { summary, detail } = splitDeliveryError(error)
+
+  return (
+    <Callout tone="danger" size="xs" className="basis-full" data-testid="delivery-error">
+      <p>{summary}</p>
+      {detail && (
+        <details className="mt-1 text-muted-foreground">
+          <summary className="cursor-pointer select-none">Technical details</summary>
+          <code className="mt-1 block font-mono wrap-anywhere">{detail}</code>
+        </details>
+      )}
+    </Callout>
   )
 }
 
@@ -881,6 +931,8 @@ interface ChannelEditorProps {
   picked?: Channel[]
   overrides?: Record<string, Override>
   providers: Provider[]
+  /** The post's tags: they go out as hashtags, so they count. */
+  tags: string[]
   onText: (channelId: string | undefined, text: string) => void
   onMedia: Dispatch<SetStateAction<Media[]>>
 }
@@ -901,13 +953,14 @@ const ChannelEditor = memo(
     picked,
     overrides,
     providers,
+    tags,
     onText,
     onMedia,
   }: ChannelEditorProps) {
     const providerOf = (c: Channel) => providers.find((p) => p.id === c.provider)
     const counts = channel
-      ? [countFor(channel, value, providerOf(channel))]
-      : (picked ?? NO_CHANNELS).map((c) => countFor(c, overrides?.[c.id]?.content ?? value, providerOf(c)))
+      ? [countFor(channel, value, providerOf(channel), tags)]
+      : (picked ?? NO_CHANNELS).map((c) => countFor(c, overrides?.[c.id]?.content ?? value, providerOf(c), tags))
 
     return (
       <div
@@ -1154,7 +1207,7 @@ function ComposerFooter({
           </ButtonGroup>
         </div>
       )}
-      {(error || inPast) && (
+      {(error || (inPast && !locked)) && (
         <FieldError className="basis-full text-right">{error ?? 'Pick a time in the future'}</FieldError>
       )}
     </div>
@@ -1403,7 +1456,8 @@ export function ComposerForm({
   const active = multi && tab !== 'all' ? picked.find((c) => c.id === tab) : undefined
   const shownTab = active?.id ?? 'all'
   const ownText = active ? (overrides[active.id]?.content ?? null) : null
-  const countsFor = (ch?: Channel): Count[] => (ch ? [ch] : picked).map((c) => countFor(c, textFor(c), providerOf(c)))
+  const countsFor = (ch?: Channel): Count[] =>
+    (ch ? [ch] : picked).map((c) => countFor(c, textFor(c), providerOf(c), tags))
   const { isLocal } = useMode()
   const xPosts = useXPosts({ enabled: !isLocal })
   const xOut = xPosts.data && !xPosts.data.unlimited && xPosts.data.left <= 0 ? xPostsWarning(xPosts.data) : ''
@@ -1660,6 +1714,7 @@ export function ComposerForm({
                     picked={ch ? undefined : picked}
                     overrides={ch ? undefined : overrides}
                     providers={providerList}
+                    tags={tags}
                     onText={onText}
                     onMedia={setMedia}
                   />
@@ -1669,6 +1724,7 @@ export function ComposerForm({
               </div>
 
               {/* Comments belong to the post as a whole: written on the shared tab, shown read only per channel. */}
+              {!active && <CommentsNotice parts={thread} picked={picked} providers={providerList} />}
               {!active && (
                 <ThreadEditor
                   parts={thread}

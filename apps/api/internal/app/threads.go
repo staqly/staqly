@@ -201,9 +201,7 @@ func (s *Service) startThread(ctx context.Context, q *db.Queries, row db.Post, c
 	replies := repliesFor(len(parts), "[]")
 	canReply := false
 	if ch, err := q.GetChannelByID(ctx, channelID); err == nil {
-		if e, ok := providers.Get(ch.Provider); ok {
-			_, canReply = e.Provider.(providers.Replier)
-		}
+		canReply = channelComments(ch) // the platform comments and this connection may
 	}
 	if !canReply || result.ExternalID == "" {
 		for i := range replies {

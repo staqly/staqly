@@ -112,3 +112,27 @@ func HasLiveLink(text string) bool {
 	}
 	return false
 }
+
+var hashtagUnsafe = regexp.MustCompile(`[^\p{L}\p{N}_]+`)
+
+// AppendHashtags ends text with the post's tags as hashtags ("client-a" becomes #clienta), on a line of
+// their own, leaving out those the text already has (any case) and tags with nothing left to make one.
+func AppendHashtags(text string, tags []string) string {
+	have := strings.ToLower(text)
+	var add []string
+	for _, t := range tags {
+		h := "#" + hashtagUnsafe.ReplaceAllString(strings.TrimPrefix(t, "#"), "")
+		if h == "#" || strings.Contains(have+" ", strings.ToLower(h)+" ") || strings.Contains(have, strings.ToLower(h)+"\n") {
+			continue
+		}
+		have += " " + strings.ToLower(h)
+		add = append(add, h)
+	}
+	if len(add) == 0 {
+		return text
+	}
+	if strings.TrimSpace(text) == "" {
+		return strings.Join(add, " ")
+	}
+	return strings.TrimRight(text, " \t\n") + "\n\n" + strings.Join(add, " ")
+}

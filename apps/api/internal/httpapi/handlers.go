@@ -873,6 +873,7 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	ch, err := s.svc.CompleteOAuth(r.Context(), principal(r), provider, q.Get("code"), q.Get("state"), s.oauthRedirect(provider), oauthExtra(q))
 	if err != nil {
+		s.log.WarnContext(r.Context(), "channel connection failed", "provider", provider, "err", err)
 		var ae *app.Error
 		if errors.As(err, &ae) {
 			land(url.Values{"error": {ae.Message}})

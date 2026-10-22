@@ -80,3 +80,27 @@ export function xLength(text: string) {
 
   return n
 }
+
+/**
+ * A delivery error as the server words it, "LinkedIn refused it (the platform's own text); staqly tries again",
+ * split into the sentence a person reads and the platform's text (the first parenthesised part) for the details.
+ */
+export function splitDeliveryError(error: string): { summary: string; detail: string } {
+  const open = error.indexOf(' (')
+
+  if (open < 0) {
+    return { summary: error, detail: '' }
+  }
+
+  let depth = 0
+
+  for (let i = open + 1; i < error.length; i++) {
+    if (error[i] === '(') {
+      depth++
+    } else if (error[i] === ')' && --depth === 0) {
+      return { summary: error.slice(0, open) + error.slice(i + 1), detail: error.slice(open + 2, i) }
+    }
+  }
+
+  return { summary: error, detail: '' }
+}

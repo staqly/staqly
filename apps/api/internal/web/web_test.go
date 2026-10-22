@@ -241,3 +241,25 @@ func TestEditorCSPPinsCDN(t *testing.T) {
 		t.Errorf("dashboard CSP allows jsDelivr: %s", dash)
 	}
 }
+
+// Was a bug: a failed connection lands on the callback page with ?error=... (the API's answer); forwarding
+// that to the API again made it wrap the error and redirect back, round and round. The platform's own answer
+// carries the state; the landing doesn't, so it is the page.
+func TestOAuthCallbackLandingIsThePage(t *testing.T) {
+	var forwarded []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		forwarded = append(forwarded, r.URL.Path+"?"+r.URL.RawQuery)
+		w.WriteHeader(302)
+	}))
+	defer upstream.Close()
+	u, _ := url.Parse(upstream.URL)
+	h := Handler(site, u, slog.New(slog.DiscardHandler), false, "")
+	if w := do(h, "GET", "/channels/callback/linkedin?error=The+connection+failed", nil, nil); w.Code != 200 || len(forwarded) != 0 {
+		t.Fatalf("landing: %d, forwarded %v", w.Code, forwarded)
+	}
+	do(h, "GET", "/channels/callback/linkedin?code=c&state=s", nil, nil)
+	do(h, "GET", "/channels/callback/linkedin?error=access_denied&state=s", nil, nil)
+	if len(forwarded) != 2 {
+		t.Fatalf("the platform's answers forwarded: %v", forwarded)
+	}
+}

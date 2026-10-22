@@ -69,7 +69,7 @@ A post is one piece of content on its way to one or more channels.
 | `status` | `draft`, `scheduled`, `publishing`, `published` or `failed` (see [below](#status-lifecycle)). |
 | `publish_at` | When it goes out. A draft keeps the time as a note after a cancel. |
 | `published_at` | When the last target was published. |
-| `tags` | Labels such as `launch` or `client-a`; `GET /v1/tags` counts them. |
+| `tags` | Labels such as `launch` or `client-a`; `GET /v1/tags` counts them. Every channel but your own automation gets them as hashtags at the end of the text (`#launch #clienta`), except those the text already has. |
 | `metadata` | Free JSON for your own use: prompt, model, campaign. |
 | `source` | Who created it: a client name, an agent, or `schedule:<name>` for posts a schedule fetched. |
 | `external_ref` | Your own reference. |

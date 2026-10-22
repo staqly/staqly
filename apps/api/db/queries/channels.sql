@@ -60,3 +60,6 @@ ON CONFLICT (workspace_id, provider) DO UPDATE SET credentials = excluded.creden
 
 -- name: DeleteProviderApp :execrows
 DELETE FROM provider_apps WHERE workspace_id = ? AND provider = ?;
+
+-- name: SetChannelComments :exec
+UPDATE channels SET comments = ? WHERE id = ?;
