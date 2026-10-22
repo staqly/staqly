@@ -148,11 +148,11 @@ describe('schedule page', () => {
 
     // A slot still ahead of now: two hours from now today, or tomorrow morning late in the evening (the week
     // grid holds tomorrow unless today is Sunday; then yesterday is the other day, so use today's last hour).
+    // Never 9, the entry's own slot: a drop there changes nothing.
     const hourNow = new Date().getHours()
+    const ahead = hourNow + 2 === 9 ? 10 : hourNow + 2
     const dropAt =
-      hourNow + 2 < 24
-        ? { day: dayKey(today), hour: hourNow + 2 }
-        : { day: dayKey(at(today.getDay() === 0 ? 0 : 1, 9)), hour: 23 }
+      ahead < 24 ? { day: dayKey(today), hour: ahead } : { day: dayKey(at(today.getDay() === 0 ? 0 : 1, 9)), hour: 23 }
     const dt = dataTransfer()
     const to = screen.getByTestId(`schedule-slot-${dropAt.day}-${dropAt.hour}`)
 
