@@ -83,8 +83,9 @@ a new address gets an account and a first workspace, like a first Google sign-in
 
 - The code works once, for 10 minutes. Five wrong tries end it, and a new code replaces the
   previous one.
-- One address gets at most one code every 30 seconds and five codes an hour. Each client IP
-  address has its own limit too.
+- One address gets at most one code every 30 seconds. Each asker (client IP address) can have five
+  codes an hour and 15 a day sent to an address, so nobody can use up someone else's codes; all
+  askers together get at most 60 a day per address. Each client IP has its own overall limit too.
 - The answer to "send a code" is the same whether or not the address has an account, so the page
   never tells anyone who uses Staqly.
 - Staqly stores only a hash of the code.
@@ -157,7 +158,7 @@ at least two (for example an email address and a passkey).
 |---|---|
 | `401 code_invalid` | A wrong code; the message says how many tries are left (5 per code). |
 | `410 code_expired` | The code is older than 10 minutes, was used, was replaced by a newer one or had too many wrong tries. Ask for a new one. |
-| `429 code_cooldown` or `rate_limited` | One code per address every 30 seconds and 5 per hour; wait the seconds in `Retry-After`. |
+| `429 code_cooldown` or `rate_limited` | One code per address every 30 seconds, and 5 per hour from one place; wait the seconds in `Retry-After`. |
 | No **Add passkey** button | Your browser doesn't support passkeys. A passkey works only on `app.staqly.ai`. |
 | `401 passkey_cloned` | The passkey's counter went backwards; remove it and add it again. |
 | `403 sign_in_with_account` | An API key doesn't open the dashboard: sign in with Google, an email code or a passkey. API keys keep working for agents and scripts. |

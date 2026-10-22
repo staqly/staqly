@@ -81,6 +81,24 @@ func (q *Queries) CloseEmailCodes(ctx context.Context, arg CloseEmailCodesParams
 	return err
 }
 
+const countEmailCodesFromSince = `-- name: CountEmailCodesFromSince :one
+SELECT COUNT(*) FROM email_codes WHERE email = ? AND client = ? AND created_at > ?
+`
+
+type CountEmailCodesFromSinceParams struct {
+	Email     string `json:"email"`
+	Client    string `json:"client"`
+	CreatedAt string `json:"created_at"`
+}
+
+// The codes one asker (client) had sent to an address.
+func (q *Queries) CountEmailCodesFromSince(ctx context.Context, arg CountEmailCodesFromSinceParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countEmailCodesFromSince, arg.Email, arg.Client, arg.CreatedAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countEmailCodesSince = `-- name: CountEmailCodesSince :one
 SELECT COUNT(*) FROM email_codes WHERE email = ? AND created_at > ?
 `
@@ -98,7 +116,7 @@ func (q *Queries) CountEmailCodesSince(ctx context.Context, arg CountEmailCodesS
 }
 
 const createEmailCode = `-- name: CreateEmailCode :exec
-INSERT INTO email_codes (id, email, purpose, user_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO email_codes (id, email, purpose, user_id, code_hash, created_at, expires_at, client) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateEmailCodeParams struct {
@@ -109,6 +127,7 @@ type CreateEmailCodeParams struct {
 	CodeHash  string `json:"code_hash"`
 	CreatedAt string `json:"created_at"`
 	ExpiresAt string `json:"expires_at"`
+	Client    string `json:"client"`
 }
 
 func (q *Queries) CreateEmailCode(ctx context.Context, arg CreateEmailCodeParams) error {
@@ -120,6 +139,7 @@ func (q *Queries) CreateEmailCode(ctx context.Context, arg CreateEmailCodeParams
 		arg.CodeHash,
 		arg.CreatedAt,
 		arg.ExpiresAt,
+		arg.Client,
 	)
 	return err
 }
@@ -166,7 +186,7 @@ func (q *Queries) GetIdentity(ctx context.Context, arg GetIdentityParams) (UserI
 }
 
 const latestEmailCode = `-- name: LatestEmailCode :one
-SELECT id, email, purpose, user_id, code_hash, attempts, created_at, expires_at, verified_at, used_at FROM email_codes WHERE email = ? AND purpose = ? AND user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1
+SELECT id, email, purpose, user_id, code_hash, attempts, created_at, expires_at, verified_at, used_at, client FROM email_codes WHERE email = ? AND purpose = ? AND user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1
 `
 
 type LatestEmailCodeParams struct {
@@ -189,6 +209,7 @@ func (q *Queries) LatestEmailCode(ctx context.Context, arg LatestEmailCodeParams
 		&i.ExpiresAt,
 		&i.VerifiedAt,
 		&i.UsedAt,
+		&i.Client,
 	)
 	return i, err
 }

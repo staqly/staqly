@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strings"
@@ -23,11 +26,14 @@ const (
 	emailCodeTTL         = 10 * time.Minute
 	emailCodeCooldown    = 30 * time.Second
 	emailCodeMaxAttempts = 5
-	// emailCodesPerHour: codes one address can receive per hour (per client IP: httpapi).
+	// emailCodesPerHour: codes one asker (a client address) can have sent to one address per hour, and
+	// emailCodesPerDay per rolling 24 hours. Counted per asker, so nobody can use up another person's codes
+	// (a lockout of an address by asking for its codes); every purpose counts.
 	emailCodesPerHour = 5
-	// emailCodesPerDay: and per rolling 24 hours, so guessing stays bounded over days (15 codes x 5 tries:
-	// 75 guesses a day out of a million). Every purpose counts, like the hourly cap.
-	emailCodesPerDay = 15
+	emailCodesPerDay  = 15
+	// emailCodesPerAddressDay: all askers together, so guessing stays bounded over days whoever asks (60 codes
+	// x 5 tries: 300 guesses a day out of a million).
+	emailCodesPerAddressDay = 60
 
 	purposeSignIn = "sign_in"
 	purposeLink   = "link"
@@ -58,6 +64,26 @@ func sixDigits() string {
 }
 
 func emailCodeHash(id, code string) string { return hashSecret(id + ":" + code) }
+
+type clientIPKey struct{}
+
+// WithClientIP: the request's client address (the rate-limit key: an IPv4 address or an IPv6 /64), for the
+// limits counted per asker (email codes).
+func WithClientIP(ctx context.Context, ip string) context.Context {
+	return context.WithValue(ctx, clientIPKey{}, ip)
+}
+
+// clientKey: the asker as stored with an email code, a keyed hash of the client address (never the address
+// itself); "" outside a request.
+func (s *Service) clientKey(ctx context.Context) string {
+	ip, _ := ctx.Value(clientIPKey{}).(string)
+	if ip == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, s.Cfg.SecretKey)
+	mac.Write([]byte("email-code-client:" + ip))
+	return hex.EncodeToString(mac.Sum(nil)[:12])
+}
 
 // StartEmailSignIn mails a sign-in code to the address, whether or not it has an account.
 func (s *Service) StartEmailSignIn(ctx context.Context, email string) (EmailCodeSent, error) {
@@ -135,6 +161,7 @@ func (s *Service) sendEmailCode(ctx context.Context, email, purpose, userID stri
 	}
 	now := s.Now().UTC()
 	code, id := sixDigits(), newID("emc")
+	client := s.clientKey(ctx)
 	err = s.tx(ctx, func(q *db.Queries) error {
 		latest, err := q.LatestEmailCode(ctx, db.LatestEmailCodeParams{Email: email, Purpose: purpose, UserID: userID})
 		if err != nil && !isNoRows(err) {
@@ -147,7 +174,7 @@ func (s *Service) sendEmailCode(ctx context.Context, email, purpose, userID stri
 					Details: map[string]any{"resend_in": wait}}
 			}
 		}
-		n, err := q.CountEmailCodesSince(ctx, db.CountEmailCodesSinceParams{Email: email, CreatedAt: formatTime(now.Add(-time.Hour))})
+		n, err := q.CountEmailCodesFromSince(ctx, db.CountEmailCodesFromSinceParams{Email: email, Client: client, CreatedAt: formatTime(now.Add(-time.Hour))})
 		if err != nil {
 			return err
 		}
@@ -155,11 +182,18 @@ func (s *Service) sendEmailCode(ctx context.Context, email, purpose, userID stri
 			return &Error{Code: "rate_limited", Status: 429, Message: "too many codes for this address: wait an hour and try again"}
 		}
 		// Purged after 24 h (below), so the day's codes are all still here.
-		n, err = q.CountEmailCodesSince(ctx, db.CountEmailCodesSinceParams{Email: email, CreatedAt: formatTime(now.Add(-24 * time.Hour))})
+		n, err = q.CountEmailCodesFromSince(ctx, db.CountEmailCodesFromSinceParams{Email: email, Client: client, CreatedAt: formatTime(now.Add(-24 * time.Hour))})
 		if err != nil {
 			return err
 		}
 		if n >= emailCodesPerDay {
+			return &Error{Code: "rate_limited", Status: 429, Message: "too many codes for this address today: try again tomorrow"}
+		}
+		n, err = q.CountEmailCodesSince(ctx, db.CountEmailCodesSinceParams{Email: email, CreatedAt: formatTime(now.Add(-24 * time.Hour))})
+		if err != nil {
+			return err
+		}
+		if n >= emailCodesPerAddressDay {
 			return &Error{Code: "rate_limited", Status: 429, Message: "too many codes for this address today: try again tomorrow"}
 		}
 		if err := q.PurgeEmailCodes(ctx, formatTime(now.Add(-24*time.Hour))); err != nil {
@@ -169,7 +203,7 @@ func (s *Service) sendEmailCode(ctx context.Context, email, purpose, userID stri
 			return err
 		}
 		return q.CreateEmailCode(ctx, db.CreateEmailCodeParams{ID: id, Email: email, Purpose: purpose, UserID: userID,
-			CodeHash: emailCodeHash(id, code), CreatedAt: formatTime(now), ExpiresAt: formatTime(now.Add(emailCodeTTL))})
+			CodeHash: emailCodeHash(id, code), CreatedAt: formatTime(now), ExpiresAt: formatTime(now.Add(emailCodeTTL)), Client: client})
 	})
 	if err != nil {
 		return EmailCodeSent{}, err
