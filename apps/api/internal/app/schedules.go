@@ -603,7 +603,7 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 				sourceErr = err
 				result = "endpoint failed: " + truncateRunes(err.Error(), 200)
 			} else {
-				waiting = created
+				waiting, onePerRun = created, false // what the endpoint answers all goes out
 			}
 		default:
 			result = "nothing to publish"

@@ -123,7 +123,8 @@ func seenAgent(t *tools) mcp.Middleware {
 
 // dropNullArgs removes top-level arguments that are null before the input schema is checked. Clients
 // such as Codex (OpenAI models) send every optional parameter, unset ones as null, which the schema of a
-// string or object field rejects; an omitted field means the same thing.
+// string or object field rejects; an omitted field means the same thing. So null never means "clear" in a
+// tool: fields that can be cleared take an empty string.
 func dropNullArgs(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		if p, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok && method == "tools/call" && len(p.Arguments) > 0 {
