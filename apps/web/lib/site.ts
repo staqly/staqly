@@ -24,6 +24,8 @@ export const btnSecondary =
 export const arrowLink =
   'inline-flex items-center gap-1.5 text-sm font-semibold text-brand-strong hover:underline pointer-coarse:-my-2.5 pointer-coarse:py-2.5'
 export const wrap = 'mx-auto w-full max-w-6xl px-5 sm:px-8'
+// The header and the home hero: as wide as the docs home hero (docs.staqly.ai), so the hero text lines up with the logo.
+export const wrapWide = 'mx-auto w-full max-w-7xl px-5 sm:px-8'
 
 export const SITE_URL = env.siteUrl
 export const TAGLINE = 'The local-first social media scheduler for people and their AI agents'
