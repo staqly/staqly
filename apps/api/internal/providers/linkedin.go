@@ -141,7 +141,9 @@ func (l LinkedIn) Exchange(ctx context.Context, app App, redirect, code string, 
 	creds := t.into(Credentials{}, time.Now())
 	creds["person_id"] = me.Sub
 	// The profile's public address needs a permission only partners get, so the channel shows the name.
-	return creds, Profile{Name: me.Name, AvatarURL: me.Picture}, nil
+	// Comments need w_member_social_feed (the Community Management API); "Share on LinkedIn" only posts.
+	noComments := t.Scope != "" && !strings.Contains(t.Scope, "w_member_social_feed")
+	return creds, Profile{Name: me.Name, AvatarURL: me.Picture, NoComments: noComments}, nil
 }
 
 // Refresh renews the token with a refresh token when LinkedIn gave one (approved partner apps). Without one the

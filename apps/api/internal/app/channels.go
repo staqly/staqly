@@ -35,6 +35,9 @@ type Channel struct {
 	// GroupID is the channel group it belongs to (every channel is in exactly one; Default unless moved).
 	GroupID   string `json:"group_id"`
 	LastError string `json:"last_error"`
+	// Comments: a post's comments go out under it on this channel (its platform comments and this connection
+	// may); otherwise they are not sent here.
+	Comments  bool   `json:"comments"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 	// Activity is read from the channel's targets; only GET /channels and GET /channels/{id} include it.
@@ -58,7 +61,18 @@ func toChannelOut(c db.Channel) Channel {
 		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 	_ = json.Unmarshal([]byte(c.Settings), &out.Settings)
 	out.Links = channelLinks(c)
+	out.Comments = channelComments(c)
 	return out
+}
+
+// channelComments: the platform posts comments and this connection is allowed to.
+func channelComments(c db.Channel) bool {
+	e, ok := providers.Get(c.Provider)
+	if !ok {
+		return false
+	}
+	_, replies := e.Provider.(providers.Replier)
+	return replies && c.Comments != 0
 }
 
 // channelLinks is the links mode a channel publishes with: its own setting, else its platform's default.
@@ -348,7 +362,7 @@ func (s *Service) saveChannel(ctx context.Context, p Principal, e providers.Entr
 	now := s.now()
 	row := db.Channel{ID: newID("ch"), WorkspaceID: p.WorkspaceID, Provider: e.ID(), Name: name, Handle: profile.Handle,
 		AvatarUrl: profile.AvatarURL, ProfileUrl: profile.ProfileURL, Status: "connected", Credentials: sealed,
-		Settings: mustJSON(settings), CreatedAt: now, UpdatedAt: now}
+		Settings: mustJSON(settings), Comments: boolInt(!profile.NoComments), CreatedAt: now, UpdatedAt: now}
 	err = s.tx(ctx, func(q *db.Queries) error {
 		if err := s.useChannelQuota(ctx, q, p.WorkspaceID); err != nil {
 			return err
@@ -359,6 +373,9 @@ func (s *Service) saveChannel(ctx context.Context, p Principal, e providers.Entr
 		if err := q.CreateChannel(ctx, db.CreateChannelParams{ID: row.ID, WorkspaceID: row.WorkspaceID, Provider: row.Provider,
 			Name: row.Name, Handle: row.Handle, AvatarUrl: row.AvatarUrl, ProfileUrl: row.ProfileUrl, Status: row.Status,
 			Credentials: row.Credentials, Settings: row.Settings, GroupID: row.GroupID, CreatedAt: now, UpdatedAt: now}); err != nil {
+			return err
+		}
+		if err := q.SetChannelComments(ctx, db.SetChannelCommentsParams{Comments: row.Comments, ID: row.ID}); err != nil {
 			return err
 		}
 		_, err := s.emitRef(ctx, q, p, "channel.connected", Ref{Channel: row.ID}, map[string]any{"channel": toChannelOut(row)})
@@ -533,7 +550,11 @@ func (s *Service) reconnectChannel(ctx context.Context, p Principal, row db.Chan
 	}
 	row.Credentials, row.Status, row.LastError, row.UpdatedAt = sealed, "connected", "", s.now()
 	row.AvatarUrl, row.ProfileUrl = firstNonEmpty(profile.AvatarURL, row.AvatarUrl), firstNonEmpty(profile.ProfileURL, row.ProfileUrl)
+	row.Comments = boolInt(!profile.NoComments) // a reconnect through an app that may comment turns them on
 	err = s.tx(ctx, func(q *db.Queries) error {
+		if err := q.SetChannelComments(ctx, db.SetChannelCommentsParams{Comments: row.Comments, ID: row.ID}); err != nil {
+			return err
+		}
 		if err := q.UpdateChannel(ctx, db.UpdateChannelParams{Name: row.Name, Handle: row.Handle, AvatarUrl: row.AvatarUrl,
 			ProfileUrl: row.ProfileUrl, Status: row.Status, Credentials: row.Credentials, Settings: row.Settings, LastError: "",
 			UpdatedAt: row.UpdatedAt, WorkspaceID: p.WorkspaceID, ID: row.ID}); err != nil {
@@ -1010,4 +1031,11 @@ func (s *Service) channelNeedsReconnect(ctx context.Context, row db.Channel, cau
 		_, err := s.emitRef(ctx, q, sys, "channel.needs_reconnect", Ref{Channel: row.ID}, map[string]any{"channel": toChannelOut(row), "error": cause.Error()})
 		return err
 	})
+}
+
+func boolInt(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
 }

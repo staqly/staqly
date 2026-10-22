@@ -203,6 +203,9 @@ type Profile struct {
 	Name       string `json:"name"`
 	AvatarURL  string `json:"avatar_url"`
 	ProfileURL string `json:"profile_url"`
+	// NoComments: this connection may not post comments under its posts (LinkedIn without the Community
+	// Management API); the post's comments are then not sent on it.
+	NoComments bool `json:"-"`
 }
 
 // Settings are the per-target values of SettingsFields (strings; booleans as "true"/"false").
