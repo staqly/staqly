@@ -16,7 +16,6 @@ import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
-import { ChannelAvatar } from '@/components/channels/channel-avatars'
 import { ErrorState } from '@/components/common/error-state'
 import { PageIcon } from '@/components/common/page-header'
 import { Button } from '@/components/ui/button'
@@ -28,6 +27,7 @@ import { useIsCoarsePointer, useIsMobile } from '@/hooks/use-mobile'
 import type { Collection, Post, PostTarget } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { postTitle } from '@/lib/posts'
+import { ProviderTile } from '@/lib/providers'
 import { useCollections, usePostsInfinite, useRefetchOnForeignChange, useSchedules } from '@/lib/queries'
 import { safeCssColor } from '@/lib/safe'
 import {
@@ -173,13 +173,7 @@ const Entry = memo(function Entry({
   const time = formatTime(new Date(post.publish_at!))
   const muted = state === 'published'
   const title = postTitle(post)
-  const channel = target && {
-    id: target.channel_id,
-    provider: target.provider,
-    name: target.channel_name,
-    avatar_url: target.avatar_url,
-  }
-  const where = channel ? ` on ${channel.name}` : ''
+  const where = target ? ` on ${target.channel_name}` : ''
 
   return (
     <button
@@ -206,12 +200,12 @@ const Entry = memo(function Entry({
       )}
       style={color ? { borderLeftColor: color } : undefined}
     >
-      {/* One line: the state as an icon, the time, the title, the channel. The state's name and the collection are
-          in the title and the accessible name. */}
+      {/* One line: the state as an icon, the time, the title, the platform's icon. The state's name, the channel's
+          name and the collection are in the title and the accessible name. */}
       <StateIcon aria-hidden className={cn('size-4 shrink-0', tone.text, state === 'publishing' && 'animate-spin')} />
       <span className="shrink-0 font-medium text-foreground tabular-nums">{time}</span>
       <span className="min-w-0 flex-1 truncate font-medium text-foreground">{title}</span>
-      {channel && <ChannelAvatar channel={channel} className="size-5 shrink-0" />}
+      {target && <ProviderTile id={target.provider} className="size-5 shrink-0" />}
     </button>
   )
 })
