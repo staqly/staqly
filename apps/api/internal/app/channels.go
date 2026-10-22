@@ -898,6 +898,14 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	if err := s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
 		return err
 	}
+	if old, ok := credentialsExpiry(creds); ok {
+		if exp, ok := credentialsExpiry(fresh); ok && exp.Equal(old) {
+			// Nothing was renewed (a platform without refresh tokens, like LinkedIn for most apps): look again when
+			// the token runs out, so the channel turns needs_reconnect and alerts then, not at its next post.
+			_ = s.enqueue(ctx, s.W, row.WorkspaceID, "refresh_channel", "refresh_channel:"+row.ID, map[string]any{"channel_id": row.ID}, exp.Add(time.Minute), 3)
+			return nil
+		}
+	}
 	s.scheduleRefresh(ctx, row, fresh)
 	return nil
 }
