@@ -222,7 +222,7 @@ func (q *Queries) GetSessionByHash(ctx context.Context, tokenHash string) (Sessi
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
-SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, account_id, onboarded_at, entitlements, timezone FROM workspaces WHERE id = ?
+SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone FROM workspaces WHERE id = ?
 `
 
 func (q *Queries) GetWorkspace(ctx context.Context, id string) (Workspace, error) {
@@ -241,7 +241,6 @@ func (q *Queries) GetWorkspace(ctx context.Context, id string) (Workspace, error
 		&i.StripeSubscriptionID,
 		&i.SubscriptionStatus,
 		&i.ProcessingTimeoutSeconds,
-		&i.AccountID,
 		&i.OnboardedAt,
 		&i.Entitlements,
 		&i.Timezone,
@@ -250,7 +249,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, id string) (Workspace, error
 }
 
 const getWorkspaceByRecoveryVerifier = `-- name: GetWorkspaceByRecoveryVerifier :one
-SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, account_id, onboarded_at, entitlements, timezone FROM workspaces WHERE recovery_verifier = ?
+SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone FROM workspaces WHERE recovery_verifier = ?
 `
 
 func (q *Queries) GetWorkspaceByRecoveryVerifier(ctx context.Context, recoveryVerifier string) (Workspace, error) {
@@ -269,7 +268,6 @@ func (q *Queries) GetWorkspaceByRecoveryVerifier(ctx context.Context, recoveryVe
 		&i.StripeSubscriptionID,
 		&i.SubscriptionStatus,
 		&i.ProcessingTimeoutSeconds,
-		&i.AccountID,
 		&i.OnboardedAt,
 		&i.Entitlements,
 		&i.Timezone,

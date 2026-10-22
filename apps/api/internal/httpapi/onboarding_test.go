@@ -31,12 +31,10 @@ func TestOnboardingAccounts(t *testing.T) {
 	if !s.Onboarded {
 		t.Fatalf("finished: %+v", s)
 	}
-	// Reopened from the user menu and finished again with a name: the account (the sidebar) takes it.
+	// Reopened from the user menu and finished again with a name: the person (the sidebar) takes it.
 	e.as(owner, "POST", "/v1/session/onboarded", map[string]any{"name": "Ana Creator"}, 204, nil)
-	var acc struct{ Name string }
-	e.as(owner, "GET", "/v1/account", nil, 200, &acc)
-	if acc.Name != "Ana Creator" {
-		t.Fatalf("account name: %+v", acc)
+	if s := e.session(owner); s.User.Name != "Ana Creator" {
+		t.Fatalf("name: %+v", s.User)
 	}
 	e.as(owner, "POST", "/v1/session/onboarded", map[string]any{"name": string(make([]byte, 101))}, 422, nil)
 }

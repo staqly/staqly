@@ -90,7 +90,7 @@ const XPOSTS = {
 const inDays = (days: number) => new Date(Date.now() + days * 86_400_000 - 60_000).toISOString()
 
 /** Settings, Plan & usage as an owner (cloud) unless a session says otherwise. */
-function renderPlan(session: Record<string, unknown> = { role: 'owner', account_owner: true, accounts_enabled: true }) {
+function renderPlan(session: Record<string, unknown> = { role: 'owner', accounts_enabled: true }) {
   const client = makeClient()
 
   client.setQueryData(qk.session, { ...sessionFixture('cloud'), ...session })
@@ -267,7 +267,7 @@ describe('plan & usage', () => {
       'GET /v1/workspace/usage': usage(PLANS[1], { posts_per_month: 40 }),
     })
 
-    renderPlan({ role: 'editor', account_owner: false, accounts_enabled: true })
+    renderPlan({ role: 'editor', accounts_enabled: true })
     expect(await screen.findByRole('heading', { level: 2, name: 'Plus plan' })).toBeInTheDocument()
     expect(screen.getByText('Owners and admins of this workspace change the plan.')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /change plan/i })).not.toBeInTheDocument()

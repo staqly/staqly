@@ -157,7 +157,7 @@ paths:
       security: []
       summary: Create a cloud workspace (with billing it has no plan until a subscription starts; without billing the server-side trial)
       description: >-
-        Without cloud accounts (AUTH_DEV_SIGNIN) only; with Google sign-in new people start at GET /v1/auth/google/start (409 here) and account owners add workspaces with POST /v1/account/workspaces. Cloud mode only; each call" creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, an admin API key (scope `admin`, the credential that signs in to the dashboard; see POST /v1/sessions/api-key), a single-use recovery key and a browser session cookie. Secrets are returned only in this response.
+        Without cloud accounts (AUTH_DEV_SIGNIN) only; with Google sign-in new people start at GET /v1/auth/google/start (409 here) and signed-in people add workspaces with POST /v1/account/workspaces. Cloud mode only; each call" creates a new isolated workspace. Rate-limited to 5 per hour per client IP (429). Requires `setup_token` when the server sets SETUP_TOKEN. Creates the workspace, an admin API key (scope `admin`, the credential that signs in to the dashboard; see POST /v1/sessions/api-key), a single-use recovery key and a browser session cookie. Secrets are returned only in this response.
       requestBody:
         required: true
         content:
@@ -310,7 +310,7 @@ paths:
     post:
       operationId: createCheckoutSession
       tags: [billing]
-      summary: Pay for a plan, or switch the subscription to another plan (account owner)
+      summary: Pay for a plan, or switch the subscription to another plan (a workspace owner)
       description: |
         Without a live subscription: returns a Stripe Checkout URL for the plan billed monthly or yearly;
         open it in a browser to pay. Prices are per seat (the members) and exclude VAT (Stripe Tax adds it from
@@ -373,7 +373,7 @@ paths:
     post:
       operationId: createCreditsCheckout
       tags: [billing]
-      summary: Buy extra posts to X (account owner)
+      summary: Buy extra posts to X (a workspace owner)
       description: Returns a Stripe Checkout URL (one-time payment) for a bundle; the posts are added when Stripe reports the payment.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
@@ -421,7 +421,7 @@ paths:
     post:
       operationId: addAddon
       tags: [billing]
-      summary: Add an add-on to the subscription (account owner)
+      summary: Add an add-on to the subscription (a workspace owner)
       description: Adds it to the live subscription in the subscription's interval, charged at once for the rest of the period with the card on file. Its features apply when Stripe reports them (seconds).
       responses:
         "204": { description: Added }
@@ -431,7 +431,7 @@ paths:
     delete:
       operationId: removeAddon
       tags: [billing]
-      summary: Remove an add-on (account owner)
+      summary: Remove an add-on (a workspace owner)
       description: Removes it from the subscription now; the unused rest of the period is credited on the next invoice.
       responses:
         "204": { description: Removed }
@@ -1103,29 +1103,17 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/account:
-    get:
-      operationId: getAccount
-      tags: [accounts]
-      summary: The signed-in person's account (account owners only)
-      responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } } }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
     patch:
-      operationId: renameAccount
+      operationId: renameMe
       tags: [accounts]
-      summary: Rename the account (account owner)
+      summary: Change the signed-in person's name (how members, the activity log and emails show them)
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
         required: true
         content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 100 } } } } }
       responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } } }
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -1135,9 +1123,9 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/account/workspaces:
     post:
-      operationId: createAccountWorkspace
+      operationId: createMyWorkspace
       tags: [accounts]
-      summary: Add a workspace to the account (account owner; with billing it has no plan until a subscription starts, see GET /v1/billing trial)
+      summary: "Create a workspace the signed-in person owns (where people join by invitation only, someone who owns a workspace already); with billing it has no plan until a subscription starts, see GET /v1/billing trial"
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
@@ -1171,7 +1159,7 @@ paths:
       operationId: updateMember
       tags: [accounts]
       summary: Change a member's role (admins up to admin; owners any role)
-      description: Signed-in people only (not API keys). The last owner and the account owner keep the owner role (409).
+      description: Signed-in people only (not API keys). The last owner keeps the owner role (409).
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
@@ -1329,7 +1317,6 @@ paths:
                   csrf_token: { type: string, description: Empty for API-key callers }
                   user: { $ref: "#/components/schemas/User" }
                   role: { $ref: "#/components/schemas/Role" }
-                  account_owner: { type: boolean, description: "Owns the account this workspace belongs to (creates and deletes workspaces, billing)" }
                   accounts_enabled: { type: boolean, description: "Cloud accounts with Google sign-in are on" }
                   workspaces: { type: array, items: { $ref: "#/components/schemas/MyWorkspace" }, description: "Workspaces this person can switch to" }
                   onboarded: { type: boolean, description: "The welcome wizard is done (per person in an account; in the Community Edition per workspace, and a workspace with channels or posts counts as done). False sends the dashboard to /welcome once." }
@@ -4271,7 +4258,7 @@ components:
       required: [id, name, email, avatar_url]
       properties:
         id: { type: string }
-        name: { type: string, description: "The Google name; in the Community Edition the computer's user name" }
+        name: { type: string, description: "The person's name (from Google or set by them); in the Community Edition the computer's user name" }
         email: { type: string }
         avatar_url: { type: string }
     EmailCodeSent:
@@ -4309,25 +4296,15 @@ components:
         name: { type: string }
         role: { $ref: "#/components/schemas/Role" }
         current: { type: boolean }
-    Account:
-      type: object
-      required: [id, name, owner, workspaces, created_at]
-      properties:
-        id: { type: string }
-        name: { type: string }
-        owner: { $ref: "#/components/schemas/User" }
-        workspaces: { type: array, items: { $ref: "#/components/schemas/MyWorkspace" } }
-        created_at: { type: string }
     Member:
       type: object
-      required: [user_id, name, email, avatar_url, role, account_owner, you, created_at]
+      required: [user_id, name, email, avatar_url, role, you, created_at]
       properties:
         user_id: { type: string }
         name: { type: string }
         email: { type: string }
         avatar_url: { type: string }
         role: { $ref: "#/components/schemas/Role" }
-        account_owner: { type: boolean }
         you: { type: boolean }
         created_at: { type: string }
     Invitation:

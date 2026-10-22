@@ -28,7 +28,7 @@ export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOp
   const paid = !!useBilling().data?.enabled
   const create = useMutation({
     mutationFn: async () => {
-      const w = await api.createAccountWorkspace(name.trim(), browserTimeZone())
+      const w = await api.createWorkspace(name.trim(), browserTimeZone())
 
       await api.switchWorkspace(w.id)
     },

@@ -184,7 +184,7 @@ type notifyRecipient struct {
 	role string
 }
 
-// workspacePeople: the members with their roles, and the account owner (an owner everywhere in the account).
+// workspacePeople: the members with their roles.
 func (s *Service) workspacePeople(ctx context.Context, workspaceID string) ([]notifyRecipient, error) {
 	members, err := s.Q.ListMembers(ctx, workspaceID)
 	if err != nil {
@@ -192,15 +192,6 @@ func (s *Service) workspacePeople(ctx context.Context, workspaceID string) ([]no
 	}
 	var out []notifyRecipient
 	seen := map[string]bool{}
-	ws, err := s.Q.GetWorkspace(ctx, workspaceID)
-	if err == nil && ws.AccountID.Valid {
-		if acc, err := s.Q.GetAccount(ctx, ws.AccountID.String); err == nil {
-			if u, err := s.Q.GetUser(ctx, acc.OwnerUserID); err == nil {
-				out = append(out, notifyRecipient{user: u, role: RoleOwner})
-				seen[u.ID] = true
-			}
-		}
-	}
 	for _, m := range members {
 		if seen[m.UserID] {
 			continue

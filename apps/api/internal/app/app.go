@@ -94,8 +94,6 @@ type Principal struct {
 	UserID string
 	// Role: that person's role in WorkspaceID (owner, admin, editor, viewer); their Scopes come from it.
 	Role string
-	// AccountOwner: they own the account WorkspaceID belongs to (create and delete workspaces, billing).
-	AccountOwner bool
 }
 
 // Has: local mode and sessions from before accounts (no user) may do everything in their workspace, as

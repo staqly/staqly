@@ -30,7 +30,6 @@ function render(paying: boolean, trial = paying ? 'none' : 'available') {
     ...sessionFixture('cloud'),
     role: 'owner',
     accounts_enabled: true,
-    account_owner: true,
   })
 
   const api = mockApi({

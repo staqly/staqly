@@ -8,14 +8,6 @@ import (
 	"database/sql"
 )
 
-type Account struct {
-	ID          string `json:"id"`
-	OwnerUserID string `json:"owner_user_id"`
-	Name        string `json:"name"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-}
-
 type Agent struct {
 	ID            string `json:"id"`
 	WorkspaceID   string `json:"workspace_id"`
@@ -502,7 +494,6 @@ type Workspace struct {
 	StripeSubscriptionID     sql.NullString `json:"stripe_subscription_id"`
 	SubscriptionStatus       sql.NullString `json:"subscription_status"`
 	ProcessingTimeoutSeconds sql.NullInt64  `json:"processing_timeout_seconds"`
-	AccountID                sql.NullString `json:"account_id"`
 	OnboardedAt              sql.NullString `json:"onboarded_at"`
 	Entitlements             string         `json:"entitlements"`
 	Timezone                 string         `json:"timezone"`

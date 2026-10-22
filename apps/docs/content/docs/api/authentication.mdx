@@ -156,7 +156,7 @@ A drafting-only agent gets `collections:read posts:read posts:write media:write`
 The dashboard uses an HttpOnly session cookie (`staqly_session`, SameSite=Lax, 30-day expiry,
 revocable). It is `Secure` by default in cloud mode (`COOKIE_SECURE`, default `true` in cloud,
 `false` in local). A person's session holds their role's scopes, read on every request; a session without a person
-(Community Edition, signed in with the access token or a connect link; workspaces without an account) holds every scope.
+(Community Edition, signed in with the access token or a connect link; workspaces without people) holds every scope.
 
 - Cookie-authenticated **unsafe** requests (POST/PATCH/DELETE) must send the session's CSRF
   token in `X-CSRF-Token`; otherwise `403 csrf_failed`. `GET /v1/session` returns the token.

@@ -367,7 +367,7 @@ func (s *Service) ListAddons(ctx context.Context, p Principal) ([]Addon, error) 
 // subscription's interval, charged at once for the rest of the period (always_invoice, like an added seat);
 // the card on file pays it, so no Checkout is needed. Its features arrive with Stripe's entitlement events.
 func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
-	if err := s.requireAccountOwner(ctx, p); err != nil {
+	if err := s.requireOwner(ctx, p); err != nil {
 		return err
 	}
 	if !s.BillingEnabled() {
@@ -400,7 +400,7 @@ func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
 // RemoveAddon: DELETE /v1/billing/addons/{id}. The item leaves the subscription now; the unused rest of the
 // period is credited on the next invoice.
 func (s *Service) RemoveAddon(ctx context.Context, p Principal, id string) error {
-	if err := s.requireAccountOwner(ctx, p); err != nil {
+	if err := s.requireOwner(ctx, p); err != nil {
 		return err
 	}
 	if !s.BillingEnabled() {

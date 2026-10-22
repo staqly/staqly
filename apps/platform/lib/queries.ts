@@ -33,7 +33,6 @@ export const qk = {
   sessions: ['sessions'] as const,
   members: ['members'] as const,
   invitations: ['invitations'] as const,
-  account: ['account'] as const,
   notificationPrefs: ['notification-prefs'] as const,
   // One cached list, archived collections included; useCollections(false) filters them out in `select`.
   collections: () => ['collections', { includeArchived: true }] as const,
@@ -618,7 +617,7 @@ export function useJobStats(opts?: { refetchInterval?: number }) {
   return useQuery({ queryKey: qk.jobStats, queryFn: api.jobStats, refetchInterval: opts?.refetchInterval })
 }
 
-/** Cloud accounts: what the signed-in person may do here (the server enforces it; the UI only hides). */
+/** People in cloud mode: what the signed-in person may do here (the server enforces it; the UI only hides). */
 export function useRole() {
   const session = useSession()
   const role = session.data?.role ?? 'owner'
@@ -626,7 +625,8 @@ export function useRole() {
   return {
     role,
     accountsEnabled: !!session.data?.accounts_enabled,
-    accountOwner: !!session.data?.account_owner,
+    /** An owner of this workspace with people (pays, deletes it, adds workspaces); never in local mode. */
+    isOwner: !!session.data?.accounts_enabled && role === 'owner',
     canManagePeople: role === 'owner' || role === 'admin',
     canWrite: role !== 'viewer',
   }
