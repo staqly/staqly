@@ -500,8 +500,18 @@ func linkedinError(status int, body string) error {
 		}
 	}
 	switch {
+	// The token endpoint: the app's keys (a wrong Client ID or Secret) or the sign-in's code, not the account.
+	case e.Error == "invalid_client", e.Error == "unauthorized_client":
+		// For whoever runs the server: PROVIDER_LINKEDIN_CLIENT_ID and _SECRET don't match the app's Auth tab.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn did not accept this server's app (" + detail + ")"}
+	case e.Error == "invalid_redirect_uri", strings.Contains(detail, "redirect_uri"):
+		// For whoever runs the server: the app's Authorized redirect URLs need <dashboard>/channels/callback/linkedin.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn did not accept the return address (" + detail + ")"}
+	case e.Error == "invalid_request", e.Error == "invalid_grant" && status == http.StatusBadRequest:
+		// LinkedIn answers a sign-in code it doesn't know (used, expired) with 401 invalid_request.
+		return &Failure{Kind: ErrRejected, Msg: "LinkedIn did not accept the sign-in (" + detail + "); connect again"}
 	case status == http.StatusUnauthorized, e.Error == "invalid_grant", strings.Contains(body, "REVOKED_ACCESS_TOKEN"), strings.Contains(body, "EXPIRED_ACCESS_TOKEN"):
-		return &Failure{Kind: ErrReauth, Msg: "LinkedIn no longer accepts this account's sign-in; reconnect it"}
+		return &Failure{Kind: ErrReauth, Msg: "LinkedIn no longer accepts this account's sign-in (" + detail + "); reconnect it"}
 	case status == http.StatusTooManyRequests:
 		return &Failure{Msg: "LinkedIn rate limit reached; staqly tries again in a few minutes"}
 	case status >= 500:

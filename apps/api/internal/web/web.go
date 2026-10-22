@@ -119,13 +119,14 @@ func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, r
 	mux.Handle("/api/", api)
 	mux.Handle("/api", api)
 	// The OAuth redirect URL people register at a platform is the dashboard's callback page: while the
-	// platform's answer (code or state, or an error) is on it, hand it to the API, which finishes the
-	// connection and sends the browser back here without those parameters to land.
+	// platform's answer is on it (a code, or an error, both with the state the sign-in started with), hand it
+	// to the API, which finishes the connection and sends the browser back here to land, without a state.
+	// An error without a state is that landing (the API's own ?error=...): forwarding it sent it round again.
 	page := files(site)
 	mux.HandleFunc("/channels/callback/", func(rw http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		provider := strings.TrimPrefix(r.URL.Path, "/channels/callback/")
-		if provider != "" && !strings.Contains(provider, "/") && (q.Has("code") || q.Has("state") || q.Has("error")) {
+		if provider != "" && !strings.Contains(provider, "/") && (q.Has("code") || q.Has("state")) {
 			r2 := r.Clone(r.Context())
 			r2.URL.Path = "/api/v1/channels/oauth/" + provider + "/callback"
 			if linkState(q.Get("state")) {
