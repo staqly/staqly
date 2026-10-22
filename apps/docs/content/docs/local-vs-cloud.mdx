@@ -18,7 +18,7 @@ supported for the Community Edition only.
 | | Staqly Cloud | Community Edition |
 |---|---|---|
 | Where | [app.staqly.ai](https://app.staqly.ai), run by us | Your computer or server ([binary](/self-hosting/binary) or [Docker](/self-hosting/docker)) |
-| Workspaces | Many, in accounts: your first sign-in creates an account and a workspace; members join by invitation | One, created automatically |
+| Workspaces | Many: your first sign-in creates a workspace you own; members join by invitation | One, created automatically |
 | People | Sign in with Google, an email code or a passkey; members with roles ([Accounts](/accounts)) | You; each browser signs in once with the access token |
 | Agents, n8n, scripts | Scoped API keys `stk_...`; the key decides which workspace you work in | The access token `stk_local_...` as `Authorization: Bearer` (API keys `stk_...` are refused, `401`) |
 | MCP | `https://app.staqly.ai/mcp` + `Authorization: Bearer {API_KEY}` | `http://localhost:3333/mcp` + `Authorization: Bearer {ACCESS_TOKEN}`, or `docker exec -i staqly mcp-stdio` (Docker only, no token) |
@@ -34,7 +34,7 @@ If you want to try Staqly on your own machine first, start with the
 ## Staqly Cloud
 
 [Create an account](https://app.staqly.ai/signup) with Google or your email address. Your first
-sign-in creates an account with a workspace, and the welcome walks you through naming it,
+sign-in creates a workspace you own, and the welcome walks you through naming it,
 choosing a plan and connecting a first channel.
 
 - **Members and roles**: owners and admins invite people as owner, admin, editor or viewer under
@@ -46,8 +46,8 @@ choosing a plan and connecting a first channel.
 - The **dashboard** uses an HttpOnly session cookie and a CSRF token after sign-in. **Connect a
   device** signs a phone in as the same person with a QR code.
 - **Plans** limit each workspace; over a limit the API answers
-  [`402 plan_limit_exceeded`](/api/errors#402-plan_limit_exceeded). The account owner chooses
-  Starter, Plus, Pro or Business by card under **Settings → Plan & usage** and manages the
+  [`402 plan_limit_exceeded`](/api/errors#402-plan_limit_exceeded). Its owners choose
+  Starter, Plus, Pro or Business by card under **Settings → Plan & usage** and manage the
   subscription in the Stripe portal. See [Plans](/plans), [Plan & usage](/dashboard/plan-and-usage)
   and [Limits](/limits).
 

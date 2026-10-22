@@ -22,28 +22,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?);
 -- The identity provider (Google) is the source of the name, address and picture: refreshed at every sign-in.
 UPDATE users SET email = ?, name = ?, avatar_url = ?, updated_at = ?, last_login_at = ? WHERE id = ?;
 
--- name: CreateAccount :exec
-INSERT INTO accounts (id, owner_user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?);
-
--- name: GetAccount :one
-SELECT * FROM accounts WHERE id = ?;
-
--- name: GetAccountByOwner :one
-SELECT * FROM accounts WHERE owner_user_id = ?;
-
--- name: UpdateAccountName :exec
-UPDATE accounts SET name = ?, updated_at = ? WHERE id = ?;
-
--- name: SetWorkspaceAccount :execrows
--- A workspace joins an account once (a workspace from before accounts, claimed by its first owner).
-UPDATE workspaces SET account_id = ?, updated_at = ? WHERE id = ? AND account_id IS NULL;
-
--- name: ListAccountWorkspaces :many
-SELECT * FROM workspaces WHERE account_id = ? ORDER BY created_at, id;
-
--- name: CountAccountWorkspaces :one
-SELECT COUNT(*) FROM workspaces WHERE account_id = ?;
-
 -- name: AddMember :execrows
 -- Idempotent: a second accept of the same invitation (or a race) adds nothing.
 INSERT INTO workspace_members (workspace_id, user_id, role, created_at, updated_at)
@@ -73,7 +51,7 @@ SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ?;
 SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ? AND role = 'owner';
 
 -- name: ListUserWorkspaces :many
-SELECT w.id, w.name, w.account_id, m.role
+SELECT w.id, w.name, m.role
 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
 WHERE m.user_id = ?
 ORDER BY w.created_at, w.id;

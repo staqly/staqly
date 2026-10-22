@@ -1,21 +1,19 @@
 'use client'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Plus } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-import { ErrorState } from '@/components/common/error-state'
 import { PageContainer } from '@/components/common/page-header'
 import { SettingsHeader } from '@/components/settings/settings-header'
 import { Button } from '@/components/ui/button'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { api } from '@/lib/api'
-import { formatDateTime } from '@/lib/format'
+import { api, type MyWorkspace } from '@/lib/api'
 import { toastApiError } from '@/lib/notify'
-import { qk, useRole, useSwitchWorkspace } from '@/lib/queries'
+import { qk, useRole, useSession, useSwitchWorkspace } from '@/lib/queries'
 import { ROLE_LABELS } from '@/lib/roles'
 
 import { NewWorkspaceDialog } from './new-workspace-dialog'
@@ -25,92 +23,104 @@ import { SettingsNav } from './settings-nav'
 import { SignInMethodsCard } from './sign-in-methods'
 
 export function AccountPage() {
-  const { accountOwner, accountsEnabled } = useRole()
+  const { accountsEnabled } = useRole()
+  const session = useSession()
+  const person = accountsEnabled && !!session.data?.user?.id
 
   return (
     <PageContainer>
       <SettingsHeader />
       <SettingsNav className="mt-4" />
       <div className="mt-6 grid gap-4">
+        {person && <ProfileCard />}
         <SignInMethodsCard />
         {accountsEnabled && <NotificationPrefsCard />}
-        {accountOwner && <AccountCard />}
+        {person && <WorkspacesCard />}
       </div>
     </PageContainer>
   )
 }
 
-function AccountCard() {
+/** The person's name: how members, the activity log and emails show them. */
+function ProfileCard() {
   const qc = useQueryClient()
-  const account = useQuery({ queryKey: qk.account, queryFn: api.account })
+  const session = useSession()
+  const user = session.data?.user
   const [name, setName] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
-  const switchTo = useSwitchWorkspace()
   const rename = useMutation({
-    mutationFn: (n: string) => api.renameAccount(n),
-    onSuccess: (a) => {
-      qc.setQueryData(qk.account, a)
+    mutationFn: (n: string) => api.renameMe(n),
+    onSuccess: (u) => {
+      qc.setQueryData(qk.session, (old: typeof session.data) => (old ? { ...old, user: u } : old))
       setName(null)
-      toast.success('Account renamed')
+      toast.success('Name saved')
     },
     onError: (e) => toastApiError(e),
   })
 
-  if (account.isPending) {
-    return <Skeleton className="h-40" />
+  if (!user) {
+    return <Skeleton className="h-32" />
   }
 
-  if (account.isError) {
-    return <ErrorState error={account.error} onRetry={() => void account.refetch()} />
-  }
+  const value = name ?? user.name
 
-  const a = account.data
-  const value = name ?? a.name
+  return (
+    <Card title="Profile" icon={<UserRound />} description={`You sign in as ${user.email}.`}>
+      <form
+        className="grid gap-3"
+        onSubmit={(e) => {
+          e.preventDefault()
+
+          if (value.trim()) {
+            rename.mutate(value.trim())
+          }
+        }}
+      >
+        <Field>
+          <FieldLabel htmlFor="profile-name" required>
+            Name
+          </FieldLabel>
+          <div className="flex gap-2">
+            <Input
+              id="profile-name"
+              className="min-w-0 sm:max-w-sm"
+              maxLength={100}
+              aria-required
+              value={value}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Button type="submit" disabled={rename.isPending || !value.trim() || value === user.name}>
+              Save
+            </Button>
+          </div>
+        </Field>
+      </form>
+    </Card>
+  )
+}
+
+/** Every workspace the person belongs to, with their role; owners add new ones. */
+function WorkspacesCard() {
+  const { isOwner } = useRole()
+  const session = useSession()
+  const [creating, setCreating] = useState(false)
+  const switchTo = useSwitchWorkspace()
+  const workspaces = session.data?.workspaces ?? NO_WORKSPACES
 
   return (
     <>
-      <Card title="Account" icon={<Building2 />} description={`Owned by ${a.owner.name} (${a.owner.email}).`}>
-        <form
-          className="grid gap-3"
-          onSubmit={(e) => {
-            e.preventDefault()
-
-            if (value.trim()) {
-              rename.mutate(value.trim())
-            }
-          }}
-        >
-          <Field>
-            <FieldLabel htmlFor="account-name" required>
-              Name
-            </FieldLabel>
-            <div className="flex gap-2">
-              <Input
-                id="account-name"
-                className="min-w-0 sm:max-w-sm"
-                maxLength={100}
-                value={value}
-                onChange={(e) => setName(e.target.value)}
-              />
-              <Button type="submit" disabled={rename.isPending || !value.trim() || value === a.name}>
-                Save
-              </Button>
-            </div>
-          </Field>
-          <p className="text-xs text-muted-foreground">Created {formatDateTime(a.created_at)}</p>
-        </form>
-      </Card>
       <Card
         title="Workspaces"
         description="Each workspace has its own posts, channels, members and plan."
         action={
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus /> New workspace
-          </Button>
+          isOwner && (
+            <Button size="sm" onClick={() => setCreating(true)}>
+              <Plus /> New workspace
+            </Button>
+          )
         }
       >
         <ul className="grid divide-y" data-testid="account-workspaces">
-          {a.workspaces.map((w) => (
+          {workspaces.map((w) => (
             <li key={w.id} className="flex flex-wrap items-center gap-3 py-3">
               <div className="min-w-0 flex-1">
                 <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
@@ -124,13 +134,7 @@ function AccountCard() {
                 <p className="text-xs text-muted-foreground">{ROLE_LABELS[w.role]}</p>
               </div>
               {!w.current && (
-                <Button
-                  variant="outline"
-                  size="sm"
-
-                  disabled={switchTo.isPending}
-                  onClick={() => switchTo.mutate(w.id)}
-                >
+                <Button variant="outline" size="sm" disabled={switchTo.isPending} onClick={() => switchTo.mutate(w.id)}>
                   Open
                 </Button>
               )}
@@ -138,7 +142,9 @@ function AccountCard() {
           ))}
         </ul>
       </Card>
-      <NewWorkspaceDialog open={creating} onOpenChange={setCreating} />
+      {creating && <NewWorkspaceDialog open={creating} onOpenChange={setCreating} />}
     </>
   )
 }
+
+const NO_WORKSPACES: MyWorkspace[] = []

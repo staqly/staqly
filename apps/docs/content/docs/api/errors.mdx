@@ -128,7 +128,7 @@ A target that fails while publishing doesn't answer an error code: the post's ta
 | 401 | `passkey_invalid` | The passkey's answer could not be checked |
 | 401 | `passkey_cloned` | The passkey's sign counter went backwards, a sign it was copied; it is refused |
 | 401 | `invalid_link` | A device link (QR code) is not valid, or its person can no longer open the workspace |
-| 403 | `sign_in_with_account` | The workspace belongs to an account: sign in with Google, an email code or a passkey, not with an API key or recovery key |
+| 403 | `sign_in_with_account` | The workspace has people who sign in: use Google, an email code or a passkey, not an API key or recovery key |
 | 403 | `signup_closed` | Sign-up is closed on this server: join by invitation |
 | 403 | `email_unverified` | The Google account has no verified email address |
 | 403 | `invitation_email_mismatch` | The invitation is for another address than the one you signed in with |
@@ -140,10 +140,9 @@ A target that fails while publishing doesn't answer an error code: the post's ta
 | 409 | `already_member`, `already_invited` | The address is already a member, or has an open invitation (use Resend) |
 | 409 | `invitation_closed` | The invitation was already accepted or revoked |
 | 409 | `last_owner` | A workspace needs at least one owner |
-| 409 | `account_owner` | The account owner is always an owner of its workspaces |
 | 409 | `accounts_disabled`, `google_disabled`, `email_sign_in_disabled`, `passkeys_disabled` | That sign-in, or accounts at all, aren't available on this server ([Accounts](/accounts)) |
 | 409 | `sign_in_with_account` | `POST /v1/workspaces` on a server with accounts: new workspaces start on the sign-in page |
-| 409 | `conflict` | *people in an account recover access with their sign-in methods*: a recovery key exists only for workspaces without an account |
+| 409 | `conflict` | *people recover access with their sign-in methods*: a recovery key exists only for workspaces without people |
 | 410 | `code_expired` | The code expired, was used, was replaced by a newer one or had too many wrong tries |
 | 410 | `invitation_expired`, `invitation_invalid` | Ask for a new invitation |
 | 410 | `link_used` / `link_expired` | A device link was already used / is older than 5 minutes |

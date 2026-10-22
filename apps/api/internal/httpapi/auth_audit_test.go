@@ -47,7 +47,6 @@ func TestAPIKeysNeverActAsTheirCreator(t *testing.T) {
 	if len(wss.Data) != 1 || wss.Data[0].ID == other.ID || !wss.Data[0].Current || wss.Data[0].Role != app.RoleOwner {
 		t.Fatalf("workspaces seen by a key: %+v", wss.Data)
 	}
-	e.do(nil, "GET", "/v1/account", anaKey.Key, nil, 403, nil)
 	e.as(owner, "GET", "/v1/workspaces", nil, 200, &wss)
 	if len(wss.Data) != 2 {
 		t.Fatalf("workspaces seen by the person: %+v", wss.Data)

@@ -29,9 +29,8 @@ func init() {
 	RegisterAuthedRoutes(func(s *Server, r chi.Router) {
 		r.Get("/workspaces", s.listMyWorkspaces)
 		r.Post("/session/workspace", s.switchWorkspace)
-		r.Get("/account", s.getAccount)
-		r.Patch("/account", s.renameAccount)
-		r.Post("/account/workspaces", s.createAccountWorkspace)
+		r.Patch("/account", s.renameMe)
+		r.Post("/account/workspaces", s.createWorkspace)
 		r.Get("/account/sign-in-methods", s.listSignInMethods)
 		r.Post("/account/sign-in-methods/email/start", s.linkEmailStart)
 		r.Post("/account/sign-in-methods/email/verify", s.linkEmailVerify)
@@ -343,23 +342,18 @@ func (s *Server) switchWorkspace(w http.ResponseWriter, r *http.Request) {
 	respondEmpty(w, r, s.svc.SwitchWorkspace(r.Context(), principal(r), in.WorkspaceID))
 }
 
-func (s *Server) getAccount(w http.ResponseWriter, r *http.Request) {
-	out, err := s.svc.GetAccount(r.Context(), principal(r))
-	respond(w, r, 200, out, err)
-}
-
-func (s *Server) renameAccount(w http.ResponseWriter, r *http.Request) {
+func (s *Server) renameMe(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Name string `json:"name"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	out, err := s.svc.RenameAccount(r.Context(), principal(r), in.Name)
+	out, err := s.svc.RenameMe(r.Context(), principal(r), in.Name)
 	respond(w, r, 200, out, err)
 }
 
-func (s *Server) createAccountWorkspace(w http.ResponseWriter, r *http.Request) {
+func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Name     string `json:"name"`
 		Timezone string `json:"timezone"`
@@ -367,7 +361,7 @@ func (s *Server) createAccountWorkspace(w http.ResponseWriter, r *http.Request) 
 	if !decode(w, r, &in) {
 		return
 	}
-	out, err := s.svc.CreateAccountWorkspace(r.Context(), principal(r), in.Name, in.Timezone)
+	out, err := s.svc.CreateWorkspace(r.Context(), principal(r), in.Name, in.Timezone)
 	respond(w, r, 201, out, err)
 }
 
