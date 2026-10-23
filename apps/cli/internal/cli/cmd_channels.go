@@ -264,7 +264,7 @@ func channelsConnectCommand() *Command {
 		fieldsJSON := fs.String("fields-json", "", "credentials as a JSON object; '-' reads stdin, '@path' reads a file (keeps secrets out of shell history)")
 		var settings multiFlag
 		fs.Var(&settings, "setting", "default target `key=value` for new posts (repeatable)")
-		instance := fs.String("instance", "", "platforms with many servers (Mastodon): the server's URL or host")
+		instance := fs.String("instance", "", "OAuth platforms with many servers: the server's URL or host")
 		group := fs.String("group", "", "put the channel in this channel `group` (name or ID; default: Default)")
 		return func(c *Ctx, args []string) error {
 			cl, err := c.Client()

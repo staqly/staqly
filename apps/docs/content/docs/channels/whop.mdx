@@ -1,0 +1,79 @@
+---
+title: Whop
+description: Publish to a Whop forum with text, a title, pictures and videos, pinned posts, member notifications and comments. Where to create the Account API key.
+---
+
+Staqly publishes to a **forum of your Whop business** through Whop's REST API: it sends the
+business's Account API key, uploads pictures and videos to Whop, and posts with
+`POST /api/v1/forum_posts`. Each forum is its own channel. A published target links to the
+business's page on whop.com (Whop's API gives no address for a single post).
+
+## What you need
+
+An **Account API key** of the business that owns the forum. Nothing is registered on the server.
+
+<Steps>
+<Step>
+
+### Create the key
+
+On [whop.com/dashboard](https://whop.com/dashboard), pick the business, open the **Developer**
+page and, under **Account API keys**, click **Create**. Give it a name (for example `staqly`) and
+these permissions:
+
+| Permission | Why |
+|---|---|
+| Read the business (`company:basic:read`) | Show the business's name and logo |
+| Read forums (`forum:read`) | List the forums to post into |
+| Create forum posts (`forum:post:create`) | Publish posts and comments, with their files |
+
+Copy the key: Whop shows it once. A key with the **Admin** role works too.
+
+</Step>
+<Step>
+
+### Connect a forum
+
+In **Channels → Add channel → Whop**, paste the key. When the business has one forum, staqly uses
+it; with several, it lists them (`General (exp_...)`) and asks for the **Forum** id. To connect
+another forum, add the channel again with the same key and the other id. The channel shows the
+business's name and logo and the forum's name.
+
+</Step>
+</Steps>
+
+The key does not expire. If you delete it on Whop, the channel turns **Needs reconnect**.
+
+## Limits
+
+| | |
+|---|---|
+| Text | 5,000 characters, Markdown |
+| Media | up to **4** pictures or videos per post, uploaded to Whop first; staqly waits until Whop has processed each one |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The post's headline in the forum (optional) |
+| **Notify members** (`notify`) | Whop sends a mention notification to the forum's members who allow them |
+| **Pin to the top** (`pinned`) | Pins the post in the forum |
+
+Over the API: `{"title": "Week 42", "notify": "true"}` in the target's `settings`.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments, each answering the
+one before it, in order and after their delays. Comments take pictures and videos too.
+
+## When publishing fails
+
+| Whop says | Staqly does |
+|---|---|
+| The key is not valid (401) | Marks the channel **Needs reconnect**; reconnect it with a working key |
+| A missing permission or a forum where only admins post (403) | Fails the target with Whop's reason; give the key **Create forum posts** |
+| The forum is gone (404), a refused post (400, 422), a file Whop could not process | Fails the target with Whop's reason |
+| Rate limit (429) or Whop unavailable (5xx), an upload that did not go through | Retries through the job queue (after 1, 5, then 15 minutes) |
+
+Whop has no way to recognize a post sent twice. When its answer is lost, staqly does not post again
+and fails the target asking you to check the forum first.

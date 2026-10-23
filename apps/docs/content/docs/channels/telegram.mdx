@@ -1,0 +1,95 @@
+---
+title: Telegram
+description: Publish to a Telegram channel or group through your own bot, with text, pictures, videos and albums, replies as comments. Where to get the bot token.
+---
+
+Staqly publishes to **Telegram** through the Bot API: a bot you make with **@BotFather** posts into a
+channel, a group or a supergroup it belongs to. Text goes out with `sendMessage`, a picture, video or
+GIF with `sendPhoto` / `sendVideo` / `sendAnimation`, several files as an album with
+`sendMediaGroup`. Files are uploaded by staqly, so no public media storage is needed. A published
+target links to the message on t.me.
+
+## What you need
+
+No developer app and nothing on the server: each channel uses its own bot.
+
+<Steps>
+<Step>
+
+### Make a bot
+
+In Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot` and follow the questions
+(a name and a username ending in `bot`). It answers with the **bot token**, like
+`123456789:AAH...`. For an existing bot, `/token` shows it again (and `/revoke` makes a new one).
+
+</Step>
+<Step>
+
+### Add the bot to the chat
+
+- **Channel:** the channel's settings → **Administrators** → **Add Admin** → your bot, with
+  **Post messages** allowed.
+- **Group:** add the bot as a member (an administrator if the group limits who may write).
+
+</Step>
+<Step>
+
+### Connect it in staqly
+
+**Channels → Add channel → Telegram**, then paste:
+
+| Field | What |
+|---|---|
+| **Bot token** | the token from @BotFather |
+| **Channel or group** | a public channel's `@username` (or its `t.me/...` link), or the numeric id of a private channel or group, like `-1001234567890` |
+
+To find a private chat's id, forward a message from it to a bot such as @userinfobot, or open the
+chat in Telegram Web: the number in the address is the id (`-100` comes before it for channels and
+supergroups).
+
+Staqly checks the token (`getMe`), finds the chat (`getChat`) and checks that the bot may post
+there (`getChatMember`): in a channel it must be an administrator allowed to post messages. The
+channel shows the chat's title and `@username` (or its id when it has none). The token is stored
+sealed and never shown again; connecting the same chat again reconnects the existing channel.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | 4,096 characters without media; **1,024 with media** (Telegram's caption limit). A longer text with media is refused before publishing rather than split into two messages: shorten it, or put the media in a comment |
+| Media | up to **10** pictures and videos: one file goes out on its own, several as an album (the text shows under the first). A **GIF** goes out on its own, never in an album |
+| Files | pictures up to 10 MB, other files up to 50 MB (what a bot may upload) |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Send silently** (`silent`) | Subscribers get the message without a sound |
+| **Show a link preview** (`link_preview`) | On by default: Telegram previews the first link of a text-only post |
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies: each part replies to
+the message before it, after its delay (to the album's first message after an album). In a
+channel, replies show as messages quoting the one before; when the channel has a linked discussion
+group, Telegram also copies them there.
+
+## Links
+
+A public chat's message links to `https://t.me/<username>/<id>`; a private channel or supergroup's
+to `https://t.me/c/<id>/<message>` (members only). A private basic group has no message links.
+
+## When publishing fails
+
+| Telegram says | Staqly does |
+|---|---|
+| The token is revoked, the bot was removed from the chat or lost its right to post, the group became a supergroup | Marks the channel **Needs reconnect** and fails the target: add the bot back (or paste the new token) and reconnect from the row's menu |
+| Too many requests (429), Telegram unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused message: too long, a file too large, a format Telegram does not take | Fails the target with Telegram's reason; retrying would not help, so it does not |
+| The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: the Bot API cannot tell, and sending again could post twice. Check the chat before you retry |
+
+The bot token is part of every Bot API address, so staqly never puts addresses in its error
+messages or logs.

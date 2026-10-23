@@ -1,0 +1,118 @@
+---
+title: TikTok
+description: Publish a video to a TikTok account with who can watch, comments, duets, stitches and disclosure labels. What to register in the TikTok developer portal and why the app needs TikTok's audit.
+---
+
+Staqly publishes to **TikTok** through the Content Posting API: it signs in with Login Kit
+(OAuth 2.0), asks TikTok what the account may post, uploads the video's bytes in parts (no public
+link needed) and waits until TikTok reports it published. A published target links to the video
+on tiktok.com, or to the profile while TikTok is still reviewing it.
+
+## What you need
+
+A **TikTok developer app** with **Login Kit** and **Content Posting API** (direct post), registered
+once per server. Its keys go into the server's environment (`.env`), the same way locally and in the
+cloud; a workspace can also use its own app (see [Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app
+
+At [developers.tiktok.com](https://developers.tiktok.com/apps), create an app, then:
+
+| Where | What |
+|---|---|
+| **Products** | Add **Login Kit** and **Content Posting API**; in Content Posting API, turn on **Direct Post** |
+| **Login Kit → Redirect URI** | your dashboard's `/channels/callback/tiktok`, for example `https://staqly.example.com/channels/callback/tiktok`. TikTok takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
+| **Scopes** | `user.info.basic`, `user.info.profile`, `video.publish` |
+
+Copy the **Client key** and **Client secret** from the app's page.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_TIKTOK_CLIENT_ID=your-client-key
+PROVIDER_TIKTOK_CLIENT_SECRET=your-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_TIKTOK_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, TikTok shows as **soon** in **Channels → Add channel**.
+`PROVIDER_TIKTOK_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the account
+
+**Connect with TikTok** opens tiktok.com, where the person signs in and allows the app. Staqly asks
+for these scopes:
+
+| Scope | Why |
+|---|---|
+| `user.info.basic` | Read the account's name and picture |
+| `user.info.profile` | Read the `@username` the channel shows |
+| `video.publish` | Post videos to the account |
+
+TikTok's sign-in lasts a day and renews for a year; staqly renews it on its own.
+
+</Step>
+<Step>
+
+### Before other people connect: TikTok's audit
+
+Until TikTok **audits** the app, it publishes **only as "Only you"** (`SELF_ONLY`, private videos),
+and only for accounts that are private. Submit the app for review in the developer portal (TikTok
+checks that the app follows its [content sharing
+guidelines](https://developers.tiktok.com/doc/content-sharing-guidelines)) before posting publicly.
+Staqly asks TikTok which audiences each account may use before every post and fails with the
+choices when **Who can watch** isn't one of them.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Media | exactly **one video** (MP4, WebM or MOV); pictures are not posted |
+| Caption | up to 2,200 characters, hashtags and mentions included |
+| Video | at least 360 pixels on each side, 23 to 60 frames per second; its length up to what TikTok allows the account (often 10 minutes) |
+| Posts | TikTok limits how many posts an account and an app make a day |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Who can watch** (`privacy_level`) | Required on every post, no default (TikTok's rule): `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR` or `SELF_ONLY` |
+| **Allow comments**, **Allow duets**, **Allow stitches** | On by default; an account that turned one off in TikTok keeps it off |
+| **AI-generated content** (`ai_generated`) | TikTok labels the video as AI-generated |
+| **Paid partnership** (`branded_content`) | Labels it as promoting a third party; can't be "Only you" |
+| **Promotes your own business** (`your_brand`) | Labels it as promotional content |
+
+Over the API: `{"privacy_level": "FOLLOWER_OF_CREATOR", "allow_duet": "false"}` in the target's
+`settings`.
+
+## Comments
+
+TikTok's API cannot comment, so a post's thread is not sent to TikTok.
+
+## When publishing fails
+
+| TikTok says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit, TikTok unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| An audience the account may not use, the daily limit, a video TikTok can't use (format, length, frame rate), spam | Fails the target with TikTok's reason; retrying would not help, so it does not |
+
+Once the video is uploaded TikTok publishes it on its own, so staqly never uploads it again: if the
+job's time runs out while TikTok is still processing, the target fails with "may have published".
+Check the profile before you post it again.

@@ -1,0 +1,75 @@
+---
+title: Mastodon
+description: Publish posts with pictures or a video, content warnings and replies to any Mastodon server, with an access token made on your own server.
+---
+
+Staqly publishes to a **Mastodon** account (or any server that speaks Mastodon's API, such as
+GoToSocial or Akkoma) with an **access token** you make on your own server. Mastodon apps belong to
+one server each, so there is nothing for whoever runs staqly to register: every person brings their
+server's address and a token. A published target links to the post on your server.
+
+<Steps>
+<Step>
+
+### Make an access token
+
+On your Mastodon server, open **Preferences → Development → New application**:
+
+| Field | What |
+|---|---|
+| **Application name** | anything, for example `staqly` |
+| **Scopes** | untick everything, then tick `write:statuses`, `write:media` and `read:accounts` |
+
+Save, open the application and copy **Your access token**.
+
+</Step>
+<Step>
+
+### Connect the account
+
+In **Channels → Add channel → Mastodon**, enter:
+
+| Field | What |
+|---|---|
+| **Server** | your server's address, for example `https://mastodon.social` (the default) |
+| **Access token** | the token from the previous step |
+
+The channel shows your display name, `@username@server` and picture. Staqly keeps the token sealed.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | 500 characters (Mastodon's default; staqly keeps to 500 even on servers that allow more) |
+| Media | up to **4 pictures**, or **one video** alone |
+
+Your server processes a video before the post goes out; a long video makes the publish wait for it.
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Who can see it** (`visibility`) | `public` (default), `unlisted` (quiet public: not in public timelines) or `private` (followers only) |
+| **Content warning** (`spoiler_text`) | Hides the post (and marks its media sensitive) behind this text until a reader opens it |
+
+Over the API: `{"visibility": "unlisted", "spoiler_text": "Spoilers for episode 3"}` in the target's `settings`.
+
+## Replies
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies, each under the one
+before, with the post's visibility and content warning.
+
+## When publishing fails
+
+| Mastodon says | Staqly does |
+|---|---|
+| The token is invalid, revoked or lacks a scope | Marks the channel **Needs reconnect** and fails the target; make a new token and reconnect |
+| Rate limit, the server is down or can't be reached | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused post (too long, a file the server doesn't take, a deleted post replied to) | Fails the target with Mastodon's reason |
+
+Every post is sent with an **idempotency key**: when its answer is lost, the next attempt gets the
+post Mastodon already made instead of a second one. Mastodon remembers the key for an hour, so
+retrying a failed target by hand much later could post twice: check the profile first.

@@ -296,7 +296,7 @@ func (s *Service) ConnectChannel(ctx context.Context, p Principal, in ChannelInp
 	name := strings.TrimSpace(in.Name)
 	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
 	defer cancel()
-	creds, profile, err := e.Connect(cctx, fields)
+	creds, profile, err := e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), fields)
 	if err != nil {
 		return Channel{}, connectError(err)
 	}
@@ -331,7 +331,7 @@ func connectError(err error) error {
 	if errors.As(err, &e) {
 		return e
 	}
-	return &Error{Code: "connect_failed", Status: 422, Message: "the platform did not accept these details: " + err.Error()}
+	return &Error{Code: "connect_failed", Status: 422, Message: "the platform did not accept these details: " + truncateRunes(err.Error(), 500)}
 }
 
 func firstNonEmpty(v ...string) string {
@@ -493,54 +493,45 @@ func (s *Service) StartOAuth(ctx context.Context, p Principal, providerID, redir
 }
 
 // CompleteOAuth exchanges the code the platform sent back and saves the account as a channel. An existing
-// channel of the same provider and handle is reconnected instead of duplicated.
-func (s *Service) CompleteOAuth(ctx context.Context, p Principal, providerID, code, state, redirect string, extra map[string]string) (Channel, error) {
+// channel of the same provider and handle is reconnected instead of duplicated. A sign-in that may publish as
+// several accounts answers a pending connection to pick them from instead (GetPendingConnection).
+func (s *Service) CompleteOAuth(ctx context.Context, p Principal, providerID, code, state, redirect string, extra map[string]string) (OAuthResult, error) {
 	if err := p.require(ScopeChannelsManage); err != nil {
-		return Channel{}, err
+		return OAuthResult{}, err
 	}
 	e, err := s.availableProvider(providerID)
 	if err != nil {
-		return Channel{}, err
+		return OAuthResult{}, err
 	}
 	st, err := s.verifyState(state, providerID, p.WorkspaceID)
 	if err != nil {
-		return Channel{}, err
+		return OAuthResult{}, err
 	}
 	if st.Link != "" {
-		return Channel{}, invalid("state", "belongs to another connection")
+		return OAuthResult{}, invalid("state", "belongs to another connection")
 	}
 	return s.completeOAuth(ctx, p, e, st, code, redirect, extra, "")
 }
 
-// completeOAuth exchanges the code and saves (or reconnects) the channel; a new channel joins groupID ("" = Default).
+// completeOAuth exchanges the code and saves (or reconnects) the channel, or keeps the sign-in for the person to
+// pick its accounts; a new channel joins groupID ("" = Default).
 func (s *Service) completeOAuth(ctx context.Context, p Principal, e providers.Entry, st oauthState, code, redirect string,
-	extra map[string]string, groupID string) (Channel, error) {
+	extra map[string]string, groupID string) (OAuthResult, error) {
 	providerID := e.ID()
 	if code == "" {
-		return Channel{}, invalid("code", "is required")
+		return OAuthResult{}, invalid("code", "is required")
 	}
 	app, err := s.providerApp(ctx, p.WorkspaceID, providerID)
 	if err != nil {
-		return Channel{}, err
+		return OAuthResult{}, err
 	}
-	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
 	defer cancel()
 	creds, profile, err := e.Exchange(cctx, app, redirect, code, withVerifier(extra, s.pkceVerifier(st)))
 	if err != nil {
-		return Channel{}, connectError(err)
+		return OAuthResult{}, connectError(err)
 	}
-	if profile.Handle != "" {
-		rows, err := s.Q.ListChannels(ctx, p.WorkspaceID)
-		if err != nil {
-			return Channel{}, err
-		}
-		for _, row := range rows {
-			if row.Provider == providerID && row.Handle == profile.Handle {
-				return s.reconnectChannel(ctx, p, row, creds, profile)
-			}
-		}
-	}
-	return s.saveChannel(ctx, p, e, firstNonEmpty(profile.Name, profile.Handle, e.Name()), creds, profile, nil, groupID)
+	return s.connectSignIn(ctx, p, e, creds, profile, st.Link, groupID)
 }
 
 func (s *Service) reconnectChannel(ctx context.Context, p Principal, row db.Channel, creds providers.Credentials, profile providers.Profile) (Channel, error) {
@@ -684,7 +675,7 @@ func (s *Service) UpdateChannel(ctx context.Context, p Principal, id string, in 
 		}
 		cctx, cancel := context.WithTimeout(ctx, connectTimeout)
 		defer cancel()
-		creds, profile, err := e.Connect(cctx, fields)
+		creds, profile, err := e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), fields)
 		if err != nil {
 			return Channel{}, connectError(err)
 		}
@@ -831,7 +822,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 	if err != nil {
 		return nil, err
 	}
-	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
 	defer cancel()
 	var profile providers.Profile
 	switch e.Auth() {
@@ -845,17 +836,18 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 			if errors.Is(err, providers.ErrReauth) { // a platform that can't be reached now is no reason to reconnect
 				s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
 			}
-			return map[string]any{"ok": false, "error": err.Error()}, nil
+			return map[string]any{"ok": false, "error": truncateRunes(err.Error(), 500)}, nil
 		}
 		if sealed, err := s.seal(fresh); err == nil {
 			_ = s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID})
+			s.shareRefresh(ctx, row, creds, fresh)
 		}
 		profile = providers.Profile{Handle: row.Handle, Name: row.Name}
 	default:
-		_, profile, err = e.Connect(cctx, map[string]string(creds))
+		_, profile, err = e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), map[string]string(creds))
 		if err != nil {
 			s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
-			return map[string]any{"ok": false, "error": err.Error()}, nil
+			return map[string]any{"ok": false, "error": truncateRunes(err.Error(), 500)}, nil
 		}
 	}
 	if row.Status == "needs_reconnect" {
@@ -924,7 +916,7 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	if err != nil {
 		return s.channelNeedsReconnect(ctx, row, err)
 	}
-	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
 	defer cancel()
 	fresh, err := e.Refresh(cctx, app, creds)
 	if errors.Is(err, providers.ErrReauth) {
@@ -940,6 +932,7 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	if err := s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
 		return err
 	}
+	s.shareRefresh(ctx, row, creds, fresh)
 	if old, ok := credentialsExpiry(creds); ok {
 		if exp, ok := credentialsExpiry(fresh); ok && exp.Equal(old) {
 			// Nothing was renewed (a platform without refresh tokens, like LinkedIn for most apps): look again when
@@ -999,7 +992,7 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if err != nil {
 		return nil, err
 	}
-	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
 	defer cancel()
 	fresh, err := e.Refresh(cctx, app, creds)
 	if errors.Is(err, providers.ErrReauth) {
@@ -1017,8 +1010,41 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if err := s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
 		return nil, err
 	}
+	s.shareRefresh(ctx, row, creds, fresh)
 	s.scheduleRefresh(ctx, row, fresh)
 	return fresh, nil
+}
+
+// shareRefresh hands a renewed sign-in to the other channels made from the same one (the accounts picked after one
+// sign-in: Tumblr blogs, Slack channels). Platforms that rotate refresh tokens retire the old one when it is used,
+// so a sibling still holding it could not renew any more. ponytail: siblings refresh under their own locks; two of
+// them renewing in the same instant can still race, and the loser turns needs_reconnect.
+func (s *Service) shareRefresh(ctx context.Context, row db.Channel, old, fresh providers.Credentials) {
+	was := old["refresh_token"]
+	if was == "" || fresh["refresh_token"] == "" || fresh["refresh_token"] == was {
+		return
+	}
+	rows, err := s.Q.ListChannels(ctx, row.WorkspaceID)
+	if err != nil {
+		return
+	}
+	for _, other := range rows {
+		if other.ID == row.ID || other.Provider != row.Provider {
+			continue
+		}
+		var c providers.Credentials
+		if s.unseal(other.Credentials, &c) != nil || c["refresh_token"] != was {
+			continue
+		}
+		for _, k := range []string{"access_token", "refresh_token", "expires_at", "refresh_expires_at"} {
+			if v, ok := fresh[k]; ok {
+				c[k] = v
+			}
+		}
+		if sealed, err := s.seal(c); err == nil {
+			_ = s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: other.ID})
+		}
+	}
 }
 
 func (s *Service) channelNeedsReconnect(ctx context.Context, row db.Channel, cause error) error {

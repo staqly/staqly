@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -42,7 +41,12 @@ func init() {
 func (Instagram) SettingsFields() []Field { return instagramFields }
 
 func (i Instagram) Validate(p PostContent, s Settings) error {
-	if err := CheckLimits(i.Limits(), p, s); err != nil {
+	return instagramValidate(i.Limits(), i.SettingsFields(), p, s)
+}
+
+// instagramValidate checks a post for Instagram, with either sign-in.
+func instagramValidate(l Limits, fields []Field, p PostContent, s Settings) error {
+	if err := CheckLimits(l, p, s); err != nil {
 		return err
 	}
 	videos := 0
@@ -64,7 +68,7 @@ func (i Instagram) Validate(p PostContent, s Settings) error {
 			return invalid("media", "a story is one picture or one video")
 		}
 	}
-	return CheckFields(i.SettingsFields(), s)
+	return CheckFields(fields, s)
 }
 
 func (Instagram) AuthURL(app App, redirect, state string, _ map[string]string) (string, error) {
@@ -231,17 +235,26 @@ func (Instagram) Refresh(ctx context.Context, _ App, c Credentials) (Credentials
 // Instagram publishes a post's thread as comments under it.
 var _ Replier = Instagram{}
 
-func (i Instagram) Publish(ctx context.Context, c Credentials, p PostContent, s Settings) (Result, error) {
+func (Instagram) Publish(ctx context.Context, c Credentials, p PostContent, s Settings) (Result, error) {
 	token, user := c["access_token"], c["user_id"]
 	if token == "" || user == "" {
 		return Result{}, &Failure{Kind: ErrReauth, Msg: "Instagram: no account stored; reconnect the account"}
 	}
+	return instagramPublish(ctx, igGraph, token, user, p, s)
+}
+
+// instagramPublish publishes a post to an Instagram account through g: graph.instagram.com (Instagram Login) or
+// graph.facebook.com (an account linked to a Facebook Page).
+func instagramPublish(ctx context.Context, g metaGraph, token, user string, p PostContent, s Settings) (Result, error) {
 	for _, m := range p.Media {
 		if m.SignedURL == "" {
 			// For whoever runs the server: Instagram downloads media itself, so files must be in S3-compatible
 			// storage (STORAGE_DRIVER=s3) at an address it can reach.
 			return Result{}, &Failure{Kind: ErrRejected, Msg: "Instagram downloads a post's pictures and videos from a link, and this server keeps them where Instagram can't reach; ask whoever runs it to store media in the cloud"}
 		}
+	}
+	if len(p.Media) == 0 {
+		return Result{}, &Failure{Kind: ErrRejected, Msg: "Instagram needs at least one picture or video"}
 	}
 	base := url.Values{"caption": {p.Text}}
 	if names := instagramCollaborators(s["collaborators"]); names != "" {
@@ -256,7 +269,7 @@ func (i Instagram) Publish(ctx context.Context, c Credentials, p PostContent, s 
 		// Stories take no caption.
 		form := url.Values{"media_type": {"STORIES"}}
 		instagramMediaURL(form, m)
-		container, err = i.container(ctx, token, user, form)
+		container, err = instagramContainer(ctx, g, token, user, form)
 	case len(p.Media) > 1:
 		var children []string
 		for _, m := range p.Media {
@@ -265,7 +278,7 @@ func (i Instagram) Publish(ctx context.Context, c Credentials, p PostContent, s 
 			if strings.HasPrefix(m.MimeType, "video/") {
 				form.Set("media_type", "VIDEO")
 			}
-			id, err := i.container(ctx, token, user, form)
+			id, err := instagramContainer(ctx, g, token, user, form)
 			if err != nil {
 				return Result{}, err
 			}
@@ -273,7 +286,7 @@ func (i Instagram) Publish(ctx context.Context, c Credentials, p PostContent, s 
 		}
 		base.Set("media_type", "CAROUSEL")
 		base.Set("children", strings.Join(children, ","))
-		container, err = i.container(ctx, token, user, base)
+		container, err = instagramContainer(ctx, g, token, user, base)
 	case video:
 		// A single video is a reel: Instagram publishes no other kind of video post.
 		base.Set("media_type", "REELS")
@@ -283,10 +296,10 @@ func (i Instagram) Publish(ctx context.Context, c Credentials, p PostContent, s 
 			share = "false"
 		}
 		base.Set("share_to_feed", share)
-		container, err = i.container(ctx, token, user, base)
+		container, err = instagramContainer(ctx, g, token, user, base)
 	default:
 		base.Set("image_url", m.SignedURL)
-		container, err = i.container(ctx, token, user, base)
+		container, err = instagramContainer(ctx, g, token, user, base)
 	}
 	if err != nil {
 		return Result{}, err
@@ -295,23 +308,19 @@ func (i Instagram) Publish(ctx context.Context, c Credentials, p PostContent, s 
 	var out struct {
 		ID string `json:"id"`
 	}
-	req, err := instagramPost(ctx, token, "/"+user+"/media_publish", url.Values{"creation_id": {container}})
+	req, err := g.post(ctx, token, "/"+user+"/media_publish", url.Values{"creation_id": {container}})
 	if err != nil {
 		return Result{}, err
 	}
 	// Instagram has no idempotency key and a new attempt makes new containers, so publishing again after an answer
 	// that never came could post twice: say so instead of retrying.
-	if err := instagramDo(ctx, req, &out); err != nil {
-		var f *Failure
-		if !errors.As(err, &f) {
-			return Result{}, &Failure{Kind: ErrRejected, Msg: "Instagram may have published the post, but its answer was lost (" + err.Error() + "); check the profile before posting it again"}
-		}
-		return Result{}, err
+	if err := g.do(ctx, req, &out); err != nil {
+		return Result{}, g.lost(err)
 	}
 	if out.ID == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Instagram published the post but did not say its id; check the profile"}
 	}
-	return Result{ExternalID: out.ID, URL: instagramPermalink(ctx, token, out.ID)}, nil
+	return Result{ExternalID: out.ID, URL: instagramPermalink(ctx, g, token, out.ID)}, nil
 }
 
 // instagramMediaURL sets the link Instagram fetches the file from.
@@ -336,16 +345,16 @@ func instagramCollaborators(v string) string {
 	return string(b)
 }
 
-// container creates a media container and waits until Instagram has fetched and processed it.
-func (Instagram) container(ctx context.Context, token, user string, form url.Values) (string, error) {
-	req, err := instagramPost(ctx, token, "/"+user+"/media", form)
+// instagramContainer creates a media container and waits until Instagram has fetched and processed it.
+func instagramContainer(ctx context.Context, g metaGraph, token, user string, form url.Values) (string, error) {
+	req, err := g.post(ctx, token, "/"+user+"/media", form)
 	if err != nil {
 		return "", err
 	}
 	var out struct {
 		ID string `json:"id"`
 	}
-	if err := instagramDo(ctx, req, &out); err != nil {
+	if err := g.do(ctx, req, &out); err != nil {
 		return "", err
 	}
 	for {
@@ -353,7 +362,7 @@ func (Instagram) container(ctx context.Context, token, user string, form url.Val
 			StatusCode string `json:"status_code"`
 			Status     string `json:"status"`
 		}
-		if err := instagramGet(ctx, token, "/"+out.ID, url.Values{"fields": {"status_code,status"}}, &st); err != nil {
+		if err := g.get(ctx, token, "/"+out.ID, url.Values{"fields": {"status_code,status"}}, &st); err != nil {
 			return "", err
 		}
 		switch st.StatusCode {
@@ -366,20 +375,18 @@ func (Instagram) container(ctx context.Context, token, user string, form url.Val
 			return "", &Failure{Msg: "Instagram's upload expired; staqly tries again in a few minutes"}
 		}
 		// The job's own deadline ends a video that never finishes; its next attempt starts again.
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-time.After(instagramPoll):
+		if err := metaWait(ctx, instagramPoll); err != nil {
+			return "", err
 		}
 	}
 }
 
 // instagramPermalink is the post's address, or the app's home when Instagram doesn't say (the post is out anyway).
-func instagramPermalink(ctx context.Context, token, id string) string {
+func instagramPermalink(ctx context.Context, g metaGraph, token, id string) string {
 	var out struct {
 		Permalink string `json:"permalink"`
 	}
-	if err := instagramGet(ctx, token, "/"+id, url.Values{"fields": {"permalink"}}, &out); err != nil || out.Permalink == "" {
+	if err := g.get(ctx, token, "/"+id, url.Values{"fields": {"permalink"}}, &out); err != nil || out.Permalink == "" {
 		return "https://www.instagram.com/"
 	}
 	return out.Permalink
@@ -388,6 +395,10 @@ func instagramPermalink(ctx context.Context, token, id string) string {
 // Reply comments under the post. parentExternalID is the post or, from the second part on, the comment before
 // ("comment:<post>:<comment>"); every part becomes a comment on the post itself, in order.
 func (Instagram) Reply(ctx context.Context, c Credentials, parentExternalID string, p PostContent, _ Settings) (Result, error) {
+	return instagramReply(ctx, igGraph, c, parentExternalID, p)
+}
+
+func instagramReply(ctx context.Context, g metaGraph, c Credentials, parentExternalID string, p PostContent) (Result, error) {
 	token := c["access_token"]
 	if token == "" {
 		return Result{}, &Failure{Kind: ErrReauth, Msg: "Instagram: no account stored; reconnect the account"}
@@ -402,120 +413,31 @@ func (Instagram) Reply(ctx context.Context, c Credentials, parentExternalID stri
 	if len(p.Media) > 0 {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Instagram comments take text only"}
 	}
-	req, err := instagramPost(ctx, token, "/"+post+"/comments", url.Values{"message": {p.Text}})
+	req, err := g.post(ctx, token, "/"+post+"/comments", url.Values{"message": {p.Text}})
 	if err != nil {
 		return Result{}, err
 	}
 	var out struct {
 		ID string `json:"id"`
 	}
-	if err := instagramDo(ctx, req, &out); err != nil {
+	if err := g.do(ctx, req, &out); err != nil {
 		return Result{}, err
 	}
-	return Result{ExternalID: "comment:" + post + ":" + out.ID, URL: instagramPermalink(ctx, token, post)}, nil
+	return Result{ExternalID: "comment:" + post + ":" + out.ID, URL: instagramPermalink(ctx, g, token, post)}, nil
 }
 
 func instagramGet(ctx context.Context, token, path string, q url.Values, out any) error {
-	if q == nil {
-		q = url.Values{}
-	}
-	q.Set("access_token", token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, instagramGraph+"/"+instagramVersion+path+"?"+q.Encode(), nil)
-	if err != nil {
-		return err
-	}
-	return instagramDo(ctx, req, out)
+	return igGraph.get(ctx, token, path, q, out)
 }
 
 func instagramPost(ctx context.Context, token, path string, form url.Values) (*http.Request, error) {
-	form.Set("access_token", token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, instagramGraph+"/"+instagramVersion+path, strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return req, nil
+	return igGraph.post(ctx, token, path, form)
 }
 
-// instagramDo sends a request and decodes a 2xx reply into out; Meta's errors become messages a person can act on.
-// A request that never got an answer is a plain error (not a Failure), so Publish can tell it apart.
+// instagramDo sends a request to Instagram (see metaGraph.do).
 func instagramDo(ctx context.Context, req *http.Request, out any) error {
-	resp, err := httpClient(ctx).Do(req)
-	if err != nil {
-		// The error may quote the URL, and with it the access token: name the host only.
-		return fmt.Errorf("Instagram could not be reached (%s)", req.URL.Host)
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		if out != nil && len(raw) > 0 {
-			return json.Unmarshal(raw, out)
-		}
-		return nil
-	}
-	return instagramError(resp.StatusCode, raw)
+	return igGraph.do(ctx, req, out)
 }
 
-// instagramError maps Meta's replies to what staqly does next: a sign-in problem needs reconnecting, a refused post
-// is final, rate limits and outages are retried. Graph errors are {"error":{"message","code","error_subcode",
-// "error_user_msg"}}; the token endpoint answers {"error_type","code","error_message"}.
-func instagramError(status int, raw []byte) error {
-	var e struct {
-		Error struct {
-			Message string `json:"message"`
-			Code    int    `json:"code"`
-			Subcode int    `json:"error_subcode"`
-			UserMsg string `json:"error_user_msg"`
-		} `json:"error"`
-		ErrorType    string `json:"error_type"`
-		Code         int    `json:"code"`
-		ErrorMessage string `json:"error_message"`
-	}
-	_ = json.Unmarshal(raw, &e)
-	code, detail := e.Error.Code, e.Error.Message
-	if e.Error.UserMsg != "" {
-		detail = e.Error.UserMsg
-	}
-	if detail == "" {
-		detail = e.ErrorMessage
-	}
-	if detail == "" {
-		detail = string(raw)
-		if len(detail) > 200 {
-			detail = detail[:200] + "..."
-		}
-	}
-	lower := strings.ToLower(detail)
-	sub := e.Error.Subcode
-	switch {
-	// The token endpoint: the app's keys, the return address or the sign-in's code, not the account.
-	case e.ErrorMessage != "" && strings.Contains(lower, "redirect_uri"):
-		// For whoever runs the server: the app's Business login settings need <dashboard>/channels/callback/instagram.
-		return &Failure{Kind: ErrRejected, Msg: "Instagram did not accept the return address (" + detail + ")"}
-	case e.ErrorMessage != "" && (strings.Contains(lower, "client") || strings.Contains(lower, "app")):
-		// For whoever runs the server: PROVIDER_INSTAGRAM_CLIENT_ID and _SECRET are the Instagram App ID and secret.
-		return &Failure{Kind: ErrRejected, Msg: "Instagram did not accept this server's app (" + detail + ")"}
-	case e.ErrorMessage != "":
-		return &Failure{Kind: ErrRejected, Msg: "Instagram did not accept the sign-in (" + detail + "); connect again"}
-	case strings.Contains(lower, "not an instagram business"):
-		return &Failure{Kind: ErrReauth, Msg: "Instagram posts only from professional accounts: switch the account to Business or Creator in the Instagram app, then reconnect it"}
-	case code == 190, code == 102:
-		return &Failure{Kind: ErrReauth, Msg: "Instagram no longer accepts this account's sign-in (" + detail + "); reconnect it"}
-	case code == 4, code == 17, code == 32, code == 613, code == 80002, status == http.StatusTooManyRequests:
-		return &Failure{Msg: "Instagram rate limit reached; staqly tries again in a few minutes"}
-	case sub == 2207052, sub == 2207003:
-		// Instagram could not download the file in time: often a slow first fetch.
-		return &Failure{Msg: "Instagram could not download the media (" + detail + "); staqly tries again in a few minutes"}
-	case sub == 2207042:
-		return &Failure{Kind: ErrRejected, Msg: "Instagram's limit of posts a day for this account is reached (" + detail + "); schedule it for tomorrow"}
-	case sub == 2207050:
-		return &Failure{Kind: ErrRejected, Msg: "Instagram has restricted this account (" + detail + ")"}
-	case code == 1, code == 2, status >= 500:
-		return &Failure{Msg: fmt.Sprintf("Instagram is unavailable (%s); staqly tries again in a few minutes", detail)}
-	case code == 10, code == 200, status == http.StatusForbidden:
-		return &Failure{Kind: ErrRejected, Msg: "Instagram refused it (" + detail + ")"}
-	case code == 9004, strings.Contains(lower, "media"):
-		return &Failure{Kind: ErrRejected, Msg: "Instagram could not use the media (" + detail + ")"}
-	}
-	return &Failure{Kind: ErrRejected, Msg: "Instagram: " + detail}
-}
+// instagramError maps Instagram's replies (see metaGraph.fail).
+func instagramError(status int, raw []byte) error { return igGraph.fail(status, raw) }

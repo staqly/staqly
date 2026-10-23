@@ -56,7 +56,7 @@ func (s *Service) CheckProvider(ctx context.Context, p Principal, providerID str
 
 	redirect := s.WebURL() + "/channels/callback/" + providerID
 	if checker, ok := e.Provider.(providers.AppChecker); ok && appErr == nil {
-		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), 10*time.Second)
 		verified, err := checker.CheckApp(cctx, app, redirect)
 		cancel()
 		c := SetupCheck{Key: "platform", Label: e.Name(), OK: err == nil}

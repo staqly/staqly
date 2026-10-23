@@ -1,0 +1,93 @@
+---
+title: Tumblr
+description: Publish text, pictures and a video to any of your Tumblr blogs, with the post's tags. What to register with Tumblr and how picking blogs works.
+---
+
+Staqly publishes to **Tumblr blogs** through API v2: it signs in with OAuth 2.0, you pick the blogs
+to post to, and each post goes out in Tumblr's Neue Post Format, its pictures and video uploaded in
+the same request. A published target links to the post on tumblr.com.
+
+## What you need
+
+A **Tumblr app** with OAuth 2.0, registered once per server. Its keys go into the server's
+environment (`.env`), the same way locally and in the cloud; a workspace can also use its own app
+(see [Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app
+
+At [tumblr.com/oauth/apps](https://www.tumblr.com/oauth/apps), register an application with:
+
+| Field | Value |
+|---|---|
+| OAuth2 redirect URLs | your dashboard's `/channels/callback/tumblr`, for example `http://localhost:8080/channels/callback/tumblr` locally or `https://staqly.example.com/channels/callback/tumblr` |
+
+Copy the **OAuth consumer key** and **secret key**.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_TUMBLR_CLIENT_ID=your-oauth-consumer-key
+PROVIDER_TUMBLR_CLIENT_SECRET=your-secret-key
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_TUMBLR_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, Tumblr shows as **soon** in **Channels → Add channel**.
+`PROVIDER_TUMBLR_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect and pick blogs
+
+**Connect with Tumblr** opens tumblr.com, where the person signs in and allows the app. Staqly asks
+for these scopes:
+
+| Scope | Why |
+|---|---|
+| `basic` | Read the account and its blogs |
+| `write` | Publish posts |
+| `offline_access` | Stay connected (Tumblr's access lasts 42 minutes; staqly renews it) |
+
+Staqly then lists the account's blogs, the main one and any side blogs: pick one or more, and each
+becomes its own channel, named after the blog. Connecting the same blog again reconnects its
+channel.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | 4,096 characters; each paragraph becomes a text block |
+| Media | up to **10** files: pictures and at most **one video** |
+| Posts | Tumblr limits posts (250) and uploads per blog and account a day |
+
+The post's tags become Tumblr tags (without `#`).
+
+## Comments
+
+Tumblr's API cannot reply to a post, so a post's thread is not sent to Tumblr.
+
+## When publishing fails
+
+| Tumblr says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked (401) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit (429), Tumblr unavailable (5xx, 503), a video still processing from the last post | Retries through the job queue (after 1, 5, then 15 minutes) |
+| The daily post or upload limit, a file format Tumblr does not take, a blog that is gone | Fails the target with Tumblr's reason; retrying would not help, so it does not |
+
+When staqly sent a post but its answer never came, it looks at the blog's latest posts for one that
+starts the same way: if it is there, that is the post; if not, the target fails with "may have
+published" instead of trying again. Check the blog before you post it again.

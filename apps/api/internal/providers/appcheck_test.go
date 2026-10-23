@@ -63,3 +63,13 @@ func TestCheckApp(t *testing.T) {
 		}
 	}
 }
+
+func TestPlatformHost(t *testing.T) {
+	for raw, ok := range map[string]bool{"https://rupload.facebook.com/v1/x": true, "https://facebook.com/x": true,
+		"http://rupload.facebook.com/x": false, "https://evilfacebook.com/x": false, "https://facebook.com.evil.example/x": false,
+		"https://graph.facebook.com/up": true, "": false} {
+		if platformHost(raw, "https://graph.facebook.com", "facebook.com") != ok {
+			t.Errorf("platformHost(%q) != %v", raw, ok)
+		}
+	}
+}

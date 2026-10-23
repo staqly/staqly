@@ -1,0 +1,100 @@
+---
+title: Dribbble
+description: Publish a shot to Dribbble with a 400x300 or 800x600 picture, a title, a description and tags. What to register with Dribbble.
+---
+
+Staqly publishes **shots** to a Dribbble account through API v2: it signs in with OAuth 2.0 and
+uploads the shot with `POST /shots`. Dribbble makes the shot shortly after; a published target
+links to it on dribbble.com.
+
+## What you need
+
+A **Dribbble application**, registered once per server. Its keys go into the server's environment
+(`.env`), the same way locally and in the cloud; a workspace can also use its own app (see
+[Developer apps](/channels/developer-apps)). Registering is self-service; Dribbble's
+[API terms](https://developer.dribbble.com/terms/) allow posting on a person's behalf when they ask
+for it, as a scheduled post does.
+
+<Steps>
+<Step>
+
+### Create the app
+
+At [dribbble.com/account/applications/new](https://dribbble.com/account/applications/new), register
+an application with:
+
+| Field | Value |
+|---|---|
+| Callback URL | your dashboard's `/channels/callback/dribbble`, for example `http://localhost:8080/channels/callback/dribbble` locally or `https://staqly.example.com/channels/callback/dribbble` |
+
+Copy its **Client ID** and **Client Secret**.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_DRIBBBLE_CLIENT_ID=your-client-id
+PROVIDER_DRIBBBLE_CLIENT_SECRET=your-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_DRIBBBLE_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, Dribbble shows as **soon** in **Channels → Add channel**.
+`PROVIDER_DRIBBBLE_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the account
+
+**Connect with Dribbble** opens dribbble.com, where the person signs in and allows the app. Staqly
+asks for the scopes `public` (read the profile) and `upload` (create shots). Dribbble's sign-in does
+not expire; it lasts until the person revokes it.
+
+Only accounts Dribbble lets upload shots can publish (Dribbble opens uploading to new accounts
+itself, and teams post as their members): connecting an account that can't fails and says so.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Media | exactly **one picture**: JPEG, PNG or GIF, up to 8 MB, **exactly 400x300 or 800x600 pixels** (crop it in the media editor) |
+| Title | required |
+| Description | the post's text, up to 1,000 characters |
+| Tags | the post's tags, up to 12 |
+| Requests | Dribbble allows 60 a minute and 1,440 a day per account |
+
+Videos can't be posted: Dribbble's API does not take them.
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The shot's title |
+
+Over the API: `{"title": "Club poster"}` in the target's `settings`.
+
+## Comments
+
+Dribbble's API cannot comment, so a post's thread is not sent to Dribbble.
+
+## When publishing fails
+
+| Dribbble says | Staqly does |
+|---|---|
+| The sign-in was revoked (401) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit (429), Dribbble unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A picture of the wrong size, a refused field (422), an account that may not upload (403) | Fails the target with Dribbble's reason; retrying would not help, so it does not |
+
+When staqly sent a shot but its answer never came, it looks among the account's latest shots for one
+with the same title: if it is there, that is the shot; if not, the target fails with "may have
+published" instead of trying again. Check the profile before you post it again.

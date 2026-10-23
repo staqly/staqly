@@ -149,14 +149,18 @@ func (l LinkedIn) Exchange(ctx context.Context, app App, redirect, code string, 
 // Refresh renews the token with a refresh token when LinkedIn gave one (approved partner apps). Without one the
 // token stays as it is until it runs out; then the channel needs reconnecting.
 func (l LinkedIn) Refresh(ctx context.Context, app App, c Credentials) (Credentials, error) {
+	return l.refresh(ctx, app, c, linkedinAPI+"/v2/userinfo")
+}
+
+// refresh renews the token, or, without a refresh token, asks LinkedIn at check whether it still takes the one it
+// has (the member may have removed the app), so a channel test or a scheduled check finds out before a post does.
+func (l LinkedIn) refresh(ctx context.Context, app App, c Credentials, check string) (Credentials, error) {
 	if c["refresh_token"] == "" {
 		exp, ok := credentialsExpiry(c)
 		if !ok || !exp.After(time.Now().Add(2*time.Minute)) {
 			return nil, &Failure{Kind: ErrReauth, Msg: "LinkedIn signs apps out after 60 days; reconnect the account"}
 		}
-		// Still in date: ask LinkedIn whether it still takes it (the member may have removed the app), so a
-		// channel test or a scheduled check finds out before a post does.
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, linkedinAPI+"/v2/userinfo", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, check, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +191,16 @@ func (l LinkedIn) Publish(ctx context.Context, c Credentials, p PostContent, s S
 	if token == "" || person == "" {
 		return Result{}, &Failure{Kind: ErrReauth, Msg: "LinkedIn: no account stored; reconnect the account"}
 	}
-	author := "urn:li:person:" + person
+	visibility := "PUBLIC"
+	if s["visibility"] == "connections" {
+		visibility = "CONNECTIONS"
+	}
+	return linkedinPublish(ctx, token, "urn:li:person:"+person, visibility, p)
+}
+
+// linkedinPublish uploads the media and posts as author (a member or an organization).
+func linkedinPublish(ctx context.Context, token, author, visibility string, p PostContent) (Result, error) {
+	l := LinkedIn{}
 	var ids []string
 	images := false
 	for _, m := range p.Media {
@@ -204,10 +217,6 @@ func (l LinkedIn) Publish(ctx context.Context, c Credentials, p PostContent, s S
 			return Result{}, ctx.Err()
 		case <-time.After(linkedinImageWait):
 		}
-	}
-	visibility := "PUBLIC"
-	if s["visibility"] == "connections" {
-		visibility = "CONNECTIONS"
 	}
 	body := map[string]any{
 		"author":                    author,
@@ -254,6 +263,11 @@ func (l LinkedIn) Reply(ctx context.Context, c Credentials, parentExternalID str
 	if token == "" || person == "" {
 		return Result{}, &Failure{Kind: ErrReauth, Msg: "LinkedIn: no account stored; reconnect the account"}
 	}
+	return linkedinComment(ctx, token, "urn:li:person:"+person, parentExternalID, p)
+}
+
+// linkedinComment comments under a post as actor (a member or an organization).
+func linkedinComment(ctx context.Context, token, actor, parentExternalID string, p PostContent) (Result, error) {
 	post := linkedinCommentPost(parentExternalID)
 	if post == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "LinkedIn: nothing to comment on (the post has no id)"}
@@ -262,7 +276,7 @@ func (l LinkedIn) Reply(ctx context.Context, c Credentials, parentExternalID str
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "LinkedIn comments take text only"}
 	}
 	req, err := linkedinJSON(ctx, token, http.MethodPost, linkedinAPI+"/rest/socialActions/"+linkedinURN(post)+"/comments",
-		map[string]any{"actor": "urn:li:person:" + person, "object": post, "message": map[string]string{"text": p.Text}})
+		map[string]any{"actor": actor, "object": post, "message": map[string]string{"text": p.Text}})
 	if err != nil {
 		return Result{}, err
 	}

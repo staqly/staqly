@@ -845,6 +845,11 @@ func oauthExtra(q url.Values) map[string]string {
 	return extra
 }
 
+// oauthCode is the sign-in's code: "code" for OAuth 2.0, "loginRequestToken" for MeWe's sign-in.
+func oauthCode(q url.Values) string {
+	return firstNonEmptyStr(q.Get("code"), q.Get("loginRequestToken"))
+}
+
 func (s *Server) oauthStart(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	u, err := s.svc.StartOAuth(r.Context(), principal(r), provider, s.oauthRedirect(provider), oauthExtra(r.URL.Query()))
@@ -876,7 +881,7 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		land(url.Values{"error": {"The connection did not start in this browser; try again"}})
 		return
 	}
-	ch, err := s.svc.CompleteOAuth(r.Context(), principal(r), provider, q.Get("code"), q.Get("state"), s.oauthRedirect(provider), oauthExtra(q))
+	ch, err := s.svc.CompleteOAuth(r.Context(), principal(r), provider, oauthCode(q), q.Get("state"), s.oauthRedirect(provider), oauthExtra(q))
 	if err != nil {
 		s.log.WarnContext(r.Context(), "channel connection failed", "provider", provider, "err", err)
 		var ae *app.Error
@@ -887,7 +892,33 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		land(url.Values{"error": {"The connection failed; try again"}})
 		return
 	}
-	land(url.Values{"channel": {ch.ID}})
+	if ch.Pending != nil {
+		// The sign-in may publish as several accounts: the callback page asks which ones.
+		land(url.Values{"pending": {ch.Pending.ID}})
+		return
+	}
+	land(url.Values{"channel": {ch.Channel.ID}})
+}
+
+// getPendingConnection lists the accounts a sign-in may publish as, for the person to pick from.
+func (s *Server) getPendingConnection(w http.ResponseWriter, r *http.Request) {
+	noStore(r)
+	out, err := s.svc.GetPendingConnection(r.Context(), principal(r), chi.URLParam(r, "id"))
+	respond(w, r, 200, out, err)
+}
+
+type pendingChoice struct {
+	AccountIDs []string `json:"account_ids"`
+}
+
+// finishPendingConnection connects the picked accounts, each as its own channel.
+func (s *Server) finishPendingConnection(w http.ResponseWriter, r *http.Request) {
+	var in pendingChoice
+	if !decode(w, r, &in) {
+		return
+	}
+	out, err := s.svc.FinishPendingConnection(r.Context(), principal(r), chi.URLParam(r, "id"), in.AccountIDs)
+	respond(w, r, 201, map[string]any{"data": out}, err)
 }
 
 func firstNonEmptyStr(v ...string) string {

@@ -1,0 +1,89 @@
+---
+title: Kick
+description: Send a post as a chat message in your Kick channel's chat, with replies as comments. What to register in Kick's developer settings.
+---
+
+Staqly publishes to **Kick** as a **chat message** in the connected account's own channel: it signs
+in with OAuth 2.1 (with PKCE) and sends the text with `POST /public/v1/chat`. Kick chat takes text
+only. A chat message is not a lasting post: it shows in the live chat (for example an announcement
+when you go live) and scrolls away; the target links to the channel.
+
+## What you need
+
+A **Kick app**, registered once per server. Its keys go into the server's environment (`.env`),
+the same way locally and in the cloud; a workspace can also bring its own app (see
+[Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app
+
+On kick.com, open **Settings → Developer** (two-factor authentication must be on), then
+**Create App**:
+
+| Field | Value |
+|---|---|
+| **Redirect URL** | your dashboard's `/channels/callback/kick`, for example `http://localhost:8080/channels/callback/kick` locally or `https://staqly.example.com/channels/callback/kick` |
+| **Scopes** | **Read user information**, **Read channel information**, **Write to Chat feed** |
+
+Copy the **Client ID** and **Client Secret**.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+```bash title=".env"
+PROVIDER_KICK_CLIENT_ID=your-client-id
+PROVIDER_KICK_CLIENT_SECRET=your-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_KICK_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install`.
+
+Until both are set, Kick shows as **soon** in **Channels → Add channel**.
+`PROVIDER_KICK_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the account
+
+**Connect with Kick** opens id.kick.com, where the person signs in and allows the app. Staqly asks
+for these scopes:
+
+| Scope | Why |
+|---|---|
+| `user:read` | Read the account's name and picture |
+| `channel:read` | Read the channel's address, to link to it |
+| `chat:write` | Send chat messages |
+
+The channel shows the account's name, `@channel` and picture.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | 500 characters |
+| Media | none: chat is text only |
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as chat replies, each to the
+message before it, after its delay.
+
+## When publishing fails
+
+| Kick says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked (401, a refused refresh) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit (429) or Kick unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| The message was not sent (slow mode, followers-only chat, a banned word), a ban | Fails the target with the reason; retrying would not help, so it does not |
+| The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: check the chat before you retry |
+
+Access tokens are short-lived; staqly renews them with the refresh token before they run out and
+right before publishing when needed.

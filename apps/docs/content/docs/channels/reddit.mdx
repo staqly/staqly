@@ -1,0 +1,122 @@
+---
+title: Reddit
+description: Publish text, link, picture and video posts to a subreddit with a title, flair, NSFW and spoiler marks, and comments. What to register with Reddit.
+---
+
+Staqly publishes to **Reddit** as the account that connects: it signs in with OAuth 2.0 (a
+permanent sign-in), uploads a picture or video to Reddit's media storage when the post has one,
+and posts with `POST /api/submit` to the subreddit the post names. A published target links to the
+post on reddit.com.
+
+## What you need
+
+A **Reddit app** of type *web app*, registered once per server. Its keys go into the server's
+environment (`.env`), the same way locally and in the cloud; a workspace can also use its own app
+(see [Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app
+
+Since November 2025 Reddit reviews every new use of its API (the *Responsible Builder Policy*):
+request access first at [reddit.com/prefs/apps](https://www.reddit.com/prefs/apps) and wait for
+Reddit's approval before people connect. Then **create another app**:
+
+| Field | Value |
+|---|---|
+| Type | **web app** |
+| redirect uri | your dashboard's `/channels/callback/reddit`, for example `http://localhost:8080/channels/callback/reddit` locally or `https://staqly.example.com/channels/callback/reddit` |
+
+The app's **id** is the string under its name; the **secret** is next to it.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_REDDIT_CLIENT_ID=your-app-id
+PROVIDER_REDDIT_CLIENT_SECRET=your-app-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_REDDIT_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, Reddit shows as **soon** in **Channels → Add channel**.
+`PROVIDER_REDDIT_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the account
+
+**Connect with Reddit** opens reddit.com, where the person signs in and allows the app for good
+(`duration=permanent`). Staqly asks for these scopes:
+
+| Scope | Why |
+|---|---|
+| `identity` | Read the account's name and picture |
+| `submit` | Publish posts and comments |
+| `read` | Find a picture or video post once Reddit has made it |
+| `flair` | Look up a subreddit's flairs by name |
+
+The channel shows `u/name`. Reddit's sign-in does not run out: staqly renews the hour-long access
+on its own until the person removes the app on reddit.com.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Title | required, up to 300 characters |
+| Text | up to 40,000 characters, for text posts |
+| Media | **one** picture or **one** video |
+
+A Reddit post is one kind: **text**, **link** (the title links to an address) or **picture/video**.
+Link, picture and video posts have a title only, so leave the text empty for a Reddit channel (or
+put it in a comment). A video goes out with a plain dark cover picture, which Reddit shows before it
+plays.
+
+Whether a subreddit takes a kind of post is the subreddit's rule: one that only takes text refuses a
+picture, and the target fails with Reddit's reason.
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The post's title, required |
+| **Subreddit** (`subreddit`) | Where it goes: `r/running`, `running` or the subreddit's link |
+| **Link** (`link`) | Makes it a link post to this address |
+| **Flair** (`flair`) | The subreddit's flair, by the name the subreddit shows; required where the subreddit asks for one |
+| **Mark as NSFW** (`nsfw`), **Mark as spoiler** (`spoiler`) | Reddit's marks |
+
+Over the API: `{"title": "Long run", "subreddit": "r/running", "flair": "Race report"}` in the
+target's `settings`. A flair name the subreddit doesn't have fails the target with the names it has.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments, each under the one
+before, after their delays. Comments take text only.
+
+For a picture or video post Reddit answers before the post exists; staqly waits for it to show up
+among the account's posts (about a minute at most). If it doesn't in time, the target is still
+published, linking to the account's posts, but its comments can't be sent.
+
+## When publishing fails
+
+| Reddit says | Staqly does |
+|---|---|
+| The sign-in was revoked (401) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit (429, or "you are doing that too much"), Reddit unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| No such subreddit, a missing flair, a kind of post the subreddit doesn't take, a banned account (403) | Fails the target with Reddit's reason; retrying would not help, so it does not |
+
+Reddit has no way to send a post only once. When staqly sent a post but its answer never came, it
+looks among the account's latest posts for one with the same title in that subreddit: if it is
+there, that is the post; if not, the target fails with "may have published" instead of trying again.
+Check the subreddit before you post it again.

@@ -1,0 +1,93 @@
+---
+title: MeWe
+description: Publish to your MeWe timeline or your MeWe groups with text and pictures. What to register in MeWe's developer program.
+---
+
+Staqly publishes to **MeWe** through MeWe's Open API (a developer preview): the person signs in on
+mewe.com, and staqly posts to their own timeline (`POST /api/dev/me/post`) or to one of their groups
+(`POST /api/dev/group/{groupId}/post`), with pictures uploaded first. Each timeline or group is its
+own channel. A published target links to the timeline or the group: MeWe's API does not say the new
+post's address.
+
+## What you need
+
+A **MeWe app** of the **Standalone** type, registered once per server. MeWe's developer program is
+a **beta with limited places**: MeWe reviews who joins and reviews each app. Its keys go into the
+server's environment (`.env`), the same way locally and in the cloud (see
+[Developer apps](/channels/developer-apps)); a workspace can also use its own app.
+
+<Steps>
+<Step>
+
+### Join the developer program and create the app
+
+Sign in at [dev.mewe.com/developer](https://dev.mewe.com/developer) with a MeWe account and apply
+to become a developer. Once MeWe approves you, create an application:
+
+| Where | What |
+|---|---|
+| **Type** | Standalone |
+| **Permissions** | `user_profile` (read the person), `user_groups` (list their groups and post to them), `post_content` (post and upload pictures) |
+| **Redirect URI** | your dashboard's `/channels/callback/mewe`, for example `http://localhost:8080/channels/callback/mewe` locally or `https://staqly.example.com/channels/callback/mewe` |
+
+Copy the **App ID** and the **API key** from the app's developer settings.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_MEWE_CLIENT_ID=your-app-id
+PROVIDER_MEWE_CLIENT_SECRET=your-api-key
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_MEWE_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, MeWe shows as **soon** in **Channels → Add channel**.
+`PROVIDER_MEWE_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the timeline or groups
+
+**Connect with MeWe** opens mewe.com, where the person signs in and allows the app. Staqly then
+lists **your timeline** and every group you belong to; pick one or more, and each becomes its own
+channel. Connecting the same timeline or group again reconnects the existing channel.
+
+</Step>
+</Steps>
+
+## Reconnecting
+
+MeWe's sign-in has an end date and MeWe offers no way to renew it. When it runs out, the channel
+turns **Needs reconnect** (an [alert](/automation/alerts) can tell you): open the row's menu and
+reconnect it.
+
+## Limits
+
+| | |
+|---|---|
+| Text | 5,000 characters |
+| Media | up to **4 pictures** per post; MeWe's API takes no videos |
+
+## Comments
+
+MeWe's API does not return the new post's id and has no way to comment, so a post's thread is not
+sent on MeWe.
+
+## When publishing fails
+
+| MeWe says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked (401) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit (420 "Enhance Your Calm", 429) or MeWe unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A missing app permission (403, it names the permission), a group you may not post in, a group you left (404) | Fails the target with MeWe's reason; add the permission to the app, or reconnect |
+
+MeWe has no way to recognize a post sent twice. When its answer is lost, staqly does not post again
+and fails the target asking you to check the timeline or group first.

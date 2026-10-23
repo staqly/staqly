@@ -98,6 +98,11 @@ func (s *Service) RunRetention(ctx context.Context) (RetentionReport, error) {
 		}
 	}
 
+	// 2. Account pickers nobody finished: the sealed sign-in goes once it expires.
+	if err := s.W.DeleteExpiredPendingConnections(ctx, s.now()); err != nil {
+		return rep, err
+	}
+
 	wss, err := s.Q.RetentionWorkspaceIDs(ctx)
 	if err != nil {
 		return rep, err

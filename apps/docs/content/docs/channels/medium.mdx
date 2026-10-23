@@ -1,0 +1,60 @@
+---
+title: Medium
+description: Publish stories to a Medium profile or a publication you write for, with a lead picture, tags and an original link. Only accounts that already have an integration token can connect.
+---
+
+Staqly publishes **stories** to Medium through its REST API, signed in with an **integration
+token**. The post's text is the story in Markdown and its **Title** setting the headline. A
+published target links to the story on medium.com.
+
+<Callout type="warn">
+Medium stopped issuing integration tokens and no longer takes new API apps. Only an account that
+already has a token can connect; Medium doesn't offer another way to publish from outside.
+</Callout>
+
+## Connect the account
+
+1. On medium.com, open **Settings → Security and apps → Integration tokens** and copy a token
+   you made earlier (Medium shows the token list only to accounts that have one).
+2. In staqly: **Channels → Add channel → Medium**, paste it as **Integration token**.
+3. To publish to a **publication** you write for instead of your profile, enter its link
+   (`https://medium.com/your-publication`), its name or its id as **Publication**. Staqly checks
+   that the account writes for it and, if not, lists the publications it does write for. Connect
+   the account twice to publish to both.
+
+The channel shows your name and `@username` (with the publication: its name and
+`@username in your-publication`).
+
+## Limits
+
+| | |
+|---|---|
+| Text | no limit; Markdown (headings, lists, links, code, quotes) |
+| Media | one picture (JPEG, PNG, GIF or TIFF): staqly uploads it to Medium and puts it under the title |
+| Title | required, up to 100 characters |
+
+Medium shows a story's title only when its content starts with it, so staqly writes the title as
+the story's first heading. Don't repeat it in the text.
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The story's headline (required) |
+| **Tags** (`tags`) | Up to 3 tags of at most 25 characters (Medium's API ignores the rest) |
+| **Original link** (`canonical_url`) | Where the article first appeared, so search engines credit it |
+| **Publish as** (`publish_status`) | `public` (default), `unlisted` (only people with the link) or `draft` |
+
+In a publication, the editors may hold the story for review whatever **Publish as** says.
+
+## When publishing fails
+
+| Medium says | Staqly does |
+|---|---|
+| The token was revoked or is invalid | Marks the channel **Needs reconnect**; paste a valid token |
+| Rate limit, Medium unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused story (publication not found, no permission) | Fails the target with Medium's reason |
+
+Medium has no way to ask "did this story go out?", and a new attempt would make a second story.
+So when staqly sent the story but its answer never came, the target fails with "may have
+published" instead of trying again: check your profile before you post it again.

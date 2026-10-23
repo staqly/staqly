@@ -1,0 +1,136 @@
+---
+title: Facebook Page
+description: Publish posts, pictures, videos, reels and stories to Facebook Pages, with comments. What to register at Meta for Developers and how to pick the Pages.
+---
+
+Staqly publishes to **Facebook Pages** through the Graph API with Facebook Login: the person signs
+in on facebook.com, staqly lists the Pages they may post to, and each Page they pick becomes its
+own channel. Staqly publishes as the Page, never as the person. A published target links to the
+post on facebook.com.
+
+## What you need
+
+- A **Meta app** with **Facebook Login for Business**, registered once per server. Its keys go into
+  the server's environment (`.env`), the same way locally and in the cloud (see
+  [Developer apps](/channels/developer-apps)).
+- A Facebook account with a role on the Page that lets it publish (full control, or partial access
+  with content).
+
+Facebook takes uploads, so unlike Instagram and Threads a Facebook Page needs no public media
+storage: staqly sends each file's bytes. A video kept in [S3-compatible storage](/self-hosting/storage)
+is handed to Facebook as a link instead, which spares the server the upload.
+
+<Steps>
+<Step>
+
+### Create the app
+
+At [Meta for Developers](https://developers.facebook.com/apps), click **Create app** and choose
+**Business** (or the use case **Manage everything on your Page**). Add **Facebook Login for
+Business**, then set:
+
+| Where | What |
+|---|---|
+| **Facebook Login for Business → Settings → Valid OAuth Redirect URIs** | your dashboard's `/channels/callback/facebook`, for example `https://staqly.example.com/channels/callback/facebook`. Meta takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
+| **App settings → Basic** | a privacy policy URL and a category (Meta asks for both before the app goes live) |
+| **App roles → Roles** | the people who may connect while the app is in development |
+
+Copy the **App ID** and **App secret** from **App settings → Basic**.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_FACEBOOK_CLIENT_ID=your-meta-app-id
+PROVIDER_FACEBOOK_CLIENT_SECRET=your-meta-app-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_FACEBOOK_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, Facebook Page shows as **soon** in **Channels → Add channel**.
+`PROVIDER_FACEBOOK_ENABLED=false` hides it altogether. The same Meta app can also serve
+[Instagram Business](/channels/instagram_business) (its own `PROVIDER_INSTAGRAM_BUSINESS_*` keys).
+A workspace may instead save its own app over the API (`PUT /v1/providers/facebook/app`).
+
+</Step>
+<Step>
+
+### Connect the Pages
+
+**Connect with Facebook** opens facebook.com, where the person signs in, chooses the Pages the app
+may use and allows it. Staqly asks for these permissions:
+
+| Permission | Why |
+|---|---|
+| `pages_show_list` | List the Pages the person manages |
+| `business_management` | Also list the Pages a business portfolio owns or manages for clients |
+| `pages_manage_posts` | Publish posts, reels and stories as the Page |
+| `pages_read_engagement` | Read the Page's name, picture and posts |
+| `pages_manage_engagement` | Post the comments of a post's thread as the Page |
+
+Staqly then lists the Pages: pick one or more, and each becomes a channel showing the Page's name,
+`@username` (or its id, for a Page without one) and picture. A Page staqly finds through a business
+portfolio but on which the person has no role is left out. Connecting the same Page again
+reconnects its channel.
+
+Without `pages_manage_engagement` the channel connects, but a post's comments are not sent on it.
+
+</Step>
+<Step>
+
+### Before other people connect
+
+While the app is in development, only people with a role on it can connect. Before your customers
+connect their Pages, Meta reviews the app: **App Review** for each permission above (a screen
+recording of staqly using it) and **Business Verification** of your company.
+
+</Step>
+</Steps>
+
+## The sign-in
+
+The person's sign-in is traded for a 60-day token, and each Page channel keeps the **Page's own
+token**, which does not run out. The channel turns **Needs reconnect** when the person removes the
+app, changes their password, or loses their role on the Page.
+
+## Limits
+
+| | |
+|---|---|
+| Text | 63,206 characters |
+| Media | up to **10 pictures**, or **one video**: not both in one post |
+| Pictures | JPEG, PNG, GIF, BMP, TIFF or WebP, up to 10 MB |
+| Reels | one video, 3 to 90 seconds, 9:16 |
+| Stories | one picture or one video; no text |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Post as** (`post_type`) | `post` (default: text, pictures or a video in the feed), `reel` or `story` |
+
+Over the API: `{"post_type": "reel"}` in the target's `settings`.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the post, as
+the Page, in order and after their delays. A comment takes text and at most one picture. Stories
+take no comments.
+
+## When publishing fails
+
+| Facebook says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked, the person lost their role on the Page | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit, posting too fast, Facebook unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A duplicate post, a refused picture or video, a Community Standards block, a security check on the account | Fails the target with Facebook's reason; retrying would not help, so it does not |
+
+Facebook has no way to ask "did this post go out?", and a new attempt would make a new post. So
+when staqly sent the post but its answer never came, the target fails with "may have published"
+instead of trying again: check the Page before you post it again.

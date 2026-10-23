@@ -166,6 +166,8 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 			r.Post("/channels", s.connectChannel)
 			r.Get("/channels/oauth/{provider}/start", s.oauthStart)
 			r.Get("/channels/oauth/{provider}/callback", s.oauthCallback)
+			r.Get("/pending-connections/{id}", s.getPendingConnection)
+			r.Post("/pending-connections/{id}", s.finishPendingConnection)
 			r.Get("/channels/{id}", s.getChannel)
 			r.Patch("/channels/{id}", s.updateChannel)
 			r.Delete("/channels/{id}", s.deleteChannel)
