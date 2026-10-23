@@ -1,7 +1,7 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { BellRing, HardDrive, KeyRound, Layers, Send, Share2, Webhook } from 'lucide-react'
+import { BellRing, HardDrive, KeyRound, Layers, Share2, Webhook } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
@@ -34,12 +34,14 @@ const METERS: { key: MeterKey; label: string; Icon: typeof Layers; bytes?: boole
   { key: 'api_keys', label: 'API keys', Icon: KeyRound },
   { key: 'storage_bytes', label: 'Storage', Icon: HardDrive, bytes: true },
   { key: 'alerts', label: 'Alerts', Icon: BellRing },
-  {
-    key: 'x_posts_per_period',
-    label: 'X posts this month',
-    Icon: Send,
-    hint: 'Included in the plan; bought posts come on top',
-  },
+]
+
+/**
+ * Platforms whose posts count against an allowance of their own (their APIs charge per post), shown inside Posts
+ * this month rather than as tiles of their own: one more such platform is one more line here.
+ */
+const PLATFORM_POSTS: { key: MeterKey; provider: string; name: string }[] = [
+  { key: 'x_posts_per_period', provider: 'x', name: 'X' },
 ]
 
 function UsageMeter({
@@ -49,6 +51,7 @@ function UsageMeter({
   bytes,
   hint,
   Icon,
+  children,
 }: {
   label: string
   used: number
@@ -56,6 +59,8 @@ function UsageMeter({
   bytes?: boolean
   hint?: string
   Icon?: typeof Layers
+  /** More inside the tile, under the hint (the per-platform allowances of Posts this month). */
+  children?: React.ReactNode
 }) {
   const { level, pct } = usageMeter(used, max)
   const tone = meterTone(level)
@@ -107,7 +112,61 @@ function UsageMeter({
         )}
       </div>
       {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+      {children}
     </div>
+  )
+}
+
+const count = (n: number) => n.toLocaleString('en-US')
+
+/** One platform's own allowance: a line with a thin bar, inside Posts this month. */
+function PlatformPosts({
+  provider,
+  name,
+  used,
+  max,
+  hint,
+}: {
+  provider: string
+  name: string
+  used: number
+  max: number
+  hint?: string
+}) {
+  const { level, pct } = usageMeter(used, max)
+  const tone = meterTone(level)
+
+  return (
+    <li className="grid gap-1.5" data-testid={`platform-posts-${provider}`} data-level={level}>
+      <div className="flex items-center gap-2 text-[13px]">
+        <span className="min-w-0 flex-1 font-medium">{name}</span>
+        {(level === 'full' || level === 'warn') && (
+          <span className={cn('text-xs font-medium', tone.text)}>
+            {level === 'full' ? 'Limit reached' : 'Almost full'}
+          </span>
+        )}
+        <span className="text-muted-foreground tabular-nums">
+          <span className="text-foreground">{count(used)}</span> / {level === 'unlimited' ? '∞' : count(max)}
+        </span>
+      </div>
+      {level !== 'unlimited' && (
+        <div
+          role="progressbar"
+          aria-label={`${name} posts`}
+          aria-valuemin={0}
+          aria-valuemax={max}
+          aria-valuenow={used}
+          aria-valuetext={`${count(used)} of ${count(max)}`}
+          className="h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className={cn('h-full rounded-full transition-[width] duration-500', tone.fill)}
+            style={{ width: `${Math.max(pct, used > 0 ? 2 : 0)}%` }}
+          />
+        </div>
+      )}
+      {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+    </li>
   )
 }
 
@@ -313,6 +372,29 @@ export function PlanUsagePage() {
     <Skeleton className="h-40 rounded-2xl" />
   )
 
+  // The platforms with an allowance of their own this plan has (none when local or unlocked: nothing is metered).
+  const metered =
+    u && !isLocal && !unlocked ? PLATFORM_POSTS.filter((p) => (u.plan?.limits?.[p.key] ?? UNLIMITED) !== UNLIMITED) : []
+  const platformPosts =
+    u && metered.length > 0 ? (
+      <div className="grid gap-2 border-t pt-2.5">
+        <div className="text-xs font-medium text-muted-foreground">Per platform</div>
+        <ul className="grid gap-2.5" aria-label="Posts per platform">
+          {metered.map((p) => (
+            <PlatformPosts
+              key={p.key}
+              provider={p.provider}
+              name={p.name}
+              used={u.usage?.[p.key] ?? 0}
+              max={u.plan?.limits?.[p.key] ?? UNLIMITED}
+              hint={bonusHint(plan, p.key) || undefined}
+            />
+          ))}
+        </ul>
+        <div className="text-xs text-muted-foreground">Included in the plan; bought posts come on top.</div>
+      </div>
+    ) : null
+
   const meters = usage.error ? (
     <ErrorState title="Could not load usage" error={usage.error} onRetry={() => refetchUsage()} />
   ) : (
@@ -330,7 +412,9 @@ export function PlanUsagePage() {
             hint={unlocked ? undefined : bonusHint(plan, m.key) || m.hint}
             used={u.usage?.[m.key] ?? 0}
             max={unlocked ? UNLIMITED : (u.plan?.limits?.[m.key] ?? UNLIMITED)}
-          />
+          >
+            {m.key === 'posts_per_month' && platformPosts}
+          </UsageMeter>
         ),
       )}
     </div>
