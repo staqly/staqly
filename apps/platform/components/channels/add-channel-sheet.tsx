@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, PlugZap } from 'lucide-react'
+import { ArrowLeft, Loader2, PlugZap } from 'lucide-react'
 import { useState } from 'react'
 
 import { ErrorState } from '@/components/common/error-state'
@@ -87,14 +87,18 @@ export function ConnectForm({
   })
 
   if (provider.auth === 'oauth2') {
+    // Busy from the click until the platform's page loads: after success the browser is still navigating away.
+    const opening = start.isPending || start.isSuccess
+
     return (
       <div className="grid gap-4">
         <p className="text-sm text-muted-foreground">
           {provider.name} opens in this tab to ask which account to connect. You come back here when it is done.
         </p>
         <div>
-          <Button onClick={() => start.mutate()} disabled={start.isPending} data-testid="oauth-start">
-            <PlugZap /> {start.isPending ? 'Opening...' : `Connect with ${provider.name}`}
+          <Button onClick={() => start.mutate()} disabled={opening} aria-busy={opening} data-testid="oauth-start">
+            {opening ? <Loader2 className="animate-spin" aria-hidden /> : <PlugZap />}{' '}
+            {opening ? `Opening ${provider.name}...` : `Connect with ${provider.name}`}
           </Button>
         </div>
       </div>
