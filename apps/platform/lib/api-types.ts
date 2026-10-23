@@ -291,6 +291,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/billing/promotion-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a promotion code (admin)
+         * @description Checks a promotion code made in Stripe (active, its coupon valid) and returns what it takes off and the
+         *     plans it applies to, so a plan picker can show the discounted prices. 422 under `promotion_code` when
+         *     the code is unknown, used up or fits no plan. Checkout checks the code again for the plan chosen.
+         */
+        post: operations["checkPromotionCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/billing/sync": {
         parameters: {
             query?: never;
@@ -3439,6 +3461,31 @@ export interface components {
             /** @example https://checkout.stripe.com/c/pay/cs_test_a1b2c3 */
             url: string;
         };
+        PromotionCode: {
+            /** @example SPRING20 */
+            code: string;
+            /** @description Percent taken off; absent for an amount off. */
+            percent_off?: number;
+            /** @description Amount taken off per invoice, in cents of `currency`; absent for a percent off. */
+            amount_off?: number;
+            /** @example eur */
+            currency?: string;
+            /**
+             * @description How long the discount lasts.
+             * @enum {string}
+             */
+            duration?: "once" | "repeating" | "forever";
+            /** @description Months the discount lasts when `duration` is `repeating`. */
+            duration_in_months?: number;
+            /**
+             * @description Ids of the plans the code applies to.
+             * @example [
+             *       "plus",
+             *       "pro"
+             *     ]
+             */
+            plans: string[];
+        };
         ErrorResponse: {
             error: components["schemas"]["ErrorBody"];
             /** @description Same as the X-Request-Id response header */
@@ -5519,6 +5566,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BillingURL"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    checkPromotionCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @example SPRING20 */
+                    promotion_code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The code's discount and plans */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromotionCode"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -601,13 +601,26 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 	return nil
 }
 
-// promotionCodeID: the id of the active promotion code `code` (as typed), checked against the plan the person
-// picked: a code limited to other plans is refused here rather than giving nothing at Stripe.
-func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, price string) (string, error) {
+// stripeCoupon: what a promotion code's coupon takes off, and the products it is limited to (none: every plan).
+type stripeCoupon struct {
+	Valid            bool    `json:"valid"`
+	PercentOff       float64 `json:"percent_off"`
+	AmountOff        int64   `json:"amount_off"`
+	Currency         string  `json:"currency"`
+	Duration         string  `json:"duration"`
+	DurationInMonths int64   `json:"duration_in_months"`
+	AppliesTo        *struct {
+		Products []string `json:"products"`
+	} `json:"applies_to"`
+}
+
+// promotion: the active promotion code `code` (as typed): its id and its coupon (nil when Stripe sent none).
+func (s *Service) promotion(ctx context.Context, code string) (string, *stripeCoupon, error) {
 	notValid := invalid("promotion_code", "this code isn't valid (or has been used up)")
 	var list struct {
 		Data []struct {
 			ID     string          `json:"id"`
+			Code   string          `json:"code"`
 			Coupon json.RawMessage `json:"coupon"` // before API 2025-09: the coupon (an object)
 			// From API 2025-09: promotion.coupon (an id).
 			Promotion struct {
@@ -617,10 +630,11 @@ func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, p
 	}
 	q := url.Values{"code": {code}, "active": {"true"}, "limit": {"1"}}
 	if err := s.stripe(ctx, "GET", "/v1/promotion_codes?"+q.Encode(), nil, &list); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	if len(list.Data) == 0 {
-		return "", notValid
+	// Stripe finds codes whatever their case; staqly takes a code only as it was made (SPRING20, not spring20).
+	if len(list.Data) == 0 || list.Data[0].Code != code {
+		return "", nil, notValid
 	}
 	pc := list.Data[0]
 	couponID := pc.Promotion.Coupon
@@ -633,32 +647,103 @@ func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, p
 		}
 	}
 	if couponID == "" {
-		return pc.ID, nil
+		return pc.ID, nil, nil
 	}
-	var coupon struct {
-		Valid     bool `json:"valid"`
-		AppliesTo *struct {
-			Products []string `json:"products"`
-		} `json:"applies_to"`
-	}
+	var coupon stripeCoupon
 	if err := s.stripe(ctx, "GET", "/v1/coupons/"+url.PathEscape(couponID)+"?expand[]=applies_to", nil, &coupon); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if !coupon.Valid {
-		return "", notValid
+		return "", nil, notValid
 	}
-	if coupon.AppliesTo != nil && len(coupon.AppliesTo.Products) > 0 {
-		var pr struct {
-			Product string `json:"product"`
-		}
-		if err := s.stripe(ctx, "GET", "/v1/prices/"+url.PathEscape(price), nil, &pr); err != nil {
-			return "", err
-		}
-		if !slices.Contains(coupon.AppliesTo.Products, pr.Product) {
-			return "", invalid("promotion_code", fmt.Sprintf("this code doesn't apply to the %s plan", plan.Name))
+	return pc.ID, &coupon, nil
+}
+
+// couponFits: whether a coupon covers a plan's price (a coupon limited to products names the price's product).
+func (s *Service) couponFits(ctx context.Context, coupon *stripeCoupon, price string) (bool, error) {
+	if coupon == nil || coupon.AppliesTo == nil || len(coupon.AppliesTo.Products) == 0 {
+		return true, nil
+	}
+	var pr struct {
+		Product string `json:"product"`
+	}
+	if err := s.stripe(ctx, "GET", "/v1/prices/"+url.PathEscape(price), nil, &pr); err != nil {
+		return false, err
+	}
+	return slices.Contains(coupon.AppliesTo.Products, pr.Product), nil
+}
+
+// promotionCodeID: the id of the active promotion code `code` (as typed), checked against the plan the person
+// picked: a code limited to other plans is refused here rather than giving nothing at Stripe.
+func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, price string) (string, error) {
+	id, coupon, err := s.promotion(ctx, code)
+	if err != nil {
+		return "", err
+	}
+	fits, err := s.couponFits(ctx, coupon, price)
+	if err != nil {
+		return "", err
+	}
+	if !fits {
+		return "", invalid("promotion_code", fmt.Sprintf("this code doesn't apply to the %s plan", plan.Name))
+	}
+	return id, nil
+}
+
+// PromotionCode: what a promotion code takes off and the plans it is good for, so the plan picker can check a
+// code and show the discounted prices before anyone pays. Checkout checks it again for the plan chosen.
+type PromotionCode struct {
+	Code             string   `json:"code"`
+	PercentOff       float64  `json:"percent_off,omitempty"`
+	AmountOff        int64    `json:"amount_off,omitempty"` // in cents of currency
+	Currency         string   `json:"currency,omitempty"`
+	Duration         string   `json:"duration,omitempty"` // once, repeating (duration_in_months) or forever
+	DurationInMonths int64    `json:"duration_in_months,omitempty"`
+	Plans            []string `json:"plans"`
+}
+
+// CheckPromotionCode: a promotion code typed in staqly, with its discount and the offered plans it applies to
+// (a plan is in when either of its prices fits); a code that fits no plan is refused.
+func (s *Service) CheckPromotionCode(ctx context.Context, p Principal, code string) (PromotionCode, error) {
+	if err := s.requireOwner(ctx, p); err != nil {
+		return PromotionCode{}, err
+	}
+	if !s.BillingEnabled() {
+		return PromotionCode{}, errBillingOff
+	}
+	code = strings.TrimSpace(code)
+	if code == "" || len(code) > 100 {
+		return PromotionCode{}, invalid("promotion_code", "type the code, such as SPRING20")
+	}
+	_, coupon, err := s.promotion(ctx, code)
+	if err != nil {
+		return PromotionCode{}, err
+	}
+	out := PromotionCode{Code: code, Plans: []string{}}
+	if coupon != nil {
+		out.PercentOff, out.AmountOff, out.Currency = coupon.PercentOff, coupon.AmountOff, coupon.Currency
+		out.Duration, out.DurationInMonths = coupon.Duration, coupon.DurationInMonths
+	}
+	for _, plan := range OfferedPlans() {
+		for _, interval := range []string{IntervalMonth, IntervalYear} {
+			price, err := s.priceID(ctx, plan, interval)
+			if err != nil {
+				continue // not for sale in this interval: nothing to discount
+			}
+			fits, err := s.couponFits(ctx, coupon, price)
+			if err != nil {
+				return PromotionCode{}, err
+			}
+			if fits {
+				out.Plans = append(out.Plans, plan.ID)
+				break
+			}
 		}
 	}
-	return pc.ID, nil
+	if len(out.Plans) == 0 {
+		return PromotionCode{}, invalid("promotion_code", "this code doesn't apply to any plan")
+	}
+	return out, nil
 }
 
 // PortalSession opens the Stripe customer portal (payment method, invoices,
