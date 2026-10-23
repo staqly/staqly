@@ -1,7 +1,7 @@
 'use client'
 
-import { CircleCheck, CircleX, LoaderCircle, Share2 } from 'lucide-react'
-import { useState } from 'react'
+import { CircleCheck, CircleX, LoaderCircle, RefreshCw, Share2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { ErrorState } from '@/components/common/error-state'
 import { Button } from '@/components/ui/button'
@@ -14,12 +14,15 @@ import { cn } from '@/lib/utils'
 
 import { SettingsCard } from './settings-card'
 
-type Outcome = { check?: ProviderCheck; error?: string }
+type Outcome = { ok: boolean; hint: string }
 
-/** One platform's check; never throws, so Test all goes on after a failure. A rate limit is waited out once. */
+/** One platform's check, as one line: ready, or the first thing to fix. Never throws; a rate limit is waited out once. */
 async function checkOne(id: string, retry = true): Promise<Outcome> {
   try {
-    return { check: await api.checkProvider(id) }
+    const c: ProviderCheck = await api.checkProvider(id)
+    const problem = c.checks.find((x) => !x.ok)
+
+    return problem ? { ok: false, hint: problem.detail } : { ok: true, hint: 'Ready to connect and post' }
   } catch (e) {
     if (retry && e instanceof ApiError && e.status === 429) {
       await new Promise((resolve) => setTimeout(resolve, (e.retryAfter || 1) * 1000))
@@ -27,14 +30,29 @@ async function checkOne(id: string, retry = true): Promise<Outcome> {
       return checkOne(id, false)
     }
 
-    return { error: `Not checked: ${errorMessage(e)}` }
+    return { ok: false, hint: `Not checked: ${errorMessage(e)}` }
+  }
+}
+
+/** Checks platforms one at a time (each check calls the platform once), filling in each line as it answers. */
+async function runChecks(
+  list: string[],
+  setResults: React.Dispatch<React.SetStateAction<Record<string, Outcome>>>,
+  setRunning: React.Dispatch<React.SetStateAction<string[]>>,
+) {
+  setRunning(list)
+
+  for (const id of list) {
+    const out = await checkOne(id)
+
+    setResults((all) => ({ ...all, [id]: out }))
+    setRunning((r) => r.filter((x) => x !== id))
   }
 }
 
 /**
- * This server's side of each platform people connect through its sign-in: app keys, whether the platform takes
- * them, the return address to register and (Instagram) media storage it can download from. Accounts are tested on
- * the Channels page.
+ * This server's side of each platform people connect through its sign-in (app keys, the platform taking them, what
+ * else it needs), shown like Health: one line each. Accounts are tested on the Channels page.
  */
 export function ChannelsHealthCard() {
   const providers = useProviders()
@@ -44,48 +62,50 @@ export function ChannelsHealthCard() {
   const [results, setResults] = useState<Record<string, Outcome>>({})
   const [running, setRunning] = useState<string[]>([])
   const oauth = (providers.data ?? []).filter((p) => p.auth === 'oauth2' && p.app_configured)
+  const ids = oauth.map((p) => p.id).join(',')
 
-  async function test(ids: string[]) {
-    if (!canCheck || running.length > 0) {
-      return
-    }
-
-    setRunning(ids)
-
-    // One at a time: each check calls the platform once.
-    for (const id of ids) {
-      const out = await checkOne(id)
-
-      setResults((all) => ({ ...all, [id]: out }))
-      setRunning((r) => r.filter((x) => x !== id))
+  const check = (list: string[]) => {
+    if (canCheck && list.length > 0) {
+      void runChecks(list, setResults, setRunning)
     }
   }
+
+  // Checked once when the page opens, like Health; Check now runs it again.
+  const started = useRef(false)
+
+  useEffect(() => {
+    if (!started.current && canCheck && ids) {
+      started.current = true
+      void runChecks(ids.split(','), setResults, setRunning)
+    }
+  }, [canCheck, ids])
 
   return (
     <SettingsCard
       title="Platforms"
       icon={<Share2 />}
-      description="Is this server set up for each platform: its app keys, whether the platform takes them, and what else it needs. Accounts are tested on the Channels page."
+      description="Can people connect and post to each platform? Accounts are checked on the Channels page."
       action={
         canCheck && oauth.length > 0 ? (
           <Button
             size="sm"
             variant="outline"
-            onClick={() => void test(oauth.map((p) => p.id))}
+            onClick={() => check(oauth.map((p) => p.id))}
             disabled={running.length > 0}
           >
-            {running.length > 0 ? 'Testing...' : 'Test all'}
+            <RefreshCw className={running.length > 0 ? 'animate-spin' : undefined} />{' '}
+            {running.length > 0 ? 'Checking...' : 'Check now'}
           </Button>
         ) : undefined
       }
     >
       {providers.isLoading ? (
-        <Skeleton className="h-24" />
+        <Skeleton className="h-28" />
       ) : providers.error ? (
         <ErrorState title="Could not load platforms" error={providers.error} onRetry={() => providers.refetch()} />
       ) : oauth.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No platform has its app keys on this server yet; your own automation always works.
+          No platform is set up on this server yet; your own automation always works.
         </p>
       ) : (
         <ul
@@ -98,55 +118,26 @@ export function ChannelsHealthCard() {
             const r = results[p.id]
 
             return (
-              <li key={p.id} className="grid gap-2 px-3 py-2.5 text-sm">
-                <div className="flex items-center gap-3">
-                  <ProviderTile id={p.id} name={p.name} className="size-6 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-                  {r?.check && !busy && (
-                    <span className={cn('text-xs font-medium', TONES[r.check.ok ? 'success' : 'danger'].text)}>
-                      {r.check.ok ? 'Ready' : 'Needs attention'}
-                    </span>
-                  )}
-                  {canCheck && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void test([p.id])}
-                      disabled={running.length > 0}
-                      aria-label={`Test ${p.name}`}
-                    >
-                      {busy ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
-                      Test
-                    </Button>
-                  )}
-                </div>
-                {!busy && r?.error && (
-                  <p role="status" className={cn('text-xs wrap-anywhere', TONES.danger.text)}>
-                    {r.error}
-                  </p>
+              <li key={p.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                {busy ? (
+                  <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+                ) : !r ? (
+                  <span className="size-4 shrink-0 rounded-full border" aria-hidden />
+                ) : r.ok ? (
+                  <CircleCheck className={cn('size-4 shrink-0', TONES.success.text)} aria-hidden />
+                ) : (
+                  <CircleX className={cn('size-4 shrink-0', TONES.danger.text)} aria-hidden />
                 )}
-                {!busy && r?.check && (
-                  <ul className="grid gap-1.5 pl-9" role="status" aria-label={`${p.name} checks`}>
-                    {r.check.checks.map((c) => (
-                      <li key={c.key} className="flex items-start gap-2 text-xs">
-                        {c.ok ? (
-                          <CircleCheck className={cn('mt-px size-3.5 shrink-0', TONES.success.text)} aria-hidden />
-                        ) : (
-                          <CircleX className={cn('mt-px size-3.5 shrink-0', TONES.danger.text)} aria-hidden />
-                        )}
-                        <span className="min-w-0">
-                          <span className="font-medium">{c.label}</span>
-                          <span className="text-muted-foreground">: </span>
-                          {c.key === 'return_address' && c.ok ? (
-                            <code className="font-mono wrap-anywhere">{c.detail}</code>
-                          ) : (
-                            <span className="text-muted-foreground wrap-anywhere">{c.detail}</span>
-                          )}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <ProviderTile id={p.id} name={p.name} className="size-6 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{p.name}</span>
+                  <span className="block text-xs text-muted-foreground wrap-anywhere">
+                    {busy ? 'Checking...' : (r?.hint ?? 'Set up on this server')}
+                  </span>
+                </span>
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                  {busy ? 'checking' : r ? (r.ok ? 'ok' : 'needs attention') : '—'}
+                </span>
               </li>
             )
           })}
