@@ -37,8 +37,8 @@ const METERS: { key: MeterKey; label: string; Icon: typeof Layers; bytes?: boole
 ]
 
 /**
- * Platforms whose posts count against an allowance of their own (their APIs charge per post), shown inside Posts
- * this month rather than as tiles of their own: one more such platform is one more line here.
+ * Platforms whose posts count against an allowance of their own (their APIs charge per post): one compact chip each
+ * in the full-width Posts per platform row under the tiles, so every tile keeps one height however many there are.
  */
 const PLATFORM_POSTS: { key: MeterKey; provider: string; name: string }[] = [
   { key: 'x_posts_per_period', provider: 'x', name: 'X' },
@@ -51,7 +51,6 @@ function UsageMeter({
   bytes,
   hint,
   Icon,
-  children,
 }: {
   label: string
   used: number
@@ -59,8 +58,6 @@ function UsageMeter({
   bytes?: boolean
   hint?: string
   Icon?: typeof Layers
-  /** More inside the tile, under the hint (the per-platform allowances of Posts this month). */
-  children?: React.ReactNode
 }) {
   const { level, pct } = usageMeter(used, max)
   const tone = meterTone(level)
@@ -112,15 +109,14 @@ function UsageMeter({
         )}
       </div>
       {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
-      {children}
     </div>
   )
 }
 
 const count = (n: number) => n.toLocaleString('en-US')
 
-/** One platform's own allowance: a line with a thin bar, inside Posts this month. */
-function PlatformPosts({
+/** One platform's own allowance: a compact chip (name, used / limit, a tiny bar) in the Posts per platform row. */
+function PlatformChip({
   provider,
   name,
   used,
@@ -135,37 +131,34 @@ function PlatformPosts({
 }) {
   const { level, pct } = usageMeter(used, max)
   const tone = meterTone(level)
+  const status = level === 'full' ? 'Limit reached' : level === 'warn' ? 'Almost full' : ''
 
   return (
-    <li className="grid gap-1.5" data-testid={`platform-posts-${provider}`} data-level={level}>
-      <div className="flex items-center gap-2 text-[13px]">
-        <span className="min-w-0 flex-1 font-medium">{name}</span>
-        {(level === 'full' || level === 'warn') && (
-          <span className={cn('text-xs font-medium', tone.text)}>
-            {level === 'full' ? 'Limit reached' : 'Almost full'}
-          </span>
-        )}
-        <span className="text-muted-foreground tabular-nums">
-          <span className="text-foreground">{count(used)}</span> / {level === 'unlimited' ? '∞' : count(max)}
-        </span>
-      </div>
-      {level !== 'unlimited' && (
-        <div
-          role="progressbar"
-          aria-label={`${name} posts`}
-          aria-valuemin={0}
-          aria-valuemax={max}
-          aria-valuenow={used}
-          aria-valuetext={`${count(used)} of ${count(max)}`}
-          className="h-1.5 overflow-hidden rounded-full bg-muted"
-        >
-          <div
-            className={cn('h-full rounded-full transition-[width] duration-500', tone.fill)}
-            style={{ width: `${Math.max(pct, used > 0 ? 2 : 0)}%` }}
-          />
-        </div>
-      )}
-      {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+    <li
+      className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border bg-background px-2.5 py-1 text-xs"
+      data-testid={`platform-posts-${provider}`}
+      data-level={level}
+      title={hint}
+    >
+      <span className="font-medium">{name}</span>
+      <span className="text-muted-foreground tabular-nums">
+        <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> / {count(max)}
+      </span>
+      <span
+        role="progressbar"
+        aria-label={`${name} posts`}
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-valuenow={used}
+        aria-valuetext={`${count(used)} of ${count(max)}`}
+        className="h-1.5 w-10 shrink-0 overflow-hidden rounded-full bg-muted"
+      >
+        <span
+          className={cn('block h-full rounded-full transition-[width] duration-500', tone.fill)}
+          style={{ width: `${Math.max(pct, used > 0 ? 4 : 0)}%` }}
+        />
+      </span>
+      {status && <span className={cn('font-medium', tone.text)}>{status}</span>}
     </li>
   )
 }
@@ -377,11 +370,16 @@ export function PlanUsagePage() {
     u && !isLocal && !unlocked ? PLATFORM_POSTS.filter((p) => (u.plan?.limits?.[p.key] ?? UNLIMITED) !== UNLIMITED) : []
   const platformPosts =
     u && metered.length > 0 ? (
-      <div className="grid gap-2 border-t pt-2.5">
-        <div className="text-xs font-medium text-muted-foreground">Per platform</div>
-        <ul className="grid gap-2.5" aria-label="Posts per platform">
+      <div
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-3.5 py-2.5 sm:px-4"
+        data-testid="platform-posts"
+      >
+        <span id="platform-posts-heading" className="text-[13px] font-medium sm:text-sm">
+          Posts per platform
+        </span>
+        <ul className="flex min-w-0 flex-wrap gap-2" aria-labelledby="platform-posts-heading">
           {metered.map((p) => (
-            <PlatformPosts
+            <PlatformChip
               key={p.key}
               provider={p.provider}
               name={p.name}
@@ -391,7 +389,7 @@ export function PlanUsagePage() {
             />
           ))}
         </ul>
-        <div className="text-xs text-muted-foreground">Included in the plan; bought posts come on top.</div>
+        <p className="text-xs text-muted-foreground sm:ml-auto">Included in the plan; bought posts come on top.</p>
       </div>
     ) : null
 
@@ -412,9 +410,7 @@ export function PlanUsagePage() {
             hint={unlocked ? undefined : bonusHint(plan, m.key) || m.hint}
             used={u.usage?.[m.key] ?? 0}
             max={unlocked ? UNLIMITED : (u.plan?.limits?.[m.key] ?? UNLIMITED)}
-          >
-            {m.key === 'posts_per_month' && platformPosts}
-          </UsageMeter>
+          />
         ),
       )}
     </div>
@@ -432,6 +428,7 @@ export function PlanUsagePage() {
       }
     >
       {meters}
+      {!usage.error && platformPosts}
       {u?.posts_by_status && <PeriodActivity usage={u} />}
       {!unlocked && plan && plan.limits.max_upload_bytes > 0 && (
         <p className="text-xs text-muted-foreground">
