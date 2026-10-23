@@ -7,6 +7,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/staqly/staqly/apps/api/internal/app"
@@ -42,11 +43,29 @@ func (fakePages) UseAccount(_ context.Context, c providers.Credentials, id strin
 	if c["user_token"] == "" {
 		return nil, providers.Profile{}, errors.New("no sign-in")
 	}
-	return providers.Credentials{"page_token": "pt_" + id, "page_id": id},
+	return providers.Credentials{"page_token": "pt_" + id, "page_id": id, "refresh_token": pagesRefresh.Load().(string)},
 		providers.Profile{Handle: "@page" + id, Name: "Page " + id}, nil
 }
 
+// pagesRefresh is the one refresh token the fake platform takes: each refresh retires it and hands out a new one.
+var pagesRefresh atomic.Value
+
+func (fakePages) Refresh(_ context.Context, _ providers.App, c providers.Credentials) (providers.Credentials, error) {
+	if c["refresh_token"] != pagesRefresh.Load().(string) {
+		return nil, &providers.Failure{Kind: providers.ErrReauth, Msg: "refresh token retired"}
+	}
+	next := c["refresh_token"] + "+"
+	pagesRefresh.Store(next)
+	out := providers.Credentials{}
+	for k, v := range c {
+		out[k] = v
+	}
+	out["refresh_token"] = next
+	return out, nil
+}
+
 func init() {
+	pagesRefresh.Store("rt")
 	providers.Register(fakePages{providers.NewBase("fakepages", "Fake Pages", providers.AuthOAuth2, providers.Limits{MaxChars: 500})}, providers.StatusAvailable)
 }
 
@@ -117,6 +136,15 @@ func TestPendingConnections(t *testing.T) {
 	e.do(nil, "GET", "/v1/channels", e.key, nil, 200, &list)
 	if len(list.Data) != 2 { // p1 was connected by the one-account sign-in and reconnected now
 		t.Fatalf("channels: %+v", list.Data)
+	}
+	// The two channels came from one sign-in: renewing it for one hands the new refresh token to the other, so the
+	// platform retiring the old one doesn't sign the other out.
+	for _, ch := range out.Data {
+		var test map[string]any
+		e.do(e.browser, "POST", "/v1/channels/"+ch.ID+"/test", "", nil, 200, &test, csrf...)
+		if test["ok"] != true {
+			t.Fatalf("test %s after a sibling refreshed: %v", ch.Handle, test)
+		}
 	}
 	// Used once.
 	e.do(e.browser, "POST", "/v1/pending-connections/"+id, "", map[string]any{"account_ids": []string{"p1"}}, 404, nil, csrf...)

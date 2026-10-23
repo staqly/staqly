@@ -840,6 +840,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		}
 		if sealed, err := s.seal(fresh); err == nil {
 			_ = s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID})
+			s.shareRefresh(ctx, row, creds, fresh)
 		}
 		profile = providers.Profile{Handle: row.Handle, Name: row.Name}
 	default:
@@ -931,6 +932,7 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	if err := s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
 		return err
 	}
+	s.shareRefresh(ctx, row, creds, fresh)
 	if old, ok := credentialsExpiry(creds); ok {
 		if exp, ok := credentialsExpiry(fresh); ok && exp.Equal(old) {
 			// Nothing was renewed (a platform without refresh tokens, like LinkedIn for most apps): look again when
@@ -1008,8 +1010,41 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if err := s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
 		return nil, err
 	}
+	s.shareRefresh(ctx, row, creds, fresh)
 	s.scheduleRefresh(ctx, row, fresh)
 	return fresh, nil
+}
+
+// shareRefresh hands a renewed sign-in to the other channels made from the same one (the accounts picked after one
+// sign-in: Tumblr blogs, Slack channels). Platforms that rotate refresh tokens retire the old one when it is used,
+// so a sibling still holding it could not renew any more. ponytail: siblings refresh under their own locks; two of
+// them renewing in the same instant can still race, and the loser turns needs_reconnect.
+func (s *Service) shareRefresh(ctx context.Context, row db.Channel, old, fresh providers.Credentials) {
+	was := old["refresh_token"]
+	if was == "" || fresh["refresh_token"] == "" || fresh["refresh_token"] == was {
+		return
+	}
+	rows, err := s.Q.ListChannels(ctx, row.WorkspaceID)
+	if err != nil {
+		return
+	}
+	for _, other := range rows {
+		if other.ID == row.ID || other.Provider != row.Provider {
+			continue
+		}
+		var c providers.Credentials
+		if s.unseal(other.Credentials, &c) != nil || c["refresh_token"] != was {
+			continue
+		}
+		for _, k := range []string{"access_token", "refresh_token", "expires_at", "refresh_expires_at"} {
+			if v, ok := fresh[k]; ok {
+				c[k] = v
+			}
+		}
+		if sealed, err := s.seal(c); err == nil {
+			_ = s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: other.ID})
+		}
+	}
 }
 
 func (s *Service) channelNeedsReconnect(ctx context.Context, row db.Channel, cause error) error {
