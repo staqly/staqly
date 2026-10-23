@@ -39,6 +39,7 @@ import { daysLeft } from '@/components/billing/billing-format'
 import { PlanBadge } from '@/components/plans/plan-badge'
 import { NewWorkspaceDialog } from '@/components/settings/new-workspace-dialog'
 import { UserAvatar } from '@/components/settings/user-avatar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -309,7 +310,7 @@ function UserMenu() {
         : nextPlan && `Upgrade to ${nextPlan.name}`
   const name = user?.name || (isLocal ? 'System' : 'Signed in')
   // People who sign in with an email code have the address as their name: show it once.
-  const roleLabel = role ? role.charAt(0).toUpperCase() + role.slice(1) : ''
+  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1)
   const detail = (user?.email !== name && user?.email) || (isLocal ? 'This computer' : roleLabel)
   // A local install has no welcome: its empty pages guide instead.
   const showGettingStarted = !isLocal && session.data?.onboarded === false
@@ -345,7 +346,15 @@ function UserMenu() {
             className="w-[min(16rem,calc(100vw-1rem))] [&_[role=menuitem]]:pointer-coarse:min-h-11"
           >
             <DropdownMenuLabel className="grid min-w-0 py-2 leading-tight">
-              <span className="truncate text-sm font-semibold text-foreground">{name}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate text-sm font-semibold text-foreground">{name}</span>
+                {/* With people (cloud), your role in this workspace; the detail line holds it when there is no address. */}
+                {accountsEnabled && detail !== roleLabel && (
+                  <Badge variant="outline" className="ml-auto shrink-0 font-medium" data-testid="user-role">
+                    {roleLabel}
+                  </Badge>
+                )}
+              </span>
               <span className="truncate text-xs font-normal text-muted-foreground">{detail}</span>
             </DropdownMenuLabel>
             {(showGettingStarted || upgradeLabel) && <DropdownMenuSeparator />}

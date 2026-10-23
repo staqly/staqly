@@ -90,6 +90,7 @@ describe('the signed-in person in the sidebar', () => {
 
     await user.click(screen.getAllByTestId('user-menu-trigger')[0])
     menu = await screen.findByRole('menu')
+    expect(within(menu).getByTestId('user-role')).toHaveTextContent('Owner')
     await user.click(within(menu).getByRole('menuitem', { name: /sign out/i }))
     await waitFor(() => expect(api.find('DELETE', '/v1/session')).toHaveLength(1))
   })

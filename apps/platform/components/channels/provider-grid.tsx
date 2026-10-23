@@ -48,7 +48,7 @@ const GROUPS: { title: string; ids: string[] }[] = [
   { title: 'Business and portfolio', ids: ['google_business', 'dribbble'] },
 ]
 
-function groupProviders<T extends { id: string }>(providers: T[]) {
+function groupProviders<T extends { id: string; status: string }>(providers: T[]) {
   const known = new Set(GROUPS.flatMap((g) => g.ids))
   const out = GROUPS.map((g) => ({
     title: g.title,
@@ -56,6 +56,11 @@ function groupProviders<T extends { id: string }>(providers: T[]) {
   }))
 
   out.push({ title: 'Other', items: providers.filter((p) => !known.has(p.id)) })
+
+  // Available platforms lead each group; the sort is stable, so the catalog order holds within each half.
+  for (const g of out) {
+    g.items.sort((a, b) => +(a.status !== 'available') - +(b.status !== 'available'))
+  }
 
   return out.filter((g) => g.items.length)
 }
