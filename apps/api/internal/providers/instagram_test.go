@@ -28,6 +28,7 @@ type fakeInstagram struct {
 	publishBody string            // its body then
 	dropPublish bool              // close the connection on media_publish (an answer that never came)
 	statusFor   map[string]string // container id -> status_code (default: IN_PROGRESS once, then FINISHED)
+	unusable    bool              // the long-lived exchange refuses the token (an account the app may not serve)
 	srv         *httptest.Server
 }
 
@@ -50,6 +51,9 @@ func (f *fakeInstagram) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			perms = instagramScopes
 		}
 		_, _ = w.Write([]byte(`{"data":[{"access_token":"short","user_id":"1784","permissions":"` + perms + `"}]}`))
+	case r.URL.Path == "/access_token" && f.unusable:
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"Unsupported request - method type: get","type":"IGApiException","code":100}}`))
 	case r.URL.Path == "/access_token":
 		_, _ = w.Write([]byte(`{"access_token":"long","token_type":"bearer","expires_in":5183944}`))
 	case r.URL.Path == "/refresh_access_token":
@@ -162,6 +166,12 @@ func TestInstagramConnect(t *testing.T) {
 	f.permissions = "instagram_business_basic"
 	if _, _, err := ig.Exchange(context.Background(), app, "https://app.example/cb", "c3", nil); !errors.Is(err, ErrRejected) {
 		t.Fatalf("without publishing: %v", err)
+	}
+
+	// An account the app may not serve (personal, or not a tester): say what to check.
+	f.permissions, f.unusable = "", true
+	if _, _, err := ig.Exchange(context.Background(), app, "https://app.example/cb", "c4", nil); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "tester") {
+		t.Fatalf("unusable token: %v", err)
 	}
 }
 

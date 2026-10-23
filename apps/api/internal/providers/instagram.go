@@ -122,7 +122,13 @@ func (i Instagram) Exchange(ctx context.Context, app App, redirect, code string,
 	long, err := instagramLongToken(ctx, url.Values{"grant_type": {"ig_exchange_token"}, "client_id": {app.ClientID}, "client_secret": {app.ClientSecret},
 		"access_token": {t.AccessToken}}, "/access_token")
 	if err != nil {
-		return nil, Profile{}, err
+		// Instagram signs in any account but then refuses its token on every call ("Unsupported request", code 100)
+		// when the app may not serve it: a personal account, or one without a role on an app not yet reviewed.
+		var f *Failure
+		if errors.As(err, &f) && strings.Contains(f.Msg, "Unsupported request") {
+			return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: "Instagram signed this account in but won't let the app use it (" + f.Msg + "): it must be a Business or Creator account, and while the app is in testing, one added as a tester. Check the account you are signed in to on instagram.com"}
+		}
+		return nil, Profile{}, instagramStep(err, "trading the sign-in for the 60-day token")
 	}
 	var me struct {
 		ID          string `json:"id"`
@@ -133,7 +139,7 @@ func (i Instagram) Exchange(ctx context.Context, app App, redirect, code string,
 		AccountType string `json:"account_type"`
 	}
 	if err := instagramGet(ctx, long.AccessToken, "/me", url.Values{"fields": {"id,user_id,username,name,profile_picture_url,account_type"}}, &me); err != nil {
-		return nil, Profile{}, err
+		return nil, Profile{}, instagramStep(err, "reading the account")
 	}
 	user := me.UserID
 	if user == "" {
@@ -154,6 +160,15 @@ func (i Instagram) Exchange(ctx context.Context, app App, redirect, code string,
 		ProfileURL: "https://www.instagram.com/" + me.Username + "/",
 		NoComments: t.Permissions != nil && !strings.Contains(perms, "instagram_business_manage_comments"),
 	}, nil
+}
+
+// instagramStep says which step of connecting an error comes from (Instagram's own messages rarely do).
+func instagramStep(err error, step string) error {
+	var f *Failure
+	if errors.As(err, &f) {
+		return &Failure{Kind: f.Kind, Msg: f.Msg + " (" + step + ")"}
+	}
+	return fmt.Errorf("%w (%s)", err, step)
 }
 
 type instagramLong struct {
