@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs'
 
+import { AxeBuilder } from '@axe-core/playwright'
+
 import { daysAhead, freshCollection } from '../../lib/data.js'
 import { expect, ready, test } from '../../lib/fixtures.js'
 import { connectLink } from '../../lib/stack.js'
@@ -172,6 +174,49 @@ test.describe('settings', () => {
     await expect(page.getByRole('region', { name: 'Health' })).toContainText('Ready')
     await page.getByRole('button', { name: 'Check now' }).click()
     await expect(page.getByRole('listitem').filter({ hasText: 'SQLite answers a ping' })).toContainText('ok')
+  })
+
+  test('platforms: compact status rows and one Check now button on desktop and phone', async ({ page }) => {
+    let checks = 0
+
+    await page.route('**/api/v1/providers', (route) =>
+      route.fulfill({
+        json: {
+          data: [{ id: 'instagram', name: 'Instagram', auth: 'oauth2', app_configured: true, status: 'ready' }],
+        },
+      }),
+    )
+    await page.route('**/api/v1/providers/instagram/check', (route) => {
+      checks++
+
+      return route.fulfill({
+        json: {
+          provider: 'instagram',
+          ok: true,
+          checks: [
+            { key: 'keys', label: 'App keys', ok: true, detail: 'Set' },
+            { key: 'media', label: 'Media storage', ok: true, detail: 'Links point at media.example.com' },
+          ],
+        },
+      })
+    })
+    await page.goto('/settings/system')
+    const platforms = page.getByRole('region', { name: 'Platforms' })
+
+    await expect(platforms.getByText('ok', { exact: true })).toBeVisible()
+    await expect(platforms.getByRole('button')).toHaveCount(1)
+    await expect(platforms.getByRole('listitem')).toHaveText('Instagramok')
+    await platforms.getByRole('button', { name: 'Check now' }).click()
+    await expect.poll(() => checks).toBe(2)
+    await expect(platforms.getByText('ok', { exact: true })).toBeVisible()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await platforms.scrollIntoViewIfNeeded()
+    await expect(platforms.getByRole('button', { name: 'Check now' })).toBeInViewport()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    const accessibility = await new AxeBuilder({ page }).include('section[aria-label="Platforms"]').analyze()
+
+    expect(accessibility.violations).toEqual([])
   })
 })
 
