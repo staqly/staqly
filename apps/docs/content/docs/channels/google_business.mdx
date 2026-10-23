@@ -1,0 +1,128 @@
+---
+title: Google Business Profile
+description: Publish updates with a photo and a button to a Google Business Profile location (formerly Google My Business). What to register in the Google Cloud console and what Google must approve.
+---
+
+Staqly publishes **updates** to a **Google Business Profile** location (formerly Google My
+Business): the post shows on the business's profile in Google Search and Maps. The person signs in
+with Google, picks one or more locations, and each becomes its own channel. A published target
+links to the post on Google.
+
+## What you need
+
+- A **Google Cloud project** approved for the **Business Profile APIs** and an OAuth client,
+  registered once per server. Its keys go into the server's environment (`.env`), the same way
+  locally and in the cloud (see [Developer apps](/channels/developer-apps)). The project and
+  client of [YouTube](/channels/youtube) can serve here too.
+- **Media storage Google can reach**, for posts with a photo. Google does not take uploads: it
+  downloads the photo from a link. Staqly hands it a time-limited link to the file in
+  [S3-compatible storage](/self-hosting/storage), so a server that keeps media on its own disk
+  publishes text posts only (a post with a photo fails and says why).
+- A Google account that is an owner or manager of the business, and a **verified** location.
+
+<Steps>
+<Step>
+
+### Ask Google for API access
+
+Google opens the Business Profile APIs to approved projects only: until then every call is refused
+(its quota is 0 requests a minute). Create the Cloud project, then request access with the
+[Business Profile API access form](https://developers.google.com/my-business/content/prereqs);
+Google answers by email, usually within a few days. Once approved, enable these APIs in
+**APIs & Services → Library**:
+
+- **My Business Account Management API** (lists the business accounts)
+- **My Business Business Information API** (lists the locations)
+- **Google My Business API** (publishes the posts)
+
+</Step>
+<Step>
+
+### Create the OAuth client
+
+In the [Google Cloud console](https://console.cloud.google.com/):
+
+| Where | What |
+|---|---|
+| **Google Auth Platform → Branding / Audience** | Fill in the app's name and support address; while the app is in **Testing**, add the Google accounts that may connect as **Test users** |
+| **Google Auth Platform → Data access** | Add the scopes listed below |
+| **Google Auth Platform → Clients → Create client** | Type **Web application**; under **Authorized redirect URIs** add your dashboard's `/channels/callback/google_business`, for example `http://localhost:8080/channels/callback/google_business` locally or `https://staqly.example.com/channels/callback/google_business` |
+
+Google takes `http://` return addresses for `localhost` only; any other address must be `https://`.
+Copy the **Client ID** and **Client secret** of the client.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_GOOGLE_BUSINESS_CLIENT_ID=your-client-id.apps.googleusercontent.com
+PROVIDER_GOOGLE_BUSINESS_CLIENT_SECRET=your-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_GOOGLE_BUSINESS_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, Google Business Profile shows as **soon** in **Channels → Add channel**.
+`PROVIDER_GOOGLE_BUSINESS_ENABLED=false` hides it altogether. The channel setup check asks Google
+whether it takes the keys and whether media links are public.
+
+</Step>
+<Step>
+
+### Connect the locations
+
+**Connect with Google Business Profile** opens Google's sign-in. Staqly asks for these scopes:
+
+| Scope | Why |
+|---|---|
+| `openid`, `email`, `profile` | Read who signed in |
+| `business.manage` | List the business accounts and locations, and publish posts |
+
+Staqly then lists every location of every business account the person manages, as "name, town";
+each one you pick becomes its own channel. Connecting the same location again reconnects the
+existing one.
+
+While the app is in **Testing**, Google signs test users out after **7 days** (the channel turns
+**Needs reconnect**); publish the app (**Audience → Publish app**) to keep sign-ins. `business.manage`
+is a sensitive scope, so Google verifies the app before people outside your organization see it
+without a warning.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | required, up to 1,500 characters; Google refuses posts with phone numbers in the text |
+| Media | up to **one picture**, JPEG or PNG, up to 5 MB and at least 250 pixels wide; no videos |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Button** (`call_to_action`) | `none` (default), `LEARN_MORE`, `BOOK`, `ORDER`, `SHOP` (Buy), `SIGN_UP` or `CALL` (dials the profile's phone number) |
+| **Button link** (`call_to_action_link`) | Where the button leads; every button but `CALL` needs one |
+
+Over the API: `{"call_to_action": "BOOK", "call_to_action_link": "https://example.com/book"}` in
+the target's `settings`.
+
+Google Business Profile posts have no comments, so a post's thread is not sent on it.
+
+## When publishing fails
+
+| Google says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit, Google unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| The post breaks a content policy, an invalid button link, a location that is gone or not verified | Fails the target with Google's reason; retrying would not help, so it does not |
+| "Google approves each app" when connecting | The project is not approved for the Business Profile APIs yet (see the first step) |
+
+Google has no way to ask "did this post go out?", and a new attempt would make a new post. So
+when staqly sent the post but its answer never came, the target fails with "may have published"
+instead of trying again: check the business profile before you post it again.

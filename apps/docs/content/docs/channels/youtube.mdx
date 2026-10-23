@@ -1,0 +1,140 @@
+---
+title: YouTube
+description: Upload videos to a YouTube channel with title, visibility, tags, category, playlist and comments. What to register in the Google Cloud console.
+---
+
+Staqly uploads videos to a **YouTube channel** through the YouTube Data API: the person signs in
+with Google, picks the channel, and every post becomes a video. A published target links to the
+video on youtube.com. Vertical videos up to three minutes show as Shorts on their own.
+
+## What you need
+
+A **Google Cloud project** with the YouTube Data API and an OAuth client, registered once per
+server. Its keys go into the server's environment (`.env`), the same way locally and in the cloud
+(see [Developer apps](/channels/developer-apps)). The same project and OAuth client can serve
+[Google Business Profile](/channels/google_business) too.
+
+<Steps>
+<Step>
+
+### Create the project and the OAuth client
+
+In the [Google Cloud console](https://console.cloud.google.com/):
+
+| Where | What |
+|---|---|
+| **APIs & Services → Library** | Enable **YouTube Data API v3** |
+| **Google Auth Platform → Branding / Audience** | Fill in the app's name and support address; while the app is in **Testing**, add the Google accounts that may connect as **Test users** |
+| **Google Auth Platform → Data access** | Add the scopes listed below |
+| **Google Auth Platform → Clients → Create client** | Type **Web application**; under **Authorized redirect URIs** add your dashboard's `/channels/callback/youtube`, for example `http://localhost:8080/channels/callback/youtube` locally or `https://staqly.example.com/channels/callback/youtube` |
+
+Google takes `http://` return addresses for `localhost` only; any other address must be `https://`.
+Copy the **Client ID** and **Client secret** of the client.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_YOUTUBE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+PROVIDER_YOUTUBE_CLIENT_SECRET=your-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_YOUTUBE_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, YouTube shows as **soon** in **Channels → Add channel**.
+`PROVIDER_YOUTUBE_ENABLED=false` hides it altogether. The channel setup check asks Google whether it
+takes the keys, without connecting an account.
+
+</Step>
+<Step>
+
+### Connect the channel
+
+**Connect with YouTube** opens Google's sign-in. Staqly asks for these scopes:
+
+| Scope | Why |
+|---|---|
+| `openid`, `email`, `profile` | Read who signed in |
+| `youtube.upload` | Upload videos |
+| `youtube.readonly` | List the channels the account owns |
+| `youtube.force-ssl` | Post comments and add videos to playlists |
+
+Leave every permission ticked: without `youtube.upload` the connection fails, without
+`youtube.force-ssl` the channel connects without comments.
+
+A Google account that owns several channels (brand accounts) is asked by Google which one to use;
+staqly then shows the channels the sign-in may publish to, and each one you pick becomes its own
+channel with the channel's name, `@handle` and picture. Connecting the same channel again
+reconnects the existing one.
+
+</Step>
+<Step>
+
+### Before other people connect
+
+- While the app is in **Testing**, only its test users can connect, and Google signs them out
+  after **7 days** (the channel turns **Needs reconnect**). Publish the app (**Audience → Publish
+  app**) to keep sign-ins.
+- **Google's verification**: the YouTube scopes are sensitive, so Google reviews the app (a privacy
+  policy, a video of staqly using them) before people outside your organization see it without a
+  warning.
+- **YouTube's API audit**: videos uploaded by a project YouTube has not audited are **locked as
+  private**, whatever visibility you chose. Request the audit with YouTube's
+  [API Services audit form](https://support.google.com/youtube/contact/yt_api_form) to publish
+  public videos.
+- **Quota**: a project gets 10,000 units a day and an upload costs about 1,600, so about **6 videos
+  a day** per server; the same form asks for more.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Media | exactly **one video** per post |
+| Title | required, up to 100 characters, no `<` or `>` |
+| Description | the post's text: up to 5,000 bytes (an emoji counts 4, an accented letter 2), no `<` or `>` |
+| Tags | up to 500 characters in all |
+
+The video is sent in parts through a resumable upload; YouTube creates it only once the last part
+arrives, so a failed attempt leaves nothing behind on the channel.
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The video's title (required) |
+| **Visibility** (`privacy`) | `public` (default), `unlisted` or `private` |
+| **Made for kids** (`made_for_kids`) | YouTube asks for every video; `false` by default. Videos made for kids take no comments |
+| **Tags** (`tags`) | Comma-separated |
+| **Category** (`category`) | YouTube's category id, `22` (People & Blogs) by default |
+| **Add to playlist** (`playlist`) | The playlist's link (`https://www.youtube.com/playlist?list=PL...`); it must belong to the channel, which staqly checks before uploading |
+
+Over the API: `{"title": "Morning run", "privacy": "unlisted", "tags": "running, sport"}` in the
+target's `settings`.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the video,
+in order and after their delays. Comments take text only.
+
+## When publishing fails
+
+| YouTube says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit, YouTube unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| The daily quota is used up | Fails the target: the quota resets at midnight Pacific time, so schedule it for later |
+| A refused title, description or category, a playlist of another channel, an account without a channel | Fails the target with YouTube's reason; retrying would not help, so it does not |
+
+When the answer to the last part of an upload is lost, staqly asks YouTube how far the upload got
+and records the video if it is there. Only when that question gets no answer either does the
+target fail with "may have published" instead of uploading again: check the channel before you
+post it again.
