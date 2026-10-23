@@ -1,4 +1,4 @@
-import { render, renderHook, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
-import { useReturnFocus } from '@/hooks/use-return-focus'
 
 // Most of our dialogs open from state (an inbox row, ⌘K, a menu item), not from a Radix Trigger. Radix then had no
 // element to return focus to and dropped it on <body>.
@@ -60,28 +59,6 @@ function FromMenu() {
 }
 
 describe('dialogs without a Trigger', () => {
-  it('returns to a closing menu trigger after Radix removes aria-controls', () => {
-    render(
-      <>
-        <button id="menu-trigger" type="button" aria-expanded="false">
-          More
-        </button>
-        <div id="closing-menu" role="menu" aria-labelledby="menu-trigger">
-          <button type="button" role="menuitem">
-            Edit
-          </button>
-        </div>
-      </>,
-    )
-    const { result } = renderHook(() => useReturnFocus({}))
-
-    screen.getByRole('menuitem').focus()
-    result.current.onOpenAutoFocus(new Event('openAutoFocus'))
-    screen.getByRole('menuitem').blur()
-    result.current.onCloseAutoFocus(new Event('closeAutoFocus', { cancelable: true }))
-    expect(screen.getByRole('button', { name: 'More' })).toHaveFocus()
-  })
-
   it.each(['dialog', 'sheet'] as const)('%s: focus goes back to what opened it', async (kind) => {
     const user = userEvent.setup()
 

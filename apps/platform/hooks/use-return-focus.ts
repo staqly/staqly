@@ -22,12 +22,7 @@ export function useReturnFocus({
 
       // A menu item goes away with its menu: return to the button that opened the menu (through submenus) instead.
       for (let menu = el?.closest('[role=menu]'), i = 0; menu?.id && i < 5; menu = el?.closest('[role=menu]'), i++) {
-        // Radix removes aria-controls before the closing menu's animation ends.
-        const triggerId = menu.getAttribute('aria-labelledby')
-
-        el =
-          (triggerId ? document.getElementById(triggerId) : null) ??
-          document.querySelector(`[aria-controls="${CSS.escape(menu.id)}"]`)
+        el = document.querySelector(`[aria-controls="${CSS.escape(menu.id)}"]`)
       }
 
       returnTo.current = el instanceof HTMLElement && el !== document.body ? el : null
