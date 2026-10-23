@@ -357,41 +357,44 @@ func (s *Service) IsLinkState(state string) bool {
 	return err == nil && st.Link != ""
 }
 
-// CompleteOAuthViaLink finishes a customer's sign-in started from a link and saves the channel there.
-func (s *Service) CompleteOAuthViaLink(ctx context.Context, providerID, code, state, redirect string, extra map[string]string) (Channel, string, error) {
+// CompleteOAuthViaLink finishes a customer's sign-in started from a link and saves the channel there, or keeps the
+// sign-in for the customer to pick its accounts (each picked account then takes one use of the link).
+func (s *Service) CompleteOAuthViaLink(ctx context.Context, providerID, code, state, redirect string, extra map[string]string) (OAuthResult, string, error) {
 	st, err := s.decodeState(state)
 	if err != nil {
-		return Channel{}, "", err
+		return OAuthResult{}, "", err
 	}
 	if st.Link == "" || st.Provider != providerID {
-		return Channel{}, "", invalid("state", "belongs to another connection")
+		return OAuthResult{}, "", invalid("state", "belongs to another connection")
 	}
 	l, err := s.Q.GetChannelLink(ctx, db.GetChannelLinkParams{WorkspaceID: st.Workspace, ID: st.Link})
 	if isNoRows(err) {
-		return Channel{}, "", &Error{Code: "invalid_link", Status: 404, Message: "this link is not valid; ask for a new one"}
+		return OAuthResult{}, "", &Error{Code: "invalid_link", Status: 404, Message: "this link is not valid; ask for a new one"}
 	}
 	if err != nil {
-		return Channel{}, "", err
+		return OAuthResult{}, "", err
 	}
 	ws, err := s.Q.GetWorkspace(ctx, l.WorkspaceID)
 	if err != nil {
-		return Channel{}, "", err
+		return OAuthResult{}, "", err
 	}
 	if err := s.channelLinkOpen(l); err != nil {
-		return Channel{}, ws.Name, err
+		return OAuthResult{}, ws.Name, err
 	}
 	e, err := s.linkAllows(ctx, l, providerID)
 	if err != nil {
-		return Channel{}, ws.Name, err
+		return OAuthResult{}, ws.Name, err
 	}
 	release, err := s.takeChannelLinkUse(ctx, l)
 	if err != nil {
-		return Channel{}, ws.Name, err
+		return OAuthResult{}, ws.Name, err
 	}
-	ch, err := s.completeOAuth(ctx, linkPrincipal(l), e, st, code, redirect, extra, s.linkGroup(ctx, l))
+	res, err := s.completeOAuth(ctx, linkPrincipal(l), e, st, code, redirect, extra, s.linkGroup(ctx, l))
+	if err != nil || res.Pending != nil {
+		release() // a pending sign-in takes its uses when the customer picks
+	}
 	if err != nil {
-		release()
-		return Channel{}, ws.Name, err
+		return OAuthResult{}, ws.Name, err
 	}
-	return ch, ws.Name, nil
+	return res, ws.Name, nil
 }

@@ -1,0 +1,72 @@
+---
+title: Discord
+description: Publish to a Discord channel or forum through a channel webhook, with text, pictures and videos, and comments inside forum posts. How to make the webhook.
+---
+
+Staqly publishes to **Discord** through a **channel webhook**: anyone who may manage the channel
+makes one in a minute, and staqly needs nothing else (no bot, no developer app). Messages go out
+with `POST /webhooks/{id}/{token}?wait=true`, pictures and videos as attachments. A published
+target links to the message.
+
+Why a webhook and not a bot: a webhook is made in the channel's settings by the person who wants
+the posts, it can post only to its own channel, and it can be removed there at any time. A bot
+needs a developer application, an invitation to the server and a channel id, for the same
+messages.
+
+## What you need
+
+<Steps>
+<Step>
+
+### Make the webhook
+
+In Discord, open the channel's settings (the gear next to its name), or **Server Settings**, then
+**Integrations → Webhooks → New Webhook**. Pick the channel, give the webhook a name and a picture
+(the posts show them as the author), then **Copy Webhook URL**. You need the **Manage Webhooks**
+permission.
+
+</Step>
+<Step>
+
+### Connect it in staqly
+
+**Channels → Add channel → Discord**, then paste the **Webhook URL**
+(`https://discord.com/api/webhooks/<id>/<token>`). Staqly asks Discord for the webhook and shows its
+name and picture; the URL is stored sealed and never shown again. Connecting the same webhook again
+reconnects the existing channel. For several Discord channels, make one webhook in each.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | 2,000 characters |
+| Media | up to **10** pictures and videos per message |
+| Files | **10 MB** each unless the server is boosted (Discord refuses larger ones) |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Forum post title** (`thread_name`) | Needed when the webhook belongs to a **forum** (or media) channel: the post starts a forum post with this title, up to 100 characters. Leave it empty for a text channel |
+
+## Comments
+
+A webhook cannot reply to a message in a text channel, so a post's
+[thread](/concepts#threads-comments-under-a-post) goes out only under a **forum post**: give the
+post a forum post title and each comment follows in the forum post's thread, after its delay. On a
+text channel the first comment fails with that reason and the rest are skipped; the post itself
+stays up.
+
+## When publishing fails
+
+| Discord says | Staqly does |
+|---|---|
+| Unknown webhook (deleted, or its URL was reset) | Marks the channel **Needs reconnect** and fails the target: make a new webhook and reconnect the channel with its URL |
+| Rate limit (429) or Discord unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A forum channel without a forum post title, a file too large, a refused message | Fails the target with the reason; retrying would not help, so it does not |
+| The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: webhooks take no idempotency key, and sending again could post twice. Check the channel before you retry |
+
+The webhook's token is part of its URL, so staqly never puts the URL in error messages or logs.

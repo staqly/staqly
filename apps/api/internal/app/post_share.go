@@ -728,7 +728,7 @@ func (s *Service) readMetrics(ctx context.Context, workspaceID, channelID string
 	if creds, err = s.refreshIfDue(ctx, ch, e, creds); err != nil {
 		return providers.Metrics{}, err
 	}
-	pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	pctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), 15*time.Second)
 	defer cancel()
 	return r.Metrics(pctx, creds, externalID)
 }

@@ -1,0 +1,58 @@
+---
+title: Lemmy
+description: Publish posts with a title, a link or a picture to a Lemmy community, with the thread as comments.
+---
+
+Staqly publishes to **Lemmy** communities as your Lemmy account. You sign in once with your username
+and password; staqly keeps only the login token Lemmy returns, not your password. There is nothing
+for whoever runs staqly to register. A published target links to the post on your server.
+
+## Connect the account
+
+In **Channels → Add channel → Lemmy**, enter:
+
+| Field | What |
+|---|---|
+| **Server** | the Lemmy server your account is on, for example `https://lemmy.world` |
+| **Username or email** | what you sign in with |
+| **Password** | your password; used once |
+| **Two-factor code** | only if your account uses two-factor authentication: the current code from your app |
+
+The channel shows your display name, `@username@server` and picture. The login token lasts until you
+change your password or log out of all sessions on Lemmy; the channel then turns **Needs reconnect**.
+Staqly speaks Lemmy's API of version 0.19.
+
+## Limits
+
+| | |
+|---|---|
+| Title | required, up to 200 characters |
+| Text | 10,000 characters; may be empty (a title alone is a post) |
+| Media | **one picture**, uploaded to your server |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The post's title (required) |
+| **Community** (`community`) | Where it goes: `name@server`, for example `technology@lemmy.world`. Your server fetches a community it doesn't know yet |
+| **Link** (`link`) | Makes it a link post; with a picture, the picture is the link's thumbnail |
+
+Over the API: `{"title": "Release notes", "community": "technology@lemmy.world", "link": "https://example.com/notes"}`.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the post, each
+answering the one before. Comments take text only.
+
+## When publishing fails
+
+| Lemmy says | Staqly does |
+|---|---|
+| The login token is no longer valid | Marks the channel **Needs reconnect** and fails the target; reconnect with your password |
+| Rate limit, the server is down | Retries through the job queue (after 1, 5, then 15 minutes) |
+| The community doesn't exist, only moderators may post, you are banned | Fails the target with Lemmy's reason |
+
+Lemmy has no way to ask "did this post go out?", so when staqly sent the post but its answer never
+came, the target fails with "may have published" instead of trying again: check the community
+before you post it again.

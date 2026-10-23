@@ -1,0 +1,115 @@
+---
+title: Pinterest
+description: Publish a pin with a picture, title, link and alt text to one of your Pinterest boards. What to register in the Pinterest developer portal and why the app needs Standard access.
+---
+
+Staqly publishes **pins** to a Pinterest account through API v5: it signs in with OAuth 2.0, finds
+the board the post names and creates the pin with `POST /v5/pins`, sending the picture itself (no
+public link needed). A published target links to the pin on pinterest.com.
+
+## What you need
+
+A **Pinterest app**, registered once per server. Its keys go into the server's environment
+(`.env`), the same way locally and in the cloud; a workspace can also use its own app (see
+[Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app
+
+At [developers.pinterest.com/apps](https://developers.pinterest.com/apps/), connect the app (it
+needs a Pinterest business account), then on the app's page:
+
+| Where | What |
+|---|---|
+| **Redirect URIs** | your dashboard's `/channels/callback/pinterest`, for example `http://localhost:8080/channels/callback/pinterest` locally or `https://staqly.example.com/channels/callback/pinterest` |
+
+Copy the **App id** and the **App secret key**.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_PINTEREST_CLIENT_ID=your-app-id
+PROVIDER_PINTEREST_CLIENT_SECRET=your-app-secret-key
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_PINTEREST_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, Pinterest shows as **soon** in **Channels → Add channel**.
+`PROVIDER_PINTEREST_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the account
+
+**Connect with Pinterest** opens pinterest.com, where the person signs in and allows the app.
+Staqly asks for these scopes:
+
+| Scope | Why |
+|---|---|
+| `user_accounts:read` | Read the account's username and picture |
+| `boards:read` | Find the board a post names |
+| `pins:write` | Create pins |
+| `pins:read` | Find a pin whose answer was lost |
+
+Pinterest's sign-in lasts 30 days and renews for a year; staqly renews it on its own.
+
+</Step>
+<Step>
+
+### Before other people connect: Standard access
+
+A new app has **Trial access**: the pins it creates are visible only to the account that made them.
+Apply for **Standard access** on the app's page (Pinterest asks for a video of the sign-in and of
+publishing a pin) before posting pins others should see.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Media | exactly **one picture** (JPEG, PNG or WebP, up to 20 MB) |
+| Description | the post's text, up to 500 characters |
+| Title | required, up to 100 characters |
+| Link | required: where the pin leads |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The pin's title |
+| **Board** (`board`) | The board's name as Pinterest shows it (any case), or its id; the board must exist |
+| **Link** (`link`) | Where the pin leads |
+| **Alt text** (`alt_text`) | Describes the picture for people who use screen readers |
+
+Over the API: `{"title": "Long run", "board": "Marathon training", "link": "https://example.com/run"}`
+in the target's `settings`. A board the account doesn't have fails the target with the names of the
+boards it has.
+
+## Comments
+
+Pinterest's API cannot comment on pins, so a post's thread is not sent to Pinterest.
+
+## When publishing fails
+
+| Pinterest says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked (401) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit (429), Pinterest unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| An unknown board, a refused link or picture, no permission for the board (403) | Fails the target with Pinterest's reason; retrying would not help, so it does not |
+
+Pinterest has no way to create a pin only once. When staqly sent a pin but its answer never came, it
+looks at the board's latest pins for one with the same title and link: if it is there, that is the
+pin; if not, the target fails with "may have published" instead of trying again. Check the board
+before you post it again.

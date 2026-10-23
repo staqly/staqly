@@ -293,6 +293,18 @@ type PasskeyChallenge struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
+type PendingConnection struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Provider    string `json:"provider"`
+	Credentials string `json:"credentials"`
+	Accounts    string `json:"accounts"`
+	LinkID      string `json:"link_id"`
+	GroupID     string `json:"group_id"`
+	CreatedAt   string `json:"created_at"`
+	ExpiresAt   string `json:"expires_at"`
+}
+
 type Post struct {
 	ID            string         `json:"id"`
 	WorkspaceID   string         `json:"workspace_id"`

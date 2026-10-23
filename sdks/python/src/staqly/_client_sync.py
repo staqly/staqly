@@ -1482,7 +1482,7 @@ class Channels(_Resource):
         self, provider: str, *, instance: str | None = None, request_options: RequestOptions | None = None
     ) -> str:
         """Begins connecting an OAuth platform: returns the URL to open in a browser signed in to
-        the platform. ``instance`` is the server for platforms with many (Mastodon)."""
+        the platform. ``instance`` is the server for OAuth platforms with many servers."""
         r = self._http.request(
             RequestSpec(
                 "GET",

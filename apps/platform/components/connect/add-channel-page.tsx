@@ -6,6 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, Link2Off, PlugZap } from 'lucide-react'
 import { useState, useSyncExternalStore } from 'react'
 
+import { AccountPicker } from '@/components/channels/account-picker'
 import { fieldValues, ProviderFields } from '@/components/channels/provider-fields'
 import { ProviderGrid } from '@/components/channels/provider-grid'
 import { Button } from '@/components/ui/button'
@@ -19,7 +20,8 @@ import { formatDateTime } from '@/lib/format'
  * the platforms the link allows. They sign in at the platform (or enter its token here) and the channel lands in
  * that workspace. No session is made; nothing else of the workspace is reachable. The token is in the fragment,
  * so it never reaches a server log; after a platform's sign-in the API sends the browser back here with
- * `?connected=` or `?error=` and the token again in the fragment.
+ * `?connected=`, `?pending=` (the sign-in may publish as several accounts: they pick which here) or `?error=`, and
+ * the token again in the fragment.
  */
 
 function subscribeLocation(onChange: () => void) {
@@ -142,7 +144,9 @@ export function AddChannelPage() {
   const [starting, setStarting] = useState('')
   const [startError, setStartError] = useState('')
   const returned = params.get('connected')
-  const returnError = params.get('error')
+  const pendingID = params.get('pending')
+  const [pickError, setPickError] = useState('')
+  const returnError = params.get('error') || pickError
   const link = useQuery({
     queryKey: ['connect-link', token],
     queryFn: () => api.openConnectLink(token),
@@ -150,6 +154,18 @@ export function AddChannelPage() {
     retry: false,
   })
   const l = link.data
+  const pending = useQuery({
+    queryKey: ['connect-link-pending', token, pendingID],
+    queryFn: () => api.pendingConnectionViaLink(token, pendingID!),
+    enabled: !!token && !!pendingID && !returned && !pickError,
+    retry: false,
+  })
+  const finish = useMutation({
+    mutationFn: (ids: string[]) => api.finishPendingConnectionViaLink(token, pendingID!, ids),
+    onSuccess: (r) => setDone(r.data.map((c) => c.handle || c.name).join(', ')),
+    onError: (e) => setPickError(errorMessage(e)),
+  })
+  const pendingError = pending.error ? errorMessage(pending.error) : ''
 
   const start = async (p: Provider) => {
     setStartError('')
@@ -190,6 +206,20 @@ export function AddChannelPage() {
     )
   } else if (link.isLoading || !l) {
     body = <Skeleton className="mx-auto h-72 w-full max-w-2xl rounded-2xl" />
+  } else if (pendingID && !pickError && (pending.isLoading || pending.data)) {
+    const p = pending.data
+
+    body = p ? (
+      <AccountPicker
+        provider={p.provider}
+        name={l?.providers.find((x) => x.id === p.provider)?.name ?? p.provider}
+        accounts={p.accounts}
+        busy={finish.isPending}
+        onConnect={(ids) => finish.mutate(ids)}
+      />
+    ) : (
+      <Skeleton className="mx-auto h-72 w-full max-w-lg rounded-2xl" />
+    )
   } else if (picked) {
     body = (
       <div className="mx-auto w-full max-w-lg">
@@ -209,9 +239,9 @@ export function AddChannelPage() {
             access to anything else, and you can close this page when it&apos;s done.
           </p>
         </div>
-        {(returnError || startError) && (
+        {(returnError || startError || pendingError) && (
           <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm">
-            The account was not connected: {startError || returnError}
+            The account was not connected: {startError || returnError || pendingError}
           </p>
         )}
         {l.providers.length === 0 ? (

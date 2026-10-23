@@ -1,0 +1,54 @@
+---
+title: Dev.to
+description: Publish articles to DEV (dev.to) with an API key, with tags, a series, a cover picture and an original link.
+---
+
+Staqly publishes **articles** to [DEV](https://dev.to) through the Forem API, signed in with an
+**API key**. The post's text is the article in Markdown and its **Title** setting the headline. A
+published target links to the article on dev.to.
+
+## Connect the account
+
+1. On dev.to, open **Settings → Extensions**, find **DEV Community API Keys**, give the key a
+   name (for example `staqly`) and click **Generate API key**.
+2. In staqly: **Channels → Add channel → Dev.to**, paste it as **API key**.
+
+The channel shows your name and `@username`.
+
+## Limits
+
+| | |
+|---|---|
+| Text | no limit; Markdown, including DEV's liquid tags (`{% embed https://... %}`) |
+| Media | one picture, used as the article's **cover** |
+| Title | required, up to 128 characters |
+
+DEV takes no uploads: it downloads the cover from a link. Staqly hands it a time-limited link to
+the file in [S3-compatible storage](/self-hosting/storage), so on a server that keeps media on its
+own disk a post with a picture fails and says why (publish it without the picture, or store media
+in the cloud). Pictures inside the article are links in its Markdown.
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The article's headline (required) |
+| **Tags** (`tags`) | Up to 4 tags; DEV keeps letters and digits only, so `Web Dev` becomes `webdev` |
+| **Original link** (`canonical_url`) | Where the article first appeared, so search engines credit it |
+| **Series** (`series`) | Articles with the same series name are listed together |
+
+Articles are published right away (not saved as drafts).
+
+## When publishing fails
+
+| DEV says | Staqly does |
+|---|---|
+| The API key was revoked | Marks the channel **Needs reconnect**; generate a new key and reconnect |
+| Rate limit (DEV allows a few articles a minute), DEV unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused article (too many tags, a title too long) | Fails the target with DEV's reason |
+
+DEV refuses the same title and text from one author twice. When that happens and your latest
+articles hold this one, staqly records it as published (an earlier attempt got through but its
+answer was lost); otherwise the target fails: change the title or the text. When staqly sent the
+article but its answer never came, the target fails with "may have published" instead of trying
+again: check your DEV dashboard first, or retry the target, which finds the article if it is there.

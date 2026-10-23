@@ -1,0 +1,56 @@
+---
+title: ListMonk
+description: Send a post as an email campaign from your self-hosted listmonk, to the lists you choose, at once or as a draft.
+---
+
+Staqly sends a post as an **email campaign** from a self-hosted [listmonk](https://listmonk.app)
+(v4 or newer) through its REST API, signed in with an **API user**. The post's text is the email
+in Markdown and its **Subject** setting the subject line. The campaign goes to the lists you
+choose and starts at once, or waits in listmonk as a draft. A published target links to the
+campaign in listmonk's admin.
+
+## Connect listmonk
+
+1. In listmonk, open **Admin → Users → New**, choose the type **API** and a name (for example
+   `staqly`), and give it a **user role** that can manage campaigns and read lists, and a **list
+   role** with the lists it may send to. listmonk shows the API token once: copy it.
+2. In staqly: **Channels → Add channel → ListMonk**, enter the **listmonk address**
+   (`https://lists.example.com`, without `/admin`), the **API user** and the **API token**.
+
+The channel shows `user@address`.
+
+Staqly reaches listmonk from the server it runs on. A locally run staqly reaches addresses on your
+network (`http://192.168.1.20:9000`); listmonk on the same computer as staqly (`localhost`) needs
+the server to allow that. Staqly in the cloud reaches public addresses only.
+
+## Limits
+
+| | |
+|---|---|
+| Text | no limit; Markdown, which listmonk renders into the campaign's template |
+| Media | none: link pictures from listmonk's media library or the web in the Markdown |
+| Subject | required |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Subject** (`title`) | The email's subject line (required) |
+| **Lists** (`lists`) | Names or ids of the lists the campaign goes to (required) |
+| **When** (`send`) | `now` (default): start sending; `draft`: leave the campaign in listmonk to check and send yourself |
+| **Template id** (`template_id`) | A campaign template's id from **Campaigns → Templates**; empty for the default one |
+
+Over the API: `{"title": "October news", "lists": "Newsletter, Customers", "send": "draft"}` in
+the target's `settings`.
+
+## When publishing fails
+
+| listmonk says | Staqly does |
+|---|---|
+| The API user or token is wrong or was deleted | Marks the channel **Needs reconnect**; reconnect with a valid token |
+| listmonk is down or answers with an error | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A list that doesn't exist (staqly lists the ones the user may use), a missing permission, a wrong template | Fails the target with listmonk's reason |
+
+Each campaign is named after its post (`October news [staqly pst_...]`), so an attempt after one
+whose answer was lost finds the campaign it made instead of making a second one, and starts it only
+if it isn't sending yet. A campaign you paused or cancelled in listmonk is left alone.

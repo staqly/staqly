@@ -1,0 +1,90 @@
+---
+title: Twitch
+description: Send a post as a chat message in your Twitch channel's chat, with replies as comments. What to register in the Twitch developer console.
+---
+
+Staqly publishes to **Twitch** as a **chat message** the connected account sends in its own
+channel's chat: it signs in with OAuth 2.0 and sends the text with the Helix API
+(`POST /helix/chat/messages`). Twitch chat takes text only. A chat message is not a lasting post:
+it shows in the live chat (for example an announcement when you go live) and scrolls away; the
+target links to the channel.
+
+## What you need
+
+A **Twitch application**, registered once per server. Its keys go into the server's environment
+(`.env`), the same way locally and in the cloud; a workspace can also bring its own app (see
+[Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app
+
+In the [Twitch developer console](https://dev.twitch.tv/console/apps) (two-factor authentication
+must be on), **Register Your Application**:
+
+| Field | Value |
+|---|---|
+| **OAuth Redirect URLs** | your dashboard's `/channels/callback/twitch`, for example `http://localhost:8080/channels/callback/twitch` locally or `https://staqly.example.com/channels/callback/twitch` (Twitch takes `http://` for localhost only) |
+| **Category** | any, for example **Application Integration** |
+| **Client Type** | **Confidential** |
+
+Then **Manage** the app, copy the **Client ID**, and **New Secret** for the **Client Secret**.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+```bash title=".env"
+PROVIDER_TWITCH_CLIENT_ID=your-client-id
+PROVIDER_TWITCH_CLIENT_SECRET=your-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_TWITCH_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install`.
+
+Until both are set, Twitch shows as **soon** in **Channels → Add channel**.
+`PROVIDER_TWITCH_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the account
+
+**Connect with Twitch** opens twitch.tv, where the person signs in (Twitch always asks which
+account) and allows the app. Staqly asks for one scope:
+
+| Scope | Why |
+|---|---|
+| `user:write:chat` | Send chat messages as the account |
+
+The channel shows the account's display name, `@login` and picture. Messages go to the account's
+own channel.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | 500 characters |
+| Media | none: chat is text only |
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as chat replies, each to the
+message before it, after its delay.
+
+## When publishing fails
+
+| Twitch says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked (401, a refused refresh) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit (429) or Twitch unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| The message was dropped (AutoMod, a duplicate within 30 seconds, chat settings) or refused (a ban) | Fails the target with Twitch's reason; retrying would not help, so it does not |
+| The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: check the chat before you retry |
+
+Access tokens last about four hours; staqly renews them with the refresh token before they run out
+and right before publishing when needed.

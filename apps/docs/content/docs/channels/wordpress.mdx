@@ -1,0 +1,72 @@
+---
+title: WordPress
+description: Publish posts to a self-hosted WordPress site with an application password, with categories, tags, a featured image, or as drafts.
+---
+
+Staqly publishes **posts** to a self-hosted WordPress site (5.6 or newer) through the WordPress
+REST API, signed in with a username and an **application password**. The post's text is written
+in Markdown and staqly turns it into the HTML WordPress stores; its **Title** setting is the
+headline. A published target links to the post on your site.
+
+WordPress.com sites don't take application passwords and can't connect.
+
+## Connect the site
+
+1. In WordPress, open **Users → Profile**, scroll to **Application passwords**, enter a name
+   (for example `staqly`) and click **Add new application password**. Copy the password it shows
+   (four groups of letters; the spaces don't matter). It is not your login password, and you can
+   revoke it there at any time.
+2. In staqly: **Channels → Add channel → WordPress**, enter the **Site address**
+   (`https://blog.example.com`), your **Username** and the **Application password**.
+
+The user needs a role that writes posts: **Author**, **Editor** or **Administrator**
+(a Contributor can only send posts for review: use **Publish as → Pending review**). The channel
+shows the user's name and `username@site`.
+
+Sites with plain permalinks (`?p=123`) work too: staqly finds the API at `?rest_route=`.
+
+### The site is on your own network
+
+Staqly reaches the site from the server it runs on. A locally run staqly reaches addresses on your
+network (`http://192.168.1.20`); a site on the same computer as staqly (`localhost`) needs the
+server to allow that, and WordPress itself takes application passwords over `http://` only on a
+site set up as a local environment. Staqly in the cloud reaches public addresses only.
+
+## Limits
+
+| | |
+|---|---|
+| Text | no limit; Markdown with tables, strikethrough and links; HTML you write passes through and WordPress filters it by the user's role |
+| Media | one picture: staqly uploads it to the media library and makes it the **featured image** |
+| Title | required |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The post's headline (required) |
+| **Publish as** (`status`) | `publish` (default), `draft`, or `pending` (waits for an editor's review) |
+| **Categories** (`categories`) | Names of categories the site has; a name it doesn't have fails the post |
+| **Tags** (`tags`) | Tag names; tags the site doesn't have yet are created |
+
+## When publishing fails
+
+| WordPress says | Staqly does |
+|---|---|
+| The username or application password is wrong or revoked | Marks the channel **Needs reconnect**; add a new application password and reconnect |
+| Rate limit, the site is down or answers with an error | Retries through the job queue (after 1, 5, then 15 minutes) |
+| The user may not publish, a category doesn't exist | Fails the target with WordPress's reason |
+
+If connecting fails with a wrong password although it is right, the web server in front of
+WordPress may drop the sign-in before WordPress sees it (some Apache and CGI hosts do). Ask the
+host to pass the `Authorization` header to WordPress, or add to `.htaccess`:
+
+```apache
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+```
+
+Security plugins that turn off the REST API or application passwords block staqly too.
+
+WordPress has no way to ask "did this post go out?", and a new attempt would make a second post.
+So when staqly sent the post but its answer never came, the target fails with "may have published"
+instead of trying again: check the site's posts before you post it again.

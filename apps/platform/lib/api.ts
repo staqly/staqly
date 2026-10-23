@@ -62,6 +62,8 @@ export type ChannelPatch = Schemas['ChannelPatch']
 export type ChannelGroup = Schemas['ChannelGroup']
 export type ChannelLink = Schemas['ChannelLink']
 export type ChannelLinkPublic = Schemas['ChannelLinkPublic']
+export type PendingConnection = Schemas['PendingConnection']
+export type PlatformAccount = Schemas['PlatformAccount']
 export type ChannelGroupInput = Schemas['ChannelGroupInput']
 export type ChannelStatus = Schemas['ChannelStatus']
 export type Provider = Schemas['Provider']
@@ -918,6 +920,22 @@ export const api = {
     ),
   oauthStart: (provider: string) =>
     request<{ url: string }>(`/v1/channels/oauth/${encodeURIComponent(provider)}/start`),
+  /** A sign-in that may publish as several accounts, waiting for the person to pick them. */
+  pendingConnection: (id: string) => request<PendingConnection>(`/v1/pending-connections/${encodeURIComponent(id)}`),
+  finishPendingConnection: (id: string, accountIds: string[]) =>
+    request<{ data: Channel[] }>(`/v1/pending-connections/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      json: { account_ids: accountIds },
+    }),
+  pendingConnectionViaLink: (token: string, id: string) =>
+    request<PendingConnection>(`/v1/connect-links/${encodeURIComponent(token)}/pending/${encodeURIComponent(id)}`, {
+      public: true,
+    }),
+  finishPendingConnectionViaLink: (token: string, id: string, accountIds: string[]) =>
+    request<{ data: { name: string; handle: string; provider: string }[] }>(
+      `/v1/connect-links/${encodeURIComponent(token)}/pending/${encodeURIComponent(id)}`,
+      { method: 'POST', json: { account_ids: accountIds }, public: true },
+    ),
   updateChannel: (id: string, body: ChannelPatch) =>
     request<Channel>(`/v1/channels/${encodeURIComponent(id)}`, { method: 'PATCH', json: body }),
   deleteChannel: (id: string) => request<void>(`/v1/channels/${encodeURIComponent(id)}`, { method: 'DELETE' }),

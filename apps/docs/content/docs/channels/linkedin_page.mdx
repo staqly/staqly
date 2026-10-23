@@ -1,0 +1,109 @@
+---
+title: LinkedIn Page
+description: Publish to LinkedIn company pages you administer, with up to 9 pictures or one video and comments. What to register in the LinkedIn developer portal and what LinkedIn reviews.
+---
+
+Staqly publishes to **LinkedIn company pages** (and showcase pages) through LinkedIn's REST API:
+a page admin signs in, picks the pages, and each becomes its own channel that posts as the page.
+A published target links to the post on linkedin.com. To post on your own profile, use
+[LinkedIn](/channels/linkedin).
+
+## What you need
+
+A **LinkedIn developer app** with the **Community Management API**, registered once per server.
+Its keys go into the server's environment (`.env`), the same way locally and in the cloud (see
+[Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app and request the Community Management API
+
+In the [LinkedIn developer portal](https://www.linkedin.com/developers/apps), click
+**Create app**, name the company page it belongs to and verify it from the page (**Settings →
+Verify**). Then:
+
+| Where | What |
+|---|---|
+| **Products** | Request the **Community Management API**. LinkedIn asks about your company and use case and reviews the request; it grants a Development tier first, then Standard after a second review |
+| **Auth → Authorized redirect URLs** | your dashboard's `/channels/callback/linkedin_page`, for example `http://localhost:8080/channels/callback/linkedin_page` locally or `https://staqly.example.com/channels/callback/linkedin_page` |
+
+LinkedIn wants the Community Management API alone on its app, so this is usually a second app,
+next to the one for [LinkedIn](/channels/linkedin) profiles. Copy the **Client ID** and **Primary
+Client Secret** from the **Auth** tab.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_LINKEDIN_PAGE_CLIENT_ID=your-client-id
+PROVIDER_LINKEDIN_PAGE_CLIENT_SECRET=your-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_LINKEDIN_PAGE_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, LinkedIn Page shows as **soon** in **Channels → Add channel**.
+`PROVIDER_LINKEDIN_PAGE_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the pages
+
+**Connect with LinkedIn Page** opens linkedin.com, where a page admin signs in and allows the app.
+Staqly asks for these scopes:
+
+| Scope | Why |
+|---|---|
+| `r_basicprofile` | Read the member's name |
+| `rw_organization_admin` | List the pages the member administers, with names and logos |
+| `w_organization_social` | Post, upload pictures and videos and comment as the page |
+| `r_organization_social` | Read the page's posts |
+
+Staqly then lists the pages where the member is an **admin** or **content admin** (other roles may
+not post); each one you pick becomes its own channel with the page's name, logo and address.
+Connecting the same page again reconnects the existing one.
+
+</Step>
+</Steps>
+
+## Reconnecting
+
+LinkedIn's sign-in lasts **60 days**. Apps with the Community Management API usually get a refresh
+token as well, and staqly renews the sign-in with it for up to a year; without one, the channel
+turns **Needs reconnect** after 60 days (an [alert](/automation/alerts) can tell you): reconnect it
+from the row's menu. A member who loses the page's admin role can't post as it anymore either.
+
+## Limits
+
+| | |
+|---|---|
+| Text | 3,000 characters |
+| Media | up to **9 pictures** (PNG, JPEG, GIF) **or one video** per post |
+| Video | uploaded in the parts LinkedIn asks for; staqly waits until LinkedIn has processed it before posting |
+
+Posts as a page are always public. Hashtags (`#launch`) stay hashtags, and characters LinkedIn
+treats as formatting go out as written.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the post,
+written as the page, in order and after their delays. Comments take text only.
+
+## When publishing fails
+
+| LinkedIn says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked (401) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit (429) or LinkedIn unavailable (5xx), media still processing | Retries through the job queue (after 1, 5, then 15 minutes) |
+| Text too long, a refused picture, a missing permission or page role (403) | Fails the target with LinkedIn's reason; retrying would not help, so it does not |
+
+When an answer is lost and staqly tries again, LinkedIn refuses the copy as a duplicate and names
+the post that is already there; staqly records that post and its link, so a retry never publishes
+twice.
