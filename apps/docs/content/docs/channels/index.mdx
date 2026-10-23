@@ -96,7 +96,7 @@ listing them needs `channels:read`. Credentials are never returned by any call.
 
 `GET /v1/providers` (MCP `list_providers`, CLI `staqly channels providers`) lists every provider
 with its `auth`, `status`, `limits`, `credential_fields` and `settings_fields`. In this
-release **Your own automation**, **[X](/channels/x)** and **[LinkedIn](/channels/linkedin)** are available (X and LinkedIn once the server has their app keys); every other platform is in the catalog as `soon`,
+release **Your own automation**, **[X](/channels/x)**, **[LinkedIn](/channels/linkedin)** and **[Instagram](/channels/instagram)** are available (the last three once the server has their app keys); every other platform is in the catalog as `soon`,
 so the dashboard already shows the whole grid and a post's preview can check the platform's
 limits.
 
@@ -107,8 +107,8 @@ limits.
 | [LinkedIn](/channels/linkedin) (**available**) | `linkedin` | OAuth | 3,000 | 9 pictures or 1 video | — |
 | LinkedIn Page | `linkedin_page` | OAuth | 3,000 | 9 | — |
 | Reddit | `reddit` | OAuth | 40,000 | 1 | a title |
-| Instagram Business (through a Facebook Page) | `instagram` | OAuth | 2,200 | 10 | media |
-| Instagram (Instagram login, no Facebook Page) | `instagram_standalone` | OAuth | 2,200 | 10 | media |
+| [Instagram](/channels/instagram) (**available**) | `instagram` | OAuth | 2,200 | 10 JPEG pictures and videos, or 1 reel or story | media |
+| Instagram Business (through a Facebook Page) | `instagram_business` | OAuth | 2,200 | 10 | media |
 | Facebook Page | `facebook` | OAuth | 63,206 | 10 | — |
 | Threads | `threads` | OAuth | 500 | 10 | — |
 | YouTube | `youtube` | OAuth | 5,000 | 1 video | a title and the video |

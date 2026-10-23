@@ -18,8 +18,7 @@ func init() {
 		{"linkedin", "LinkedIn", AuthOAuth2, Limits{MaxChars: 3000, MaxMedia: 9, MediaKinds: imgVid}},
 		{"linkedin_page", "LinkedIn Page", AuthOAuth2, Limits{MaxChars: 3000, MaxMedia: 9, MediaKinds: imgVid}},
 		{"reddit", "Reddit", AuthOAuth2, Limits{MaxChars: 40000, MaxMedia: 1, MediaKinds: imgVid, NeedsTitle: true}},
-		{"instagram", "Instagram Business", AuthOAuth2, Limits{MaxChars: 2200, MaxMedia: 10, MediaKinds: imgVid, NeedsMedia: true}},
-		{"instagram_standalone", "Instagram", AuthOAuth2, Limits{MaxChars: 2200, MaxMedia: 10, MediaKinds: imgVid, NeedsMedia: true}},
+		{"instagram_business", "Instagram Business", AuthOAuth2, Limits{MaxChars: 2200, MaxMedia: 10, MediaKinds: imgVid, NeedsMedia: true}},
 		{"facebook", "Facebook Page", AuthOAuth2, Limits{MaxChars: 63206, MaxMedia: 10, MediaKinds: imgVid}},
 		{"threads", "Threads", AuthOAuth2, Limits{MaxChars: 500, MaxMedia: 10, MediaKinds: imgVid}},
 		{"youtube", "YouTube", AuthOAuth2, Limits{MaxChars: 5000, MaxMedia: 1, MediaKinds: []string{"video"}, NeedsTitle: true, NeedsMedia: true}},
@@ -61,7 +60,8 @@ var (
 		return Field{Key: "title", Label: "Title", Kind: "text", Required: true, MaxLength: max}
 	}
 	linkField = Field{Key: "link", Label: "Link", Kind: "url", Placeholder: "https://example.com/page"}
-	instagram = []Field{
+	// instagramFields: Instagram's post settings; a post's comments are its thread (the composer's comments).
+	instagramFields = []Field{
 		{Key: "post_type", Label: "Post as", Kind: "select", Default: "post", Options: []Option{
 			{Value: "post", Label: "Feed post (several files make a carousel)"},
 			{Value: "reel", Label: "Reel"},
@@ -72,8 +72,6 @@ var (
 		{Key: "collaborators", Label: "Collaborators", Kind: "list", MaxItems: 3, Placeholder: "username",
 			Help: "Up to 3 Instagram accounts invited as collaborators; the post shows on their profiles once they accept.",
 			When: &Condition{Key: "post_type", Value: "post"}},
-		{Key: "first_comment", Label: "First comment", Kind: "textarea", MaxLength: 2200,
-			Help: "Posted as a comment right after the post goes out, for example for hashtags."},
 	}
 	linkedinVisibility = Field{Key: "visibility", Label: "Who can see it", Kind: "select", Default: "public", Options: []Option{
 		{Value: "public", Label: "Anyone"},
@@ -86,8 +84,8 @@ var (
 func soonSettings(id string, l Limits) []Field {
 	var fields []Field
 	switch id {
-	case "instagram", "instagram_standalone":
-		fields = instagram
+	case "instagram_business":
+		fields = instagramFields
 	case "facebook":
 		fields = []Field{{Key: "post_type", Label: "Post as", Kind: "select", Default: "post", Options: []Option{
 			{Value: "post", Label: "Post"}, {Value: "reel", Label: "Reel"}, {Value: "story", Label: "Story"},

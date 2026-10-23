@@ -27,7 +27,7 @@
       "idempotentHint": false,
       "readOnlyHint": false
     },
-    "description": "Connect your own automation (provider custom, no fields). LinkedIn or X (OAuth) is connected in the dashboard. Platforms with status soon in list_providers can't be connected yet. Requires channels:manage.",
+    "description": "Connect your own automation (provider custom, no fields). Instagram, LinkedIn or X (OAuth) is connected in the dashboard. Platforms with status soon in list_providers can't be connected yet. Requires channels:manage.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
