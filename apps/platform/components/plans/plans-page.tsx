@@ -231,6 +231,7 @@ export function PlansPage() {
   const billing = useBilling({ enabled: !isLocal })
   const subscribed = LIVE_SUBSCRIPTION.includes(billing.data?.subscription_status ?? '')
   const details = useBillingDetails({ enabled: !isLocal && subscribed })
+  const discount = details.data?.subscription?.discount
   // The paid period is known once the details are in: no guess meanwhile, so a yearly plan never reads as
   // monthly (and its own button never offers a switch to what it already is).
   const paidInterval: BillingInterval | undefined =
@@ -398,7 +399,26 @@ export function PlansPage() {
         </p>
       </div>
       {!isLocal && <IntervalToggle value={interval} onChange={setChosen} className="mt-8" />}
-      {!isLocal && canPay && payer && <PromotionCodeField promotion={promotion} onChange={setPromotion} />}
+      {!isLocal &&
+        canPay &&
+        payer &&
+        (discount ? (
+          // One discount at a time: no other code until it ends.
+          <p
+            className="mt-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground"
+            data-testid="promotion-discount-on"
+          >
+            <TicketPercent className="size-4 text-brand" aria-hidden />
+            {discount.code ? (
+              <span className="font-mono font-medium text-foreground">{discount.code}</span>
+            ) : (
+              'A discount'
+            )}{' '}
+            is on{discount.end ? ` until ${shortDate(discount.end)}` : ''}. Another code can be added once it ends.
+          </p>
+        ) : (
+          <PromotionCodeField promotion={promotion} onChange={setPromotion} />
+        ))}
       <div className="mt-8 w-full max-w-6xl">
         {isLocal ? (
           <p className="text-center text-sm text-muted-foreground">A local install has no plans and no limits.</p>
@@ -416,7 +436,7 @@ export function PlansPage() {
           />
         )}
       </div>
-      <Link href={BACK} className="mt-8 text-sm text-muted-foreground underline-offset-4 hover:underline">
+      <Link href={BACK} className="mt-8 text-sm text-muted-foreground underline-offset-4 underline hover:no-underline">
         Back to Plan & usage
       </Link>
     </PublicShell>

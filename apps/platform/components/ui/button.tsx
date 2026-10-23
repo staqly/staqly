@@ -20,7 +20,7 @@ const buttonVariants = cva(
         // Text a shade darker than the token in light mode: red on its 10% tint stays above 4.5:1.
         destructive:
           'bg-destructive/10 text-red-700 hover:bg-destructive/20 dark:text-destructive dark:bg-destructive/20 dark:hover:bg-destructive/30',
-        link: 'text-primary underline-offset-4 hover:underline',
+        link: 'text-primary underline-offset-4 underline hover:no-underline',
         // Pausing or holding something back: amber, styled like `destructive`.
         warning:
           'bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:bg-amber-500/20 dark:text-amber-400 dark:hover:bg-amber-500/30',

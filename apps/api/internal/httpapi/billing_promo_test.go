@@ -93,6 +93,21 @@ func TestPromotionCodes(t *testing.T) {
 		t.Fatalf("code on the current plan: %v", updated)
 	}
 	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business"}, 409, nil)
+
+	// One discount at a time: while it lasts, no other code and not the same one again, checked or applied.
+	sub["discounts"] = []string{"di_1"}
+	updated = nil
+	for path, body := range map[string]map[string]string{
+		"/v1/billing/checkout":       {"plan": "business", "promotion_code": "BIZ-FREE"},
+		"/v1/billing/promotion-code": {"promotion_code": "BIZ-FREE"},
+	} {
+		e.do(nil, "POST", path, admin, body, 422, &errBody)
+		if !strings.Contains(errBody.Error.Fields["promotion_code"], "already has a discount") || updated != nil {
+			t.Fatalf("%s with a discount on: %+v %v", path, errBody.Error, updated)
+		}
+	}
+	// A switch without a code still works.
+	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, nil)
 }
 
 // Checking a promotion code before paying: its discount and the plans it applies to, so the plan picker can show
