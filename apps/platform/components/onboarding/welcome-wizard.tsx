@@ -147,9 +147,11 @@ export function WelcomeWizard() {
     <PublicShell
       className="flex flex-col items-center pt-6 sm:pt-12"
       nav={
-        // Without a plan there is nothing to skip to: the app opens once the workspace has one.
+        // Without a plan there is nothing to skip to: the app opens once the workspace has one. The last step
+        // ends the wizard itself.
         billingKnown &&
-        !needsPlan && (
+        !needsPlan &&
+        index < steps.length - 1 && (
           <Button variant="ghost" size="sm" disabled={finish.isPending} onClick={() => finish.mutate('/schedule')}>
             Skip for now
           </Button>
@@ -978,32 +980,54 @@ function DoneStep({
     (p) => draft.providers?.includes(p.id) && !connected.some((c) => c.provider === p.id),
   )
   const provider = toConnect.find((p) => p.id === connecting) ?? null
-  const items: { done: boolean; text: string }[] = [
-    { done: true, text: `Workspace ${draft.workspaceName || workspace.name} is ready` },
+  const items: { done: boolean; text: ReactNode; key: string }[] = [
+    {
+      done: true,
+      key: 'workspace',
+      text: (
+        <>
+          <span className="font-medium text-foreground">{draft.workspaceName || workspace.name}</span> is ready
+        </>
+      ),
+    },
     ...(applied?.invited
-      ? [{ done: true, text: `${applied.invited} ${applied.invited === 1 ? 'invitation' : 'invitations'} sent` }]
+      ? [
+          {
+            done: true,
+            key: 'invited',
+            text: `${applied.invited} ${applied.invited === 1 ? 'invitation' : 'invitations'} sent`,
+          },
+        ]
       : []),
-    ...(applied?.failed.length ? [{ done: false, text: `Not sent: ${applied.failed.join('; ')}` }] : []),
+    ...(applied?.failed.length ? [{ done: false, key: 'failed', text: `Not sent: ${applied.failed.join('; ')}` }] : []),
     ...(connected.length
-      ? [{ done: true, text: `${connected.length} ${connected.length === 1 ? 'channel' : 'channels'} connected` }]
+      ? [
+          {
+            done: true,
+            key: 'channels',
+            text: `${connected.length} ${connected.length === 1 ? 'channel' : 'channels'} connected`,
+          },
+        ]
       : []),
   ]
 
   return (
     <div>
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-brand-soft text-brand-strong">
-        <PartyPopper className="size-6 motion-safe:animate-[bounce_1s_ease-in-out_2]" />
+      <div className="grid justify-items-center text-center">
+        <div className="relative flex size-16 items-center justify-center rounded-3xl bg-brand-soft text-brand-strong ring-8 ring-brand-soft/40">
+          <PartyPopper className="size-8 motion-safe:animate-[bounce_1s_ease-in-out_2]" />
+        </div>
+        <div className="mt-6 [&_p]:mx-auto [&_p]:max-w-md">
+          <StepHeader heading={heading} title="You are all set">
+            {toConnect.length
+              ? 'Connect the platforms you picked, then write your first post.'
+              : 'Your workspace is ready. Write your first post, or open the calendar and plan the week.'}
+          </StepHeader>
+        </div>
       </div>
-      <div className="mt-6">
-        <StepHeader heading={heading} title="You are all set">
-          {toConnect.length
-            ? 'Connect the platforms you picked, then write your first post.'
-            : 'Write your first post or open the calendar and plan the week.'}
-        </StepHeader>
-      </div>
-      <ul className="mt-8 grid gap-2">
+      <ul className="mx-auto mt-8 grid max-w-md divide-y rounded-2xl border bg-card" aria-label="What is set up">
         {items.map((it) => (
-          <li key={it.text} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm">
+          <li key={it.key} className="flex items-center gap-3 px-4 py-3 text-sm text-muted-foreground">
             <span
               className={cn(
                 'flex size-6 shrink-0 items-center justify-center rounded-full',
@@ -1058,21 +1082,62 @@ function DoneStep({
       {draft.agent && (applied?.keyCreated || isLocal) && (
         <AgentPanel isLocal={isLocal} tool={draft.agent} apiKey={key?.key} />
       )}
-      <Actions>
-        <Button
-          type="button"
-          variant="outline"
-          className={bigButton}
+      <div className="mt-10 grid gap-3 sm:grid-cols-2">
+        <NextStep
+          icon={<PenLine />}
+          title="Write your first post"
+          description="Draft it now, then publish it or schedule it."
+          primary
           disabled={busy}
           onClick={() => onFinish('/posts?compose=1')}
-        >
-          <PenLine /> Write your first post
-        </Button>
-        <Button type="button" className={bigButton} disabled={busy} onClick={() => onFinish('/schedule')}>
-          Go to the calendar <ArrowRight />
-        </Button>
-      </Actions>
+        />
+        <NextStep
+          icon={<CalendarClock />}
+          title="Go to the calendar"
+          description="See the week and plan what goes out when."
+          disabled={busy}
+          onClick={() => onFinish('/schedule')}
+        />
+      </div>
     </div>
+  )
+}
+
+/** One way out of the wizard: a big card with what it opens. */
+function NextStep({
+  icon,
+  title,
+  description,
+  primary,
+  disabled,
+  onClick,
+}: {
+  icon: ReactNode
+  title: string
+  description: string
+  primary?: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'group flex items-start gap-3 rounded-2xl border bg-card p-4 text-left transition-colors outline-none hover:border-brand/60 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60 sm:p-5',
+        primary && 'border-brand/50 bg-brand-soft/30',
+      )}
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-strong [&_svg]:size-5">
+        {icon}
+      </span>
+      <span className="grid min-w-0 flex-1 gap-1">
+        <span className="font-semibold">{title}</span>
+        <span className="text-sm text-muted-foreground">{description}</span>
+      </span>
+      <ArrowRight className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+    </button>
   )
 }
 
