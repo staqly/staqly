@@ -51,7 +51,7 @@ export function SignIn({ signup = false }: { signup?: boolean }) {
       ) : signup && !canSignUp ? (
         <Notice title="Sign-ups are by invitation here">
           Ask a workspace admin to invite your address, then open the link in the invitation.{' '}
-          <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+          <Link href="/login" className="font-medium text-foreground underline-offset-4 underline hover:no-underline">
             Sign in
           </Link>{' '}
           if you already have an account.
@@ -332,7 +332,7 @@ function AccountSignIn({
             Already have an account?{' '}
             <Link
               href={`/login${query}`}
-              className="inline-flex min-h-10 items-center font-medium text-foreground underline-offset-4 hover:underline"
+              className="inline-flex min-h-10 items-center font-medium text-foreground underline-offset-4 underline hover:no-underline"
             >
               Sign in
             </Link>
@@ -343,7 +343,7 @@ function AccountSignIn({
               New to Staqly?{' '}
               <Link
                 href={`/signup${query}`}
-                className="inline-flex min-h-10 items-center font-medium text-foreground underline-offset-4 hover:underline"
+                className="inline-flex min-h-10 items-center font-medium text-foreground underline-offset-4 underline hover:no-underline"
               >
                 Create an account
               </Link>

@@ -264,6 +264,15 @@ class Billing(StaqlyModel):
     trial: str = "none"
 
 
+class SubscriptionDiscount(StaqlyModel):
+    """A subscription's discount while it lasts; no other promotion code is taken meanwhile."""
+
+    #: The promotion code behind it (empty when it was set on a coupon in Stripe).
+    code: str = ""
+    #: When it ends (``None`` = never).
+    end: OptionalDatetime = None
+
+
 class BillingSubscription(StaqlyModel):
     """The current Stripe subscription (``billing.details()``)."""
 
@@ -283,6 +292,8 @@ class BillingSubscription(StaqlyModel):
     interval: str = ""
     #: Seats billed: the workspace's members.
     quantity: int = 1
+    #: The discount while it lasts.
+    discount: SubscriptionDiscount | None = None
 
 
 class PaymentMethod(StaqlyModel):

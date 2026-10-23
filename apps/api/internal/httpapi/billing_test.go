@@ -348,7 +348,11 @@ func TestBillingDetails(t *testing.T) {
 	stripe := httptest.NewServer(subsFirst(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/subscriptions/sub_1":
+			if r.URL.Query().Get("expand[]") != "discounts.promotion_code" {
+				t.Errorf("subscription read without its discount's code: %s", r.URL.RawQuery)
+			}
 			json.NewEncoder(w).Encode(map[string]any{"id": "sub_1", "status": "active", "cancel_at_period_end": true,
+				"discounts": []any{map[string]any{"id": "di_1", "end": end, "promotion_code": map[string]any{"code": "SPRING20"}}},
 				"items": map[string]any{"data": []any{map[string]any{"current_period_start": start, "current_period_end": end,
 					"price": map[string]any{"unit_amount": 3000, "currency": "usd", "recurring": map[string]any{"interval": "month"}}}}}})
 		case "GET /v1/customers/cus_1":
@@ -389,6 +393,9 @@ func TestBillingDetails(t *testing.T) {
 	if sub == nil || sub.Status != "active" || !sub.CancelAtPeriodEnd || sub.Amount != 3000 || sub.Interval != "month" ||
 		sub.CurrentPeriodStart == nil || sub.CurrentPeriodEnd == nil {
 		t.Fatalf("subscription: %+v", sub)
+	}
+	if sub.Discount == nil || sub.Discount.Code != "SPRING20" || sub.Discount.End == nil {
+		t.Fatalf("discount: %+v", sub.Discount)
 	}
 	if len(d.PaymentMethods) != 2 || d.PaymentMethods[1].Last4 != "4444" || !d.PaymentMethods[1].Default || d.PaymentMethods[0].Default {
 		t.Fatalf("payment methods: %+v", d.PaymentMethods)

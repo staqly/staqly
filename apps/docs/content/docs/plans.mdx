@@ -62,7 +62,9 @@ The compare page on staqly.ai lists the same limits side by side.
      code, or apply one to the plan you have, use **Have a promotion code?** on the plan page (or send
      `promotion_code` to `POST /v1/billing/checkout`). The code is checked with Stripe before it is applied
      (`POST /v1/billing/promotion-code`; codes are case sensitive: `SPRING20`, not `spring20`), and the plans it covers show their discounted price; a code that is
-     unknown, used up or made for other plans is refused with the reason.
+     unknown, used up or made for other plans is refused with the reason. One discount at a time: while
+     the subscription has one, the plan page shows it with its end date instead of **Have a promotion code?**,
+     and another code (or the same one again) is refused until it ends.
 5. Until a plan starts, and after one ends (a trial cancelled for want of a card, an unpaid renewal,
    a cancellation), the workspace is **locked**:
    - the dashboard shows only that, with **Go to billing** (Settings → Plan & usage) for owners and

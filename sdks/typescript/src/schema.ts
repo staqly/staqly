@@ -3420,6 +3420,16 @@ export interface components {
              * @example 3
              */
             quantity: number;
+            /** @description The subscription's discount while it lasts; no other promotion code is taken meanwhile */
+            discount: null | {
+                /**
+                 * @description The promotion code behind it (empty when it was set on a coupon in Stripe)
+                 * @example SPRING20
+                 */
+                code: string;
+                /** @description When it ends (null = never) */
+                end: string | null;
+            };
         };
         PaymentMethod: {
             /** @example visa */

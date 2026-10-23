@@ -4152,7 +4152,7 @@ components:
         managed_payments: { type: boolean, description: "Checkouts on this server use Stripe Managed Payments: Stripe, through Link, is the merchant of record and sends the receipts and invoices" }
     BillingSubscription:
       type: object
-      required: [status, current_period_start, current_period_end, cancel_at_period_end, cancel_at, canceled_at, trial_end, amount, currency, interval, quantity]
+      required: [status, current_period_start, current_period_end, cancel_at_period_end, cancel_at, canceled_at, trial_end, amount, currency, interval, quantity, discount]
       properties:
         status: { type: string, description: "Stripe's status: active, trialing, past_due, canceled, unpaid, incomplete, ...", examples: [active] }
         current_period_start: { type: [string, "null"], description: Start of the billing period }
@@ -4165,6 +4165,15 @@ components:
         currency: { type: string, examples: [usd] }
         interval: { type: string, examples: [month] }
         quantity: { type: integer, description: "Seats billed: the workspace's members (the server keeps Stripe's quantity in step)", examples: [3] }
+        discount:
+          description: The subscription's discount while it lasts; no other promotion code is taken meanwhile
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [code, end]
+              properties:
+                code: { type: string, description: The promotion code behind it (empty when it was set on a coupon in Stripe), examples: [SPRING20] }
+                end: { type: [string, "null"], description: When it ends (null = never) }
     PaymentMethod:
       type: object
       required: [brand, last4, exp_month, exp_year, default]

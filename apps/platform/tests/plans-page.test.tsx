@@ -1,8 +1,8 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { render as renderPlain, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { teamTotal } from '@/components/plans/plan-cards'
+import { PlanGrid, teamTotal } from '@/components/plans/plan-cards'
 import { PlansPage } from '@/components/plans/plans-page'
 import { qk } from '@/lib/queries'
 
@@ -28,7 +28,7 @@ const PROMOTIONS: Record<string, unknown> = {
   SPRING20: { code: 'SPRING20', percent_off: 20, duration: 'repeating', duration_in_months: 3, plans: ['plus', 'pro'] },
 }
 
-function render(paying: boolean, trial = paying ? 'none' : 'available') {
+function render(paying: boolean, trial = paying ? 'none' : 'available', sub: object = SUB) {
   const client = makeClient()
 
   client.setQueryData(qk.session, {
@@ -54,7 +54,7 @@ function render(paying: boolean, trial = paying ? 'none' : 'available') {
     },
     'GET /v1/billing/details': {
       enabled: true,
-      subscription: paying ? SUB : null,
+      subscription: paying ? sub : null,
       payment_methods: [],
       invoices: [],
       has_more_invoices: false,
@@ -95,6 +95,7 @@ describe('plan picker', () => {
     expect(screen.getByRole('link', { name: 'Back' })).toBeInTheDocument()
     expect(within(plus).getByText('€29')).toBeInTheDocument()
     expect(screen.queryByText('Your current plan')).not.toBeInTheDocument() // nothing is paid for yet
+    expect(within(plus).getByText('Most popular')).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: /yearly/i }))
     expect(within(plus).getByText('€23')).toBeInTheDocument()
     expect(within(plus).getByText('€276 per user, billed yearly, excl. VAT')).toBeInTheDocument()
@@ -210,6 +211,23 @@ describe('from the pricing page', () => {
 })
 
 describe('per user pricing', () => {
+  it('Most popular helps pick a first plan, not a switch: gone once a plan is paid for', () => {
+    const { rerender } = renderPlain(<PlanGrid plans={PLANS} />)
+
+    expect(within(screen.getByTestId('plan-plus')).getByText('Most popular')).toBeInTheDocument()
+    rerender(<PlanGrid plans={PLANS} currentPlanId="pro" />)
+    expect(screen.queryByText('Most popular')).not.toBeInTheDocument()
+  })
+
+  it('while a discount is on, no other code can be added: the plans page says which and until when', async () => {
+    render(true, 'none', { ...SUB, discount: { code: 'SPRING20', end: '2027-01-23T00:00:00Z' } })
+
+    expect(await screen.findByTestId('promotion-discount-on')).toHaveTextContent(
+      /SPRING20 is on until .+\. Another code can be added once it ends\./,
+    )
+    expect(screen.queryByRole('button', { name: 'Have a promotion code?' })).not.toBeInTheDocument()
+  })
+
   it('a team pays the seat price times its members', () => {
     const plus = PLANS.find((p) => p.id === 'plus')!
 
