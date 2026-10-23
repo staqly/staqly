@@ -2421,6 +2421,24 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/providers/{id}/check:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: checkProvider
+      tags: [channels]
+      summary: Check this server's setup for an OAuth platform (channels:manage)
+      description: |
+        Independent of any connected account: the app keys (and, where the platform can tell without an account, whether it
+        accepts them: X and LinkedIn), the return address to register with the platform, and for platforms that download media
+        themselves (Instagram) whether media links point at an address the internet can reach. Nothing is stored.
+      responses:
+        "200": { description: The checks, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderCheck" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /v1/channels:
     get:
       operationId: listChannels
@@ -4174,6 +4192,22 @@ components:
               properties:
                 code: { type: string, description: The promotion code behind it (empty when it was set on a coupon in Stripe), examples: [SPRING20] }
                 end: { type: [string, "null"], description: When it ends (null = never) }
+    ProviderCheck:
+      type: object
+      required: [provider, ok, checks]
+      properties:
+        provider: { type: string, examples: [instagram] }
+        ok: { type: boolean, description: Every check passed }
+        checks:
+          type: array
+          items:
+            type: object
+            required: [key, label, ok, detail]
+            properties:
+              key: { type: string, enum: [keys, platform, return_address, media] }
+              label: { type: string, examples: [App keys] }
+              ok: { type: boolean }
+              detail: { type: string, description: "What was found; for return_address, the address to register with the platform" }
     PaymentMethod:
       type: object
       required: [brand, last4, exp_month, exp_year, default]
