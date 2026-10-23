@@ -1,18 +1,18 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import { PageContainer } from '@/components/common/page-header'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { qk } from '@/lib/queries'
 import { clearOAuthReturn, peekOAuthReturn } from '@/lib/welcome'
 
 /**
  * Where the platform sends the browser back after OAuth. The API already handled `code` and `state` at its own
- * callback and redirected here with `channel=<id>` or `error=<message>`; this page just lands on Channels.
+ * callback and redirected here with `channel=<id>` or `error=<message>`; this page just lands on Channels, which
+ * shows an error over itself.
  */
 export function OAuthCallback() {
   const params = useSearchParams()
@@ -20,6 +20,7 @@ export function OAuthCallback() {
   const qc = useQueryClient()
   const error = params.get('error')
   const channel = params.get('channel')
+  const provider = usePathname().split('/').filter(Boolean)[2] ?? ''
 
   // Started from the welcome wizard: back there (with the error, if any), else Channels.
   const [back] = useState(peekOAuthReturn)
@@ -33,25 +34,15 @@ export function OAuthCallback() {
       return
     }
 
-    if (!error) {
-      void qc.invalidateQueries({ queryKey: qk.channels })
-      router.replace(channel ? `/channels?connected=${encodeURIComponent(channel)}` : '/channels')
-    }
-  }, [back, error, channel, qc, router])
+    if (error) {
+      router.replace(`/channels?${new URLSearchParams({ connect_error: error, provider })}`)
 
-  if (error && !back) {
-    return (
-      <PageContainer>
-        <div className="mx-auto mt-[10vh] max-w-md rounded-xl border p-6 text-center">
-          <h1 className="text-lg font-semibold">The channel was not connected</h1>
-          <p className="mt-2 text-sm text-muted-foreground wrap-anywhere">{error}</p>
-          <Button className="mt-4" onClick={() => router.replace('/channels')}>
-            Back to Channels
-          </Button>
-        </div>
-      </PageContainer>
-    )
-  }
+      return
+    }
+
+    void qc.invalidateQueries({ queryKey: qk.channels })
+    router.replace(channel ? `/channels?connected=${encodeURIComponent(channel)}` : '/channels')
+  }, [back, error, channel, provider, qc, router])
 
   return (
     <PageContainer>

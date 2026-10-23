@@ -22,6 +22,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react'
 
+import { ConnectErrorDialog } from '@/components/channels/connect-error-dialog'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
@@ -610,8 +611,15 @@ function GroupSection({
 export function ChannelsPage() {
   const channels = useChannels()
   const providers = useProviders()
+  const search = useSearchParams()
   // ?add=1 (the getting-started checklist) opens the platform grid at once.
-  const add = useLazyDialog(useSearchParams().get('add') === '1')
+  const add = useLazyDialog(search.get('add') === '1')
+  // A connection that came back with an error (from the OAuth callback page).
+  const [connectError, setConnectError] = useState(() => {
+    const error = search.get('connect_error')
+
+    return error ? { error, provider: search.get('provider') ?? '' } : null
+  })
   const [reconnect, setReconnect] = useState<Channel | null>(null)
   const groupsQuery = useChannelGroups()
   const channelGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])
@@ -848,6 +856,15 @@ export function ChannelsPage() {
             }
           }}
           reconnect={reconnect}
+        />
+      )}
+      {connectError && (
+        <ConnectErrorDialog
+          {...connectError}
+          onClose={() => {
+            setConnectError(null)
+            window.history.replaceState(null, '', '/channels')
+          }}
         />
       )}
       {editing && (
