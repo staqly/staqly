@@ -6,7 +6,7 @@ import { DESCRIPTION, GITHUB, SITE_URL, TAGLINE } from './site'
 export const HOME_TITLE = `staqly — ${TAGLINE}`
 
 /*
- * The social card (app/opengraph-image.png, source assets/brand/og-image.svg). A page that sets its own `openGraph`
+ * The social card (app/opengraph-image.png). A page that sets its own `openGraph`
  * replaces the root layout's object, file-based image included, so every page names the image again.
  */
 const OG_IMAGE = {

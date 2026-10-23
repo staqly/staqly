@@ -17,7 +17,8 @@ pnpm typecheck
 The monorepo CI (`.github/workflows/ci.yml`, job `web`) runs formatting, lint, types and the full build on every push and PR.
 `robots.txt`, `sitemap.xml` and `llms.txt` are generated from `app/{robots,sitemap}.ts` and `app/llms.txt/route.ts`;
 SEO text (tagline, description) lives in `lib/site.ts`; per-page metadata, the social card and structured data
-helpers in `lib/seo.ts` (the card's source is `assets/brand/og-image.svg`).
+helpers in `lib/seo.ts`. The card's editable source is `brand/og-image.svg` in the separate staqly assets
+repository (a sibling checkout at `../assets` from the monorepo root); the build uses the local `app/opengraph-image.png`.
 
 | Path | What |
 |---|---|
