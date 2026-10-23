@@ -60,7 +60,9 @@ The compare page on staqly.ai lists the same limits side by side.
      and the plan page says so.
    - **Promotion codes:** Stripe Checkout has its own code box for a first plan. To switch plans with a
      code, or apply one to the plan you have, use **Have a promotion code?** on the plan page (or send
-     `promotion_code` to `POST /v1/billing/checkout`). A code made for other plans is refused with the reason.
+     `promotion_code` to `POST /v1/billing/checkout`). The code is checked with Stripe before it is applied
+     (`POST /v1/billing/promotion-code`; codes are case sensitive: `SPRING20`, not `spring20`), and the plans it covers show their discounted price; a code that is
+     unknown, used up or made for other plans is refused with the reason.
 5. Until a plan starts, and after one ends (a trial cancelled for want of a card, an unpaid renewal,
    a cancellation), the workspace is **locked**:
    - the dashboard shows only that, with **Go to billing** (Settings → Plan & usage) for owners and
