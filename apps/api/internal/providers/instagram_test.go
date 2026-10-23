@@ -132,8 +132,8 @@ func TestInstagramConnect(t *testing.T) {
 	if ig.Status != StatusAvailable || ig.Name() != "Instagram" {
 		t.Fatalf("instagram is %q %q", ig.Status, ig.Name())
 	}
-	if b, _ := Get("instagram_business"); b.Status != StatusSoon {
-		t.Fatalf("instagram_business is %q, want soon", b.Status)
+	if b, _ := Get("instagram_business"); b.Status != StatusAvailable {
+		t.Fatalf("instagram_business is %q, want available", b.Status)
 	}
 	app := App{ClientID: "cid", ClientSecret: "secret"}
 	u, _ := ig.AuthURL(app, "https://app.example/cb", "st", nil)

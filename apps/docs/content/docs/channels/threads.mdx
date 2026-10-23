@@ -1,0 +1,124 @@
+---
+title: Threads
+description: Publish text, pictures, videos and carousels to a Threads profile, choose who can reply, and post a thread as replies. What to register at Meta for Developers.
+---
+
+Staqly publishes to a **Threads profile** through the Threads API: the person signs in on
+threads.com and allows the app. A published target links to the post on threads.com.
+
+## What you need
+
+- A **Meta app** with the **Threads API** use case, registered once per server. Its keys go into the
+  server's environment (`.env`), the same way locally and in the cloud (see
+  [Developer apps](/channels/developer-apps)).
+- **For pictures and videos, media storage Threads can reach.** Threads does not take uploads: it
+  downloads every file from a link. Staqly hands it a time-limited link to the file in
+  [S3-compatible storage](/self-hosting/storage), so a server that keeps media on its own disk
+  publishes text-only Threads posts but fails a post with media (and says why). Locally, the bucket
+  needs an address on the internet, for example a tunnel to it set as `S3_PUBLIC_URL`.
+
+<Steps>
+<Step>
+
+### Create the app
+
+At [Meta for Developers](https://developers.facebook.com/apps), click **Create app** and choose the
+use case **Access the Threads API**. In **Use cases → Access the Threads API → Customize**:
+
+| Where | What |
+|---|---|
+| **Permissions** | add `threads_content_publish` and `threads_manage_replies` (`threads_basic` is there already) |
+| **Settings → Redirect Callback URLs** | your dashboard's `/channels/callback/threads`, for example `https://staqly.example.com/channels/callback/threads`. Meta takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
+| **App roles → Roles → Threads testers** | the Threads profiles that may connect while the app is in development; each accepts the invitation on threads.com (Settings → Account → Website permissions → Invites) |
+
+Copy the **Threads app ID** and **Threads app secret** from **App settings → Basic** (not the Meta
+app's own ID).
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_THREADS_CLIENT_ID=your-threads-app-id
+PROVIDER_THREADS_CLIENT_SECRET=your-threads-app-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_THREADS_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, Threads shows as **soon** in **Channels → Add channel**.
+`PROVIDER_THREADS_ENABLED=false` hides it altogether. A workspace may instead save its own app over
+the API (`PUT /v1/providers/threads/app`).
+
+</Step>
+<Step>
+
+### Connect the profile
+
+**Connect with Threads** opens threads.com, where the person signs in and allows the app. Staqly
+asks for these scopes:
+
+| Scope | Why |
+|---|---|
+| `threads_basic` | Read the profile's username, name and picture |
+| `threads_content_publish` | Publish posts |
+| `threads_manage_replies` | Post the replies of a post's thread, and choose who can reply |
+
+The channel shows the profile's name, `@username` and picture.
+
+</Step>
+<Step>
+
+### Before other people connect
+
+While the app is in development, only its testers can connect. Before your customers connect their
+profiles, Meta reviews the app: **App Review** for each of the scopes (a screen recording of staqly
+using it) and **Business Verification** of your company.
+
+</Step>
+</Steps>
+
+## The 60-day sign-in
+
+Threads' sign-in lasts **60 days** and can be renewed. Staqly renews it on its own before it runs
+out, so the channel stays connected as long as the profile allows the app. If the person removes the
+app or changes their password, the channel turns **Needs reconnect**.
+
+## Limits
+
+| | |
+|---|---|
+| Text | 500 characters; text alone is a post |
+| Media | up to **10** pictures and videos (several make a carousel) |
+| Pictures | JPEG or PNG, up to 8 MB |
+| Videos | MOV or MP4, up to 5 minutes and 1 GB |
+| Posts | Threads takes up to **250 posts** and **1,000 replies a day** per profile through its API |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Who can reply** (`reply_control`) | `everyone` (default), `accounts_you_follow` or `mentioned_only` |
+
+Over the API: `{"reply_control": "mentioned_only"}` in the target's `settings`.
+
+## Replies
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies on Threads, each under
+the one before, in order and after their delays. Replies take text, pictures and videos like a post.
+
+## When publishing fails
+
+| Threads says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit, Threads unavailable, media not processed yet | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused picture or video, text over the limit, a restricted profile | Fails the target with Threads' reason; retrying would not help, so it does not |
+
+Threads has no way to ask "did this post go out?", and a new attempt would make a new post. So when
+staqly sent the post but its answer never came, the target fails with "may have published" instead
+of trying again: check the profile before you post it again.
