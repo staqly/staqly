@@ -101,8 +101,9 @@ func TestMediaOnS3(t *testing.T) {
 
 	// Deleting the media removes the file and its thumbnail from the bucket.
 	e.do(nil, "DELETE", "/v1/media/"+m.ID+"?permanent=true", e.keyWith(app.ScopePostsDelete), nil, 204, nil)
-	if keys := fake.Keys("media"); len(keys) != 0 {
-		t.Fatalf("bucket after delete: %v", keys)
+	backupKey := "workspaces/" + workspaceID(e) + "/backups/" + job.ID + ".zip"
+	if keys := fake.Keys("media"); len(keys) != 1 || keys[0] != backupKey || !bytes.Equal(fake.Get("media", backupKey), zb) {
+		t.Fatalf("only the existing backup should remain after media deletion: %v", keys)
 	}
 
 	// Deleting the workspace removes its remaining files.
