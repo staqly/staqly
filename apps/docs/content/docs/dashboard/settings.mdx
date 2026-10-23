@@ -21,8 +21,9 @@ palette (<Kbd>⌘</Kbd> <Kbd>K</Kbd>).
   [Backup & restore](/self-hosting/backup-and-restore).
 - **Download everything**: **Settings → Data & privacy → Export workspace** (on the Starter plan
   without the media files).
-- **Check your channels**: **Settings → System → Channels** shows the platforms the server can
-  connect and tests each connected account with **Test** or **Test all**.
+- **Check the server's platform setup**: **Settings → System → Platforms** tests each platform's
+  app keys, the return address to register and what else it needs (accounts are tested on
+  **Channels**).
 - **See what the server is doing** (local installs): **Settings → System → Queue** lists publishing
   and schedule jobs with a **Retry** for failed ones.
 - **Connect an agent**: open **Integrations** (under *Automation* in the sidebar) for copy-ready
@@ -113,7 +114,7 @@ See [Backup & restore](/self-hosting/backup-and-restore).
 | Section | What it does |
 |---|---|
 | **Health** | Live readiness of the staqly API (*Ready* or *Not ready*, the version, and each check: database, migrations, background workers), refreshed every 30 seconds, with a **Check now** button. |
-| **Channels** | The platforms this server can connect (their app keys are set) and every connected channel with its state and last error. **Test** asks the platform whether the account still signs in and shows the answer; **Test all** checks them one after another. A channel that no longer signs in turns *Needs reconnect*. |
+| **Platforms** | Every platform connected through its own sign-in that has app keys on this server. **Test** (or **Test all**) checks the server's side, independent of any account: the **app keys** (X and LinkedIn also say whether they accept them; Instagram checks them only when an account connects), the **return address** to register with the platform (Instagram needs `https`), and for Instagram the **media storage** (it downloads pictures and videos from a link, so links must point at an address the internet can reach). Connected accounts are tested from the **Channels** page. |
 | **Queue** (local installs) | The background jobs: **Queued**, **Running**, **Failed** and **Done today** counts, a filter (all, failed, queued, running) and the latest jobs with their kind (*Publish a post*, *Publish on a channel*, *Run a schedule*, *Refresh a channel sign-in*), status, tries and last error. **Retry** queues a failed job again; the **×** cancels a queued one. Refreshes every few seconds. See [Jobs](/concepts#jobs). |
 | **Monitoring** (local installs) | The monitoring endpoints with your instance's API URL: `/livez`, `/readyz` and `/metrics` (Prometheus; needs `METRICS_TOKEN` except for `curl` on the same machine in the Community Edition). |
 
