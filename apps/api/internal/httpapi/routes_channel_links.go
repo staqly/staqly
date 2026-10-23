@@ -33,6 +33,8 @@ func init() {
 		r.Get("/connect-links/{token}", s.openConnectLink)
 		r.Post("/connect-links/{token}/channels", s.connectViaLink)
 		r.Get("/connect-links/{token}/oauth/{provider}/start", s.connectLinkOAuthStart)
+		r.Get("/connect-links/{token}/pending/{id}", s.pendingViaLink)
+		r.Post("/connect-links/{token}/pending/{id}", s.finishPendingViaLink)
 	})
 }
 
@@ -156,5 +158,41 @@ func (s *Server) connectLinkOAuthCallback(w http.ResponseWriter, r *http.Request
 		land(url.Values{"error": {"The connection failed; try again"}})
 		return
 	}
-	land(url.Values{"connected": {firstNonEmptyStr(ch.Handle, ch.Name)}, "workspace": {workspace}})
+	if ch.Pending != nil {
+		// The sign-in may publish as several accounts: the link's page asks which ones.
+		land(url.Values{"pending": {ch.Pending.ID}, "workspace": {workspace}})
+		return
+	}
+	land(url.Values{"connected": {firstNonEmptyStr(ch.Channel.Handle, ch.Channel.Name)}, "workspace": {workspace}})
+}
+
+func (s *Server) pendingViaLink(w http.ResponseWriter, r *http.Request) {
+	noStore(r)
+	if s.connectLinkLimited(w, r) {
+		return
+	}
+	out, err := s.svc.GetPendingConnectionViaLink(r.Context(), chi.URLParam(r, "token"), chi.URLParam(r, "id"))
+	respond(w, r, 200, out, err)
+}
+
+func (s *Server) finishPendingViaLink(w http.ResponseWriter, r *http.Request) {
+	noStore(r)
+	if s.connectLinkLimited(w, r) {
+		return
+	}
+	var in pendingChoice
+	if !decode(w, r, &in) {
+		return
+	}
+	chs, err := s.svc.FinishPendingConnectionViaLink(r.Context(), chi.URLParam(r, "token"), chi.URLParam(r, "id"), in.AccountIDs)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	// The customer learns which accounts were connected, nothing else about the workspace.
+	out := make([]map[string]any, len(chs))
+	for i, ch := range chs {
+		out[i] = map[string]any{"name": ch.Name, "handle": ch.Handle, "provider": ch.Provider}
+	}
+	writeJSON(w, 201, map[string]any{"data": out})
 }

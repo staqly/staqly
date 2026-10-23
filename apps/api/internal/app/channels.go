@@ -493,54 +493,45 @@ func (s *Service) StartOAuth(ctx context.Context, p Principal, providerID, redir
 }
 
 // CompleteOAuth exchanges the code the platform sent back and saves the account as a channel. An existing
-// channel of the same provider and handle is reconnected instead of duplicated.
-func (s *Service) CompleteOAuth(ctx context.Context, p Principal, providerID, code, state, redirect string, extra map[string]string) (Channel, error) {
+// channel of the same provider and handle is reconnected instead of duplicated. A sign-in that may publish as
+// several accounts answers a pending connection to pick them from instead (GetPendingConnection).
+func (s *Service) CompleteOAuth(ctx context.Context, p Principal, providerID, code, state, redirect string, extra map[string]string) (OAuthResult, error) {
 	if err := p.require(ScopeChannelsManage); err != nil {
-		return Channel{}, err
+		return OAuthResult{}, err
 	}
 	e, err := s.availableProvider(providerID)
 	if err != nil {
-		return Channel{}, err
+		return OAuthResult{}, err
 	}
 	st, err := s.verifyState(state, providerID, p.WorkspaceID)
 	if err != nil {
-		return Channel{}, err
+		return OAuthResult{}, err
 	}
 	if st.Link != "" {
-		return Channel{}, invalid("state", "belongs to another connection")
+		return OAuthResult{}, invalid("state", "belongs to another connection")
 	}
 	return s.completeOAuth(ctx, p, e, st, code, redirect, extra, "")
 }
 
-// completeOAuth exchanges the code and saves (or reconnects) the channel; a new channel joins groupID ("" = Default).
+// completeOAuth exchanges the code and saves (or reconnects) the channel, or keeps the sign-in for the person to
+// pick its accounts; a new channel joins groupID ("" = Default).
 func (s *Service) completeOAuth(ctx context.Context, p Principal, e providers.Entry, st oauthState, code, redirect string,
-	extra map[string]string, groupID string) (Channel, error) {
+	extra map[string]string, groupID string) (OAuthResult, error) {
 	providerID := e.ID()
 	if code == "" {
-		return Channel{}, invalid("code", "is required")
+		return OAuthResult{}, invalid("code", "is required")
 	}
 	app, err := s.providerApp(ctx, p.WorkspaceID, providerID)
 	if err != nil {
-		return Channel{}, err
+		return OAuthResult{}, err
 	}
 	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
 	defer cancel()
 	creds, profile, err := e.Exchange(cctx, app, redirect, code, withVerifier(extra, s.pkceVerifier(st)))
 	if err != nil {
-		return Channel{}, connectError(err)
+		return OAuthResult{}, connectError(err)
 	}
-	if profile.Handle != "" {
-		rows, err := s.Q.ListChannels(ctx, p.WorkspaceID)
-		if err != nil {
-			return Channel{}, err
-		}
-		for _, row := range rows {
-			if row.Provider == providerID && row.Handle == profile.Handle {
-				return s.reconnectChannel(ctx, p, row, creds, profile)
-			}
-		}
-	}
-	return s.saveChannel(ctx, p, e, firstNonEmpty(profile.Name, profile.Handle, e.Name()), creds, profile, nil, groupID)
+	return s.connectSignIn(ctx, p, e, creds, profile, st.Link, groupID)
 }
 
 func (s *Service) reconnectChannel(ctx context.Context, p Principal, row db.Channel, creds providers.Credentials, profile providers.Profile) (Channel, error) {

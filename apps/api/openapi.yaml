@@ -2505,7 +2505,8 @@ paths:
       description: |
         Receives the platform's `code` and `state` (or `error`), creates the channel (or reconnects the
         existing one for the same account) and redirects the browser to the dashboard's
-        `/channels/callback/{provider}` page with `?channel=<id>`, or `?error=<message>`.
+        `/channels/callback/{provider}` page with `?channel=<id>`, `?pending=<id>` when the sign-in may
+        publish as several accounts (see getPendingConnection), or `?error=<message>`.
       parameters:
         - { name: code, in: query, schema: { type: string } }
         - { name: state, in: query, schema: { type: string } }
@@ -2513,11 +2514,58 @@ paths:
         - { name: error_description, in: query, schema: { type: string } }
       responses:
         "302":
-          description: "Redirect to the dashboard's callback page (?channel=<id> or ?error=<message>)"
+          description: "Redirect to the dashboard's callback page (?channel=<id>, ?pending=<id> or ?error=<message>)"
           headers: { Location: { schema: { type: string } } }
           content: { text/html: { schema: { type: string } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/pending-connections/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getPendingConnection
+      tags: [channels]
+      summary: The accounts a sign-in may publish as, to pick from (channels:manage)
+      description: |
+        A platform whose sign-in may publish as several accounts (Facebook Pages, LinkedIn Pages, YouTube
+        channels, Google Business locations...) does not connect one by itself: the callback lands on the
+        dashboard's `/channels/callback/{provider}` page with `?pending=<id>`, and the sign-in waits here,
+        sealed, for ten minutes. A sign-in with only one account connects it directly.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PendingConnection" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      operationId: finishPendingConnection
+      tags: [channels]
+      summary: Connect the picked accounts, each as its own channel (channels:manage)
+      description: |
+        Every picked account becomes a channel; one already connected (the same account) is reconnected
+        instead. The sign-in is used once: to pick again, connect again. The plan's channel limit applies to
+        each new channel.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_ids]
+              properties:
+                account_ids: { type: array, minItems: 1, items: { type: string }, description: Ids from the pending connection's accounts }
+      responses:
+        "201": { description: Connected, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Channel" } } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/channel-links:
     get:
@@ -2642,6 +2690,54 @@ paths:
         "410": { description: "The link was revoked, expired or used up", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/connect-links/{token}/pending/{id}:
+    parameters:
+      - { name: token, in: path, required: true, description: The connect link's token, schema: { type: string } }
+      - { $ref: "#/components/parameters/id" }
+    get:
+      operationId: getPendingConnectionViaLink
+      tags: [channels]
+      security: []
+      summary: The accounts a sign-in started from a connect link may publish as (no credentials)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PendingConnection" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { description: "The link was revoked, expired or used up", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      operationId: finishPendingConnectionViaLink
+      tags: [channels]
+      security: []
+      summary: Connect the accounts a customer picked; each takes one use of the link (no credentials)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_ids]
+              properties:
+                account_ids: { type: array, minItems: 1, items: { type: string } }
+      responses:
+        "201":
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { type: object, required: [name, handle, provider], properties: { name: { type: string }, handle: { type: string }, provider: { type: string } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "The link was revoked, expired or used up", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /v1/connect-links/oauth/{provider}/callback:
     parameters: [{ name: provider, in: path, required: true, schema: { type: string } }]
     get:
@@ -2652,7 +2748,9 @@ paths:
       description: |
         The dashboard's `/channels/callback/{provider}` page forwards the platform's answer here when the
         state belongs to a link. Redirects to the dashboard's `/add-channel` page with
-        `?connected=<handle>&workspace=<name>` or `?error=<message>`, the link's token in the fragment.
+        `?connected=<handle>&workspace=<name>`, `?pending=<id>&workspace=<name>` when the sign-in may publish
+        as several accounts (see getPendingConnectionViaLink), or `?error=<message>`, the link's token in the
+        fragment.
       parameters:
         - { name: code, in: query, schema: { type: string } }
         - { name: state, in: query, schema: { type: string } }
@@ -4834,6 +4932,25 @@ components:
         revoked_at: { type: string, format: date-time }
         url: { type: string, description: Only when created }
         token: { type: string, description: Only when created }
+    PendingConnection:
+      type: object
+      description: A sign-in waiting for the person to pick which of its accounts become channels.
+      required: [id, provider, accounts, expires_at]
+      properties:
+        id: { type: string }
+        provider: { type: string }
+        accounts: { type: array, items: { $ref: "#/components/schemas/PlatformAccount" } }
+        expires_at: { type: string, format: date-time }
+    PlatformAccount:
+      type: object
+      description: One account a sign-in may publish as (a Page, a channel, a location, a blog).
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        handle: { type: string }
+        avatar_url: { type: string }
+        profile_url: { type: string }
     ChannelLinkPublic:
       type: object
       required: [workspace, note, providers, expires_at, uses_left]

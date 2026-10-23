@@ -2077,11 +2077,43 @@ export interface paths {
          * Finish connecting an OAuth platform (channels:manage)
          * @description Receives the platform's `code` and `state` (or `error`), creates the channel (or reconnects the
          *     existing one for the same account) and redirects the browser to the dashboard's
-         *     `/channels/callback/{provider}` page with `?channel=<id>`, or `?error=<message>`.
+         *     `/channels/callback/{provider}` page with `?channel=<id>`, `?pending=<id>` when the sign-in may
+         *     publish as several accounts (see getPendingConnection), or `?error=<message>`.
          */
         get: operations["finishChannelOAuth"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pending-connections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The accounts a sign-in may publish as, to pick from (channels:manage)
+         * @description A platform whose sign-in may publish as several accounts (Facebook Pages, LinkedIn Pages, YouTube
+         *     channels, Google Business locations...) does not connect one by itself: the callback lands on the
+         *     dashboard's `/channels/callback/{provider}` page with `?pending=<id>`, and the sign-in waits here,
+         *     sealed, for ten minutes. A sign-in with only one account connects it directly.
+         */
+        get: operations["getPendingConnection"];
+        put?: never;
+        /**
+         * Connect the picked accounts, each as its own channel (channels:manage)
+         * @description Every picked account becomes a channel; one already connected (the same account) is reconnected
+         *     instead. The sign-in is used once: to pick again, connect again. The plan's channel limit applies to
+         *     each new channel.
+         */
+        post: operations["finishPendingConnection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2198,6 +2230,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/connect-links/{token}/pending/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The connect link's token */
+                token: string;
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        /** The accounts a sign-in started from a connect link may publish as (no credentials) */
+        get: operations["getPendingConnectionViaLink"];
+        put?: never;
+        /** Connect the accounts a customer picked; each takes one use of the link (no credentials) */
+        post: operations["finishPendingConnectionViaLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/connect-links/oauth/{provider}/callback": {
         parameters: {
             query?: never;
@@ -2211,7 +2265,9 @@ export interface paths {
          * Finish connecting an OAuth platform started from a connect link (no credentials)
          * @description The dashboard's `/channels/callback/{provider}` page forwards the platform's answer here when the
          *     state belongs to a link. Redirects to the dashboard's `/add-channel` page with
-         *     `?connected=<handle>&workspace=<name>` or `?error=<message>`, the link's token in the fragment.
+         *     `?connected=<handle>&workspace=<name>`, `?pending=<id>&workspace=<name>` when the sign-in may publish
+         *     as several accounts (see getPendingConnectionViaLink), or `?error=<message>`, the link's token in the
+         *     fragment.
          */
         get: operations["finishChannelOAuthViaLink"];
         put?: never;
@@ -4232,6 +4288,22 @@ export interface components {
             url?: string;
             /** @description Only when created */
             token?: string;
+        };
+        /** @description A sign-in waiting for the person to pick which of its accounts become channels. */
+        PendingConnection: {
+            id: string;
+            provider: string;
+            accounts: components["schemas"]["PlatformAccount"][];
+            /** Format: date-time */
+            expires_at: string;
+        };
+        /** @description One account a sign-in may publish as (a Page, a channel, a location, a blog). */
+        PlatformAccount: {
+            id: string;
+            name: string;
+            handle?: string;
+            avatar_url?: string;
+            profile_url?: string;
         };
         ChannelLinkPublic: {
             /** @description The workspace's name */
@@ -9401,7 +9473,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Redirect to the dashboard's callback page (?channel=<id> or ?error=<message>) */
+            /** @description Redirect to the dashboard's callback page (?channel=<id>, ?pending=<id> or ?error=<message>) */
             302: {
                 headers: {
                     Location?: string;
@@ -9413,6 +9485,80 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getPendingConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingConnection"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    finishPendingConnection: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Replays the stored response when the same key is repeated with the same method, path,
+                 *     query string and body within 24 hours (422 `idempotency_mismatch` with a different
+                 *     request, 409 `idempotency_in_progress` while the first one runs). Not applied to
+                 *     multipart uploads or to responses that carry a secret.
+                 */
+                "Idempotency-Key"?: components["parameters"]["idempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Ids from the pending connection's accounts */
+                    account_ids: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Connected */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Channel"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
         };
     };
@@ -9649,6 +9795,93 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getPendingConnectionViaLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The connect link's token */
+                token: string;
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingConnection"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The link was revoked, expired or used up */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    finishPendingConnectionViaLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The connect link's token */
+                token: string;
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    account_ids: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Connected */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            name: string;
+                            handle: string;
+                            provider: string;
+                        }[];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            402: components["responses"]["PaymentRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description The link was revoked, expired or used up */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
         };
