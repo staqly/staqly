@@ -5,6 +5,8 @@ packages:
   - packages/*
 # Packages whose install scripts may run (pnpm blocks the rest).
 allowBuilds:
+  # posthog-js's polyfills: the install step only prints a banner.
+  core-js: false
   esbuild: true
   # The media editor's EXIF reader: its install step is not needed in the browser.
   exifreader: false
