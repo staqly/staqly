@@ -389,6 +389,9 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	}
 	promo := ""
 	if code := strings.TrimSpace(opt.PromotionCode); code != "" {
+		if err := s.noDiscount(ctx, w); err != nil {
+			return "", err
+		}
 		promo, err = s.promotionCodeID(ctx, code, plan, price)
 		if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok { // a stale STRIPE_PRICE_* (as below)
 			price = found
@@ -690,6 +693,25 @@ func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, p
 	return id, nil
 }
 
+// errDiscounted: one discount at a time. Stripe drops a discount from the subscription when it ends; until then
+// neither another code nor the same one again is taken.
+var errDiscounted = invalid("promotion_code", "this workspace already has a discount; another code can be added once it ends")
+
+// noDiscount: errDiscounted while the workspace's live subscription has a discount.
+func (s *Service) noDiscount(ctx context.Context, w db.GetWorkspaceBillingRow) error {
+	if !w.SubscriptionStatus.Valid || !liveSubscription(w.SubscriptionStatus.String) || !w.StripeSubscriptionID.Valid {
+		return nil
+	}
+	var sub stripeSubscription
+	if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String), nil, &sub); err != nil {
+		return err
+	}
+	if len(sub.Discounts) > 0 {
+		return errDiscounted
+	}
+	return nil
+}
+
 // PromotionCode: what a promotion code takes off and the plans it is good for, so the plan picker can check a
 // code and show the discounted prices before anyone pays. Checkout checks it again for the plan chosen.
 type PromotionCode struct {
@@ -714,6 +736,13 @@ func (s *Service) CheckPromotionCode(ctx context.Context, p Principal, code stri
 	code = strings.TrimSpace(code)
 	if code == "" || len(code) > 100 {
 		return PromotionCode{}, invalid("promotion_code", "type the code, such as SPRING20")
+	}
+	w, err := s.Q.GetWorkspaceBilling(ctx, p.WorkspaceID)
+	if err != nil {
+		return PromotionCode{}, err
+	}
+	if err := s.noDiscount(ctx, w); err != nil {
+		return PromotionCode{}, err
 	}
 	_, coupon, err := s.promotion(ctx, code)
 	if err != nil {
@@ -805,6 +834,7 @@ type stripeSubscription struct {
 	EndedAt            int64             `json:"ended_at"`
 	TrialEnd           int64             `json:"trial_end"`
 	Metadata           map[string]string `json:"metadata"`
+	Discounts          []json.RawMessage `json:"discounts"` // ids, or objects when expanded
 	Items              struct {
 		Data []struct {
 			ID                 string      `json:"id"`

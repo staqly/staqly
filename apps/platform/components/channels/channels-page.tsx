@@ -230,7 +230,7 @@ function ChannelActivityLine({ activity }: { activity: Channel['activity'] }) {
           <Link
             href={`/posts/${lastPost}`}
             prefetch={false}
-            className="text-foreground underline-offset-2 hover:underline pointer-coarse:-my-3 pointer-coarse:py-3"
+            className="text-foreground underline-offset-2 underline hover:no-underline pointer-coarse:-my-3 pointer-coarse:py-3"
           >
             {timeAgo(last)}
           </Link>

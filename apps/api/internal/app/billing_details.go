@@ -38,6 +38,15 @@ type BillingSubscription struct {
 	Interval string `json:"interval"`
 	// Quantity: the seats Stripe bills (the workspace's members; kept in step by the seat sync).
 	Quantity int64 `json:"quantity"`
+	// Discount: the subscription's discount while it lasts (one at a time: no other code is taken meanwhile).
+	Discount *SubscriptionDiscount `json:"discount"`
+}
+
+// SubscriptionDiscount: the promotion code behind a discount (empty when it was set on a coupon in Stripe) and
+// when it ends (null = never).
+type SubscriptionDiscount struct {
+	Code string  `json:"code"`
+	End  *string `json:"end"`
 }
 
 // PaymentMethod is a card on file: brand and last four digits only.
@@ -105,7 +114,13 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 			CanceledAt         int64  `json:"canceled_at"`
 			TrialEnd           int64  `json:"trial_end"`
 			DefaultPM          string `json:"default_payment_method"`
-			Items              struct {
+			Discounts          []struct {
+				End           int64 `json:"end"`
+				PromotionCode *struct {
+					Code string `json:"code"`
+				} `json:"promotion_code"`
+			} `json:"discounts"`
+			Items struct {
 				Data []struct {
 					CurrentPeriodStart int64 `json:"current_period_start"`
 					CurrentPeriodEnd   int64 `json:"current_period_end"`
@@ -122,7 +137,8 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 				} `json:"data"`
 			} `json:"items"`
 		}
-		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String), nil, &sub); err != nil {
+		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String)+
+			"?expand[]=discounts.promotion_code", nil, &sub); err != nil {
 			return out, err
 		}
 		// Newer Stripe API versions keep the period on the items.
@@ -145,6 +161,13 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 			bs.Quantity = max(it.Quantity, 1)
 		}
 		bs.CurrentPeriodStart, bs.CurrentPeriodEnd = unixTime(start), unixTime(end)
+		if len(sub.Discounts) > 0 {
+			d := sub.Discounts[0]
+			bs.Discount = &SubscriptionDiscount{End: unixTime(d.End)}
+			if d.PromotionCode != nil {
+				bs.Discount.Code = d.PromotionCode.Code
+			}
+		}
 		out.Subscription = &bs
 
 		var cus struct {
