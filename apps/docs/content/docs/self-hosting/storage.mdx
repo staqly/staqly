@@ -85,6 +85,31 @@ contains the files: protect the bucket with your provider's tools (versioning, r
 lifecycle copy to a second bucket). The workspace export with files (`POST /v1/workspace/export`)
 reads them from the bucket either way.
 
+### Workspace ZIP exports in cloud mode
+
+With `STAQLY_MODE=cloud` and `STORAGE_DRIVER=s3`, also set:
+
+```bash title="staqly.env"
+BACKUP_S3_BUCKET=my-staqly-backups
+```
+
+Create this as a **private bucket**, separate from the media bucket, with no public policy or CDN.
+The same S3 endpoint, region, credentials and optional `S3_PREFIX` apply; the credentials need
+read, write, delete and list access to both buckets. `S3_CREATE_BUCKET=true` can create the backup
+bucket too. The server checks both buckets at startup and rejects a missing `BACKUP_S3_BUCKET`
+or one equal to `S3_BUCKET`.
+
+Workspace archives keep their JSON/NDJSON and media files inside a ZIP. The server builds each ZIP
+on temporary local disk, uploads it, then removes the local copy. Downloads stream through the
+authenticated API with the same workspace and admin checks; `S3_PUBLIC_URL` never applies to
+exports. Archives expire after 24 hours and are also removed when their workspace is deleted or
+its posts are purged. Failed deletions are retried by the export worker.
+
+ZIPs created on disk before enabling S3 remain downloadable on that server until they expire.
+Local mode keeps ZIPs in `DATA_DIR/exports`. Cloud with disk storage keeps that behavior unless
+`BACKUP_S3_BUCKET` is configured with the S3 connection settings. These workspace exports are
+separate from the consistent database backups described in [Backup & restore](/self-hosting/backup-and-restore).
+
 ## Development
 
 The development stack (`make dev`) runs [MaxIOFS](https://github.com/MaxIOFS/MaxIOFS) and keeps

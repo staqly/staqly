@@ -67,6 +67,10 @@ pending or running; a second request gets `409` with `details.export_id`.
 
 ### Download the ZIP
 
+Cloud installations using S3 keep ZIPs in a separate private `BACKUP_S3_BUCKET`; local installs keep
+them in `DATA_DIR/exports`. Downloads always require the same workspace and admin access. See
+[Workspace ZIP storage](/self-hosting/storage#workspace-zip-exports-in-cloud-mode).
+
 `GET /v1/workspace/exports/{id}/download` → the ZIP. Archives are deleted **24 hours** after
 they finish; afterwards the download returns `410`.
 

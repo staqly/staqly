@@ -257,7 +257,7 @@ func (s *Service) DeleteWorkspace(ctx context.Context, p Principal, confirm stri
 		s.logger(ctx).Warn("files not removed after workspace deletion", "err", err)
 	}
 	for _, id := range exports {
-		s.removeExportFile(id)
+		s.removeExportFile(ctx, id)
 	}
 	s.logger(ctx).Info("workspace deleted", "workspace_id", p.WorkspaceID, "files", files)
 	return nil
@@ -281,11 +281,11 @@ func (s *Service) PurgePost(ctx context.Context, p Principal, id string) (PurgeR
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute) // see DeleteWorkspace
 	defer cancel()
 	res := PurgeResult{PostID: id}
-	var mediaFiles []string
+	var mediaFiles, exports []string
 	err := s.tx(ctx, func(q *db.Queries) error {
 		// fn may run again on PostgreSQL: only the run that commits counts (a file kept on the retry, now used
 		// by another post, must not be removed after the commit).
-		mediaFiles, res = nil, PurgeResult{PostID: id}
+		mediaFiles, exports, res = nil, nil, PurgeResult{PostID: id}
 		row, err := q.GetPost(ctx, db.GetPostParams{WorkspaceID: p.WorkspaceID, ID: id})
 		if isNoRows(err) {
 			return notFound("post")
@@ -331,6 +331,16 @@ func (s *Service) PurgePost(ctx context.Context, p Principal, id string) (PurgeR
 			WorkspaceID: p.WorkspaceID, Needle: id}); err != nil {
 			return err
 		}
+		// Revoke exports in the same transaction as the purge, before remote deletion can fail.
+		exports, err = q.ReadyWorkspaceExports(ctx, p.WorkspaceID)
+		if err != nil {
+			return err
+		}
+		for _, x := range exports {
+			if err := q.MarkWorkspaceExportExpired(ctx, x); err != nil {
+				return err
+			}
+		}
 		_, err = s.emit(ctx, q, p, "post.purged", row.CollectionID, id, map[string]any{
 			"post_id": id, "collection_id": row.CollectionID, "events_deleted": res.EventsDeleted, "media_deleted": res.MediaDeleted})
 		return err
@@ -343,13 +353,8 @@ func (s *Service) PurgePost(ctx context.Context, p Principal, id string) (PurgeR
 			s.logger(ctx).Warn("media file not removed after purge", "post_id", id, "err", err)
 		}
 	}
-	// Finished or in-progress exports may contain the post: expire them now
-	// (a running build notices at the end and deletes its ZIP).
-	if ids, err := s.Q.ReadyWorkspaceExports(ctx, p.WorkspaceID); err == nil {
-		for _, x := range ids {
-			s.removeExportFile(x)
-			_ = s.W.MarkWorkspaceExportExpired(ctx, x)
-		}
+	for _, x := range exports {
+		s.removeExportFile(ctx, x)
 	}
 	return res, nil
 }

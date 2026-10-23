@@ -98,6 +98,7 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `UPLOAD_DIR` | `$DATA_DIR/uploads` | Media files, with `STORAGE_DRIVER=disk`. |
 | `STORAGE_DRIVER` | `disk` | Where media files live: `disk` (`UPLOAD_DIR`) or `s3`, any S3-compatible bucket (AWS S3, Cloudflare R2, MaxIOFS...). See [Media storage](/self-hosting/storage). |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | none | Required with `STORAGE_DRIVER=s3`; the server refuses to start without them. |
+| `BACKUP_S3_BUCKET` | none | Private bucket for workspace ZIP exports in cloud mode. Required when cloud uses `STORAGE_DRIVER=s3`; must differ from `S3_BUCKET`. Uses the same S3 connection and prefix, never `S3_PUBLIC_URL`. Local mode keeps exports on disk. |
 | `S3_REGION` | `us-east-1` | The bucket's region. |
 | `S3_FORCE_PATH_STYLE` | `false` | `true` puts the bucket in the URL path, as MaxIOFS, MinIO and most self-hosted servers need. |
 | `S3_PREFIX` | none | A folder in the bucket for staqly's files, e.g. `staqly/`. |
