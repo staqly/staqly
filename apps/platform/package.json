@@ -61,7 +61,7 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "~5.0.4",
+    "@vitest/coverage-v8": "~5.0.5",
     "babel-plugin-react-compiler": "1.0.0",
     "esbuild": "0.28.2",
     "gifenc": "^1.0.3",
