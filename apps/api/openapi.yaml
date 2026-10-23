@@ -460,6 +460,37 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/BadGateway" }
 
+  /v1/billing/promotion-code:
+    post:
+      operationId: checkPromotionCode
+      tags: [billing]
+      summary: Check a promotion code (admin)
+      description: |
+        Checks a promotion code made in Stripe (active, its coupon valid) and returns what it takes off and the
+        plans it applies to, so a plan picker can show the discounted prices. 422 under `promotion_code` when
+        the code is unknown, used up or fits no plan. Checkout checks the code again for the plan chosen.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [promotion_code]
+              properties:
+                promotion_code: { type: string, maxLength: 100, examples: ["SPRING20"] }
+      responses:
+        "200":
+          description: The code's discount and plans
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PromotionCode" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
   /v1/billing/sync:
     post:
       operationId: syncBilling
@@ -4164,6 +4195,21 @@ components:
       required: [url]
       properties:
         url: { type: string, examples: ["https://checkout.stripe.com/c/pay/cs_test_a1b2c3"] }
+    PromotionCode:
+      type: object
+      required: [code, plans]
+      properties:
+        code: { type: string, examples: ["SPRING20"] }
+        percent_off: { type: number, description: "Percent taken off; absent for an amount off." }
+        amount_off: { type: integer, description: "Amount taken off per invoice, in cents of `currency`; absent for a percent off." }
+        currency: { type: string, examples: ["eur"] }
+        duration: { type: string, enum: [once, repeating, forever], description: "How long the discount lasts." }
+        duration_in_months: { type: integer, description: "Months the discount lasts when `duration` is `repeating`." }
+        plans:
+          type: array
+          items: { type: string }
+          description: Ids of the plans the code applies to.
+          examples: [["plus", "pro"]]
     ErrorResponse:
       type: object
       required: [error]

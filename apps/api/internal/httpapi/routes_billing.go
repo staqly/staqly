@@ -15,6 +15,7 @@ import (
 //	GET  /v1/billing/details   subscription period, cards on file and invoices, read from Stripe (admin)
 //	POST /v1/billing/checkout  Stripe Checkout URL for a plan and interval, or a switch of the live subscription (admin)
 //	POST /v1/billing/portal    Stripe customer portal URL (admin)
+//	POST /v1/billing/promotion-code  check a promotion code: its discount and the plans it applies to (admin)
 //	POST /v1/billing/sync      read the subscription from Stripe now, then the status (admin; back from Checkout)
 //	GET  /v1/billing/x-posts   posts to X this period: included, used, bought credits left (posts:read)
 //	POST /v1/billing/credits/checkout  Stripe Checkout URL for a bundle of extra X posts (a workspace owner)
@@ -28,6 +29,7 @@ func init() {
 		r.Get("/billing/details", s.getBillingDetails)
 		r.Post("/billing/checkout", s.billingCheckout)
 		r.Post("/billing/portal", s.billingURL(s.svc.PortalSession))
+		r.Post("/billing/promotion-code", s.checkPromotionCode)
 		r.Post("/billing/sync", s.syncBilling)
 		r.Get("/billing/x-posts", s.getXPosts)
 		r.Post("/billing/credits/checkout", s.creditsCheckout)
@@ -96,6 +98,18 @@ func (s *Server) billingCheckout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]string{"url": u})
+}
+
+// checkPromotionCode: {"promotion_code": "SPRING20"}.
+func (s *Server) checkPromotionCode(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		PromotionCode string `json:"promotion_code"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	c, err := s.svc.CheckPromotionCode(r.Context(), principal(r), in.PromotionCode)
+	respond(w, r, 200, c, err)
 }
 
 func (s *Server) stripeWebhook(w http.ResponseWriter, r *http.Request) {
