@@ -1,4 +1,4 @@
-.PHONY: help dashboard release up dev site dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
+.PHONY: help dashboard release up dev dev-tunnel site dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -14,6 +14,24 @@ dev: ## Build from this checkout with the dev stack (debug logs, mailpit :8025, 
 	$(DEV) up -d --build --wait
 	@$(MAKE) --no-print-directory open
 
+# The dev stack on public https addresses through a named Cloudflare tunnel, for platforms that call back over
+# https and download media themselves (Instagram). TUNNEL is a cloudflared config whose ingress serves
+# localhost:8080 (the dashboard) and localhost:9000 (MaxIOFS) on two hostnames; media links are signed for the
+# second. The dashboard is public meanwhile, so the dev sign-in (readable email codes) is off.
+TUNNEL_FILE = $(shell echo $(TUNNEL))
+TUNNEL_LOG := $(or $(TMPDIR),/tmp/)staqly-tunnel.log
+
+dev-tunnel: ## Dev stack behind a named Cloudflare tunnel (Instagram tests): make dev-tunnel TUNNEL=~/.cloudflared/<name>.yml
+	@test -n "$(TUNNEL)" || { echo "Usage: make dev-tunnel TUNNEL=~/.cloudflared/<name>.yml (hostnames for localhost:8080 and localhost:9000)"; exit 1; }
+	@app=$$(awk '/hostname:/{h=$$NF} /service:.*:8080/{print h; exit}' $(TUNNEL_FILE)); \
+	media=$$(awk '/hostname:/{h=$$NF} /service:.*:9000/{print h; exit}' $(TUNNEL_FILE)); \
+	test -n "$$app" -a -n "$$media" || { echo "$(TUNNEL) needs one hostname for localhost:8080 and one for localhost:9000"; exit 1; }; \
+	pkill -f "cloudflared tunnel --no-autoupdate --config $(TUNNEL_FILE)" || true; \
+	nohup cloudflared tunnel --no-autoupdate --config $(TUNNEL_FILE) run > $(TUNNEL_LOG) 2>&1 & \
+	for i in $$(seq 30); do [ "$$(curl -s -o /dev/null -w '%{http_code}' https://$$media)" != 530 ] && break; sleep 1; done; \
+	PUBLIC_DASHBOARD_URL=https://$$app AUTH_DEV_SIGNIN=false S3_ENDPOINT=https://$$media $(DEV) up -d --build --wait && \
+	echo "Dashboard: https://$$app  Media: https://$$media  Tunnel log: $(TUNNEL_LOG)  (make dev-down stops both)"
+
 pull: ## Download the released image (STAQLY_VERSION=v0.2.0 for a specific release)
 	docker compose pull staqly
 
@@ -22,8 +40,9 @@ site: ## Landing page (http://localhost:8070) and docs (http://localhost:8090) f
 	NEXT_PUBLIC_APP_URL=http://localhost:8080 NEXT_PUBLIC_DOCS_URL=http://localhost:8090 NEXT_PUBLIC_WEB_URL=http://localhost:8070 \
 		pnpm turbo run dev --filter=@staqly/web --filter=@staqly/docs
 
-dev-down: ## Stop the dev stack (data volume kept)
+dev-down: ## Stop the dev stack (data volume kept) and a dev-tunnel
 	$(DEV) --profile stripe down
+	@pkill -f "cloudflared tunnel --no-autoupdate --config" || true
 
 stripe-secret: ## Print the webhook signing secret of the Stripe CLI (put it in .env as STRIPE_WEBHOOK_SECRET)
 	@$(DEV) run --rm --no-deps stripe listen --print-secret
