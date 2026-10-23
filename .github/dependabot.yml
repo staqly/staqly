@@ -17,7 +17,7 @@ updates:
     directory: /sdks/python
     schedule: { interval: monthly }
   - package-ecosystem: docker
-    directories: ["/apps/api", "/apps/platform"]
+    directory: /
     schedule: { interval: monthly }
     ignore:
       # Stay on the current Node LTS; odd/non-LTS majors (25, 26 before LTS) are skipped.

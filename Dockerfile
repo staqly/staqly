@@ -21,7 +21,7 @@
 # Stage 1: dashboard static export (only the dashboard's slice of the pnpm
 # workspace, exactly what pnpm-lock.yaml says)
 # ─────────────────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM node:24-alpine AS node
+FROM --platform=$BUILDPLATFORM node:24.22.1-alpine AS node
 ENV NEXT_TELEMETRY_DISABLED=1 PNPM_HOME=/pnpm COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 WORKDIR /repo
