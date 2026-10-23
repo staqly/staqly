@@ -185,7 +185,7 @@ describe('plan & usage', () => {
     expect(api.find('GET', '/v1/billing/details').some((c) => c.query.get('starting_after') === 'in_2')).toBe(true)
   })
 
-  it('platforms with an allowance of their own are lines inside Posts this month, not tiles of their own', async () => {
+  it('platforms with an allowance of their own are chips in one row under the tiles, not inside or beside them', async () => {
     mockApi({
       'GET /v1/billing': BILLING_PRO,
       'GET /v1/billing/details': DETAILS,
@@ -195,13 +195,73 @@ describe('plan & usage', () => {
     })
     renderPlan()
 
-    const posts = await screen.findByTestId('meter-Posts this month')
-    const x = within(posts).getByTestId('platform-posts-x')
+    const row = await screen.findByTestId('platform-posts')
+    const list = within(row).getByRole('list', { name: 'Posts per platform' })
+    const x = within(list).getByTestId('platform-posts-x')
 
     expect(x).toHaveTextContent('X')
     expect(x).toHaveTextContent('12 / 450')
-    expect(within(posts).getByRole('progressbar', { name: 'X posts' })).toHaveAttribute('aria-valuenow', '12')
+    expect(x).toHaveAttribute('data-level', 'ok')
+    expect(x).not.toHaveTextContent('Almost full')
+
+    const meter = within(x).getByRole('progressbar', { name: 'X posts' })
+
+    expect(meter).toHaveAttribute('aria-valuenow', '12')
+    expect(meter).toHaveAttribute('aria-valuemax', '450')
+    expect(meter).toHaveAttribute('aria-valuetext', '12 of 450')
+    // The explanation is said once for the row, never per platform.
+    expect(within(row).getAllByText('Included in the plan; bought posts come on top.')).toHaveLength(1)
+    expect(within(x).queryByText(/bought posts/)).not.toBeInTheDocument()
+    // The tiles stay alike: Posts this month holds no per-platform lines, and no platform has a tile of its own.
+    expect(within(screen.getByTestId('meter-Posts this month')).queryByTestId('platform-posts-x')).toBeNull()
+    expect(within(screen.getByTestId('usage-meters')).queryByTestId('platform-posts')).toBeNull()
     expect(screen.queryByTestId('meter-X posts this month')).not.toBeInTheDocument()
+  })
+
+  it('a platform chip warns near its allowance and says when it is used up', async () => {
+    mockApi({
+      'GET /v1/billing': BILLING_PRO,
+      'GET /v1/billing/details': DETAILS,
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/workspace/usage': usage(PLANS[1], { x_posts_per_period: 400 }),
+    })
+    renderPlan()
+
+    const warn = await screen.findByTestId('platform-posts-x')
+
+    expect(warn).toHaveAttribute('data-level', 'warn')
+    expect(warn).toHaveTextContent('400 / 450')
+    expect(warn).toHaveTextContent('Almost full')
+
+    cleanup()
+    mockApi({
+      'GET /v1/billing': BILLING_PRO,
+      'GET /v1/billing/details': DETAILS,
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/workspace/usage': usage(PLANS[1], { x_posts_per_period: 450 }),
+    })
+    renderPlan()
+
+    const full = await screen.findByTestId('platform-posts-x')
+
+    expect(full).toHaveAttribute('data-level', 'full')
+    expect(full).toHaveTextContent('Limit reached')
+  })
+
+  it('shows no Posts per platform row when no platform has an allowance of its own', async () => {
+    mockApi({
+      'GET /v1/billing': BILLING_PRO,
+      'GET /v1/billing/details': DETAILS,
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/workspace/usage': usage({ ...PLANS[1], limits: { ...PLANS[1].limits, x_posts_per_period: -1 } }),
+    })
+    renderPlan()
+
+    await screen.findByTestId('meter-Posts this month')
+    expect(screen.queryByTestId('platform-posts')).not.toBeInTheDocument()
   })
 
   it("Stripe's 7-day trial shows 7 days left: it counts to the trial's end, not the plan's end with its grace", async () => {
