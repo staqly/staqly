@@ -3,10 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SystemPage } from '@/components/settings/system-page'
-import { api, ApiError } from '@/lib/api'
+import { api, ApiError, type ProviderCheck } from '@/lib/api'
 import { qk } from '@/lib/queries'
 
-import { channel, provider } from './fixtures'
+import { provider } from './fixtures'
 import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
 
 const routes = {
@@ -16,37 +16,47 @@ const routes = {
   'GET /v1/jobs': { data: [] },
   'GET /v1/providers': {
     data: [
-      provider(),
+      provider({ id: 'x', name: 'X' }),
       provider({ id: 'instagram', name: 'Instagram' }),
-      provider({ id: 'tiktok', name: 'TikTok', status: 'soon' }),
+      provider({ id: 'linkedin', name: 'LinkedIn', app_configured: false, status: 'soon' }),
+      provider({ id: 'custom', name: 'Your own automation', auth: 'none' }),
     ],
   },
-  'GET /v1/channels': {
-    data: [
-      channel(),
-      channel({
-        id: 'ch_2',
-        name: 'Brand on Instagram',
-        provider: 'instagram',
-        status: 'needs_reconnect',
-        last_error: 'Token revoked',
-      }),
+  'POST /v1/providers/x/check': {
+    provider: 'x',
+    ok: true,
+    checks: [
+      { key: 'keys', label: 'App keys', ok: true, detail: 'Set' },
+      { key: 'platform', label: 'X', ok: true, detail: 'X accepts the app keys' },
+      { key: 'return_address', label: 'Return address', ok: true, detail: 'https://app.example/channels/callback/x' },
     ],
   },
-  'POST /v1/channels/ch_1/test': { ok: true, profile: { handle: '@brand' } },
-  'POST /v1/channels/ch_2/test': { ok: false, error: 'Instagram no longer accepts the sign-in' },
+  'POST /v1/providers/instagram/check': {
+    provider: 'instagram',
+    ok: false,
+    checks: [
+      { key: 'keys', label: 'App keys', ok: true, detail: 'Set' },
+      {
+        key: 'media',
+        label: 'Media storage',
+        ok: false,
+        detail:
+          "Instagram downloads pictures and videos from a link, and media links point at maxiofs:8080, which the internet can't reach",
+      },
+    ],
+  },
 }
 
 describe('system page', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it.each(['editor', 'viewer'])('keeps channel diagnostics read-only for %s', async (role) => {
+  it.each(['editor', 'viewer'])('shows the platforms read-only to %s', async (role) => {
     mockApi(routes)
     const client = makeClient()
 
     client.setQueryData(qk.session, { ...sessionFixture('cloud'), role })
     renderWithProviders(<SystemPage />, { client })
-    expect(await screen.findByText('Token revoked')).toBeInTheDocument()
+    expect(await within(await screen.findByTestId('platforms-health')).findByText('Instagram')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Test/ })).not.toBeInTheDocument()
   })
 
@@ -61,52 +71,53 @@ describe('system page', () => {
     })
     renderWithProviders(<SystemPage />, { mode: 'cloud' })
     expect(await screen.findByText('Could not load platforms')).toBeInTheDocument()
-    expect(screen.queryByText(/No platform has its app keys/)).not.toBeInTheDocument()
     failed = false
     await user.click(screen.getByRole('button', { name: 'Try again' }))
-    expect(await screen.findByRole('list', { name: 'Platforms ready to connect' })).toBeInTheDocument()
+    expect(await screen.findByTestId('platforms-health')).toBeInTheDocument()
   })
 
-  it('retries a rate-limited batch test and disables other tests until the batch ends', async () => {
+  it('waits out a rate limit once in Test all and keeps the other tests off until the batch ends', async () => {
     mockApi(routes)
     const user = userEvent.setup()
+    const ready = routes['POST /v1/providers/x/check'] as ProviderCheck
     let finish!: () => void
-    const pending = new Promise<{ ok: boolean; profile: { handle: string } }>((resolve) => {
-      finish = () => resolve({ ok: true, profile: { handle: '@second' } })
+    const pending = new Promise<ProviderCheck>((resolve) => {
+      finish = () => resolve({ ...ready, provider: 'instagram' })
     })
     const check = vi
-      .spyOn(api, 'testChannel')
-      .mockResolvedValueOnce({ ok: true, profile: { handle: '@first' } })
+      .spyOn(api, 'checkProvider')
+      .mockResolvedValueOnce(ready)
       .mockRejectedValueOnce(new ApiError(429, { message: 'Rate limited' }, undefined, 0.001))
       .mockReturnValueOnce(pending)
 
     renderWithProviders(<SystemPage />, { mode: 'cloud' })
     await user.click(await screen.findByRole('button', { name: 'Test all' }))
     await waitFor(() => expect(check).toHaveBeenCalledTimes(3))
-    expect(screen.getByRole('button', { name: 'Test Brand on Instagram' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Test Brand on Mastodon' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Test X' })).toBeDisabled()
     finish()
-    expect(await screen.findByText('Works, signed in as @second')).toBeInTheDocument()
-    expect(check.mock.calls.map(([id]) => id)).toEqual(['ch_1', 'ch_2', 'ch_2'])
+    await waitFor(() => expect(screen.getAllByText('Ready')).toHaveLength(2))
+    expect(check.mock.calls.map(([id]) => id)).toEqual(['x', 'instagram', 'instagram'])
   })
 
-  it('in the cloud: health and channels with a test each, no queue or monitoring', async () => {
+  it('in the cloud: health and each platform set up on the server with a test, no queue or monitoring', async () => {
     mockApi(routes)
     const user = userEvent.setup()
 
     renderWithProviders(<SystemPage />, { mode: 'cloud' })
-    const card = await screen.findByTestId('channels-health')
-    const ready = await within(card).findByRole('list', { name: 'Platforms ready to connect' })
+    const list = await screen.findByTestId('platforms-health')
 
-    expect(await within(ready).findByText('Instagram')).toBeInTheDocument()
-    expect(within(ready).queryByText('TikTok')).not.toBeInTheDocument() // not set up on this server
-    expect(await within(card).findByText('Token revoked')).toBeInTheDocument()
+    // Only platforms connected through their sign-in and set up here: not LinkedIn (no keys), not your own automation.
+    expect(within(list).getByText('Instagram')).toBeInTheDocument()
+    expect(within(list).queryByText('LinkedIn')).not.toBeInTheDocument()
+    expect(within(list).queryByText('Your own automation')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Queue' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Monitoring' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Test all' }))
-    expect(await within(card).findByText('Works, signed in as @brand')).toBeInTheDocument()
-    expect(await within(card).findByText('Instagram no longer accepts the sign-in')).toBeInTheDocument()
+    expect(await within(list).findByText('X accepts the app keys')).toBeInTheDocument()
+    expect(within(list).getByText('https://app.example/channels/callback/x')).toBeInTheDocument()
+    expect(await within(list).findByText(/which the internet can't reach/)).toBeInTheDocument()
+    expect(within(list).getByText('Needs attention')).toBeInTheDocument()
   })
 
   it('locally: the queue and monitoring too', async () => {
