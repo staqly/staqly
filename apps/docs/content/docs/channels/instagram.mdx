@@ -1,0 +1,128 @@
+---
+title: Instagram
+description: Publish pictures, carousels, reels and stories to an Instagram Business or Creator account, with collaborators and comments. What to register at Meta for Developers.
+---
+
+Staqly publishes to an **Instagram professional account** (Business or Creator) through the
+Instagram API with Instagram Login: the person signs in on instagram.com, no Facebook Page is
+needed. A published target links to the post on instagram.com. Accounts managed through a
+Facebook Page (**Instagram Business**) are in the catalog as **Soon**.
+
+## What you need
+
+- A **Meta app** with the Instagram product, registered once per server. Its keys go into the
+  server's environment (`.env`), the same way locally and in the cloud (see
+  [Developer apps](/channels/developer-apps)).
+- **Media storage Instagram can reach.** Instagram does not take uploads: it downloads every picture
+  and video from a link. Staqly hands it a time-limited link to the file in
+  [S3-compatible storage](/self-hosting/storage), so a server that keeps media on its own disk
+  can't publish to Instagram (the target fails and says why). Locally, the bucket needs an address
+  on the internet, for example a tunnel to it set as `S3_PUBLIC_URL`.
+- An Instagram account set to **Business** or **Creator** (Instagram app → Settings → Account type).
+  Personal accounts can't publish through the API.
+
+<Steps>
+<Step>
+
+### Create the app
+
+At [Meta for Developers](https://developers.facebook.com/apps), click **Create app** and choose a
+**Business** app. Add the **Instagram** product, then open **API setup with Instagram login**:
+
+| Where | What |
+|---|---|
+| **Set up Instagram business login → Business login settings → OAuth redirect URIs** | your dashboard's `/channels/callback/instagram`, for example `https://staqly.example.com/channels/callback/instagram`. Meta takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
+| **App roles → Roles → Instagram testers** | the Instagram accounts that may connect while the app is in development; each accepts the invitation in the Instagram app (Settings → Website permissions → Apps and websites → Tester invites) |
+
+Copy the **Instagram app ID** and **Instagram app secret** from the same page (not the Meta app's
+own ID).
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_INSTAGRAM_CLIENT_ID=your-instagram-app-id
+PROVIDER_INSTAGRAM_CLIENT_SECRET=your-instagram-app-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_INSTAGRAM_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, Instagram shows as **soon** in **Channels → Add channel**.
+`PROVIDER_INSTAGRAM_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect the account
+
+**Connect with Instagram** opens instagram.com, where the person signs in and allows the app.
+Staqly asks for these scopes:
+
+| Scope | Why |
+|---|---|
+| `instagram_business_basic` | Read the account's username, name and picture |
+| `instagram_business_content_publish` | Publish posts, carousels, reels and stories |
+| `instagram_business_manage_comments` | Post the comments of a post's thread |
+
+The channel shows the account's name, `@username` and picture.
+
+</Step>
+<Step>
+
+### Before other people connect
+
+While the app is in development, only its testers can connect. Before your customers connect their
+accounts, Meta reviews the app: **App Review** for each of the three scopes (a screen recording of
+staqly using it) and **Business Verification** of your company.
+
+</Step>
+</Steps>
+
+## The 60-day sign-in
+
+Instagram's sign-in lasts **60 days** and can be renewed. Staqly renews it on its own a day before
+it runs out, so the channel stays connected as long as the account allows the app. If the person
+removes the app or changes their password, the channel turns **Needs reconnect**.
+
+## Limits
+
+| | |
+|---|---|
+| Text | 2,200 characters; up to 30 hashtags |
+| Media | at least one file: up to **10** pictures and videos (a carousel), **one video** for a reel, **one file** for a story |
+| Pictures | **JPEG only**, up to 8 MB; feed pictures 4:5 to 1.91:1 (the composer flags a picture that doesn't fit) |
+| Posts | Instagram takes up to **100 posts a day** per account through its API |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Post as** (`post_type`) | `post` (default; several files make a carousel, a single video goes out as a reel), `reel` or `story` (stories take no caption) |
+| **Also show the reel in the feed** (`share_to_feed`) | Reels only; on by default |
+| **Collaborators** (`collaborators`) | Feed posts: up to 3 usernames invited as collaborators; the post shows on their profiles once they accept |
+
+Over the API: `{"post_type": "reel", "share_to_feed": "false"}` in the target's `settings`.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the post, in
+order and after their delays: for example a first comment with hashtags. Comments take text only;
+stories have none.
+
+## When publishing fails
+
+| Instagram says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit, Instagram unavailable, a media download that timed out | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused picture (format, size, shape), the daily limit, a restricted account | Fails the target with Instagram's reason; retrying would not help, so it does not |
+
+Instagram has no way to ask "did this post go out?", and a new attempt would make a new post. So
+when staqly sent the post but its answer never came, the target fails with "may have published"
+instead of trying again: check the profile before you post it again.
