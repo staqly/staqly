@@ -525,7 +525,7 @@ func (s *Service) completeOAuth(ctx context.Context, p Principal, e providers.En
 	if err != nil {
 		return OAuthResult{}, err
 	}
-	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
 	defer cancel()
 	creds, profile, err := e.Exchange(cctx, app, redirect, code, withVerifier(extra, s.pkceVerifier(st)))
 	if err != nil {
@@ -822,7 +822,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 	if err != nil {
 		return nil, err
 	}
-	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
 	defer cancel()
 	var profile providers.Profile
 	switch e.Auth() {
@@ -916,7 +916,7 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	if err != nil {
 		return s.channelNeedsReconnect(ctx, row, err)
 	}
-	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
 	defer cancel()
 	fresh, err := e.Refresh(cctx, app, creds)
 	if errors.Is(err, providers.ErrReauth) {
@@ -992,7 +992,7 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if err != nil {
 		return nil, err
 	}
-	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
 	defer cancel()
 	fresh, err := e.Refresh(cctx, app, creds)
 	if errors.Is(err, providers.ErrReauth) {
