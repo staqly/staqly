@@ -3,6 +3,7 @@ import type { components, paths } from './api-types'
 type Schemas = components['schemas']
 
 export type Workspace = Schemas['Workspace']
+export type ProviderCheck = Schemas['ProviderCheck']
 // The OpenAPI spec lags the server on a few fields (notification channels
 // limit/usage, the channels:manage scope, escalate's channel_id); they are
 // added here as optional so older servers still type-check.
@@ -923,6 +924,9 @@ export const api = {
   /** Asks the platform who the account is: `ok` false with `error` when the sign-in no longer works. */
   testChannel: (id: string) =>
     request<ChannelTestResult>(`/v1/channels/${encodeURIComponent(id)}/test`, { method: 'POST' }),
+  /** This server's setup for a platform (app keys, return address, media), independent of any account. */
+  checkProvider: (id: string) =>
+    request<ProviderCheck>(`/v1/providers/${encodeURIComponent(id)}/check`, { method: 'POST' }),
 
   // Schedules (a collection's publishing rules) and the work agents are asked for
   schedules: (collectionId?: string) =>

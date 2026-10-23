@@ -1988,6 +1988,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/providers/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check this server's setup for an OAuth platform (channels:manage)
+         * @description Independent of any connected account: the app keys (and, where the platform can tell without an account, whether it
+         *     accepts them: X and LinkedIn), the return address to register with the platform, and for platforms that download media
+         *     themselves (Instagram) whether media links point at an address the internet can reach. Nothing is stored.
+         */
+        post: operations["checkProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/channels": {
         parameters: {
             query?: never;
@@ -3430,6 +3454,21 @@ export interface components {
                 /** @description When it ends (null = never) */
                 end: string | null;
             };
+        };
+        ProviderCheck: {
+            /** @example instagram */
+            provider: string;
+            /** @description Every check passed */
+            ok: boolean;
+            checks: {
+                /** @enum {string} */
+                key: "keys" | "platform" | "return_address" | "media";
+                /** @example App keys */
+                label: string;
+                ok: boolean;
+                /** @description What was found; for return_address, the address to register with the platform */
+                detail: string;
+            }[];
         };
         PaymentMethod: {
             /** @example visa */
@@ -9213,6 +9252,33 @@ export interface operations {
             402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    checkProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The checks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderCheck"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
         };
     };
