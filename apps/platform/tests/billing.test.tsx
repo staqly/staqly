@@ -185,6 +185,25 @@ describe('plan & usage', () => {
     expect(api.find('GET', '/v1/billing/details').some((c) => c.query.get('starting_after') === 'in_2')).toBe(true)
   })
 
+  it('platforms with an allowance of their own are lines inside Posts this month, not tiles of their own', async () => {
+    mockApi({
+      'GET /v1/billing': BILLING_PRO,
+      'GET /v1/billing/details': DETAILS,
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/workspace/usage': usage(PLANS[1], { posts_per_month: 40, x_posts_per_period: 12 }),
+    })
+    renderPlan()
+
+    const posts = await screen.findByTestId('meter-Posts this month')
+    const x = within(posts).getByTestId('platform-posts-x')
+
+    expect(x).toHaveTextContent('X')
+    expect(x).toHaveTextContent('12 / 450')
+    expect(within(posts).getByRole('progressbar', { name: 'X posts' })).toHaveAttribute('aria-valuenow', '12')
+    expect(screen.queryByTestId('meter-X posts this month')).not.toBeInTheDocument()
+  })
+
   it("Stripe's 7-day trial shows 7 days left: it counts to the trial's end, not the plan's end with its grace", async () => {
     const trialEnd = inDays(7)
 
