@@ -17,7 +17,7 @@
     "format:check": "oxfmt --check"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.9.1",
+    "@hookform/resolvers": "^6.0.0",
     "@staqly/brand": "workspace:*",
     "@tanstack/react-query": "^5.104.2",
     "@tiptap/core": "3.31.4",
@@ -31,7 +31,7 @@
     "cn": "^0.4.0",
     "exifreader": "^4.50.0",
     "fflate": "^0.8.3",
-    "framer-motion": "^12.43.0",
+    "framer-motion": "^14.4.0",
     "geist": "^1.7.2",
     "immer": "^11.1.21",
     "localforage": "^1.10.0",
@@ -61,7 +61,7 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "~5.0.4",
+    "@vitest/coverage-v8": "~5.0.5",
     "babel-plugin-react-compiler": "1.0.0",
     "esbuild": "0.28.2",
     "gifenc": "^1.0.3",
@@ -74,7 +74,7 @@
     "shadcn": "^4.21.4",
     "tailwindcss": "^4",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.4",
+    "vitest": "^5.0.5",
     "wasm-vips": "^0.0.18"
   }
 }

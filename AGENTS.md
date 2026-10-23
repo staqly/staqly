@@ -36,6 +36,7 @@ pnpm --filter @staqly/e2e test:ui   # the dashboard in a real browser (Playwrigh
 pnpm --filter @staqly/e2e test:ui-responsive   # after `make dashboard`: every dashboard route at phone/tablet/desktop widths, fails on overflow, overlaps, small touch targets (e2e/ui-responsive)
 make up            # compose.yml alone with the released image, open a signed-in browser (users run `docker run`, not this)
 make dev           # build from this checkout with the dev stack (compose.dev.yml: mailpit, Stripe CLI)
+make dev-tunnel TUNNEL=~/.cloudflared/<name>.yml  # the dev stack on https through a named Cloudflare tunnel (Instagram: callback and media); dev sign-in off
 make site          # landing page :8070 + docs :8090 from this checkout
 make connect       # one-time sign-in link for another browser
 make release VERSION=v0.2.0  # tag origin/main; CI publishes the binaries and ghcr.io/staqly/staqly:v0.2.0

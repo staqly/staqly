@@ -18,6 +18,7 @@ import { qk, useMode } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
+import { ChannelsHealthCard } from './channels-health-card'
 import { QueueCard } from './queue-card'
 import { SettingsCard } from './settings-card'
 import { SettingsNav } from './settings-nav'
@@ -131,30 +132,34 @@ export function SystemPage() {
       <SettingsNav className="mt-4" />
       <div className="mt-6 grid gap-4">
         <ReadinessCard />
-        <QueueCard />
-        <SettingsCard title="Monitoring" icon={<BookOpen />} description="For uptime checks, Prometheus and alerts.">
-          <ul className="grid gap-2 text-sm">
-            <li>
-              <InlineCode>GET {apiUrl}/livez</InlineCode>{' '}
-              <span className="text-muted-foreground">— liveness, never touches the database</span>
-            </li>
-            <li>
-              <InlineCode>GET {apiUrl}/readyz</InlineCode>{' '}
-              <span className="text-muted-foreground">— readiness (what this page shows)</span>
-            </li>
-            <li>
-              <InlineCode>GET {apiUrl}/metrics</InlineCode>{' '}
-              <span className="text-muted-foreground">
-                — Prometheus; {isLocal ? 'allowed for curl on this machine, otherwise needs' : 'needs'}{' '}
-                <InlineCode>METRICS_TOKEN</InlineCode>
-              </span>
-            </li>
-            <li className="text-muted-foreground">
-              Request IDs, rate limits and Grafana tips:{' '}
-              <DocsLink path="/self-hosting/logs-and-tracing">Logs &amp; tracing</DocsLink>
-            </li>
-          </ul>
-        </SettingsCard>
+        <ChannelsHealthCard />
+        {/* The server's own queue and its monitoring endpoints are the operator's business: on the hosted
+            service that isn't the workspace's people. */}
+        {isLocal && <QueueCard />}
+        {isLocal && (
+          <SettingsCard title="Monitoring" icon={<BookOpen />} description="For uptime checks, Prometheus and alerts.">
+            <ul className="grid gap-2 text-sm">
+              <li>
+                <InlineCode>GET {apiUrl}/livez</InlineCode>{' '}
+                <span className="text-muted-foreground">— liveness, never touches the database</span>
+              </li>
+              <li>
+                <InlineCode>GET {apiUrl}/readyz</InlineCode>{' '}
+                <span className="text-muted-foreground">— readiness (what this page shows)</span>
+              </li>
+              <li>
+                <InlineCode>GET {apiUrl}/metrics</InlineCode>{' '}
+                <span className="text-muted-foreground">
+                  — Prometheus; allowed for curl on this machine, otherwise needs <InlineCode>METRICS_TOKEN</InlineCode>
+                </span>
+              </li>
+              <li className="text-muted-foreground">
+                Request IDs, rate limits and Grafana tips:{' '}
+                <DocsLink path="/self-hosting/logs-and-tracing">Logs &amp; tracing</DocsLink>
+              </li>
+            </ul>
+          </SettingsCard>
+        )}
       </div>
     </PageContainer>
   )
