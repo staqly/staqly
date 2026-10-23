@@ -9,5 +9,8 @@
     "lint": "go vet ./...",
     "format": "gofmt -w cmd internal",
     "format:check": "test -z \"$(gofmt -l cmd internal)\""
+  },
+  "dependencies": {
+    "@staqly/api": "workspace:*"
   }
 }

@@ -21,7 +21,11 @@ importers:
         specifier: 2.66.0
         version: 2.66.0
 
-  apps/cli: {}
+  apps/cli:
+    dependencies:
+      '@staqly/api':
+        specifier: workspace:*
+        version: link:../api
 
   apps/docs:
     dependencies:
