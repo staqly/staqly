@@ -1,0 +1,72 @@
+---
+title: Bluesky
+description: Publish posts with up to 4 pictures, clickable links, mentions and hashtags, and replies to Bluesky, with an app password.
+---
+
+Staqly publishes to a **Bluesky** account (or an account on any AT Protocol server, a PDS) with an
+**app password**. There is nothing for whoever runs staqly to register. A published target links to
+the post on bsky.app.
+
+<Steps>
+<Step>
+
+### Make an app password
+
+In Bluesky, open **Settings → Privacy and security → App passwords → Add App Password**, name it
+(for example `staqly`) and copy the password (`abcd-efgh-ijkl-mnop`). Leave **Allow access to your
+direct messages** off. Never use your account password: staqly refuses it.
+
+</Step>
+<Step>
+
+### Connect the account
+
+In **Channels → Add channel → Bluesky**, enter:
+
+| Field | What |
+|---|---|
+| **Handle** | your handle without the `@` (`janedoe.bsky.social`, or your own domain), or your DID |
+| **App password** | the app password from the previous step |
+| **Server** | `https://bsky.social` (the default); change it only if your account lives on its own PDS |
+
+The channel shows your display name, `@handle` and picture. Staqly keeps the app password sealed and
+signs in with it for every publish, so there is no sign-in to renew. Deleting the app password in
+Bluesky disconnects staqly.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | 300 characters |
+| Media | up to **4 pictures** (JPEG, PNG, WebP or GIF), **1 MB** each; no video |
+
+Links, `@handle` mentions and `#hashtags` in the text become clickable. A mention of a handle that
+doesn't exist stays plain text. Pictures go out without alt text, and links without a preview card.
+
+## Settings per post
+
+None.
+
+## Replies
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies, each under the one
+before, all in the same thread.
+
+## When publishing fails
+
+| Bluesky says | Staqly does |
+|---|---|
+| The app password was deleted or is wrong, the account is suspended | Marks the channel **Needs reconnect** and fails the target; make a new app password and reconnect |
+| Rate limit, Bluesky unavailable or unreachable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused post (too long, a picture too large) | Fails the target with Bluesky's reason |
+
+Each post gets a record key made from the post and the channel, and every attempt first looks for
+that record. So when an answer is lost, the next attempt finds the post Bluesky already made
+instead of posting it twice.
+
+Bluesky limits sign-ins (about 30 every 5 minutes and 300 a day per account). Staqly signs in once
+per post and once per reply, so a channel with many long threads can reach it; staqly then retries
+later.

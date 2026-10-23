@@ -1,0 +1,56 @@
+---
+title: Nostr
+description: Publish text notes and replies to Nostr relays, signed with your private key.
+---
+
+Staqly publishes **text notes** to Nostr: it signs each note with your private key and sends it to
+your relays. There is nothing for whoever runs staqly to register. A published target links to the
+note on njump.me.
+
+## Connect the account
+
+In **Channels → Add channel → Nostr**, enter:
+
+| Field | What |
+|---|---|
+| **Private key** | your `nsec1...` key (or its 64-character hex form), from your Nostr app's key or account settings |
+| **Relays** | the relays your Nostr app writes to, comma-separated `wss://` addresses (default `wss://relay.damus.io, wss://nos.lol, wss://relay.primal.net`) |
+
+The private key is your account: anyone who has it can post as you. Staqly keeps it sealed and uses
+it only to sign notes. If you'd rather not hand over your main key, make a separate Nostr account
+for publishing.
+
+The channel shows your `npub`, and your name and picture when one of the relays has your profile.
+Connecting fails when none of the relays can be reached.
+
+## Limits
+
+| | |
+|---|---|
+| Text | no limit |
+| Media | none: Nostr channels publish text only (pictures need an upload server staqly doesn't ask for yet) |
+
+`#hashtags` in the text are added as tags, so Nostr apps list the note under them.
+
+## Settings per post
+
+None.
+
+## Replies
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies, each under the one
+before, marked as part of the post's thread.
+
+## When publishing fails
+
+A note is published when **at least one relay** accepts it.
+
+| Relays say | Staqly does |
+|---|---|
+| None can be reached, or all are rate limiting | Retries through the job queue (after 1, 5, then 15 minutes) |
+| All refuse the note (for example a relay that takes paying members only) | Fails the target with each relay's reason; change your relays and reconnect |
+| The private key stored is not valid | Marks the channel **Needs reconnect** |
+
+A note's id includes the moment it was signed, so a new attempt is a new note. When a relay took the
+note but never answered, the target fails with "may have published" instead of trying again: check
+your profile before you post it again.
