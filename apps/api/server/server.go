@@ -91,28 +91,18 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 	defer database.Close()
 	svc := app.New(database, log, cfg.App)
 	// A bucket server started next to us (the dev stack's MaxIOFS) may take a few seconds to answer.
-	for _, storage := range []struct {
-		name  string
-		store blob.Store
-	}{
-		{"media", svc.Cfg.Blob}, {"backup", svc.Cfg.BackupBlob},
-	} {
-		if storage.store == nil {
-			continue
+	for try := 1; ; try++ {
+		err := svc.Cfg.Blob.Check(ctx, cfg.StorageCreateBucket)
+		if err == nil {
+			break
 		}
-		for try := 1; ; try++ {
-			err := storage.store.Check(ctx, cfg.StorageCreateBucket)
-			if err == nil {
-				break
-			}
-			if try == 15 || ctx.Err() != nil {
-				return fmt.Errorf("%s storage (%s): %w", storage.name, storage.store.Name(), err)
-			}
-			log.Warn("storage not ready, retrying", "storage", storage.name, "driver", storage.store.Name(), "err", err)
-			time.Sleep(2 * time.Second)
+		if try == 15 || ctx.Err() != nil {
+			return fmt.Errorf("media storage (%s): %w", svc.Cfg.Blob.Name(), err)
 		}
-		log.Info("storage", "storage", storage.name, "driver", storage.store.Name())
+		log.Warn("media storage not ready, retrying", "driver", svc.Cfg.Blob.Name(), "err", err)
+		time.Sleep(2 * time.Second)
 	}
+	log.Info("media storage", "driver", svc.Cfg.Blob.Name())
 	if err := svc.MoveLegacyFiles(ctx); err != nil {
 		return fmt.Errorf("media storage (%s): moving files to workspace folders: %w", svc.Cfg.Blob.Name(), err)
 	}

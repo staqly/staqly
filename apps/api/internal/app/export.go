@@ -185,11 +185,22 @@ func (s *Service) ExportDir() string {
 // export IDs are server-generated (exp_[a-z2-7]+), so the path is safe.
 func (s *Service) exportPath(id string) string { return filepath.Join(s.ExportDir(), id+".zip") }
 
+func (s *Service) exportsOnS3() bool {
+	return s.Cfg.Mode == ModeCloud && s.Cfg.Blob.Name() == "s3"
+}
+
 func (s *Service) exportStore() blob.Store {
-	if s.Cfg.BackupBlob != nil {
-		return s.Cfg.BackupBlob
+	if s.exportsOnS3() {
+		return s.Cfg.Blob
 	}
 	return blob.NewDisk(s.ExportDir())
+}
+
+func (s *Service) exportKey(workspaceID, id string) string {
+	if s.exportsOnS3() {
+		return workspaceKey(workspaceID) + "backups/" + id + ".zip"
+	}
+	return id + ".zip"
 }
 
 var exportWakers sync.Map // *Service -> chan struct{}
@@ -293,8 +304,8 @@ func (s *Service) OpenWorkspaceExport(ctx context.Context, p Principal, id strin
 	case x.Status != "ready":
 		return nil, x, conflict("export is " + x.Status)
 	}
-	f, err := s.exportStore().Open(ctx, x.ID+".zip") // the stored id, not the request's
-	if s.Cfg.BackupBlob != nil && errors.Is(err, blob.ErrNotExist) {
+	f, err := s.exportStore().Open(ctx, s.exportKey(p.WorkspaceID, x.ID)) // the stored id, not the request's
+	if s.exportsOnS3() && errors.Is(err, blob.ErrNotExist) {
 		// ZIPs made before S3 was enabled remain downloadable until their normal expiry.
 		f, err = os.Open(s.exportPath(x.ID))
 	}
@@ -359,11 +370,11 @@ func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport) {
 	p := Principal{WorkspaceID: j.WorkspaceID, Kind: j.ActorType, ID: j.ActorID, Name: j.ActorName}
 	final := s.exportPath(j.ID)
 	size, err := s.writeExportZip(ctx, j.WorkspaceID, final, j.IncludesMedia != 0)
-	if err == nil && s.Cfg.BackupBlob != nil {
+	if err == nil && s.exportsOnS3() {
 		var f *os.File
 		f, err = os.Open(final)
 		if err == nil {
-			err = s.Cfg.BackupBlob.Put(ctx, j.ID+".zip", f, size, "application/zip")
+			err = s.Cfg.Blob.Put(ctx, s.exportKey(j.WorkspaceID, j.ID), f, size, "application/zip")
 			f.Close()
 		}
 		os.Remove(final)
@@ -384,7 +395,7 @@ func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport) {
 	if n == 0 {
 		// Expired by a purge or the workspace was deleted mid-build: the ZIP
 		// may contain erased data, so it must not survive.
-		s.removeExportFile(ctx, j.ID)
+		s.removeExportFile(ctx, j.WorkspaceID, j.ID)
 		return
 	}
 	if err == nil {
@@ -400,9 +411,9 @@ func (s *Service) expireExports(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	for _, id := range ids {
-		s.removeExportFile(ctx, id)
-		_ = s.W.MarkWorkspaceExportExpired(ctx, id)
+	for _, row := range ids {
+		s.removeExportFile(ctx, row.WorkspaceID, row.ID)
+		_ = s.W.MarkWorkspaceExportExpired(ctx, row.ID)
 	}
 	s.sweepExportFiles(ctx)
 }
@@ -410,36 +421,61 @@ func (s *Service) expireExports(ctx context.Context) {
 // sweepExportFiles removes ZIPs that no ready/running export row accounts
 // for (deleted workspace, crash between file write and bookkeeping, ...).
 func (s *Service) sweepExportFiles(ctx context.Context) {
-	sweep := func(key string, _ int64) error {
-		id, ok := strings.CutSuffix(key, ".zip")
-		if !ok || !strings.HasPrefix(id, "exp_") || strings.ContainsAny(id, "/\\") {
-			return nil
-		}
-		st, err := s.Q.ExportStatusByID(ctx, id)
-		if err == nil && (st == "ready" || st == "running") {
-			return nil
-		}
-		if err != nil && !isNoRows(err) {
-			return err // Never delete on database uncertainty.
-		}
-		s.removeExportFile(ctx, id)
-		return nil
+	stores := []blob.Store{blob.NewDisk(s.ExportDir())}
+	if s.exportsOnS3() {
+		stores = append(stores, s.Cfg.Blob)
 	}
-	for _, store := range []blob.Store{blob.NewDisk(s.ExportDir()), s.Cfg.BackupBlob} {
-		if store != nil {
-			if err := store.Walk(ctx, "exp_", sweep); err != nil {
-				s.logger(ctx).Warn("export cleanup failed", "driver", store.Name(), "err", err)
+	for _, store := range stores {
+		prefix := "exp_"
+		if store.Name() == "s3" {
+			prefix = "workspaces/"
+		}
+		err := store.Walk(ctx, prefix, func(key string, _ int64) error {
+			name, wsID := key, ""
+			if store.Name() == "s3" {
+				parts := strings.Split(key, "/")
+				if len(parts) != 4 || parts[0] != "workspaces" || parts[1] == "" || parts[2] != "backups" {
+					return nil
+				}
+				wsID, name = parts[1], parts[3]
 			}
+			id, ok := strings.CutSuffix(name, ".zip")
+			if !ok || !strings.HasPrefix(id, "exp_") || strings.ContainsAny(id, "/\\") {
+				return nil
+			}
+			var status string
+			var err error
+			if wsID == "" {
+				status, err = s.Q.ExportStatusByID(ctx, id)
+			} else {
+				var row db.WorkspaceExport
+				row, err = s.Q.GetWorkspaceExport(ctx, db.GetWorkspaceExportParams{WorkspaceID: wsID, ID: id})
+				status = row.Status
+			}
+			if err == nil && (status == "ready" || status == "running") {
+				return nil
+			}
+			if err != nil && !isNoRows(err) {
+				return err // Never delete on database uncertainty.
+			}
+			if err := store.Delete(ctx, key); err != nil {
+				s.logger(ctx).Warn("export cleanup failed", "key", key, "driver", store.Name(), "err", err)
+			}
+			return nil
+		})
+		if err != nil {
+			s.logger(ctx).Warn("export cleanup failed", "driver", store.Name(), "err", err)
 		}
 	}
 }
 
-func (s *Service) removeExportFile(ctx context.Context, id string) {
-	for _, store := range []blob.Store{blob.NewDisk(s.ExportDir()), s.Cfg.BackupBlob} {
-		if store != nil {
-			if err := store.Delete(ctx, id+".zip"); err != nil {
-				s.logger(ctx).Warn("export file not removed", "export_id", id, "driver", store.Name(), "err", err)
-			}
+func (s *Service) removeExportFile(ctx context.Context, workspaceID, id string) {
+	if err := blob.NewDisk(s.ExportDir()).Delete(ctx, id+".zip"); err != nil {
+		s.logger(ctx).Warn("export file not removed", "export_id", id, "err", err)
+	}
+	if s.exportsOnS3() {
+		if err := s.Cfg.Blob.Delete(ctx, s.exportKey(workspaceID, id)); err != nil {
+			s.logger(ctx).Warn("export object not removed", "export_id", id, "err", err)
 		}
 	}
 }

@@ -87,27 +87,21 @@ reads them from the bucket either way.
 
 ### Workspace ZIP exports in cloud mode
 
-With `STAQLY_MODE=cloud` and `STORAGE_DRIVER=s3`, also set:
+With `STAQLY_MODE=cloud` and `STORAGE_DRIVER=s3`, workspace archives use the existing S3 bucket
+and credentials automatically. Each ZIP is stored at
+`workspaces/<workspace_id>/backups/<export_id>.zip`, alongside the workspace's media and thumbnails.
+`S3_PREFIX`, when configured, applies to this path too. No separate backup bucket or setting is needed.
 
-```bash title="staqly.env"
-BACKUP_S3_BUCKET=my-staqly-backups
-```
+Keep the backup objects **private**. Any bucket policy or CDN that exposes media must exclude the
+`workspaces/*/backups/*` paths. The application does not publish backup URLs through `S3_PUBLIC_URL`:
+downloads stream through the authenticated API with workspace and admin checks.
 
-Create this as a **private bucket**, separate from the media bucket, with no public policy or CDN.
-The same S3 endpoint, region, credentials and optional `S3_PREFIX` apply; the credentials need
-read, write, delete and list access to both buckets. `S3_CREATE_BUCKET=true` can create the backup
-bucket too. The server checks both buckets at startup and rejects a missing `BACKUP_S3_BUCKET`
-or one equal to `S3_BUCKET`.
-
-Workspace archives keep their JSON/NDJSON and media files inside a ZIP. The server builds each ZIP
-on temporary local disk, uploads it, then removes the local copy. Downloads stream through the
-authenticated API with the same workspace and admin checks; `S3_PUBLIC_URL` never applies to
-exports. Archives expire after 24 hours and are also removed when their workspace is deleted or
-its posts are purged. Failed deletions are retried by the export worker.
+Archives keep their JSON/NDJSON and media files inside a ZIP. The server stages each ZIP locally,
+uploads it, then removes the local copy. Archives expire after 24 hours and are also removed when
+their workspace is deleted or its posts are purged. Failed deletions are retried by the export worker.
 
 ZIPs created on disk before enabling S3 remain downloadable on that server until they expire.
-Local mode keeps ZIPs in `DATA_DIR/exports`. Cloud with disk storage keeps that behavior unless
-`BACKUP_S3_BUCKET` is configured with the S3 connection settings. These workspace exports are
+Local mode and cloud with disk storage keep ZIPs in `DATA_DIR/exports`. These workspace exports are
 separate from the consistent database backups described in [Backup & restore](/self-hosting/backup-and-restore).
 
 ## Development

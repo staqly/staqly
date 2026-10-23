@@ -200,9 +200,7 @@ type Config struct {
 	LocalTokenPath string
 	UploadDir      string
 	// Blob is where media files live (STORAGE_DRIVER): nil means files on disk in UploadDir.
-	Blob blob.Store
-	// BackupBlob stores workspace ZIP exports privately; nil keeps DATA_DIR/exports on disk.
-	BackupBlob         blob.Store
+	Blob               blob.Store
 	MaxUploadBytes     int64
 	SessionTTL         time.Duration
 	SetupToken         string // optional; required by Setup when set

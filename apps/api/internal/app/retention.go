@@ -257,7 +257,7 @@ func (s *Service) DeleteWorkspace(ctx context.Context, p Principal, confirm stri
 		s.logger(ctx).Warn("files not removed after workspace deletion", "err", err)
 	}
 	for _, id := range exports {
-		s.removeExportFile(ctx, id)
+		s.removeExportFile(ctx, p.WorkspaceID, id)
 	}
 	s.logger(ctx).Info("workspace deleted", "workspace_id", p.WorkspaceID, "files", files)
 	return nil
@@ -354,7 +354,7 @@ func (s *Service) PurgePost(ctx context.Context, p Principal, id string) (PurgeR
 		}
 	}
 	for _, x := range exports {
-		s.removeExportFile(ctx, x)
+		s.removeExportFile(ctx, p.WorkspaceID, x)
 	}
 	return res, nil
 }

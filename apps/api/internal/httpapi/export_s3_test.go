@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,12 +18,12 @@ import (
 
 func useBackupS3(t *testing.T, e *env) *blobtest.S3 {
 	t.Helper()
-	fake := blobtest.NewS3(t, "backups", "media")
-	st, err := blob.NewS3(blob.S3Config{Endpoint: fake.URL, Bucket: "backups", AccessKey: "test", SecretKey: "test-secret", PathStyle: true})
+	fake := blobtest.NewS3(t, "media")
+	st, err := blob.NewS3(blob.S3Config{Endpoint: fake.URL, Bucket: "media", PublicURL: "https://cdn.example.com", AccessKey: "test", SecretKey: "test-secret", PathStyle: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.svc.Cfg.BackupBlob = st
+	e.svc.Cfg.Blob = st
 	return fake
 }
 
@@ -42,12 +43,9 @@ func TestWorkspaceExportS3Lifecycle(t *testing.T) {
 			e.do(nil, "POST", "/v1/workspace/export", key, nil, 202, &job)
 			e.svc.ProcessExports(ctx)
 			e.do(nil, "GET", "/v1/workspace/exports/"+job.ID, key, nil, 200, &job)
-			data := fake.Get("backups", job.ID+".zip")
+			data := fake.Get("media", "workspaces/"+workspaceID(e)+"/backups/"+job.ID+".zip")
 			if job.Status != "ready" || int64(len(data)) != job.SizeBytes || len(data) == 0 {
-				t.Fatalf("export not stored in backup bucket: %+v, bytes=%d", job, len(data))
-			}
-			if len(fake.Keys("media")) != 0 {
-				t.Fatal("backup leaked into media bucket")
+				t.Fatalf("export not stored in workspace backups folder: %+v, bytes=%d", job, len(data))
 			}
 			if _, err := os.Stat(filepath.Join(dir, "exports", job.ID+".zip")); !os.IsNotExist(err) {
 				t.Fatalf("S3 export left on disk: %v", err)
@@ -78,7 +76,7 @@ func TestWorkspaceExportS3Lifecycle(t *testing.T) {
 			case "delete workspace":
 				e.do(e.browser, "DELETE", "/v1/workspace", "", map[string]string{"confirm": "Test"}, 204, nil, "X-CSRF-Token", e.csrf)
 			}
-			if len(fake.Keys("backups")) != 0 {
+			if len(backupKeys(fake)) != 0 {
 				t.Fatalf("backup survived %s", cleanup)
 			}
 		})
@@ -95,12 +93,19 @@ func TestWorkspaceExportS3LegacyDownloadAndOrphanCleanup(t *testing.T) {
 	e.do(nil, "GET", "/v1/workspace/exports/"+job.ID, key, nil, 200, &job)
 	fake := useBackupS3(t, e)
 	e.do(nil, "GET", job.DownloadURL, key, nil, 200, nil)
-	if err := e.svc.Cfg.BackupBlob.Put(context.Background(), "exp_orphan.zip", bytes.NewReader([]byte("orphan")), 6, "application/zip"); err != nil {
+	if err := e.svc.Cfg.Blob.Put(context.Background(), "workspaces/ws_deleted/backups/exp_orphan.zip", bytes.NewReader([]byte("orphan")), 6, "application/zip"); err != nil {
+		t.Fatal(err)
+	}
+	mediaKey := "workspaces/ws_deleted/media/exp_keep.zip"
+	if err := e.svc.Cfg.Blob.Put(context.Background(), mediaKey, bytes.NewReader([]byte("keep")), 4, "application/zip"); err != nil {
 		t.Fatal(err)
 	}
 	e.svc.ProcessExports(context.Background())
-	if len(fake.Keys("backups")) != 0 {
+	if len(backupKeys(fake)) != 0 {
 		t.Fatal("orphan archive was not deleted")
+	}
+	if !bytes.Equal(fake.Get("media", mediaKey), []byte("keep")) {
+		t.Fatal("backup cleanup deleted media")
 	}
 	e.svc.Now = func() time.Time { return time.Now().Add(25 * time.Hour) }
 	e.svc.ProcessExports(context.Background())
@@ -119,7 +124,7 @@ func TestWorkspaceExportS3UploadFailure(t *testing.T) {
 	e := newEnv(t)
 	dir := withDataDir(e)
 	fake := useBackupS3(t, e)
-	e.svc.Cfg.BackupBlob = failingBackupUpload{e.svc.Cfg.BackupBlob}
+	e.svc.Cfg.Blob = failingBackupUpload{e.svc.Cfg.Blob}
 	key := e.keyWith(app.ScopeAdmin)
 	var job app.WorkspaceExport
 	e.do(nil, "POST", "/v1/workspace/export", key, nil, 202, &job)
@@ -128,7 +133,7 @@ func TestWorkspaceExportS3UploadFailure(t *testing.T) {
 	if job.Status != "failed" || job.DownloadURL != "" {
 		t.Fatalf("failed upload offered for download: %+v", job)
 	}
-	if len(fake.Keys("backups")) != 0 {
+	if len(backupKeys(fake)) != 0 {
 		t.Fatal("failed upload left an object")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "exports", job.ID+".zip")); !os.IsNotExist(err) {
@@ -140,6 +145,7 @@ func TestWorkspaceExportS3UploadFailure(t *testing.T) {
 type failingBackupDelete struct {
 	blob.Store
 	unavailable  bool
+	failureKey   string
 	beforeDelete func(context.Context)
 }
 
@@ -147,7 +153,7 @@ func (f *failingBackupDelete) Delete(ctx context.Context, key string) error {
 	if f.beforeDelete != nil {
 		f.beforeDelete(ctx)
 	}
-	if f.unavailable {
+	if f.unavailable && (f.failureKey == "" || f.failureKey == key) {
 		return errors.New("delete unavailable")
 	}
 	return f.Store.Delete(ctx, key)
@@ -157,8 +163,8 @@ func TestWorkspaceExportS3RetriesExpiredDeletion(t *testing.T) {
 	e := newEnv(t)
 	withDataDir(e)
 	fake := useBackupS3(t, e)
-	store := &failingBackupDelete{Store: e.svc.Cfg.BackupBlob, unavailable: true}
-	e.svc.Cfg.BackupBlob = store
+	store := &failingBackupDelete{Store: e.svc.Cfg.Blob, unavailable: true}
+	e.svc.Cfg.Blob = store
 	key := e.keyWith(app.ScopeAdmin)
 	var job app.WorkspaceExport
 	e.do(nil, "POST", "/v1/workspace/export", key, nil, 202, &job)
@@ -166,12 +172,12 @@ func TestWorkspaceExportS3RetriesExpiredDeletion(t *testing.T) {
 	e.svc.Now = func() time.Time { return time.Now().Add(25 * time.Hour) }
 	e.svc.ProcessExports(context.Background())
 	e.do(nil, "GET", "/v1/workspace/exports/"+job.ID+"/download", key, nil, 410, nil)
-	if len(fake.Keys("backups")) != 1 {
+	if len(backupKeys(fake)) != 1 {
 		t.Fatal("expected the failed deletion to leave the object")
 	}
 	store.unavailable = false
 	e.svc.ProcessExports(context.Background())
-	if len(fake.Keys("backups")) != 0 {
+	if len(backupKeys(fake)) != 0 {
 		t.Fatal("expired object deletion was not retried")
 	}
 }
@@ -186,22 +192,67 @@ func TestWorkspaceExportS3PurgeRevokesBeforeDeletion(t *testing.T) {
 	e.do(nil, "POST", "/v1/workspace/export", key, nil, 202, &job)
 	e.svc.ProcessExports(context.Background())
 	var statusAtDelete string
-	store := &failingBackupDelete{Store: e.svc.Cfg.BackupBlob, unavailable: true,
+	store := &failingBackupDelete{Store: e.svc.Cfg.Blob, unavailable: true,
 		beforeDelete: func(ctx context.Context) {
 			statusAtDelete, _ = e.svc.Q.ExportStatusByID(ctx, job.ID)
 		}}
-	e.svc.Cfg.BackupBlob = store
+	e.svc.Cfg.Blob = store
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/purge", key, nil, 200, nil)
 	if statusAtDelete != "expired" {
 		t.Fatalf("backup still accessible during remote deletion: %s", statusAtDelete)
 	}
 	e.do(nil, "GET", "/v1/workspace/exports/"+job.ID+"/download", key, nil, 410, nil)
-	if len(fake.Keys("backups")) != 1 {
+	if len(backupKeys(fake)) != 1 {
 		t.Fatal("expected failed deletion to leave an inaccessible object")
 	}
 	store.unavailable = false
 	e.svc.ProcessExports(context.Background())
-	if len(fake.Keys("backups")) != 0 {
+	if len(backupKeys(fake)) != 0 {
 		t.Fatal("purged export deletion was not retried")
+	}
+}
+
+func backupKeys(fake *blobtest.S3) []string {
+	var keys []string
+	for _, key := range fake.Keys("media") {
+		if strings.Contains(key, "/backups/") {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+func TestWorkspaceExportLocalKeepsDiskWithS3Media(t *testing.T) {
+	e := newEnv(t)
+	dir := withDataDir(e)
+	fake := useBackupS3(t, e)
+	var job app.WorkspaceExport
+	e.do(nil, "POST", "/v1/workspace/export", e.keyWith(app.ScopeAdmin), nil, 202, &job)
+	e.svc.Cfg.Mode = app.ModeLocal
+	e.svc.ProcessExports(context.Background())
+	data, err := os.ReadFile(filepath.Join(dir, "exports", job.ID+".zip"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(readZip(t, data)["workspace.json"]) == 0 || len(backupKeys(fake)) != 0 {
+		t.Fatal("local export must remain a ZIP on disk")
+	}
+}
+
+func TestWorkspaceExportS3CleanupContinuesAfterDeleteFailure(t *testing.T) {
+	e := newEnv(t)
+	withDataDir(e)
+	fake := useBackupS3(t, e)
+	first := "workspaces/ws_deleted/backups/exp_a.zip"
+	second := "workspaces/ws_deleted/backups/exp_b.zip"
+	for _, key := range []string{first, second} {
+		if err := e.svc.Cfg.Blob.Put(context.Background(), key, bytes.NewReader([]byte("zip")), 3, "application/zip"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.svc.Cfg.Blob = &failingBackupDelete{Store: e.svc.Cfg.Blob, unavailable: true, failureKey: first}
+	e.svc.ProcessExports(context.Background())
+	if len(fake.Get("media", first)) == 0 || len(fake.Get("media", second)) != 0 {
+		t.Fatal("one failed deletion must not block cleanup of other backup objects")
 	}
 }

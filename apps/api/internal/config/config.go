@@ -275,9 +275,6 @@ func Load() (Config, error) {
 	if c.App.Blob, err = storage(c.App.UploadDir, dataDir); err != nil {
 		return Config{}, err
 	}
-	if c.App.BackupBlob, err = backupStorage(c.App.Mode, dataDir); err != nil {
-		return Config{}, err
-	}
 	c.StorageCreateBucket = envBool("S3_CREATE_BUCKET", false)
 	if c.LogLevel, err = logctx.ParseLevel(os.Getenv("LOG_LEVEL")); err != nil {
 		return Config{}, err
@@ -362,7 +359,17 @@ func storage(uploadDir, dataDir string) (blob.Store, error) {
 	case "disk":
 		return blob.NewDisk(uploadDir), nil
 	case "s3":
-		cfg := s3Config(dataDir)
+		cfg := blob.S3Config{
+			Endpoint:  os.Getenv("S3_ENDPOINT"),
+			Region:    os.Getenv("S3_REGION"),
+			Bucket:    os.Getenv("S3_BUCKET"),
+			AccessKey: os.Getenv("S3_ACCESS_KEY_ID"),
+			SecretKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
+			PathStyle: envBool("S3_FORCE_PATH_STYLE", false),
+			Prefix:    os.Getenv("S3_PREFIX"),
+			PublicURL: os.Getenv("S3_PUBLIC_URL"),
+			TempDir:   filepath.Join(dataDir, "tmp"),
+		}
 		if missing := cfg.Missing(); len(missing) > 0 {
 			sort.Strings(missing)
 			return nil, fmt.Errorf("STORAGE_DRIVER=s3 needs %s (https://docs.staqly.ai/self-hosting/storage)", strings.Join(missing, ", "))
@@ -371,35 +378,4 @@ func storage(uploadDir, dataDir string) (blob.Store, error) {
 	default:
 		return nil, fmt.Errorf("STORAGE_DRIVER must be disk or s3 (got %q)", d)
 	}
-}
-
-func s3Config(dataDir string) blob.S3Config {
-	return blob.S3Config{
-		Endpoint:  os.Getenv("S3_ENDPOINT"),
-		Region:    os.Getenv("S3_REGION"),
-		Bucket:    os.Getenv("S3_BUCKET"),
-		AccessKey: os.Getenv("S3_ACCESS_KEY_ID"),
-		SecretKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
-		PathStyle: envBool("S3_FORCE_PATH_STYLE", false),
-		Prefix:    os.Getenv("S3_PREFIX"),
-		PublicURL: os.Getenv("S3_PUBLIC_URL"),
-		TempDir:   filepath.Join(dataDir, "tmp"),
-	}
-}
-
-func backupStorage(mode, dataDir string) (blob.Store, error) {
-	bucket := os.Getenv("BACKUP_S3_BUCKET")
-	if mode != app.ModeCloud || (bucket == "" && env("STORAGE_DRIVER", "disk") != "s3") {
-		return nil, nil
-	}
-	if bucket == "" || bucket == os.Getenv("S3_BUCKET") {
-		return nil, fmt.Errorf("BACKUP_S3_BUCKET must name a private bucket separate from S3_BUCKET")
-	}
-	cfg := s3Config(dataDir)
-	cfg.Bucket, cfg.PublicURL = bucket, ""
-	if missing := cfg.Missing(); len(missing) > 0 {
-		sort.Strings(missing)
-		return nil, fmt.Errorf("BACKUP_S3_BUCKET needs %s", strings.Join(missing, ", "))
-	}
-	return blob.NewS3(cfg)
 }
