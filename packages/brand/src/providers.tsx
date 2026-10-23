@@ -80,7 +80,7 @@ const LOOKS: Record<string, Look> = {
   linkedin_page: { icon: LINKEDIN, color: '#0A66C2' },
   reddit: { icon: siReddit, color: '#FF4500' },
   instagram: { icon: siInstagram, color: '#FF0069' },
-  instagram_standalone: { icon: siInstagram, color: '#FF0069' },
+  instagram_business: { icon: siInstagram, color: '#FF0069' },
   facebook: { icon: siFacebook, color: '#0866FF' },
   threads: { icon: siThreads, color: '#000000' },
   youtube: { icon: siYoutube, color: '#FF0000' },
