@@ -70,7 +70,7 @@ describe('system page', () => {
   it('retries a rate-limited batch test and disables other tests until the batch ends', async () => {
     mockApi(routes)
     const user = userEvent.setup()
-    let finish: () => void = () => {}
+    let finish!: () => void
     const pending = new Promise<{ ok: boolean; profile: { handle: string } }>((resolve) => {
       finish = () => resolve({ ok: true, profile: { handle: '@second' } })
     })
