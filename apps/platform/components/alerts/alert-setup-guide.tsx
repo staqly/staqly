@@ -14,7 +14,7 @@ function A({ href, children }: { href: string; children: React.ReactNode }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="font-medium text-brand underline-offset-2 hover:underline"
+      className="font-medium text-brand underline-offset-2 underline hover:no-underline"
     >
       {children}
     </a>

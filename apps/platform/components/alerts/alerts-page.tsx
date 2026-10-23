@@ -117,7 +117,11 @@ function DeliveriesSheet({ channel, onOpenChange }: { channel: Alert | null; onO
                     {d.status === 'sent' && d.sent_at && <span>sent {timeAgo(d.sent_at)}</span>}
                     {d.status === 'pending' && d.next_attempt_at && <span>next {timeAgo(d.next_attempt_at)}</span>}
                     {d.post_id && (
-                      <Link prefetch={false} href={`/posts/${d.post_id}`} className="text-brand hover:underline">
+                      <Link
+                        prefetch={false}
+                        href={`/posts/${d.post_id}`}
+                        className="text-brand underline hover:no-underline"
+                      >
                         Open post
                       </Link>
                     )}

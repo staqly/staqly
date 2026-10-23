@@ -185,7 +185,7 @@ function PlanCard({
             {after !== undefined && <span className="sr-only">Now </span>}
             {money(after !== undefined ? perMonth(after) : monthly(plan, interval), plan.currency)}
           </span>
-          <span className="text-sm text-muted-foreground">per user / month</span>
+          <span className="text-sm whitespace-nowrap text-muted-foreground">/ user / mo</span>
         </span>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
@@ -270,9 +270,12 @@ export function PlanGrid({
     )
   }
 
+  // "Most popular" helps pick a first plan; a workspace that has one is switching, not choosing.
+  const shown = currentPlanId ? plans?.map((p) => ({ ...p, highlight: false })) : plans
+
   return (
     <div className={cn(grid, className)} data-testid="plan-grid">
-      {(plans ?? []).map((p) => (
+      {(shown ?? []).map((p) => (
         <PlanCard
           key={p.id}
           plan={p}
