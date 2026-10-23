@@ -1,11 +1,13 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SystemPage } from '@/components/settings/system-page'
+import { api, ApiError } from '@/lib/api'
+import { qk } from '@/lib/queries'
 
 import { channel, provider } from './fixtures'
-import { mockApi, renderWithProviders } from './utils'
+import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
 
 const routes = {
   'GET /readyz': { status: 'ok', checks: { database: 'ok', migrations: 'ok', workers: 'ok' } },
@@ -36,6 +38,58 @@ const routes = {
 }
 
 describe('system page', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it.each(['editor', 'viewer'])('keeps channel diagnostics read-only for %s', async (role) => {
+    mockApi(routes)
+    const client = makeClient()
+
+    client.setQueryData(qk.session, { ...sessionFixture('cloud'), role })
+    renderWithProviders(<SystemPage />, { client })
+    expect(await screen.findByText('Token revoked')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Test/ })).not.toBeInTheDocument()
+  })
+
+  it('shows a retry when platforms cannot be loaded', async () => {
+    const user = userEvent.setup()
+    let failed = true
+
+    mockApi({
+      ...routes,
+      'GET /v1/providers': () =>
+        failed ? { status: 503, body: { error: { message: 'Unavailable' } } } : routes['GET /v1/providers'],
+    })
+    renderWithProviders(<SystemPage />, { mode: 'cloud' })
+    expect(await screen.findByText('Could not load platforms')).toBeInTheDocument()
+    expect(screen.queryByText(/No platform has its app keys/)).not.toBeInTheDocument()
+    failed = false
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('list', { name: 'Platforms ready to connect' })).toBeInTheDocument()
+  })
+
+  it('retries a rate-limited batch test and disables other tests until the batch ends', async () => {
+    mockApi(routes)
+    const user = userEvent.setup()
+    let finish: () => void = () => {}
+    const pending = new Promise<{ ok: boolean; profile: { handle: string } }>((resolve) => {
+      finish = () => resolve({ ok: true, profile: { handle: '@second' } })
+    })
+    const check = vi
+      .spyOn(api, 'testChannel')
+      .mockResolvedValueOnce({ ok: true, profile: { handle: '@first' } })
+      .mockRejectedValueOnce(new ApiError(429, { message: 'Rate limited' }, undefined, 0.001))
+      .mockReturnValueOnce(pending)
+
+    renderWithProviders(<SystemPage />, { mode: 'cloud' })
+    await user.click(await screen.findByRole('button', { name: 'Test all' }))
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(3))
+    expect(screen.getByRole('button', { name: 'Test Brand on Instagram' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Test Brand on Mastodon' })).toBeDisabled()
+    finish()
+    expect(await screen.findByText('Works, signed in as @second')).toBeInTheDocument()
+    expect(check.mock.calls.map(([id]) => id)).toEqual(['ch_1', 'ch_2', 'ch_2'])
+  })
+
   it('in the cloud: health and channels with a test each, no queue or monitoring', async () => {
     mockApi(routes)
     const user = userEvent.setup()
