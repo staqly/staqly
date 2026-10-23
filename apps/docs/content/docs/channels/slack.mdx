@@ -1,0 +1,113 @@
+---
+title: Slack
+description: Publish to Slack channels through a Slack app, with text, files and replies in the message's thread. What to register at api.slack.com.
+---
+
+Staqly publishes to **Slack** through a Slack app installed in the workspace: the person signs in
+with OAuth v2, picks the channels, and each becomes a staqly channel. Messages go out with
+`chat.postMessage`, files with `files.getUploadURLExternal` + `files.completeUploadExternal` (the
+text becomes the files' message). A published target links to the message.
+
+## What you need
+
+A **Slack app**, registered once per server. Its keys go into the server's environment (`.env`),
+the same way locally and in the cloud; a workspace can also bring its own app (see
+[Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app
+
+At [api.slack.com/apps](https://api.slack.com/apps), **Create New App → From scratch**, name it
+(the name shows on every message) and pick a development workspace. Then:
+
+| Where | What |
+|---|---|
+| **OAuth & Permissions → Redirect URLs** | your dashboard's `/channels/callback/slack`, for example `https://staqly.example.com/channels/callback/slack`. Slack takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
+| **OAuth & Permissions → Bot Token Scopes** | nothing needed: staqly asks for its scopes when someone connects (listed below) |
+| **Manage Distribution** | **Activate Public Distribution** so workspaces other than the development one can install the app (no Slack Marketplace review is needed for that) |
+
+Copy the **Client ID** and **Client Secret** from **Basic Information → App Credentials**.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_SLACK_CLIENT_ID=your-client-id
+PROVIDER_SLACK_CLIENT_SECRET=your-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_SLACK_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, Slack shows as **soon** in **Channels → Add channel**.
+`PROVIDER_SLACK_ENABLED=false` hides it altogether.
+
+</Step>
+<Step>
+
+### Connect channels
+
+**Connect with Slack** opens slack.com, where the person picks the workspace and allows the app.
+Staqly asks for these bot scopes:
+
+| Scope | Why |
+|---|---|
+| `chat:write` | Post messages as the app |
+| `channels:read`, `groups:read` | List the public channels, and the private ones the app was invited to, to pick from |
+| `channels:join` | Join a public channel when it is picked, so files can be shared there |
+| `files:write` | Upload files |
+| `files:read` | Find the message an upload made, to link to it and reply under it |
+
+Then staqly lists the channels: every public channel, and the private ones where the app was
+invited (`/invite @YourApp` in the channel). Pick one or more; each becomes its own channel, shown
+as `#name`. Connecting the same Slack channel again reconnects the existing staqly channel.
+
+</Step>
+</Steps>
+
+## Limits
+
+| | |
+|---|---|
+| Text | 40,000 characters (Slack's limit for a message) |
+| Media | up to **10** files per message, shared together with the text |
+
+Slack's own formatting (`*bold*`, `_italic_`, links) works in the text; `&`, `<` and `>` are sent
+as written.
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Show link previews** (`link_preview`) | On by default: Slack unfurls links into previews |
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies in the message's
+Slack thread, one after another with their delays.
+
+When a post has files, Slack answers with the files, not the message; staqly asks Slack where they
+were shared for a few seconds. When Slack does not say in time, the target links to the channel and
+its comments are skipped; the post is out.
+
+## Tokens
+
+Slack bot tokens last until the app is removed from the workspace. If the app turns on **token
+rotation**, staqly renews them every 12 hours with the refresh token. Checking the channel's
+connection asks Slack whether the token still works.
+
+## When publishing fails
+
+| Slack says | Staqly does |
+|---|---|
+| The token is revoked, the app was removed, the app was removed from the channel or the channel archived | Marks the channel **Needs reconnect** and fails the target: invite the app back (or unarchive the channel) and reconnect from the row's menu |
+| Rate limit (429) or Slack unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused message: too long, posting restricted in the channel, files not allowed | Fails the target with Slack's reason; retrying would not help, so it does not |
+| The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: Slack has no idempotency key, and sending again could post twice. Check the channel before you retry |
