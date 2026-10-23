@@ -260,6 +260,28 @@ type Replier interface {
 	Reply(ctx context.Context, c Credentials, parentExternalID string, p PostContent, s Settings) (Result, error)
 }
 
+// Account is one place a sign-in may publish as: a Facebook Page, a LinkedIn Page, a YouTube channel, a Google
+// Business location, a Tumblr blog, a Slack channel...
+type Account struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Handle     string `json:"handle,omitempty"`
+	AvatarURL  string `json:"avatar_url,omitempty"`
+	ProfileURL string `json:"profile_url,omitempty"`
+}
+
+// AccountLister is implemented by OAuth platforms whose sign-in may publish as several accounts. After Exchange
+// (whose Credentials are the person's sign-in, its Profile the person) the app lists the accounts, the person picks
+// one or more, and each becomes its own channel with what UseAccount returns. A provider never picks for the person:
+// the app connects the only account directly and asks when there are several.
+type AccountLister interface {
+	// Accounts lists what the sign-in may publish as (none is an error the person can act on, e.g. "no Pages").
+	Accounts(ctx context.Context, c Credentials) ([]Account, error)
+	// UseAccount narrows the sign-in to one listed account: the channel's credentials and profile. The profile's
+	// Handle identifies the account (an existing channel with the same handle is reconnected, not duplicated).
+	UseAccount(ctx context.Context, c Credentials, accountID string) (Credentials, Profile, error)
+}
+
 // Reposter is implemented by platforms where another connected account can repost a published post (the
 // "reposters" setting): the app runs one repost job per account once the post is out.
 type Reposter interface {
