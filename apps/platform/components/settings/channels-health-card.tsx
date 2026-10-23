@@ -9,9 +9,9 @@ import { ErrorState } from '@/components/common/error-state'
 import { ChannelStatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { api, errorMessage, type Channel } from '@/lib/api'
+import { api, ApiError, errorMessage, type Channel } from '@/lib/api'
 import { ProviderTile } from '@/lib/providers'
-import { qk, useChannels, useProviders } from '@/lib/queries'
+import { qk, useChannels, useProviders, useRole } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
@@ -20,20 +20,31 @@ import { SettingsCard } from './settings-card'
 type Result = { ok: boolean; text: string }
 
 /** Asks the platform about one channel; never throws, so Test all goes on after a failure. */
-function testOne(c: Channel): Promise<Result> {
-  return api.testChannel(c.id).then(
-    (r) =>
-      r.ok
-        ? { ok: true, text: r.profile?.handle ? `Works, signed in as ${r.profile.handle}` : 'Works' }
-        : { ok: false, text: r.error || 'The platform no longer accepts the sign-in' },
-    (e) => ({ ok: false, text: errorMessage(e) }),
-  )
+async function testOne(c: Channel, retry = true): Promise<Result> {
+  try {
+    const r = await api.testChannel(c.id)
+
+    return r.ok
+      ? { ok: true, text: r.profile?.handle ? `Works, signed in as ${r.profile.handle}` : 'Works' }
+      : { ok: false, text: r.error || 'The platform no longer accepts the sign-in' }
+  } catch (e) {
+    // Even sequential requests can exhaust the server's channel-test burst limit.
+    if (retry && e instanceof ApiError && e.status === 429) {
+      await new Promise((resolve) => setTimeout(resolve, (e.retryAfter || 1) * 1000))
+
+      return testOne(c, false)
+    }
+
+    return { ok: false, text: `Not checked: ${errorMessage(e)}` }
+  }
 }
 
 /** The workspace's channels: which platforms this server can connect, each channel's state and a live test. */
 export function ChannelsHealthCard() {
   const channels = useChannels()
   const providers = useProviders()
+  const { role } = useRole()
+  const canManageChannels = role === 'owner' || role === 'admin'
   const qc = useQueryClient()
   const [results, setResults] = useState<Record<string, Result>>({})
   const [running, setRunning] = useState<string[]>([])
@@ -41,6 +52,10 @@ export function ChannelsHealthCard() {
   const available = (providers.data ?? []).filter((p) => p.status === 'available' && p.id !== 'custom')
 
   async function test(cs: Channel[]) {
+    if (!canManageChannels || running.length > 0) {
+      return
+    }
+
     setRunning((r) => [...r, ...cs.map((c) => c.id)])
 
     // One at a time: a platform that rate-limits sign-in checks sees one request, not a burst.
@@ -61,7 +76,7 @@ export function ChannelsHealthCard() {
       icon={<Share2 />}
       description="The platforms this server can publish to, and whether each connected account still signs in."
       action={
-        list && list.length > 0 ? (
+        canManageChannels && list && list.length > 0 ? (
           <Button size="sm" variant="outline" onClick={() => void test(list)} disabled={running.length > 0}>
             {running.length > 0 ? 'Testing...' : 'Test all'}
           </Button>
@@ -73,6 +88,8 @@ export function ChannelsHealthCard() {
           <h3 className="text-xs font-medium text-muted-foreground">Ready to connect on this server</h3>
           {providers.isLoading ? (
             <Skeleton className="h-8" />
+          ) : providers.error ? (
+            <ErrorState title="Could not load platforms" error={providers.error} onRetry={() => providers.refetch()} />
           ) : available.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No platform has its app keys on this server yet; your own automation always works.
@@ -96,9 +113,11 @@ export function ChannelsHealthCard() {
         ) : !list?.length ? (
           <p className="text-sm text-muted-foreground">
             No channels connected yet.{' '}
-            <Link href="/channels?add=1" className="text-foreground underline underline-offset-4 hover:no-underline">
-              Add a channel
-            </Link>
+            {canManageChannels && (
+              <Link href="/channels?add=1" className="text-foreground underline underline-offset-4 hover:no-underline">
+                Add a channel
+              </Link>
+            )}
           </p>
         ) : (
           <ul className="divide-y rounded-lg border" aria-label="Connected channels">
@@ -139,15 +158,17 @@ export function ChannelsHealthCard() {
                     )}
                   </span>
                   <ChannelStatusBadge status={c.status} />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void test([c])}
-                    disabled={busy}
-                    aria-label={`Test ${c.name}`}
-                  >
-                    Test
-                  </Button>
+                  {canManageChannels && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void test([c])}
+                      disabled={running.length > 0}
+                      aria-label={`Test ${c.name}`}
+                    >
+                      Test
+                    </Button>
+                  )}
                 </li>
               )
             })}
