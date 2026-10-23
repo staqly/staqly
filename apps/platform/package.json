@@ -17,7 +17,7 @@
     "format:check": "oxfmt --check"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.9.1",
+    "@hookform/resolvers": "^6.0.0",
     "@staqly/brand": "workspace:*",
     "@tanstack/react-query": "^5.104.5",
     "@tiptap/core": "3.32.0",
@@ -31,7 +31,7 @@
     "cn": "^0.5.0",
     "exifreader": "^4.50.0",
     "fflate": "^0.8.3",
-    "framer-motion": "^12.43.0",
+    "framer-motion": "^14.4.0",
     "geist": "^1.8.1",
     "immer": "^11.1.21",
     "localforage": "^1.10.0",
