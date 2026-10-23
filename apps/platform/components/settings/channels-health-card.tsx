@@ -1,180 +1,148 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
-import { CircleCheck, CircleX, LoaderCircle, Share2 } from 'lucide-react'
-import Link from 'next/link'
-import { useState } from 'react'
+import { CircleCheck, CircleX, LoaderCircle, RefreshCw, Share2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { ErrorState } from '@/components/common/error-state'
-import { ChannelStatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { api, ApiError, errorMessage, type Channel } from '@/lib/api'
+import { api, ApiError, errorMessage, type ProviderCheck } from '@/lib/api'
 import { ProviderTile } from '@/lib/providers'
-import { qk, useChannels, useProviders, useRole } from '@/lib/queries'
+import { useProviders, useRole } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 import { SettingsCard } from './settings-card'
 
-type Result = { ok: boolean; text: string }
+type Outcome = { ok: boolean; hint: string }
 
-/** Asks the platform about one channel; never throws, so Test all goes on after a failure. */
-async function testOne(c: Channel, retry = true): Promise<Result> {
+/** One platform's check, as one line: ready, or the first thing to fix. Never throws; a rate limit is waited out once. */
+async function checkOne(id: string, retry = true): Promise<Outcome> {
   try {
-    const r = await api.testChannel(c.id)
+    const c: ProviderCheck = await api.checkProvider(id)
+    const problem = c.checks.find((x) => !x.ok)
 
-    return r.ok
-      ? { ok: true, text: r.profile?.handle ? `Works, signed in as ${r.profile.handle}` : 'Works' }
-      : { ok: false, text: r.error || 'The platform no longer accepts the sign-in' }
+    return problem ? { ok: false, hint: problem.detail } : { ok: true, hint: 'Ready to connect and post' }
   } catch (e) {
-    // Even sequential requests can exhaust the server's channel-test burst limit.
     if (retry && e instanceof ApiError && e.status === 429) {
       await new Promise((resolve) => setTimeout(resolve, (e.retryAfter || 1) * 1000))
 
-      return testOne(c, false)
+      return checkOne(id, false)
     }
 
-    return { ok: false, text: `Not checked: ${errorMessage(e)}` }
+    return { ok: false, hint: `Not checked: ${errorMessage(e)}` }
   }
 }
 
-/** The workspace's channels: which platforms this server can connect, each channel's state and a live test. */
-export function ChannelsHealthCard() {
-  const channels = useChannels()
-  const providers = useProviders()
-  const { role } = useRole()
-  const canManageChannels = role === 'owner' || role === 'admin'
-  const qc = useQueryClient()
-  const [results, setResults] = useState<Record<string, Result>>({})
-  const [running, setRunning] = useState<string[]>([])
-  const list = channels.data
-  const available = (providers.data ?? []).filter((p) => p.status === 'available' && p.id !== 'custom')
+/** Checks platforms one at a time (each check calls the platform once), filling in each line as it answers. */
+async function runChecks(
+  list: string[],
+  setResults: React.Dispatch<React.SetStateAction<Record<string, Outcome>>>,
+  setRunning: React.Dispatch<React.SetStateAction<string[]>>,
+) {
+  setRunning(list)
 
-  async function test(cs: Channel[]) {
-    if (!canManageChannels || running.length > 0) {
-      return
-    }
+  for (const id of list) {
+    const out = await checkOne(id)
 
-    setRunning((r) => [...r, ...cs.map((c) => c.id)])
-
-    // One at a time: a platform that rate-limits sign-in checks sees one request, not a burst.
-    for (const c of cs) {
-      const r = await testOne(c)
-
-      setResults((all) => ({ ...all, [c.id]: r }))
-      setRunning((ids) => ids.filter((id) => id !== c.id))
-    }
-
-    // A test may change a channel's state (needs reconnect, or connected again).
-    void qc.invalidateQueries({ queryKey: qk.channels })
+    setResults((all) => ({ ...all, [id]: out }))
+    setRunning((r) => r.filter((x) => x !== id))
   }
+}
+
+/**
+ * This server's side of each platform people connect through its sign-in (app keys, the platform taking them, what
+ * else it needs), shown like Health: one line each. Accounts are tested on the Channels page.
+ */
+export function ChannelsHealthCard() {
+  const providers = useProviders()
+  // Checking calls the platforms with the server's app keys: owners and admins only (channels:manage).
+  const { role } = useRole()
+  const canCheck = role === 'owner' || role === 'admin'
+  const [results, setResults] = useState<Record<string, Outcome>>({})
+  const [running, setRunning] = useState<string[]>([])
+  const oauth = (providers.data ?? []).filter((p) => p.auth === 'oauth2' && p.app_configured)
+  const ids = oauth.map((p) => p.id).join(',')
+
+  const check = (list: string[]) => {
+    if (canCheck && list.length > 0) {
+      void runChecks(list, setResults, setRunning)
+    }
+  }
+
+  // Checked once when the page opens, like Health; Check now runs it again.
+  const started = useRef(false)
+
+  useEffect(() => {
+    if (!started.current && canCheck && ids) {
+      started.current = true
+      void runChecks(ids.split(','), setResults, setRunning)
+    }
+  }, [canCheck, ids])
 
   return (
     <SettingsCard
-      title="Channels"
+      title="Platforms"
       icon={<Share2 />}
-      description="The platforms this server can publish to, and whether each connected account still signs in."
+      description="Can people connect and post to each platform? Accounts are checked on the Channels page."
       action={
-        canManageChannels && list && list.length > 0 ? (
-          <Button size="sm" variant="outline" onClick={() => void test(list)} disabled={running.length > 0}>
-            {running.length > 0 ? 'Testing...' : 'Test all'}
+        canCheck && oauth.length > 0 ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => check(oauth.map((p) => p.id))}
+            disabled={running.length > 0}
+          >
+            <RefreshCw className={running.length > 0 ? 'animate-spin' : undefined} />{' '}
+            {running.length > 0 ? 'Checking...' : 'Check now'}
           </Button>
         ) : undefined
       }
     >
-      <div className="grid gap-4" data-testid="channels-health">
-        <div className="grid gap-2">
-          <h3 className="text-xs font-medium text-muted-foreground">Ready to connect on this server</h3>
-          {providers.isLoading ? (
-            <Skeleton className="h-8" />
-          ) : providers.error ? (
-            <ErrorState title="Could not load platforms" error={providers.error} onRetry={() => providers.refetch()} />
-          ) : available.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No platform has its app keys on this server yet; your own automation always works.
-            </p>
-          ) : (
-            <ul className="flex flex-wrap gap-2" aria-label="Platforms ready to connect">
-              {available.map((p) => (
-                <li key={p.id} className="flex items-center gap-2 rounded-full border py-1 pr-3 pl-1 text-sm">
-                  <ProviderTile id={p.id} name={p.name} className="size-6" />
-                  {p.name}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {providers.isLoading ? (
+        <Skeleton className="h-28" />
+      ) : providers.error ? (
+        <ErrorState title="Could not load platforms" error={providers.error} onRetry={() => providers.refetch()} />
+      ) : oauth.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No platform is set up on this server yet; your own automation always works.
+        </p>
+      ) : (
+        <ul
+          className="divide-y rounded-lg border"
+          aria-label="Platforms set up on this server"
+          data-testid="platforms-health"
+        >
+          {oauth.map((p) => {
+            const busy = running.includes(p.id)
+            const r = results[p.id]
 
-        {channels.isLoading ? (
-          <Skeleton className="h-24" />
-        ) : channels.error ? (
-          <ErrorState title="Could not load channels" error={channels.error} onRetry={() => channels.refetch()} />
-        ) : !list?.length ? (
-          <p className="text-sm text-muted-foreground">
-            No channels connected yet.{' '}
-            {canManageChannels && (
-              <Link href="/channels?add=1" className="text-foreground underline underline-offset-4 hover:no-underline">
-                Add a channel
-              </Link>
-            )}
-          </p>
-        ) : (
-          <ul className="divide-y rounded-lg border" aria-label="Connected channels">
-            {list.map((c) => {
-              const busy = running.includes(c.id)
-              const r = results[c.id]
-
-              return (
-                <li key={c.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm">
-                  <ProviderTile id={c.provider} className="size-6 shrink-0" />
-                  <span className="min-w-0 flex-1 basis-40">
-                    <span className="block truncate font-medium" title={c.name}>
-                      {c.name}
-                    </span>
-                    {busy ? (
-                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> Testing...
-                      </span>
-                    ) : r ? (
-                      <span
-                        className={cn(
-                          'flex items-start gap-1.5 text-xs wrap-anywhere',
-                          TONES[r.ok ? 'success' : 'danger'].text,
-                        )}
-                        role="status"
-                      >
-                        {r.ok ? (
-                          <CircleCheck className="mt-px size-3.5 shrink-0" aria-hidden />
-                        ) : (
-                          <CircleX className="mt-px size-3.5 shrink-0" aria-hidden />
-                        )}
-                        {r.text}
-                      </span>
-                    ) : (
-                      c.last_error && (
-                        <span className="block text-xs text-muted-foreground wrap-anywhere">{c.last_error}</span>
-                      )
-                    )}
+            return (
+              <li key={p.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                {busy ? (
+                  <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+                ) : !r ? (
+                  <span className="size-4 shrink-0 rounded-full border" aria-hidden />
+                ) : r.ok ? (
+                  <CircleCheck className={cn('size-4 shrink-0', TONES.success.text)} aria-hidden />
+                ) : (
+                  <CircleX className={cn('size-4 shrink-0', TONES.danger.text)} aria-hidden />
+                )}
+                <ProviderTile id={p.id} name={p.name} className="size-6 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{p.name}</span>
+                  <span className="block text-xs text-muted-foreground wrap-anywhere">
+                    {busy ? 'Checking...' : (r?.hint ?? 'Set up on this server')}
                   </span>
-                  <ChannelStatusBadge status={c.status} />
-                  {canManageChannels && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void test([c])}
-                      disabled={running.length > 0}
-                      aria-label={`Test ${c.name}`}
-                    >
-                      Test
-                    </Button>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
+                </span>
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                  {busy ? 'checking' : r ? (r.ok ? 'ok' : 'needs attention') : '—'}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </SettingsCard>
   )
 }

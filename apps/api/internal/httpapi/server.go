@@ -161,6 +161,7 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 			r.Get("/providers", s.listProviders)
 			r.Put("/providers/{id}/app", s.setProviderApp)
 			r.Delete("/providers/{id}/app", s.deleteProviderApp)
+			r.Post("/providers/{id}/check", s.checkProvider)
 			r.Get("/channels", s.listChannels)
 			r.Post("/channels", s.connectChannel)
 			r.Get("/channels/oauth/{provider}/start", s.oauthStart)
