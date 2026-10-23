@@ -56,8 +56,13 @@ describe('system page', () => {
 
     client.setQueryData(qk.session, { ...sessionFixture('cloud'), role })
     renderWithProviders(<SystemPage />, { client })
-    expect(await within(await screen.findByTestId('platforms-health')).findByText('Instagram')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Test/ })).not.toBeInTheDocument()
+    const list = await screen.findByTestId('platforms-health')
+
+    expect(within(list).getByText('Instagram')).toBeInTheDocument()
+    expect(within(list).getAllByText('Set up on this server')).toHaveLength(2) // not checked for them
+    expect(
+      within(screen.getByRole('region', { name: 'Platforms' })).queryByRole('button', { name: 'Check now' }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows a retry when platforms cannot be loaded', async () => {
@@ -76,9 +81,8 @@ describe('system page', () => {
     expect(await screen.findByTestId('platforms-health')).toBeInTheDocument()
   })
 
-  it('waits out a rate limit once in Test all and keeps the other tests off until the batch ends', async () => {
+  it('checks when the page opens, waits out a rate limit once and keeps Check now off until the batch ends', async () => {
     mockApi(routes)
-    const user = userEvent.setup()
     const ready = routes['POST /v1/providers/x/check'] as ProviderCheck
     let finish!: () => void
     const pending = new Promise<ProviderCheck>((resolve) => {
@@ -91,15 +95,16 @@ describe('system page', () => {
       .mockReturnValueOnce(pending)
 
     renderWithProviders(<SystemPage />, { mode: 'cloud' })
-    await user.click(await screen.findByRole('button', { name: 'Test all' }))
     await waitFor(() => expect(check).toHaveBeenCalledTimes(3))
-    expect(screen.getByRole('button', { name: 'Test X' })).toBeDisabled()
+    expect(
+      within(screen.getByRole('region', { name: 'Platforms' })).getByRole('button', { name: /Checking/ }),
+    ).toBeDisabled()
     finish()
-    await waitFor(() => expect(screen.getAllByText('Ready')).toHaveLength(2))
+    await waitFor(() => expect(screen.getAllByText('Ready to connect and post')).toHaveLength(2))
     expect(check.mock.calls.map(([id]) => id)).toEqual(['x', 'instagram', 'instagram'])
   })
 
-  it('in the cloud: health and each platform set up on the server with a test, no queue or monitoring', async () => {
+  it('in the cloud: health and one line per platform set up on the server, no queue or monitoring', async () => {
     mockApi(routes)
     const user = userEvent.setup()
 
@@ -113,11 +118,19 @@ describe('system page', () => {
     expect(screen.queryByRole('region', { name: 'Queue' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Monitoring' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Test all' }))
-    expect(await within(list).findByText('X accepts the app keys')).toBeInTheDocument()
-    expect(within(list).getByText('https://app.example/channels/callback/x')).toBeInTheDocument()
+    // Checked on opening: a ready platform says so in one line, a failing one gives the first thing to fix only.
+    expect(await within(list).findByText('Ready to connect and post')).toBeInTheDocument()
     expect(await within(list).findByText(/which the internet can't reach/)).toBeInTheDocument()
-    expect(within(list).getByText('Needs attention')).toBeInTheDocument()
+    expect(within(list).getByText('needs attention')).toBeInTheDocument()
+    expect(within(list).queryByText('X accepts the app keys')).not.toBeInTheDocument()
+    expect(within(list).queryByText('https://app.example/channels/callback/x')).not.toBeInTheDocument()
+
+    await user.click(
+      within(screen.getByRole('region', { name: 'Platforms' })).getByRole('button', { name: 'Check now' }),
+    )
+    expect(
+      await within(screen.getByRole('region', { name: 'Platforms' })).findByRole('button', { name: 'Check now' }),
+    ).toBeEnabled()
   })
 
   it('locally: the queue and monitoring too', async () => {
