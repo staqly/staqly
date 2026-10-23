@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Clock } from 'lucide-react'
+import { ArrowLeft, Clock, TicketPercent } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useRef, useState } from 'react'
@@ -10,7 +10,7 @@ import { flushSync } from 'react-dom'
 import { PublicShell } from '@/components/auth/public-shell'
 import { daysLeft, shortDate } from '@/components/billing/billing-format'
 import { ErrorState } from '@/components/common/error-state'
-import { EVERY_PLAN, IntervalToggle, PlanGrid } from '@/components/plans/plan-cards'
+import { EVERY_PLAN, IntervalToggle, PlanGrid, promotionSummary } from '@/components/plans/plan-cards'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { api, type BillingInterval, type Plan } from '@/lib/api'
+import { api, ApiError, type BillingInterval, type Plan, type PromotionCode } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { LIVE_SUBSCRIPTION } from '@/lib/plans'
@@ -62,36 +62,69 @@ export function usePlanActions() {
 const BACK = '/settings/plan'
 
 /**
- * A promotion code for the plan buttons: a small link under the billing period that opens a short modal, then the
- * applied code with Change and Remove. A modal, not a drawer: one field.
+ * A promotion code for the plan buttons: a small link under the billing period that opens a short modal, which
+ * checks the code with Stripe before applying it; then the applied code, what it takes off, Change and Remove. A
+ * modal, not a drawer: one field.
  */
-function PromotionCode({ code, onChange }: { code: string | undefined; onChange: (code: string) => void }) {
+function PromotionCodeField({
+  promotion,
+  onChange,
+}: {
+  promotion: PromotionCode | undefined
+  onChange: (promotion: PromotionCode | undefined) => void
+}) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState('')
   // The link, or Change once a code is applied: focus comes back here when the modal closes or the code is removed.
   const trigger = useRef<HTMLButtonElement>(null)
+  const check = useMutation({
+    mutationFn: (code: string) => api.checkPromotionCode(code),
+    onSuccess: (p) => {
+      onChange(p)
+      setOpen(false)
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && (e.fields?.promotion_code || e.status === 422)) {
+        const msg = e.fields?.promotion_code ?? e.message
+
+        setError(msg.charAt(0).toUpperCase() + msg.slice(1) + '.')
+
+        return
+      }
+
+      toastApiError(e)
+    },
+  })
 
   const show = () => {
-    setDraft(code ?? '')
+    setDraft(promotion?.code ?? '')
     setError('')
+    check.reset()
     setOpen(true)
   }
 
   const remove = () => {
-    flushSync(() => onChange(''))
+    flushSync(() => onChange(undefined))
     trigger.current?.focus()
   }
 
   const triggerClass = 'h-auto p-0 text-sm font-normal pointer-coarse:-my-3 pointer-coarse:h-auto pointer-coarse:py-3'
 
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-      {code ? (
-        <>
-          <p role="status" data-testid="promotion-code-applied">
-            Code <span className="font-mono text-foreground uppercase">{code}</span> applied
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+      {promotion ? (
+        <div
+          className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-full border border-brand/30 bg-brand-soft/60 py-1 pr-4 pl-3"
+          data-testid="promotion-code-applied"
+        >
+          <p role="status" className="inline-flex items-center gap-1.5 text-foreground">
+            <TicketPercent className="size-4 text-brand" aria-hidden />
+            <span className="font-mono font-medium">{promotion.code}</span>
+            <span className="text-muted-foreground">·</span>
+            <span>{promotionSummary(promotion)}</span>
           </p>
+          <span className="h-4 w-px bg-border" aria-hidden />
           <Button ref={trigger} type="button" variant="link" className={triggerClass} onClick={show}>
             Change
           </Button>
@@ -103,13 +136,13 @@ function PromotionCode({ code, onChange }: { code: string | undefined; onChange:
           >
             Remove
           </Button>
-        </>
+        </div>
       ) : (
         <Button ref={trigger} type="button" variant="link" className={triggerClass} onClick={show}>
           Have a promotion code?
         </Button>
       )}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(o) => !check.isPending && setOpen(o)}>
         <DialogContent
           onCloseAutoFocus={(e) => {
             // The link turns into Change when a code is applied: focus whichever is there now.
@@ -120,7 +153,7 @@ function PromotionCode({ code, onChange }: { code: string | undefined; onChange:
           <DialogHeader>
             <DialogTitle>Add a promotion code</DialogTitle>
             <DialogDescription>
-              Stripe checks the code when you choose a plan; one made for other plans is refused with the reason.
+              The code is checked with Stripe; the plans it applies to show their new price.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -135,8 +168,7 @@ function PromotionCode({ code, onChange }: { code: string | undefined; onChange:
                 return
               }
 
-              onChange(draft.trim())
-              setOpen(false)
+              check.mutate(draft.trim())
             }}
           >
             <Field data-invalid={!!error}>
@@ -145,29 +177,32 @@ function PromotionCode({ code, onChange }: { code: string | undefined; onChange:
               </FieldLabel>
               <Input
                 id="promotion-code"
-                className="font-mono uppercase"
+                className="font-mono"
                 placeholder="SPRING20"
                 autoComplete="off"
                 maxLength={100}
                 value={draft}
                 aria-required
                 aria-invalid={!!error}
+                aria-describedby={error ? 'promotion-code-error' : undefined}
                 onChange={(e) => {
                   setDraft(e.target.value)
 
-                  if (error && e.target.value.trim()) {
+                  if (error) {
                     setError('')
                   }
                 }}
                 data-testid="promotion-code"
               />
-              <FieldError>{error}</FieldError>
+              <FieldError id="promotion-code-error">{error}</FieldError>
             </Field>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              <Button type="button" variant="ghost" disabled={check.isPending} onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Apply</Button>
+              <Button type="submit" disabled={check.isPending || !!error}>
+                {check.isPending ? 'Checking...' : 'Apply'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -215,11 +250,12 @@ export function PlansPage() {
   const trialHere = canPay && !subscribed && trial === 'available'
   // Leaving Starter's trial for another plan ends the trial and charges the new plan at once.
   const trialing = billing.data?.subscription_status === 'trialing'
-  // A promotion code applied here: a plan switch never opens Stripe Checkout, whose own code box covers new plans.
-  const [code, setCode] = useState('')
-  const promotionCode = code.trim() || undefined
+  // A promotion code checked here: a plan switch never opens Stripe Checkout, whose own code box covers new plans.
+  // It goes only with the plans it applies to; the others are bought at their usual price.
+  const [promotion, setPromotion] = useState<PromotionCode>()
 
   const cta = (p: Plan, current: boolean) => {
+    const promotionCode = promotion?.plans.includes(p.id) ? promotion.code : undefined
     const withTrial = trialHere && p.id === 'starter'
     const label =
       !subscribed || !plan
@@ -274,7 +310,14 @@ export function PlansPage() {
         variant={p.highlight ? 'default' : 'outline'}
         className={cn('w-full', p.highlight && 'bg-brand-gradient text-[#052817]')}
         disabled={checkout.isPending}
-        onClick={() => checkout.mutate({ plan: p.id, interval, welcome: fromWelcome, promotionCode })}
+        onClick={() =>
+          checkout.mutate({
+            plan: p.id,
+            interval,
+            welcome: fromWelcome,
+            promotionCode,
+          })
+        }
       >
         {label}
       </Button>
@@ -355,7 +398,7 @@ export function PlansPage() {
         </p>
       </div>
       {!isLocal && <IntervalToggle value={interval} onChange={setChosen} className="mt-8" />}
-      {!isLocal && canPay && payer && <PromotionCode code={promotionCode} onChange={setCode} />}
+      {!isLocal && canPay && payer && <PromotionCodeField promotion={promotion} onChange={setPromotion} />}
       <div className="mt-8 w-full max-w-6xl">
         {isLocal ? (
           <p className="text-center text-sm text-muted-foreground">A local install has no plans and no limits.</p>
@@ -369,6 +412,7 @@ export function PlansPage() {
             currentPlanId={currentId}
             renderCta={cta}
             seats={billing.data?.seats}
+            promotion={promotion}
           />
         )}
       </div>

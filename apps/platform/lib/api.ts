@@ -162,6 +162,7 @@ export type WorkspaceUsage = Omit<RawUsage, 'plan' | 'usage'> & {
 }
 export type DeviceLink = JSONOf<'/v1/device-links', 'post', 201>
 export type Billing = JSONOf<'/v1/billing', 'get', 200>
+export type PromotionCode = JSONOf<'/v1/billing/promotion-code', 'post', 200>
 export type BillingDetails = JSONOf<'/v1/billing/details', 'get', 200>
 export type XPosts = JSONOf<'/v1/billing/x-posts', 'get', 200>
 /** How a plan is billed: `year` is twelve whole-dollar months at 20 % off or more. */
@@ -978,6 +979,9 @@ export const api = {
       },
     }),
   billingPortal: () => request<{ url: string }>('/v1/billing/portal', { method: 'POST' }),
+  /** Checks a promotion code: what it takes off and the plans it applies to (422 when it isn't valid). */
+  checkPromotionCode: (code: string) =>
+    request<PromotionCode>('/v1/billing/promotion-code', { method: 'POST', json: { promotion_code: code } }),
   /** Reads the subscription from Stripe now (back from Checkout, before or without its webhook). */
   syncBilling: () => request<Billing>('/v1/billing/sync', { method: 'POST' }),
   /** Posts to X this period: included, used and bought ones left. */

@@ -33,8 +33,8 @@ func TestPromotionCodes(t *testing.T) {
 		case "GET /v1/prices/price_pro_month":
 			fmt.Fprint(w, `{"id":"price_pro_month","product":"prod_pro"}`)
 		case "GET /v1/promotion_codes":
-			if r.URL.Query().Get("code") == "BIZ-FREE" && r.URL.Query().Get("active") == "true" {
-				fmt.Fprint(w, `{"data":[{"id":"promo_biz","promotion":{"type":"coupon","coupon":"biz_free"}}]}`)
+			if strings.EqualFold(r.URL.Query().Get("code"), "BIZ-FREE") && r.URL.Query().Get("active") == "true" {
+				fmt.Fprint(w, `{"data":[{"id":"promo_biz","code":"BIZ-FREE","promotion":{"type":"coupon","coupon":"biz_free"}}]}`)
 				return
 			}
 			fmt.Fprint(w, `{"data":[]}`)
@@ -93,6 +93,65 @@ func TestPromotionCodes(t *testing.T) {
 		t.Fatalf("code on the current plan: %v", updated)
 	}
 	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business"}, 409, nil)
+}
+
+// Checking a promotion code before paying: its discount and the plans it applies to, so the plan picker can show
+// the new prices; a code that is unknown, used up or for no plan on sale is refused under the field.
+func TestCheckPromotionCode(t *testing.T) {
+	e := newEnv(t)
+	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.Method + " " + r.URL.Path
+		switch {
+		case path == "GET /v1/prices":
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
+		case strings.HasPrefix(path, "GET /v1/prices/price_"):
+			id := strings.TrimPrefix(r.URL.Path, "/v1/prices/")
+			plan, _, _ := strings.Cut(strings.TrimPrefix(id, "price_"), "_")
+			fmt.Fprintf(w, `{"id":%q,"product":"prod_%s"}`, id, plan)
+		case path == "GET /v1/promotion_codes":
+			// Like Stripe: the lookup ignores case and answers with the code as it was made.
+			code := strings.ToUpper(r.URL.Query().Get("code"))
+			coupon := map[string]string{"BIZ-FREE": "biz_free", "SPRING20": "spring", "DEAD": "dead", "GONE": "gone"}[code]
+			if coupon == "" {
+				fmt.Fprint(w, `{"data":[]}`)
+				return
+			}
+			fmt.Fprintf(w, `{"data":[{"id":"promo_%s","code":%q,"promotion":{"type":"coupon","coupon":%q}}]}`, coupon, code, coupon)
+		case path == "GET /v1/coupons/biz_free":
+			fmt.Fprint(w, `{"id":"biz_free","valid":true,"percent_off":100,"duration":"once","applies_to":{"products":["prod_business"]}}`)
+		case path == "GET /v1/coupons/spring":
+			fmt.Fprint(w, `{"id":"spring","valid":true,"percent_off":20,"duration":"repeating","duration_in_months":3}`)
+		case path == "GET /v1/coupons/dead":
+			fmt.Fprint(w, `{"id":"dead","valid":false,"percent_off":10}`)
+		case path == "GET /v1/coupons/gone":
+			fmt.Fprint(w, `{"id":"gone","valid":true,"amount_off":500,"currency":"eur","applies_to":{"products":["prod_old"]}}`)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer stripe.Close()
+	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_c", WebhookSecret: testWhsec, APIBase: stripe.URL}
+	admin := e.keyWith(app.ScopeAdmin)
+
+	var c app.PromotionCode
+	e.do(nil, "POST", "/v1/billing/promotion-code", admin, map[string]string{"promotion_code": " SPRING20 "}, 200, &c)
+	if c.Code != "SPRING20" || c.PercentOff != 20 || c.Duration != "repeating" || c.DurationInMonths != 3 ||
+		strings.Join(c.Plans, ",") != "starter,plus,pro,business" {
+		t.Fatalf("a code for every plan: %+v", c)
+	}
+	e.do(nil, "POST", "/v1/billing/promotion-code", admin, map[string]string{"promotion_code": "BIZ-FREE"}, 200, &c)
+	if c.PercentOff != 100 || c.Duration != "once" || strings.Join(c.Plans, ",") != "business" {
+		t.Fatalf("a code for Business: %+v", c)
+	}
+	// Codes are case sensitive: spring20 is not SPRING20, though Stripe's lookup finds it.
+	for _, code := range []string{"NOPE", "DEAD", "GONE", " ", "spring20", "Biz-Free"} {
+		var errBody struct{ Error app.Error }
+		e.do(nil, "POST", "/v1/billing/promotion-code", admin, map[string]string{"promotion_code": code}, 422, &errBody)
+		if errBody.Error.Fields["promotion_code"] == "" {
+			t.Fatalf("%q: %+v", code, errBody.Error)
+		}
+	}
+	e.do(nil, "POST", "/v1/billing/promotion-code", e.keyWith(app.ScopePostsRead), map[string]string{"promotion_code": "SPRING20"}, 403, nil)
 }
 
 // Leaving Starter's trial for another plan ends the trial now and charges the new plan at once; the change waits
