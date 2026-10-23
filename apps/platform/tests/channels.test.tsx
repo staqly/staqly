@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { ChannelsPage } from '@/components/channels/channels-page'
 
 import { channel, group, provider } from './fixtures'
+import { nav } from './navigation'
 import { mockApi, renderWithProviders } from './utils'
 
 const telegram = provider({
@@ -20,6 +21,26 @@ const telegram = provider({
 const soon = provider({ id: 'tiktok', name: 'TikTok', status: 'soon' })
 
 describe('channels', () => {
+  it('a connection that came back with an error shows a modal over Channels with the platform, details and Try again', async () => {
+    const api = mockApi({
+      'GET /v1/channels': { data: [] },
+      'GET /v1/providers': { data: [provider()] },
+      'GET /v1/channels/oauth/mastodon/start': { url: 'https://mastodon.example/authorize' },
+    })
+    const user = userEvent.setup()
+
+    nav.set('/channels', 'connect_error=Mastodon refused the sign-in (invalid_grant)&provider=mastodon')
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+    const dialog = await screen.findByRole('dialog', { name: "Mastodon wasn't connected" })
+
+    expect(within(dialog).getByText('Mastodon refused the sign-in')).toBeInTheDocument()
+    expect(within(dialog).getByText('invalid_grant')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(api.find('GET', '/v1/channels/oauth/mastodon/start')).toHaveLength(1))
+    await user.click(within(dialog).getByRole('button', { name: 'Back to Channels' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
   it('lists connected channels by platform with their state, and the empty state offers Add channel', async () => {
     mockApi({
       'GET /v1/channels': {
