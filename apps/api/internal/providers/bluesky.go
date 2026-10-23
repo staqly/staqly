@@ -123,9 +123,10 @@ func blueskyLogin(ctx context.Context, c Credentials) (*blueskySession, error) {
 	if c["identifier"] == "" || c["app_password"] == "" {
 		return nil, &Failure{Kind: ErrReauth, Msg: "Bluesky: no account stored; reconnect the account"}
 	}
-	service := c["service"]
-	if service == "" {
-		service = blueskyDefault
+	// Checked again on every use: the stored address only ever goes back to a plain https server.
+	service, err := fediInstance(c["service"], blueskyDefault, "service")
+	if err != nil {
+		return nil, &Failure{Kind: ErrReauth, Msg: "Bluesky: the stored server address is not valid; reconnect the account"}
 	}
 	s := &blueskySession{service: service}
 	body, _ := json.Marshal(map[string]string{"identifier": c["identifier"], "password": c["app_password"]})
