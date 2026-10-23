@@ -3,11 +3,11 @@ title: Privacy Policy
 description: What personal data staqly cloud processes, why, for how long, and your rights.
 ---
 
-Last updated: 2026-10-21
+Last updated: 2026-10-24
 
 This policy explains how **staqly, Switzerland** ("staqly", "we", "us") processes
-personal data when you use **staqly cloud** (the hosted dashboard, API and MCP endpoint) and this
-documentation site. We follow the Swiss Federal Act on Data Protection (FADP) and, for people in
+personal data when you use **staqly cloud** (the hosted dashboard, API and MCP endpoint), the website
+staqly.ai and this documentation site. We follow the Swiss Federal Act on Data Protection (FADP) and, for people in
 the EU/EEA, the GDPR.
 
 ## Staqly on your own computer
@@ -52,11 +52,21 @@ other customers.
 Content may contain personal data about other people, for example in generated posts or
 images. You are responsible for having a legal basis for putting it into staqly.
 
-### 3. This documentation site
+### 3. staqly.ai and this documentation site
 
-docs.staqly.ai is a static site hosted on GitHub Pages. It sets no cookies and uses no
-analytics. GitHub processes connection data (such as IP addresses) to deliver the pages; see
+staqly.ai and docs.staqly.ai are static sites; docs.staqly.ai is hosted on GitHub Pages, which
+processes connection data (such as IP addresses) to deliver the pages; see
 [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+
+To learn which pages people read and how they find us, both sites send usage events to
+**PostHog** (hosted in the EU): the pages you visit, links and buttons you click, the referring
+site and campaign tags, page load times, and your browser, device type and approximate location
+derived from your IP address. They set **no cookies** and store nothing in your browser. Visits
+are counted with an anonymous identifier that PostHog computes from a hash of the day, your IP
+address, user agent and the site, with a secret that changes daily, so the same visitor cannot be
+recognised on another day or across the two sites. We do not record sessions or what you type.
+Legal basis: legitimate interest in improving the sites. You can block these events with any
+content blocker.
 The API playground keeps the API key you enter in your browser only and sends requests directly
 from your browser to the instance you choose.
 
@@ -70,6 +80,8 @@ cookies.
 
 - **Hosting and infrastructure:** the providers that store and run staqly cloud for us, and the
   email provider that delivers sign-in codes and invitations, under data processing agreements. Ask us at support@staqly.ai for the current list.
+- **Website analytics:** PostHog (EU cloud), for staqly.ai and docs.staqly.ai only (section 3);
+  staqly cloud and the software you run yourself send it nothing.
 - **Payments:** Stripe, once payments are available. Stripe receives your card details
   directly; we never see them.
 - **Services you connect:** when you connect a channel, set up webhooks, alerts or schedule endpoints,
