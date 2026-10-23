@@ -148,7 +148,7 @@ func (s *Server) connectLinkOAuthCallback(w http.ResponseWriter, r *http.Request
 		land(url.Values{"error": {"The connection did not start in this browser; open the link again"}})
 		return
 	}
-	ch, workspace, err := s.svc.CompleteOAuthViaLink(r.Context(), provider, q.Get("code"), q.Get("state"), s.oauthRedirect(provider), oauthExtra(q))
+	ch, workspace, err := s.svc.CompleteOAuthViaLink(r.Context(), provider, oauthCode(q), q.Get("state"), s.oauthRedirect(provider), oauthExtra(q))
 	if err != nil {
 		var ae *app.Error
 		if errors.As(err, &ae) {

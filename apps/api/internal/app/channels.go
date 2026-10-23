@@ -296,7 +296,7 @@ func (s *Service) ConnectChannel(ctx context.Context, p Principal, in ChannelInp
 	name := strings.TrimSpace(in.Name)
 	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
 	defer cancel()
-	creds, profile, err := e.Connect(cctx, fields)
+	creds, profile, err := e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), fields)
 	if err != nil {
 		return Channel{}, connectError(err)
 	}
@@ -675,7 +675,7 @@ func (s *Service) UpdateChannel(ctx context.Context, p Principal, id string, in 
 		}
 		cctx, cancel := context.WithTimeout(ctx, connectTimeout)
 		defer cancel()
-		creds, profile, err := e.Connect(cctx, fields)
+		creds, profile, err := e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), fields)
 		if err != nil {
 			return Channel{}, connectError(err)
 		}
@@ -843,7 +843,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		}
 		profile = providers.Profile{Handle: row.Handle, Name: row.Name}
 	default:
-		_, profile, err = e.Connect(cctx, map[string]string(creds))
+		_, profile, err = e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), map[string]string(creds))
 		if err != nil {
 			s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
 			return map[string]any{"ok": false, "error": err.Error()}, nil
