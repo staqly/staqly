@@ -1,7 +1,8 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ChannelsHealthCard } from '@/components/settings/channels-health-card'
 import { SystemPage } from '@/components/settings/system-page'
 import { api, ApiError, type ProviderCheck } from '@/lib/api'
 import { qk } from '@/lib/queries'
@@ -48,7 +49,10 @@ const routes = {
 }
 
 describe('system page', () => {
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
 
   it.each(['editor', 'viewer'])('shows the platforms read-only to %s', async (role) => {
     mockApi(routes)
@@ -100,8 +104,53 @@ describe('system page', () => {
       within(screen.getByRole('region', { name: 'Platforms' })).getByRole('button', { name: /Checking/ }),
     ).toBeDisabled()
     finish()
-    await waitFor(() => expect(screen.getAllByText('Ready to connect and post')).toHaveLength(2))
+    await waitFor(() => expect(within(screen.getByTestId('platforms-health')).getAllByText('ok')).toHaveLength(2))
     expect(check.mock.calls.map(([id]) => id)).toEqual(['x', 'instagram', 'instagram'])
+  })
+
+  it('refreshes platform results every 15 minutes and stops after leaving the page', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    let recovered = false
+    const { find } = mockApi({
+      ...routes,
+      'POST /v1/providers/instagram/check': () =>
+        recovered ? routes['POST /v1/providers/x/check'] : routes['POST /v1/providers/instagram/check'],
+    })
+    const { unmount } = renderWithProviders(<ChannelsHealthCard />, { mode: 'cloud' })
+    const list = await screen.findByTestId('platforms-health')
+
+    expect(await within(list).findByText('needs attention')).toBeInTheDocument()
+    recovered = true
+    await act(() => vi.advanceTimersByTimeAsync(899_999))
+    expect(find('POST', '/v1/providers/instagram/check')).toHaveLength(1)
+    await act(() => vi.advanceTimersByTimeAsync(1))
+    await waitFor(() => expect(within(list).getAllByText('ok')).toHaveLength(2))
+    expect(find('POST', '/v1/providers/x/check')).toHaveLength(2)
+    expect(find('POST', '/v1/providers/instagram/check')).toHaveLength(2)
+
+    unmount()
+    await act(() => vi.advanceTimersByTimeAsync(900_000))
+    expect(find('POST', '/v1/providers/instagram/check')).toHaveLength(2)
+  })
+
+  it('does not start another batch while an automatic check is still running', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    mockApi(routes)
+    const ready = routes['POST /v1/providers/x/check'] as ProviderCheck
+    let finish!: () => void
+    const pending = new Promise<ProviderCheck>((resolve) => {
+      finish = () => resolve(ready)
+    })
+    const check = vi.spyOn(api, 'checkProvider').mockReturnValueOnce(pending).mockResolvedValue(ready)
+
+    renderWithProviders(<ChannelsHealthCard />, { mode: 'cloud' })
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(1))
+    await act(() => vi.advanceTimersByTimeAsync(900_000))
+    expect(check).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /Checking/ })).toBeDisabled()
+    finish()
+    await waitFor(() => expect(screen.getAllByText('ok')).toHaveLength(2))
+    expect(check).toHaveBeenCalledTimes(2)
   })
 
   it('in the cloud: health and one line per platform set up on the server, no queue or monitoring', async () => {
@@ -119,7 +168,9 @@ describe('system page', () => {
     expect(screen.queryByRole('region', { name: 'Monitoring' })).not.toBeInTheDocument()
 
     // Checked on opening: a ready platform says so in one line, a failing one gives the first thing to fix only.
-    expect(await within(list).findByText('Ready to connect and post')).toBeInTheDocument()
+    expect(await within(list).findByText('ok')).toBeInTheDocument()
+    expect(within(list).queryByText('Ready to connect and post')).not.toBeInTheDocument()
+    expect(within(list).queryByRole('button')).not.toBeInTheDocument()
     expect(await within(list).findByText(/which the internet can't reach/)).toBeInTheDocument()
     expect(within(list).getByText('needs attention')).toBeInTheDocument()
     expect(within(list).queryByText('X accepts the app keys')).not.toBeInTheDocument()

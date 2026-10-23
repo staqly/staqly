@@ -1,7 +1,7 @@
 'use client'
 
 import { CircleCheck, CircleX, LoaderCircle, RefreshCw, Share2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ErrorState } from '@/components/common/error-state'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ async function checkOne(id: string, retry = true): Promise<Outcome> {
     const c: ProviderCheck = await api.checkProvider(id)
     const problem = c.checks.find((x) => !x.ok)
 
-    return problem ? { ok: false, hint: problem.detail } : { ok: true, hint: 'Ready to connect and post' }
+    return problem ? { ok: false, hint: problem.detail } : { ok: true, hint: '' }
   } catch (e) {
     if (retry && e instanceof ApiError && e.status === 429) {
       await new Promise((resolve) => setTimeout(resolve, (e.retryAfter || 1) * 1000))
@@ -64,27 +64,37 @@ export function ChannelsHealthCard() {
   const oauth = (providers.data ?? []).filter((p) => p.auth === 'oauth2' && p.app_configured)
   const ids = oauth.map((p) => p.id).join(',')
 
-  const check = (list: string[]) => {
-    if (canCheck && list.length > 0) {
-      void runChecks(list, setResults, setRunning)
-    }
-  }
-
-  // Checked once when the page opens, like Health; Check now runs it again.
-  const started = useRef(false)
+  const checking = useRef(false)
+  const check = useCallback(
+    (list: string[]) => {
+      if (canCheck && list.length > 0 && !checking.current) {
+        checking.current = true
+        void runChecks(list, setResults, setRunning).then(() => {
+          checking.current = false
+        })
+      }
+    },
+    [canCheck],
+  )
 
   useEffect(() => {
-    if (!started.current && canCheck && ids) {
-      started.current = true
-      void runChecks(ids.split(','), setResults, setRunning)
+    if (!canCheck || !ids) {
+      return
     }
-  }, [canCheck, ids])
+
+    const list = ids.split(',')
+
+    check(list)
+    const timer = setInterval(() => check(list), 15 * 60_000)
+
+    return () => clearInterval(timer)
+  }, [canCheck, check, ids])
 
   return (
     <SettingsCard
       title="Platforms"
       icon={<Share2 />}
-      description="Can people connect and post to each platform? Accounts are checked on the Channels page."
+      description="Can people connect and post? Checked again every 15 minutes."
       action={
         canCheck && oauth.length > 0 ? (
           <Button
@@ -131,9 +141,11 @@ export function ChannelsHealthCard() {
                 <ProviderTile id={p.id} name={p.name} className="size-6 shrink-0" />
                 <span className="min-w-0 flex-1">
                   <span className="block font-medium">{p.name}</span>
-                  <span className="block text-xs text-muted-foreground wrap-anywhere">
-                    {busy ? 'Checking...' : (r?.hint ?? 'Set up on this server')}
-                  </span>
+                  {!busy && !r?.ok && (
+                    <span className="block text-xs text-muted-foreground wrap-anywhere">
+                      {r?.hint ?? 'Set up on this server'}
+                    </span>
+                  )}
                 </span>
                 <span className="shrink-0 font-mono text-xs text-muted-foreground">
                   {busy ? 'checking' : r ? (r.ok ? 'ok' : 'needs attention') : '—'}
