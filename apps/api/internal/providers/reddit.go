@@ -323,7 +323,7 @@ func (Reddit) find(ctx context.Context, token, user, sr, title string, sent time
 
 // flairID finds the subreddit's post flair whose text (or id) is name.
 func (Reddit) flairID(ctx context.Context, token, sr, name string) (string, error) {
-	req, err := redditRequest(ctx, http.MethodGet, redditOAuth+"/r/"+sr+"/api/link_flair_v2?raw_json=1", token, nil)
+	req, err := redditRequest(ctx, http.MethodGet, redditOAuth+"/r/"+url.PathEscape(sr)+"/api/link_flair_v2?raw_json=1", token, nil)
 	if err != nil {
 		return "", err
 	}

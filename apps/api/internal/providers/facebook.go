@@ -402,12 +402,16 @@ func (Facebook) upload(ctx context.Context, token, edge string, m MediaFile) (st
 		defer rc.Close()
 		body = rc
 		if size <= 0 {
-			raw, err := io.ReadAll(rc)
+			raw, err := readMedia(ctx, m, 0)
 			if err != nil {
 				return "", err
 			}
 			body, size = bytes.NewReader(raw), int64(len(raw))
 		}
+	}
+	// The Page token goes to the address Graph answered with: only ever Facebook's own upload host, over https.
+	if !platformHost(start.UploadURL, facebookGraph, "facebook.com") {
+		return "", &Failure{Msg: "Facebook answered with an unexpected upload address; staqly tries again in a few minutes"}
 	}
 	up, err := http.NewRequestWithContext(ctx, http.MethodPost, start.UploadURL, body)
 	if err != nil {

@@ -331,7 +331,7 @@ func connectError(err error) error {
 	if errors.As(err, &e) {
 		return e
 	}
-	return &Error{Code: "connect_failed", Status: 422, Message: "the platform did not accept these details: " + err.Error()}
+	return &Error{Code: "connect_failed", Status: 422, Message: "the platform did not accept these details: " + truncateRunes(err.Error(), 500)}
 }
 
 func firstNonEmpty(v ...string) string {
@@ -836,7 +836,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 			if errors.Is(err, providers.ErrReauth) { // a platform that can't be reached now is no reason to reconnect
 				s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
 			}
-			return map[string]any{"ok": false, "error": err.Error()}, nil
+			return map[string]any{"ok": false, "error": truncateRunes(err.Error(), 500)}, nil
 		}
 		if sealed, err := s.seal(fresh); err == nil {
 			_ = s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID})
@@ -847,7 +847,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		_, profile, err = e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), map[string]string(creds))
 		if err != nil {
 			s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
-			return map[string]any{"ok": false, "error": err.Error()}, nil
+			return map[string]any{"ok": false, "error": truncateRunes(err.Error(), 500)}, nil
 		}
 	}
 	if row.Status == "needs_reconnect" {

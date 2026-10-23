@@ -237,7 +237,7 @@ func (t TikTok) Publish(ctx context.Context, c Credentials, p PostContent, s Set
 
 	size := m.Size
 	var whole []byte
-	if size <= 0 {
+	if size <= 0 { // read whole, up to maxMediaRead
 		if whole, err = readMedia(ctx, m, 0); err != nil {
 			return Result{}, fmt.Errorf("TikTok: %w", err)
 		}

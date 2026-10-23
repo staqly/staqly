@@ -75,6 +75,9 @@ func nostrKey(v string) (*btcec.PrivateKey, error) {
 	return key, nil
 }
 
+// nostrRelayAddress: a relay's address, optionally with a plain path.
+var nostrRelayAddress = regexp.MustCompile(`^wss?://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$`)
+
 // nostrRelays reads the relay list: wss:// addresses (ws:// only for a relay on a private network).
 func nostrRelays(v string) ([]string, error) {
 	if strings.TrimSpace(v) == "" {
@@ -87,7 +90,13 @@ func nostrRelays(v string) ([]string, error) {
 		if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" {
 			return nil, invalid("relays", r+" is not a relay address; relays start with wss://")
 		}
+		if u.Scheme == "ws" && !privateHost(u.Hostname()) {
+			return nil, invalid("relays", r+": use the relay's wss:// address")
+		}
 		s := strings.TrimRight(u.String(), "/")
+		if !nostrRelayAddress.MatchString(s) {
+			return nil, invalid("relays", r+" is not a relay address; relays start with wss://")
+		}
 		if !seen[s] {
 			seen[s] = true
 			out = append(out, s)

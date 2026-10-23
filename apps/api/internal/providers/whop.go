@@ -267,7 +267,7 @@ func whopUpload(ctx context.Context, key string, m MediaFile) (string, error) {
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 	resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", &Failure{Msg: fmt.Sprintf("Whop's file storage refused %s (%d %s); staqly tries again in a few minutes", name, resp.StatusCode, strings.TrimSpace(string(raw)))}
+		return "", &Failure{Msg: fmt.Sprintf("Whop's file storage refused %s (%d %s); staqly tries again in a few minutes", name, resp.StatusCode, blogSnippet(raw))}
 	}
 	for {
 		var st struct {

@@ -10,7 +10,9 @@ import (
 	_ "image/png"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/textproto"
+	"net/url"
 	"strings"
 	"time"
 
@@ -131,21 +133,38 @@ func sizedForm(ctx context.Context, fields [][2]string, files []formFile) (body 
 var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
 
 // readMedia reads a whole file (pictures: a few MB), at most limit bytes when limit > 0.
+// With limit 0 a file over maxMediaRead is refused; with a limit the caller checks len > limit for its own message.
 func readMedia(ctx context.Context, m MediaFile, limit int64) ([]byte, error) {
+	capped := limit <= 0
+	if capped {
+		limit = maxMediaRead
+	}
 	r, err := m.Reader(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %s: %w", m.Name, err)
 	}
 	defer r.Close()
-	var src io.Reader = r
-	if limit > 0 {
-		src = io.LimitReader(r, limit+1)
-	}
-	b, err := io.ReadAll(src)
+	b, err := io.ReadAll(io.LimitReader(r, limit+1))
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %s: %w", m.Name, err)
 	}
+	if capped && int64(len(b)) > limit {
+		return nil, &Failure{Kind: ErrRejected, Msg: m.Name + " is too large to send"}
+	}
 	return b, nil
+}
+
+// maxMediaRead caps a file read whole into memory (a platform that needs its length up front, or the bytes inline).
+// ponytail: whole-file reads, stream with a known size if larger files must go through.
+const maxMediaRead = 256 << 20
+
+// privateHost: a name or address on this machine or a private network, where http:// and ws:// stay off the internet.
+func privateHost(h string) bool {
+	if ip := net.ParseIP(h); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+	}
+	return h == "localhost" || !strings.Contains(h, ".") || strings.HasSuffix(h, ".localhost") || strings.HasSuffix(h, ".local") ||
+		strings.HasSuffix(h, ".internal") || strings.HasSuffix(h, ".lan")
 }
 
 // imageSize reads a picture's width and height from its header (JPEG, PNG, GIF, WebP); ok is false for others.
@@ -155,4 +174,18 @@ func imageSize(b []byte) (w, h int, ok bool) {
 		return 0, 0, false
 	}
 	return cfg.Width, cfg.Height, true
+}
+
+// platformHost: an address a platform answered with (an upload session) that its token may go to: https on the
+// platform's own domain, or the API base itself (tests point it at a local server).
+func platformHost(raw, base, domain string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	if b, err := url.Parse(base); err == nil && u.Scheme == b.Scheme && u.Host == b.Host {
+		return true
+	}
+	h := u.Hostname()
+	return u.Scheme == "https" && (h == domain || strings.HasSuffix(h, "."+domain))
 }

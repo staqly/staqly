@@ -249,7 +249,8 @@ func (YouTube) upload(ctx context.Context, token string, m MediaFile, meta map[s
 		return "", err
 	}
 	session := h.Get("Location")
-	if session == "" {
+	// The token goes with every chunk: only to Google's upload host, over https.
+	if !platformHost(session, youtubeAPI, "googleapis.com") {
 		return "", &Failure{Msg: "YouTube did not start the upload; staqly tries again in a few minutes"}
 	}
 

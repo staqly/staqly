@@ -69,3 +69,22 @@ func TestBlogInstance(t *testing.T) {
 		t.Fatal("ftp accepted")
 	}
 }
+
+// Passwords and tokens never cross the internet in clear: http:// and ws:// only for this machine or a private network.
+func TestPlaintextOnlyOnPrivateHosts(t *testing.T) {
+	for raw, ok := range map[string]bool{"https://blog.example.com": true, "http://blog.example.com": false,
+		"http://localhost:8080": true, "http://192.168.1.5": true, "http://wordpress": true, "http://8.8.8.8": false} {
+		if _, err := blogInstance("url", raw); (err == nil) != ok {
+			t.Errorf("blogInstance(%q): %v", raw, err)
+		}
+		if _, err := fediInstance(raw, "mastodon.social", "instance"); (err == nil) != ok {
+			t.Errorf("fediInstance(%q): %v", raw, err)
+		}
+	}
+	if _, err := nostrRelays("ws://relay.example.com"); err == nil {
+		t.Error("ws:// to a public relay passed")
+	}
+	if _, err := nostrRelays("ws://127.0.0.1:7777, wss://relay.example.com"); err != nil {
+		t.Error(err)
+	}
+}

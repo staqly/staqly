@@ -370,7 +370,10 @@ func (Slack) upload(ctx context.Context, token string, m MediaFile) (string, err
 	var data io.Reader = f
 	size := m.Size
 	if size <= 0 { // Slack needs the exact length up front
-		b, err := io.ReadAll(f)
+		b, err := io.ReadAll(io.LimitReader(f, maxMediaRead+1))
+		if err == nil && int64(len(b)) > maxMediaRead {
+			err = errors.New("too large to send")
+		}
 		if err != nil {
 			return "", fmt.Errorf("Slack: cannot read %s: %w", m.Name, err)
 		}

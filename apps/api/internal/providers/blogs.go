@@ -108,6 +108,9 @@ func blogInstance(field, raw string) (*url.URL, error) {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
 		return nil, invalid(field, "enter the address as https://example.com")
 	}
+	if u.Scheme == "http" && !privateHost(u.Hostname()) {
+		return nil, invalid(field, "use the https:// address: a password or token sent over http:// can be read on the way")
+	}
 	u.User = nil
 	return u, nil
 }

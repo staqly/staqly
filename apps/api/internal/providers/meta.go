@@ -338,7 +338,7 @@ func metaEach(ctx context.Context, g metaGraph, token, path string, q url.Values
 			each(d)
 		}
 		next, err := url.Parse(out.Paging.Next)
-		if out.Paging.Next == "" || err != nil || host == nil || next.Host != host.Host || i >= 20 {
+		if out.Paging.Next == "" || err != nil || host == nil || next.Host != host.Host || next.Scheme != host.Scheme || i >= 20 {
 			return nil
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, next.String(), nil)

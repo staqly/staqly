@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -75,8 +76,18 @@ func fediInstance(raw, def, field string) (string, error) {
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return "", invalid(field, "enter the server's address, for example "+def)
 	}
-	return u.Scheme + "://" + u.Host, nil
+	if u.Scheme == "http" && !privateHost(u.Hostname()) {
+		return "", invalid(field, "use the server's https:// address: a password or token sent over http:// can be read on the way")
+	}
+	base := u.Scheme + "://" + u.Host
+	if !serverAddress.MatchString(base) {
+		return "", invalid(field, "enter the server's address, for example "+def)
+	}
+	return base, nil
 }
+
+// serverAddress: a scheme and a host name or address with an optional port, nothing else.
+var serverAddress = regexp.MustCompile(`^https?://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?$`)
 
 // fediKey is a stable key for one publish of one post (or one reply) to one channel: the same on every retry.
 func fediKey(parts ...string) string {
