@@ -145,6 +145,7 @@ it by hand (e2e/README.md). Every workflow step runs a command that works the sa
   recorded as applied by `store.baselineSquash`). From the first release on, never
   edit a released migration — add `0000N_<name>.sql` (goose) instead, or existing
   installs will diverge.
-* Node: the current LTS, pinned once in `.nvmrc` (CI) and the `node:<major>`
-  base image in the root `Dockerfile` (dashboard build stage); bump them
-  together when a new LTS lands.
+* Node: the current LTS, pinned to a patched release in `.nvmrc` (CI), the root
+  `Dockerfile` (dashboard build stage) and `compose.e2e.yml` (test receiver).
+  Update these pins together, including security patches, and keep the private
+  packages' `engines.node` minimum aligned. Bump the major when a new LTS lands.

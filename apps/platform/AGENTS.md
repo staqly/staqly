@@ -13,7 +13,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 Next.js 16 (App Router, React Compiler, `output: "export"`), React 19,
 TypeScript 7 (native `tsc`), Tailwind v4, shadcn/ui, TanStack Query (all server
 state), React Hook Form + Zod, lucide-react, next-themes, Vitest + Testing
-Library, oxlint + oxfmt. Node 24 LTS (build only, Docker `node:24-alpine`, `@types/node` 24).
+Library, oxlint + oxfmt. Node 24 LTS (build only, Docker matches root `.nvmrc`, `@types/node` 24).
 
 ## Commands
 
