@@ -91,7 +91,7 @@ export class Channels extends APIResource {
 
   /**
    * Begins connecting an OAuth platform: returns the URL to open in a browser signed in to the
-   * platform. `instance` is the server for platforms with many (Mastodon). The browser lands on
+   * platform. `instance` is the server for OAuth platforms with many servers. The browser lands on
    * the dashboard when done.
    */
   async oauthStart(provider: string, params: { instance?: string } = {}, options?: RequestOptions): Promise<string> {

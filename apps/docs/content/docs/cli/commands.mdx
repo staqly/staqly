@@ -221,7 +221,7 @@ staqly channels links revoke chl_123       # channels already connected through 
 | `--setting` | `key=value` | No | A provider-level default for new targets, repeatable |
 | `--enable`, `--disable` | boolean | No | `update` only: turn the channel on or off |
 | `--group` | string | No | A channel group by name or ID. `list`: only that group. `connect`: put the channel there. `update`: move it there |
-| `--instance` | string | No | `connect`: for platforms with many servers (Mastodon), the server's URL or host |
+| `--instance` | string | No | `connect`: for OAuth platforms with many servers, the server's URL or host |
 | `--client-id`, `--client-secret` | string | No | `app`: the workspace's own OAuth developer app, used instead of the server's `PROVIDER_<ID>_CLIENT_ID` / `_CLIENT_SECRET`; `--client-secret -` reads stdin. See [Developer apps](/channels/developer-apps) |
 
 Managing channels needs `channels:manage`; listing them `channels:read`. See

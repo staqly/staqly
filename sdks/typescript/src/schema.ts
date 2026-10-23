@@ -2052,7 +2052,7 @@ export interface paths {
          * Begin connecting an OAuth platform (channels:manage)
          * @description Answers the platform's authorization URL to send the browser to. The state is signed and
          *     bound to this browser with a short-lived cookie. Other query parameters are passed to the
-         *     provider (`instance` for a Mastodon-style platform, say). The platform sends the browser back
+         *     provider (`instance` for an OAuth platform with many servers, say). The platform sends the browser back
          *     to the dashboard's `/channels/callback/{provider}` page, which hands the answer to the callback below.
          */
         get: operations["startChannelOAuth"];
@@ -9425,7 +9425,7 @@ export interface operations {
     startChannelOAuth: {
         parameters: {
             query?: {
-                /** @description Platforms with many servers (Mastodon): the server's URL or host */
+                /** @description OAuth platforms with many servers: the server's URL or host */
                 instance?: string;
             };
             header?: never;
