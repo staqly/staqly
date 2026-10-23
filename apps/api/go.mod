@@ -3,6 +3,8 @@ module github.com/staqly/staqly/apps/api
 go 1.27.3
 
 require (
+	github.com/btcsuite/btcd/btcec/v2 v2.5.1
+	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/getsentry/sentry-go v0.50.0
 	github.com/go-chi/chi/v5 v5.5.0
@@ -18,6 +20,7 @@ require (
 	github.com/riverqueue/river/riverdriver/riversqlite v0.49.0
 	github.com/riverqueue/river/rivertype v0.49.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
+	github.com/yuin/goldmark v1.8.2
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/image v0.47.0
 	golang.org/x/oauth2 v0.37.0
@@ -27,7 +30,10 @@ require (
 )
 
 require (
+	github.com/btcsuite/btcd/chainhash/v2 v2.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.4 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect

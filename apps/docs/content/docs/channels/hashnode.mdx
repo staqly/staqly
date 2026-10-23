@@ -1,0 +1,53 @@
+---
+title: Hashnode
+description: Publish articles to a Hashnode blog with a personal access token, with tags, a subtitle, a cover picture and an original link.
+---
+
+Staqly publishes **articles** to a [Hashnode](https://hashnode.com) blog through Hashnode's
+GraphQL API, signed in with a **personal access token**. The post's text is the article in
+Markdown and its **Title** setting the headline. A published target links to the article on the
+blog.
+
+## Connect the blog
+
+1. On hashnode.com, open **Account settings → Developer** and click **Generate new token**.
+2. In staqly: **Channels → Add channel → Hashnode**, paste it as **Personal access token**.
+3. **Blog**: leave it empty when the account has one blog. With several, enter the blog's address
+   (`blog.example.com` or `janedoe.hashnode.dev`) or its id; staqly lists the account's blogs when
+   it needs you to choose. Connect once per blog to publish to several.
+
+The channel shows the blog's name and address.
+
+## Limits
+
+| | |
+|---|---|
+| Text | no limit; Markdown |
+| Media | one picture, used as the article's **cover** |
+| Title | required |
+
+Hashnode takes no uploads: it downloads the cover from a link. Staqly hands it a time-limited link
+to the file in [S3-compatible storage](/self-hosting/storage), so on a server that keeps media on
+its own disk a post with a picture fails and says why (publish it without the picture, or store
+media in the cloud).
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The article's headline (required) |
+| **Subtitle** (`subtitle`) | Shown under the title, up to 150 characters |
+| **Tags** (`tags`) | Up to 5 tags, by name: `Web Development` is the tag `web-development` |
+| **Original link** (`canonical_url`) | Where the article first appeared, so search engines credit it |
+
+## When publishing fails
+
+| Hashnode says | Staqly does |
+|---|---|
+| The token was revoked or is invalid | Marks the channel **Needs reconnect**; generate a new token and reconnect |
+| Rate limit, Hashnode unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused article (no permission on the blog, a tag it doesn't take) | Fails the target with Hashnode's reason |
+
+Hashnode has no way to ask "did this article go out?", and a new attempt would make a second one.
+So when staqly sent the article but its answer never came, the target fails with "may have
+published" instead of trying again: check your blog before you post it again.
