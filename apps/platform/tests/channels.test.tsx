@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
+import { ConnectForm } from '@/components/channels/add-channel-sheet'
 import { ChannelsPage } from '@/components/channels/channels-page'
 
 import { channel, group, provider } from './fixtures'
@@ -270,5 +271,21 @@ describe('channels', () => {
     expect(confirm).toHaveTextContent('Its 1 channel move to Default')
     await user.click(within(confirm).getByRole('button', { name: 'Delete group' }))
     await waitFor(() => expect(api.find('DELETE', '/v1/channel-groups/grp_a')).toHaveLength(1))
+  })
+
+  it('Connect with a platform shows a spinner and stays disabled until the browser leaves for the platform', async () => {
+    const api = mockApi({ 'GET /v1/channels/oauth/mastodon/start': { url: 'https://mastodon.example/authorize' } })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ConnectForm provider={provider()} reconnect={null} onDone={() => {}} />, { mode: 'local' })
+    await user.click(screen.getByRole('button', { name: 'Connect with Mastodon' }))
+    const button = await screen.findByRole('button', { name: 'Opening Mastodon...' })
+
+    expect(button).toBeDisabled()
+    // The request is done and the page is navigating away: still busy, so a second click can't start another.
+    await waitFor(() => expect(api.find('GET', '/v1/channels/oauth/mastodon/start')).toHaveLength(1))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('Opening Mastodon...')
   })
 })
