@@ -80,6 +80,8 @@ describe('welcome wizard', () => {
     expect(api.find('POST', '/v1/api-keys')).toHaveLength(1)
     expect(screen.getByText('1 invitation sent')).toBeInTheDocument()
     expect(screen.getAllByText(/stk_agent_secret/).length).toBeGreaterThan(0)
+    // The last step ends the wizard itself: nothing left to skip.
+    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Go to the calendar/ }))
     await waitFor(() => expect(api.find('POST', '/v1/session/onboarded')).toHaveLength(1))
