@@ -72,4 +72,4 @@ minimumReleaseAgeExclude:
 # preview, with no option to change it; the docs never show that character, so the patch makes it "...".
 # Re-check (and drop or redo with `pnpm patch`) when bumping fumadocs-openapi.
 patchedDependencies:
-  fumadocs-openapi@12.4.2: apps/docs/patches/fumadocs-openapi@12.4.2.patch
+  fumadocs-openapi@12.5.3: apps/docs/patches/fumadocs-openapi@12.5.3.patch
