@@ -751,6 +751,11 @@ func (s *Server) deleteProviderApp(w http.ResponseWriter, r *http.Request) {
 	respondEmpty(w, r, s.svc.DeleteProviderApp(r.Context(), principal(r), chi.URLParam(r, "id")))
 }
 
+func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.CheckProvider(r.Context(), principal(r), chi.URLParam(r, "id"))
+	respond(w, r, 200, out, err)
+}
+
 func (s *Server) listChannels(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	out, err := s.svc.ListChannels(r.Context(), principal(r), app.ChannelFilter{Group: q.Get("group")})
