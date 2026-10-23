@@ -16,7 +16,7 @@ type MarkProps = {
 }
 
 /**
- * Staqly mark: the isometric "S" folded from three stacked layers (assets/brand). The light colourway deepens
+ * Staqly mark: the isometric "S" folded from three stacked layers. The light colourway deepens
  * the lime top so it holds up on white. <img> keeps each copy's gradients self-contained (inline SVG gradient
  * ids clash between copies).
  */

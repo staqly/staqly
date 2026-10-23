@@ -1,7 +1,7 @@
 /*
  * staqly brand tokens, shared by the dashboard, the docs and the landing page. Import after `tailwindcss`.
  *
- * One green accent taken from the logo (assets/brand). Light mode uses a deep green for text, links and filled
+ * One green accent taken from the logo. Light mode uses a deep green for text, links and filled
  * buttons (AA on white); dark mode (`.dark` on <html>) uses the bright logo green with dark text on it.
  * --brand-gradient is the logo's lime -> green ramp for highlights; it always takes dark text.
  * The graphite neutrals (--background, --foreground, --card, --muted, --border...) stay in each app: the
