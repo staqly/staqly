@@ -96,7 +96,7 @@ func TestChannelsTokenProvider(t *testing.T) {
 	}
 	if byID["custom"].Status != "available" || byID["custom"].Auth != "none" || byID["faketoken"].Auth != "token" ||
 		len(byID["faketoken"].CredentialFields) != 1 || byID["faketoken"].CredentialFields[0].Placeholder != "123:abc" ||
-		byID["faketoken"].Limits.MaxChars != 20 || byID["bluesky"].Status != "soon" || !strings.HasPrefix(byID["faketoken"].DocsURL, "https://docs.staqly.ai/channels/") {
+		byID["faketoken"].Limits.MaxChars != 20 || byID["farcaster"].Status != "soon" || !strings.HasPrefix(byID["faketoken"].DocsURL, "https://docs.staqly.ai/channels/") {
 		t.Fatalf("providers: %+v", byID)
 	}
 
@@ -111,7 +111,7 @@ func TestChannelsTokenProvider(t *testing.T) {
 	if !strings.Contains(errBody.Error.Message+errBody.Error.Fields["fields"], "refused") {
 		t.Fatalf("refused token: %+v", errBody.Error)
 	}
-	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "bluesky", "fields": map[string]string{"token": "x"}}, 409, nil) // soon
+	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "farcaster", "fields": map[string]string{"token": "x"}}, 409, nil) // soon
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "nope"}, 422, nil)
 	var ch app.Channel
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "faketoken", "fields": map[string]string{"token": "good"}}, 201, &ch)
