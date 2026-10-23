@@ -17,7 +17,7 @@
     "format:check": "oxfmt --check"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.9.1",
+    "@hookform/resolvers": "^6.0.0",
     "@staqly/brand": "workspace:*",
     "@tanstack/react-query": "^5.104.2",
     "@tiptap/core": "3.31.4",
