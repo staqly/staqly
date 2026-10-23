@@ -6,7 +6,8 @@ updates:
     schedule: { interval: monthly }
     groups: { go: { patterns: ["*"] } }
   - package-ecosystem: npm
-    directories: ["/apps/platform", "/apps/docs", "/apps/web", "/sdks/typescript"]
+    # pnpm workspaces share the lockfile at the repository root.
+    directory: /
     schedule: { interval: monthly }
     groups: { npm: { patterns: ["*"], update-types: [minor, patch] } }
     ignore:
