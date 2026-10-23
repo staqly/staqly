@@ -33,7 +33,7 @@
     "fflate": "^0.8.3",
     "framer-motion": "^14.4.0",
     "geist": "^1.8.1",
-    "immer": "^11.1.21",
+    "immer": "^11.2.3",
     "localforage": "^1.10.0",
     "lucide-react": "^1.60.0",
     "next": "16.4.2",
