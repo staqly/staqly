@@ -201,7 +201,7 @@ function PromotionCodeField({
                 Cancel
               </Button>
               <Button type="submit" disabled={check.isPending || !!error}>
-                {check.isPending ? 'Checking…' : 'Apply'}
+                {check.isPending ? 'Checking...' : 'Apply'}
               </Button>
             </DialogFooter>
           </form>
