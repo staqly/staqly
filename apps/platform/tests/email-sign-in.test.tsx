@@ -145,7 +145,7 @@ describe('sign-in methods', () => {
 
     const list = await screen.findByTestId('sign-in-methods')
 
-    expect(within(list).getByRole('button', { name: 'Remove' })).toBeDisabled()
+    expect(within(list).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
     expect(screen.queryByTestId('change-email')).not.toBeInTheDocument()
 
     await user.click(await screen.findByRole('button', { name: /add email address/i }))

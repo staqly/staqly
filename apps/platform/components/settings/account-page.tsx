@@ -76,48 +76,50 @@ function ProfileCard() {
 
   return (
     <Card title="Profile" icon={<UserRound />} description={`You sign in as ${user.email}.`}>
-      <div role="group" aria-labelledby="profile-picture-label" className="grid gap-2">
-        <span id="profile-picture-label" className="text-sm font-medium">
-          Picture
-        </span>
-        <ImagePicker
-          label="picture"
-          value={user.avatar_url}
-          fallback={<UserAvatar name={user.name} className="size-12" />}
-          pending={picture.isPending}
-          onChange={(v) => picture.mutate(v)}
-          hint="Optional. Shown to the members of your workspaces; without one, your Google picture or your initials."
-        />
-      </div>
-      <form
-        className="grid gap-3"
-        onSubmit={(e) => {
-          e.preventDefault()
+      <div className="grid gap-6">
+        <div role="group" aria-labelledby="profile-picture-label" className="grid gap-2">
+          <span id="profile-picture-label" className="text-sm font-medium">
+            Picture
+          </span>
+          <ImagePicker
+            label="picture"
+            value={user.avatar_url}
+            fallback={<UserAvatar name={user.name} className="size-12" />}
+            pending={picture.isPending}
+            onChange={(v) => picture.mutate(v)}
+            hint="Optional. Shown to the members of your workspaces; without one, your Google picture or your initials."
+          />
+        </div>
+        <form
+          className="grid gap-3"
+          onSubmit={(e) => {
+            e.preventDefault()
 
-          if (value.trim()) {
-            rename.mutate(value.trim())
-          }
-        }}
-      >
-        <Field>
-          <FieldLabel htmlFor="profile-name" required>
-            Name
-          </FieldLabel>
-          <div className="flex gap-2">
-            <Input
-              id="profile-name"
-              className="min-w-0 sm:max-w-sm"
-              maxLength={100}
-              aria-required
-              value={value}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <Button type="submit" disabled={rename.isPending || !value.trim() || value === user.name}>
-              Save
-            </Button>
-          </div>
-        </Field>
-      </form>
+            if (value.trim()) {
+              rename.mutate(value.trim())
+            }
+          }}
+        >
+          <Field>
+            <FieldLabel htmlFor="profile-name" required>
+              Name
+            </FieldLabel>
+            <div className="flex gap-2">
+              <Input
+                id="profile-name"
+                className="min-w-0 sm:max-w-sm"
+                maxLength={100}
+                aria-required
+                value={value}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <Button type="submit" disabled={rename.isPending || !value.trim() || value === user.name}>
+                Save
+              </Button>
+            </div>
+          </Field>
+        </form>
+      </div>
     </Card>
   )
 }

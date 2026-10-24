@@ -70,11 +70,16 @@ export default function WorkspaceCard() {
   return (
     <Card title="Workspace" icon={<SettingsIcon />}>
       <form
-        className="grid gap-3"
+        className="grid gap-4"
         onSubmit={form.handleSubmit((v) => save.mutate({ name: v.name.trim(), timezone: v.timezone }))}
         noValidate
       >
-        <div role="group" aria-labelledby="ws-logo-label" className="grid gap-2">
+        {ws && (
+          <div className="text-xs text-muted-foreground">
+            <IdChip id={ws.id} label="workspace" /> · created {formatDateTime(ws.created_at)}
+          </div>
+        )}
+        <div role="group" aria-labelledby="ws-logo-label" className="mb-2 grid gap-2">
           <span id="ws-logo-label" className="text-sm font-medium">
             Logo
           </span>
@@ -125,11 +130,6 @@ export default function WorkspaceCard() {
             {save.isPending ? 'Saving...' : 'Save'}
           </Button>
         </div>
-        {ws && (
-          <div className="text-xs text-muted-foreground">
-            <IdChip id={ws.id} label="workspace" /> · created {formatDateTime(ws.created_at)}
-          </div>
-        )}
       </form>
     </Card>
   )

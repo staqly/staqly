@@ -31,14 +31,14 @@ describe('workspace logo', () => {
     nav.set('/settings')
     renderWithProviders(<WorkspaceCard />, { client })
     expect(await screen.findByRole('button', { name: 'Upload logo' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove logo' })).not.toBeInTheDocument()
 
     await user.upload(fileInput(), file())
     await waitFor(() => expect(api.find('PATCH', '/v1/workspace').map((c) => c.body)).toEqual([{ logo: PNG }]))
     expect(await screen.findByRole('button', { name: 'Replace logo' })).toBeInTheDocument()
     expect(client.getQueryData<{ workspace: { logo: string } }>(qk.session)?.workspace.logo).toBe(PNG)
 
-    await user.click(screen.getByRole('button', { name: 'Remove' }))
+    await user.click(screen.getByRole('button', { name: 'Remove logo' }))
     await waitFor(() => expect(api.find('PATCH', '/v1/workspace').at(-1)?.body).toEqual({ logo: '' }))
     expect(await screen.findByRole('button', { name: 'Upload logo' })).toBeInTheDocument()
   })

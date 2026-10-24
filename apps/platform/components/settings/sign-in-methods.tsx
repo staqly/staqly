@@ -162,16 +162,12 @@ export function SignInMethodsCard() {
                   Rename
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-
-                disabled={only || remove.isPending}
-                title={only ? 'Add another way to sign in first' : undefined}
-                onClick={() => setRemoving(m)}
-              >
-                Remove
-              </Button>
+              {/* The only way to sign in can't be removed: no button until there is another. */}
+              {!only && (
+                <Button variant="ghost" size="sm" disabled={remove.isPending} onClick={() => setRemoving(m)}>
+                  Remove
+                </Button>
+              )}
             </li>
           ))}
         </ul>

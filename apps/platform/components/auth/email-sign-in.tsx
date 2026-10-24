@@ -295,7 +295,7 @@ export function EmailCodeForm({
                 <div
                   key={i}
                   className={cn(
-                    'flex items-center justify-center rounded-lg border bg-background font-mono font-semibold tabular-nums shadow-xs transition-colors',
+                    'flex items-center justify-center rounded-lg border border-input bg-transparent font-mono font-semibold tabular-nums shadow-xs transition-colors dark:bg-input/30',
                     compact ? 'h-10 text-lg' : 'h-14 text-2xl',
                     error && 'border-destructive',
                     focused && i === Math.min(code.length, 5) && 'border-brand ring-3 ring-brand/25',
@@ -311,7 +311,7 @@ export function EmailCodeForm({
               inputMode="numeric"
               autoComplete="one-time-code"
               pattern="[0-9]*"
-              className="absolute inset-0 h-full rounded-lg border-0 bg-transparent text-transparent caret-transparent shadow-none outline-none selection:bg-transparent focus-visible:border-0 focus-visible:ring-0 aria-invalid:ring-0 dark:bg-transparent"
+              className="absolute inset-0 h-full rounded-lg border-0 bg-transparent text-transparent caret-transparent shadow-none outline-none selection:bg-transparent focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 aria-invalid:ring-0 dark:bg-transparent"
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               value={code}
