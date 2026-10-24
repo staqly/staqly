@@ -78,7 +78,7 @@ func (s *Service) CheckProvider(ctx context.Context, p Principal, providerID str
 	ret := SetupCheck{Key: "return_address", Label: "Return address", OK: true, Detail: redirect}
 	if u, err := url.Parse(redirect); err != nil || (needs.HTTPS && u.Scheme != "https") {
 		ret.OK = false
-		ret.Detail = e.Name() + " sends people back over https only, and this server's address is " + s.WebURL()
+		ret.Detail = e.Name() + " only sends people back to an https address, and this server runs at " + s.WebURL() + ". Serve it over https (your own domain or a tunnel) to connect " + e.Name() + "."
 	}
 	add(ret)
 

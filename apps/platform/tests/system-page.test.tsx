@@ -170,9 +170,15 @@ describe('system page', () => {
     // Checked on opening: a ready platform says so in one line, a failing one gives the first thing to fix only.
     expect(await within(list).findByText('ok')).toBeInTheDocument()
     expect(within(list).queryByText('Ready to connect and post')).not.toBeInTheDocument()
-    expect(within(list).queryByRole('button')).not.toBeInTheDocument()
-    expect(await within(list).findByText(/which the internet can't reach/)).toBeInTheDocument()
+    // The line says it in plain words; the server's explanation is in the (?) tooltip.
+    expect(
+      await within(list).findByText('Instagram needs media storage it can reach to post pictures and videos'),
+    ).toBeInTheDocument()
     expect(within(list).getByText('needs attention')).toBeInTheDocument()
+    const why = within(list).getByRole('button', { name: 'Why Instagram needs attention' })
+
+    await user.hover(why)
+    expect((await screen.findAllByText(/which the internet can't reach/)).length).toBeGreaterThan(0)
     expect(within(list).queryByText('X accepts the app keys')).not.toBeInTheDocument()
     expect(within(list).queryByText('https://app.example/channels/callback/x')).not.toBeInTheDocument()
 
