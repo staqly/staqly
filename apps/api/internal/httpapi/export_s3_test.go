@@ -176,6 +176,7 @@ func TestWorkspaceExportS3RetriesExpiredDeletion(t *testing.T) {
 		t.Fatal("expected the failed deletion to leave the object")
 	}
 	store.unavailable = false
+	e.svc.Now = func() time.Time { return time.Now().Add(27 * time.Hour) } // the bucket is swept hourly
 	e.svc.ProcessExports(context.Background())
 	if len(backupKeys(fake)) != 0 {
 		t.Fatal("expired object deletion was not retried")
@@ -206,6 +207,7 @@ func TestWorkspaceExportS3PurgeRevokesBeforeDeletion(t *testing.T) {
 		t.Fatal("expected failed deletion to leave an inaccessible object")
 	}
 	store.unavailable = false
+	e.svc.Now = func() time.Time { return time.Now().Add(2 * time.Hour) } // the bucket is swept hourly
 	e.svc.ProcessExports(context.Background())
 	if len(backupKeys(fake)) != 0 {
 		t.Fatal("purged export deletion was not retried")
@@ -254,5 +256,37 @@ func TestWorkspaceExportS3CleanupContinuesAfterDeleteFailure(t *testing.T) {
 	e.svc.ProcessExports(context.Background())
 	if len(fake.Get("media", first)) == 0 || len(fake.Get("media", second)) != 0 {
 		t.Fatal("one failed deletion must not block cleanup of other backup objects")
+	}
+}
+
+type countingWalks struct {
+	blob.Store
+	walks *int
+}
+
+func (c countingWalks) Walk(ctx context.Context, prefix string, fn func(string, int64) error) error {
+	*c.walks++
+	return c.Store.Walk(ctx, prefix, fn)
+}
+
+// The export worker runs every minute; looking for orphan archives lists every workspace's files in the
+// bucket (media included), so it does that at most once an hour, not on every run.
+func TestWorkspaceExportS3OrphanSweepIsHourly(t *testing.T) {
+	e := newEnv(t)
+	withDataDir(e)
+	useBackupS3(t, e)
+	walks := 0
+	e.svc.Cfg.Blob = countingWalks{e.svc.Cfg.Blob, &walks}
+	ctx := context.Background()
+	for range 3 {
+		e.svc.ProcessExports(ctx)
+	}
+	if walks != 1 {
+		t.Fatalf("bucket listed %d times in three runs a moment apart, want 1", walks)
+	}
+	e.svc.Now = func() time.Time { return time.Now().Add(61 * time.Minute) }
+	e.svc.ProcessExports(ctx)
+	if walks != 2 {
+		t.Fatalf("bucket listed %d times after an hour, want 2", walks)
 	}
 }
