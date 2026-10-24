@@ -22,16 +22,19 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { api, ApiError, type BillingInterval, type Plan, type PromotionCode } from '@/lib/api'
+import { api, ApiError, type BillingInterval, type PendingPayment, type Plan, type PromotionCode } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { LIVE_SUBSCRIPTION } from '@/lib/plans'
 import { qk, useBilling, useBillingDetails, useMode, usePlans, useRole, useUsage } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
+export const PAYMENT_FAILED = '/plans/payment-failed'
+
 /** Pay for a plan (Stripe Checkout, or a switch of the live subscription) and open the billing portal. */
 export function usePlanActions() {
   const qc = useQueryClient()
+  const router = useRouter()
   const checkout = useMutation({
     mutationFn: ({
       plan,
@@ -48,7 +51,17 @@ export function usePlanActions() {
       void qc.invalidateQueries({ queryKey: qk.billing })
       window.location.assign(url)
     },
-    onError: (e) => toastApiError(e),
+    onError: (e) => {
+      // A switch charged at once (leaving the trial) that wasn't paid: the payment page says why and what to do.
+      if (e instanceof ApiError && e.code === 'payment_failed') {
+        qc.setQueryData<PendingPayment>(qk.pendingPayment, { ...e.details, pending: true })
+        router.push(PAYMENT_FAILED)
+
+        return
+      }
+
+      toastApiError(e)
+    },
   })
   const portal = useMutation({
     mutationFn: () => api.billingPortal(),

@@ -58,8 +58,19 @@ The compare page on staqly.ai lists the same limits side by side.
 4. Choose a plan any time: **Settings → Plan & usage → Choose a plan**, the user menu, or
    `POST /v1/billing/checkout` with the plan and interval.
    - Leaving the trial for another plan ends the trial at once: the new plan is charged right away and
-     starts when the payment goes through. If the card fails, nothing changes (the trial keeps running)
-     and the plan page says so.
+     starts when the payment goes through. If it doesn't, nothing changes (the trial keeps running) and
+     the dashboard opens a payment page that says why, with the next step on Stripe's own pages:
+     - **Your bank asks you to confirm the payment** (3-D Secure, common for European cards): **Confirm
+       the payment** opens Stripe's invoice page in a new tab, where you confirm it with your bank and pay.
+       Come back to the dashboard tab and the new plan shows once Stripe has the payment.
+     - **The card was declined** (for example not enough funds, or an expired card): **Update your card**
+       opens the billing portal; then choose the plan again. You can also pay on Stripe's invoice page with
+       another card.
+
+     Card details and confirmations never go through staqly. Over the API, `POST /v1/billing/checkout`
+     answers `402 payment_failed` with `details.reason` (`authentication_required`, `card_declined`,
+     `insufficient_funds`, ...) and `details.pay_url` (Stripe's invoice page), and
+     `GET /v1/billing/pending-payment` reads the same later.
    - **Promotion codes:** Stripe Checkout has its own code box for a first plan. To switch plans with a
      code, or apply one to the plan you have, use **Have a promotion code?** on the plan page (or send
      `promotion_code` to `POST /v1/billing/checkout`). The code is checked with Stripe before it is applied
