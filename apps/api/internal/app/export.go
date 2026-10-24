@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/staqly/staqly/apps/api/internal/blob"
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/logctx"
 )
@@ -176,13 +177,31 @@ func toWorkspaceExport(x db.WorkspaceExport) WorkspaceExport {
 	return out
 }
 
-// ExportDir is where finished ZIPs live (DATA_DIR/exports).
+// ExportDir holds local ZIPs and stages cloud ZIPs before uploading them to private storage.
 func (s *Service) ExportDir() string {
 	return filepath.Join(s.Env("DATA_DIR", "./data"), "exports")
 }
 
 // export IDs are server-generated (exp_[a-z2-7]+), so the path is safe.
 func (s *Service) exportPath(id string) string { return filepath.Join(s.ExportDir(), id+".zip") }
+
+func (s *Service) exportsOnS3() bool {
+	return s.Cfg.Mode == ModeCloud && s.Cfg.Blob.Name() == "s3"
+}
+
+func (s *Service) exportStore() blob.Store {
+	if s.exportsOnS3() {
+		return s.Cfg.Blob
+	}
+	return blob.NewDisk(s.ExportDir())
+}
+
+func (s *Service) exportKey(workspaceID, id string) string {
+	if s.exportsOnS3() {
+		return workspaceKey(workspaceID) + "backups/" + id + ".zip"
+	}
+	return id + ".zip"
+}
 
 var exportWakers sync.Map // *Service -> chan struct{}
 
@@ -274,7 +293,7 @@ func (s *Service) ListWorkspaceExports(ctx context.Context, p Principal) ([]Work
 }
 
 // OpenWorkspaceExport returns the finished ZIP for download.
-func (s *Service) OpenWorkspaceExport(ctx context.Context, p Principal, id string) (*os.File, WorkspaceExport, error) {
+func (s *Service) OpenWorkspaceExport(ctx context.Context, p Principal, id string) (io.ReadSeekCloser, WorkspaceExport, error) {
 	x, err := s.GetWorkspaceExport(ctx, p, id)
 	if err != nil {
 		return nil, x, err
@@ -285,7 +304,11 @@ func (s *Service) OpenWorkspaceExport(ctx context.Context, p Principal, id strin
 	case x.Status != "ready":
 		return nil, x, conflict("export is " + x.Status)
 	}
-	f, err := os.Open(s.exportPath(x.ID)) // the stored id, not the request's
+	f, err := s.exportStore().Open(ctx, s.exportKey(p.WorkspaceID, x.ID)) // the stored id, not the request's
+	if s.exportsOnS3() && errors.Is(err, blob.ErrNotExist) {
+		// ZIPs made before S3 was enabled remain downloadable until their normal expiry.
+		f, err = os.Open(s.exportPath(x.ID))
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, x, &Error{Code: "gone", Status: 410, Message: "this export is no longer available; request a new one"}
 	}
@@ -347,6 +370,15 @@ func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport) {
 	p := Principal{WorkspaceID: j.WorkspaceID, Kind: j.ActorType, ID: j.ActorID, Name: j.ActorName}
 	final := s.exportPath(j.ID)
 	size, err := s.writeExportZip(ctx, j.WorkspaceID, final, j.IncludesMedia != 0)
+	if err == nil && s.exportsOnS3() {
+		var f *os.File
+		f, err = os.Open(final)
+		if err == nil {
+			err = s.Cfg.Blob.Put(ctx, s.exportKey(j.WorkspaceID, j.ID), f, size, "application/zip")
+			f.Close()
+		}
+		os.Remove(final)
+	}
 	now := s.Now().UTC()
 	status, msg := "ready", ""
 	if err != nil {
@@ -363,7 +395,7 @@ func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport) {
 	if n == 0 {
 		// Expired by a purge or the workspace was deleted mid-build: the ZIP
 		// may contain erased data, so it must not survive.
-		s.removeExportFile(j.ID)
+		s.removeExportFile(ctx, j.WorkspaceID, j.ID)
 		return
 	}
 	if err == nil {
@@ -379,9 +411,9 @@ func (s *Service) expireExports(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	for _, id := range ids {
-		s.removeExportFile(id)
-		_ = s.W.MarkWorkspaceExportExpired(ctx, id)
+	for _, row := range ids {
+		s.removeExportFile(ctx, row.WorkspaceID, row.ID)
+		_ = s.W.MarkWorkspaceExportExpired(ctx, row.ID)
 	}
 	s.sweepExportFiles(ctx)
 }
@@ -389,29 +421,62 @@ func (s *Service) expireExports(ctx context.Context) {
 // sweepExportFiles removes ZIPs that no ready/running export row accounts
 // for (deleted workspace, crash between file write and bookkeeping, ...).
 func (s *Service) sweepExportFiles(ctx context.Context) {
-	entries, err := os.ReadDir(s.ExportDir())
-	if err != nil {
-		return
+	stores := []blob.Store{blob.NewDisk(s.ExportDir())}
+	if s.exportsOnS3() {
+		stores = append(stores, s.Cfg.Blob)
 	}
-	for _, e := range entries {
-		id, ok := strings.CutSuffix(e.Name(), ".zip")
-		if e.IsDir() || !ok || !strings.HasPrefix(id, "exp_") {
-			continue
+	for _, store := range stores {
+		prefix := "exp_"
+		if store.Name() == "s3" {
+			prefix = "workspaces/"
 		}
-		st, err := s.Q.ExportStatusByID(ctx, id)
-		if err == nil && (st == "ready" || st == "running") {
-			continue
+		err := store.Walk(ctx, prefix, func(key string, _ int64) error {
+			name, wsID := key, ""
+			if store.Name() == "s3" {
+				parts := strings.Split(key, "/")
+				if len(parts) != 4 || parts[0] != "workspaces" || parts[1] == "" || parts[2] != "backups" {
+					return nil
+				}
+				wsID, name = parts[1], parts[3]
+			}
+			id, ok := strings.CutSuffix(name, ".zip")
+			if !ok || !strings.HasPrefix(id, "exp_") || strings.ContainsAny(id, "/\\") {
+				return nil
+			}
+			var status string
+			var err error
+			if wsID == "" {
+				status, err = s.Q.ExportStatusByID(ctx, id)
+			} else {
+				var row db.WorkspaceExport
+				row, err = s.Q.GetWorkspaceExport(ctx, db.GetWorkspaceExportParams{WorkspaceID: wsID, ID: id})
+				status = row.Status
+			}
+			if err == nil && (status == "ready" || status == "running") {
+				return nil
+			}
+			if err != nil && !isNoRows(err) {
+				return err // Never delete on database uncertainty.
+			}
+			if err := store.Delete(ctx, key); err != nil {
+				s.logger(ctx).Warn("export cleanup failed", "key", key, "driver", store.Name(), "err", err)
+			}
+			return nil
+		})
+		if err != nil {
+			s.logger(ctx).Warn("export cleanup failed", "driver", store.Name(), "err", err)
 		}
-		if err != nil && !isNoRows(err) {
-			continue // database trouble: never delete on uncertainty
-		}
-		s.removeExportFile(id)
 	}
 }
 
-func (s *Service) removeExportFile(id string) {
-	if err := os.Remove(s.exportPath(id)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		s.Log.Warn("export file not removed", "export_id", id, "err", err)
+func (s *Service) removeExportFile(ctx context.Context, workspaceID, id string) {
+	if err := blob.NewDisk(s.ExportDir()).Delete(ctx, id+".zip"); err != nil {
+		s.logger(ctx).Warn("export file not removed", "export_id", id, "err", err)
+	}
+	if s.exportsOnS3() {
+		if err := s.Cfg.Blob.Delete(ctx, s.exportKey(workspaceID, id)); err != nil {
+			s.logger(ctx).Warn("export object not removed", "export_id", id, "err", err)
+		}
 	}
 }
 

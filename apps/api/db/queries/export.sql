@@ -56,7 +56,7 @@ UPDATE workspace_exports SET status = ?, size_bytes = ?, error = ?, finished_at 
 WHERE id = ? AND status = 'running';
 
 -- name: ExpiredWorkspaceExports :many
-SELECT id FROM workspace_exports WHERE status IN ('ready', 'failed') AND expires_at <= ? LIMIT 100;
+SELECT id, workspace_id FROM workspace_exports WHERE status IN ('ready', 'failed') AND expires_at <= ? LIMIT 100;
 
 -- name: ReadyWorkspaceExports :many
 -- Exports that may contain current data: finished or being built right now.
