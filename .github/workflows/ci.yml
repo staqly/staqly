@@ -105,7 +105,7 @@ jobs:
         working-directory: apps/api
         env:
           STAQLY_TEST_DATABASE_URL: postgres://staqly:staqly@127.0.0.1:5432/staqly?sslmode=disable
-        run: go test -race ./...
+        run: go test -race -timeout 25m ./...
 
   # ── staqly CLI ────────────────────────────────────────────────────────────
   cli:
