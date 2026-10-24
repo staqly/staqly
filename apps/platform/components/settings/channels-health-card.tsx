@@ -45,16 +45,24 @@ async function checkOne(id: string, retry = true): Promise<Outcome> {
   }
 }
 
-/** Checks platforms one at a time (each check calls the platform once), filling in each line as it answers. */
+/**
+ * Checks platforms one at a time (each check calls the platform once), filling in each line as it answers. Stops
+ * once `stopped()` says the card is gone, so leaving the page calls no more platforms.
+ */
 async function runChecks(
   list: string[],
   setResults: React.Dispatch<React.SetStateAction<Record<string, Outcome>>>,
   setRunning: React.Dispatch<React.SetStateAction<string[]>>,
+  stopped: () => boolean,
 ) {
   setRunning(list)
 
   for (const id of list) {
     const out = await checkOne(id)
+
+    if (stopped()) {
+      return
+    }
 
     setResults((all) => ({ ...all, [id]: out }))
     setRunning((r) => r.filter((x) => x !== id))
@@ -76,11 +84,21 @@ export function ChannelsHealthCard() {
   const ids = oauth.map((p) => p.id).join(',')
 
   const checking = useRef(false)
+  const mounted = useRef(true)
+
+  useEffect(() => {
+    mounted.current = true
+
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
   const check = useCallback(
     (list: string[]) => {
       if (canCheck && list.length > 0 && !checking.current) {
         checking.current = true
-        void runChecks(list, setResults, setRunning).then(() => {
+        void runChecks(list, setResults, setRunning, () => !mounted.current).then(() => {
           checking.current = false
         })
       }

@@ -78,6 +78,8 @@ function BuyXPostsDialog({ open, onOpenChange, x }: { open: boolean; onOpenChang
     onSuccess: ({ url }) => window.location.assign(url),
     onError: (e) => toastApiError(e),
   })
+  // Busy until the browser has left for Stripe, not only until the API answered.
+  const leaving = buy.isPending || buy.isSuccess
   const cheapest = Math.max(...x.bundles.map((b) => b.price / b.posts))
 
   return (
@@ -123,8 +125,8 @@ function BuyXPostsDialog({ open, onOpenChange, x }: { open: boolean; onOpenChang
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button disabled={!posts || buy.isPending} onClick={() => buy.mutate()} data-testid="buy-x-posts-continue">
-            {buy.isPending ? 'Opening checkout...' : 'Continue to payment'}
+          <Button disabled={!posts || leaving} onClick={() => buy.mutate()} data-testid="buy-x-posts-continue">
+            {leaving ? 'Opening checkout...' : 'Continue to payment'}
           </Button>
         </DialogFooter>
       </DialogContent>

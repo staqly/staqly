@@ -140,6 +140,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Never narrower than a small phone: below that the page scrolls sideways instead of squeezing. */
+    min-width: 20rem;
     font-feature-settings: 'cv11', 'ss01';
   }
   button:not(:disabled),

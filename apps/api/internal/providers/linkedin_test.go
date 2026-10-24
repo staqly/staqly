@@ -311,3 +311,13 @@ func TestLinkedInCommentPermission(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// LinkedIn's quotas start over at midnight UTC: a 429 says to try again then.
+func TestLinkedInQuotaWaitsForTheNextUTCDay(t *testing.T) {
+	err := linkedinError(http.StatusTooManyRequests, `{"message":"Resource level throttle APPLICATION DAY limit for calls to this resource is reached."}`)
+	at := RetryAt(err)
+	next := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
+	if at.Before(next) || at.After(next.Add(2*time.Minute)) || errors.Is(err, ErrRejected) {
+		t.Fatalf("retry at %v (%v), want just after %v", at, err, next)
+	}
+}

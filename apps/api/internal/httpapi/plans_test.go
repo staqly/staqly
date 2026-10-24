@@ -101,6 +101,9 @@ func TestProTrialAndSuspension(t *testing.T) {
 	e.do(nil, "POST", "/v1/posts/"+it.ID+"/publish", e.key, nil, 402, nil)
 	e.do(nil, "GET", "/v1/posts/"+it.ID, e.key, nil, 200, nil) // reading still works
 	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 202, nil, "X-CSRF-Token", e.csrf)
+	// Deleting data and checking a promotion code before paying stay open (billing is off here: 409, not 402).
+	e.do(e.browser, "POST", "/v1/billing/promotion-code", "", map[string]any{"promotion_code": "SPRING20"}, 409, nil, "X-CSRF-Token", e.csrf)
+	e.do(nil, "POST", "/v1/posts/"+it.ID+"/purge", e.admin, nil, 200, nil)
 	// MCP: read-only tools work, writing tools report plan_expired.
 	if _, out := mcpCall(e, e.key, "list_collections", nil); isToolError(out) {
 		t.Fatalf("read-only MCP tool refused while suspended: %v", out)

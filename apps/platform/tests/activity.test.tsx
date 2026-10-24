@@ -98,7 +98,7 @@ describe('activity audit log', () => {
 
     renderWithProviders(<ActivityFeed />, { mode: 'cloud' })
     const rows = await screen.findAllByTestId('audit-event')
-    const toggle = within(rows[1]).getByRole('button', { name: 'Data' })
+    const toggle = within(rows[1]).getByRole('button', { name: /^Data / })
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(within(rows[1]).queryByTestId('event-data')).not.toBeInTheDocument()
@@ -156,15 +156,15 @@ describe('activity audit log', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove Dates filter' }))
     expect(nav.replace).toHaveBeenLastCalledWith('/activity', { scroll: false })
-    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    await user.click(screen.getByRole('button', { name: 'Clear all filters' }))
     expect(nav.replace).toHaveBeenLastCalledWith('/activity', { scroll: false })
   })
 
-  it('hides Clear filters without filters', async () => {
+  it('hides Clear all without filters', async () => {
     setup()
     renderWithProviders(<ActivityFeed />, { mode: 'cloud' })
     await screen.findAllByTestId('audit-event')
-    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear all filters' })).not.toBeInTheDocument()
   })
 
   it('exports with every current filter', async () => {

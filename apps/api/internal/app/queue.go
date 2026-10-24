@@ -19,6 +19,7 @@ import (
 
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/logctx"
+	"github.com/staqly/staqly/apps/api/internal/providers"
 )
 
 // The job queue runs on River (github.com/riverqueue/river, MPL-2.0): SQLite in local mode, PostgreSQL in
@@ -347,6 +348,11 @@ func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 		metricJobs.Inc(j.Kind, "done")
 		s.logger(ctx).Info("job done", "attempt", j.Attempt)
 		return nil
+	case s.quotaWait(err) > 0:
+		wait := s.quotaWait(err)
+		metricJobs.Inc(j.Kind, "snoozed")
+		s.logger(ctx).Warn("job waits for the platform's limit", "attempt", j.Attempt, "until", s.Now().Add(wait), "err", err)
+		return river.JobSnooze(wait) // a snooze spends no attempt
 	case j.Attempt >= j.MaxAttempts:
 		metricJobs.Inc(j.Kind, "failed")
 		s.logger(ctx).Warn("job failed", "attempt", j.Attempt, "err", err)
@@ -356,6 +362,16 @@ func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 		s.logger(ctx).Warn("job attempt failed", "attempt", j.Attempt, "err", err)
 	}
 	return err
+}
+
+// quotaWait is how long a job waits for a platform whose quota is spent until a known time (0: retry as usual).
+// ponytail: at most 25 hours; a platform asking for longer is simply asked again then.
+func (s *Service) quotaWait(err error) time.Duration {
+	at := providers.RetryAt(err)
+	if at.IsZero() || !at.After(s.Now()) {
+		return 0
+	}
+	return min(at.Sub(s.Now()), 25*time.Hour)
 }
 
 // requeueAfterRun queues the key again when it was asked for while this run went on: the run completes
@@ -439,6 +455,49 @@ func (s *Service) sweepJobRequeues(ctx context.Context) int {
 	return swept
 }
 
+// riverRescuedError is the error River's rescuer records on a job it found still running long after it
+// started (the process running it died).
+const riverRescuedError = "Stuck job rescued by JobRescuer"
+
+// errJobInterrupted is what a job discarded by the rescuer settles with.
+var errJobInterrupted = errors.New("the server stopped during the last attempt (it may have gone out; check before retrying)")
+
+// settleRescuedJobs settles what rescued jobs were about. A process that died during a job's last attempt
+// leaves it running; River's rescuer then discards it without running our worker, so jobFailed never ran (a
+// target publishing for good, a recurring schedule with no next run). Each is settled once (marked in the
+// job's output), and only when it was discarded lately, not before this check existed.
+func (s *Service) settleRescuedJobs(ctx context.Context) int {
+	where := "json_extract(errors, '$[#-1].error') = @rescued"
+	if s.pg {
+		where = "errors[array_length(errors, 1)]->>'error' = @rescued"
+	}
+	res, err := s.river.JobList(ctx, river.NewJobListParams().States(rivertype.JobStateDiscarded).
+		Where(where, river.NamedArgs{"rescued": riverRescuedError}).OrderBy(river.JobListOrderByID, river.SortOrderDesc).First(100))
+	if err != nil {
+		if ctx.Err() == nil {
+			s.logger(ctx).Error("rescued jobs not read", "err", err)
+		}
+		return 0
+	}
+	since := s.Now().Add(-time.Hour)
+	settled := 0
+	for _, r := range res.Jobs {
+		var a jobArgs
+		if len(r.Output()) > 0 || r.FinalizedAt == nil || r.FinalizedAt.Before(since) || json.Unmarshal(r.EncodedArgs, &a) != nil {
+			continue
+		}
+		jctx := logctx.With(ctx, "workspace_id", a.WorkspaceID, "job_id", jobPublicID(r.ID), "job_kind", r.Kind)
+		if _, err := s.river.JobUpdate(ctx, r.ID, &river.JobUpdateParams{Output: "settled"}); err != nil {
+			s.logger(jctx).Error("rescued job not marked", "err", err)
+			continue
+		}
+		s.logger(jctx).Warn("job failed: its process stopped during the last attempt", "attempt", r.Attempt)
+		s.jobFailed(jctx, r.Kind, a, errJobInterrupted)
+		settled++
+	}
+	return settled
+}
+
 // RunJobs runs the queue until ctx ends: it first carries jobs of the queue before River over, then lets
 // River work. On shutdown running jobs get jobShutdownGrace to finish, then are cancelled (River puts them
 // back for the next start).
@@ -461,6 +520,7 @@ func (s *Service) RunJobs(ctx context.Context) {
 			if n := s.sweepJobRequeues(ctx); n > 0 {
 				s.logger(ctx).Info("job requeues swept", "keys", n)
 			}
+			s.settleRescuedJobs(ctx)
 		}
 	}
 }

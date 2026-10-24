@@ -443,7 +443,7 @@ export function ActivityFeed() {
                 </Button>
               </span>
             ))}
-            <Button variant="ghost" size="xs" onClick={clearFilters} aria-label="Clear filters">
+            <Button variant="ghost" size="xs" onClick={clearFilters} aria-label="Clear all filters">
               Clear all
             </Button>
           </div>

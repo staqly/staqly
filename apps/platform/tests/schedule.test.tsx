@@ -253,4 +253,29 @@ describe('schedule page', () => {
     )
     expect(within(list).getAllByTestId('schedule-entry')[0]).toHaveAccessibleName(/Launches/)
   })
+
+  it('on a phone: a week is a list, a month stays a calendar even when it is empty', async () => {
+    const original = window.matchMedia
+
+    window.matchMedia = (query: string) =>
+      ({
+        matches: query.startsWith('(max-width'),
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+      }) as never
+
+    try {
+      mockApi({ 'GET /v1/posts': { data: [] }, 'GET /v1/collections': { data: [] }, 'GET /v1/events': { data: [] } })
+      renderWithProviders(<SchedulePage />, { mode: 'local' })
+      expect(await screen.findByTestId('schedule-list')).toBeInTheDocument()
+
+      nav.set('/schedule', 'view=month')
+      renderWithProviders(<SchedulePage />, { mode: 'local' })
+      expect(await screen.findByTestId('schedule-grid')).toBeInTheDocument()
+      expect(screen.getByText('Nothing scheduled this month')).toBeInTheDocument()
+    } finally {
+      window.matchMedia = original
+    }
+  })
 })

@@ -187,3 +187,50 @@ func TestScheduleRunCountsPostsOnceAcrossTxReruns(t *testing.T) {
 		t.Fatalf("last result %q, want published 1", got.LastResult)
 	}
 }
+
+// Accounts picked after one sign-in (Tumblr blogs, Slack channels) share its refresh token and expiry, so
+// their refresh jobs come due at the same moment. On a platform that rotates refresh tokens the two refreshes
+// must not both spend the one token: the second would fail and its channel need reconnecting.
+func TestSiblingChannelsRefreshingTogetherStayConnected(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	f := &fakeRotating{Base: providers.NewBase("fakesiblings", "Fake Siblings", providers.AuthOAuth2, providers.Limits{MaxChars: 280}), current: "r0"}
+	providers.Register(f, providers.StatusAvailable)
+	t.Cleanup(func() { providers.Unregister(f.ID()) })
+	s.Getenv = func(k string) string {
+		if k == "PROVIDER_FAKESIBLINGS_CLIENT_ID" {
+			return "client"
+		}
+		return ""
+	}
+	e, _ := providers.Get(f.ID())
+	creds := providers.Credentials{"access_token": "a0", "refresh_token": "r0", "expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}
+	var ids []string
+	for _, name := range []string{"Blog one", "Blog two"} {
+		ch, err := s.saveChannel(ctx, p, e, name, creds, providers.Profile{Handle: name}, nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, ch.ID)
+	}
+	var wg sync.WaitGroup
+	for _, id := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.refreshChannel(ctx, id); err != nil {
+				t.Errorf("refresh: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	for _, id := range ids {
+		row, err := s.Q.GetChannelByID(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row.Status != "connected" {
+			t.Fatalf("channel %s after its sibling refreshed at the same time: %s (%s)", row.Name, row.Status, row.LastError)
+		}
+	}
+}

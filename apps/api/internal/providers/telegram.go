@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -401,7 +402,8 @@ func telegramError(status int, desc string, retryAfter int) error {
 		return reauth("the bot token no longer works (revoked in @BotFather?); reconnect the channel with the new one")
 	case status == http.StatusTooManyRequests:
 		if retryAfter > 0 {
-			return &Failure{Msg: fmt.Sprintf("Telegram rate limit reached (wait %d s); staqly tries again in a few minutes", retryAfter)}
+			return &Failure{Msg: fmt.Sprintf("Telegram rate limit reached; staqly tries again in %d s", retryAfter),
+				RetryAt: time.Now().Add(time.Duration(retryAfter) * time.Second)}
 		}
 		return &Failure{Msg: "Telegram rate limit reached; staqly tries again in a few minutes"}
 	case status >= 500:

@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Discord through a channel webhook: the person makes one in the channel's settings (Integrations > Webhooks) and
@@ -244,7 +245,11 @@ func discordError(status int, raw []byte) error {
 	rejected := func(msg string) error { return &Failure{Kind: ErrRejected, Msg: "Discord: " + msg} }
 	switch {
 	case status == http.StatusTooManyRequests:
-		return &Failure{Msg: "Discord rate limit reached; staqly tries again in a few minutes"}
+		f := &Failure{Msg: "Discord rate limit reached; staqly tries again in a few minutes"}
+		if e.RetryAfter > 0 {
+			f.RetryAt = time.Now().Add(time.Duration(e.RetryAfter * float64(time.Second)))
+		}
+		return f
 	case status >= 500:
 		return &Failure{Msg: fmt.Sprintf("Discord is unavailable (%d); staqly tries again in a few minutes", status)}
 	case e.Code == 10015, status == http.StatusUnauthorized, status == http.StatusNotFound && e.Code != 10003:

@@ -21,7 +21,8 @@ import (
 //   - each kind has a run budget (jobRunTimeout): a publish has 10 minutes for uploads and the platform's
 //     processing, other kinds a minute or two; River cancels the run's context when it runs out;
 //   - what a run writes afterwards (a requeue, a failed target) has its own short context (jobWriteTimeout);
-//   - a job still running after jobRescueAfter belonged to a process that died and is put back.
+//   - a job still running after jobRescueAfter belonged to a process that died and is put back (on its last
+//     attempt River discards it, and settleRescuedJobs settles what it was about).
 //
 // These are variables so tests can shrink them.
 var (

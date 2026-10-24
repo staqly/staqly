@@ -133,6 +133,23 @@ describe('system page', () => {
     expect(find('POST', '/v1/providers/instagram/check')).toHaveLength(2)
   })
 
+  it('leaving the page in the middle of a batch checks no more platforms', async () => {
+    mockApi(routes)
+    const ready = routes['POST /v1/providers/x/check'] as ProviderCheck
+    let finish!: () => void
+    const pending = new Promise<ProviderCheck>((resolve) => {
+      finish = () => resolve(ready)
+    })
+    const check = vi.spyOn(api, 'checkProvider').mockReturnValueOnce(pending).mockResolvedValue(ready)
+    const { unmount } = renderWithProviders(<ChannelsHealthCard />, { mode: 'cloud' })
+
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(1))
+    unmount()
+    finish()
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+    expect(check).toHaveBeenCalledTimes(1)
+  })
+
   it('does not start another batch while an automatic check is still running', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     mockApi(routes)

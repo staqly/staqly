@@ -27,7 +27,10 @@ export function UserAvatar({
   return (
     <Avatar className={cn('size-8', className)} data-logo={logo ? '' : undefined}>
       {picture && <AvatarImage src={picture} alt="" referrerPolicy="no-referrer" />}
-      <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+      {/* The name next to the picture says it: a button holding the avatar (the account menu) is named by the name. */}
+      <AvatarFallback aria-hidden className="text-xs">
+        {initials}
+      </AvatarFallback>
     </Avatar>
   )
 }
