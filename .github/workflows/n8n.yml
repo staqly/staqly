@@ -32,12 +32,13 @@ jobs:
       - name: Results directory
         # results.json lands in $TMPDIR/staqly-n8n-e2e/<run>/
         run: echo "TMPDIR=$RUNNER_TEMP" >>"$GITHUB_ENV"
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # the image compose.yml names (ghcr.io/staqly/staqly:latest), built from this
       # checkout with the layer cache, so compose does not build it again
       - name: staqly image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           load: true
@@ -56,7 +57,7 @@ jobs:
       - name: staqly logs
         if: failure()
         run: docker compose -f compose.yml -f compose.dev.yml logs --no-color staqly | tail -n 300
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: n8n-results

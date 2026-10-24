@@ -24,7 +24,9 @@ updates:
       # Stay on the current Node LTS; odd/non-LTS majors (25, 26 before LTS) are skipped.
       - dependency-name: node
         update-types: [version-update:semver-major]
+  # Actions are pinned to commit SHAs with a `# vX.Y.Z` comment; Dependabot bumps both. "/" covers
+  # .github/workflows; the composite action needs its own directory.
   - package-ecosystem: github-actions
-    directory: /
+    directories: ["/", "/.github/actions/*"]
     schedule: { interval: monthly }
     groups: { actions: { patterns: ["*"] } }

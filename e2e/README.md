@@ -104,6 +104,8 @@ GitHub Actions layer cache) tagged `staqly-e2e:test`, checks formatting, lint an
 then runs `pnpm turbo run test:e2e --filter=@staqly/e2e` with `E2E_BUILD=0`. On a pull request every
 job of `ci.yml` runs only when its code changed (the `changes` job: the e2e job for `apps/api`, `apps/cli`,
 `e2e/`, the Dockerfile and compose files); the workflows, the lockfile and the root config run them all.
+It runs next to the API job, not after it, so the two (about 10 minutes each) don't add up. The
+`workflows` job lints `.github/` with actionlint on every run (`make lint-workflows` locally).
 
 The live suites below have workflows of their own; each runs the same commands
 as locally:
@@ -112,7 +114,6 @@ as locally:
 |---|---|---|---|
 | `cross-client.yml` | every push to `main`, pull requests touching the API, CLI, SDKs or the suite | Go, uv and Node; builds the TS SDK, then `pnpm --filter @staqly/e2e test:cross-client` | none |
 | `n8n.yml` | push to `main`, nightly, by hand (`scenarios` input) | the image built from the checkout (layer cache) as `ghcr.io/staqly/staqly:latest`, `docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait` (`make dev` without the browser), then `pnpm --filter @staqly/e2e test:n8n`; `results.json` as an artifact | none |
-
 | `ui.yml` | nightly, by hand | Go and Node, PostgreSQL as a service; `make dashboard`, Playwright's Chromium, then `UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui` and `pnpm --filter @staqly/e2e test:ui-responsive`; the report and traces as an artifact on failure | none |
 
 The real-agent suite (`e2e/agent/`) has no workflow: it costs money, so it runs only by hand (below).

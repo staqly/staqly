@@ -1,4 +1,4 @@
-.PHONY: help dashboard release up dev dev-tunnel site dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
+.PHONY: help dashboard release up dev dev-tunnel site dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi lint-workflows gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -83,8 +83,8 @@ dashboard: ## Build the dashboard (static export) into apps/api/web for the Go b
 	find apps/api/web -mindepth 1 ! -name .gitkeep -delete
 	cp -R apps/platform/out/. apps/api/web/
 
-check: ## Formatting, lint, types and unit tests of every package (turbo)
-	pnpm turbo run format:check lint typecheck test
+check: ## Formatting, lint, types, unit tests and bundle size of every package (the same as pnpm check)
+	pnpm check
 
 test: ## Unit and integration tests of every package (turbo)
 	pnpm turbo run test
@@ -97,6 +97,11 @@ test-e2e: ## Full Docker end-to-end test (compose.e2e.yml + e2e/)
 
 lint-openapi: ## Validate the OpenAPI document
 	pnpm --filter @staqly/api run lint:openapi
+
+ACTIONLINT_IMAGE := rhysd/actionlint:1.7.12
+
+lint-workflows: ## Lint the GitHub Actions workflows (actionlint + shellcheck, in Docker; CI runs the same)
+	docker run --rm -v "$(CURDIR):/repo" -w /repo $(ACTIONLINT_IMAGE) -color
 
 gen: ## Regenerate sqlc queries, dashboard API types and the TypeScript SDK schema
 	pnpm turbo run gen

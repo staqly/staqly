@@ -12,20 +12,24 @@ on:
   pull_request_target:
     types: [opened, closed, synchronize]
 
-permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
+# Nothing by default; the one job gets what the action needs. Signatures go to the remote repository
+# with CLA_SIGNATURES_TOKEN, so this repository's contents stay read-only.
+permissions: {}
 
 jobs:
   cla:
+    permissions:
+      actions: write # re-runs the check after a sign comment
+      contents: read
+      pull-requests: write # comments, locks the pull request after merge
+      statuses: write # the CLA status on the head commit
     if: >-
       (github.event_name == 'pull_request_target' &&
         !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)) ||
       (github.event.issue.pull_request &&
         (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'))
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
         env:
