@@ -11,7 +11,7 @@ import (
 // layoutMarker records in the store that its files are in workspace folders (MoveLegacyFiles ran).
 const layoutMarker = "workspaces/.layout"
 
-// removeWorkspaceFiles deletes a workspace's folder in the store (media, thumbnails, projects) and returns how
+// removeWorkspaceFiles deletes a workspace's folder in the store (media, thumbnails, projects, backups) and returns how
 // many files went.
 func (s *Service) removeWorkspaceFiles(ctx context.Context, workspaceID string) (int, error) {
 	var keys []string

@@ -233,22 +233,27 @@ func (q *Queries) DeleteWorkspaceRow(ctx context.Context, id string) (int64, err
 }
 
 const expiredWorkspaceExports = `-- name: ExpiredWorkspaceExports :many
-SELECT id FROM workspace_exports WHERE status IN ('ready', 'failed') AND expires_at <= ? LIMIT 100
+SELECT id, workspace_id FROM workspace_exports WHERE status IN ('ready', 'failed') AND expires_at <= ? LIMIT 100
 `
 
-func (q *Queries) ExpiredWorkspaceExports(ctx context.Context, expiresAt string) ([]string, error) {
+type ExpiredWorkspaceExportsRow struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+func (q *Queries) ExpiredWorkspaceExports(ctx context.Context, expiresAt string) ([]ExpiredWorkspaceExportsRow, error) {
 	rows, err := q.db.QueryContext(ctx, expiredWorkspaceExports, expiresAt)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ExpiredWorkspaceExportsRow
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var i ExpiredWorkspaceExportsRow
+		if err := rows.Scan(&i.ID, &i.WorkspaceID); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

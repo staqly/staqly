@@ -85,6 +85,25 @@ contains the files: protect the bucket with your provider's tools (versioning, r
 lifecycle copy to a second bucket). The workspace export with files (`POST /v1/workspace/export`)
 reads them from the bucket either way.
 
+### Workspace ZIP exports in cloud mode
+
+With `STAQLY_MODE=cloud` and `STORAGE_DRIVER=s3`, workspace archives use the existing S3 bucket
+and credentials automatically. Each ZIP is stored at
+`workspaces/<workspace_id>/backups/<export_id>.zip`, alongside the workspace's media and thumbnails.
+`S3_PREFIX`, when configured, applies to this path too. No separate backup bucket or setting is needed.
+
+Keep the backup objects **private**. Any bucket policy or CDN that exposes media must exclude the
+`workspaces/*/backups/*` paths. The application does not publish backup URLs through `S3_PUBLIC_URL`:
+downloads stream through the authenticated API with workspace and admin checks.
+
+Archives keep their JSON/NDJSON and media files inside a ZIP. The server stages each ZIP locally,
+uploads it, then removes the local copy. Archives expire after 24 hours and are also removed when
+their workspace is deleted or its posts are purged. Failed deletions are retried by the export worker.
+
+ZIPs created on disk before enabling S3 remain downloadable on that server until they expire.
+Local mode and cloud with disk storage keep ZIPs in `DATA_DIR/exports`. These workspace exports are
+separate from the consistent database backups described in [Backup & restore](/self-hosting/backup-and-restore).
+
 ## Development
 
 The development stack (`make dev`) runs [MaxIOFS](https://github.com/MaxIOFS/MaxIOFS) and keeps
