@@ -282,7 +282,8 @@ jobs:
           load: true
           tags: staqly-e2e:test
           cache-from: type=gha,scope=staqly
-          cache-to: type=gha,mode=max,scope=staqly
+          # main writes the layer cache, pull requests only read it (the 10 GB repository limit)
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,scope=staqly' || '' }}
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/e2e..." }
       - name: Formatting, lint, types of the e2e suite
@@ -290,3 +291,15 @@ jobs:
       - name: End-to-end
         run: pnpm turbo run test:e2e --filter=@staqly/e2e
         env: { E2E_BUILD: "0" }
+
+  # One check for branch protection: jobs skipped by `changes` count as passed, a failed or
+  # cancelled one fails this. Make "CI passed" the required status check, not the jobs themselves.
+  passed:
+    name: CI passed
+    if: always()
+    needs: [changes, workflows, api, api-postgres, cli, dashboard, docs, web, packages, sdk-typescript, sdk-python, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

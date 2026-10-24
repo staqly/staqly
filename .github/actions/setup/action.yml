@@ -18,9 +18,21 @@ runs:
       with: { node-version-file: .nvmrc, cache: pnpm }
     - shell: bash
       run: pnpm install --frozen-lockfile ${{ inputs.filter && format('--filter "{0}" --filter staqly', inputs.filter) || '' }}
+    # Only main saves (one entry per commit): pull requests restore main's entry and save nothing, so their
+    # caches don't fill the 10 GB repository limit and evict main's (and the Docker layer cache).
     - name: Cache Turbo tasks and Next compiler
-      if: inputs.cache-builds == 'true'
+      if: inputs.cache-builds == 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          .turbo
+          apps/*/.next/cache
+        key: js-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('.nvmrc', 'pnpm-lock.yaml') }}-${{ github.sha }}
+        restore-keys: |
+          js-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('.nvmrc', 'pnpm-lock.yaml') }}-
+    - name: Restore Turbo tasks and Next compiler
+      if: inputs.cache-builds == 'true' && github.ref != 'refs/heads/main'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           .turbo
