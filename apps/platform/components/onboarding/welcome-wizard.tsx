@@ -101,7 +101,7 @@ export function WelcomeWizard() {
     ? ['you', 'joined']
     : [
         ...(hasPerson ? (['you'] as const) : []),
-        'workspace',
+        ...(draft.named ? [] : (['workspace'] as const)),
         'channel',
         ...extra,
         ...(needsPlan || requested === 'plan' ? (['plan'] as const) : []),
