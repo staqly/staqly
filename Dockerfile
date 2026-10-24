@@ -23,12 +23,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
 FROM --platform=$BUILDPLATFORM node:24.22.1-alpine AS node
 ENV NEXT_TELEMETRY_DISABLED=1 PNPM_HOME=/pnpm COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable
 WORKDIR /repo
+# pnpm (packageManager in package.json) fetched once into its own layer, not on every source change
+COPY package.json ./
+RUN corepack enable && corepack install
 
 FROM node AS prune
 COPY . .
-RUN pnpm dlx turbo@2.11.8 prune @staqly/platform --docker
+# the turbo version in pnpm-lock.yaml
+RUN pnpm dlx turbo@2.11.10 prune @staqly/platform --docker
 
 FROM node AS export
 COPY --from=prune /repo/out/json/ .
@@ -67,11 +70,10 @@ FROM alpine:3.24
 
 # ca-certificates: HTTPS for webhooks, watchers and hosted models
 # tzdata:          local times in logs when TZ is set
-# wget:            the HEALTHCHECK below
-RUN apk add --no-cache ca-certificates tzdata wget
-
+# The HEALTHCHECK below uses BusyBox's wget, already in the base image.
 # Unprivileged user; /data is created here so a fresh named volume inherits it.
-RUN adduser -D -H -u 10001 staqly && \
+RUN apk add --no-cache ca-certificates tzdata && \
+    adduser -D -H -u 10001 staqly && \
     mkdir -p /data/uploads /data/backups && \
     chown -R staqly:staqly /data
 
