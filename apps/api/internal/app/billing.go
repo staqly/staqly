@@ -594,15 +594,19 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 		form.Set("trial_end", "now")
 		form.Set("proration_behavior", "always_invoice")
 		form.Set("payment_behavior", "pending_if_incomplete")
+		form.Set("expand[]", "latest_invoice")
 	}
 	var out struct {
-		PendingUpdate json.RawMessage `json:"pending_update"`
+		PendingUpdate *stripePendingUpdate `json:"pending_update"`
+		LatestInvoice json.RawMessage      `json:"latest_invoice"`
 	}
 	if err := s.stripe(ctx, "POST", "/v1/subscriptions/"+url.PathEscape(subscriptionID), form, &out); err != nil {
 		return err
 	}
-	if trial && len(out.PendingUpdate) > 0 && string(out.PendingUpdate) != "null" {
-		return &Error{Code: "payment_failed", Status: 402, Message: "the payment for the new plan didn't go through, so the trial stays as it was: check the card in Manage billing and try again"}
+	// Not paid: read why from the invoice and its payment (outside any transaction), so the dashboard can send
+	// the person to the right Stripe page: the invoice page to confirm with the bank, or the billing portal.
+	if trial && out.PendingUpdate != nil {
+		return s.pendingPayment(ctx, *out.PendingUpdate, out.LatestInvoice, planID).error()
 	}
 	return nil
 }

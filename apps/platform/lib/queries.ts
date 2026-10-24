@@ -61,6 +61,7 @@ export const qk = {
   plans: ['plans'] as const,
   billing: ['billing'] as const,
   billingDetails: ['billing', 'details'] as const,
+  pendingPayment: ['billing', 'pending-payment'] as const,
   xPosts: ['billing', 'x-posts'] as const,
   addons: ['billing', 'addons'] as const,
   usage: ['usage'] as const,
@@ -107,6 +108,11 @@ export function useMode() {
 /** Public cloud plans (not including the local "unlocked" plan). */
 export function useBilling(opts?: { enabled?: boolean }) {
   return useQuery({ queryKey: qk.billing, queryFn: api.billing, enabled: opts?.enabled })
+}
+
+/** A plan change waiting for its payment and why it isn't paid, read from Stripe (asked again on focus). */
+export function usePendingPayment(opts?: { enabled?: boolean }) {
+  return useQuery({ queryKey: qk.pendingPayment, queryFn: api.pendingPayment, enabled: opts?.enabled })
 }
 
 /** The subscription period, cards and the first page of invoices, read from Stripe (cached a minute). */
