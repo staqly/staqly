@@ -156,6 +156,10 @@ class PlanLimits(StaqlyModel):
     data_export: bool = True
     #: Posts to X included per month (a post with a live link counts 14); ``-1`` = unlimited.
     x_posts_per_period: int = -1
+    #: Posts to LinkedIn profiles and Pages included per month (comments don't count); ``-1`` = unlimited.
+    linkedin_posts_per_period: int = -1
+    #: How many of those can have a video (each also counts as a post); ``-1`` = unlimited.
+    linkedin_videos_per_period: int = -1
 
 
 class LimitBonus(StaqlyModel):
@@ -210,6 +214,9 @@ class Usage(StaqlyModel):
     storage_bytes: int = 0
     #: Posts to X this month (a post with a live link counts 14).
     x_posts_per_period: int = 0
+    #: Posts to LinkedIn this month, and those with a video.
+    linkedin_posts_per_period: int = 0
+    linkedin_videos_per_period: int = 0
 
 
 class WorkspaceUsage(StaqlyModel):

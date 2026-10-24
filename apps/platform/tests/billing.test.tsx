@@ -210,12 +210,62 @@ describe('plan & usage', () => {
     expect(meter).toHaveAttribute('aria-valuemax', '450')
     expect(meter).toHaveAttribute('aria-valuetext', '12 of 450')
     // The explanation is said once for the row, never per platform.
-    expect(within(row).getAllByText('Included in the plan; bought posts come on top.')).toHaveLength(1)
+    expect(within(row).getAllByText('Included in the plan; bought X posts come on top.')).toHaveLength(1)
     expect(within(x).queryByText(/bought posts/)).not.toBeInTheDocument()
     // The tiles stay alike: Posts this month holds no per-platform lines, and no platform has a tile of its own.
     expect(within(screen.getByTestId('meter-Posts this month')).queryByTestId('platform-posts-x')).toBeNull()
     expect(within(screen.getByTestId('usage-meters')).queryByTestId('platform-posts')).toBeNull()
     expect(screen.queryByTestId('meter-X posts this month')).not.toBeInTheDocument()
+  })
+
+  it('LinkedIn has a chip for its posts and one for its videos, with the same warnings as X', async () => {
+    mockApi({
+      'GET /v1/billing': BILLING_PRO,
+      'GET /v1/billing/details': DETAILS,
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/workspace/usage': usage(PLANS[1], {
+        x_posts_per_period: 12,
+        linkedin_posts_per_period: 120,
+        linkedin_videos_per_period: 60,
+      }),
+    })
+    renderPlan()
+
+    const list = within(await screen.findByTestId('platform-posts')).getByRole('list', { name: 'Posts per platform' })
+    const posts = within(list).getByTestId('platform-posts-linkedin')
+    const videos = within(list).getByTestId('platform-posts-linkedin-videos')
+
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3)
+    expect(posts).toHaveTextContent('LinkedIn')
+    expect(posts).toHaveTextContent('120 / 600')
+    expect(posts).toHaveAttribute('data-level', 'ok')
+    expect(within(posts).getByRole('progressbar', { name: 'LinkedIn posts' })).toHaveAttribute(
+      'aria-valuetext',
+      '120 of 600',
+    )
+    expect(videos).toHaveTextContent('LinkedIn videos')
+    expect(videos).toHaveTextContent('60 / 60')
+    expect(videos).toHaveAttribute('data-level', 'full')
+    expect(videos).toHaveTextContent('Limit reached')
+    expect(within(videos).getByRole('progressbar', { name: 'LinkedIn videos' })).toHaveAttribute('aria-valuemax', '60')
+  })
+
+  it('without an X allowance the row says nothing about bought posts', async () => {
+    mockApi({
+      'GET /v1/billing': BILLING_PRO,
+      'GET /v1/billing/details': DETAILS,
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/workspace/usage': usage({ ...PLANS[1], limits: { ...PLANS[1].limits, x_posts_per_period: -1 } }),
+    })
+    renderPlan()
+
+    const row = await screen.findByTestId('platform-posts')
+
+    expect(within(row).queryByTestId('platform-posts-x')).toBeNull()
+    expect(within(row).getByTestId('platform-posts-linkedin')).toHaveTextContent('0 / 600')
+    expect(within(row).getByText('Included in the plan.')).toBeInTheDocument()
   })
 
   it('a platform chip warns near its allowance and says when it is used up', async () => {
@@ -256,7 +306,15 @@ describe('plan & usage', () => {
       'GET /v1/billing/details': DETAILS,
       'GET /v1/billing/addons': { data: [] },
       'GET /v1/billing/x-posts': XPOSTS,
-      'GET /v1/workspace/usage': usage({ ...PLANS[1], limits: { ...PLANS[1].limits, x_posts_per_period: -1 } }),
+      'GET /v1/workspace/usage': usage({
+        ...PLANS[1],
+        limits: {
+          ...PLANS[1].limits,
+          x_posts_per_period: -1,
+          linkedin_posts_per_period: -1,
+          linkedin_videos_per_period: -1,
+        },
+      }),
     })
     renderPlan()
 

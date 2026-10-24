@@ -217,7 +217,7 @@ paths:
                   period: { type: string, examples: ["2026-10"] }
                   usage:
                     type: object
-                    required: [posts_per_month, channels, seats, alerts, webhooks, api_keys, storage_bytes, x_posts_per_period]
+                    required: [posts_per_month, channels, seats, alerts, webhooks, api_keys, storage_bytes, x_posts_per_period, linkedin_posts_per_period, linkedin_videos_per_period]
                     properties:
                       posts_per_month: { type: integer, description: Posts created this month }
                       channels: { type: integer, description: Connected channels }
@@ -227,6 +227,8 @@ paths:
                       api_keys: { type: integer }
                       storage_bytes: { type: integer }
                       x_posts_per_period: { type: integer, description: "Posts to X this month (a post with a live link counts 14)" }
+                      linkedin_posts_per_period: { type: integer, description: "Posts to LinkedIn profiles and Pages this month (comments don't count)" }
+                      linkedin_videos_per_period: { type: integer, description: "Posts to LinkedIn with a video this month" }
                   plan_expires_at:
                     type: [string, "null"]
                     format: date-time
@@ -4100,7 +4102,9 @@ components:
         `plan_limit_exceeded` (a plan limit; `details` has limit, max, used, plan),
         `plan_expired` (the workspace is suspended and read-only), `payment_required`, `payment_failed` (a plan
         change that charges at once, such as leaving the trial, wasn't paid: nothing changed), or `x_posts_exhausted` (this
-        period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end).
+        period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end), or
+        `linkedin_posts_exhausted` / `linkedin_videos_exhausted` (this period's posts to LinkedIn, or those with a video,
+        can't cover the post; `details` has limit, needed, left, period_end).
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
     Forbidden:
       description: |
@@ -4170,7 +4174,7 @@ components:
         period: { type: string, examples: ["2026-10"] }
         usage:
           type: object
-          required: [posts_per_month, channels, seats, alerts, webhooks, api_keys, storage_bytes, x_posts_per_period]
+          required: [posts_per_month, channels, seats, alerts, webhooks, api_keys, storage_bytes, x_posts_per_period, linkedin_posts_per_period, linkedin_videos_per_period]
           properties:
             posts_per_month: { type: integer, description: Posts created this month }
             channels: { type: integer, description: Connected channels }
@@ -4180,6 +4184,8 @@ components:
             api_keys: { type: integer }
             storage_bytes: { type: integer }
             x_posts_per_period: { type: integer, description: "Posts to X this month (a post with a live link counts 14)" }
+            linkedin_posts_per_period: { type: integer, description: "Posts to LinkedIn profiles and Pages this month (comments don't count)" }
+            linkedin_videos_per_period: { type: integer, description: "Posts to LinkedIn with a video this month" }
         plan_expires_at:
           type: [string, "null"]
           format: date-time
@@ -4365,7 +4371,7 @@ components:
         code:
           type: string
           description: Stable machine-readable code; new codes may be added.
-          examples: [bad_request, unauthorized, invalid_link, forbidden, csrf_failed, not_found, conflict, not_available, idempotency_in_progress, post_changed, already_free, sign_in_with_account, gone, link_used, link_expired, plan_limit_exceeded, plan_expired, payment_required, x_posts_exhausted, too_large, unsupported_media_type, validation_failed, not_editable, idempotency_mismatch, rate_limited, payment_provider_error, ai_provider_error, ai_key_rejected, timeout, busy, internal, default_group]
+          examples: [bad_request, unauthorized, invalid_link, forbidden, csrf_failed, not_found, conflict, not_available, idempotency_in_progress, post_changed, already_free, sign_in_with_account, gone, link_used, link_expired, plan_limit_exceeded, plan_expired, payment_required, x_posts_exhausted, linkedin_posts_exhausted, linkedin_videos_exhausted, too_large, unsupported_media_type, validation_failed, not_editable, idempotency_mismatch, rate_limited, payment_provider_error, ai_provider_error, ai_key_rejected, timeout, busy, internal, default_group]
         message: { type: string }
         fields: { type: object, additionalProperties: { type: string } }
         details: { type: object, additionalProperties: true, description: "plan_limit_exceeded: limit, max, used, plan" }
@@ -4411,7 +4417,7 @@ components:
 
     PlanLimits:
       type: object
-      required: [posts_per_month, channels, alerts, webhooks, api_keys, storage_bytes, max_upload_bytes, data_export, x_posts_per_period]
+      required: [posts_per_month, channels, alerts, webhooks, api_keys, storage_bytes, max_upload_bytes, data_export, x_posts_per_period, linkedin_posts_per_period, linkedin_videos_per_period]
       properties:
         posts_per_month: { type: integer, description: "Posts created per calendar month (people, agents and schedules); -1 = unlimited" }
         channels: { type: integer, description: "Connected channels; -1 = unlimited" }
@@ -4422,6 +4428,8 @@ components:
         max_upload_bytes: { type: integer }
         data_export: { type: boolean, description: "Full workspace exports with media files (backups) and event exports; false on Starter, where the workspace export is data only" }
         x_posts_per_period: { type: integer, description: "Posts to X included per month (each post and thread reply; a post with a live link counts 14). Bought credits come on top. -1 = unlimited", examples: [450] }
+        linkedin_posts_per_period: { type: integer, description: "Posts to LinkedIn profiles and Pages included per month (comments don't count; no bought posts). -1 = unlimited", examples: [600] }
+        linkedin_videos_per_period: { type: integer, description: "How many of the month's posts to LinkedIn can have a video (each also counts as a post). -1 = unlimited", examples: [60] }
 
     Addon:
       type: object

@@ -18,6 +18,7 @@ import (
 // (Plans in plans.go); a feature can switch a capability on or raise a limit, through its metadata:
 //
 //	staqly_limit_<limit> = "+10" | "unlimited"   channels, alerts, webhooks, api_keys, x_posts_per_period,
+//	                                              linkedin_posts_per_period, linkedin_videos_per_period,
 //	                                              posts_per_month, storage_gb, max_upload_mb
 //	staqly_enable        = "data_export,..."      capabilities a plan may lack
 //
@@ -54,6 +55,8 @@ var limitFields = []struct {
 	{"api_keys", 1, LimitAPIKeys, func(l *PlanLimits) *int64 { return &l.APIKeys }},
 	{"posts_per_month", 1, LimitPostsPerMonth, func(l *PlanLimits) *int64 { return &l.PostsPerMonth }},
 	{"x_posts_per_period", 1, LimitXPosts, func(l *PlanLimits) *int64 { return &l.XPostsPerPeriod }},
+	{"linkedin_posts_per_period", 1, LimitLinkedInPosts, func(l *PlanLimits) *int64 { return &l.LinkedInPostsPerPeriod }},
+	{"linkedin_videos_per_period", 1, LimitLinkedInVideos, func(l *PlanLimits) *int64 { return &l.LinkedInVideosPerPeriod }},
 	{"storage_gb", gb, LimitStorage, func(l *PlanLimits) *int64 { return &l.StorageBytes }},
 	{"max_upload_mb", 1 << 20, LimitMaxUpload, func(l *PlanLimits) *int64 { return &l.MaxUploadBytes }},
 }
