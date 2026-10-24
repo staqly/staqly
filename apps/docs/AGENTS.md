@@ -56,7 +56,7 @@ links: plain `<img>`/`<a>` and fetches must add `env.basePath` (`lib/env.mjs`, t
 | `components/mdx.tsx` | Components available in MDX |
 | `components/mdx/bits.tsx` | `<Badge>`, `<Kbd>`, `<Method>`, `<ComingSoon>`, `<Required>` |
 | `app/global.css` | staqly theme: brand tokens and hero/button helpers from `@staqly/brand` (`packages/brand`, shared with the dashboard and staqly.ai), graphite neutrals for Fumadocs + small helpers. The docs are **dark only**: forced in `components/provider.tsx`, no theme switch |
-| `components/logo.tsx` | The shared logo (`@staqly/brand/logo`) with the base path and the "docs" badge; the home hero demo is `@staqly/brand/hero-demo` |
+| `components/logo.tsx` | The shared logo (`@staqly/brand/logo`) with the base path and the "docs" badge; the home hero demo is `@staqly/brand/hero-demo` and the home footer `@staqly/brand/site-footer` (the same as staqly.ai's) |
 | `scripts/check-links.mjs` | Link check (`@staqly/check-links`, shared with staqly.ai) — the build's quality gate (pages and `#anchors`) |
 
 ## Writing pages

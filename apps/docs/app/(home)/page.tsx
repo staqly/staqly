@@ -1,4 +1,5 @@
 import { HeroDemo } from '@staqly/brand/hero-demo'
+import { SiteFooter } from '@staqly/brand/site-footer'
 import {
   ArrowRight,
   BellRing,
@@ -21,10 +22,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
-import { LogoMark } from '@/components/logo'
 import { env } from '@/lib/env.mjs'
 import { DOCS_DESCRIPTION, SITE_JSON_LD, docsMeta, ldJson } from '@/lib/seo'
-import { repoUrl } from '@/lib/shared'
 
 const features: { icon: ReactNode; title: string; body: string; href: string }[] = [
   {
@@ -362,38 +361,6 @@ function Modes() {
   )
 }
 
-function Footer() {
-  return (
-    <footer className="border-t border-fd-border">
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-8 text-sm text-fd-muted-foreground sm:px-8">
-        <span className="inline-flex items-center gap-2">
-          <LogoMark className="size-5" /> staqly ·{' '}
-          <a href={`${repoUrl}/blob/main/LICENSE`} className="hover:text-fd-foreground">
-            AGPL-3.0
-          </a>
-        </span>
-        <nav className="flex flex-wrap gap-x-5 gap-y-2 pointer-coarse:[&>*]:inline-flex pointer-coarse:[&>*]:min-h-10 pointer-coarse:[&>*]:items-center">
-          <Link href="/introduction" className="hover:text-fd-foreground">
-            Docs
-          </Link>
-          <Link href="/api/reference" className="hover:text-fd-foreground">
-            API
-          </Link>
-          <Link href="/mcp" className="hover:text-fd-foreground">
-            MCP
-          </Link>
-          <a href={env.webUrl} className="hover:text-fd-foreground">
-            staqly.ai
-          </a>
-          <a href={repoUrl} className="hover:text-fd-foreground">
-            GitHub
-          </a>
-        </nav>
-      </div>
-    </footer>
-  )
-}
-
 export const metadata: Metadata = {
   ...docsMeta(
     'staqly docs: the local-first social media scheduler for people and their AI agents',
@@ -413,7 +380,8 @@ export default function HomePage() {
       <QuickStart />
       <Sections />
       <Modes />
-      <Footer />
+      {/* The footer of staqly.ai (packages/brand). */}
+      <SiteFooter web={env.webUrl} docs="" basePath={env.basePath} link={Link} />
     </main>
   )
 }

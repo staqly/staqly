@@ -3,7 +3,7 @@
   "license": "AGPL-3.0-only",
   "version": "0.1.0",
   "private": true,
-  "description": "Staqly brand pieces shared by the dashboard, docs and landing page: logo, hero demo, platform marks, brand CSS (source only, transpiled by each Next app)",
+  "description": "Staqly brand pieces shared by the dashboard, docs and landing page: logo, hero demo, site footer, platform marks, brand CSS (source only, transpiled by each Next app)",
   "type": "module",
   "sideEffects": [
     "*.css"
@@ -15,7 +15,9 @@
     "./tokens.css": "./tokens.css",
     "./site.css": "./site.css",
     "./providers": "./src/providers.tsx",
-    "./placements": "./src/placements.ts"
+    "./placements": "./src/placements.ts",
+    "./site-footer": "./src/site-footer.tsx",
+    "./tools": "./src/tools.ts"
   },
   "scripts": {
     "lint": "oxlint --deny-warnings",

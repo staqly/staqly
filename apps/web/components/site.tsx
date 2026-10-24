@@ -1,19 +1,11 @@
-import { Logo, LogoMark } from '@staqly/brand/logo'
-import { ArrowRight, Terminal, Heart } from 'lucide-react'
+import { Logo } from '@staqly/brand/logo'
+import { SiteFooter } from '@staqly/brand/site-footer'
+import { ArrowRight, Terminal } from 'lucide-react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { MobileMenu } from '@/components/mobile-menu'
-import { DOCS, GITHUB, SIGNUP, btnPrimary, btnSecondary, wrap, wrapWide, SELF_HOST } from '@/lib/site'
-import { TOOLS } from '@/lib/tools'
-
-function GitHubIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
-      <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0 0 12 .3" />
-    </svg>
-  )
-}
+import { DOCS, SIGNUP, btnPrimary, btnSecondary, wrap, wrapWide, SELF_HOST } from '@/lib/site'
 
 export function Eyebrow({ children }: { children: ReactNode }) {
   return <p className="text-sm font-semibold text-brand-strong">{children}</p>
@@ -56,97 +48,9 @@ export function Nav() {
   )
 }
 
-const footerColumns: { title: string; links: [string, string][] }[] = [
-  {
-    title: 'Product',
-    links: [
-      ['How it works', '/#how'],
-      ['Channels', '/#channels'],
-      ['Pricing', '/pricing'],
-      ['Compare plans', '/pricing/compare'],
-      ['Use cases', '/use-cases'],
-      ['Agents', '/agents'],
-    ],
-  },
-  {
-    title: 'Free tools',
-    links: [['All free tools', '/tools'], ...TOOLS.map((t): [string, string] => [t.short, `/tools/${t.slug}`])],
-  },
-  {
-    title: 'Developers',
-    links: [
-      ['Docs', DOCS],
-      ['API reference', `${DOCS}/api/reference`],
-      ['MCP', `${DOCS}/mcp`],
-      ['CLI', `${DOCS}/cli`],
-      ['TypeScript SDK', `${DOCS}/sdk/typescript`],
-      ['Python SDK', `${DOCS}/sdk/python`],
-      ['Self-hosting', SELF_HOST],
-    ],
-  },
-  {
-    title: 'Legal',
-    links: [
-      ['Security', `${GITHUB}/blob/main/SECURITY.md`],
-      ['Terms', `${DOCS}/legal/terms`],
-      ['Privacy', `${DOCS}/legal/privacy`],
-      ['AGPL-3.0 license', `${GITHUB}/blob/main/LICENSE`],
-    ],
-  },
-]
-
+/** The site footer, shared with the docs (packages/brand). */
 export function Footer() {
-  return (
-    <footer className="border-t border-border">
-      <div className={`${wrap} grid gap-10 py-12 sm:grid-cols-2 sm:py-16 lg:grid-cols-[1.4fr_repeat(4,1fr)]`}>
-        <div className="max-w-xs sm:col-span-2 lg:col-span-1">
-          <Link href="/" aria-label="Staqly home" className="inline-flex min-h-10 items-center">
-            <Logo colorway="dark" wordmarkClassName="text-[18px]" />
-          </Link>
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            The post scheduler for people and their AI agents: write once, schedule it, and publish to X or anywhere
-            your own automation reaches.
-          </p>
-          <a
-            href={GITHUB}
-            className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <GitHubIcon className="size-4" /> Star on GitHub
-          </a>
-        </div>
-        {footerColumns.map((c) => (
-          <nav key={c.title} aria-label={c.title}>
-            <h2 className="text-xs font-semibold tracking-wider text-foreground/80 uppercase">{c.title}</h2>
-            <ul className="mt-4 grid gap-2.5 text-sm">
-              {c.links.map(([label, href]) => (
-                <li key={label}>
-                  <Link
-                    href={href}
-                    className="inline-flex min-h-6 items-center text-muted-foreground transition-colors hover:text-brand-strong pointer-coarse:min-h-10"
-                  >
-                    {label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        ))}
-      </div>
-      <div className="border-t border-border">
-        <div
-          className={`${wrap} flex flex-col items-center gap-2 py-6 text-sm text-muted-foreground sm:flex-row sm:justify-between`}
-        >
-          <p className="inline-flex items-center gap-2 text-foreground">
-            <LogoMark className="size-5" colorway="dark" /> © 2026 Staqly. All rights reserved.
-          </p>
-          <p className="inline-flex items-center gap-1.5">
-            Hosted cloud + open source
-            <Heart aria-label="with love" className="size-3.5 fill-red-500 text-red-500" />
-          </p>
-        </div>
-      </div>
-    </footer>
-  )
+  return <SiteFooter web="" docs={DOCS} link={Link} />
 }
 
 /** Signup + self-host buttons, used in page heroes. */
