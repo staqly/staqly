@@ -27,9 +27,10 @@ export function UserAvatar({
   return (
     <Avatar className={cn('size-8', className)} data-logo={logo ? '' : undefined}>
       {picture && <AvatarImage src={picture} alt="" referrerPolicy="no-referrer" />}
-      {/* The initials are drawn by CSS, not text: the name next to the picture says it, so a button holding the
-          avatar (the account menu) is named by that name alone. */}
-      <AvatarFallback aria-hidden data-initials={initials} className="text-xs before:content-[attr(data-initials)]" />
+      {/* The name next to the picture says it: a button holding the avatar (the account menu) is named by the name. */}
+      <AvatarFallback aria-hidden className="text-xs">
+        {initials}
+      </AvatarFallback>
     </Avatar>
   )
 }

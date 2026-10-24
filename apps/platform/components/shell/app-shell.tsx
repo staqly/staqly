@@ -289,7 +289,7 @@ function UserMenu() {
   const { isLocal } = useMode()
   const { accountsEnabled, role, canManagePeople } = useRole()
   const router = useRouter()
-  const { setOpenMobile } = useSidebar()
+  const { setOpenMobile, state, isMobile } = useSidebar()
   const logout = useLogout()
   const user = session.data?.user
   // Cloud, for owners and admins: Billing, and the loud row. In the trial or after a plan ran out: Choose a plan.
@@ -328,8 +328,9 @@ function UserMenu() {
             <SidebarMenuButton
               size="lg"
               tooltip={name}
-              // Starts with what the button shows (the name, then the address or role): speech input can say it.
-              aria-label={`${name} ${detail}, account menu`}
+              // Named by what it shows (the name, then the address or role) so speech input can say it; the collapsed
+              // rail shows only the picture, so there it is named outright.
+              aria-label={state === 'collapsed' && !isMobile ? `${name}, account menu` : undefined}
               data-testid="user-menu-trigger"
             >
               <UserAvatar name={name} src={user?.avatar_url} className="size-8 rounded-lg" logo />
