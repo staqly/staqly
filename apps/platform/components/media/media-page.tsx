@@ -369,7 +369,8 @@ export function MediaPage() {
     mutationFn: () => api.deleteMediaMany([...selected]),
     onSuccess: (res) => {
       setSelected(new Set())
-      deletedToast(qc, res.deleted, files(res.deleted.length))
+      // One file is named in the title; more are counted under it.
+      deletedToast(qc, res.deleted, res.deleted.length > 1 ? files(res.deleted.length) : undefined)
     },
     onError: (e) => toastApiError(e),
   })

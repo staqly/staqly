@@ -180,7 +180,7 @@ function DetailForm({
   const remove = useMutation({
     mutationFn: () => api.deleteMedia(item.id),
     onSuccess: () => {
-      deletedToast(qc, [item.id], item.original_name)
+      deletedToast(qc, [item.id], undefined, item.original_name)
       onClose()
     },
     onError: (e) => toastApiError(e),
