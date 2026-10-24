@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/posthog/posthog-go"
 	api "github.com/staqly/staqly/apps/api"
 	"github.com/staqly/staqly/apps/api/internal/app"
 	"github.com/staqly/staqly/apps/api/internal/blob"
@@ -67,7 +68,20 @@ func Main(args []string, version string) int {
 			return 2
 		}
 		defer sentry.Flush(2 * time.Second)
-		log = slog.New(sentryHandler{Handler: log.Handler()})
+		log = slog.New(reportHandler{Handler: log.Handler(), send: sentrySend})
+	}
+	if ph := cfg.App.PostHog; ph.Key != "" {
+		// Product events and error reports for the operator's PostHog project (internal/app/analytics.go).
+		base := posthog.NewProperties().Set("environment", ph.Environment).Set("release", version).
+			Set("mode", cfg.App.Mode).Set("app", "api")
+		client, err := newPostHog(ph, base, log.Handler())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "config: POSTHOG_KEY:", err)
+			return 2
+		}
+		defer client.Close() // sends what is still queued (at most 5 s)
+		cfg.App.Analytics = client
+		log = slog.New(reportHandler{Handler: log.Handler(), send: posthogSend(client, base)})
 	}
 	slog.SetDefault(log)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -187,7 +201,11 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 		// Same path as the standalone dashboard (cmd/dashboard): it reaches the API
 		// over its listener, so the API's local-mode checks are unchanged.
 		site, _ := fs.Sub(api.Web, "web")
-		dash := &http.Server{Handler: web.Handler(site, web.DialURL(ln.Addr().String()), log, cfg.TrustProxy, relay),
+		var analyticsHost []string
+		if cfg.App.PostHog.Key != "" {
+			analyticsHost = append(analyticsHost, cfg.App.PostHog.Host)
+		}
+		dash := &http.Server{Handler: web.Handler(site, web.DialURL(ln.Addr().String()), log, cfg.TrustProxy, relay, analyticsHost...),
 			ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Minute, IdleTimeout: 120 * time.Second}
 		servers = append(servers, dash)
 		go func() {

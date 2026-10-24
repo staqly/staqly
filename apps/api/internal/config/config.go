@@ -210,6 +210,8 @@ func Load() (Config, error) {
 		SentryEnvironment: env("SENTRY_ENVIRONMENT", "production"),
 		App: app.Config{
 			Mode: mode,
+			PostHog: app.PostHogConfig{Key: os.Getenv("POSTHOG_KEY"), Host: strings.TrimRight(env("POSTHOG_HOST", "https://eu.i.posthog.com"), "/"),
+				Environment: env("POSTHOG_ENVIRONMENT", "production")},
 			AI: app.AIConfig{
 				Disabled:      envBool("AI_DISABLED", false),
 				OpenAIBaseURL: strings.TrimRight(env("AI_OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),

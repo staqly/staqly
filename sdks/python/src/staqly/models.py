@@ -496,6 +496,15 @@ class AccessTokenRotated(StaqlyModel):
     sessions_revoked: int
 
 
+class SetupAnalytics(StaqlyModel):
+    """The server's PostHog project for the dashboard (public project token, host, environment, release)."""
+
+    key: str
+    host: str
+    environment: str
+    release: str
+
+
 class SetupStatus(StaqlyModel):
     """Result of ``setup()``: server mode and whether a workspace can be created."""
 
@@ -517,6 +526,8 @@ class SetupStatus(StaqlyModel):
     legacy_sign_in: bool = False
     #: Cloud accounts: people sign in with a passkey.
     passkey_sign_in: bool = False
+    #: ``POSTHOG_KEY`` set: where the dashboard sends its page views, web vitals and errors.
+    analytics: SetupAnalytics | None = None
 
 
 class Liveness(StaqlyModel):

@@ -161,6 +161,9 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `METRICS_TOKEN` | — | Bearer token for `/metrics` from outside this machine (e.g. Prometheus in Docker). |
 | `SENTRY_DSN` | — | Send errors (5xx, panics, failing workers) to Sentry. Off when empty. See [Logs & tracing](/self-hosting/logs-and-tracing#sentry). |
 | `SENTRY_ENVIRONMENT` | `production` | Sentry environment name. |
+| `POSTHOG_KEY` | — | Send product analytics and error reports to your own PostHog project (its project token, `phc_...`). Off when empty: nothing is sent. See [Analytics](/self-hosting/analytics). |
+| `POSTHOG_HOST` | `https://eu.i.posthog.com` | PostHog ingestion host (US cloud, self-hosted PostHog or a reverse proxy). |
+| `POSTHOG_ENVIRONMENT` | `production` | Added to every event; `development` and `test` are meant to be filtered out of dashboards. |
 | `RATE_LIMIT_DISABLED` | `false` | Turn off rate limits. |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Sensitive unauthenticated endpoints, per IP. `RATE_LIMIT_BURST` defaults to the same value. |
 

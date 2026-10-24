@@ -5,11 +5,13 @@ import { RotateCcw } from 'lucide-react'
 import { useEffect } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { captureError } from '@/lib/analytics'
 
 /** Full-page "something broke" screen used by app/error.tsx and app/global-error.tsx. */
 export function ErrorScreen({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     console.error(error)
+    captureError(error, 'app')
   }, [error])
 
   return (

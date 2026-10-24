@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"mime"
 	"net"
 	"net/http"
@@ -112,8 +113,9 @@ const RelayHeader = "X-Staqly-Relay"
 // /api/* to the API at upstream (e.g. http://api:3333). trustProxy (TRUST_PROXY)
 // takes the browser's address from the right-most X-Forwarded-For entry set by
 // your own reverse proxy instead of the TCP peer. relayToken ("" = none) is a
-// secret shared with an API in the same process, sent as RelayHeader.
-func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken string) http.Handler {
+// secret shared with an API in the same process, sent as RelayHeader. analyticsHost (POSTHOG_HOST when
+// POSTHOG_KEY is set) is the one other origin the dashboard's pages may send to.
+func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken string, analyticsHost ...string) http.Handler {
 	mux := http.NewServeMux()
 	api := apiProxy(upstream, log, trustProxy, relayToken)
 	mux.Handle("/api/", api)
@@ -122,7 +124,7 @@ func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, r
 	// platform's answer is on it (a code, or an error, both with the state the sign-in started with), hand it
 	// to the API, which finishes the connection and sends the browser back here to land, without a state.
 	// An error without a state is that landing (the API's own ?error=...): forwarding it sent it round again.
-	page := files(site)
+	page := files(site, withConnect(securityHeaders, analyticsHost), withConnect(editorHeaders, analyticsHost))
 	mux.HandleFunc("/channels/callback/", func(rw http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		provider := strings.TrimPrefix(r.URL.Path, "/channels/callback/")
@@ -254,16 +256,28 @@ func errorJSON(w http.ResponseWriter, status int, code, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": code, "message": msg}})
 }
 
-func files(site fs.FS) http.Handler {
+// withConnect: headers with connect-src opened to the PostHog host (its https origin only), if there is one.
+func withConnect(headers map[string]string, hosts []string) map[string]string {
+	h := maps.Clone(headers)
+	for _, host := range hosts {
+		if u, err := url.Parse(host); err == nil && u.Scheme == "https" && u.Host != "" {
+			h["Content-Security-Policy"] = strings.Replace(h["Content-Security-Policy"], "connect-src 'self'",
+				"connect-src 'self' https://"+u.Host, 1)
+		}
+	}
+	return h
+}
+
+func files(site fs.FS, headers, editor map[string]string) http.Handler {
 	_, err := fs.Stat(site, "index.html")
 	built := err == nil
 	assets := &assetCache{files: map[string]*asset{}}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		for k, v := range securityHeaders {
+		for k, v := range headers {
 			w.Header().Set(k, v)
 		}
 		if editorPath(r.URL.Path) {
-			for k, v := range editorHeaders {
+			for k, v := range editor {
 				w.Header().Set(k, v)
 			}
 		}

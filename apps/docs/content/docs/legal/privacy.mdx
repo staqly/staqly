@@ -16,7 +16,9 @@ If you run staqly yourself (`staqly serve` or Docker), your data stays on your m
 software has **no telemetry** and sends nothing to us. Outgoing requests happen only to
 services you configure yourself: the platforms you connect as channels (your posts and media
 go to them when published), webhooks, alerts (Telegram, Slack, Discord, ntfy, email) and the
-endpoints your schedules call. The rest of this policy is about staqly cloud.
+endpoints your schedules call. If you set `POSTHOG_KEY` yourself, usage events and error
+reports go to **your own** PostHog project ([Analytics](/self-hosting/analytics)), never to us.
+The rest of this policy is about staqly cloud.
 
 ## Who is responsible
 
@@ -70,6 +72,34 @@ content blocker.
 The API playground keeps the API key you enter in your browser only and sends requests directly
 from your browser to the instance you choose.
 
+### 4. Product analytics and error reports in staqly cloud
+
+To see which features are used, where onboarding stalls, why publishing fails and what breaks,
+staqly cloud sends **PostHog** (hosted in the EU) a limited set of usage events and error
+reports:
+
+- **Usage events** from our server, after something happened: for example that you signed in
+  (and with which method), created a workspace, connected a channel (which platform), created,
+  scheduled or published a post (to which platforms, how many channels and media files, how
+  late it went out), that publishing failed (the platform's error message), that you uploaded or
+  edited media, started a checkout, or that your plan changed. They are linked to your account
+  only by its internal id (`usr_...`) and to your workspace by its id; **not** your name, email
+  address, IP address, post text, media, channel names, comments or any other content. Work we
+  do for a workspace (such as publishing at the scheduled time) is recorded for the workspace,
+  not for a person. At most once a day we record that you used the workspace.
+- **Error reports** when something goes wrong: from our server, the error message and technical
+  context (request ID, route, workspace ID); from the dashboard in your browser, the error, the
+  page it happened on (without query strings) and your browser type.
+- **Page views and load times** of the dashboard, **without cookies** or anything stored in
+  your browser and not linked to your account: counted the same anonymous way as on our
+  websites (section 3).
+
+We do **not** record sessions, clicks or what you type, and never send access tokens, API keys,
+passwords, cookies or payment details. Revenue figures come from Stripe, not from these events.
+Legal basis: legitimate interest in running a reliable service and improving it. You can block
+the dashboard's events with any content blocker; to object to the server's events, write to
+[support@staqly.ai](mailto:support@staqly.ai).
+
 ## Cookies
 
 The dashboard uses only what it needs to work: an HttpOnly **session cookie** (valid for up to
@@ -80,8 +110,8 @@ cookies.
 
 - **Hosting and infrastructure:** the providers that store and run staqly cloud for us, and the
   email provider that delivers sign-in codes and invitations, under data processing agreements. Ask us at support@staqly.ai for the current list.
-- **Website analytics:** PostHog (EU cloud), for staqly.ai and docs.staqly.ai only (section 3);
-  staqly cloud and the software you run yourself send it nothing.
+- **Analytics and error reports:** PostHog (EU cloud), for staqly.ai and docs.staqly.ai
+  (section 3) and staqly cloud (section 4); the software you run yourself sends us nothing.
 - **Payments:** Stripe, once payments are available. Stripe receives your card details
   directly; we never see them.
 - **Services you connect:** when you connect a channel, set up webhooks, alerts or schedule endpoints,
@@ -105,6 +135,8 @@ on standard contractual clauses recognised under the FADP and GDPR.
 - **Sessions** expire after 30 days or when you sign out or revoke them.
 - **Request logs** are kept only as long as needed for security and troubleshooting, then
   deleted.
+- **Analytics events and error reports** (sections 3 and 4) are kept in PostHog for at most
+  the retention of our PostHog plan, currently 12 months.
 - **Billing records** are kept as long as accounting law requires (in Switzerland, 10 years).
 
 ## Security

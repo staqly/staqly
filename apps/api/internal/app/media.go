@@ -247,6 +247,7 @@ func (s *Service) UploadMedia(ctx context.Context, p Principal, filename string,
 		_ = s.Cfg.Blob.Delete(ctx, mediaKey(p.WorkspaceID, storage))
 		return Media{}, err
 	}
+	s.trackAs(nil, p, "media_uploaded", "type", strings.SplitN(mime, "/", 2)[0], "size_bytes", n)
 	return s.withTwin(ctx, row, s.toMedia(row)), nil
 }
 

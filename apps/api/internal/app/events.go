@@ -83,6 +83,7 @@ func (s *Service) emitRef(ctx context.Context, q *db.Queries, p Principal, typ s
 			return ev, err
 		}
 	}
+	s.trackEvent(q, p, ev)
 	if strings.HasPrefix(typ, "webhook.") {
 		// Audit only: delivering changes of webhooks to webhooks would loop
 		// back to the receiver being configured.

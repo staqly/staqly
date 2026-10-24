@@ -92,7 +92,8 @@ func (s *Service) StartEmailSignIn(ctx context.Context, email string) (EmailCode
 
 // VerifyEmailSignIn checks the code and signs in (a new person gets an account and a first workspace,
 // an invitation is accepted), with a fresh session.
-func (s *Service) VerifyEmailSignIn(ctx context.Context, email, code, next, invite, setupToken, userAgent string) (LoginResult, error) {
+func (s *Service) VerifyEmailSignIn(ctx context.Context, email, code, next, invite, setupToken, userAgent string) (_ LoginResult, err error) {
+	defer func() { s.trackSignInFailed(ProviderEmail, err) }()
 	row, email, err := s.checkEmailCode(ctx, email, code, purposeSignIn, "")
 	if err != nil {
 		return LoginResult{}, err
