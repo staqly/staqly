@@ -21,6 +21,8 @@ const buttonVariants = cva(
         // stays above 4.5:1.
         destructive:
           'bg-destructive/10 text-red-700 hover:bg-destructive/20 dark:text-red-400 dark:bg-destructive/20 dark:hover:bg-destructive/30',
+        // Buying or changing a plan: blue, styled like `destructive`.
+        info: 'bg-blue-500/15 text-blue-700 hover:bg-blue-500/25 dark:bg-blue-500/20 dark:text-blue-300 dark:hover:bg-blue-500/30',
         link: 'text-primary underline-offset-4 underline hover:no-underline',
         // Pausing or holding something back: amber, styled like `destructive`.
         warning:

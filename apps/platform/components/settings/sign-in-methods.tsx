@@ -143,7 +143,7 @@ export function SignInMethodsCard() {
                   {PROVIDER_LABEL[m.provider] ?? m.provider}
                   <span className="font-normal text-muted-foreground">
                     {' '}
-                    · {m.provider === 'passkey' ? m.name : m.email}
+                    {m.provider === 'passkey' ? m.name : m.email}
                   </span>
                 </p>
                 <p className="text-xs text-muted-foreground">

@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Laptop,
   LifeBuoy,
-  LogOut,
   Monitor,
   MonitorSmartphone,
   QrCode,
@@ -26,7 +25,7 @@ import { IdChip } from '@/components/common/id-chip'
 import { PageContainer } from '@/components/common/page-header'
 import { SecretField } from '@/components/common/secret-field'
 import { SettingsHeader } from '@/components/settings/settings-header'
-import { useLogout, useShell } from '@/components/shell/app-shell'
+import { useShell } from '@/components/shell/app-shell'
 import { THEMES } from '@/components/shell/theme-toggle'
 import { Button } from '@/components/ui/button'
 import {
@@ -65,7 +64,7 @@ function WorkspaceCardLoading() {
         </Field>
         {ws && (
           <div className="text-xs text-muted-foreground">
-            <IdChip id={ws.id} label="workspace" /> · created {formatDateTime(ws.created_at)}
+            <IdChip id={ws.id} label="workspace" /> created {formatDateTime(ws.created_at)}
           </div>
         )}
       </div>
@@ -326,7 +325,6 @@ function RecoveryCard() {
 }
 
 export function SettingsPage() {
-  const logout = useLogout()
   const { isCloud } = useMode()
   const { accountsEnabled } = useRole()
 
@@ -340,13 +338,6 @@ export function SettingsPage() {
         <DevicesCard />
         {/* People in an account recover access with their sign-in methods; the key is for workspaces without one. */}
         {isCloud && !accountsEnabled && <RecoveryCard />}
-        {isCloud && (
-          <Card title="Sign out" icon={<LogOut />} description="End the session in this browser.">
-            <Button variant="outline" onClick={() => logout.mutate()} disabled={logout.isPending}>
-              <LogOut /> Log out
-            </Button>
-          </Card>
-        )}
       </div>
     </PageContainer>
   )

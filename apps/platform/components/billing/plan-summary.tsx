@@ -173,7 +173,7 @@ export function PlanSummary({
   const planLink = canManage && (
     <Button
       asChild
-      variant={state === 'start' || state === 'suspended' || (state === 'trial' && !subscribed) ? 'default' : 'outline'}
+      variant={state === 'start' || state === 'suspended' || (state === 'trial' && !subscribed) ? 'default' : 'info'}
     >
       <Link href="/plans">
         {state === 'start' ? (

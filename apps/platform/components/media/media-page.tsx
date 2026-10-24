@@ -905,7 +905,7 @@ export function MediaPage() {
               className="mb-4 items-center"
               action={
                 canWrite && (
-                  <Button variant="outline" size="sm" onClick={() => setPurgingIds([])} disabled={purging}>
+                  <Button variant="destructive" size="sm" onClick={() => setPurgingIds([])} disabled={purging}>
                     <Trash2 /> Empty Deleted
                   </Button>
                 )

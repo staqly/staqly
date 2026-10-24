@@ -430,7 +430,7 @@ function RowActions({
             type="button"
             size="icon"
             variant="ghost"
-            className={cn(quick, 'hover:text-destructive')}
+            className={cn(quick, 'text-destructive hover:text-destructive')}
             aria-label="Delete"
             onClick={() => onAction('delete', post)}
             data-testid="post-row-delete"

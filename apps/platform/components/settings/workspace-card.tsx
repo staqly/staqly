@@ -76,7 +76,7 @@ export default function WorkspaceCard() {
       >
         {ws && (
           <div className="text-xs text-muted-foreground">
-            <IdChip id={ws.id} label="workspace" /> · created {formatDateTime(ws.created_at)}
+            <IdChip id={ws.id} label="workspace" /> created {formatDateTime(ws.created_at)}
           </div>
         )}
         <div role="group" aria-labelledby="ws-logo-label" className="mb-2 grid gap-2">

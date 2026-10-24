@@ -245,7 +245,7 @@ describe('sign-in methods', () => {
     await user.clear(name)
     await user.type(name, 'Mac')
     await user.click(within(drawer).getByTestId('save-passkey'))
-    await waitFor(() => expect(screen.getByTestId('sign-in-methods')).toHaveTextContent('Passkey · Mac'))
+    await waitFor(() => expect(screen.getByTestId('sign-in-methods')).toHaveTextContent('Passkey Mac'))
     expect(api.find('POST', '/v1/account/sign-in-methods/passkey/finish')[0].body).toEqual({
       challenge_id: 'pkc_1',
       name: 'Mac',
