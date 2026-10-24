@@ -7,13 +7,15 @@ import { toastApiError } from '@/lib/notify'
 
 /**
  * Files moved to Deleted: a toast with Undo (restores them) for 7 seconds. Used by the drawer and the action bar.
+ * One file is named in the title; label (a count, or what happened) is the line under it.
  */
-export function deletedToast(qc: QueryClient, ids: string[], label: string) {
+export function deletedToast(qc: QueryClient, ids: string[], label?: string, name?: string) {
   // Their use counts, for when Undo brings them back.
   const known = findMedia(qc, ids)
+  const one = ids.length === 1 ? (name ?? known.get(ids[0]!)?.original_name) : undefined
 
   trashInCache(qc, ids)
-  toast.success('Moved to Deleted', {
+  toast.success(one ? `“${one}” moved to Deleted` : 'Moved to Deleted', {
     description: label,
     duration: 7000,
     action: {

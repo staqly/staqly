@@ -160,9 +160,25 @@ describe('media library page', () => {
     await waitFor(() => expect(api.find('POST', '/v1/media/delete')).toHaveLength(1))
     expect(api.find('POST', '/v1/media/delete')[0]!.body).toEqual({ ids: ['med_sun', 'med_clip'] })
     expect(await screen.findByText('Moved to Deleted')).toBeInTheDocument()
+    expect(screen.getByText('2 files')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(api.find('POST', '/v1/media/med_clip/restore')).toHaveLength(1))
     expect(api.find('POST', '/v1/media/med_sun/restore')).toHaveLength(1)
+  })
+
+  it('one file moved to Deleted is named in the toast', async () => {
+    mockApi({
+      'GET /v1/media': { data: [SUNSET, CLIP] },
+      'POST /v1/media/delete': { deleted: ['med_sun'], missing: [] },
+      'GET /v1/workspace/usage': usage(PLANS[1]!),
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<MediaPage />, { mode: 'cloud' })
+    await user.click(await screen.findByRole('button', { name: 'Select Sunset.png' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('“Sunset.png” moved to Deleted')).toBeInTheDocument()
+    expect(screen.queryByText('1 file')).not.toBeInTheDocument()
   })
 
   it('refuses a file over the plan limit before uploading, in plain words', async () => {
