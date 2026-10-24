@@ -96,8 +96,8 @@ export function SiteFooter({ web, docs, basePath, link: Link = A }: SiteFooterPr
             <Logo basePath={basePath} colorway="dark" wordmarkClassName="text-[18px]" />
           </Link>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            The post scheduler for people and their AI agents: write once, schedule it, and publish to X or anywhere
-            your own automation reaches.
+            The post scheduler for people and their AI agents: write once, schedule it, and publish to every platform
+            you connect, or anywhere your own automation reaches.
           </p>
           <a
             href={GITHUB}

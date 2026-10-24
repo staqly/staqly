@@ -1,5 +1,5 @@
 // The plans as sold, per user. Source of truth: apps/api/internal/app/plans.go (limits and prices); keep this
-// file in step with it. Yearly = twelve whole-dollar months at 20 % off or a little more (rounded down).
+// file in step with it. Yearly = twelve whole-euro months at 20 % off or a little more (rounded down).
 // Every member of a workspace is a seat and pays the plan's price, whatever their role.
 
 export type Interval = 'month' | 'year'
@@ -146,7 +146,7 @@ export const COMPARE: { category: string; rows: CompareRow[] }[] = [
     rows: [
       {
         label: 'Connected channels',
-        hint: 'X and LinkedIn directly, every other platform through your own automation',
+        hint: 'Each connected account counts once, whatever the platform, your own automation included',
         values: ['5', '15', '40', 'Unlimited'],
       },
       {

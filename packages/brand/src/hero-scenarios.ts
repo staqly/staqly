@@ -15,9 +15,9 @@ export type Scenario = {
   image?: string // a file under the app's public/ (both apps serve /demo/*.svg)
 }
 
-// Use cases of the landing page (apps/web/lib/use-cases.ts), as an agent would send them. staqly publishes to X
-// and LinkedIn itself (apps/api/internal/providers); every other platform is a channel on your own automation
-// (`custom`), so it always says which one ("via n8n"), never that staqly posts there directly.
+// Use cases of the landing page (apps/web/lib/use-cases.ts), as an agent would send them. staqly publishes to the
+// platforms in its catalog itself (apps/api/internal/providers); `via` marks a channel on your own automation
+// (`custom`), and says which one ("via script").
 export const scenarios: Scenario[] = [
   {
     agent: 'claude',
@@ -27,8 +27,8 @@ export const scenarios: Scenario[] = [
     slot: 'Today 18:00',
     content: '3 things I wish I knew before my first marathon 🏃 Save this for race week. #running #marathontraining',
     targets: [
-      { id: 'instagram', channel: 'Instagram', via: 'n8n', chars: '96 / 2,200', link: 'instagram.com/reel/C9...' },
-      { id: 'tiktok', channel: 'TikTok', via: 'n8n', chars: '96 / 2,200', link: 'tiktok.com/@.../video/73...' },
+      { id: 'instagram', channel: 'Instagram', chars: '96 / 2,200', link: 'instagram.com/reel/C9...' },
+      { id: 'tiktok', channel: 'TikTok', chars: '96 / 2,200', link: 'tiktok.com/@.../video/73...' },
       { id: 'x', channel: 'X', chars: '96 / 280', link: 'x.com/.../status/18...' },
     ],
     image: '/demo/race-day.svg',
@@ -41,8 +41,8 @@ export const scenarios: Scenario[] = [
     slot: 'Today 18:30',
     content: 'Chasing the last light of the day ☀️ #goldenhour #citylife',
     targets: [
-      { id: 'instagram', channel: 'Instagram', via: 'n8n', chars: '58 / 2,200', link: 'instagram.com/p/C9x...' },
-      { id: 'threads', channel: 'Threads', via: 'n8n', chars: '58 / 500', link: 'threads.net/@.../post/C9...' },
+      { id: 'instagram', channel: 'Instagram', chars: '58 / 2,200', link: 'instagram.com/p/C9x...' },
+      { id: 'threads', channel: 'Threads', chars: '58 / 500', link: 'threads.net/@.../post/C9...' },
     ],
     image: '/demo/golden-hour.svg',
   },
@@ -67,11 +67,10 @@ export const scenarios: Scenario[] = [
     slot: 'Tomorrow 07:30',
     content: 'Fresh out of the oven: cardamom buns, today only 🥐 Come early, they go fast!',
     targets: [
-      { id: 'facebook', channel: 'Facebook', via: 'Make', chars: '78 chars', link: 'facebook.com/.../posts/pf...' },
+      { id: 'facebook', channel: 'Facebook', chars: '78 / 63,206', link: 'facebook.com/.../posts/pf...' },
       {
         id: 'google_business',
         channel: 'Google Business',
-        via: 'n8n',
         chars: '78 / 1,500',
         link: 'g.page/.../posts/...',
       },
