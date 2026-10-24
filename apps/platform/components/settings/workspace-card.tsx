@@ -38,7 +38,16 @@ export default function WorkspaceCard() {
   const save = useMutation({
     mutationFn: (v: { name: string; timezone: string }) => api.updateWorkspace(v),
     onSuccess: (w) => {
-      qc.setQueryData(qk.session, (old: typeof session.data) => (old ? { ...old, workspace: w } : old))
+      // The workspace menu lists the name too.
+      qc.setQueryData(qk.session, (old: typeof session.data) =>
+        old
+          ? {
+              ...old,
+              workspace: w,
+              workspaces: old.workspaces?.map((x) => (x.id === w.id ? { ...x, name: w.name } : x)),
+            }
+          : old,
+      )
       toast.success('Workspace saved')
     },
     onError: (e) => setFormApiError(e, form.setError, fieldsOf('name', 'timezone')),

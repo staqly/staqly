@@ -8,7 +8,6 @@ import {
   BellRing,
   Blocks,
   CalendarClock,
-  Check,
   ChevronsUpDown,
   Clock,
   CreditCard,
@@ -39,6 +38,7 @@ import { daysLeft } from '@/components/billing/billing-format'
 import { PlanBadge } from '@/components/plans/plan-badge'
 import { NewWorkspaceDialog } from '@/components/settings/new-workspace-dialog'
 import { UserAvatar } from '@/components/settings/user-avatar'
+import { WorkspaceTile } from '@/components/shell/workspace-tile'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -47,6 +47,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -70,7 +72,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { api, setCsrfToken } from '@/lib/api'
+import { api, setCsrfToken, type MyWorkspace } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { planName, toastApiError } from '@/lib/notify'
 import { LIVE_SUBSCRIPTION } from '@/lib/plans'
@@ -142,6 +144,10 @@ function useIsWide() {
 
 // ---- workspace menu ----
 
+const NO_WORKSPACES: MyWorkspace[] = []
+// ponytail: past the first few, the menu keeps the server's order; recently opened first when people ask for it.
+const MENU_WORKSPACES = 6
+
 function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
   const session = useSession()
   const { isLocal } = useMode()
@@ -149,10 +155,19 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
   const { openConnectDevice } = useShell()
   const { setOpenMobile } = useSidebar()
   const logout = useLogout()
-  const { accountsEnabled, isOwner, canManagePeople } = useRole()
+  const { accountsEnabled, isOwner } = useRole()
   const openWorkspace = useSwitchWorkspace()
   const [creating, setCreating] = useState(false)
-  const others = session.data?.workspaces ?? []
+  const [searching, setSearching] = useState(false)
+  const others = session.data?.workspaces ?? NO_WORKSPACES
+  // The menu lists a few (the open one first); the rest are a search away.
+  const listed = useMemo(
+    () =>
+      others.length > MENU_WORKSPACES
+        ? others.toSorted((a, b) => +b.current - +a.current).slice(0, MENU_WORKSPACES - 1)
+        : others,
+    [others],
+  )
   const ws = session.data?.workspace
   const plan = isLocal ? 'unlocked' : ws?.plan
   const name = ws?.name ?? 'staqly'
@@ -215,11 +230,47 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
           {plan && <PlanBadge plan={plan} className="ml-auto" />}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onSelect={() => go('/settings/plan')}>
-            <Gauge /> Plan & usage
-          </DropdownMenuItem>
-          {!accountsEnabled && (
+        {/* People in an account: this menu is the workspaces (switch, create); the workspace's plan, members and
+            settings are in the person's menu. Without accounts there is one workspace: its pages are here. */}
+        {accountsEnabled ? (
+          <>
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+              Switch workspace
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              aria-label="Switch workspace"
+              value={ws?.id ?? ''}
+              onValueChange={(id) => id !== ws?.id && openWorkspace.mutate(id)}
+            >
+              {listed.map((w) => (
+                <DropdownMenuRadioItem key={w.id} value={w.id} disabled={openWorkspace.isPending}>
+                  <WorkspaceTile name={w.name} />
+                  <span className="min-w-0 flex-1 truncate" title={w.name}>
+                    {w.name}
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            {listed.length < others.length && (
+              <DropdownMenuItem onSelect={() => setSearching(true)} className="text-muted-foreground">
+                <Search /> All {others.length} workspaces...
+              </DropdownMenuItem>
+            )}
+            {/* An action, not one of the workspaces: its own group under a line. */}
+            {isOwner && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setCreating(true)}>
+                  <Plus /> New workspace
+                </DropdownMenuItem>
+              </>
+            )}
+          </>
+        ) : (
+          <DropdownMenuGroup>
+            <DropdownMenuItem onSelect={() => go('/settings/plan')}>
+              <Gauge /> Plan & usage
+            </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {
                 setOpenMobile(false)
@@ -228,39 +279,10 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
             >
               <QrCode /> Connect a device
             </DropdownMenuItem>
-          )}
-          {accountsEnabled && canManagePeople && (
-            <DropdownMenuItem onSelect={() => go('/settings/members')}>
-              <Users /> Members
+            <DropdownMenuItem onSelect={() => go('/settings')}>
+              <Settings /> Settings
             </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onSelect={() => go('/settings')}>
-            <Settings /> Settings
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        {accountsEnabled && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup aria-label="Workspaces">
-              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Workspaces</DropdownMenuLabel>
-              {others.map((w) => (
-                <DropdownMenuItem
-                  key={w.id}
-                  disabled={openWorkspace.isPending}
-                  onSelect={() => !w.current && openWorkspace.mutate(w.id)}
-                  data-testid="workspace-switch-item"
-                >
-                  <span className="min-w-0 flex-1 truncate">{w.name}</span>
-                  {w.current && <Check className="ml-auto" aria-label="Open now" />}
-                </DropdownMenuItem>
-              ))}
-              {isOwner && (
-                <DropdownMenuItem onSelect={() => setCreating(true)}>
-                  <Plus /> New workspace
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuGroup>
-          </>
+          </DropdownMenuGroup>
         )}
         {/* A session without a person (an API key on a development server): it can only end. New workspaces and
             switching belong to people in an account (above). */}
@@ -274,6 +296,15 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
         )}
       </DropdownMenuContent>
       {isOwner && creating && <NewWorkspaceDialog open={creating} onOpenChange={setCreating} />}
+      {searching && (
+        <WorkspaceSwitcherDialog
+          open={searching}
+          onOpenChange={setSearching}
+          workspaces={others}
+          pending={openWorkspace.isPending}
+          onPick={openWorkspace.mutate}
+        />
+      )}
     </DropdownMenu>
   )
 }
@@ -384,19 +415,29 @@ function UserMenu() {
               </>
             )}
             <DropdownMenuSeparator />
-            {manageBilling && (
-              <DropdownMenuItem onSelect={() => go('/settings/plan')}>
-                <CreditCard /> Billing
+            {/* People in an account: the open workspace's pages, then their own account. */}
+            {accountsEnabled ? (
+              <>
+                <DropdownMenuItem onSelect={() => go('/settings/plan')}>
+                  <Gauge /> Plan & usage
+                </DropdownMenuItem>
+                {canManagePeople && (
+                  <DropdownMenuItem onSelect={() => go('/settings/members')}>
+                    <Users /> Members
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onSelect={() => go('/settings')}>
+                  <Settings /> Workspace settings
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => go('/settings/account')}>
+                  <UserRound /> Account settings
+                </DropdownMenuItem>
+              </>
+            ) : (
+              <DropdownMenuItem onSelect={() => go('/settings')}>
+                <Settings /> Settings
               </DropdownMenuItem>
             )}
-            {accountsEnabled && (
-              <DropdownMenuItem onSelect={() => go('/settings/account')}>
-                <UserRound /> Account
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onSelect={() => go('/settings')}>
-              <Settings /> Settings
-            </DropdownMenuItem>
             {/* Locally too: a browser signs in with the access token and can sign out again. */}
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => logout.mutate()} disabled={logout.isPending}>
@@ -762,6 +803,9 @@ function IdRoutePrefetch() {
   return null
 }
 
+const WorkspaceSwitcherDialog = dynamic(() => import('./workspace-switcher').then((m) => m.WorkspaceSwitcherDialog), {
+  ssr: false,
+})
 const CommandPalette = dynamic(() => import('./command-palette').then((m) => m.CommandPalette), { ssr: false })
 const CreateCollectionDialog = dynamic(
   () => import('@/components/collections/create-collection-dialog').then((m) => m.CreateCollectionDialog),
