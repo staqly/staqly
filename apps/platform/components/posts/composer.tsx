@@ -682,20 +682,30 @@ function ThreadEditor({
   locked,
 }: {
   parts: ThreadPart[]
-  onChange: (parts: ThreadPart[]) => void
+  /** A state setter: every change applies to the latest thread, by uid, so uploads that finish later and several
+   * files picked at once never write back an older thread or land on another comment. */
+  onChange: Dispatch<SetStateAction<ThreadPart[]>>
   countsFor: (text: string) => Count[]
   errors: Record<string, string | undefined>
   locked: boolean
 }) {
-  const set = (i: number, patch: Partial<ThreadPart>) =>
-    onChange(parts.map((p, j) => (j === i ? { ...p, ...patch } : p)))
-  const move = (i: number, by: number) => {
-    const next = [...parts]
-    const [part] = next.splice(i, 1)
+  const set = (uid: string, patch: (part: ThreadPart) => Partial<ThreadPart>) =>
+    onChange((ps) => ps.map((p) => (p.uid === uid ? { ...p, ...patch(p) } : p)))
+  const move = (uid: string, by: number) =>
+    onChange((ps) => {
+      const i = ps.findIndex((p) => p.uid === uid)
 
-    next.splice(i + by, 0, part!)
-    onChange(next)
-  }
+      if (i < 0 || i + by < 0 || i + by >= ps.length) {
+        return ps
+      }
+
+      const next = [...ps]
+      const [part] = next.splice(i, 1)
+
+      next.splice(i + by, 0, part!)
+
+      return next
+    })
 
   return (
     <div className="grid gap-3" data-testid="thread">
@@ -719,7 +729,7 @@ function ThreadEditor({
                 <>
                   <DelayPicker
                     value={part.delay}
-                    onChange={(d) => set(i, { delay: d })}
+                    onChange={(d) => set(part.uid, () => ({ delay: d }))}
                     label={`When comment ${i + 1} goes out`}
                   />
                   <span className="ml-auto flex items-center">
@@ -730,7 +740,7 @@ function ThreadEditor({
                       aria-label={`Move comment ${i + 1} up`}
                       tooltip="Move up"
                       disabled={i === 0}
-                      onClick={() => move(i, -1)}
+                      onClick={() => move(part.uid, -1)}
                     >
                       <ChevronUp />
                     </Button>
@@ -741,7 +751,7 @@ function ThreadEditor({
                       aria-label={`Move comment ${i + 1} down`}
                       tooltip="Move down"
                       disabled={i === parts.length - 1}
-                      onClick={() => move(i, 1)}
+                      onClick={() => move(part.uid, 1)}
                     >
                       <ChevronDown />
                     </Button>
@@ -752,7 +762,7 @@ function ThreadEditor({
                       aria-label={`Remove comment ${i + 1}`}
                       tooltip="Remove this comment"
                       className="text-destructive hover:text-destructive"
-                      onClick={() => onChange(parts.filter((_, j) => j !== i))}
+                      onClick={() => onChange((ps) => ps.filter((p) => p.uid !== part.uid))}
                     >
                       <Trash2 />
                     </Button>
@@ -765,7 +775,7 @@ function ThreadEditor({
                 id={`thread-${part.uid}`}
                 labelledBy={`thread-${part.uid}-label`}
                 value={part.content}
-                onChange={(content) => set(i, { content })}
+                onChange={(content) => set(part.uid, () => ({ content }))}
                 placeholder="Write a comment"
                 invalid={!!err}
                 testId={`thread-content-${i}`}
@@ -774,10 +784,14 @@ function ThreadEditor({
                 below={
                   <MediaStrip
                     media={part.media}
-                    onRemove={locked ? undefined : (id) => set(i, { media: part.media.filter((m) => m.id !== id) })}
+                    onRemove={
+                      locked ? undefined : (id) => set(part.uid, (p) => ({ media: p.media.filter((m) => m.id !== id) }))
+                    }
                   />
                 }
-                start={locked ? undefined : <MediaButton onAdd={(m) => set(i, { media: [...part.media, m] })} />}
+                start={
+                  locked ? undefined : <MediaButton onAdd={(m) => set(part.uid, (p) => ({ media: [...p.media, m] }))} />
+                }
                 end={<Counter counts={countsFor(part.content)} />}
               />
             </div>
@@ -791,7 +805,7 @@ function ThreadEditor({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => onChange([...parts, { uid: crypto.randomUUID(), content: '', media: [], delay: 0 }])}
+            onClick={() => onChange((ps) => [...ps, { uid: crypto.randomUUID(), content: '', media: [], delay: 0 }])}
             data-testid="add-comment"
           >
             <MessageSquarePlus /> Add comment
