@@ -63,7 +63,7 @@ jobs:
 
   # ── Go API ────────────────────────────────────────────────────────────────
   api:
-    name: API (Go)
+    name: API (Go) on SQLite
     needs: changes
     if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
