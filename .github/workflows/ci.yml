@@ -259,9 +259,11 @@ jobs:
     name: Docker images + end-to-end
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [changes, api, dashboard]
-    # Runs when its code changed, after api and dashboard passed or were skipped (unchanged).
-    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.changes.outputs.e2e == 'true' }}
+    needs: changes
+    # Runs when its code changed, next to the api job rather than after it: api (about 10 min, mostly
+    # `go test -race`) and this job (about 10 min) no longer add up on the critical path. A failing api
+    # job doesn't stop this one; the run fails either way.
+    if: needs.changes.outputs.e2e == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
