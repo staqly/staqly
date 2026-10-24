@@ -259,7 +259,7 @@ function AccountSignIn({
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {signup
-            ? `Starter is free for 7 days, no card needed. ${signInWays(google, false, email)}`
+            ? `Starter is free for 7 days, cancel anytime.${signInWays(google, false, email)}`
             : signInWays(google, passkey, email)}
         </p>
       </div>
