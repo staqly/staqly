@@ -60,6 +60,17 @@ jobs:
           hit e2e 'apps/(api|cli)/|e2e/|Dockerfile|compose'
           cat "$GITHUB_OUTPUT" # the decisions, in the log
 
+  # The workflows themselves: expressions, permissions, shell in run: steps (actionlint + shellcheck).
+  # A few seconds, so it runs on every change.
+  workflows:
+    name: Workflows (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - run: make lint-workflows
+
   # Every job runs the same turbo tasks a developer runs locally
   # (`pnpm check`), for its own package: format:check, lint, typecheck, test,
   # build. Generated code is checked to be up to date.

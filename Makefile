@@ -1,4 +1,4 @@
-.PHONY: help dashboard release up dev dev-tunnel site dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
+.PHONY: help dashboard release up dev dev-tunnel site dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi lint-workflows gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -97,6 +97,11 @@ test-e2e: ## Full Docker end-to-end test (compose.e2e.yml + e2e/)
 
 lint-openapi: ## Validate the OpenAPI document
 	pnpm --filter @staqly/api run lint:openapi
+
+ACTIONLINT_IMAGE := rhysd/actionlint:1.7.12
+
+lint-workflows: ## Lint the GitHub Actions workflows (actionlint + shellcheck, in Docker; CI runs the same)
+	docker run --rm -v "$(CURDIR):/repo" -w /repo $(ACTIONLINT_IMAGE) -color
 
 gen: ## Regenerate sqlc queries, dashboard API types and the TypeScript SDK schema
 	pnpm turbo run gen
