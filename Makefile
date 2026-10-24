@@ -17,7 +17,8 @@ dev: ## Build from this checkout with the dev stack (debug logs, mailpit :8025, 
 # The dev stack on public https addresses through a named Cloudflare tunnel, for platforms that call back over
 # https and download media themselves (Instagram). TUNNEL is a cloudflared config whose ingress serves
 # localhost:8080 (the dashboard) and localhost:9000 (MaxIOFS) on two hostnames; media links are signed for the
-# second. The dashboard is public meanwhile, so the dev sign-in (readable email codes) is off.
+# second, while staqly itself reads MaxIOFS on the compose network (through Cloudflare, HEAD requests for .png/.jpg
+# keys sometimes arrive as GET and fail their signature). The dashboard is public meanwhile, so the dev sign-in (readable email codes) is off.
 TUNNEL_FILE = $(shell echo $(TUNNEL))
 TUNNEL_LOG := $(or $(TMPDIR),/tmp/)staqly-tunnel.log
 
@@ -29,7 +30,7 @@ dev-tunnel: ## Dev stack behind a named Cloudflare tunnel (Instagram tests): mak
 	pkill -f "cloudflared tunnel --no-autoupdate --config $(TUNNEL_FILE)" || true; \
 	nohup cloudflared tunnel --no-autoupdate --config $(TUNNEL_FILE) run > $(TUNNEL_LOG) 2>&1 & \
 	for i in $$(seq 30); do [ "$$(curl -s -o /dev/null -w '%{http_code}' https://$$media)" != 530 ] && break; sleep 1; done; \
-	PUBLIC_DASHBOARD_URL=https://$$app AUTH_DEV_SIGNIN=false S3_ENDPOINT=https://$$media $(DEV) up -d --build --wait && \
+	PUBLIC_DASHBOARD_URL=https://$$app AUTH_DEV_SIGNIN=false S3_SIGN_ENDPOINT=https://$$media $(DEV) up -d --build --wait && \
 	echo "Dashboard: https://$$app  Media: https://$$media  Tunnel log: $(TUNNEL_LOG)  (make dev-down stops both)"
 
 pull: ## Download the released image (STAQLY_VERSION=v0.2.0 for a specific release)

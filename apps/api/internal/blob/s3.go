@@ -23,7 +23,10 @@ type S3Config struct {
 	PathStyle bool   // bucket in the path (MaxIOFS, MinIO and most self-hosted servers) instead of the host name
 	Prefix    string // optional folder in the bucket, e.g. "staqly/"
 	PublicURL string // optional public base URL (a CDN in front of a public bucket); used instead of signed URLs
-	TempDir   string // where uploads are staged before they are sent (DATA_DIR/tmp)
+	// SignEndpoint is the host signed URLs point at when platforms reach the bucket at another address than
+	// staqly does (staqly on the internal network, platforms through a tunnel or proxy). Default: Endpoint.
+	SignEndpoint string
+	TempDir      string // where uploads are staged before they are sent (DATA_DIR/tmp)
 }
 
 // Missing lists the settings an S3 store can't start without.
@@ -40,14 +43,35 @@ func (c S3Config) Missing() []string {
 
 // S3 keeps files in a bucket through minio-go (any S3-compatible server, SigV4).
 type S3 struct {
-	c   *minio.Client
-	cfg S3Config
+	c      *minio.Client
+	signer *minio.Client // signs URLs (for SignEndpoint); makes no requests, the region is set
+	cfg    S3Config
 }
 
 func NewS3(cfg S3Config) (*S3, error) {
-	u, err := url.Parse(cfg.Endpoint)
+	c, err := newMinio(cfg, "S3_ENDPOINT", cfg.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	signer := c
+	if cfg.SignEndpoint != "" {
+		if signer, err = newMinio(cfg, "S3_SIGN_ENDPOINT", cfg.SignEndpoint); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.TempDir == "" {
+		cfg.TempDir = os.TempDir()
+	}
+	if cfg.Prefix != "" && !strings.HasSuffix(cfg.Prefix, "/") {
+		cfg.Prefix += "/"
+	}
+	return &S3{c: c, signer: signer, cfg: cfg}, nil
+}
+
+func newMinio(cfg S3Config, name, endpoint string) (*minio.Client, error) {
+	u, err := url.Parse(endpoint)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
-		return nil, fmt.Errorf("S3_ENDPOINT must be an http(s) URL, got %q", cfg.Endpoint)
+		return nil, fmt.Errorf("%s must be an http(s) URL, got %q", name, endpoint)
 	}
 	lookup := minio.BucketLookupAuto
 	if cfg.PathStyle {
@@ -57,22 +81,12 @@ func NewS3(cfg S3Config) (*S3, error) {
 	if region == "" {
 		region = "us-east-1"
 	}
-	c, err := minio.New(u.Host, &minio.Options{
+	return minio.New(u.Host, &minio.Options{
 		Creds:        credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
 		Secure:       u.Scheme == "https",
 		Region:       region,
 		BucketLookup: lookup,
 	})
-	if err != nil {
-		return nil, err
-	}
-	if cfg.TempDir == "" {
-		cfg.TempDir = os.TempDir()
-	}
-	if cfg.Prefix != "" && !strings.HasSuffix(cfg.Prefix, "/") {
-		cfg.Prefix += "/"
-	}
-	return &S3{c: c, cfg: cfg}, nil
 }
 
 func (s *S3) Name() string    { return "s3" }
@@ -189,7 +203,7 @@ func (s *S3) SignedURL(ctx context.Context, key string, ttl time.Duration) (stri
 		// A public bucket behind a CDN: its plain URL (a signature would not match the CDN's host).
 		return strings.TrimRight(s.cfg.PublicURL, "/") + "/" + (&url.URL{Path: obj}).EscapedPath(), nil
 	}
-	u, err := s.c.PresignedGetObject(ctx, s.cfg.Bucket, obj, ttl, nil)
+	u, err := s.signer.PresignedGetObject(ctx, s.cfg.Bucket, obj, ttl, nil)
 	if err != nil {
 		return "", err
 	}
