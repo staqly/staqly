@@ -88,7 +88,7 @@ const (
 	IntervalYear  = "year"
 )
 
-// yearly: twelve months at 20 % off, each rounded down to a whole dollar ($29 -> $23 a month, $276 a year).
+// yearly: twelve months at 20 % off, each rounded down to a whole euro (€29 -> €23 a month, €276 a year).
 func yearly(month int) int { return month * 80 / 100 * 12 }
 
 // Plans is the single source of truth for cloud packages, cheapest first. Every new workspace gets a
