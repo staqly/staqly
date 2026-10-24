@@ -64,6 +64,7 @@ services:
       WEBHOOK_ALLOW_LOOPBACK: ${WEBHOOK_ALLOW_LOOPBACK:-false}
       WEBHOOK_RETRY_BASE: ${WEBHOOK_RETRY_BASE:-15s}
       WEBHOOK_RETRY_MAX: ${WEBHOOK_RETRY_MAX:-}
+      WEBHOOK_LEASE: ${WEBHOOK_LEASE:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       # Optional settings from .env.example, passed through as-is (the ones it

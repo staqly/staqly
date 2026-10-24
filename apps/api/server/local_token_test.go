@@ -56,11 +56,17 @@ func TestLocalStartPrintsAndRequiresTheToken(t *testing.T) {
 	if err != nil || (runtime.GOOS != "windows" && st.Mode().Perm() != 0o600) {
 		t.Fatalf("token file: %v %v", st, err)
 	}
+	// The token is printed before the API logs that it listens: wait for that line too.
 	addr := ""
-	for _, line := range strings.Split(buf.String(), "\n") {
-		var l struct{ Msg, Addr string }
-		if json.Unmarshal([]byte(line), &l) == nil && l.Msg == "listening" {
-			addr = l.Addr
+	for deadline := time.Now().Add(60 * time.Second); addr == ""; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no listening line: %s", buf)
+		}
+		for _, line := range strings.Split(buf.String(), "\n") {
+			var l struct{ Msg, Addr string }
+			if json.Unmarshal([]byte(line), &l) == nil && l.Msg == "listening" {
+				addr = l.Addr
+			}
 		}
 	}
 	get := func(token string) int {

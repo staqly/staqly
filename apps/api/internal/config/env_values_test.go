@@ -12,7 +12,7 @@ import (
 func TestInvalidEnvValuesRefuseToStart(t *testing.T) {
 	for k, v := range map[string]string{
 		"TRUST_PROXY": "yes", "COOKIE_SECURE": "on", "AUTH_DEV_SIGNIN": "maybe", "S3_CREATE_BUCKET": "y",
-		"SESSION_TTL": "30d", "WEBHOOK_RETRY_BASE": "-1s", "WEBHOOK_RETRY_MAX": "0s", "PROCESSING_TIMEOUT": "-5m",
+		"SESSION_TTL": "30d", "WEBHOOK_RETRY_BASE": "-1s", "WEBHOOK_RETRY_MAX": "0s", "WEBHOOK_LEASE": "60s", "PROCESSING_TIMEOUT": "-5m",
 		"MAX_UPLOAD_MB": "lots", "RATE_LIMIT_PER_MINUTE": "-3", "JOB_CONCURRENCY": "four", "RATE_LIMIT_DISABLED": "nope",
 		"NOTIFY_RETRY_BASE": "soon", "MAIL_SMTP_PORT": "0",
 	} {

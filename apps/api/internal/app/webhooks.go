@@ -30,8 +30,12 @@ type WebhookConfig struct {
 	AllowLoopback bool          // 127.0.0.0/8, ::1 (n8n on the same host, non-Docker)
 	RetryBase     time.Duration // first retry delay; doubles per attempt
 	RetryMax      time.Duration
-	PollInterval  time.Duration
-	Concurrency   int
+	// Lease: how long a claimed delivery stays hidden from other polls. It outlasts the longest attempt
+	// (timeout_ms is at most 60 s) and is also how soon a delivery in flight during a crash is sent again.
+	// Default 2 minutes.
+	Lease        time.Duration
+	PollInterval time.Duration
+	Concurrency  int
 	// PerWorkspace caps in-flight deliveries per workspace (fairness: one
 	// slow receiver can't take every worker slot). Default 2.
 	PerWorkspace int
@@ -45,6 +49,9 @@ func (c *WebhookConfig) defaults() {
 	}
 	if c.RetryMax == 0 {
 		c.RetryMax = time.Hour
+	}
+	if c.Lease == 0 {
+		c.Lease = 2 * time.Minute
 	}
 	if c.PollInterval == 0 {
 		c.PollInterval = 2 * time.Second
@@ -540,10 +547,6 @@ func checkIP(ip netip.Addr, cfg WebhookConfig) error {
 // Fairness: at most Concurrency requests in flight overall and PerWorkspace
 // per workspace; a saturated workspace is skipped (its rows stay due) rather
 // than blocking the loop for everyone else.
-// deliveryLease: how long a claimed delivery stays hidden from other polls. It outlasts the longest attempt
-// (timeout_ms is at most 60 s) and is also how soon a delivery in flight during a crash is sent again.
-const deliveryLease = 2 * time.Minute
-
 func (s *Service) RunWorker(ctx context.Context) {
 	client := s.safeClient()
 	cfg := s.Cfg.Webhook
@@ -591,7 +594,7 @@ func (s *Service) RunWorker(ctx context.Context) {
 				}
 				mu.Unlock()
 			}
-			lease := formatTime(s.Now().Add(deliveryLease))
+			lease := formatTime(s.Now().Add(s.Cfg.Webhook.Lease))
 			n, err := s.W.LeaseDelivery(ctx, db.LeaseDeliveryParams{LeaseUntil: lease, Now: nullStr(s.now()), ID: d.ID, ExpectedNext: d.NextAttemptAt})
 			if err != nil || n == 0 {
 				release()
