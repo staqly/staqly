@@ -1,4 +1,4 @@
-import { render as renderPlain, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render as renderPlain, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -104,6 +104,8 @@ describe('plan picker', () => {
     await waitFor(() => expect(api.find('POST', '/v1/billing/checkout')).toHaveLength(1))
     expect(api.find('POST', '/v1/billing/checkout')[0].body).toEqual({ plan: 'plus', interval: 'year' })
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/cs_1'))
+    // The browser is still leaving for Stripe: a second click must not start another checkout.
+    expect(within(plus).getByRole('button', { name: 'Choose Plus' })).toBeDisabled()
   })
 
   it('paying for Plus monthly: the current card, upgrades and downgrades switch the subscription', async () => {
@@ -114,13 +116,14 @@ describe('plan picker', () => {
 
     await waitFor(() => expect(within(plus).getByRole('button', { name: 'Your current plan' })).toBeDisabled())
     expect(within(screen.getByTestId('plan-starter')).getByRole('button', { name: 'Switch to Starter' })).toBeEnabled()
+    // The same plan billed yearly is a switch too.
+    await user.click(screen.getByRole('radio', { name: /yearly/i }))
+    expect(within(plus).getByRole('button', { name: 'Switch to yearly' })).toBeEnabled()
+    await user.click(screen.getByRole('radio', { name: /monthly/i }))
     await user.click(within(screen.getByTestId('plan-pro')).getByRole('button', { name: 'Upgrade to Pro' }))
     await waitFor(() =>
       expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'pro', interval: 'month' }),
     )
-    // The same plan billed yearly is a switch too.
-    await user.click(screen.getByRole('radio', { name: /yearly/i }))
-    expect(within(plus).getByRole('button', { name: 'Switch to yearly' })).toBeEnabled()
   })
 
   it('a promotion code goes with a switch, and can be applied to the current plan', async () => {
@@ -147,9 +150,21 @@ describe('plan picker', () => {
         promotion_code: 'BIZ-5UUS-DUQR',
       }),
     )
-    await user.click(within(plus).getByRole('button', { name: 'Apply the code to this plan' }))
+
+    // The browser leaves for the switch; the next visit applies the code to the current plan instead.
+    cleanup()
+    const again = render(true)
+    const plusAgain = await screen.findByTestId('plan-plus')
+
+    await waitFor(() => expect(within(plusAgain).getByRole('button', { name: 'Your current plan' })).toBeDisabled())
+    await user.click(screen.getByRole('button', { name: 'Have a promotion code?' }))
+    await user.type(
+      within(await screen.findByRole('dialog', { name: 'Add a promotion code' })).getByLabelText(/Promotion code/),
+      'BIZ-5UUS-DUQR{Enter}',
+    )
+    await user.click(await within(plusAgain).findByRole('button', { name: 'Apply the code to this plan' }))
     await waitFor(() =>
-      expect(api.find('POST', '/v1/billing/checkout')[1]?.body).toEqual({
+      expect(again.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({
         plan: 'plus',
         interval: 'month',
         promotion_code: 'BIZ-5UUS-DUQR',
@@ -297,11 +312,6 @@ describe('per user pricing', () => {
     // Business isn't in the code: its usual price, and no code at checkout.
     expect(within(business).queryByTestId('plan-old-price-business')).not.toBeInTheDocument()
     expect(within(business).getByTestId('plan-price-business')).toHaveTextContent('€99')
-    await user.click(within(business).getByRole('button', { name: 'Choose Business' }))
-    await waitFor(() =>
-      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'business', interval: 'month' }),
-    )
-
     // Yearly: the yearly price comes down too.
     await user.click(screen.getByRole('radio', { name: /yearly/i }))
     expect(within(plus).getByTestId('plan-old-price-plus')).toHaveTextContent('€23')
@@ -309,11 +319,28 @@ describe('per user pricing', () => {
     expect(within(plus).getByText('€220.80 per user, billed yearly, excl. VAT')).toBeInTheDocument()
     await user.click(within(plus).getByRole('button', { name: 'Choose Plus' }))
     await waitFor(() =>
-      expect(api.find('POST', '/v1/billing/checkout')[1]?.body).toEqual({
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({
         plan: 'plus',
         interval: 'year',
         promotion_code: 'SPRING20',
       }),
+    )
+  })
+
+  it('a plan the code does not cover goes to checkout without it', async () => {
+    const api = render(false)
+    const user = userEvent.setup()
+
+    await screen.findByTestId('plan-plus')
+    await user.click(screen.getByRole('button', { name: 'Have a promotion code?' }))
+    await user.type(
+      within(await screen.findByRole('dialog', { name: 'Add a promotion code' })).getByLabelText(/Promotion code/),
+      'SPRING20{Enter}',
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(within(screen.getByTestId('plan-business')).getByRole('button', { name: 'Choose Business' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'business', interval: 'month' }),
     )
   })
 })
