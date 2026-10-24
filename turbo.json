@@ -1,6 +1,8 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "stream",
+  "globalDependencies": [".nvmrc", "apps/api/openapi.yaml"],
+  "globalEnv": ["SITE_URL", "DOCS_BASE_PATH", "OPENAPI_SPEC", "API_INTERNAL_URL", "NEXT_PUBLIC_*", "NODE_ENV", "TZ", "LANG", "LC_ALL"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

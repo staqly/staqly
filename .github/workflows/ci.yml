@@ -6,20 +6,25 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "23 1 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-# A newer push to the same branch cancels the run still in progress: only the
-# latest commit matters (`make release` releases origin/main, whose run completes).
+# Cancel superseded PRs. Each main push keeps its own run: otherwise cancelling a
+# filtered run could leave its changed packages untested by the next push.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Full runs execute tasks even when their Turbo cache is warm.
+  TURBO_FORCE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
 
 jobs:
-  # A pull request runs only the jobs whose code (or a dependency of it) changed; a push to main runs everything.
-  # Workflows, the lockfile and the root config change every job. Nothing here is a required check, so a
-  # skipped job doesn't block a merge.
+  # Pushes and PRs check affected packages; nightly/manual runs check everything.
   changes:
     name: What changed
     runs-on: ubuntu-latest
@@ -36,29 +41,9 @@ jobs:
       e2e: ${{ steps.f.outputs.e2e }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 2, persist-credentials: false }
+        with: { fetch-depth: 0, persist-credentials: false }
       - id: f
-        # A pull request is checked out as its merge commit: the first parent is the base branch.
-        run: |
-          files=$(git diff --name-only HEAD^1 HEAD)
-          all='\.github/|package\.json$|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|\.nvmrc'
-          hit() {
-            if [ "$GITHUB_EVENT_NAME" != pull_request ] || grep -qE "^($all|$2)" <<<"$files"; then
-              echo "$1=true" >>"$GITHUB_OUTPUT"
-            else
-              echo "$1=false" >>"$GITHUB_OUTPUT"
-            fi
-          }
-          hit api 'apps/api/'
-          hit cli 'apps/(api|cli)/'
-          hit dashboard 'apps/platform/|packages/|apps/api/openapi\.yaml'
-          hit docs 'apps/docs/|packages/|apps/api/openapi\.yaml'
-          hit web 'apps/web/|packages/'
-          hit packages 'packages/'
-          hit sdk_ts 'sdks/typescript/|apps/api/openapi\.yaml'
-          hit sdk_py 'sdks/python/'
-          hit e2e 'apps/(api|cli)/|e2e/|Dockerfile|compose'
-          cat "$GITHUB_OUTPUT" # the decisions, in the log
+        run: python3 .github/scripts/changes.py
 
   # The workflows themselves: expressions, permissions, shell in run: steps (actionlint + shellcheck).
   # A few seconds, so it runs on every change.
@@ -70,6 +55,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - run: make lint-workflows
+      - run: python3 -m unittest discover -s .github/scripts
 
   # Every job runs the same turbo tasks a developer runs locally
   # (`pnpm check`), for its own package: format:check, lint, typecheck, test,
@@ -85,13 +71,34 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - id: go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/api" }
+      - name: Read the pinned sqlc module
+        id: sqlc
+        run: |
+          module=$(node -p 'require("./apps/api/package.json").scripts.gen.match(/^go run (\S+) generate$/)[1]')
+          [[ "$module" == github.com/sqlc-dev/sqlc/cmd/sqlc@v* ]]
+          echo "module=$module" >> "$GITHUB_OUTPUT"
+      - name: Cache sqlc binary
+        id: sqlc-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sqlc
+          key: sqlc-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ steps.sqlc.outputs.module }}
+      - name: Install sqlc on a cache miss
+        if: steps.sqlc-cache.outputs.cache-hit != 'true'
+        env:
+          GOBIN: ${{ runner.temp }}/sqlc
+          SQLC_MODULE: ${{ steps.sqlc.outputs.module }}
+        run: go install "$SQLC_MODULE"
       - name: Generated queries are up to date (sqlc)
         working-directory: apps/api
-        run: pnpm gen && git diff --exit-code internal/db
+        env:
+          SQLC: ${{ runner.temp }}/sqlc/sqlc
+        run: '"$SQLC" generate && git diff --exit-code internal/db'
       - name: gofmt, vet + OpenAPI lint, tests (race, incl. OpenAPI contract test), build
         run: pnpm turbo run format:check lint test build --filter=@staqly/api
       - name: Known vulnerabilities in code that is called (govulncheck)
@@ -156,7 +163,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
-        with: { filter: "@staqly/platform..." }
+        with: { filter: "@staqly/platform...", cache-builds: "true" }
       - name: API types are up to date with openapi.yaml
         working-directory: apps/platform
         run: pnpm gen && git diff --exit-code lib/api-types.ts
@@ -172,7 +179,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
-        with: { filter: "@staqly/docs..." }
+        with: { filter: "@staqly/docs...", cache-builds: "true" }
       - name: Formatting, lint, types, build (static export + link check)
         run: pnpm turbo run format:check lint typecheck build --filter=@staqly/docs
 
@@ -188,7 +195,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
-        with: { filter: "@staqly/web..." }
+        with: { filter: "@staqly/web...", cache-builds: "true" }
       - name: Formatting, lint, types, tools' logic (scripts/check-tools.mjs), build (static export + link check)
         run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/web
       - name: SEO files are generated
@@ -205,7 +212,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
-        with: { filter: "./packages/*" }
+        with: { filter: "./packages/*", cache-builds: "true" }
       - run: pnpm turbo run format:check lint typecheck --filter="./packages/*"
 
   # ── SDKs ──────────────────────────────────────────────────────────────────
@@ -219,7 +226,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
-        with: { filter: "@staqly/sdk..." }
+        with: { filter: "@staqly/sdk...", cache-builds: "true" }
       - name: Schema types are up to date with openapi.yaml
         working-directory: sdks/typescript
         run: pnpm gen && git diff --exit-code src/schema.ts

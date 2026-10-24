@@ -8,6 +8,22 @@ name: n8n
 on:
   push:
     branches: [main]
+    paths:
+      - apps/api/**
+      - apps/platform/**
+      - packages/**
+      - e2e/n8n/**
+      - e2e/package.json
+      - integrations/n8n/**
+      - .github/**
+      - Dockerfile
+      - .dockerignore
+      - compose*.yml
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - turbo.json
+      - .nvmrc
   schedule:
     - cron: "41 2 * * *" # nightly, catches new n8n behaviour without a push
   workflow_dispatch:

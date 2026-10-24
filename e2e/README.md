@@ -101,19 +101,34 @@ e2e/perf/            dashboard performance run: seed.mjs (large workspace) and r
 
 The `e2e` job in `.github/workflows/ci.yml` builds the staqly image once (with the
 GitHub Actions layer cache) tagged `staqly-e2e:test`, checks formatting, lint and types of this package,
-then runs `pnpm turbo run test:e2e --filter=@staqly/e2e` with `E2E_BUILD=0`. On a pull request every
-job of `ci.yml` runs only when its code changed (the `changes` job: the e2e job for `apps/api`, `apps/cli`,
-`e2e/`, the Dockerfile and compose files); the workflows, the lockfile and the root config run them all.
-It runs next to the API job, not after it, so the two (about 10 minutes each) don't add up. The
-`workflows` job lints `.github/` with actionlint on every run (`make lint-workflows` locally).
+then runs `pnpm turbo run test:e2e --filter=@staqly/e2e` with `E2E_BUILD=0`. On pushes to main and
+pull requests, `ci.yml` runs affected jobs only (`.github/scripts/changes.py`). Pushes compare the
+entire `before..HEAD` range; PRs compare the checkout's merge commit to its first parent. A missing
+base runs everything. Image changes include the dashboard, shared packages and `.dockerignore`.
+Workflows, the lockfile and root configuration run every job.
+
+Nightly and manual CI runs select every job and set `TURBO_FORCE=true` to execute tasks even with
+a warm Turbo cache. Before `make release`, run `gh workflow run ci.yml --ref main` and wait for
+success: release requires a full nightly/manual run for exactly that commit.
+Only superseded PR runs are cancelled; main pushes keep independent runs so their changed packages
+cannot disappear between two filtered pushes. Docker E2E runs alongside the API job.
+The `workflows` job runs actionlint and the change-selection tests
+(`make lint-workflows`, `python3 -m unittest discover -s .github/scripts`).
+
+The setup action optionally caches `.turbo` and `apps/*/.next/cache` for JS package jobs.
+Caches are separated by OS, architecture, workflow, job, Node/lockfile hash and commit, with a
+restore prefix for earlier commits. Turbo also hashes the OpenAPI spec and build-time environment
+(URLs and docs base path). Go jobs keep using setup-go's cache; their Turbo results are not persisted.
+CI caches the sqlc executable separately, using the version from `apps/api/package.json`'s `gen`
+command; local `pnpm gen` is unchanged.
 
 The live suites below have workflows of their own; each runs the same commands
 as locally:
 
 | Workflow | When | Runs | Secrets |
 |---|---|---|---|
-| `cross-client.yml` | every push to `main`, pull requests touching the API, CLI, SDKs or the suite | Go, uv and Node; builds the TS SDK, then `pnpm --filter @staqly/e2e test:cross-client` | none |
-| `n8n.yml` | push to `main`, nightly, by hand (`scenarios` input) | the image built from the checkout (layer cache) as `ghcr.io/staqly/staqly:latest`, `docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait` (`make dev` without the browser), then `pnpm --filter @staqly/e2e test:n8n`; `results.json` as an artifact | none |
+| `cross-client.yml` | relevant pushes/PRs (API, CLI, SDKs, shared test helpers or the suite), nightly, by hand | Go, uv and Node; builds the TS SDK, then `pnpm --filter @staqly/e2e test:cross-client` | none |
+| `n8n.yml` | relevant pushes to `main` (image, compose, integration or suite), nightly, by hand (`scenarios` input) | the image built from the checkout (layer cache) as `ghcr.io/staqly/staqly:latest`, `docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait` (`make dev` without the browser), then `pnpm --filter @staqly/e2e test:n8n`; `results.json` as an artifact | none |
 | `ui.yml` | nightly, by hand | Go and Node, PostgreSQL as a service; `make dashboard`, Playwright's Chromium, then `UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui` and `pnpm --filter @staqly/e2e test:ui-responsive`; the report and traces as an artifact on failure | none |
 
 The real-agent suite (`e2e/agent/`) has no workflow: it costs money, so it runs only by hand (below).
@@ -268,7 +283,7 @@ Needs Go, uv and curl. Ports (127.0.0.1): `XC_LOCAL_PORT` (23333),
 `XC_CLOUD_PORT` (24333), `XC_LIMITED_PORT` (25333), each dashboard on the port
 +5000, and `XC_CRASH_PORT` (25433) for a server killed mid-wait.
 `XC_KEEP=1` leaves the servers running. Not part of `pnpm test:e2e`; CI runs it
-on every push to `main` and on pull requests that touch it (`cross-client.yml`), after building the TS SDK
+nightly and on pushes to `main` or pull requests that touch its inputs (`cross-client.yml`), after building the TS SDK
 (`pnpm turbo run build --filter=@staqly/sdk`), which the suite imports.
 
 | File | Covers |
