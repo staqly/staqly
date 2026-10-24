@@ -30,8 +30,10 @@ each workspace. Staqly Community Edition has one person and no accounts: its bro
 | Owner | Like an admin, and also makes, demotes and removes owners. |
 
 Owners pay for the workspace (plans, extra X posts, add-ons) and may delete it. A workspace always
-keeps at least one owner. An owner creates more workspaces with **New workspace** and owns those
-too; where people join by invitation only, only someone who owns a workspace may.
+keeps at least one owner: the only owner can't change their own role or leave. With other members
+they make one of them an owner first; alone, they delete the workspace (**Settings → Data & privacy**)
+instead. An owner creates more workspaces with **New workspace** in the workspace menu (top left,
+where you also switch between them) and owns those too; where people join by invitation only, only someone who owns a workspace may.
 
 Roles map onto the same [scopes](/api/authentication#scopes) as API keys, checked in one place
 for the REST API, MCP and the dashboard. The dashboard hides what a role cannot do, but the
