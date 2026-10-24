@@ -31,10 +31,10 @@ them. **Revoke** stops a link at once; channels already connected through it sta
 The link opens a page on your dashboard's address (`/add-channel`) with your workspace's name,
 your note and the platforms you allowed:
 
-- **Platforms that sign in with OAuth** (X today): they go to the platform, allow Staqly to post
+- **Platforms that sign in with OAuth** (X, LinkedIn, Instagram and the like): they go to the platform, allow Staqly to post
   for your workspace and come back to *Connected @handle to \{workspace\}. You can close this page.*
-- **Platforms that take a token** (a bot token, an app password): they enter it on the page
-  (none is available in this release yet).
+- **Platforms that take a token** (a bot token, an app password, such as Telegram, Bluesky or
+  Mastodon): they enter it on the page, and staqly checks it before the channel is added.
 
 A link that expired, was revoked or used up says so, and asks them to get a new one.
 
