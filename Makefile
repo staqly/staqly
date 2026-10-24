@@ -83,8 +83,8 @@ dashboard: ## Build the dashboard (static export) into apps/api/web for the Go b
 	find apps/api/web -mindepth 1 ! -name .gitkeep -delete
 	cp -R apps/platform/out/. apps/api/web/
 
-check: ## Formatting, lint, types and unit tests of every package (turbo)
-	pnpm turbo run format:check lint typecheck test
+check: ## Formatting, lint, types, unit tests and bundle size of every package (the same as pnpm check)
+	pnpm check
 
 test: ## Unit and integration tests of every package (turbo)
 	pnpm turbo run test

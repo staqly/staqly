@@ -55,7 +55,7 @@ Run `test:ui-responsive` for dashboard layout changes.
 
 | Workflow | When | What |
 |---|---|---|
-| `ci.yml` | push to `main` (every job), pull requests (only the jobs whose code changed: the `changes` job) | `pnpm check` tasks per package, generated code up to date, the Docker e2e suite |
+| `ci.yml` | push to `main` (every job), pull requests (only the jobs whose code changed: the `changes` job) | `pnpm check` tasks per package, generated code up to date, the Docker e2e suite, actionlint on the workflows |
 | `cross-client.yml` | push to `main`, pull requests touching the API, CLI, SDKs or the suite | `pnpm --filter @staqly/e2e test:cross-client` (Go, uv, Node; no secrets) |
 | `n8n.yml` | push to `main`, nightly, by hand | the dev stack built from the checkout + a real n8n: `test:n8n` (no secrets) |
 | `ui.yml` | nightly, by hand | the dashboard in a real browser: `test:ui` (flows, axe) and `test:ui-responsive` against `staqly serve` built from the checkout (no secrets) |
@@ -64,6 +64,8 @@ Run `test:ui-responsive` for dashboard layout changes.
 The landing page (`apps/web`) is built and hosted outside this repository's workflows. The real-agent
 suite (`e2e/agent/`, real Claude Code, Codex and OpenCode over MCP; costs money) has no workflow: run
 it by hand (e2e/README.md). Every workflow step runs a command that works the same locally.
+Third-party actions are pinned to a commit SHA with a `# vX.Y.Z` comment (Dependabot bumps both);
+every job sets `timeout-minutes` and only the `permissions:` it uses.
 
 ## Product rules that code must keep
 
