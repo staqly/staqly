@@ -122,6 +122,8 @@ describe('a trial upgrade that was not paid', () => {
     await user.click(screen.getByRole('button', { name: 'Update your card' }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://billing.stripe.test/p_1'))
     expect(api.find('POST', '/v1/billing/portal')).toHaveLength(1)
+    // Still busy while the browser leaves for Stripe: a second click can't open another portal session.
+    expect(screen.getByRole('button', { name: 'Update your card' })).toBeDisabled()
     expect(nav.replace).not.toHaveBeenCalled()
   })
 

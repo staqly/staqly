@@ -15,7 +15,7 @@ import { apiFieldErrors } from '@/lib/form-errors'
 import { namedToast, toastApiError } from '@/lib/notify'
 import { ProviderTile } from '@/lib/providers'
 import { qk, useProviders } from '@/lib/queries'
-import { setOAuthReturn } from '@/lib/welcome'
+import { clearOAuthReturn, setOAuthReturn } from '@/lib/welcome'
 
 import { fieldValues, ProviderFields } from './provider-fields'
 import { ProviderGrid } from './provider-grid'
@@ -44,8 +44,12 @@ export function ConnectForm({
   const start = useMutation({
     mutationFn: () => api.oauthStart(provider.id),
     onSuccess: ({ url }) => {
+      // A connection started elsewhere (the welcome wizard) and abandoned on the platform's page must not send this
+      // one back there.
       if (oauthReturnTo) {
         setOAuthReturn(oauthReturnTo)
+      } else {
+        clearOAuthReturn()
       }
 
       window.location.assign(url)

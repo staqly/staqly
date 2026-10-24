@@ -78,22 +78,35 @@ const palette = {
   clusterBorder: '#34363d',
 }
 
-/** Loaded and configured once, on the first diagram. */
+const NO_SVG = { svg: '' }
+
+/**
+ * Loaded and configured once, on the first diagram. Null when the chunk didn't load (offline, a deploy replaced it):
+ * the diagrams show their source until the page is loaded again. The fallback is inside the cached promise, so every
+ * render reads the same promise.
+ */
 function loadMermaid() {
-  return cachePromise('mermaid', async () => {
-    const { default: mermaid } = await import('mermaid')
+  return cachePromise('mermaid', () =>
+    import('mermaid').then(
+      ({ default: mermaid }) => {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          fontFamily: 'var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif',
+          theme: 'base',
+          themeVariables: { ...palette, fontSize: '14px' },
+          flowchart: { curve: 'basis', padding: 12, htmlLabels: true },
+        })
 
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      fontFamily: 'var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif',
-      theme: 'base',
-      themeVariables: { ...palette, fontSize: '14px' },
-      flowchart: { curve: 'basis', padding: 12, htmlLabels: true },
-    })
+        return mermaid
+      },
+      (err: unknown) => {
+        console.error('mermaid: could not load', err)
 
-    return mermaid
-  })
+        return null
+      },
+    ),
+  )
 }
 
 function MermaidContent({ chart }: { chart: string }) {
@@ -101,18 +114,24 @@ function MermaidContent({ chart }: { chart: string }) {
   const mermaid = use(loadMermaid())
 
   const text = chart.replaceAll('\\n', '\n')
-  const { svg } = use(
-    cachePromise(`chart:${chart}`, async () => {
-      // A broken diagram shows its source instead of taking the whole page down.
-      if (!(await mermaid.parse(text, { suppressErrors: true }))) {
-        console.error('mermaid: invalid diagram', text)
+  // A broken diagram, or one mermaid fails to draw, shows its source instead of taking the whole page down.
+  const { svg } = mermaid
+    ? use(
+        cachePromise(`chart:${chart}`, async () => {
+          if (!(await mermaid.parse(text, { suppressErrors: true }))) {
+            console.error('mermaid: invalid diagram', text)
 
-        return { svg: '' }
-      }
+            return NO_SVG
+          }
 
-      return mermaid.render(`m${id}`, text)
-    }),
-  )
+          return mermaid.render(`m${id}`, text).catch((err: unknown) => {
+            console.error('mermaid: could not draw the diagram', err)
+
+            return NO_SVG
+          })
+        }),
+      )
+    : NO_SVG
 
   if (!svg) {
     return (

@@ -26,7 +26,7 @@ import { toast } from 'sonner'
 
 import { Callout } from '@/components/common/callout'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
-import { EmptyState, ErrorState } from '@/components/common/error-state'
+import { EmptyState, ErrorState, LoadMore } from '@/components/common/error-state'
 import { FilterButton } from '@/components/common/filter-button'
 import { SkeletonList } from '@/components/common/skeleton-list'
 import {
@@ -154,6 +154,8 @@ const VIEWS: Record<string, { about: string; title: string; description: string;
 }
 const KINDS: Place[] = ['image', 'video', 'audio']
 const NO_FOLDERS: MediaFolder[] = []
+// Never mutated: every change to a selection makes a new set.
+const NO_IDS = new Set<string>()
 const NO_ITEMS: MediaLibraryItem[] = []
 
 // Action bar labels show from sm up; below, icon buttons keep their names (and tooltips) through aria-label.
@@ -200,7 +202,20 @@ export function MediaPage() {
   const [chosenPlace, setPlace] = useState<Place>('all')
   const [tag, setTag] = useState('')
   const [sort, setSort] = useState<MediaSort>('created_desc')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  // The selection belongs to one search and tag filter: a file the filter hides is never acted on unseen (Delete
+  // forever in Deleted, Move, Restore), and the bar counts what is on screen.
+  const filterKey = `${q}\n${tag}`
+  const [selection, setSelection] = useState({ key: filterKey, ids: NO_IDS })
+  const selected = selection.key === filterKey ? selection.ids : NO_IDS
+  const setSelected = useCallback(
+    (next: Set<string> | ((prev: Set<string>) => Set<string>)) =>
+      setSelection((s) => {
+        const prev = s.key === filterKey ? s.ids : NO_IDS
+
+        return { key: filterKey, ids: typeof next === 'function' ? next(prev) : next }
+      }),
+    [filterKey],
+  )
   const [open, setOpen] = useState<MediaLibraryItem | null>(null)
   const [composeWith, setComposeWith] = useState<MediaLibraryItem[] | null>(null)
   const [tagging, setTagging] = useState(false)
@@ -294,15 +309,16 @@ export function MediaPage() {
     sort: recent ? 'created_desc' : sort,
     limit: PAGE,
   }
-  const { data, isLoading, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: mediaKeys.library(query),
-    queryFn: ({ pageParam, signal }) => api.mediaLibrary({ ...query, offset: pageParam }, signal),
-    initialPageParam: 0,
-    getNextPageParam: (last) =>
-      recent && last.data.some((m) => Date.parse(m.created_at) < since) ? undefined : last.next_offset,
-    // Unchanged files keep their identity when one is added or removed, so their tiles don't re-render.
-    structuralSharing: shareMediaPages,
-  })
+  const { data, isLoading, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage, isFetchNextPageError } =
+    useInfiniteQuery({
+      queryKey: mediaKeys.library(query),
+      queryFn: ({ pageParam, signal }) => api.mediaLibrary({ ...query, offset: pageParam }, signal),
+      initialPageParam: 0,
+      getNextPageParam: (last) =>
+        recent && last.data.some((m) => Date.parse(m.created_at) < since) ? undefined : last.next_offset,
+      // Unchanged files keep their identity when one is added or removed, so their tiles don't re-render.
+      structuralSharing: shareMediaPages,
+    })
   const pages = data?.pages
   const items = useMemo(() => {
     if (!pages) {
@@ -363,7 +379,7 @@ export function MediaPage() {
     window.addEventListener('keydown', onKey)
 
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected.size])
+  }, [selected.size, setSelected])
 
   const { mutate: deleteSelected, isPending: deleting } = useMutation({
     mutationFn: () => api.deleteMediaMany([...selected]),
@@ -794,7 +810,7 @@ export function MediaPage() {
     <div className="grid animate-in gap-4 fade-in [animation-delay:300ms] [animation-fill-mode:both]">
       <SkeletonList count={6} className="h-40 rounded-xl" />
     </div>
-  ) : error ? (
+  ) : error && !data ? (
     <ErrorState error={error} onRetry={() => refetch()} />
   ) : items.length === 0 ? (
     <EmptyState
@@ -835,11 +851,13 @@ export function MediaPage() {
         className="gap-4 lg:grid-cols-[repeat(auto-fill,minmax(11.5rem,1fr))]"
       />
       {hasNextPage && (
-        <div className="mt-6 flex justify-center">
-          <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-            {isFetchingNextPage ? 'Loading...' : 'Show more'}
-          </Button>
-        </div>
+        <LoadMore
+          className="mt-6"
+          label="Show more"
+          onLoad={() => void fetchNextPage()}
+          loading={isFetchingNextPage}
+          failed={isFetchNextPageError}
+        />
       )}
     </>
   )

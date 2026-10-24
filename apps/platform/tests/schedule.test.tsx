@@ -289,4 +289,32 @@ describe('schedule page', () => {
     await userEvent.setup().click(await screen.findByRole('radio', { name: 'Week' }))
     expect(nav.replace).toHaveBeenLastCalledWith(expect.stringContaining(`at=${dayKey(new Date())}`), expect.anything())
   })
+
+  it('a later page that fails is asked for once, and Try again loads the whole range again', async () => {
+    let failing = true
+    const api = mockApi({
+      'GET /v1/posts': (call: Call) =>
+        call.query.get('cursor')
+          ? failing
+            ? { status: 429, body: { error: { code: 'rate_limited', message: 'Slow down' } } }
+            : { data: [] }
+          : {
+              data: [post({ id: 'pst_1', status: 'scheduled', publish_at: at(0, 9).toISOString() })],
+              next_cursor: 'c2',
+            },
+      'GET /v1/collections': { data: [] },
+      'GET /v1/events': { data: [] },
+    })
+    const pages = () => api.find('GET', '/v1/posts').filter((c) => c.query.get('cursor') === 'c2')
+
+    renderWithProviders(<SchedulePage />, { mode: 'local' })
+    const retry = await screen.findByRole('button', { name: /try again/i })
+
+    await new Promise((r) => setTimeout(r, 200))
+    expect(pages()).toHaveLength(1)
+    failing = false
+    await userEvent.setup().click(retry)
+    await waitFor(() => expect(screen.getAllByTestId('schedule-entry').length).toBeGreaterThan(0))
+    expect(pages()).toHaveLength(2)
+  })
 })

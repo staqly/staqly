@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { EmptyState, ErrorState } from '@/components/common/error-state'
+import { EmptyState, ErrorState, LoadMore } from '@/components/common/error-state'
 import { FilterButton } from '@/components/common/filter-button'
 import { IdChip } from '@/components/common/id-chip'
 import { MultiSelect } from '@/components/common/multi-select'
@@ -290,7 +290,7 @@ export function CollectionPosts({ id }: { id: string }) {
           <div className="grid gap-2 px-4 sm:px-6 lg:px-8" data-testid="posts-loading">
             <SkeletonList count={6} className="h-12 rounded-lg" />
           </div>
-        ) : posts.error ? (
+        ) : posts.error && !posts.data ? (
           <PageContainer>
             <ErrorState error={posts.error} onRetry={() => posts.refetch()} />
           </PageContainer>
@@ -345,16 +345,13 @@ export function CollectionPosts({ id }: { id: string }) {
               </ul>
             </div>
             {posts.hasNextPage && (
-              <div className="flex justify-center py-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => posts.fetchNextPage()}
-                  disabled={posts.isFetchingNextPage}
-                >
-                  {posts.isFetchingNextPage ? 'Loading...' : 'Load more'}
-                </Button>
-              </div>
+              <LoadMore
+                className="py-4"
+                size="sm"
+                onLoad={() => void posts.fetchNextPage()}
+                loading={posts.isFetchingNextPage}
+                failed={posts.isFetchNextPageError}
+              />
             )}
             {picked.length > 0 && (
               <PostSelectionBar selected={picked} canWrite={canWrite} onClear={() => setSelected(new Set())} />

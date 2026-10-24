@@ -118,7 +118,8 @@ export function PaymentFailedPage() {
     <Button
       variant={reason === 'authentication_required' && payUrl ? 'outline' : 'default'}
       className="w-full sm:w-auto"
-      disabled={portal.isPending}
+      // Busy until the browser has left for Stripe, not only until the API answered: one portal session per click.
+      disabled={portal.isPending || portal.isSuccess}
       onClick={() => portal.mutate()}
       data-testid="payment-update-card"
     >

@@ -87,6 +87,16 @@ function SidebarProvider({
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Not while typing: in the post editor ⌘B / Ctrl+B is bold (ProseMirror only prevents the default).
+      const t = event.target
+
+      if (
+        event.defaultPrevented ||
+        (t instanceof HTMLElement && (t.isContentEditable || t.closest('input, textarea, select, [contenteditable]')))
+      ) {
+        return
+      }
+
       if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
         toggleSidebar()

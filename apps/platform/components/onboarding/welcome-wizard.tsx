@@ -913,15 +913,28 @@ function DoneStep({
       return
     }
 
+    // One sync at a time: a slow answer from Stripe must not stack requests or land after a newer one.
+    let syncing = false
     const t = setInterval(() => {
       setWaited((n) => n + 1)
-      void api.syncBilling().then(
-        (b) => {
-          qc.setQueryData(qk.billing, b)
-          void qc.invalidateQueries({ queryKey: qk.usage })
-        },
-        () => void qc.invalidateQueries({ queryKey: qk.billing }),
-      )
+
+      if (syncing) {
+        return
+      }
+
+      syncing = true
+      void api
+        .syncBilling()
+        .then(
+          (b) => {
+            qc.setQueryData(qk.billing, b)
+            void qc.invalidateQueries({ queryKey: qk.usage })
+          },
+          () => void qc.invalidateQueries({ queryKey: qk.billing }),
+        )
+        .finally(() => {
+          syncing = false
+        })
     }, 2000)
 
     return () => clearInterval(t)

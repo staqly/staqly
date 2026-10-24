@@ -16,7 +16,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useId, useMemo, useState } from 'react'
 
 import { DateRangePicker } from '@/components/common/date-range-picker'
-import { EmptyState, ErrorState } from '@/components/common/error-state'
+import { EmptyState, ErrorState, LoadMore } from '@/components/common/error-state'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
 import { SkeletonList } from '@/components/common/skeleton-list'
 import { Button } from '@/components/ui/button'
@@ -334,8 +334,17 @@ export function ActivityFeed() {
   )
   const query = useMemo<EventQuery>(() => ({ ...exportQuery, limit: 50 }), [exportQuery])
   // The parts, not the result object: it is new on every render and would un-memoise the page around the list.
-  const { data, error, isLoading, isPlaceholderData, isFetchingNextPage, hasNextPage, fetchNextPage, refetch } =
-    useEventsInfinite(query)
+  const {
+    data,
+    error,
+    isLoading,
+    isPlaceholderData,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = useEventsInfinite(query)
   const filtered = Object.values(exportQuery).some(Boolean)
   // useMemo: a fresh array would re-render the whole list (and the page around it) on every render.
   const list = useMemo(() => data?.pages.flatMap((p) => p.data) ?? NO_EVENTS, [data])
@@ -455,7 +464,7 @@ export function ActivityFeed() {
           <div className="grid gap-4">
             <SkeletonList count={6} className="h-12" />
           </div>
-        ) : error ? (
+        ) : error && !data ? (
           <ErrorState error={error} onRetry={() => refetch()} />
         ) : list.length === 0 ? (
           <EmptyState icon={<ActivityIcon />} title="No events" description="Nothing matches these filters yet." />
@@ -465,11 +474,13 @@ export function ActivityFeed() {
           </div>
         )}
         {hasNextPage && (
-          <div className="mt-4 flex justify-center">
-            <Button variant="outline" onClick={() => void fetchNextPage()} disabled={isFetchingNextPage}>
-              {isFetchingNextPage ? 'Loading...' : 'Load older events'}
-            </Button>
-          </div>
+          <LoadMore
+            className="mt-4"
+            label="Load older events"
+            onLoad={() => void fetchNextPage()}
+            loading={isFetchingNextPage}
+            failed={isFetchNextPageError}
+          />
         )}
       </div>
     </PageContainer>
