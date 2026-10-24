@@ -103,11 +103,13 @@ export function MultiSelect({
           type="button"
           variant="outline"
           size={size}
-          aria-label={label}
           aria-invalid={invalid}
           disabled={disabled}
           className={cn('justify-between gap-1.5 font-normal', className)}
         >
+          {/* Named by its label and then what it shows (no aria-label hiding the visible text); a <Label htmlFor>
+              names it instead when there is one. */}
+          <span className="sr-only">{label}: </span>
           <span className="flex min-w-0 items-center gap-1.5 truncate">
             {summary ? (
               summary

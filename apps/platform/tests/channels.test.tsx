@@ -106,7 +106,7 @@ describe('channels', () => {
     await user.click(await screen.findByTestId('add-channel'))
     const sheet = await screen.findByRole('dialog', { name: 'Add channel' })
 
-    expect(within(sheet).getByRole('button', { name: 'TikTok, coming soon' })).toBeDisabled()
+    expect(within(sheet).getByRole('button', { name: 'TikTok, soon' })).toBeDisabled()
     await user.click(within(sheet).getByRole('button', { name: 'Telegram' }))
     expect(await screen.findByRole('dialog', { name: /Connect Telegram/ })).toBeInTheDocument()
     await user.type(screen.getByLabelText(/Bot token/), '123:abc')
@@ -173,7 +173,7 @@ describe('channels', () => {
 
     renderWithProviders(<ChannelsPage />, { mode: 'cloud' })
     await user.click(await screen.findByTestId('add-channel'))
-    expect(await screen.findByRole('button', { name: 'Mastodon, coming soon' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Mastodon, soon' })).toBeDisabled()
   })
 
   it('a row shows its last and next post and the 30-day count, or No posts yet', async () => {

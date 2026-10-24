@@ -242,6 +242,8 @@ export function PlansPage() {
   )
   const interval = chosen ?? paidInterval ?? 'month'
   const { checkout } = usePlanActions()
+  // Busy until the browser has left for Stripe, not only until the API answered.
+  const leaving = checkout.isPending || checkout.isSuccess
   const plan = usage.data?.plan
   const canPay = !!billing.data?.enabled
   // The trial runs on a plan without being paid for: every plan is a choice then, none is "current".
@@ -282,7 +284,7 @@ export function PlansPage() {
         <Button
           variant="outline"
           className="w-full"
-          disabled={checkout.isPending}
+          disabled={leaving}
           onClick={() => checkout.mutate({ plan: p.id, interval, promotionCode })}
         >
           Apply the code to this plan
@@ -310,7 +312,7 @@ export function PlansPage() {
       <Button
         variant={p.highlight ? 'default' : 'outline'}
         className={cn('w-full', p.highlight && 'bg-brand-gradient text-[#052817]')}
-        disabled={checkout.isPending}
+        disabled={leaving}
         onClick={() =>
           checkout.mutate({
             plan: p.id,

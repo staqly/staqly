@@ -135,6 +135,12 @@ function TokenForm({
   )
 }
 
+/** Back to the platforms from the account picker: drops ?pending from the address (the token stays in the fragment). */
+function leavePicker() {
+  window.history.replaceState(null, '', window.location.pathname + window.location.hash)
+  window.dispatchEvent(new PopStateEvent('popstate'))
+}
+
 export function AddChannelPage() {
   const token = useSyncExternalStore(subscribeLocation, readToken, () => '')
   const search = useSyncExternalStore(subscribeLocation, readSearch, () => '')
@@ -216,6 +222,7 @@ export function AddChannelPage() {
         accounts={p.accounts}
         busy={finish.isPending}
         onConnect={(ids) => finish.mutate(ids)}
+        onCancel={leavePicker}
       />
     ) : (
       <Skeleton className="mx-auto h-72 w-full max-w-lg rounded-2xl" />

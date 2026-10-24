@@ -33,7 +33,7 @@ test.describe('channels', () => {
 
     await expect(sheet.getByRole('region', { name: 'Your own' })).toBeVisible()
     await expect(sheet.getByRole('region', { name: 'Social networks' })).toBeVisible()
-    const soon = sheet.getByRole('button', { name: /, coming soon$/ })
+    const soon = sheet.getByRole('button', { name: /, soon$/ })
 
     await expect(soon.first()).toBeDisabled()
     await expect(soon.first()).toContainText('Soon')

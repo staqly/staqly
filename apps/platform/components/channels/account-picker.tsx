@@ -52,6 +52,12 @@ export function AccountPicker({
           Your sign-in can post as each of these. Every account you pick becomes its own channel.
         </p>
       </div>
+      {accounts.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          This sign-in has no {name} accounts to post as. Sign in with another one, or check that it manages at least
+          one.
+        </p>
+      )}
       <fieldset className="grid gap-1" aria-label={`${name} accounts`}>
         {accounts.map((a) => {
           const id = `account-${a.id}`

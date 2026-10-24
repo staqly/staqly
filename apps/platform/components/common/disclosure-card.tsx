@@ -24,7 +24,7 @@ export function DisclosureCard({
   className,
   children,
 }: {
-  /** Accessible name of the toggle, e.g. "Data" or "Feedback". */
+  /** What the card holds, e.g. "Data" (the Copy button's name). The toggle is named by what its header shows. */
   label: string
   /** What the header shows next to the chevron. */
   header: React.ReactNode
@@ -53,7 +53,6 @@ export function DisclosureCard({
           className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-2 text-left hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
           aria-expanded={open}
           aria-controls={id}
-          aria-label={label}
           onClick={() => {
             setMounted(true)
             setOpen((v) => !v)

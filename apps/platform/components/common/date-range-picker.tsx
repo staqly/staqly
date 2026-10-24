@@ -102,7 +102,8 @@ export function DateRangePicker({
             variant="outline"
             size={size}
             aria-haspopup="dialog"
-            aria-label={label}
+            // The label, then what the button shows (speech input names it by its visible text).
+            aria-label={`${label}: ${value ? formatDayRange(value) : placeholder}`}
             data-testid="date-range-picker"
             className={cn('min-w-0 justify-start font-normal', !value && 'text-muted-foreground')}
           >

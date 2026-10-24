@@ -335,7 +335,9 @@ export function PlanUsagePage() {
   const addons = useAddons({ enabled: manage })
   const xPosts = useXPosts({ enabled: !isLocal })
   const { portal } = usePlanActions()
-  const { mutate: openPortal, isPending: opening } = portal
+  const { mutate: openPortal } = portal
+  // Busy until the browser has left for Stripe's portal, not only until the API answered.
+  const opening = portal.isPending || portal.isSuccess
   const { refetch: refetchUsage } = usage
   const { refetch: refetchDetails } = details
 

@@ -48,6 +48,20 @@ describe('backup card', () => {
     await waitFor(() => expect(api.find('POST', '/v1/workspace/export')).toHaveLength(1))
   })
 
+  it('cloud, paid: a list that fails to load says so instead of "No backups yet"', async () => {
+    mockApi({
+      'GET /v1/workspace/usage': usage('pro'),
+      'GET /v1/workspace/exports': () => ({
+        status: 500,
+        body: { error: { code: 'internal', message: 'something broke' } },
+      }),
+    })
+
+    renderWithProviders(<BackupCard />, { mode: 'cloud' })
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't load the backups/i)
+    expect(screen.queryByText('No backups yet.')).not.toBeInTheDocument()
+  })
+
   it('cloud, Starter: no backups, a pointer to the data-only export and the plans', async () => {
     const api = mockApi({ 'GET /v1/workspace/usage': usage('starter'), 'GET /v1/workspace/exports': { data: [] } })
 

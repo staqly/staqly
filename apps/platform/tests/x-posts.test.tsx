@@ -76,6 +76,8 @@ describe('X posts', () => {
     await waitFor(() => expect(api.find('POST', '/v1/billing/credits/checkout')).toHaveLength(1))
     expect(api.find('POST', '/v1/billing/credits/checkout')[0].body).toEqual({ provider: 'x', posts: 4000 })
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/cs_1'))
+    // Still leaving for Stripe: no second checkout from another click.
+    expect(screen.getByTestId('buy-x-posts-continue')).toBeDisabled()
   })
 
   it('only the account owner sees Buy more X posts', async () => {
