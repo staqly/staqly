@@ -451,8 +451,8 @@ var allowedWhileSuspended = []*regexp.Regexp{
 	regexp.MustCompile(`^DELETE /v1/api-keys/[^/]+$`),
 	regexp.MustCompile(`^POST /v1/workspace/export$`),
 	regexp.MustCompile(`^DELETE /v1/workspace$`),
-	regexp.MustCompile(`^POST /v1/items/[^/]+/purge$`),
-	regexp.MustCompile(`^POST /v1/billing/(checkout|portal|sync)$`),
+	regexp.MustCompile(`^POST /v1/posts/[^/]+/purge$`),
+	regexp.MustCompile(`^POST /v1/billing/(checkout|portal|sync|promotion-code)$`),
 }
 
 // readOnlyWhenSuspended: an unpaid workspace (trial or plan ended) keeps reading and exporting,
