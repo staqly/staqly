@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { XPostsSection, xPostsLine, xPostsWarning } from '@/components/billing/x-posts'
+import { BuyXPosts, XPostsNote, xPostsLine, xPostsWarning } from '@/components/billing/x-posts'
 import type { XPosts } from '@/lib/api'
 
 import { mockApi, renderWithProviders } from './utils'
@@ -59,14 +59,18 @@ describe('X posts', () => {
     const assign = vi.fn<(url: string) => void>()
 
     vi.stubGlobal('location', { ...window.location, assign })
-    const api = mockApi({
-      'GET /v1/billing/x-posts': xposts({ used: 250, included_left: 0, left: 0 }),
-      'POST /v1/billing/credits/checkout': { url: 'https://checkout.stripe.test/cs_1' },
-    })
+    const api = mockApi({ 'POST /v1/billing/credits/checkout': { url: 'https://checkout.stripe.test/cs_1' } })
     const user = userEvent.setup()
+    const x = xposts({ used: 250, included_left: 0, left: 0 })
 
-    renderWithProviders(<XPostsSection canBuy />, { mode: 'cloud' })
-    expect(await screen.findByTestId('x-posts-line')).toHaveTextContent('None bought this period')
+    renderWithProviders(
+      <>
+        <BuyXPosts x={x} />
+        <XPostsNote x={x} />
+      </>,
+      { mode: 'cloud' },
+    )
+    expect(await screen.findByTestId('x-posts-line')).toHaveTextContent('None bought this period.')
     expect(screen.getByText(/used up/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Buy more X posts' }))
     expect(await screen.findByRole('radio', { name: /1,000 X posts/ })).toHaveAttribute('aria-checked', 'true')
@@ -78,12 +82,5 @@ describe('X posts', () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/cs_1'))
     // Still leaving for Stripe: no second checkout from another click.
     expect(screen.getByTestId('buy-x-posts-continue')).toBeDisabled()
-  })
-
-  it('only the account owner sees Buy more X posts', async () => {
-    mockApi({ 'GET /v1/billing/x-posts': xposts() })
-    renderWithProviders(<XPostsSection canBuy={false} />, { mode: 'cloud' })
-    expect(await screen.findByTestId('x-posts-line')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Buy more X posts' })).not.toBeInTheDocument()
   })
 })

@@ -4,7 +4,6 @@ import { ExternalLink, Gauge, Infinity as InfinityIcon, Sparkles } from 'lucide-
 import Link from 'next/link'
 import { useState } from 'react'
 
-import { PlanBadge } from '@/components/plans/plan-badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Billing, BillingDetails, WorkspaceUsage } from '@/lib/api'
@@ -211,8 +210,8 @@ export function PlanSummary({
             : 'bg-card',
       )}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
             <Gauge className="size-5" />
           </span>
@@ -221,10 +220,6 @@ export function PlanSummary({
               <h2 id="plan-heading" className="text-base font-semibold tracking-tight">
                 {plan.name} plan
               </h2>
-              {/* The badge repeats the plan's name: decoration for screen readers. */}
-              <span aria-hidden>
-                <PlanBadge plan={plan.id} />
-              </span>
               {pill && (
                 <span data-testid="plan-status">
                   <Pill label={pill[0]} tone={pill[1]} />

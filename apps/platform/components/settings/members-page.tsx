@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MailPlus, Users } from 'lucide-react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -144,9 +145,11 @@ function MembersCard() {
         <ErrorState error={members.error} onRetry={() => void members.refetch()} />
       ) : (
         <ul className="grid divide-y" data-testid="members">
-          {members.data.data.map((m) => {
-            // Admins never touch owners; nobody demotes the account owner.
-            const locked = m.role === 'owner' && myRole !== 'owner'
+          {members.data.data.map((m, _, all) => {
+            // Admins never touch owners. The only owner keeps the role and stays (the server refuses too): with
+            // others here they make someone else an owner first, alone they delete the workspace instead.
+            const soleOwner = m.you && m.role === 'owner' && all.filter((x) => x.role === 'owner').length === 1
+            const locked = (m.role === 'owner' && myRole !== 'owner') || soleOwner
             const roles = assignable(myRole)
 
             return (
@@ -177,10 +180,22 @@ function MembersCard() {
                     ))}
                   </NativeSelect>
                 )}
-                {(m.you || !locked) && (
-                  <Button variant="ghost" size="sm" onClick={() => setRemoving(m)}>
-                    {m.you ? 'Leave' : 'Remove'}
-                  </Button>
+                {soleOwner ? (
+                  all.length === 1 ? (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href="/settings/data">Delete workspace</Link>
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground" data-testid="sole-owner-note">
+                      Make someone else an owner to leave
+                    </span>
+                  )
+                ) : (
+                  (m.you || !locked) && (
+                    <Button variant="ghost" size="sm" onClick={() => setRemoving(m)}>
+                      {m.you ? 'Leave' : 'Remove'}
+                    </Button>
+                  )
                 )}
               </li>
             )

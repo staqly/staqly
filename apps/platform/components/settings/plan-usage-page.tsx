@@ -2,6 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { BellRing, HardDrive, KeyRound, Layers, Share2, Webhook } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
@@ -9,7 +10,7 @@ import { toast } from 'sonner'
 import { AddonsSection, bonusHint } from '@/components/billing/addons'
 import { Invoices, PaymentMethods } from '@/components/billing/payments'
 import { PlanSummary } from '@/components/billing/plan-summary'
-import { XPostsSection } from '@/components/billing/x-posts'
+import { BuyXPosts, XPostsNote } from '@/components/billing/x-posts'
 import { ErrorState } from '@/components/common/error-state'
 import { PageContainer } from '@/components/common/page-header'
 import { usePlanActions } from '@/components/plans/plans-page'
@@ -25,6 +26,12 @@ import { cn } from '@/lib/utils'
 
 import { SettingsNav } from './settings-nav'
 
+// Every provider's mark is ~11 KB gzipped: loaded after the page, next to the two names it decorates.
+const ProviderIcon = dynamic(() => import('@staqly/brand/providers').then((m) => m.ProviderIcon), {
+  ssr: false,
+  loading: () => <span className="size-4" />,
+})
+
 type MeterKey = keyof WorkspaceUsage['usage'] & keyof WorkspaceUsage['plan']['limits']
 
 const METERS: { key: MeterKey; label: string; Icon: typeof Layers; bytes?: boolean; hint?: string }[] = [
@@ -38,13 +45,19 @@ const METERS: { key: MeterKey; label: string; Icon: typeof Layers; bytes?: boole
 
 /**
  * Platforms whose posts count against an allowance of their own (X charges per post, LinkedIn's daily quotas are
- * shared by every workspace): one compact chip each in the full-width Posts per platform row under the tiles, so
- * every tile keeps one height however many there are. label names the meter for screen readers.
+ * shared by every workspace): one block each in the full-width Posts per platform card under the tiles, a line per
+ * allowance. id names the line for tests; the bar's label is the platform and the line ("LinkedIn videos").
  */
-const PLATFORM_POSTS: { key: MeterKey; id: string; name: string; label: string }[] = [
-  { key: 'x_posts_per_period', id: 'x', name: 'X', label: 'X posts' },
-  { key: 'linkedin_posts_per_period', id: 'linkedin', name: 'LinkedIn', label: 'LinkedIn posts' },
-  { key: 'linkedin_videos_per_period', id: 'linkedin-videos', name: 'LinkedIn videos', label: 'LinkedIn videos' },
+const PLATFORM_POSTS: { id: string; name: string; meters: { key: MeterKey; id: string; name: string }[] }[] = [
+  { id: 'x', name: 'X', meters: [{ key: 'x_posts_per_period', id: 'x', name: 'Posts' }] },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    meters: [
+      { key: 'linkedin_posts_per_period', id: 'linkedin', name: 'Posts' },
+      { key: 'linkedin_videos_per_period', id: 'linkedin-videos', name: 'Videos' },
+    ],
+  },
 ]
 
 function UsageMeter({
@@ -118,14 +131,18 @@ function UsageMeter({
 
 const count = (n: number) => n.toLocaleString('en-US')
 
-/** One platform's own allowance: one line (name, used / limit, a bar) in the Posts per platform list. */
-function PlatformChip({
+/**
+ * One allowance line: name, used / limit, a bar, then the status and Buy more. The cells sit on the list's columns
+ * (subgrid), so every bar starts and ends at the same place whatever the numbers' width.
+ */
+function PlatformMeter({
   id,
   name,
   label,
   used,
   max,
   hint,
+  action,
 }: {
   id: string
   name: string
@@ -133,6 +150,7 @@ function PlatformChip({
   used: number
   max: number
   hint?: string
+  action?: React.ReactNode
 }) {
   const { level, pct } = usageMeter(used, max)
   const tone = meterTone(level)
@@ -140,13 +158,13 @@ function PlatformChip({
 
   return (
     <li
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm"
+      className="col-span-full grid min-h-8 grid-cols-subgrid items-center"
       data-testid={`platform-posts-${id}`}
       data-level={level}
       title={hint}
     >
-      <span className="min-w-32 font-medium">{name}</span>
-      <span className="text-muted-foreground tabular-nums">
+      <span className="text-muted-foreground">{name}</span>
+      <span className="text-right text-muted-foreground tabular-nums">
         <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> / {count(max)}
       </span>
       <span
@@ -156,14 +174,17 @@ function PlatformChip({
         aria-valuemax={max}
         aria-valuenow={used}
         aria-valuetext={`${count(used)} of ${count(max)}`}
-        className="h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-muted"
+        className="h-1.5 overflow-hidden rounded-full bg-muted"
       >
         <span
           className={cn('block h-full rounded-full transition-[width] duration-500', tone.fill)}
           style={{ width: `${Math.max(pct, used > 0 ? 4 : 0)}%` }}
         />
       </span>
-      {status && <span className={cn('font-medium', tone.text)}>{status}</span>}
+      <span className="flex items-center justify-end gap-2">
+        {status && <span className={cn('text-xs font-medium whitespace-nowrap', tone.text)}>{status}</span>}
+        {action}
+      </span>
     </li>
   )
 }
@@ -357,6 +378,7 @@ export function PlanUsagePage() {
   const payOnline = !!b?.enabled
   const canBuy = isOwner && payOnline
   const portalOpen = isOwner && payOnline && !!b?.has_customer
+  const hasXPosts = !isLocal && !!xPosts.data && !xPosts.data.unlimited
 
   const summary = u ? (
     <PlanSummary
@@ -373,32 +395,57 @@ export function PlanUsagePage() {
   )
 
   // The platforms with an allowance of their own this plan has (none when local or unlocked: nothing is metered).
+  const limitOf = (key: MeterKey) => u?.plan?.limits?.[key] ?? UNLIMITED
   const metered =
-    u && !isLocal && !unlocked ? PLATFORM_POSTS.filter((p) => (u.plan?.limits?.[p.key] ?? UNLIMITED) !== UNLIMITED) : []
+    u && !isLocal && !unlocked
+      ? PLATFORM_POSTS.map((p) => ({ ...p, meters: p.meters.filter((m) => limitOf(m.key) !== UNLIMITED) })).filter(
+          (p) => p.meters.length > 0,
+        )
+      : []
+  const x = hasXPosts ? xPosts.data : undefined
   const platformPosts =
     u && metered.length > 0 ? (
       <div className="grid gap-2 rounded-xl border bg-card p-3.5 sm:p-4" data-testid="platform-posts">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <span id="platform-posts-heading" className="text-[13px] font-medium sm:text-sm">
-            Posts per platform
-          </span>
-          <p className="text-xs text-muted-foreground">
-            {metered.some((p) => p.id === 'x')
-              ? 'Included in the plan; bought X posts come on top.'
-              : 'Included in the plan.'}
-          </p>
-        </div>
-        <ul className="divide-y rounded-lg border bg-background" aria-labelledby="platform-posts-heading">
+        <span id="platform-posts-heading" className="text-[13px] font-medium sm:text-sm">
+          Posts per platform
+        </span>
+        {/* One column grid for every line of every platform: label, count, bar, actions. */}
+        <ul
+          className="grid grid-cols-[auto_auto_minmax(2.5rem,1fr)_auto] gap-x-3 divide-y rounded-lg border bg-background text-sm"
+          aria-labelledby="platform-posts-heading"
+        >
           {metered.map((p) => (
-            <PlatformChip
-              key={p.key}
-              id={p.id}
-              name={p.name}
-              label={p.label}
-              used={u.usage?.[p.key] ?? 0}
-              max={u.plan?.limits?.[p.key] ?? UNLIMITED}
-              hint={bonusHint(plan, p.key) || undefined}
-            />
+            <li
+              key={p.id}
+              className="col-span-full grid grid-cols-subgrid gap-y-1 px-3 py-2.5"
+              data-testid={`platform-${p.id}`}
+            >
+              <span className="col-span-full flex items-center gap-2 font-medium">
+                <span aria-hidden className="flex">
+                  <ProviderIcon id={p.id} className="size-4" />
+                </span>
+                {p.name}
+              </span>
+              <ul className="col-span-full grid grid-cols-subgrid" aria-label={p.name}>
+                {p.meters.map((m) => (
+                  <PlatformMeter
+                    key={m.key}
+                    id={m.id}
+                    name={m.name}
+                    label={`${p.name} ${m.name.toLowerCase()}`}
+                    used={u.usage?.[m.key] ?? 0}
+                    max={limitOf(m.key)}
+                    hint={bonusHint(plan, m.key) || undefined}
+                    action={p.id === 'x' && x && canBuy ? <BuyXPosts x={x} /> : undefined}
+                  />
+                ))}
+              </ul>
+              {p.id === 'x' && x && (
+                <div className="col-span-full">
+                  <XPostsNote x={x} />
+                </div>
+              )}
+            </li>
           ))}
         </ul>
       </div>
@@ -449,22 +496,18 @@ export function PlanUsagePage() {
     </Group>
   )
 
-  // Add-ons are sold on the subscription (for those who manage the workspace); extra X posts show to everyone.
+  // Add-ons are sold on the subscription, to those who manage the workspace. Extra X posts are bought next to X's bar.
   const hasAddons = manage && payOnline && !!addons.data?.length
-  const hasXPosts = !isLocal && !!xPosts.data && !xPosts.data.unlimited
   const extras =
-    !unlocked && (hasAddons || hasXPosts) ? (
+    !unlocked && hasAddons ? (
       <Group
         id="addons-heading"
-        title={hasAddons ? 'Add-ons and extra X posts' : 'Extra X posts'}
+        title="Add-ons"
         description={
-          canBuy
-            ? 'On top of the plan, excl. VAT. Add-ons are charged with the subscription; X posts once.'
-            : 'On top of the plan. The account owner buys them.'
+          canBuy ? 'On top of the plan, excl. VAT, charged with the subscription.' : 'The account owner buys them.'
         }
       >
-        <XPostsSection canBuy={canBuy} />
-        {hasAddons && <AddonsSection canBuy={canBuy} yearly={sub?.interval === 'year'} />}
+        <AddonsSection canBuy={canBuy} yearly={sub?.interval === 'year'} />
       </Group>
     ) : null
 
