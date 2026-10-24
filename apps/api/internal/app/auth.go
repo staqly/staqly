@@ -68,7 +68,7 @@ func (s *Service) toWorkspace(w db.Workspace) Workspace {
 	return Workspace{ID: w.ID, Name: w.Name, Plan: w.Plan, RecoveryRotatedAt: w.RecoveryRotatedAt, CreatedAt: w.CreatedAt, Timezone: tz, Logo: w.Logo}
 }
 
-// WorkspaceUpdate changes the name, the time zone and the logo ('' removes it); nil fields stay as they are.
+// WorkspaceUpdate changes the name, the time zone and the logo (” removes it); nil fields stay as they are.
 type WorkspaceUpdate struct {
 	Name     *string `json:"name"`
 	Timezone *string `json:"timezone"`

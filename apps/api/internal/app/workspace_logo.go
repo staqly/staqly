@@ -20,7 +20,7 @@ func checkLogo(v string) error { return checkImage("logo", v) }
 // isDataImage: a picture uploaded to staqly (a data: URL), not a sign-in provider's (an https URL).
 func isDataImage(v string) bool { return strings.HasPrefix(v, "data:image/") }
 
-// checkImage accepts '' (none) or a PNG or JPEG data: URL, no larger than maxLogoBytes and maxLogoSide: a
+// checkImage accepts ” (none) or a PNG or JPEG data: URL, no larger than maxLogoBytes and maxLogoSide: a
 // workspace logo or a person's picture. Never SVG: the dashboard shows it in an <img>, but a stored SVG is a script
 // waiting for a context that runs it.
 func checkImage(field, v string) error {
