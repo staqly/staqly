@@ -460,7 +460,7 @@ Methods that return a list return a Python `list`; `list()` on paginated endpoin
 
 | Method | Endpoint |
 |---|---|
-| `workspace.get()`, `workspace.rename(name)`, `workspace.update(name=, timezone=)`, `workspace.usage()` | `/v1/workspace`, `/usage` |
+| `workspace.get()`, `workspace.rename(name)`, `workspace.update(name=, timezone=, logo=)`, `workspace.usage()` | `/v1/workspace`, `/usage` |
 | `workspace.members()` | `GET /v1/members` (cloud) |
 | `workspace.agents()`, `workspace.forget_agent(agent_id)` | `GET /v1/agents`, `DELETE /v1/agents/{id}` |
 | `workspace.delete(confirm=...)`, `workspace.rotate_recovery_key()` | Dashboard session only |

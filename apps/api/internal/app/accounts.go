@@ -429,8 +429,8 @@ func (s *Service) upsertUser(ctx context.Context, q *db.Queries, id Identity) (d
 	if u.Name != "" {
 		name = u.Name
 	}
-	if picture == "" && id.Provider != ProviderGoogle {
-		picture = u.AvatarUrl
+	if picture == "" && id.Provider != ProviderGoogle || isDataImage(u.AvatarUrl) {
+		picture = u.AvatarUrl // and a picture the person uploaded beats the provider's
 	}
 	if err := q.UpdateUserProfile(ctx, db.UpdateUserProfileParams{Email: email, Name: name, AvatarUrl: picture, UpdatedAt: now,
 		LastLoginAt: nullStr(now), ID: u.ID}); err != nil {
@@ -648,20 +648,47 @@ func (s *Service) CreateWorkspace(ctx context.Context, p Principal, name, timezo
 	return out, err
 }
 
-// RenameMe changes the signed-in person's name (how members, the activity log and emails show them).
-func (s *Service) RenameMe(ctx context.Context, p Principal, name string) (User, error) {
+// AccountUpdate changes the signed-in person's name and picture; nil fields stay as they are.
+type AccountUpdate struct {
+	Name *string `json:"name"`
+	// Avatar is a PNG or JPEG data: URL (checked like a workspace logo), or '' to drop it (back to the
+	// sign-in provider's picture at the next sign-in, or the initials).
+	Avatar *string `json:"avatar"`
+}
+
+// RenameMe changes the signed-in person's name (how members, the activity log and emails show them) and picture.
+func (s *Service) RenameMe(ctx context.Context, p Principal, in AccountUpdate) (User, error) {
 	if err := accountsOnly(s); err != nil {
 		return User{}, err
 	}
 	if p.Kind != PrincipalSession || p.UserID == "" {
 		return User{}, forbidden("only a signed-in person changes their name")
 	}
-	name, err := trimmed(name, "name", 100, true)
-	if err != nil {
-		return User{}, err
+	if in.Name == nil && in.Avatar == nil {
+		return User{}, invalid("name", "send a name or a picture")
+	}
+	var name string
+	var err error
+	if in.Name != nil {
+		if name, err = trimmed(*in.Name, "name", 100, true); err != nil {
+			return User{}, err
+		}
+	}
+	if in.Avatar != nil {
+		if err := checkImage("avatar", *in.Avatar); err != nil {
+			return User{}, err
+		}
 	}
 	if err := s.tx(ctx, func(q *db.Queries) error {
-		return q.SetUserName(ctx, db.SetUserNameParams{Name: name, UpdatedAt: s.now(), ID: p.UserID})
+		if in.Name != nil {
+			if err := q.SetUserName(ctx, db.SetUserNameParams{Name: name, UpdatedAt: s.now(), ID: p.UserID}); err != nil {
+				return err
+			}
+		}
+		if in.Avatar != nil {
+			return q.SetUserAvatar(ctx, db.SetUserAvatarParams{AvatarUrl: *in.Avatar, UpdatedAt: s.now(), ID: p.UserID})
+		}
+		return nil
 	}); err != nil {
 		return User{}, err
 	}

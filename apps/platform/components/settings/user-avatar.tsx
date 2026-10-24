@@ -1,8 +1,8 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { safeHttpUrl } from '@/lib/safe'
+import { safeImageSrc } from '@/lib/safe'
 import { cn } from '@/lib/utils'
 
-/** A person's picture (from Google), or their initials. */
+/** A person's picture (uploaded, or from Google), or their initials. */
 export function UserAvatar({
   name,
   src,
@@ -22,7 +22,7 @@ export function UserAvatar({
       .slice(0, 2)
       .map((w) => w[0]?.toUpperCase())
       .join('') || '?'
-  const picture = safeHttpUrl(src)
+  const picture = safeImageSrc(src)
 
   return (
     <Avatar className={cn('size-8', className)} data-logo={logo ? '' : undefined}>

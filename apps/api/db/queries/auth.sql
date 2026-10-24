@@ -20,6 +20,9 @@ UPDATE workspaces SET name = ?, updated_at = ? WHERE id = ?;
 -- name: UpdateWorkspaceTimezone :exec
 UPDATE workspaces SET timezone = ?, updated_at = ? WHERE id = ?;
 
+-- name: UpdateWorkspaceLogo :exec
+UPDATE workspaces SET logo = ?, updated_at = ? WHERE id = ?;
+
 -- name: UpdateRecoveryVerifier :exec
 UPDATE workspaces SET recovery_verifier = ?, recovery_rotated_at = ?, updated_at = ? WHERE id = ?;
 

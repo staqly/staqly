@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { safeCssColor, safeHttpUrl, safeNextPath } from '@/lib/safe'
+import { safeCssColor, safeHttpUrl, safeImageSrc, safeNextPath } from '@/lib/safe'
 
 const ORIGIN = 'https://app.staqly.test'
 
@@ -87,5 +87,23 @@ describe('safeCssColor', () => {
     undefined,
   ])('rejects %j', (c) => {
     expect(safeCssColor(c)).toBeUndefined()
+  })
+})
+
+describe('safeImageSrc', () => {
+  it('keeps http(s) pictures and uploaded PNG/JPEG data: URLs', () => {
+    expect(safeImageSrc('https://example.com/a.png')).toBe('https://example.com/a.png')
+    expect(safeImageSrc('data:image/png;base64,iVBORw0KGgo=')).toBe('data:image/png;base64,iVBORw0KGgo=')
+    expect(safeImageSrc('data:image/jpeg;base64,/9j/4AAQ')).toBe('data:image/jpeg;base64,/9j/4AAQ')
+  })
+
+  it.each([
+    ['data:image/svg+xml;base64,PHN2Zz4='],
+    ['data:text/html;base64,PHNjcmlwdD4='],
+    ['data:image/png;base64,"onerror="alert(1)'],
+    ['javascript:alert(1)'],
+    [''],
+  ])('drops %s', (v) => {
+    expect(safeImageSrc(v)).toBeNull()
   })
 })

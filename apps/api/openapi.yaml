@@ -1180,12 +1180,22 @@ paths:
     patch:
       operationId: renameMe
       tags: [accounts]
-      summary: Change the signed-in person's name (how members, the activity log and emails show them)
+      summary: Change the signed-in person's name (how members, the activity log and emails show them) or picture
+      description: Send `name`, `avatar` or both; fields left out stay as they are.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
         required: true
-        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 100 } } } } }
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 100 }
+                avatar:
+                  type: string
+                  description: "A PNG or JPEG as a data: URL, at most 64 KB and 512 px a side (no SVG). Kept over the sign-in provider's picture; an empty string drops it (the provider's picture returns at the next sign-in)."
+                  examples: ["data:image/png;base64,iVBORw0KGgo..."]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1482,9 +1492,9 @@ paths:
     patch:
       operationId: updateWorkspace
       tags: [auth]
-      summary: Rename the workspace or change its time zone (admin)
+      summary: Rename the workspace, change its time zone or its logo (admin)
       description: |
-        Send the new `name`, `timezone` (an IANA name; an unknown zone is 422), or both. Fields left out stay as they are.
+        Send the new `name`, `timezone` (an IANA name; an unknown zone is 422), `logo`, or any of them. Fields left out stay as they are.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
@@ -1496,6 +1506,10 @@ paths:
               properties:
                 name: { type: string }
                 timezone: { type: string, description: IANA time zone name, examples: [Europe/Warsaw] }
+                logo:
+                  type: string
+                  description: "A PNG or JPEG as a data: URL, at most 64 KB and 512 px a side (no SVG); an empty string brings back staqly's logo."
+                  examples: ["data:image/png;base64,iVBORw0KGgo..."]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Workspace" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -4591,10 +4605,11 @@ components:
 
     Workspace:
       type: object
-      required: [id, name, plan, recovery_rotated_at, created_at, timezone]
+      required: [id, name, plan, recovery_rotated_at, created_at, timezone, logo]
       properties:
         id: { type: string }
         name: { type: string }
+        logo: { type: string, description: "The workspace's logo as a PNG or JPEG data: URL; empty for staqly's." }
         plan: { type: string, description: "starter, plus, pro or business (cloud; an operator may also set a plan of their own), unlocked (Community Edition)", examples: [plus] }
         recovery_rotated_at: { type: string }
         created_at: { type: string }

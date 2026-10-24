@@ -54,6 +54,8 @@ type Workspace struct {
 	CreatedAt         string `json:"created_at"`
 	// Timezone is an IANA name (default UTC): repeats and schedule rules without a zone use it.
 	Timezone string `json:"timezone"`
+	// Logo is a PNG or JPEG data: URL, '' for staqly's.
+	Logo string `json:"logo"`
 }
 
 // The processing timeout used to live here; since migration 00024 it is per collection (and per item), and
@@ -63,13 +65,14 @@ func (s *Service) toWorkspace(w db.Workspace) Workspace {
 	if tz == "" {
 		tz = "UTC"
 	}
-	return Workspace{ID: w.ID, Name: w.Name, Plan: w.Plan, RecoveryRotatedAt: w.RecoveryRotatedAt, CreatedAt: w.CreatedAt, Timezone: tz}
+	return Workspace{ID: w.ID, Name: w.Name, Plan: w.Plan, RecoveryRotatedAt: w.RecoveryRotatedAt, CreatedAt: w.CreatedAt, Timezone: tz, Logo: w.Logo}
 }
 
-// WorkspaceUpdate changes the name and the time zone; nil fields stay as they are.
+// WorkspaceUpdate changes the name, the time zone and the logo ('' removes it); nil fields stay as they are.
 type WorkspaceUpdate struct {
 	Name     *string `json:"name"`
 	Timezone *string `json:"timezone"`
+	Logo     *string `json:"logo"`
 }
 
 type APIKey struct {
@@ -315,8 +318,8 @@ func (s *Service) UpdateWorkspace(ctx context.Context, p Principal, in Workspace
 	if err := p.require(ScopeAdmin); err != nil {
 		return Workspace{}, err
 	}
-	if in.Name == nil && in.Timezone == nil {
-		return Workspace{}, invalid("name", "send a name or a timezone")
+	if in.Name == nil && in.Timezone == nil && in.Logo == nil {
+		return Workspace{}, invalid("name", "send a name, a timezone or a logo")
 	}
 	changes := map[string]any{}
 	var name, tz string
@@ -333,6 +336,12 @@ func (s *Service) UpdateWorkspace(ctx context.Context, p Principal, in Workspace
 		}
 		changes["timezone"] = tz
 	}
+	if in.Logo != nil {
+		if err := checkLogo(*in.Logo); err != nil {
+			return Workspace{}, err
+		}
+		changes["logo"] = *in.Logo != "" // whether there is one, never the image
+	}
 	if err := s.tx(ctx, func(q *db.Queries) error {
 		now := s.now()
 		if in.Name != nil {
@@ -342,6 +351,11 @@ func (s *Service) UpdateWorkspace(ctx context.Context, p Principal, in Workspace
 		}
 		if in.Timezone != nil {
 			if err := q.UpdateWorkspaceTimezone(ctx, db.UpdateWorkspaceTimezoneParams{Timezone: tz, UpdatedAt: now, ID: p.WorkspaceID}); err != nil {
+				return err
+			}
+		}
+		if in.Logo != nil {
+			if err := q.UpdateWorkspaceLogo(ctx, db.UpdateWorkspaceLogoParams{Logo: *in.Logo, UpdatedAt: now, ID: p.WorkspaceID}); err != nil {
 				return err
 			}
 		}

@@ -5,6 +5,7 @@ import { Plus, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { ImagePicker } from '@/components/common/image-picker'
 import { PageContainer } from '@/components/common/page-header'
 import { SettingsHeader } from '@/components/settings/settings-header'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,7 @@ import { NotificationPrefsCard } from './notification-prefs'
 import { SettingsCard as Card } from './settings-card'
 import { SettingsNav } from './settings-nav'
 import { SignInMethodsCard } from './sign-in-methods'
+import { UserAvatar } from './user-avatar'
 
 export function AccountPage() {
   const { accountsEnabled } = useRole()
@@ -41,18 +43,27 @@ export function AccountPage() {
   )
 }
 
-/** The person's name: how members, the activity log and emails show them. */
+/** The person's picture and name: how members, the activity log and emails show them. */
 function ProfileCard() {
   const qc = useQueryClient()
   const session = useSession()
   const user = session.data?.user
   const [name, setName] = useState<string | null>(null)
   const rename = useMutation({
-    mutationFn: (n: string) => api.renameMe(n),
+    mutationFn: (n: string) => api.updateMe({ name: n }),
     onSuccess: (u) => {
       qc.setQueryData(qk.session, (old: typeof session.data) => (old ? { ...old, user: u } : old))
       setName(null)
       toast.success('Name saved')
+    },
+    onError: (e) => toastApiError(e),
+  })
+  const picture = useMutation({
+    mutationFn: (avatar: string) => api.updateMe({ avatar }),
+    onSuccess: (u) => {
+      qc.setQueryData(qk.session, (old: typeof session.data) => (old ? { ...old, user: u } : old))
+      void qc.invalidateQueries({ queryKey: qk.members })
+      toast.success(u.avatar_url ? 'Picture saved' : 'Picture removed')
     },
     onError: (e) => toastApiError(e),
   })
@@ -65,6 +76,19 @@ function ProfileCard() {
 
   return (
     <Card title="Profile" icon={<UserRound />} description={`You sign in as ${user.email}.`}>
+      <div role="group" aria-labelledby="profile-picture-label" className="grid gap-2">
+        <span id="profile-picture-label" className="text-sm font-medium">
+          Picture
+        </span>
+        <ImagePicker
+          label="picture"
+          value={user.avatar_url}
+          fallback={<UserAvatar name={user.name} className="size-12" />}
+          pending={picture.isPending}
+          onChange={(v) => picture.mutate(v)}
+          hint="Optional. Shown to the members of your workspaces; without one, your Google picture or your initials."
+        />
+      </div>
       <form
         className="grid gap-3"
         onSubmit={(e) => {

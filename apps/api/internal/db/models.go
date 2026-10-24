@@ -510,6 +510,7 @@ type Workspace struct {
 	OnboardedAt              sql.NullString `json:"onboarded_at"`
 	Entitlements             string         `json:"entitlements"`
 	Timezone                 string         `json:"timezone"`
+	Logo                     string         `json:"logo"`
 }
 
 type WorkspaceAi struct {
