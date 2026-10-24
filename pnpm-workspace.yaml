@@ -75,3 +75,7 @@ minimumReleaseAgeExclude:
 # Re-check (and drop or redo with `pnpm patch`) when bumping fumadocs-openapi.
 patchedDependencies:
   fumadocs-openapi@12.5.3: apps/docs/patches/fumadocs-openapi@12.5.3.patch
+
+overrides:
+  # @scalar/json-magic (docs build only) pins undici 7.29.1 exactly; 7.30.1 fixes its advisories. Drop when it moves on.
+  'undici@7.29.1': 7.30.1

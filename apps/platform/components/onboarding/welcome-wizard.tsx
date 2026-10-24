@@ -101,7 +101,7 @@ export function WelcomeWizard() {
     ? ['you', 'joined']
     : [
         ...(hasPerson ? (['you'] as const) : []),
-        'workspace',
+        ...(draft.named ? [] : (['workspace'] as const)),
         'channel',
         ...extra,
         ...(needsPlan || requested === 'plan' ? (['plan'] as const) : []),
@@ -701,6 +701,8 @@ function PlanStep({
     mutationFn: (plan: string) => api.billingCheckout(plan, interval, 'welcome'),
     onSuccess: ({ url }) => window.location.assign(url),
   })
+  // Busy until the browser has left for Stripe, not only until the API answered.
+  const leaving = start.isPending || start.isSuccess
 
   return (
     <div>
@@ -794,11 +796,11 @@ function PlanStep({
         <Button
           type="button"
           className={cn(bigButton, 'bg-brand-gradient text-[#052817] hover:brightness-110')}
-          disabled={!picked || start.isPending}
+          disabled={!picked || leaving}
           onClick={() => picked && start.mutate(picked.id)}
           data-testid={withTrial ? 'start-trial' : 'choose-plan'}
         >
-          {start.isPending
+          {leaving
             ? 'Opening checkout...'
             : withTrial
               ? 'Start 7-day free trial'

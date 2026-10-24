@@ -816,7 +816,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		return nil, conflict("this channel's provider is not part of this build")
 	}
 	if e.Auth() == providers.AuthOAuth2 {
-		defer lockRefresh(row.ID)() // a refresh rotates the refresh token: read it under the lock
+		defer lockRefresh(row)() // a refresh rotates the refresh token: read it under the lock
 	}
 	_, creds, err := s.storedCredentials(ctx, row.ID)
 	if err != nil {
@@ -839,7 +839,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 			return map[string]any{"ok": false, "error": truncateRunes(err.Error(), 500)}, nil
 		}
 		if sealed, err := s.seal(fresh); err == nil {
-			_ = s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID})
+			_ = s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID})
 			s.shareRefresh(ctx, row, creds, fresh)
 		}
 		profile = providers.Profile{Handle: row.Handle, Name: row.Name}
@@ -896,12 +896,18 @@ func credentialsExpiry(creds providers.Credentials) (time.Time, bool) {
 
 // refreshChannel is the refresh_channel job: a failed refresh marks the channel needs_reconnect.
 func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
-	defer lockRefresh(channelID)() // the credentials are read under the lock: a publish may have just refreshed them
 	row, err := s.Q.GetChannelByID(ctx, channelID)
 	if isNoRows(err) {
 		return nil // gone
 	}
 	if err != nil {
+		return err
+	}
+	// The credentials are read (again) under the lock: a publish or a sibling may have just refreshed them.
+	defer lockRefresh(row)()
+	if row, err = s.Q.GetChannelByID(ctx, channelID); isNoRows(err) {
+		return nil
+	} else if err != nil {
 		return err
 	}
 	e, ok := providers.Get(row.Provider)
@@ -929,7 +935,8 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
+	// Saved even if the job's budget just ran out: the platform may have spent the old refresh token already.
+	if err := s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
 		return err
 	}
 	s.shareRefresh(ctx, row, creds, fresh)
@@ -945,14 +952,16 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	return nil
 }
 
-// refreshLocks: one token refresh per channel at a time in this process. Platforms like X rotate refresh
-// tokens (each works once), so two runs refreshing with the same one would fail the second and mark the
-// channel needs_reconnect. ponytail: per process and never pruned (one small mutex per channel ever
-// refreshed); several servers on one database would need a row lock or an advisory lock.
-var refreshLocks sync.Map // channel id -> *sync.Mutex
+// refreshLocks: one token refresh at a time in this process for a workspace's channels of one platform.
+// Platforms like X rotate refresh tokens (each works once), so two runs refreshing with the same one would
+// fail the second and mark the channel needs_reconnect; channels made from one sign-in share its refresh token
+// (shareRefresh) and their refresh jobs come due together. ponytail: per process and never pruned (one small
+// mutex per workspace and platform ever refreshed); several servers on one database would need a row lock or
+// an advisory lock.
+var refreshLocks sync.Map // workspace id + ":" + provider -> *sync.Mutex
 
-func lockRefresh(channelID string) func() {
-	m, _ := refreshLocks.LoadOrStore(channelID, &sync.Mutex{})
+func lockRefresh(row db.Channel) func() {
+	m, _ := refreshLocks.LoadOrStore(row.WorkspaceID+":"+row.Provider, &sync.Mutex{})
 	mu := m.(*sync.Mutex)
 	mu.Lock()
 	return mu.Unlock
@@ -981,7 +990,7 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if e.Auth() != providers.AuthOAuth2 || !due(creds) {
 		return creds, nil
 	}
-	defer lockRefresh(row.ID)()
+	defer lockRefresh(row)()
 	if _, stored, err := s.storedCredentials(ctx, row.ID); err == nil {
 		if !due(stored) {
 			return stored, nil // refreshed by another run while this one waited
@@ -1007,7 +1016,7 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if err != nil {
 		return nil, err
 	}
-	if err := s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
+	if err := s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
 		return nil, err
 	}
 	s.shareRefresh(ctx, row, creds, fresh)
@@ -1017,8 +1026,7 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 
 // shareRefresh hands a renewed sign-in to the other channels made from the same one (the accounts picked after one
 // sign-in: Tumblr blogs, Slack channels). Platforms that rotate refresh tokens retire the old one when it is used,
-// so a sibling still holding it could not renew any more. ponytail: siblings refresh under their own locks; two of
-// them renewing in the same instant can still race, and the loser turns needs_reconnect.
+// so a sibling still holding it could not renew any more. Called under the refresh lock, which siblings share.
 func (s *Service) shareRefresh(ctx context.Context, row db.Channel, old, fresh providers.Credentials) {
 	was := old["refresh_token"]
 	if was == "" || fresh["refresh_token"] == "" || fresh["refresh_token"] == was {
@@ -1042,7 +1050,7 @@ func (s *Service) shareRefresh(ctx context.Context, row db.Channel, old, fresh p
 			}
 		}
 		if sealed, err := s.seal(c); err == nil {
-			_ = s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: other.ID})
+			_ = s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: other.ID})
 		}
 	}
 }

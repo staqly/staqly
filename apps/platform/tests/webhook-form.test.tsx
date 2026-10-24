@@ -27,7 +27,7 @@ describe('webhook form', () => {
     expect(screen.getByRole('option', { name: /post\.created/ })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('option', { name: /post\.created/ })).toHaveAttribute('data-checked', 'true')
     await user.keyboard('{Escape}')
-    expect(screen.getByRole('button', { name: 'Events' })).toHaveTextContent(/^post\.\*$/)
+    expect(screen.getByRole('button', { name: 'Events' })).toHaveTextContent(/^Events: post\.\*$/)
 
     await user.click(screen.getByRole('button', { name: 'Collections' }))
     await user.click(await screen.findByRole('option', { name: /blog/i }))

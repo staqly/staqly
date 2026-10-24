@@ -418,12 +418,23 @@ func (s *Service) expireExports(ctx context.Context) {
 	s.sweepExportFiles(ctx)
 }
 
+// exportS3Sweeps: when each service last looked for orphan archives in the bucket. Listing "workspaces/" walks
+// every workspace's files (media and thumbnails too), so it happens at most once per exportS3SweepEvery, not
+// on every run of the export worker (every minute).
+var exportS3Sweeps sync.Map // *Service -> time.Time
+
+const exportS3SweepEvery = time.Hour
+
 // sweepExportFiles removes ZIPs that no ready/running export row accounts
 // for (deleted workspace, crash between file write and bookkeeping, ...).
 func (s *Service) sweepExportFiles(ctx context.Context) {
 	stores := []blob.Store{blob.NewDisk(s.ExportDir())}
 	if s.exportsOnS3() {
-		stores = append(stores, s.Cfg.Blob)
+		last, ok := exportS3Sweeps.Load(s)
+		if now := s.Now(); !ok || now.Sub(last.(time.Time)) >= exportS3SweepEvery {
+			exportS3Sweeps.Store(s, now)
+			stores = append(stores, s.Cfg.Blob)
+		}
 	}
 	for _, store := range stores {
 		prefix := "exp_"

@@ -12,7 +12,7 @@ var (
 	metricPublishes = metrics.NewCounterVec("staqly_publish_attempts_total",
 		"Publish attempts by provider and outcome (published, retry, failed).", "provider", "result")
 	metricJobs = metrics.NewCounterVec("staqly_jobs_total",
-		"Job runs by kind and outcome (done, retry, failed).", "kind", "result")
+		"Job runs by kind and outcome (done, retry, snoozed, failed).", "kind", "result")
 	metricWebhookAttempts = metrics.NewCounterVec("staqly_webhook_attempts_total",
 		"Webhook delivery attempts by outcome (succeeded, retry, failed).", "result")
 	metricWebhookDuration = metrics.NewHistogramVec("staqly_webhook_attempt_duration_seconds",

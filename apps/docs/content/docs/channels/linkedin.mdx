@@ -82,6 +82,7 @@ while you are signed in to LinkedIn. Until then, posts to it fail with the reaso
 | Text | 3,000 characters |
 | Media | up to **9 pictures** (PNG, JPEG, GIF) **or one video** per post |
 | Video | uploaded in the parts LinkedIn asks for; staqly waits until LinkedIn has processed it before posting |
+| Daily quota | LinkedIn counts calls per member and per app for 24 hours from midnight UTC, for example 500 posts per member a day. Posts over it wait and go out after midnight UTC |
 
 Hashtags (`#launch`) stay hashtags, and characters LinkedIn treats as formatting (`( ) [ ] * _`
 and others) go out as written.
@@ -113,7 +114,8 @@ connect the channel again to turn comments on.
 | LinkedIn says | Staqly does |
 |---|---|
 | The sign-in expired or was revoked (401) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
-| Rate limit (429) or LinkedIn unavailable (5xx), media still processing | Retries through the job queue (after 1, 5, then 15 minutes) |
+| Daily quota reached (429) | Keeps the target **publishing** with the reason and tries again just after midnight UTC, without using up its retries |
+| LinkedIn unavailable (5xx), media still processing | Retries through the job queue (after 1, 5, then 15 minutes) |
 | Text too long, a refused picture, a missing permission (403) | Fails the target with LinkedIn's reason; retrying would not help, so it does not |
 
 LinkedIn has no way to ask "did this post go out?". When an answer is lost and staqly tries again,

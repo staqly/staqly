@@ -10,7 +10,7 @@ import { PageContainer } from '@/components/common/page-header'
 import { SettingsHeader } from '@/components/settings/settings-header'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { api, exportDownloadUrl, type WorkspaceExport } from '@/lib/api'
+import { api, errorMessage, exportDownloadUrl, type WorkspaceExport } from '@/lib/api'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { qk, useBackupAccess } from '@/lib/queries'
@@ -107,7 +107,8 @@ function CloudBackups() {
   })
   const { mutate: create, isPending } = useMutation({
     mutationFn: () => api.requestWorkspaceExport(),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.workspaceExports }),
+    // Pending until the list shows the new backup, so the button can't start a second one in between.
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.workspaceExports }),
     onError: (e) => toastApiError(e),
   })
   const rows = list.data?.data ?? []
@@ -125,7 +126,11 @@ function CloudBackups() {
             <Plus /> {building ? 'Creating backup...' : 'Create backup'}
           </Button>
         </div>
-        {rows.length === 0 ? (
+        {list.isError && rows.length === 0 ? (
+          <p role="alert" className="text-destructive">
+            Couldn&apos;t load the backups: {errorMessage(list.error)}
+          </p>
+        ) : rows.length === 0 ? (
           <p className="text-muted-foreground">{list.isLoading ? 'Loading...' : 'No backups yet.'}</p>
         ) : (
           <ul className="divide-y rounded-lg border">

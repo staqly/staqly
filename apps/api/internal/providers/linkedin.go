@@ -533,7 +533,8 @@ func linkedinError(status int, body string) error {
 	case status == http.StatusUnauthorized, e.Error == "invalid_grant", strings.Contains(body, "REVOKED_ACCESS_TOKEN"), strings.Contains(body, "EXPIRED_ACCESS_TOKEN"):
 		return &Failure{Kind: ErrReauth, Msg: "LinkedIn no longer accepts this account's sign-in (" + detail + "); reconnect it"}
 	case status == http.StatusTooManyRequests:
-		return &Failure{Msg: "LinkedIn rate limit reached; staqly tries again in a few minutes"}
+		// LinkedIn's quotas are per app and per member for 24 hours, starting over at midnight UTC.
+		return &Failure{Msg: "LinkedIn's daily limit for this account or app is reached; staqly tries again after midnight UTC", RetryAt: nextUTCDay(time.Now())}
 	case status >= 500:
 		return &Failure{Msg: fmt.Sprintf("LinkedIn is unavailable (%d); staqly tries again in a few minutes", status)}
 	case status == http.StatusForbidden && strings.Contains(detail, "partnerApiSocialActions"):

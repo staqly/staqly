@@ -292,10 +292,10 @@ function EventData({ event }: { event: StashEvent }) {
       bodyTestId="event-data"
       header={
         <>
-          <span className="shrink-0">Data</span>
+          <span className="shrink-0">Data</span>{' '}
           <code className="truncate rounded bg-muted px-1 py-px font-mono text-[11px] text-foreground/80">
             {event.id}
-          </code>
+          </code>{' '}
           {typeof event.seq === 'number' && <span className="shrink-0 font-mono">#{event.seq}</span>}
         </>
       }

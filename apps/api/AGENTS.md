@@ -82,7 +82,8 @@ sqlc generate                       # after editing db/queries or migrations (~/
   `fairStart` snoozes); each kind has a run budget (`jobRunTimeout`, the worker's
   Timeout); retries follow `backoffFor` (1, 5, 15 min) up to `max_attempts`, the last
   failure calls `jobFailed`. River rescues a job still running after 15 min (a dead
-  process). Never call a platform inside `s.tx`; providers run from the job. Delivery is
+  process); one rescued on its last attempt is discarded, and `settleRescuedJobs` (the
+  minute sweep) calls `jobFailed` for it. Never call a platform inside `s.tx`; providers run from the job. Delivery is
   at least once: a crash after the platform accepted a post but before the result was
   written publishes again on the retry (the target is checked first, but nothing
   deduplicates on the platform's side). PostgreSQL: statements on `river_*` tables pass

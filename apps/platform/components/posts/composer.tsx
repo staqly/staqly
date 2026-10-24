@@ -160,6 +160,7 @@ function Counter({ counts }: { counts: Count[] }) {
   const tight = limited.toSorted((a, b) => a.max - a.n - (b.max - b.n))[0]
   const over = limited.some((c) => c.n > c.max) || counts.some((c) => c.links.length > 0)
   const Icon = over ? AlertTriangle : CheckCircle2
+  const shown = tight ? `${tight.n}/${tight.max}` : String(counts[0]!.n)
 
   return (
     <Popover>
@@ -169,11 +170,12 @@ function Counter({ counts }: { counts: Count[] }) {
           variant="outline"
           size="sm"
           className={cn('tabular-nums', over && 'border-destructive text-destructive')}
-          aria-label="Characters per channel"
+          // Starts with the count it shows (speech input names it by its visible text).
+          aria-label={`${shown} characters per channel`}
           data-testid="counter"
         >
           <Icon className={over ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'} />
-          {tight ? `${tight.n}/${tight.max}` : counts[0]!.n}
+          {shown}
           <ChevronDown className="opacity-60" />
         </Button>
       </PopoverTrigger>
@@ -814,14 +816,11 @@ function ScheduleMenu({
   repeat,
   disabled,
   onApply,
-  label,
 }: {
   value: Date | null
   repeat: string
   disabled?: boolean
   onApply: (at: Date, repeat: string) => void
-  /** A text button ("Schedule") instead of the calendar half of the Save changes split button. */
-  label?: string
 }) {
   const [open, setOpen] = useState(false)
   const [at, setAt] = useState<Date | null>(null)
@@ -845,23 +844,17 @@ function ScheduleMenu({
       }}
     >
       <PopoverTrigger asChild>
-        {label ? (
-          <Button type="button" aria-haspopup="dialog" data-testid="date-time-picker" disabled={disabled}>
-            <CalendarClock /> {label}
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            size="icon"
-            aria-label="Schedule for later"
-            aria-haspopup="dialog"
-            data-testid="date-time-picker"
-            disabled={disabled}
-            className="size-8 border-l border-l-primary-foreground/25 pointer-coarse:size-11"
-          >
-            <CalendarClock />
-          </Button>
-        )}
+        <Button
+          type="button"
+          size="icon"
+          aria-label="Schedule for later"
+          aria-haspopup="dialog"
+          data-testid="date-time-picker"
+          disabled={disabled}
+          className="size-8 border-l border-l-primary-foreground/25 pointer-coarse:size-11"
+        >
+          <CalendarClock />
+        </Button>
       </PopoverTrigger>
       <PopoverContent
         side="top"
@@ -1117,8 +1110,8 @@ const SettingsCard = memo(function SettingsCard({
 })
 
 /**
- * The composer's footer: the picked time as a chip, Save draft or Publish now, and the split Publish / Schedule
- * button. It holds the "is the picked time past" timer, so the form itself never renders for the clock.
+ * The composer's footer: the picked time as a chip, Save draft, and the split button: Publish now (Save changes
+ * on a live post) with the calendar half. It holds the "is the picked time past" timer, so the form itself never renders for the clock.
  */
 function ComposerFooter({
   post,
@@ -1188,32 +1181,30 @@ function ComposerFooter({
               Save draft
             </Button>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onSave('now')}
-            disabled={busy || !canSend}
-            data-testid="publish-now"
-          >
-            <Send /> Publish now
-          </Button>
-          {live ? (
-            <ButtonGroup aria-label="Publish">
+          {live && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onSave('now')}
+              disabled={busy || !canSend}
+              data-testid="publish-now"
+            >
+              <Send /> Publish now
+            </Button>
+          )}
+          {/* Two ways out of a post: now, or the calendar half (with the time already picked, if any). */}
+          <ButtonGroup aria-label="Publish">
+            {live ? (
               <Button type="submit" disabled={busy || !canSend || inPast} data-testid="save-post">
                 {busy ? 'Saving...' : 'Save changes'}
               </Button>
-              <ScheduleMenu value={publishAt} repeat={repeatEvery} disabled={busy} onApply={onApplySchedule} />
-            </ButtonGroup>
-          ) : (
-            // Two ways out of a new post or a draft: now, or the calendar (with the time already picked, if any).
-            <ScheduleMenu
-              value={publishAt}
-              repeat={repeatEvery}
-              disabled={busy}
-              onApply={onApplySchedule}
-              label={busy && publishAt ? 'Saving...' : 'Schedule'}
-            />
-          )}
+            ) : (
+              <Button type="button" onClick={() => onSave('now')} disabled={busy || !canSend} data-testid="publish-now">
+                <Send /> {busy ? 'Saving...' : 'Publish now'}
+              </Button>
+            )}
+            <ScheduleMenu value={publishAt} repeat={repeatEvery} disabled={busy} onApply={onApplySchedule} />
+          </ButtonGroup>
         </div>
       )}
       {(error || (inPast && !locked)) && (
@@ -1296,7 +1287,9 @@ export function ComposerForm({
   const collections = useCollections()
   const channels = useChannels()
   const providers = useProviders()
-  const [collection, setCollection] = useState(post?.collection_id ?? collectionId ?? '')
+  const [chosenCollection, setCollection] = useState(post?.collection_id ?? collectionId ?? '')
+  // Nothing picked yet: the workspace's Default collection.
+  const collection = chosenCollection || (collections.data?.find((c) => c.is_default)?.id ?? '')
   const [content, setContent] = useState(post?.content ?? '')
   const [media, setMedia] = useState<Media[]>(post?.media_items ?? defaultMedia ?? [])
 

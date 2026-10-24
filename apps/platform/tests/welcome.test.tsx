@@ -113,6 +113,8 @@ describe('welcome wizard', () => {
     await user.click(await screen.findByTestId('welcome-plan-starter'))
     await user.click(screen.getByTestId('start-trial'))
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/cs_1'))
+    // Still leaving for Stripe: the button stays busy so a second click can't open another checkout.
+    expect(screen.getByTestId('start-trial')).toBeDisabled()
     expect(api.find('POST', '/v1/billing/checkout')[0].body).toEqual({
       plan: 'starter',
       interval: 'month',

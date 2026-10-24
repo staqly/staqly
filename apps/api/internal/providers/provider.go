@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -320,10 +321,26 @@ var ErrReauth = errors.New("the account needs reconnecting")
 var ErrRejected = errors.New("the platform refused the post")
 
 // Failure is a platform error with the message a person reads; Kind (ErrReauth, ErrRejected or nil for a
-// retryable one) is what errors.Is matches.
+// retryable one) is what errors.Is matches. RetryAt, on a retryable one, is when the platform takes requests
+// again (a daily quota spent): the job waits until then instead of spending its attempts.
 type Failure struct {
-	Kind error
-	Msg  string
+	Kind    error
+	Msg     string
+	RetryAt time.Time
+}
+
+// RetryAt is when a retryable failure says to try again, or zero.
+func RetryAt(err error) time.Time {
+	var f *Failure
+	if errors.As(err, &f) && f.Kind == nil {
+		return f.RetryAt
+	}
+	return time.Time{}
+}
+
+// nextUTCDay is when daily quotas counted per UTC day (LinkedIn) start over, with a minute of margin.
+func nextUTCDay(now time.Time) time.Time {
+	return now.UTC().Truncate(24 * time.Hour).Add(24*time.Hour + time.Minute)
 }
 
 func (f *Failure) Error() string { return f.Msg }

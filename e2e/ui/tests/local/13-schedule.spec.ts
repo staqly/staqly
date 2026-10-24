@@ -23,8 +23,14 @@ async function showWeekOf(page: Page, day: Date) {
   await expect(page.getByTestId('schedule-grid')).toBeVisible()
   await expect(page.locator('[data-testid^="schedule-slot-"]').first()).toBeVisible()
 
+  const first = page.locator('[data-testid^="schedule-slot-"]').first()
+
   for (let i = 0; i < 3 && (await page.getByTestId(`schedule-slot-${key}-12`).count()) === 0; i++) {
+    const shown = await first.getAttribute('data-testid')
+
     await page.getByRole('button', { name: 'Next week' }).click()
+    // Look again only once the next week is on screen, or a slow render walks past the day.
+    await expect(first).not.toHaveAttribute('data-testid', shown!)
   }
 
   await expect(page.getByTestId(`schedule-slot-${key}-12`)).toBeVisible()
@@ -60,7 +66,15 @@ test.describe('the schedule', () => {
     await expect(all.getByRole('button', { name: /Beach day on Brand social: Scheduled/ })).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(all).toHaveCount(0)
-    // The collection schedules' runs are hollow chips in their slots.
+    // The collection schedules' runs are hollow chips in their slots. Weekday mornings runs Monday to Friday: on a
+    // weekend the week of tomorrow has no run left, so look at the week of the next weekday.
+    const weekday = daysAhead(1, 10)
+
+    while (weekday.getDay() === 0 || weekday.getDay() === 6) {
+      weekday.setDate(weekday.getDate() + 1)
+    }
+
+    await showWeekOf(page, weekday)
     await expect(page.getByTestId('schedule-slot-chip').first()).toBeVisible()
     await expect(page.getByTestId('schedule-slot-chip').filter({ hasText: 'Weekday mornings' }).first()).toContainText(
       'next post',

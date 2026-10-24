@@ -76,6 +76,20 @@ async function pickChannels(user: ReturnType<typeof userEvent.setup>, ...ids: st
 }
 
 describe('composer', () => {
+  it('opened outside a collection, a new post starts in the Default collection', async () => {
+    mockApi({
+      ...routes,
+      'GET /v1/collections': {
+        data: [collection(), collection({ id: 'col_default', name: 'Default', is_default: true })],
+      },
+    })
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} />, { mode: 'local' })
+    const select = await screen.findByRole('combobox', { name: /Collection/ })
+
+    await waitFor(() => expect(select).toHaveTextContent('Default'))
+  })
+
   it('Schedule opens the calendar: a quick pick and Schedule send the post for that time', async () => {
     const api = mockApi({ ...routes, 'POST /v1/posts': post({ id: 'pst_9', status: 'scheduled' }) })
     const user = userEvent.setup()
@@ -85,7 +99,7 @@ describe('composer', () => {
     await user.type(screen.getByTestId('post-content'), 'Later')
     // A new post offers both ways out side by side.
     expect(screen.getByTestId('publish-now')).toBeEnabled()
-    await user.click(screen.getByRole('button', { name: 'Schedule' }))
+    await user.click(screen.getByRole('button', { name: 'Schedule for later' }))
     const picker = await screen.findByRole('dialog', { name: 'Pick a date and time' })
 
     await user.click(within(picker).getByRole('button', { name: 'Tomorrow 09:00' }))
@@ -98,20 +112,20 @@ describe('composer', () => {
     expect([at.getHours(), at.getMinutes()]).toEqual([9, 0])
   })
 
-  it('a picked time shows as a chip next to Publish now and Schedule; the chip clears it', async () => {
+  it('a picked time shows as a chip next to Publish now and the calendar; the chip clears it', async () => {
     mockApi(routes)
     const user = userEvent.setup()
 
     renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
     // No channel and no text yet: Schedule only sets the time.
-    await user.click(await screen.findByRole('button', { name: 'Schedule' }))
+    await user.click(await screen.findByRole('button', { name: 'Schedule for later' }))
     const picker = await screen.findByRole('dialog', { name: 'Pick a date and time' })
 
     await user.click(within(picker).getByRole('button', { name: 'In 1 hour' }))
     await user.click(within(picker).getByRole('button', { name: 'Schedule' }))
     expect(await screen.findByTestId('publish-at-chip')).toBeInTheDocument()
     expect(screen.getByTestId('publish-now')).toBeInTheDocument()
-    expect(screen.getByTestId('date-time-picker')).toHaveTextContent('Schedule')
+    expect(screen.getByTestId('date-time-picker')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Clear schedule' }))
     expect(screen.queryByTestId('publish-at-chip')).not.toBeInTheDocument()
     expect(screen.getByTestId('publish-now')).toBeInTheDocument()
@@ -130,8 +144,8 @@ describe('composer', () => {
     await pickChannels(user, 'ch_1', 'ch_2')
     await user.type(screen.getByTestId('post-content'), 'Hello world')
     // The counter shows the tightest limit; its popover lists every channel against its platform's limit.
-    expect(screen.getByRole('button', { name: 'Characters per channel' })).toHaveTextContent('11/300')
-    await user.click(screen.getByRole('button', { name: 'Characters per channel' }))
+    expect(screen.getByRole('button', { name: /characters per channel$/ })).toHaveTextContent('11/300')
+    await user.click(screen.getByRole('button', { name: /characters per channel$/ }))
     expect(await screen.findByTestId('counters')).toHaveTextContent('11/500')
     expect(screen.getByTestId('counters')).toHaveTextContent('11/300')
     await user.click(screen.getByTestId('publish-now'))
@@ -178,11 +192,11 @@ describe('composer', () => {
       'Links will be removed from: Brand on X (https://example.com/a)',
     )
     expect(screen.getByTestId('links-notices')).not.toHaveTextContent('Brand on Mastodon')
-    await user.click(screen.getByRole('button', { name: 'Characters per channel' }))
+    await user.click(screen.getByRole('button', { name: /characters per channel$/ }))
     // Mastodon keeps the link (31 characters), X receives "New post:" (9).
     expect(await screen.findByTestId('counters')).toHaveTextContent('31/500')
     expect(screen.getByTestId('counters')).toHaveTextContent('9')
-    expect(screen.getByRole('button', { name: 'Characters per channel' })).toHaveClass('border-destructive')
+    expect(screen.getByRole('button', { name: /characters per channel$/ })).toHaveClass('border-destructive')
   })
 
   it('a per-channel text override and a platform setting travel with that target', async () => {
@@ -240,7 +254,7 @@ describe('composer', () => {
     const card = await screen.findByTestId('settings-ch_x')
 
     await user.click(within(card).getByRole('switch', { name: 'Made with AI' }))
-    await user.click(within(card).getByRole('button', { name: 'Repost from' }))
+    await user.click(within(card).getByRole('button', { name: /^Repost from/ }))
     await user.click(await screen.findByRole('option', { name: /Second X/ }))
     await user.keyboard('{Escape}')
     expect(screen.getByRole('tab', { name: /Settings/ })).toHaveTextContent('1')

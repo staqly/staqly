@@ -53,7 +53,7 @@ test.describe('posts', () => {
     await page.getByTestId('filter-button').click()
     await expect(page.getByRole('textbox', { name: 'Search posts' })).toHaveValue('coffee')
     await page.getByRole('button', { name: 'Clear all' }).click()
-    await page.getByRole('button', { name: 'Channel filter', exact: true }).click()
+    await page.getByRole('button', { name: /^Channel filter:/ }).click()
     await page.getByRole('option', { name: 'Weekly newsletter' }).click()
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')

@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { api, errorMessage } from '@/lib/api'
 import { useBilling } from '@/lib/queries'
 import { browserTimeZone } from '@/lib/time-zone'
+import { writeWelcomeDraft } from '@/lib/welcome'
 
 /**
  * The account owner adds a workspace; it opens right away. With billing it has no plan yet, so it opens on the
@@ -31,6 +32,7 @@ export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOp
       const w = await api.createWorkspace(name.trim(), browserTimeZone())
 
       await api.switchWorkspace(w.id)
+      writeWelcomeDraft({ workspace: w.id, named: true })
     },
     onSuccess: () => window.location.assign(paid ? '/welcome' : '/schedule'),
     onError: (e) => setError(errorMessage(e)),

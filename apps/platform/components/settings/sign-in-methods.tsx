@@ -57,6 +57,8 @@ export function SignInMethodsCard() {
     onSuccess: ({ url }) => window.location.assign(url),
     onError: (e) => toastApiError(e),
   })
+  // Busy until the browser has left for Google, not only until the API answered.
+  const leaving = google.isPending || google.isSuccess
   const remove = useMutation({
     mutationFn: (m: SignInMethod) => api.removeSignInMethod(m),
     onSuccess: (res) => {
@@ -82,7 +84,7 @@ export function SignInMethodsCard() {
               size="sm"
               variant="outline"
 
-              disabled={google.isPending}
+              disabled={leaving}
               onClick={() => google.mutate()}
             >
               <GoogleMark /> Add Google

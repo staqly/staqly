@@ -120,7 +120,7 @@ test.describe('collections', () => {
     await form.getByLabel('Add a time').fill('17:30')
     await form.getByLabel('Add a time').press('Enter')
     await expect(form.getByText('17:30')).toBeVisible()
-    await form.getByRole('button', { name: 'Channels', exact: true }).click()
+    await form.getByRole('button', { name: /^Channels:/ }).click()
     await page.getByRole('option', { name: col.channel.name }).click()
     await page.keyboard.press('Escape')
     await form.getByRole('radio', { name: 'Ask my agent for new posts' }).click()
