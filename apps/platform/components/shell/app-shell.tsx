@@ -678,6 +678,8 @@ function MobileTabBar() {
     <nav
       aria-label="Primary"
       data-testid="mobile-tabbar"
+      // As wide as the page at least (body min-width): inline, a utility class would cost every route CSS.
+      style={{ minWidth: '20rem' }}
       className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/75 md:hidden"
     >
       <ul className="mx-auto grid h-(--mobile-tabbar-h) max-w-lg grid-cols-5 px-1">

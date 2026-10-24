@@ -427,7 +427,9 @@ export function SchedulePage() {
   const today = dayKey(new Date(hourStart))
   const currentHour = new Date(hourStart).getHours()
   const view: CalendarView = params.get('view') === 'month' ? 'month' : params.get('view') === 'day' ? 'day' : 'week'
-  const layout: Layout = isMobile || params.get('list') === '1' ? 'list' : 'grid'
+  // Phones read a week or a day as a list (the hour grid needs ~720px); a month stays a calendar on every screen.
+  const narrow = useIsMobile(640)
+  const layout: Layout = (narrow && view !== 'month') || params.get('list') === '1' ? 'list' : 'grid'
   const anchor = useMemo(() => {
     const at = params.get('at')
 
