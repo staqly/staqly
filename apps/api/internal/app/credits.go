@@ -222,17 +222,29 @@ func (s *Service) xUnitsForPost(ctx context.Context, q *db.Queries, postID strin
 	return units, row.WorkspaceID, nil
 }
 
-// checkXForPost: block early, when a post is published or scheduled within this period and the allowance
-// can't cover it. Publishing re-checks each post and reply (posts scheduled later may use the room up).
-func (s *Service) checkXForPost(ctx context.Context, q *db.Queries, postID string, at time.Time) error {
+// checkAllowancesForPost: block early, when a post is published or scheduled within this period and the X or
+// LinkedIn allowances can't cover it. Publishing re-checks each post and reply (posts scheduled later may use
+// the room up).
+func (s *Service) checkAllowancesForPost(ctx context.Context, q *db.Queries, postID string, at time.Time) error {
 	if s.Cfg.Mode == ModeLocal || !at.Before(s.monthEnd()) {
 		return nil
 	}
 	units, ws, err := s.xUnitsForPost(ctx, q, postID)
-	if err != nil || units == 0 {
+	if err != nil {
 		return err
 	}
-	return s.checkX(ctx, q, ws, units)
+	if err := s.checkX(ctx, q, ws, units); err != nil {
+		return err
+	}
+	row, err := q.GetPostByID(ctx, postID)
+	if err != nil {
+		return err
+	}
+	posts, videos, err := s.linkedInForPost(ctx, q, row)
+	if err != nil {
+		return err
+	}
+	return s.checkLinkedIn(ctx, q, ws, posts, videos)
 }
 
 // CreditsCheckout starts a Stripe Checkout (one-time payment) for a bundle of extra posts and returns its URL.
@@ -359,9 +371,16 @@ func decodeCreditSession(raw json.RawMessage) *creditSession {
 	return &cs
 }
 
-// meterTarget counts a published X target (its main post) once.
+// meterTarget counts a published X or LinkedIn target (its main post) once.
 func (s *Service) meterTarget(ctx context.Context, q *db.Queries, row db.Post, t db.PostTarget, channelID string) error {
 	ch, err := q.GetChannelByID(ctx, channelID)
+	if err == nil && isLinkedIn(ch.Provider) {
+		video, err := hasVideo(ctx, q, row.WorkspaceID, row.Media)
+		if err != nil {
+			return err
+		}
+		return s.meterLinkedIn(ctx, q, row.WorkspaceID, "post:"+row.ID+":"+channelID, video)
+	}
 	if err != nil || ch.Provider != ProviderX {
 		return nil
 	}

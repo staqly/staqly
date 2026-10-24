@@ -28,6 +28,11 @@ func TestApplyEntitlements(t *testing.T) {
 			func(p Plan) bool { return p.Limits.Channels == 30 && p.Limits.StorageBytes == 150*gb }, 3},
 		{"unlimited lifts a limit", starter, []Entitlement{pack("x_unlimited", "X unlimited", map[string]string{"staqly_limit_x_posts_per_period": "unlimited"})},
 			func(p Plan) bool { return p.Limits.XPostsPerPeriod == Unlimited }, 1},
+		{"LinkedIn allowances rise", starter, []Entitlement{pack("linkedin_extra", "LinkedIn pack", map[string]string{
+			"staqly_limit_linkedin_posts_per_period": "+100", "staqly_limit_linkedin_videos_per_period": "+20"})},
+			func(p Plan) bool {
+				return p.Limits.LinkedInPostsPerPeriod == 400 && p.Limits.LinkedInVideosPerPeriod == 50 && p.BaseLimits.LinkedInPostsPerPeriod == 300
+			}, 2},
 		{"an unlimited limit stays unlimited", business, []Entitlement{pack("channels_extra_10", "Channels pack", map[string]string{"staqly_limit_channels": "+10"})},
 			func(p Plan) bool { return p.Limits.Channels == Unlimited && p.BaseLimits == nil }, 0},
 		{"a capability switches on", starter, []Entitlement{pack("backups", "Backups", map[string]string{"staqly_enable": "data_export"})},

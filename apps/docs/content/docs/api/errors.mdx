@@ -33,7 +33,7 @@ Switch on `error.code`; the `message` is for humans and may change.
 | `unauthorized`, `forbidden`, `csrf_failed` | Fix the credentials, the key's [scopes](/api/authentication#scopes) or sign in again |
 | `conflict`, `already_*`, `app_not_configured`, `provider_soon`, `provider_disabled` | Reload; the state already changed, or the platform is not ready on this server |
 | `rate_limited`, `code_cooldown`, `busy`, `unavailable`, `idempotency_in_progress` | Wait (`Retry-After` when present) and retry |
-| `plan_limit_exceeded`, `x_posts_exhausted` | Don't retry: the plan, the month or the bought X posts have to change |
+| `plan_limit_exceeded`, `x_posts_exhausted`, `linkedin_posts_exhausted`, `linkedin_videos_exhausted` | Don't retry: the plan, the month or the bought X posts have to change |
 | `plan_expired` | Don't retry: the workspace is read-only until a plan is paid for |
 | `not_available`, `*_disabled` | Don't retry: the feature is off on this server |
 | `code_expired`, `link_expired`, `link_used`, `link_revoked`, `invitation_expired`, `state_expired`, `passkey_expired` | Start the step again (a new code, link, QR code or invitation) |
@@ -158,6 +158,7 @@ A target that fails while publishing doesn't answer an error code: the post's ta
 | 402 | `plan_limit_exceeded` | Over a cloud plan limit, see [below](#402-plan_limit_exceeded) |
 | 402 | `plan_expired` | The Starter trial or a paid period ended unpaid: the workspace is read-only (reads and exports still work) until a plan is paid for; see [Plans](/plans#the-starter-trial) |
 | 402 | `x_posts_exhausted` | Publishing to X on a cloud plan whose included and bought X posts are used up (*Your X posts for this period are used up...*); `details` has `needed`, `left` and `period_end`. A scheduled post fails its X target with the same reason. See [Plans](/plans#how-limits-are-counted) |
+| 402 | `linkedin_posts_exhausted`, `linkedin_videos_exhausted` | Publishing to LinkedIn on a cloud plan whose posts to LinkedIn, or those with a video, are used up this month (*Your LinkedIn posts for this period are used up...*); `details` has `limit`, `needed`, `left` and `period_end`. A scheduled post fails its LinkedIn target with the same reason. See [Plans](/plans#how-limits-are-counted) |
 | 409 | `not_available` | Billing is not enabled on this server (`/v1/billing*`), or plans were asked for on the Community Edition |
 | 409 | `conflict` | A checkout for a workspace that already has a subscription, or the billing portal before any checkout |
 | 410 | `gone` | A workspace export or backup is no longer available (after 24 hours) |

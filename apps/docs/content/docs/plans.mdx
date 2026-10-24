@@ -21,6 +21,8 @@ for information).
 | Collections and schedules | Unlimited | Unlimited | Unlimited | Unlimited |
 | Connected channels | 5 | 15 | 40 | Unlimited |
 | Posts to X per month | 250 | 450 | 950 | 1,600 |
+| Posts to LinkedIn per month | 300 | 600 | 1,200 | 2,500 |
+| LinkedIn posts with a video per month | 30 | 60 | 150 | 300 |
 | People | Per user | Per user | Per user | Per user |
 | Alerts | 3 | 10 | Unlimited | Unlimited |
 | Webhooks | 3 | 10 | Unlimited | Unlimited |
@@ -96,8 +98,14 @@ now an ended Starter period (read-only) until a plan is paid for.
   one-time bundles, **Settings → Plan & usage → Buy more X posts**: 200 for €10, 1,000 for €40 or
   4,000 for €150, excl. VAT. They are used after the included ones and expire at the end of the
   billing period. When both run out, publishing to X answers **402 `x_posts_exhausted`** (and a
-  post scheduled for later fails with the reason); other platforms are not counted.
-  `GET /v1/billing/x-posts` shows what's left.
+  post scheduled for later fails with the reason). `GET /v1/billing/x-posts` shows what's left.
+- **Posts to LinkedIn** are counted because LinkedIn limits how many posts and video uploads all
+  of staqly's workspaces together can send each day, so each plan includes a fair share: every post
+  to a LinkedIn profile or Page counts once when it goes out, and a post with a video also counts on
+  the video allowance. Comments don't count. The allowances reset every month and can't be bought
+  on top. When one is used up, publishing to LinkedIn answers **402 `linkedin_posts_exhausted`** or
+  **`linkedin_videos_exhausted`** (and a post scheduled for later fails with the reason).
+  `GET /v1/workspace/usage` shows both counts. Other platforms are not counted.
 - Channels, alerts, webhooks, API keys and storage are counted from what currently exists; a
   disabled channel still counts.
 - **Posts / month** is unlimited on every plan; the count (every post created per calendar month,

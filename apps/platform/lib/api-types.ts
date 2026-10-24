@@ -3341,6 +3341,10 @@ export interface components {
                 storage_bytes: number;
                 /** @description Posts to X this month (a post with a live link counts 14) */
                 x_posts_per_period: number;
+                /** @description Posts to LinkedIn profiles and Pages this month (comments don't count) */
+                linkedin_posts_per_period: number;
+                /** @description Posts to LinkedIn with a video this month */
+                linkedin_videos_per_period: number;
             };
             /**
              * Format: date-time
@@ -3620,6 +3624,8 @@ export interface components {
              * @example plan_expired
              * @example payment_required
              * @example x_posts_exhausted
+             * @example linkedin_posts_exhausted
+             * @example linkedin_videos_exhausted
              * @example too_large
              * @example unsupported_media_type
              * @example validation_failed
@@ -3718,6 +3724,16 @@ export interface components {
              * @example 450
              */
             x_posts_per_period: number;
+            /**
+             * @description Posts to LinkedIn profiles and Pages included per month (comments don't count; no bought posts). -1 = unlimited
+             * @example 600
+             */
+            linkedin_posts_per_period: number;
+            /**
+             * @description How many of the month's posts to LinkedIn can have a video (each also counts as a post). -1 = unlimited
+             * @example 60
+             */
+            linkedin_videos_per_period: number;
         };
         Addon: {
             /** @example channels_pack */
@@ -4995,7 +5011,9 @@ export interface components {
          * @description `plan_limit_exceeded` (a plan limit; `details` has limit, max, used, plan),
          *     `plan_expired` (the workspace is suspended and read-only), `payment_required`, `payment_failed` (a plan
          *     change that charges at once, such as leaving the trial, wasn't paid: nothing changed), or `x_posts_exhausted` (this
-         *     period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end).
+         *     period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end), or
+         *     `linkedin_posts_exhausted` / `linkedin_videos_exhausted` (this period's posts to LinkedIn, or those with a video,
+         *     can't cover the post; `details` has limit, needed, left, period_end).
          */
         PaymentRequired: {
             headers: {
@@ -5371,6 +5389,10 @@ export interface operations {
                             storage_bytes: number;
                             /** @description Posts to X this month (a post with a live link counts 14) */
                             x_posts_per_period: number;
+                            /** @description Posts to LinkedIn profiles and Pages this month (comments don't count) */
+                            linkedin_posts_per_period: number;
+                            /** @description Posts to LinkedIn with a video this month */
+                            linkedin_videos_per_period: number;
                         };
                         /**
                          * Format: date-time

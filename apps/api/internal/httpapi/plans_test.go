@@ -20,10 +20,10 @@ func TestPlanLimitValues(t *testing.T) {
 	const mb, gb = 1 << 20, 1 << 30
 	u := int64(app.Unlimited)
 	want := map[string]app.PlanLimits{
-		"starter":  {PostsPerMonth: u, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 10 * gb, MaxUploadBytes: 25 * mb, XPostsPerPeriod: 250},
-		"plus":     {PostsPerMonth: u, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 50 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 450},
-		"pro":      {PostsPerMonth: u, Channels: 40, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 200 * gb, MaxUploadBytes: 250 * mb, DataExport: true, XPostsPerPeriod: 950},
-		"business": {PostsPerMonth: u, Channels: u, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 1024 * gb, MaxUploadBytes: 1024 * mb, DataExport: true, XPostsPerPeriod: 1600},
+		"starter":  {PostsPerMonth: u, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 10 * gb, MaxUploadBytes: 25 * mb, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 30},
+		"plus":     {PostsPerMonth: u, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 50 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 450, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 60},
+		"pro":      {PostsPerMonth: u, Channels: 40, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 200 * gb, MaxUploadBytes: 250 * mb, DataExport: true, XPostsPerPeriod: 950, LinkedInPostsPerPeriod: 1200, LinkedInVideosPerPeriod: 150},
+		"business": {PostsPerMonth: u, Channels: u, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 1024 * gb, MaxUploadBytes: 1024 * mb, DataExport: true, XPostsPerPeriod: 1600, LinkedInPostsPerPeriod: 2500, LinkedInVideosPerPeriod: 300},
 	}
 	prices := map[string][2]int{"starter": {15, 144}, "plus": {29, 276}, "pro": {59, 564}, "business": {99, 948}}
 	for id, pr := range prices {
@@ -44,7 +44,8 @@ func TestPlanLimitValues(t *testing.T) {
 		t.Error("local installs must be able to export")
 	}
 	for name, v := range map[string]int64{"posts": ul.PostsPerMonth, "channels": ul.Channels, "alerts": ul.Alerts, "webhooks": ul.Webhooks,
-		"api_keys": ul.APIKeys, "storage": ul.StorageBytes, "upload": ul.MaxUploadBytes, "x_posts": ul.XPostsPerPeriod} {
+		"api_keys": ul.APIKeys, "storage": ul.StorageBytes, "upload": ul.MaxUploadBytes, "x_posts": ul.XPostsPerPeriod,
+		"linkedin_posts": ul.LinkedInPostsPerPeriod, "linkedin_videos": ul.LinkedInVideosPerPeriod} {
 		if v != app.Unlimited {
 			t.Errorf("unlocked %s = %d, want unlimited", name, v)
 		}
@@ -251,6 +252,17 @@ func TestWebsitePricesMatchPlans(t *testing.T) {
 		n := strings.ReplaceAll(fmt.Sprintf("%d", p.Limits.XPostsPerPeriod), "1600", "1,600")
 		if !strings.Contains(string(src), "'"+n+" posts to X a month included'") {
 			t.Errorf("apps/web/lib/plans.ts: %s should include %s posts to X a month", p.ID, n)
+		}
+		thousands := func(n int64) string {
+			if n < 1000 {
+				return fmt.Sprint(n)
+			}
+			return fmt.Sprintf("%d,%03d", n/1000, n%1000)
+		}
+		li := fmt.Sprintf("'%s LinkedIn posts a month, %s with video'", thousands(p.Limits.LinkedInPostsPerPeriod),
+			thousands(p.Limits.LinkedInVideosPerPeriod))
+		if !strings.Contains(string(src), li) {
+			t.Errorf("apps/web/lib/plans.ts: %s should include %s", p.ID, li)
 		}
 	}
 }

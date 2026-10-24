@@ -24,6 +24,9 @@ const (
 	LimitDataExport    = "data_export"
 	// LimitXPosts: posts to X this month (each post and reply; one with a live link counts XLinkPostWeight).
 	LimitXPosts = "x_posts_per_period"
+	// LimitLinkedInPosts: posts to LinkedIn (profiles and Pages) this month; LimitLinkedInVideos: those with a video.
+	LimitLinkedInPosts  = "linkedin_posts_per_period"
+	LimitLinkedInVideos = "linkedin_videos_per_period"
 	// UsageSeats: the usage meter of billed seats (members); seats are billed per user, never capped.
 	UsageSeats = "seats"
 )
@@ -45,6 +48,11 @@ type PlanLimits struct {
 	// XLinkPostWeight). Sized so their cost at X is at most a quarter of the plan's per-seat price; bought
 	// credits (XBundles) come on top.
 	XPostsPerPeriod int64 `json:"x_posts_per_period"`
+	// LinkedInPostsPerPeriod: posts to LinkedIn included per month (profiles and Pages; comments don't count);
+	// LinkedInVideosPerPeriod: how many of them may carry a video. LinkedIn's API quotas are per day and shared
+	// by every workspace of the app, so each one keeps to a fair share. No bought posts.
+	LinkedInPostsPerPeriod  int64 `json:"linkedin_posts_per_period"`
+	LinkedInVideosPerPeriod int64 `json:"linkedin_videos_per_period"`
 }
 
 type Plan struct {
@@ -90,23 +98,23 @@ var Plans = []Plan{
 	{ID: "starter", Name: "Starter", PriceMonth: 15, PriceYear: yearly(15), Currency: Currency,
 		Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2,
 			StorageBytes: 10 * gb, MaxUploadBytes: 25 << 20, DataExport: false,
-			XPostsPerPeriod: 250},
-		Features: []string{"5 channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "250 X posts a month included", "MCP, REST API and SDKs", "3 alerts, 3 webhooks, 2 API keys", "10 GB storage, 25 MB per file", "Data export without files"}},
+			XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 30},
+		Features: []string{"5 channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "250 X posts a month included", "300 LinkedIn posts a month, 30 with video", "MCP, REST API and SDKs", "3 alerts, 3 webhooks, 2 API keys", "10 GB storage, 25 MB per file", "Data export without files"}},
 	{ID: "plus", Name: "Plus", PriceMonth: 29, PriceYear: yearly(29), Currency: Currency, Highlight: true,
 		Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10,
 			StorageBytes: 50 * gb, MaxUploadBytes: 100 << 20, DataExport: true,
-			XPostsPerPeriod: 450},
-		Features: []string{"15 channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "450 X posts a month included", "MCP, REST API and SDKs", "10 alerts, 10 webhooks, 10 API keys", "50 GB storage, 100 MB per file", "Backups and full data export with files"}},
+			XPostsPerPeriod: 450, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 60},
+		Features: []string{"15 channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "450 X posts a month included", "600 LinkedIn posts a month, 60 with video", "MCP, REST API and SDKs", "10 alerts, 10 webhooks, 10 API keys", "50 GB storage, 100 MB per file", "Backups and full data export with files"}},
 	{ID: "pro", Name: "Pro", PriceMonth: 59, PriceYear: yearly(59), Currency: Currency,
 		Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: 40, Alerts: Unlimited, Webhooks: Unlimited, APIKeys: Unlimited,
 			StorageBytes: 200 * gb, MaxUploadBytes: 250 << 20, DataExport: true,
-			XPostsPerPeriod: 950},
-		Features: []string{"40 channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "950 X posts a month included", "MCP, REST API and SDKs", "Unlimited alerts, webhooks and API keys", "200 GB storage, 250 MB per file", "Backups and full data export with files"}},
+			XPostsPerPeriod: 950, LinkedInPostsPerPeriod: 1200, LinkedInVideosPerPeriod: 150},
+		Features: []string{"40 channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "950 X posts a month included", "1,200 LinkedIn posts a month, 150 with video", "MCP, REST API and SDKs", "Unlimited alerts, webhooks and API keys", "200 GB storage, 250 MB per file", "Backups and full data export with files"}},
 	{ID: "business", Name: "Business", PriceMonth: 99, PriceYear: yearly(99), Currency: Currency,
 		Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: Unlimited, Alerts: Unlimited, Webhooks: Unlimited, APIKeys: Unlimited,
 			StorageBytes: 1024 * gb, MaxUploadBytes: 1 << 30, DataExport: true,
-			XPostsPerPeriod: 1600},
-		Features: []string{"Unlimited channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "1,600 X posts a month included", "MCP, REST API and SDKs", "Unlimited alerts, webhooks and API keys", "1 TB storage, 1 GB per file", "Backups and full data export with files", "Priority support"}},
+			XPostsPerPeriod: 1600, LinkedInPostsPerPeriod: 2500, LinkedInVideosPerPeriod: 300},
+		Features: []string{"Unlimited channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "1,600 X posts a month included", "2,500 LinkedIn posts a month, 300 with video", "MCP, REST API and SDKs", "Unlimited alerts, webhooks and API keys", "1 TB storage, 1 GB per file", "Backups and full data export with files", "Priority support"}},
 }
 
 // TrialDays: the Starter trial. With billing on it is Stripe's: Starter's checkout starts a 7-day trial with a
@@ -151,7 +159,8 @@ func OfferedPlans() []Plan {
 // UnlockedPlan is the plan of a local install, the Community Edition (staqly serve, the image).
 var UnlockedPlan = Plan{ID: "unlocked", Name: "Community Edition",
 	Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: Unlimited, Alerts: Unlimited, Webhooks: Unlimited, APIKeys: Unlimited,
-		StorageBytes: Unlimited, MaxUploadBytes: Unlimited, DataExport: true, XPostsPerPeriod: Unlimited},
+		StorageBytes: Unlimited, MaxUploadBytes: Unlimited, DataExport: true, XPostsPerPeriod: Unlimited,
+		LinkedInPostsPerPeriod: Unlimited, LinkedInVideosPerPeriod: Unlimited},
 	Features: []string{"Self-hosted", "No plan limits"}}
 
 func PlanByID(id string) (Plan, bool) {
@@ -391,6 +400,14 @@ func (s *Service) GetUsage(ctx context.Context, p Principal) (Usage, error) {
 	if err != nil {
 		return Usage{}, err
 	}
+	liPosts, err := s.Q.SumUnitsUsage(ctx, db.SumUnitsUsageParams{WorkspaceID: p.WorkspaceID, Provider: MeterLinkedIn, Period: period})
+	if err != nil {
+		return Usage{}, err
+	}
+	liVideos, err := s.Q.SumUnitsUsage(ctx, db.SumUnitsUsageParams{WorkspaceID: p.WorkspaceID, Provider: MeterLinkedInVideo, Period: period})
+	if err != nil {
+		return Usage{}, err
+	}
 	rows, err := s.Q.PostStatusCountsSince(ctx, db.PostStatusCountsSinceParams{WorkspaceID: p.WorkspaceID, CreatedAt: period})
 	if err != nil {
 		return Usage{}, err
@@ -405,7 +422,8 @@ func (s *Service) GetUsage(ctx context.Context, p Principal) (Usage, error) {
 	}
 	return Usage{Plan: s.withLivePrices(ctx, plan), Period: period, PlanExpiresAt: expiresAt, TrialEndsAt: trialEnds, Suspended: suspended,
 		PostsByStatus: byStatus, Deliveries: deliveries, Usage: map[string]int64{
-			LimitPostsPerMonth: posts, LimitChannels: channels, UsageSeats: seats, LimitXPosts: xPosts, LimitAlerts: alerts, LimitWebhooks: hooks, LimitAPIKeys: keys, LimitStorage: storage}}, nil
+			LimitPostsPerMonth: posts, LimitChannels: channels, UsageSeats: seats, LimitXPosts: xPosts,
+			LimitLinkedInPosts: liPosts, LimitLinkedInVideos: liVideos, LimitAlerts: alerts, LimitWebhooks: hooks, LimitAPIKeys: keys, LimitStorage: storage}}, nil
 }
 
 // changePlan sets a workspace's plan (expires "" = no end date, which also

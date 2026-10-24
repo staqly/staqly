@@ -35,9 +35,11 @@ One meter each for this calendar month (UTC): *Posts this month* (resets on the 
 *Channels*, *Webhooks*, *API keys*, *Storage* and *Alerts*, each against its limit (∞ when
 unlimited). A meter shows *Almost full* above 80 % and *Limit reached* at the limit; a limit raised
 by an add-on says so (*15 + 10 from Channels pack*). Platforms whose posts have an allowance of
-their own (X: its API charges per post) are compact chips in one **Posts per platform** row under
-the meters, each with its count, its allowance and a small bar that turns amber near the allowance
-and red at it; posts you buy come on top of it. Below the meters:
+their own (X: its API charges per post; LinkedIn: *LinkedIn* for its posts and *LinkedIn videos*
+for those with a video, as its daily quotas are shared by every workspace) are compact chips in one
+**Posts per platform** row under the meters, each with its count, its allowance and a small bar
+that turns amber near the allowance and red at it; X posts you buy come on top of X's. Below the
+meters:
 
 - **Posts created this period**, counted by their current status. Each count opens the posts list
   with that filter;
@@ -90,12 +92,12 @@ curl -s -H "Authorization: Bearer $STAQLY_API_KEY" http://localhost:3333/v1/work
 
 ```json
 {
-  "plan": { "id": "unlocked", "name": "Unlocked", "limits": { "posts_per_month": -1, "channels": -1, "alerts": -1, "webhooks": -1, "api_keys": -1, "storage_bytes": -1, "max_upload_bytes": -1, "data_export": true, "x_posts_per_period": -1 } },
+  "plan": { "id": "unlocked", "name": "Unlocked", "limits": { "posts_per_month": -1, "channels": -1, "alerts": -1, "webhooks": -1, "api_keys": -1, "storage_bytes": -1, "max_upload_bytes": -1, "data_export": true, "x_posts_per_period": -1, "linkedin_posts_per_period": -1, "linkedin_videos_per_period": -1 } },
   "period": "2026-10",
   "plan_expires_at": null,
   "trial_ends_at": null,
   "suspended": false,
-  "usage": { "posts_per_month": 42, "channels": 3, "seats": 0, "alerts": 1, "webhooks": 1, "api_keys": 0, "storage_bytes": 1048576, "x_posts_per_period": 0 },
+  "usage": { "posts_per_month": 42, "channels": 3, "seats": 0, "alerts": 1, "webhooks": 1, "api_keys": 0, "storage_bytes": 1048576, "x_posts_per_period": 0, "linkedin_posts_per_period": 0, "linkedin_videos_per_period": 0 },
   "posts_by_status": { "draft": 5, "scheduled": 12, "published": 24, "failed": 1 },
   "webhook_deliveries": { "queued": 0, "retrying": 1, "failed": 0 }
 }

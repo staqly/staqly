@@ -17,6 +17,8 @@ const limits = {
   max_upload_bytes: 100 * 2 ** 20,
   data_export: true,
   x_posts_per_period: -1,
+  linkedin_posts_per_period: -1,
+  linkedin_videos_per_period: -1,
 }
 
 function plan(over: Partial<Plan> = {}): Plan {
