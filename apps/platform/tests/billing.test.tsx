@@ -185,7 +185,7 @@ describe('plan & usage', () => {
     expect(api.find('GET', '/v1/billing/details').some((c) => c.query.get('starting_after') === 'in_2')).toBe(true)
   })
 
-  it('platforms with an allowance of their own are chips in one row under the tiles, not inside or beside them', async () => {
+  it("platforms with an allowance of their own are lines in one card under the tiles, Buy more next to X's bar", async () => {
     mockApi({
       'GET /v1/billing': BILLING_PRO,
       'GET /v1/billing/details': DETAILS,
@@ -199,7 +199,7 @@ describe('plan & usage', () => {
     const list = within(row).getByRole('list', { name: 'Posts per platform' })
     const x = within(list).getByTestId('platform-posts-x')
 
-    expect(x).toHaveTextContent('X')
+    expect(x).toHaveTextContent('Posts')
     expect(x).toHaveTextContent('12 / 450')
     expect(x).toHaveAttribute('data-level', 'ok')
     expect(x).not.toHaveTextContent('Almost full')
@@ -209,16 +209,17 @@ describe('plan & usage', () => {
     expect(meter).toHaveAttribute('aria-valuenow', '12')
     expect(meter).toHaveAttribute('aria-valuemax', '450')
     expect(meter).toHaveAttribute('aria-valuetext', '12 of 450')
-    // The explanation is said once for the row, never per platform.
-    expect(within(row).getAllByText('Included in the plan; bought X posts come on top.')).toHaveLength(1)
-    expect(within(x).queryByText(/bought posts/)).not.toBeInTheDocument()
+    // Bought posts are bought and explained in X's block, not in a section of their own.
+    expect(within(x).getByRole('button', { name: 'Buy more X posts' })).toBeInTheDocument()
+    expect(within(row).getByTestId('platform-x')).toHaveTextContent('None bought this period.')
+    expect(screen.queryByRole('heading', { name: /extra x posts/i })).not.toBeInTheDocument()
     // The tiles stay alike: Posts this month holds no per-platform lines, and no platform has a tile of its own.
     expect(within(screen.getByTestId('meter-Posts this month')).queryByTestId('platform-posts-x')).toBeNull()
     expect(within(screen.getByTestId('usage-meters')).queryByTestId('platform-posts')).toBeNull()
     expect(screen.queryByTestId('meter-X posts this month')).not.toBeInTheDocument()
   })
 
-  it('LinkedIn has a chip for its posts and one for its videos, with the same warnings as X', async () => {
+  it('LinkedIn is one block with a line for its posts and one for its videos, with the same warnings as X', async () => {
     mockApi({
       'GET /v1/billing': BILLING_PRO,
       'GET /v1/billing/details': DETAILS,
@@ -236,15 +237,19 @@ describe('plan & usage', () => {
     const posts = within(list).getByTestId('platform-posts-linkedin')
     const videos = within(list).getByTestId('platform-posts-linkedin-videos')
 
-    expect(within(list).getAllByRole('listitem')).toHaveLength(3)
-    expect(posts).toHaveTextContent('LinkedIn')
+    const linkedin = within(list).getByRole('list', { name: 'LinkedIn' })
+
+    expect(within(linkedin).getAllByRole('listitem')).toEqual([posts, videos])
+    expect(within(list).getByTestId('platform-linkedin')).toHaveTextContent(/^LinkedIn/)
+    expect(posts).toHaveTextContent('Posts')
+    expect(within(posts).queryByRole('button')).toBeNull()
     expect(posts).toHaveTextContent('120 / 600')
     expect(posts).toHaveAttribute('data-level', 'ok')
     expect(within(posts).getByRole('progressbar', { name: 'LinkedIn posts' })).toHaveAttribute(
       'aria-valuetext',
       '120 of 600',
     )
-    expect(videos).toHaveTextContent('LinkedIn videos')
+    expect(videos).toHaveTextContent('Videos')
     expect(videos).toHaveTextContent('60 / 60')
     expect(videos).toHaveAttribute('data-level', 'full')
     expect(videos).toHaveTextContent('Limit reached')
@@ -265,7 +270,7 @@ describe('plan & usage', () => {
 
     expect(within(row).queryByTestId('platform-posts-x')).toBeNull()
     expect(within(row).getByTestId('platform-posts-linkedin')).toHaveTextContent('0 / 600')
-    expect(within(row).getByText('Included in the plan.')).toBeInTheDocument()
+    expect(within(row).queryByTestId('x-posts')).toBeNull()
   })
 
   it('a platform chip warns near its allowance and says when it is used up', async () => {
@@ -490,7 +495,7 @@ describe('user menu', () => {
 
     expect(first).toBeGreaterThanOrEqual(0)
     expect(items.findIndex((i) => i.textContent?.includes('Choose a plan'))).toBeGreaterThan(first)
-    expect(items.findIndex((i) => i.textContent?.includes('Billing'))).toBeGreaterThan(first)
+    expect(items.findIndex((i) => i.textContent?.includes('Plan & usage'))).toBeGreaterThan(first)
     await user.keyboard('{Escape}')
     cleanup()
 
@@ -509,7 +514,7 @@ describe('user menu', () => {
     expect(within(banner).getByRole('link', { name: /Upgrade/ })).toHaveAttribute('href', '/plans')
   })
 
-  it('in the trial: a highlighted Choose a plan and Billing', async () => {
+  it('in the trial: a highlighted Choose a plan and Plan & usage', async () => {
     shell()
     const user = userEvent.setup()
 
@@ -517,7 +522,7 @@ describe('user menu', () => {
     const menu = await screen.findByRole('menu')
 
     expect(await within(menu).findByTestId('menu-upgrade')).toHaveTextContent('Choose a plan')
-    expect(within(menu).getByRole('menuitem', { name: 'Billing' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Plan & usage' })).toBeInTheDocument()
   })
 
   it('paying for Plus: Upgrade to the next plan, Pro', async () => {
@@ -530,14 +535,14 @@ describe('user menu', () => {
     expect(await within(menu).findByTestId('menu-upgrade')).toHaveTextContent('Upgrade to Pro')
   })
 
-  it('on the top plan (Business): Billing, no upgrade', async () => {
+  it('on the top plan (Business): Plan & usage, no upgrade', async () => {
     shell(PLANS[3], { ...BILLING_PRO, plan: 'business' })
     const user = userEvent.setup()
 
     await user.click((await screen.findAllByTestId('user-menu-trigger'))[0])
     const menu = await screen.findByRole('menu')
 
-    expect(within(menu).getByRole('menuitem', { name: 'Billing' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Plan & usage' })).toBeInTheDocument()
     await waitFor(() => expect(within(menu).queryByTestId('menu-upgrade')).not.toBeInTheDocument())
   })
 })

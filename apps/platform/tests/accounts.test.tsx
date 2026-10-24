@@ -79,11 +79,18 @@ describe('the signed-in person in the sidebar', () => {
     await user.click(screen.getAllByTestId('workspace-menu-trigger')[0])
     let menu = await screen.findByRole('menu')
 
+    // The workspace menu is the workspaces; the workspace's pages are in the person's menu.
+    expect(within(menu).queryByRole('menuitem', { name: /plan & usage|members|settings/i })).not.toBeInTheDocument()
+
+    // A choice: the open workspace is the checked one.
     expect(
       within(menu)
-        .getAllByTestId('workspace-switch-item')
+        .getAllByRole('menuitemradio')
         .map((i) => i.textContent),
-    ).toEqual(['Test WS', 'Clients'])
+    ).toEqual(['TTest WS', 'CClients'])
+    expect(within(menu).getByRole('menuitemradio', { name: 'Test WS' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(menu).getByRole('menuitemradio', { name: 'Clients' })).toHaveAttribute('aria-checked', 'false')
+    expect(within(menu).queryByRole('menuitem', { name: /all \d+ workspaces/i })).not.toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: /new workspace/i })).toBeInTheDocument()
     expect(within(menu).queryByRole('menuitem', { name: /connect a device/i })).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -91,8 +98,55 @@ describe('the signed-in person in the sidebar', () => {
     await user.click(screen.getAllByTestId('user-menu-trigger')[0])
     menu = await screen.findByRole('menu')
     expect(within(menu).getByTestId('user-role')).toHaveTextContent('Owner')
+    // The open workspace's pages, then the person's own account.
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((i) => i.textContent?.trim()),
+    ).toEqual(expect.arrayContaining(['Plan & usage', 'Members', 'Workspace settings', 'Account settings', 'Sign out']))
+    expect(within(menu).queryByRole('menuitem', { name: 'Billing' })).not.toBeInTheDocument()
     await user.click(within(menu).getByRole('menuitem', { name: /sign out/i }))
     await waitFor(() => expect(api.find('DELETE', '/v1/session')).toHaveLength(1))
+  })
+
+  it('cloud: many workspaces: the menu lists the open one and a few, the rest are found by search', async () => {
+    const workspaces = Array.from({ length: 20 }, (_, i) => ({
+      id: `ws_${i}`,
+      name: `Client ${String(i).padStart(2, '0')}`,
+      role: 'editor',
+      current: i === 15,
+    }))
+    const { client, routes } = shell({ ...accountSession('owner'), workspaces })
+    const api = mockApi({ ...routes, 'POST /v1/session/workspace': { status: 204 } })
+    const user = userEvent.setup()
+
+    nav.set('/schedule')
+    renderWithProviders(
+      <AppShell>
+        <div>page</div>
+      </AppShell>,
+      { client },
+    )
+
+    await user.click((await screen.findAllByTestId('workspace-menu-trigger'))[0])
+    const menu = await screen.findByRole('menu')
+    const radios = within(menu).getAllByRole('menuitemradio')
+
+    expect(radios).toHaveLength(5)
+    expect(radios[0]).toHaveAccessibleName('Client 15')
+    await user.click(within(menu).getByRole('menuitem', { name: 'All 20 workspaces...' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Switch workspace' })
+
+    await user.type(within(dialog).getByRole('combobox'), 'client 07')
+    expect(
+      within(dialog)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['CClient 07'])
+    await user.click(within(dialog).getByRole('option'))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/session/workspace').map((c) => c.body)).toEqual([{ workspace_id: 'ws_7' }]),
+    )
   })
 
   it('local: the computer user, who signed in with the access token and can sign out', async () => {
@@ -121,6 +175,16 @@ describe('the signed-in person in the sidebar', () => {
     // No welcome on a local install, so no way back into it either.
     expect(within(menu).queryByTestId('menu-getting-started')).not.toBeInTheDocument()
   })
+})
+
+const member = (id: string, name: string, role: string, you: boolean) => ({
+  user_id: id,
+  name,
+  email: `${id}@example.com`,
+  avatar_url: '',
+  role,
+  you,
+  created_at: '2026-10-19T00:00:00Z',
 })
 
 describe('members', () => {
@@ -222,5 +286,37 @@ describe('members', () => {
     expect(await screen.findByTestId('invite-seat-price')).toHaveTextContent(
       'Each person you add is billed $29/month on Plus (prorated).',
     )
+  })
+  it('the only owner keeps the role and cannot leave: alone they delete the workspace, with others they hand it over first', async () => {
+    const client = makeClient()
+
+    client.setQueryData(qk.session, accountSession('owner'))
+    mockApi({
+      'GET /v1/members': { data: [member('usr_1', 'Ana Owner', 'owner', true)] },
+      'GET /v1/invitations': { data: [] },
+    })
+    nav.set('/settings/members')
+
+    const { unmount } = renderWithProviders(<MembersPage />, { client })
+
+    expect(await screen.findByRole('link', { name: 'Delete workspace' })).toHaveAttribute('href', '/settings/data')
+    expect(screen.queryByLabelText('Role of Ana Owner')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Leave' })).not.toBeInTheDocument()
+    unmount()
+
+    const other = makeClient()
+
+    other.setQueryData(qk.session, accountSession('owner'))
+    mockApi({
+      'GET /v1/members': {
+        data: [member('usr_1', 'Ana Owner', 'owner', true), member('usr_2', 'Cleo', 'editor', false)],
+      },
+      'GET /v1/invitations': { data: [] },
+    })
+    renderWithProviders(<MembersPage />, { client: other })
+    expect(await screen.findByTestId('sole-owner-note')).toHaveTextContent('Make someone else an owner to leave')
+    expect(screen.queryByLabelText('Role of Ana Owner')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Role of Cleo')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Leave' })).not.toBeInTheDocument()
   })
 })

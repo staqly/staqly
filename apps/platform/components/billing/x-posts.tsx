@@ -16,57 +16,53 @@ import {
 import { api, type XPosts } from '@/lib/api'
 import { toastApiError } from '@/lib/notify'
 import { money } from '@/lib/plans'
-import { useMode, useXPosts } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 import { shortDay, xPostsWarning } from '@/lib/x-posts'
 
 export { xPostsLine, xPostsWarning } from '@/lib/x-posts'
 
 /**
- * Plan & usage, Add-ons: the X posts bought on top of the plan (what is left and when it expires), the warning when
- * this period's are used up and Buy more X posts (for the account owner). How many of the included posts are used
- * shows in the usage meters, so it is not repeated here.
+ * Plan & usage, Posts per platform, under X's bar: the X posts bought on top of the plan (what is left and when it
+ * expires), how posts count and the warning when this period's are used up. The bar shows the included posts.
  */
-export function XPostsSection({ canBuy }: { canBuy: boolean }) {
-  const { isLocal } = useMode()
-  const x = useXPosts({ enabled: !isLocal })
-  const [buying, setBuying] = useState(false)
-
-  if (isLocal || !x.data || x.data.unlimited) {
-    return null
-  }
-
-  const out = x.data.left <= 0
-
+export function XPostsNote({ x }: { x: XPosts }) {
   return (
-    <div className="grid content-start gap-2 rounded-xl border bg-background p-3.5" data-testid="x-posts">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-0.5">
-          <p className="text-sm font-medium">Extra X posts</p>
-          <p className="text-sm text-muted-foreground tabular-nums" data-testid="x-posts-line">
-            {x.data.credits_left > 0
-              ? `${x.data.credits_left.toLocaleString('en-US')} left · expire ${shortDay(x.data.credits_expire_at)}`
-              : 'None bought this period'}
-          </p>
-        </div>
-        {canBuy && (
-          <Button variant={out ? 'default' : 'outline'} onClick={() => setBuying(true)} data-testid="buy-x-posts">
-            Buy more X posts
-          </Button>
-        )}
-      </div>
-      {out && (
+    <div className="grid gap-1.5" data-testid="x-posts">
+      {x.left <= 0 && (
         <Callout tone="danger" size="xs">
-          {xPostsWarning(x.data)}
+          {xPostsWarning(x)}
         </Callout>
       )}
       <p className="text-xs text-muted-foreground">
-        Used after the {x.data.included.toLocaleString('en-US')} X posts your plan includes each month (they reset on{' '}
-        {shortDay(x.data.period_end)}). Each post and thread reply counts once when it goes out, a post with a live link
-        counts {x.data.link_post_weight}. Bought posts expire at the end of the billing period.
+        <span className="tabular-nums" data-testid="x-posts-line">
+          {x.credits_left > 0
+            ? `${x.credits_left.toLocaleString('en-US')} bought posts left, used after the included ones; they expire ${shortDay(x.credits_expire_at)}.`
+            : 'None bought this period.'}
+        </span>{' '}
+        Each post and thread reply counts once when it goes out, a post with a live link counts {x.link_post_weight}.
+        Included posts reset on {shortDay(x.period_end)}.
       </p>
-      {buying && <BuyXPostsDialog open={buying} onOpenChange={setBuying} x={x.data} />}
     </div>
+  )
+}
+
+/** Buy more, next to X's bar (for the account owner): opens the bundles. */
+export function BuyXPosts({ x }: { x: XPosts }) {
+  const [buying, setBuying] = useState(false)
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant={x.left <= 0 ? 'default' : 'outline'}
+        onClick={() => setBuying(true)}
+        aria-label="Buy more X posts"
+        data-testid="buy-x-posts"
+      >
+        Buy more
+      </Button>
+      {buying && <BuyXPostsDialog open={buying} onOpenChange={setBuying} x={x} />}
+    </>
   )
 }
 
