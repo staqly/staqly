@@ -37,11 +37,14 @@ const METERS: { key: MeterKey; label: string; Icon: typeof Layers; bytes?: boole
 ]
 
 /**
- * Platforms whose posts count against an allowance of their own (their APIs charge per post): one compact chip each
- * in the full-width Posts per platform row under the tiles, so every tile keeps one height however many there are.
+ * Platforms whose posts count against an allowance of their own (X charges per post, LinkedIn's daily quotas are
+ * shared by every workspace): one compact chip each in the full-width Posts per platform row under the tiles, so
+ * every tile keeps one height however many there are. label names the meter for screen readers.
  */
-const PLATFORM_POSTS: { key: MeterKey; provider: string; name: string }[] = [
-  { key: 'x_posts_per_period', provider: 'x', name: 'X' },
+const PLATFORM_POSTS: { key: MeterKey; id: string; name: string; label: string }[] = [
+  { key: 'x_posts_per_period', id: 'x', name: 'X', label: 'X posts' },
+  { key: 'linkedin_posts_per_period', id: 'linkedin', name: 'LinkedIn', label: 'LinkedIn posts' },
+  { key: 'linkedin_videos_per_period', id: 'linkedin-videos', name: 'LinkedIn videos', label: 'LinkedIn videos' },
 ]
 
 function UsageMeter({
@@ -117,14 +120,16 @@ const count = (n: number) => n.toLocaleString('en-US')
 
 /** One platform's own allowance: a compact chip (name, used / limit, a tiny bar) in the Posts per platform row. */
 function PlatformChip({
-  provider,
+  id,
   name,
+  label,
   used,
   max,
   hint,
 }: {
-  provider: string
+  id: string
   name: string
+  label: string
   used: number
   max: number
   hint?: string
@@ -136,7 +141,7 @@ function PlatformChip({
   return (
     <li
       className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border bg-background px-2.5 py-1 text-xs"
-      data-testid={`platform-posts-${provider}`}
+      data-testid={`platform-posts-${id}`}
       data-level={level}
       title={hint}
     >
@@ -146,7 +151,7 @@ function PlatformChip({
       </span>
       <span
         role="progressbar"
-        aria-label={`${name} posts`}
+        aria-label={label}
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={used}
@@ -381,15 +386,20 @@ export function PlanUsagePage() {
           {metered.map((p) => (
             <PlatformChip
               key={p.key}
-              provider={p.provider}
+              id={p.id}
               name={p.name}
+              label={p.label}
               used={u.usage?.[p.key] ?? 0}
               max={u.plan?.limits?.[p.key] ?? UNLIMITED}
               hint={bonusHint(plan, p.key) || undefined}
             />
           ))}
         </ul>
-        <p className="text-xs text-muted-foreground sm:ml-auto">Included in the plan; bought posts come on top.</p>
+        <p className="text-xs text-muted-foreground sm:ml-auto">
+          {metered.some((p) => p.id === 'x')
+            ? 'Included in the plan; bought X posts come on top.'
+            : 'Included in the plan.'}
+        </p>
       </div>
     ) : null
 

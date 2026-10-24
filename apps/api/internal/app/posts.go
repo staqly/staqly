@@ -624,7 +624,7 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 			}
 		}
 		if in.PublishNow {
-			if err := s.checkXForPost(ctx, q, row.ID, s.Now()); err != nil {
+			if err := s.checkAllowancesForPost(ctx, q, row.ID, s.Now()); err != nil {
 				return err
 			}
 			return s.startPublish(ctx, q, p, p.WorkspaceID, row.ID)
@@ -640,8 +640,9 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 // schedulePublish queues the publish_post job at publishAt and records post.scheduled.
 func (s *Service) schedulePublish(ctx context.Context, q *db.Queries, p Principal, workspaceID, postID, publishAt string, previous *string) error {
 	at, _ := time.Parse(timeFormat, publishAt)
-	// X posts are metered: refuse now when this period's allowance can't cover the post (publishing checks again).
-	if err := s.checkXForPost(ctx, q, postID, at); err != nil {
+	// X and LinkedIn posts are metered: refuse now when this period's allowances can't cover the post
+	// (publishing checks again).
+	if err := s.checkAllowancesForPost(ctx, q, postID, at); err != nil {
 		return err
 	}
 	// Retried like any job (a database that is briefly busy at the scheduled minute): the run checks the
@@ -1027,7 +1028,7 @@ func (s *Service) PublishPost(ctx context.Context, p Principal, id string) (Post
 		if err := s.cancelJobs(ctx, q, "publish_post:"+id); err != nil {
 			return err
 		}
-		if err := s.checkXForPost(ctx, q, id, s.Now()); err != nil {
+		if err := s.checkAllowancesForPost(ctx, q, id, s.Now()); err != nil {
 			return err
 		}
 		return s.startPublish(ctx, q, p, p.WorkspaceID, id)
@@ -1243,6 +1244,15 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	}
 	if ch.Provider == ProviderX {
 		if err := s.checkX(ctx, s.Q, row.WorkspaceID, xUnits(text)); err != nil {
+			return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, errorMessage(err))
+		}
+	}
+	if isLinkedIn(ch.Provider) {
+		var videos int64
+		if slices.ContainsFunc(files, func(f providers.MediaFile) bool { return strings.HasPrefix(f.MimeType, "video/") }) {
+			videos = 1
+		}
+		if err := s.checkLinkedIn(ctx, s.Q, row.WorkspaceID, 1, videos); err != nil {
 			return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, errorMessage(err))
 		}
 	}
