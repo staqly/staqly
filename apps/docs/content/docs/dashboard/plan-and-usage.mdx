@@ -29,6 +29,14 @@ The top of the page names the plan (*Starter*, *Plus*, *Pro* or *Business*) and 
 Under it: the **price** per user (excl. VAT), the **seats** (every member is billed) and, for
 owners and admins, the **next payment** (e.g. *€87 on Nov 10, 2026*, *3 users × €29*).
 
+## Add-ons and extra X posts (cloud)
+
+- **Extra X posts**: the posts bought on top of the plan's monthly X posts, how many are left and
+  when they expire. **Buy more X posts** (owners) opens the bundles (200 for €10, 1,000 for
+  €40, 4,000 for €150, excl. VAT) and Stripe Checkout; they appear when Stripe confirms the payment.
+- **Add-ons** (owners and admins): each with its price per month or year. **Add** charges the rest
+  of the billing period now; **Remove** stops it and credits the unused rest on the next invoice.
+
 ## Usage
 
 One meter each for this calendar month (UTC): *Posts this month* (resets on the 1st),
@@ -36,8 +44,8 @@ One meter each for this calendar month (UTC): *Posts this month* (resets on the 
 unlimited). A meter shows *Almost full* above 80 % and *Limit reached* at the limit; a limit raised
 by an add-on says so (*15 + 10 from Channels pack*). Platforms whose posts have an allowance of
 their own (X: its API charges per post; LinkedIn: *LinkedIn* for its posts and *LinkedIn videos*
-for those with a video, as its daily quotas are shared by every workspace) are compact chips in one
-**Posts per platform** row under the meters, each with its count, its allowance and a small bar
+for those with a video, as its daily quotas are shared by every workspace) are listed under
+**Posts per platform** below the meters, one line each with its count, its allowance and a bar
 that turns amber near the allowance and red at it; X posts you buy come on top of X's. Below the
 meters:
 
@@ -46,14 +54,6 @@ meters:
 - **Webhook delivery**: deliveries *Queued* for their first attempt, *Retrying* after a failure,
   and *Failed* after every retry (redeliver them from **Webhooks**);
 - the largest file you can upload on the plan.
-
-## Add-ons and extra X posts (cloud)
-
-- **Extra X posts**: the posts bought on top of the plan's monthly X posts, how many are left and
-  when they expire. **Buy more X posts** (owners) opens the bundles (200 for €10, 1,000 for
-  €40, 4,000 for €150, excl. VAT) and Stripe Checkout; they appear when Stripe confirms the payment.
-- **Add-ons** (owners and admins): each with its price per month or year. **Add** charges the rest
-  of the billing period now; **Remove** stops it and credits the unused rest on the next invoice.
 
 ## Payments (cloud, owners and admins)
 
