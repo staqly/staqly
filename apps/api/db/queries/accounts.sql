@@ -22,6 +22,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?);
 -- The identity provider (Google) is the source of the name, address and picture: refreshed at every sign-in.
 UPDATE users SET email = ?, name = ?, avatar_url = ?, updated_at = ?, last_login_at = ? WHERE id = ?;
 
+-- name: SetUserAvatar :exec
+-- A picture the person uploaded (a data: URL), or '' to drop it.
+UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?;
+
 -- name: AddMember :execrows
 -- Idempotent: a second accept of the same invitation (or a race) adds nothing.
 INSERT INTO workspace_members (workspace_id, user_id, role, created_at, updated_at)

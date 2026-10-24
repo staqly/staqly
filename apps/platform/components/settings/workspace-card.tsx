@@ -1,5 +1,6 @@
 'use client'
 
+import { LogoMark } from '@staqly/brand/logo'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Settings as SettingsIcon } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
@@ -7,13 +8,15 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { IdChip } from '@/components/common/id-chip'
+import { ImagePicker } from '@/components/common/image-picker'
 import { TimeZoneSelect } from '@/components/common/time-zone-select'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { api } from '@/lib/api'
+import { api, type Workspace } from '@/lib/api'
 import { fieldsOf, setFormApiError } from '@/lib/form-errors'
 import { formatDateTime } from '@/lib/format'
+import { toastApiError } from '@/lib/notify'
 import { qk, useSession } from '@/lib/queries'
 import { zodResolver } from '@/lib/zod'
 
@@ -35,22 +38,33 @@ export default function WorkspaceCard() {
     resolver: zodResolver(schema),
     values: { name: ws?.name ?? '', timezone: ws?.timezone ?? 'UTC' },
   })
+  // The workspace menu shows the name and the logo too.
+  const put = (w: Workspace) =>
+    qc.setQueryData(qk.session, (old: typeof session.data) =>
+      old
+        ? {
+            ...old,
+            workspace: w,
+            workspaces: old.workspaces?.map((x) => (x.id === w.id ? { ...x, name: w.name } : x)),
+          }
+        : old,
+    )
   const save = useMutation({
     mutationFn: (v: { name: string; timezone: string }) => api.updateWorkspace(v),
     onSuccess: (w) => {
-      // The workspace menu lists the name too.
-      qc.setQueryData(qk.session, (old: typeof session.data) =>
-        old
-          ? {
-              ...old,
-              workspace: w,
-              workspaces: old.workspaces?.map((x) => (x.id === w.id ? { ...x, name: w.name } : x)),
-            }
-          : old,
-      )
+      put(w)
       toast.success('Workspace saved')
     },
     onError: (e) => setFormApiError(e, form.setError, fieldsOf('name', 'timezone')),
+  })
+  // The logo saves on its own, as soon as it is picked or removed.
+  const logo = useMutation({
+    mutationFn: (dataUrl: string) => api.updateWorkspace({ logo: dataUrl }),
+    onSuccess: (w) => {
+      put(w)
+      toast.success(w.logo ? 'Logo saved' : 'Logo removed')
+    },
+    onError: (e) => toastApiError(e),
   })
 
   return (
@@ -60,6 +74,19 @@ export default function WorkspaceCard() {
         onSubmit={form.handleSubmit((v) => save.mutate({ name: v.name.trim(), timezone: v.timezone }))}
         noValidate
       >
+        <div role="group" aria-labelledby="ws-logo-label" className="grid gap-2">
+          <span id="ws-logo-label" className="text-sm font-medium">
+            Logo
+          </span>
+          <ImagePicker
+            label="logo"
+            value={ws?.logo ?? ''}
+            fallback={<LogoMark className="size-8" />}
+            pending={logo.isPending}
+            onChange={(v) => logo.mutate(v)}
+            hint="Shown in the workspace menu. A square image works best; without one, staqly's logo."
+          />
+        </div>
         <Field data-invalid={!!form.formState.errors.name}>
           <FieldLabel htmlFor="ws-name" required>
             Name

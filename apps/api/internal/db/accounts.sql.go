@@ -652,6 +652,22 @@ func (q *Queries) SetSessionWorkspace(ctx context.Context, arg SetSessionWorkspa
 	return result.RowsAffected()
 }
 
+const setUserAvatar = `-- name: SetUserAvatar :exec
+UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?
+`
+
+type SetUserAvatarParams struct {
+	AvatarUrl string `json:"avatar_url"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+}
+
+// A picture the person uploaded (a data: URL), or ” to drop it.
+func (q *Queries) SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) error {
+	_, err := q.db.ExecContext(ctx, setUserAvatar, arg.AvatarUrl, arg.UpdatedAt, arg.ID)
+	return err
+}
+
 const setUserNotificationPrefs = `-- name: SetUserNotificationPrefs :exec
 UPDATE users SET notification_prefs = ?, updated_at = ? WHERE id = ?
 `

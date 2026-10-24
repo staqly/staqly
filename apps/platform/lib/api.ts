@@ -638,7 +638,7 @@ export const api = {
   redeemDeviceLink: (token: string) =>
     request<{ csrf_token?: string }>('/v1/device-links/redeem', { method: 'POST', json: { token }, public: true }),
   renameWorkspace: (name: string) => request<Workspace>('/v1/workspace', { method: 'PATCH', json: { name } }),
-  updateWorkspace: (body: { name?: string; timezone?: string }) =>
+  updateWorkspace: (body: { name?: string; timezone?: string; logo?: string }) =>
     request<Workspace>('/v1/workspace', { method: 'PATCH', json: body }),
   rotateRecoveryKey: () => request<{ recovery_key?: string }>('/v1/recovery-key/rotate', { method: 'POST' }),
 
@@ -647,7 +647,7 @@ export const api = {
     request<MyWorkspace>('/v1/account/workspaces', { method: 'POST', json: { name, timezone } }),
   switchWorkspace: (workspace_id: string) =>
     request<void>('/v1/session/workspace', { method: 'POST', json: { workspace_id } }),
-  renameMe: (name: string) => request<User>('/v1/account', { method: 'PATCH', json: { name } }),
+  updateMe: (body: { name?: string; avatar?: string }) => request<User>('/v1/account', { method: 'PATCH', json: body }),
   notificationPrefs: () => request<NotificationPrefs>('/v1/account/notifications'),
   setNotificationPrefs: (body: { scope?: NotificationPrefs['scope']; events?: NotificationChoice[] }) =>
     request<NotificationPrefs>('/v1/account/notifications', { method: 'PUT', json: body }),
