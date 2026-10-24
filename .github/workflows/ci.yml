@@ -34,7 +34,7 @@ jobs:
       sdk_py: ${{ steps.f.outputs.sdk_py }}
       e2e: ${{ steps.f.outputs.e2e }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 2 }
       - id: f
         # A pull request is checked out as its merge commit: the first parent is the base branch.
@@ -70,8 +70,8 @@ jobs:
     if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/api" }
@@ -98,8 +98,8 @@ jobs:
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U staqly" --health-interval 2s --health-timeout 2s --health-retries 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
       - name: go test -race on PostgreSQL
         working-directory: apps/api
@@ -114,8 +114,8 @@ jobs:
     if: needs.changes.outputs.cli == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: apps/cli/go.mod, cache-dependency-path: apps/cli/go.sum }
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/cli" }
@@ -124,7 +124,7 @@ jobs:
         working-directory: apps/cli
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: Release config is valid (goreleaser)
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with: { version: "~> v2", workdir: apps/cli, args: check }
 
   # ── Dashboard, docs site, landing page ────────────────────────────────────
@@ -134,7 +134,7 @@ jobs:
     if: needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/platform..." }
       - name: API types are up to date with openapi.yaml
@@ -148,7 +148,7 @@ jobs:
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/docs..." }
       - name: Formatting, lint, types, build (static export + link check)
@@ -162,7 +162,7 @@ jobs:
     env:
       SITE_URL: https://staqly.ai
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/web..." }
       - name: Formatting, lint, types, tools' logic (scripts/check-tools.mjs), build (static export + link check)
@@ -177,7 +177,7 @@ jobs:
     if: needs.changes.outputs.packages == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with: { filter: "./packages/*" }
       - run: pnpm turbo run format:check lint typecheck --filter="./packages/*"
@@ -189,7 +189,7 @@ jobs:
     if: needs.changes.outputs.sdk_ts == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/sdk..." }
       - name: Schema types are up to date with openapi.yaml
@@ -209,8 +209,8 @@ jobs:
         # Oldest supported (requires-python) and newest stable.
         python: ["3.10", "3.15"]
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with: { python-version: "${{ matrix.python }}", enable-cache: true, cache-dependency-glob: sdks/python/uv.lock }
       - run: uv sync --locked
       - name: Lint + formatting (ruff)
@@ -232,10 +232,10 @@ jobs:
     # Runs when its code changed, after api and dashboard passed or were skipped (unchanged).
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.changes.outputs.e2e == 'true' }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: staqly image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           load: true
