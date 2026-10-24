@@ -19,6 +19,7 @@ import (
 
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/logctx"
+	"github.com/staqly/staqly/apps/api/internal/providers"
 )
 
 // The job queue runs on River (github.com/riverqueue/river, MPL-2.0): SQLite in local mode, PostgreSQL in
@@ -347,6 +348,11 @@ func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 		metricJobs.Inc(j.Kind, "done")
 		s.logger(ctx).Info("job done", "attempt", j.Attempt)
 		return nil
+	case s.quotaWait(err) > 0:
+		wait := s.quotaWait(err)
+		metricJobs.Inc(j.Kind, "snoozed")
+		s.logger(ctx).Warn("job waits for the platform's limit", "attempt", j.Attempt, "until", s.Now().Add(wait), "err", err)
+		return river.JobSnooze(wait) // a snooze spends no attempt
 	case j.Attempt >= j.MaxAttempts:
 		metricJobs.Inc(j.Kind, "failed")
 		s.logger(ctx).Warn("job failed", "attempt", j.Attempt, "err", err)
@@ -356,6 +362,16 @@ func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 		s.logger(ctx).Warn("job attempt failed", "attempt", j.Attempt, "err", err)
 	}
 	return err
+}
+
+// quotaWait is how long a job waits for a platform whose quota is spent until a known time (0: retry as usual).
+// ponytail: at most 25 hours; a platform asking for longer is simply asked again then.
+func (s *Service) quotaWait(err error) time.Duration {
+	at := providers.RetryAt(err)
+	if at.IsZero() || !at.After(s.Now()) {
+		return 0
+	}
+	return min(at.Sub(s.Now()), 25*time.Hour)
 }
 
 // requeueAfterRun queues the key again when it was asked for while this run went on: the run completes

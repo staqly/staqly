@@ -13,6 +13,8 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
+	"github.com/staqly/staqly/apps/api/internal/providers"
+
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/store/storetest"
 )
@@ -448,5 +450,26 @@ func TestRescuedLastAttemptIsSettled(t *testing.T) {
 	}
 	if n := s.settleRescuedJobs(ctx); n != 0 {
 		t.Fatalf("settled %d again, want 0", n)
+	}
+}
+
+// A platform's spent daily quota makes the job wait until it starts over, not burn its attempts and fail.
+func TestQuotaWait(t *testing.T) {
+	s := &Service{}
+	now := time.Date(2026, 10, 24, 22, 30, 0, 0, time.UTC)
+	s.Now = func() time.Time { return now }
+	for _, c := range []struct {
+		err  error
+		want time.Duration
+	}{
+		{&providers.Failure{Msg: "daily limit", RetryAt: now.Add(90 * time.Minute)}, 90 * time.Minute},
+		{&providers.Failure{Msg: "daily limit", RetryAt: now.Add(72 * time.Hour)}, 25 * time.Hour},
+		{&providers.Failure{Msg: "passed", RetryAt: now.Add(-time.Minute)}, 0},
+		{&providers.Failure{Kind: providers.ErrRejected, Msg: "refused", RetryAt: now.Add(time.Hour)}, 0},
+		{errors.New("plain"), 0},
+	} {
+		if got := s.quotaWait(c.err); got != c.want {
+			t.Errorf("quotaWait(%v) = %v, want %v", c.err, got, c.want)
+		}
 	}
 }
