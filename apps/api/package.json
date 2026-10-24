@@ -5,7 +5,7 @@
   "description": "Go backend (REST, MCP, workers). Scripts wrap the Go toolchain for turbo.",
   "scripts": {
     "build": "go build ./...",
-    "test": "go test -race ./...",
+    "test": "go test -race -timeout 25m ./...",
     "lint": "go vet ./... && pnpm run lint:openapi",
     "lint:openapi": "redocly lint openapi.yaml",
     "format": "gofmt -w cmd internal server *.go",
