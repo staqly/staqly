@@ -62,9 +62,23 @@ export function codeErrorMessage(err: unknown): string {
   }
 }
 
-/** Seconds left until `at` (a timestamp in ms), ticking every second. */
-function useCountdown(at: number) {
-  const [now, setNow] = useState(() => Date.now())
+/** When the next code may be asked for (`at`, a timestamp in ms) and when that wait started (`from`). */
+type Wait = { at: number; from: number }
+
+const startWait = (seconds: number): Wait => {
+  const from = Date.now()
+
+  return { at: from + seconds * 1000, from }
+}
+
+/**
+ * Seconds left until `wait.at`, ticking every second. A new wait counts from its own start, never from the last tick
+ * of the previous one (which stopped at 0, maybe minutes ago).
+ */
+function useCountdown(wait: Wait) {
+  const [tick, setTick] = useState(wait)
+  const now = tick.at === wait.at ? tick.from : wait.from
+  const { at } = wait
 
   useEffect(() => {
     if (at <= Date.now()) {
@@ -75,7 +89,7 @@ function useCountdown(at: number) {
     const id = window.setInterval(() => {
       const t = Date.now()
 
-      setNow(t)
+      setTick({ at, from: t })
 
       if (t >= at) {
         window.clearInterval(id)
@@ -199,7 +213,7 @@ export function EmailCodeForm({
   const [focused, setFocused] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [resendAt, setResendAt] = useState(() => Date.now() + sent.resend_in * 1000)
+  const [resendAt, setResendAt] = useState(() => startWait(sent.resend_in))
   const input = useRef<HTMLInputElement>(null)
 
   // The code field takes focus when this step opens (the address step's button had it).
@@ -216,7 +230,7 @@ export function EmailCodeForm({
   const again = useMutation({
     mutationFn: resend,
     onSuccess: (s) => {
-      setResendAt(Date.now() + s.resend_in * 1000)
+      setResendAt(startWait(s.resend_in))
       setError('')
       setNotice('We sent a new code. The previous one no longer works.')
     },
@@ -224,7 +238,7 @@ export function EmailCodeForm({
       const retry = e instanceof ApiError ? Number(e.details?.resend_in) : NaN
 
       if (Number.isFinite(retry)) {
-        setResendAt(Date.now() + retry * 1000)
+        setResendAt(startWait(retry))
       }
 
       setError(codeErrorMessage(e))

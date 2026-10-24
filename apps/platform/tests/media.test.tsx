@@ -1,11 +1,11 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { LibraryPickerButton } from '@/components/media/library-picker'
 import { FOLDER_DRAG, isExternalFileDrag, MEDIA_DRAG } from '@/components/media/media-folders'
 import { MediaPage } from '@/components/media/media-page'
-import type { Media, MediaLibraryItem } from '@/lib/api'
+import { api as apiClient, type Media, type MediaLibraryItem } from '@/lib/api'
 import { cropShare, fitVerdict, folderTree, formatDuration, ratioLabel, typeLabel } from '@/lib/media'
 
 import { PLANS, usage } from './plans-fixtures'
@@ -142,6 +142,42 @@ describe('media library page', () => {
     })
   })
 
+  it('the file drawer: an empty name is marked under the field, and text typed while saving stays', async () => {
+    mockApi({
+      'GET /v1/media': { data: [SUNSET] },
+      'GET /v1/media/med_sun/usage': { data: [] },
+      'GET /v1/workspace/usage': usage(PLANS[1]!),
+    })
+    let answer: ((m: MediaLibraryItem) => void) | undefined
+    const update = vi
+      .spyOn(apiClient, 'updateMedia')
+      .mockImplementation(() => new Promise<MediaLibraryItem>((resolve) => (answer = resolve)))
+    const user = userEvent.setup()
+
+    renderWithProviders(<MediaPage />, { mode: 'cloud' })
+    await user.click((await screen.findAllByRole('button', { name: 'Sunset.png' }))[0]!)
+    const drawer = await screen.findByTestId('media-detail')
+    const name = within(drawer).getByLabelText(/^Name/)
+
+    await user.clear(name)
+    await user.click(within(drawer).getByRole('button', { name: 'Save changes' }))
+    expect(within(drawer).getByText('Give the file a name.')).toBeInTheDocument()
+    expect(name).toHaveAttribute('aria-invalid', 'true')
+    expect(update).not.toHaveBeenCalled()
+
+    await user.type(name, 'Dusk.png')
+    expect(within(drawer).queryByText('Give the file a name.')).not.toBeInTheDocument()
+    await user.type(within(drawer).getByLabelText('Alt text'), 'Sun')
+    await user.click(within(drawer).getByRole('button', { name: 'Save changes' }))
+    // The answer is slow: keep typing meanwhile.
+    await user.type(within(drawer).getByLabelText('Alt text'), ' over the city')
+    act(() => answer!({ ...SUNSET, original_name: 'Dusk.png', alt_text: 'Sun' }))
+    await waitFor(() => expect(within(drawer).getByRole('button', { name: 'Save changes' })).toBeEnabled())
+    expect(within(drawer).getByLabelText('Alt text')).toHaveValue('Sun over the city')
+    expect(name).toHaveValue('Dusk.png')
+    update.mockRestore()
+  })
+
   it('moves selected files to Deleted with Undo', async () => {
     const api = mockApi({
       'GET /v1/media': { data: [SUNSET, CLIP] },
@@ -164,6 +200,22 @@ describe('media library page', () => {
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(api.find('POST', '/v1/media/med_clip/restore')).toHaveLength(1))
     expect(api.find('POST', '/v1/media/med_sun/restore')).toHaveLength(1)
+  })
+
+  it('a search that hides selected files clears the selection, so no action reaches a file out of view', async () => {
+    mockApi({
+      'GET /v1/media': ({ query }: { query: URLSearchParams }) => ({ data: query.get('q') ? [CLIP] : [SUNSET, CLIP] }),
+      'GET /v1/workspace/usage': usage(PLANS[1]!),
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<MediaPage />, { mode: 'cloud' })
+    await user.click(await screen.findByRole('button', { name: 'Select Sunset.png' }))
+    expect(screen.getByRole('toolbar', { name: 'Selected files' })).toHaveTextContent('1 selected')
+    await user.click(screen.getByTestId('filter-button'))
+    await user.type(await screen.findByRole('textbox', { name: 'Search files' }), 'clip')
+    await waitFor(() => expect(screen.getAllByTestId('media-tile')).toHaveLength(1))
+    expect(screen.queryByRole('toolbar', { name: 'Selected files' })).not.toBeInTheDocument()
   })
 
   it('one file moved to Deleted is named in the toast', async () => {

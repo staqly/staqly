@@ -1,9 +1,10 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { WelcomeGate } from '@/components/onboarding/welcome-redirect'
 import { WelcomeWizard } from '@/components/onboarding/welcome-wizard'
+import { api as apiClient } from '@/lib/api'
 import { qk } from '@/lib/queries'
 
 import { nav } from './navigation'
@@ -147,6 +148,26 @@ describe('welcome wizard', () => {
     expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
     expect(api.find('PATCH', '/v1/workspace')[0].body).toMatchObject({ name: 'Acme' })
     expect(api.find('POST', '/v1/billing/sync').length).toBeGreaterThan(0)
+  })
+
+  it('back from Stripe: a slow payment check is not asked again while it runs', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    mockApi({
+      ...routes,
+      'GET /v1/billing': { enabled: true, subscription_status: null, suspended: true },
+      'GET /v1/workspace/usage': { suspended: true },
+    })
+    // Stripe takes its time: the first check doesn't answer within the test.
+    const sync = vi.spyOn(apiClient, 'syncBilling').mockReturnValue(new Promise(() => {}))
+
+    sessionStorage.setItem('staqly:welcome', JSON.stringify({ name: 'Ana', workspaceName: 'Acme' }))
+    nav.set('/welcome', 'step=done&checkout=success')
+    render({})
+    expect(await screen.findByRole('heading', { name: 'Setting up your workspace' })).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(10_000))
+    expect(sync).toHaveBeenCalledTimes(1)
+    sync.mockRestore()
+    vi.useRealTimers()
   })
 
   it('setting up again after a failure counts people already invited as invited', async () => {

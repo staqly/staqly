@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { ConnectForm } from '@/components/channels/add-channel-sheet'
 import { ChannelsPage } from '@/components/channels/channels-page'
+import { peekOAuthReturn, setOAuthReturn } from '@/lib/welcome'
 
 import { channel, group, provider } from './fixtures'
 import { nav } from './navigation'
@@ -287,5 +288,16 @@ describe('channels', () => {
     await new Promise((r) => setTimeout(r, 50))
     expect(button).toBeDisabled()
     expect(button).toHaveTextContent('Opening Mastodon...')
+  })
+
+  it('a connection started from Channels forgets a welcome return left by an abandoned earlier one', async () => {
+    const api = mockApi({ 'GET /v1/channels/oauth/mastodon/start': { url: 'https://mastodon.example/authorize' } })
+    const user = userEvent.setup()
+
+    setOAuthReturn('/welcome?step=done')
+    renderWithProviders(<ConnectForm provider={provider()} reconnect={null} onDone={() => {}} />, { mode: 'local' })
+    await user.click(screen.getByRole('button', { name: 'Connect with Mastodon' }))
+    await waitFor(() => expect(api.find('GET', '/v1/channels/oauth/mastodon/start')).toHaveLength(1))
+    await waitFor(() => expect(peekOAuthReturn()).toBeNull())
   })
 })

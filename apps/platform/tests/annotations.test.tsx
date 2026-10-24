@@ -200,3 +200,42 @@ describe('preview comments on a passage', () => {
     window.location.hash = ''
   })
 })
+
+describe('preview page loading and errors', () => {
+  it('keeps the post and the comment being typed when a background refresh fails', async () => {
+    window.location.hash = '#tok_blip'
+    let fail = false
+
+    mockApi({
+      'GET /v1/previews/tok_blip': () =>
+        fail ? { status: 503, body: { error: { code: 'unavailable', message: 'Down' } } } : preview([]),
+    })
+    const user = userEvent.setup()
+    const { client } = renderWithProviders(<PreviewPage />)
+
+    await screen.findByRole('article', { name: 'X: JumpTheBear' })
+    await user.type(screen.getByPlaceholderText('What would you change?'), 'Half a thought')
+    fail = true
+    await act(() => client.refetchQueries({ queryKey: ['preview', 'tok_blip'] }))
+    await waitFor(() => expect(client.getQueryState(['preview', 'tok_blip'])?.status).toBe('error'))
+    expect(screen.queryByText('This preview is not available')).not.toBeInTheDocument()
+    expect(screen.getByRole('article', { name: 'X: JumpTheBear' })).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('What would you change?')).toHaveValue('Half a thought')
+    window.location.hash = ''
+  })
+
+  it('says a link without a token or one that fails to open is not available', async () => {
+    window.location.hash = ''
+    mockApi({})
+    const { unmount } = renderWithProviders(<PreviewPage />)
+
+    expect(screen.getByText('This preview is not available')).toBeInTheDocument()
+    unmount()
+
+    window.location.hash = '#tok_gone'
+    mockApi({ 'GET /v1/previews/tok_gone': { status: 404, body: { error: { code: 'not_found', message: 'Gone' } } } })
+    renderWithProviders(<PreviewPage />)
+    expect(await screen.findByText('This preview is not available')).toBeInTheDocument()
+    window.location.hash = ''
+  })
+})

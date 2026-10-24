@@ -229,7 +229,7 @@ function CloudApiKeysManager() {
               return (
                 <li
                   key={k.id}
-                  className={cn('grid gap-2 rounded-xl border bg-card p-3', k.revoked_at && 'opacity-60')}
+                  className={cn('grid gap-2 rounded-xl border bg-card p-3', k.revoked_at && 'text-muted-foreground')}
                   data-testid="api-key-row"
                 >
                   <div className="flex items-start gap-2">

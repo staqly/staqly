@@ -338,4 +338,31 @@ describe('composer', () => {
     await user.click(screen.getByTestId('publish-now'))
     expect(await screen.findByText('Too long for Bluesky')).toHaveAttribute('data-slot', 'field-error')
   })
+
+  it('a comment keeps every file uploaded at once, and text typed while they upload', async () => {
+    let n = 0
+
+    mockApi({
+      ...routes,
+      'POST /v1/media': () => {
+        n += 1
+
+        return { id: `med_${n}`, mime_type: 'video/mp4', original_name: `clip-${n}.mp4`, size_bytes: 10 }
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await user.click(await screen.findByTestId('add-comment'))
+    const part = screen.getByTestId('thread-part-0')
+    const input = part.querySelector<HTMLInputElement>('input[type="file"]')!
+
+    await user.type(within(part).getByTestId('thread-content-0'), 'Doors at 9')
+    await user.upload(input, [
+      new File(['a'], 'a.mp4', { type: 'video/mp4' }),
+      new File(['b'], 'b.mp4', { type: 'video/mp4' }),
+    ])
+    await waitFor(() => expect(within(part).getAllByText(/^clip-\d\.mp4$/)).toHaveLength(2))
+    expect(within(part).getByTestId('thread-content-0')).toHaveValue('Doors at 9')
+  })
 })

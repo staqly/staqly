@@ -91,7 +91,11 @@ export function ChipsInput({
           <span className="truncate">{v}</span>
           <button
             type="button"
-            onClick={() => onChange(value.filter((x) => x !== v))}
+            // The button goes with its chip: keep the keyboard in the field instead of dropping it to the page.
+            onClick={() => {
+              onChange(value.filter((x) => x !== v))
+              document.getElementById(inputId)?.focus()
+            }}
             aria-label={`Remove ${v}`}
             className="flex size-5 shrink-0 items-center justify-center rounded opacity-60 hover:bg-foreground/10 hover:opacity-100 pointer-coarse:size-7"
           >
@@ -127,7 +131,18 @@ export function ChipsInput({
         className="h-6 min-w-24 flex-1 bg-transparent px-1.5 text-base outline-none placeholder:text-muted-foreground md:text-sm pointer-coarse:h-8"
       />
       {draft.trim() && (
-        <Button type="button" size="icon-xs" variant="ghost" onClick={() => add()} aria-label={`Add ${draft.trim()}`}>
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          // The field keeps focus: a blur would add the text first and take this button away under the click.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            add()
+            document.getElementById(inputId)?.focus()
+          }}
+          aria-label={`Add ${draft.trim()}`}
+        >
           <Plus />
         </Button>
       )}

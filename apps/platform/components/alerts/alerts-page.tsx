@@ -168,7 +168,7 @@ function ChannelCard({
     <article
       className={cn(
         'grid grid-cols-1 content-start gap-3 rounded-xl border bg-card p-4',
-        health === 'paused' && 'opacity-80',
+        health === 'paused' && 'bg-muted/40',
       )}
       data-testid="channel-card"
       aria-label={ch.name}

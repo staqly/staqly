@@ -219,4 +219,28 @@ describe('activity audit log', () => {
     await waitFor(() => expect(api.find('GET', '/v1/events').length).toBeGreaterThan(0))
     expect(Object.fromEntries(api.find('GET', '/v1/events')[0].query)).toEqual({ limit: '50' })
   })
+
+  it('keeps the loaded events when older ones fail to load, and tries again from the same button', async () => {
+    let failing = true
+
+    mockApi({
+      'GET /v1/events': (call: { query: URLSearchParams }) =>
+        call.query.get('cursor')
+          ? failing
+            ? { status: 503, body: { error: { code: 'unavailable', message: 'Down' } } }
+            : { data: [WEBHOOK_EVENT] }
+          : { data: [POST_EVENT], next_cursor: 'c2' },
+      'GET /v1/collections': { data: [collection()] },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ActivityFeed />, { mode: 'cloud' })
+    await user.click(await screen.findByRole('button', { name: 'Load older events' }))
+    expect(await screen.findByText(/could not load more/i)).toBeInTheDocument()
+    expect(screen.getAllByTestId('audit-event')).toHaveLength(1)
+    failing = false
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(screen.getAllByTestId('audit-event')).toHaveLength(2))
+    expect(screen.queryByText(/could not load more/i)).not.toBeInTheDocument()
+  })
 })

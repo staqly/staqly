@@ -81,3 +81,36 @@ export function EmptyState({
     </div>
   )
 }
+
+/**
+ * "Load more" under a paged list. A page that fails to load says so above the button, which then tries it again;
+ * what is already on screen stays (an ErrorState in place of the list would hide every loaded page).
+ */
+export function LoadMore({
+  onLoad,
+  loading,
+  failed,
+  label = 'Load more',
+  size,
+  className,
+}: {
+  onLoad: () => void
+  loading: boolean
+  failed: boolean
+  label?: string
+  size?: 'sm'
+  className?: string
+}) {
+  return (
+    <div className={cn('flex flex-col items-center gap-2', className)}>
+      {failed && !loading && (
+        <p role="alert" className="text-sm text-destructive">
+          Could not load more. Check the connection and try again.
+        </p>
+      )}
+      <Button variant="outline" size={size} onClick={onLoad} disabled={loading}>
+        {loading ? 'Loading...' : failed ? 'Try again' : label}
+      </Button>
+    </div>
+  )
+}

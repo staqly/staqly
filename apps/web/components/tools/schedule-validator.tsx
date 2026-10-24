@@ -20,6 +20,11 @@ import {
 const noSubscribe = () => () => {}
 const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 const serverZone = () => 'UTC'
+// "Now" too: the page is prerendered at build time, so the runs and checks wait for the browser's clock instead of
+// rendering the build day's (a hydration mismatch, and a list that jumps on load).
+let loadedAt: number | undefined
+const browserNow = () => (loadedAt ??= Date.now())
+const serverNow = () => null
 
 // Monday first in the form; the rule numbers days the way the API does (0 = Sunday).
 const WEEK: [number, string][] = [
@@ -63,7 +68,8 @@ export function ScheduleValidatorTool() {
   const audience = audienceChoice ?? mine
   const text =
     ruleText ?? JSON.stringify({ times: ['09:00', '18:00'], weekdays: [1, 2, 3, 4, 5], tz: audienceChoice ?? mine })
-  const [now] = useState(() => new Date())
+  const nowMs = useSyncExternalStore(noSubscribe, browserNow, serverNow)
+  const now = useMemo(() => (nowMs === null ? null : new Date(nowMs)), [nowMs])
 
   // The year-long checks are the slow part: work them out again only when their inputs change.
   const parsed = useMemo(() => parseRule(text), [text])
@@ -71,15 +77,15 @@ export function ScheduleValidatorTool() {
   const list = useMemo(() => (mode === 'list' ? parseList(listText, audience) : undefined), [mode, listText, audience])
   const errors = mode === 'rule' ? parsed.errors : (list?.errors ?? [])
   const runs = useMemo(
-    () => (rule ? nextRuns(rule, now, 60) : (list?.runs.filter((r) => r > now) ?? [])),
+    () => (!now ? [] : rule ? nextRuns(rule, now, 60) : (list?.runs.filter((r) => r > now) ?? [])),
     [rule, list, now],
   )
   const failed = errors.length > 0
   const checks = useMemo(
-    () => (failed ? [] : check(runs, { platforms, audienceTz: audience, ruleTz: rule?.tz })),
-    [failed, runs, platforms, audience, rule],
+    () => (failed || !now ? [] : check(runs, { platforms, audienceTz: audience, ruleTz: rule?.tz })),
+    [failed, now, runs, platforms, audience, rule],
   )
-  const skipped = useMemo(() => (rule ? skippedTimes(rule, now) : []), [rule, now])
+  const skipped = useMemo(() => (rule && now ? skippedTimes(rule, now) : []), [rule, now])
   const cleaned = rule ? JSON.stringify(rule) : ''
 
   // The quick form edits the rule text, so the text stays the one source.
