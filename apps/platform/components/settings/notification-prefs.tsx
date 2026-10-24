@@ -105,7 +105,13 @@ export function NotificationPrefsCard() {
               </thead>
               <tbody className="divide-y">
                 {current.events.map((c) => {
-                  const [label, hint] = LABELS[c.event] ?? [c.event, '']
+                  // An event a newer server added before this dashboard can name it stays as it is, unlisted: the
+                  // table never shows an event's code name.
+                  if (!LABELS[c.event]) {
+                    return null
+                  }
+
+                  const [label, hint] = LABELS[c.event]
 
                   return (
                     <tr key={c.event}>

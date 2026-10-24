@@ -44,6 +44,26 @@ describe('notification settings', () => {
     })
   })
 
+  it('leaves out an event this dashboard has no name for, and saves it unchanged', async () => {
+    const withNew = { ...prefs, events: [...prefs.events, { event: 'post.archived', email: true, in_app: false }] }
+    const api = mockApi({ 'GET /v1/account/notifications': withNew, 'PUT /v1/account/notifications': withNew })
+    const user = userEvent.setup()
+
+    renderWithProviders(<NotificationPrefsCard />, { mode: 'cloud' })
+    await user.click(await screen.findByRole('switch', { name: 'Post published: email' }))
+    expect(screen.queryByText('post.archived')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('row')).toHaveLength(EVENTS.length + 1)
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(api.find('PUT', '/v1/account/notifications')).toHaveLength(1))
+    const body = api.find('PUT', '/v1/account/notifications')[0]!.body as typeof prefs
+
+    expect(body.events.find((c) => c.event === 'post.archived')).toEqual({
+      event: 'post.archived',
+      email: true,
+      in_app: false,
+    })
+  })
+
   it('says when the server cannot send email', async () => {
     mockApi({ 'GET /v1/account/notifications': { ...prefs, mail_ready: false } })
     renderWithProviders(<NotificationPrefsCard />, { mode: 'cloud' })
