@@ -30,4 +30,4 @@ export const wrapWide = 'mx-auto w-full max-w-7xl px-5 sm:px-8'
 export const SITE_URL = env.siteUrl
 export const TAGLINE = 'The local-first social media scheduler for people and their AI agents'
 export const DESCRIPTION =
-  'Staqly is the local-first social media scheduler for people and their AI agents. You and your agents write posts into collections, and a schedule publishes them to X, or to any platform through your own n8n workflow or script.'
+  'Staqly is the local-first social media scheduler for people and their AI agents. You and your agents write posts into collections, and a schedule publishes them to X, LinkedIn, Instagram, TikTok and more, or through your own n8n workflow or script.'

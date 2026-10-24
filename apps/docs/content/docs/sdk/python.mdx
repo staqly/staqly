@@ -243,7 +243,7 @@ async def staqly_hook(request: Request) -> Response:
 - Deliveries are at-least-once and can arrive out of order: de-duplicate on `event.id` (also
   sent as `X-Staqly-Event-Id`) and order by `event.created_at`
   ([Delivery guarantees](/automation/webhooks#delivery-guarantees)).
-- `is_valid_webhook()` returns a boolean instead of raising; `compute_webhook_signature()` helps
+- `is_valid_webhook()` returns a boolean instead of raising; `compute_signature(secret, ts, body)` helps
   you test your handler. The same functions verify a
   [schedule endpoint](/automation/schedules#call-an-endpoint-source-endpoint) request with the
   schedule's `endpoint_secret`.

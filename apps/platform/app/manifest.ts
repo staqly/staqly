@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'staqly',
     short_name: 'staqly',
     description:
-      'The local-first social media scheduler for people and their AI agents: publishes to X, and to any other platform through your own automation.',
+      'The local-first social media scheduler for people and their AI agents: publishes to X, LinkedIn, Instagram and every other platform you connect, or anywhere through your own automation.',
     start_url: '/',
     display: 'standalone',
     background_color: '#0b0d10',

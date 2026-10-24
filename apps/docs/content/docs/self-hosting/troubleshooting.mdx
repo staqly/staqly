@@ -53,7 +53,7 @@ dashboard, another agent) edited it meanwhile. Reload the post and apply your ch
 <Accordion title="A platform shows Soon, or 409 app_not_configured / provider_soon / provider_disabled">
 - **Soon** on an OAuth platform such as X, or `app_not_configured`: the server has no developer
   app for it. Register one with the platform and put its keys in the server's environment
-  (`PROVIDER_X_CLIENT_ID`, `PROVIDER_X_CLIENT_SECRET` in `.env`), then restart
+  (`PROVIDER_X_CLIENT_ID`, `PROVIDER_X_CLIENT_SECRET` in the server's environment), then restart
   ([Developer apps](/channels/developer-apps)).
 - `provider_soon`: the platform is in the catalog but not available in this build yet.
 - `provider_disabled`, or the platform is missing from **Add channel**: it is turned off with

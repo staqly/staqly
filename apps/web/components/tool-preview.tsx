@@ -14,7 +14,7 @@ const PREVIEWS: Preview[] = [
     title: 'Claude Code',
     code: `# once: claude mcp add --transport http staqly ${MCP_URL} --header "Authorization: Bearer $STAQLY_API_KEY"
 $ claude "Write three reel captions into Reels, one per evening this week"
-⏺ staqly · create_post → Reels (X, Instagram via n8n)
+⏺ staqly · create_post → Reels (X, Instagram)
 ⏺ staqly · schedule_post → Wed 18:00, Thu 18:00, Fri 18:00
 → 3 posts on the calendar`,
   },
