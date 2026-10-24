@@ -667,7 +667,14 @@ export function SchedulePage() {
           variant="outline"
           spacing={0}
           value={view}
-          onValueChange={(v) => v && navigate({ view: v as CalendarView })}
+          // A range that holds today opens the new view on today (October's month on its 1st would open a past week).
+          onValueChange={(v) =>
+            v &&
+            navigate({
+              view: v as CalendarView,
+              at: range.days.some((d) => dayKey(d) === today) ? dayFromKey(today) : undefined,
+            })
+          }
           aria-label="Calendar view"
           className="h-8 pointer-coarse:h-10"
         >
