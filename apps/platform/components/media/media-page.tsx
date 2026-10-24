@@ -154,6 +154,8 @@ const VIEWS: Record<string, { about: string; title: string; description: string;
 }
 const KINDS: Place[] = ['image', 'video', 'audio']
 const NO_FOLDERS: MediaFolder[] = []
+// Never mutated: every change to a selection makes a new set.
+const NO_IDS = new Set<string>()
 const NO_ITEMS: MediaLibraryItem[] = []
 
 // Action bar labels show from sm up; below, icon buttons keep their names (and tooltips) through aria-label.
@@ -200,7 +202,20 @@ export function MediaPage() {
   const [chosenPlace, setPlace] = useState<Place>('all')
   const [tag, setTag] = useState('')
   const [sort, setSort] = useState<MediaSort>('created_desc')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  // The selection belongs to one search and tag filter: a file the filter hides is never acted on unseen (Delete
+  // forever in Deleted, Move, Restore), and the bar counts what is on screen.
+  const filterKey = `${q}\n${tag}`
+  const [selection, setSelection] = useState({ key: filterKey, ids: NO_IDS })
+  const selected = selection.key === filterKey ? selection.ids : NO_IDS
+  const setSelected = useCallback(
+    (next: Set<string> | ((prev: Set<string>) => Set<string>)) =>
+      setSelection((s) => {
+        const prev = s.key === filterKey ? s.ids : NO_IDS
+
+        return { key: filterKey, ids: typeof next === 'function' ? next(prev) : next }
+      }),
+    [filterKey],
+  )
   const [open, setOpen] = useState<MediaLibraryItem | null>(null)
   const [composeWith, setComposeWith] = useState<MediaLibraryItem[] | null>(null)
   const [tagging, setTagging] = useState(false)
@@ -364,7 +379,7 @@ export function MediaPage() {
     window.addEventListener('keydown', onKey)
 
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected.size])
+  }, [selected.size, setSelected])
 
   const { mutate: deleteSelected, isPending: deleting } = useMutation({
     mutationFn: () => api.deleteMediaMany([...selected]),

@@ -166,6 +166,22 @@ describe('media library page', () => {
     expect(api.find('POST', '/v1/media/med_sun/restore')).toHaveLength(1)
   })
 
+  it('a search that hides selected files clears the selection, so no action reaches a file out of view', async () => {
+    mockApi({
+      'GET /v1/media': ({ query }: { query: URLSearchParams }) => ({ data: query.get('q') ? [CLIP] : [SUNSET, CLIP] }),
+      'GET /v1/workspace/usage': usage(PLANS[1]!),
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<MediaPage />, { mode: 'cloud' })
+    await user.click(await screen.findByRole('button', { name: 'Select Sunset.png' }))
+    expect(screen.getByRole('toolbar', { name: 'Selected files' })).toHaveTextContent('1 selected')
+    await user.click(screen.getByTestId('filter-button'))
+    await user.type(await screen.findByRole('textbox', { name: 'Search files' }), 'clip')
+    await waitFor(() => expect(screen.getAllByTestId('media-tile')).toHaveLength(1))
+    expect(screen.queryByRole('toolbar', { name: 'Selected files' })).not.toBeInTheDocument()
+  })
+
   it('one file moved to Deleted is named in the toast', async () => {
     mockApi({
       'GET /v1/media': { data: [SUNSET, CLIP] },
