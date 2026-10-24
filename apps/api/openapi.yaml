@@ -335,6 +335,11 @@ paths:
         returns the dashboard's plan page URL (`/settings/plan`) with `?checkout=switched`; the plan changes when Stripe's
         `customer.subscription.updated` event arrives. 409 for the plan and interval it already has.
 
+        Leaving Starter's trial ends it now and charges the new plan at once; the change waits for that payment.
+        When it doesn't go through: 402 `payment_failed` whose `details` say why (`reason`; see `PendingPayment`)
+        and, when the bank asks the customer to confirm the payment, `pay_url`: Stripe's invoice page to confirm
+        and pay there. `GET /v1/billing/pending-payment` reads the same later.
+
         Allowed while suspended. 409 `not_available` when billing is off or that price is not set up.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
@@ -520,6 +525,33 @@ paths:
               schema: { $ref: "#/components/schemas/Billing" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
+  /v1/billing/pending-payment:
+    get:
+      operationId: getPendingPayment
+      tags: [billing]
+      summary: A plan change waiting for its payment, read from Stripe (account owner)
+      description: |
+        Leaving Starter's trial for another plan is charged at once, and Stripe applies the change only when that
+        payment goes through (until then it is the subscription's pending update and the trial stays). This reads
+        from Stripe whether such a change waits and why it isn't paid: `authentication_required` (the bank asks
+        the customer to confirm the payment: open `pay_url`, Stripe's hosted invoice page, to confirm and pay),
+        a decline (`card_declined`, `insufficient_funds`, `expired_card`, `incorrect_card_details`: change the
+        card in the billing portal and try again, or pay the invoice at `pay_url` with another card),
+        `processing` (the payment is under way) or `unknown`. Once Stripe has the payment it applies the change;
+        its webhook or `POST /v1/billing/sync` brings the new plan in. Payments happen on Stripe's pages only.
+        `{"pending": false}` when nothing waits. 409 `not_available` when billing is off.
+      responses:
+        "200":
+          description: Whether a plan change waits for its payment, and why
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PendingPayment" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/BadGateway" }
 
@@ -4110,7 +4142,8 @@ components:
       description: |
         `plan_limit_exceeded` (a plan limit; `details` has limit, max, used, plan),
         `plan_expired` (the workspace is suspended and read-only), `payment_required`, `payment_failed` (a plan
-        change that charges at once, such as leaving the trial, wasn't paid: nothing changed), or `x_posts_exhausted` (this
+        change that charges at once, such as leaving the trial, wasn't paid: nothing changed; `details` has
+        `reason`, and `pay_url`, `decline_code`, `plan`, `expires_at` when known, as in `PendingPayment`), or `x_posts_exhausted` (this
         period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end), or
         `linkedin_posts_exhausted` / `linkedin_videos_exhausted` (this period's posts to LinkedIn, or those with a video,
         can't cover the post; `details` has limit, needed, left, period_end).
@@ -4346,6 +4379,27 @@ components:
         status: { type: string, description: "paid, open, void or uncollectible", examples: [paid] }
         hosted_invoice_url: { type: string, description: Stripe's page for the invoice (pay or download) }
         invoice_pdf: { type: string, description: The invoice as a PDF }
+    PendingPayment:
+      type: object
+      required: [pending]
+      description: |
+        A plan change waiting for its payment (leaving the trial is charged at once). Also the `details` of the
+        402 `payment_failed` that `POST /v1/billing/checkout` answers when that payment didn't go through
+        (without `pending`).
+      properties:
+        pending: { type: boolean, description: "A plan change waits for its payment; false when none does (nothing else is set then)" }
+        reason:
+          type: string
+          enum: [authentication_required, card_declined, insufficient_funds, expired_card, incorrect_card_details, processing, unknown]
+          description: |
+            Why the payment hasn't gone through: `authentication_required` (the bank asks the customer to confirm it,
+            3-D Secure; confirm at `pay_url`), a decline (`card_declined` and the more precise `insufficient_funds`,
+            `expired_card`, `incorrect_card_details`: another card is needed), `processing` (under way, nothing to do)
+            or `unknown` (Stripe's answer couldn't be read).
+        decline_code: { type: string, description: "Stripe's decline code or error code, as Stripe gives it", examples: [insufficient_funds] }
+        pay_url: { type: string, format: uri, description: "Stripe's hosted invoice page for the unpaid invoice, where the customer confirms the payment with the bank or pays with another card. Absent when the invoice isn't open or has no such page.", examples: ["https://invoice.stripe.com/i/acct_123/test_abc"] }
+        plan: { type: string, description: The plan waiting for the payment, examples: [pro] }
+        expires_at: { type: string, format: date-time, description: When Stripe drops the change if it is still unpaid }
     BillingURL:
       type: object
       required: [url]
@@ -4383,7 +4437,7 @@ components:
           examples: [bad_request, unauthorized, invalid_link, forbidden, csrf_failed, not_found, conflict, not_available, idempotency_in_progress, post_changed, already_free, sign_in_with_account, gone, link_used, link_expired, plan_limit_exceeded, plan_expired, payment_required, x_posts_exhausted, linkedin_posts_exhausted, linkedin_videos_exhausted, too_large, unsupported_media_type, validation_failed, not_editable, idempotency_mismatch, rate_limited, payment_provider_error, ai_provider_error, ai_key_rejected, timeout, busy, internal, default_group]
         message: { type: string }
         fields: { type: object, additionalProperties: { type: string } }
-        details: { type: object, additionalProperties: true, description: "plan_limit_exceeded: limit, max, used, plan" }
+        details: { type: object, additionalProperties: true, description: "plan_limit_exceeded: limit, max, used, plan; payment_failed: reason, pay_url, decline_code, plan, expires_at (see PendingPayment)" }
 
     Scope:
       type: string
