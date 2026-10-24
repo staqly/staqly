@@ -273,6 +273,7 @@ function ConnectLinkDialog({ open, onOpenChange }: { open: boolean; onOpenChange
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    className="text-destructive hover:text-destructive"
                     aria-label={`Revoke the link${l.note ? ` "${l.note}"` : ''}`}
                     tooltip="Revoke"
                     disabled={revoke.isPending}

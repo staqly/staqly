@@ -241,7 +241,6 @@ function DetailForm({
                           ? 'Audio'
                           : 'File'}
                 </span>
-                <span aria-hidden>·</span>
                 <span
                   className="inline-flex max-w-full min-w-0 items-center gap-0.5 rounded-md bg-muted pl-1.5 ring-1 ring-border/60 ring-inset"
                   data-testid="media-id"
@@ -522,7 +521,7 @@ function Details({ item, onOpenMedia }: { item: MediaLibraryItem; onOpenMedia?: 
     [
       'Type',
       <>
-        {typeLabel(item.mime_type)} <span className="text-muted-foreground">· {item.mime_type}</span>
+        {typeLabel(item.mime_type)} <span className="text-muted-foreground">{item.mime_type}</span>
       </>,
     ],
     ['Size', formatBytes(item.size_bytes)],
@@ -540,7 +539,7 @@ function Details({ item, onOpenMedia }: { item: MediaLibraryItem; onOpenMedia?: 
   rows.push([
     'Uploaded',
     <>
-      {formatDateTime(item.created_at)} <span className="text-muted-foreground">· {timeAgo(item.created_at)}</span>
+      {formatDateTime(item.created_at)} <span className="text-muted-foreground">{timeAgo(item.created_at)}</span>
     </>,
   ])
   rows.push([

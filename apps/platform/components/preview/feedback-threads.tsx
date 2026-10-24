@@ -185,7 +185,7 @@ const ThreadItem = memo(function ThreadItem({
                   type="button"
                   size="xs"
                   variant="ghost"
-                  className="w-fit text-muted-foreground"
+                  className="w-fit text-destructive hover:text-destructive"
                   aria-label={`Remove the reply from ${r.author_name}`}
                   disabled={pending}
                   onClick={() => onRemove(r)}
@@ -258,7 +258,7 @@ const ThreadItem = memo(function ThreadItem({
             type="button"
             size="icon-sm"
             variant="ghost"
-            className="ml-auto"
+            className="ml-auto text-destructive hover:text-destructive"
             aria-label={`Remove the comment from ${root.author_name} and its replies`}
             disabled={pending}
             onClick={() => onRemove(root)}

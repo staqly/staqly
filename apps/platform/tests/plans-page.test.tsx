@@ -139,7 +139,7 @@ describe('plan picker', () => {
     // Enter applies; the modal closes and focus goes back to the page.
     await user.type(within(dialog).getByLabelText(/Promotion code/), 'BIZ-5UUS-DUQR{Enter}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByTestId('promotion-code-applied')).toHaveTextContent('BIZ-5UUS-DUQR·50% off')
+    expect(screen.getByTestId('promotion-code-applied')).toHaveTextContent('BIZ-5UUS-DUQR 50% off')
     expect(api.find('POST', '/v1/billing/promotion-code')[0].body).toEqual({ promotion_code: 'BIZ-5UUS-DUQR' })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus())
     await user.click(within(screen.getByTestId('plan-business')).getByRole('button', { name: 'Upgrade to Business' }))
@@ -199,7 +199,7 @@ describe('plan picker', () => {
     await user.type(within(dialog).getByLabelText(/Promotion code/), 'SPRING20')
     await user.click(within(dialog).getByRole('button', { name: 'Apply' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByTestId('promotion-code-applied')).toHaveTextContent('SPRING20·20% off for 3 months')
+    expect(screen.getByTestId('promotion-code-applied')).toHaveTextContent('SPRING20 20% off for 3 months')
 
     await user.click(screen.getByRole('button', { name: 'Remove' }))
     expect(screen.queryByTestId('promotion-code-applied')).not.toBeInTheDocument()

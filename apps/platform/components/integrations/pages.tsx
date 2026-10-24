@@ -147,7 +147,7 @@ function RecentActivity({ agent, onShowAll }: { agent: Agent | null; onShowAll: 
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">
             Recent activity
-            {agent && <span className="font-normal text-muted-foreground"> · {agent.name}</span>}
+            {agent && <span className="font-normal text-muted-foreground"> {agent.name}</span>}
           </h2>
           <p className="text-sm text-muted-foreground">
             {agent

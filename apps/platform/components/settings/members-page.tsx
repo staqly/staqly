@@ -182,7 +182,7 @@ function MembersCard() {
                 )}
                 {soleOwner ? (
                   all.length === 1 ? (
-                    <Button variant="ghost" size="sm" asChild>
+                    <Button variant="destructive" size="sm" asChild>
                       <Link href="/settings/data">Delete workspace</Link>
                     </Button>
                   ) : (

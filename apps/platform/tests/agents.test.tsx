@@ -60,15 +60,15 @@ describe('agents', () => {
 
     await waitFor(() => expect(lastQuery()).toBeDefined())
     expect(lastQuery()?.getAll('agent')).toEqual([])
-    expect(screen.getByTestId('recent-activity')).not.toHaveTextContent('Recent activity ·')
+    expect(screen.getByTestId('recent-activity')).not.toHaveTextContent('Recent activity n8n')
 
     // Selecting an agent narrows to it (and its credential); Show all goes back.
     await user.click(within(agents).getByRole('button', { name: /^n8n/, pressed: false }))
     await waitFor(() => expect(lastQuery()?.getAll('agent')).toEqual(['n8n']))
     expect(lastQuery()?.get('actor_id')).toBe('local')
-    expect(screen.getByTestId('recent-activity')).toHaveTextContent('Recent activity · n8n')
+    expect(screen.getByTestId('recent-activity')).toHaveTextContent('Recent activity n8n')
     await user.click(screen.getByRole('button', { name: 'Show all' }))
-    expect(screen.getByTestId('recent-activity')).not.toHaveTextContent('Recent activity ·')
+    expect(screen.getByTestId('recent-activity')).not.toHaveTextContent('Recent activity n8n')
     expect(within(agents).getByRole('button', { name: /^n8n/ })).toHaveAttribute('aria-pressed', 'false')
 
     await user.click(within(agents).getByRole('button', { name: 'Remove n8n from the list' }))

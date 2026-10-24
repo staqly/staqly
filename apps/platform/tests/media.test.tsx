@@ -113,7 +113,7 @@ describe('media library page', () => {
     await user.click(within(drawer).getByRole('tab', { name: 'Details' }))
     const details = within(drawer).getByTestId('media-details')
 
-    expect(details).toHaveTextContent('PNG image · image/png')
+    expect(details).toHaveTextContent('PNG image image/png')
     expect(details).toHaveTextContent('Aspect ratio4:5 · portrait')
 
     // Where it fits: grouped by platform, with a count on the tab.
