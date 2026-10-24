@@ -102,6 +102,7 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `S3_FORCE_PATH_STYLE` | `false` | `true` puts the bucket in the URL path, as MaxIOFS, MinIO and most self-hosted servers need. |
 | `S3_PREFIX` | none | A folder in the bucket for staqly's files, e.g. `staqly/`. |
 | `S3_PUBLIC_URL` | none | Public URL of the bucket (usually a CDN). Platforms that fetch media get links there instead of signed links. |
+| `S3_SIGN_ENDPOINT` | `S3_ENDPOINT` | The address platforms reach the bucket at, when staqly reaches it at another one (staqly on an internal network, platforms through a proxy or tunnel). Signed links point here. |
 | `S3_CREATE_BUCKET` | `false` | Create a missing bucket on start. Otherwise a missing bucket stops the server with a clear message. |
 | `MAX_UPLOAD_MB` | `100` | Maximum upload size. |
 | `JOB_CONCURRENCY` | `4` | Background [jobs](/concepts#jobs) (publishing, schedule runs, sign-in refreshes) run at once, at most `64`; one workspace gets at most half while another waits. |

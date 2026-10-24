@@ -140,6 +140,11 @@ func TestS3CheckAndSignedURL(t *testing.T) {
 	if u, _ := pub.SignedURL(ctx, "ab/x y.jpg", time.Hour); u != "https://cdn.example.com/ab/x%20y.jpg" {
 		t.Fatalf("public url: %s", u)
 	}
+	tunnel, _ := blob.NewS3(blob.S3Config{Endpoint: fake.URL, Bucket: "media", AccessKey: "k", SecretKey: "s",
+		PathStyle: true, SignEndpoint: "https://media.example.com"})
+	if u, _ := tunnel.SignedURL(ctx, "ab/x.jpg", time.Hour); !strings.HasPrefix(u, "https://media.example.com/media/ab/x.jpg?") {
+		t.Fatalf("sign endpoint url: %s", u)
+	}
 	if missing := (blob.S3Config{Endpoint: "x"}).Missing(); len(missing) != 3 {
 		t.Fatalf("missing: %v", missing)
 	}

@@ -362,15 +362,16 @@ func storage(uploadDir, dataDir string) (blob.Store, error) {
 		return blob.NewDisk(uploadDir), nil
 	case "s3":
 		cfg := blob.S3Config{
-			Endpoint:  os.Getenv("S3_ENDPOINT"),
-			Region:    os.Getenv("S3_REGION"),
-			Bucket:    os.Getenv("S3_BUCKET"),
-			AccessKey: os.Getenv("S3_ACCESS_KEY_ID"),
-			SecretKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
-			PathStyle: envBool("S3_FORCE_PATH_STYLE", false),
-			Prefix:    os.Getenv("S3_PREFIX"),
-			PublicURL: os.Getenv("S3_PUBLIC_URL"),
-			TempDir:   filepath.Join(dataDir, "tmp"),
+			Endpoint:     os.Getenv("S3_ENDPOINT"),
+			Region:       os.Getenv("S3_REGION"),
+			Bucket:       os.Getenv("S3_BUCKET"),
+			AccessKey:    os.Getenv("S3_ACCESS_KEY_ID"),
+			SecretKey:    os.Getenv("S3_SECRET_ACCESS_KEY"),
+			PathStyle:    envBool("S3_FORCE_PATH_STYLE", false),
+			Prefix:       os.Getenv("S3_PREFIX"),
+			PublicURL:    os.Getenv("S3_PUBLIC_URL"),
+			TempDir:      filepath.Join(dataDir, "tmp"),
+			SignEndpoint: os.Getenv("S3_SIGN_ENDPOINT"),
 		}
 		if missing := cfg.Missing(); len(missing) > 0 {
 			sort.Strings(missing)
