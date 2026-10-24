@@ -36,7 +36,7 @@ How you connect depends on the platform's `auth`:
 | `auth` | What happens |
 |---|---|
 | `token` | The form asks for the platform's credentials (for example a bot token and chat, or a handle and app password). Staqly checks them against the platform, reads the account's name and picture, and stores them sealed. |
-| `oauth2` | **Connect with ...** sends your browser to the platform; after you allow access it comes back to `/channels/callback/<provider>` and the channel is created. The platform needs a [developer app](/channels/developer-apps) whose keys are in the server's environment (`.env`); without them it is listed as **Soon**. |
+| `oauth2` | **Connect with ...** sends your browser to the platform; after you allow access it comes back to `/channels/callback/<provider>` and the channel is created. The platform needs a [developer app](/channels/developer-apps) whose keys are in the server's environment; without them it is listed as **Soon**. |
 
 ### Pick the accounts
 
@@ -148,7 +148,7 @@ has their app keys; token platforms right away.
 
 ### Platforms on a server
 
-Every platform has a switch in the server's environment (`.env`), locally and in the cloud:
+Every platform has a switch in the server's environment, locally and in the cloud:
 
 ```bash title=".env"
 PROVIDER_X_ENABLED=true            # false: turned off on this server
