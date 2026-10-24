@@ -15,6 +15,8 @@ export interface WelcomeDraft {
   name?: string
   goal?: WelcomeGoal
   workspaceName?: string
+  /** Named in the New workspace dialog: the wizard skips its Name your workspace step. */
+  named?: boolean
   /** Platforms to connect once the workspace is ready (provider ids). */
   providers?: string[]
   agent?: 'claude' | 'codex'

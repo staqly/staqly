@@ -1,11 +1,12 @@
 'use client'
 
-import { CircleCheck, CircleX, LoaderCircle, RefreshCw, Share2 } from 'lucide-react'
+import { CircleCheck, CircleHelp, CircleX, LoaderCircle, RefreshCw, Share2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ErrorState } from '@/components/common/error-state'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api, ApiError, errorMessage, type ProviderCheck } from '@/lib/api'
 import { ProviderTile } from '@/lib/providers'
 import { useProviders, useRole } from '@/lib/queries'
@@ -14,7 +15,17 @@ import { cn } from '@/lib/utils'
 
 import { SettingsCard } from './settings-card'
 
-type Outcome = { ok: boolean; hint: string }
+/** `why` is the server's explanation, shown in the tooltip; the line itself says it in plain words. */
+type Outcome = { ok: boolean; key?: string; why?: string }
+
+/** What a failed check means for the people connecting, by the check's key. */
+const HEADLINES: Record<string, (name: string) => string> = {
+  keys: (name) => `${name} isn't set up on this server yet`,
+  platform: (name) => `${name} isn't letting this server connect right now`,
+  return_address: (name) => `${name} needs a secure (https) address before people can connect`,
+  media: (name) => `${name} needs media storage it can reach to post pictures and videos`,
+  unchecked: (name) => `We couldn't reach ${name} to check it. We'll try again soon`,
+}
 
 /** One platform's check, as one line: ready, or the first thing to fix. Never throws; a rate limit is waited out once. */
 async function checkOne(id: string, retry = true): Promise<Outcome> {
@@ -22,7 +33,7 @@ async function checkOne(id: string, retry = true): Promise<Outcome> {
     const c: ProviderCheck = await api.checkProvider(id)
     const problem = c.checks.find((x) => !x.ok)
 
-    return problem ? { ok: false, hint: problem.detail } : { ok: true, hint: '' }
+    return problem ? { ok: false, key: problem.key, why: problem.detail } : { ok: true }
   } catch (e) {
     if (retry && e instanceof ApiError && e.status === 429) {
       await new Promise((resolve) => setTimeout(resolve, (e.retryAfter || 1) * 1000))
@@ -30,7 +41,7 @@ async function checkOne(id: string, retry = true): Promise<Outcome> {
       return checkOne(id, false)
     }
 
-    return { ok: false, hint: `Not checked: ${errorMessage(e)}` }
+    return { ok: false, key: 'unchecked', why: errorMessage(e) }
   }
 }
 
@@ -142,8 +153,22 @@ export function ChannelsHealthCard() {
                 <span className="min-w-0 flex-1">
                   <span className="block font-medium">{p.name}</span>
                   {!busy && !r?.ok && (
-                    <span className="block text-xs text-muted-foreground wrap-anywhere">
-                      {r?.hint ?? 'Set up on this server'}
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      {r ? (HEADLINES[r.key ?? ''] ?? HEADLINES.platform!)(p.name) : 'Set up on this server'}
+                      {r?.why && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={`Why ${p.name} needs attention`}
+                              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                              <CircleHelp className="size-3.5" aria-hidden />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="wrap-anywhere">{r.why}</TooltipContent>
+                        </Tooltip>
+                      )}
                     </span>
                   )}
                 </span>
