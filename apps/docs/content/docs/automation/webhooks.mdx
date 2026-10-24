@@ -256,7 +256,7 @@ Delivery is **at-least-once** and **not ordered**:
 - The event and its delivery rows are written **in the same database transaction** as the
   change (a transactional outbox). If the change commits, the delivery exists.
 - A background worker sends deliveries **outside** any transaction, several **in parallel**
-  (see [Retries](#retries)). It leases each one for 2 minutes before sending; if the process
+  (see [Retries](#retries)). It leases each one for 2 minutes (`WEBHOOK_LEASE`) before sending; if the process
   dies mid-send, the delivery is sent again when the lease runs out. Pending deliveries
   survive restarts.
 - So a receiver can see the same event twice. **Deduplicate on `X-Staqly-Event-Id`** (or the

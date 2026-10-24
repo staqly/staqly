@@ -2,7 +2,7 @@
 // deliveries queued behind a slow receiver are delivered after the restart
 // without loss or duplicates, and the deliveries that were in flight when the
 // process died stay pending under their lease instead of being lost, and go
-// out once it runs out (about two minutes).
+// out once it runs out (WEBHOOK_LEASE, 65 s in e2e.env).
 //
 // The worker sends at most two requests per workspace at once, so two
 // deliveries held open by a slow receiver keep five others queued and
@@ -96,11 +96,11 @@ describe('webhook outbox across a crash', () => {
     for (const d of held) {
       expect(d.status).toBe('pending')
       expect(d.attempts).toBe(1)
-      // Retried when the 2-minute lease of the dead process runs out.
+      // Retried when the lease of the dead process (65 s) runs out.
       const next = Date.parse(d.next_attempt_at!)
 
       expect(next).toBeGreaterThan(Date.now())
-      expect(next).toBeLessThanOrEqual(killedAt + 2 * 60_000 + 5_000)
+      expect(next).toBeLessThanOrEqual(killedAt + 65_000 + 5_000)
     }
   })
 

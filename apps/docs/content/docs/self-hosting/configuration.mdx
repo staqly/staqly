@@ -131,6 +131,7 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `WEBHOOK_ALLOW_LOOPBACK` | `false` | Allow deliveries to `127.0.0.1` / `::1`. Useful with the binary when a receiver (e.g. n8n) runs on the same computer. |
 | `WEBHOOK_RETRY_BASE` | `15s` | First retry delay; doubles per attempt. |
 | `WEBHOOK_RETRY_MAX` | `1h` | Maximum retry delay. |
+| `WEBHOOK_LEASE` | `2m` | How long a delivery being sent stays claimed; one in flight when the process died is sent again after it. Longer than `1m` (the longest attempt). |
 
 ## Alerts
 
