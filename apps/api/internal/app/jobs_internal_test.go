@@ -380,3 +380,73 @@ func TestJobsNewJobReplacesAnOlderRequeue(t *testing.T) {
 		t.Fatalf("swept %d", n)
 	}
 }
+
+// rescueDiscard does to a key's job what River's rescuer does when the process running its last attempt died:
+// it is discarded without running again (and without our worker's last-failure handling).
+func rescueDiscard(t *testing.T, s *Service, key string) {
+	t.Helper()
+	jobs := jobsByKey(t, s, key)
+	if len(jobs) == 0 {
+		t.Fatalf("no job for %s", key)
+	}
+	rescued := `{"at":"2026-10-24T00:00:00Z","attempt":1,"error":"` + riverRescuedError + `","trace":""}`
+	errs := "[" + rescued + "]" // SQLite: one JSON array
+	stmt := "UPDATE river_job SET state = 'discarded', attempt = max_attempts, attempted_at = ?, finalized_at = ?, errors = jsonb(?) WHERE id = ?"
+	if s.pg { // PostgreSQL: an array of jsonb
+		errs = rescued
+		stmt = "UPDATE river_job SET state = 'discarded', attempt = max_attempts, attempted_at = $1, finalized_at = $2, errors = ARRAY[$3::jsonb] WHERE id = $4"
+	}
+	now := s.Now().UTC()
+	if _, err := s.DB.ExecContext(context.Background(), stmt, now, now, errs, jobs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The process died during a job's last attempt: River's rescuer discards the job without running our
+// worker, so what the job was about is settled by the sweep (once): the target fails instead of staying
+// publishing, and a recurring schedule keeps its next run.
+func TestRescuedLastAttemptIsSettled(t *testing.T) {
+	s, p, post := publishTest(t)
+	ctx := context.Background()
+	if err := s.tx(ctx, func(q *db.Queries) error {
+		return s.startPublish(ctx, q, p, p.WorkspaceID, post.ID)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	channelID := post.Targets[0].ChannelID
+	rescueDiscard(t, s, "publish_target:"+post.ID+":"+channelID)
+
+	sc, err := s.CreateSchedule(ctx, p, ScheduleInput{Collection: &post.CollectionID, Name: ptrTo("Hourly"), Kind: ptrTo("recurring"),
+		Rule: &ScheduleRule{EveryMinutes: 60}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rescueDiscard(t, s, "run_schedule:"+sc.ID)
+
+	if n := s.settleRescuedJobs(ctx); n != 2 {
+		t.Fatalf("settled %d rescued jobs, want 2", n)
+	}
+	target, err := s.Q.GetTarget(ctx, db.GetTargetParams{PostID: post.ID, ChannelID: channelID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := s.Q.GetPostByID(ctx, post.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Status != "failed" || row.Status != "failed" {
+		t.Fatalf("target %s, post %s after the rescue, want both failed", target.Status, row.Status)
+	}
+	live := 0
+	for _, j := range jobsByKey(t, s, "run_schedule:"+sc.ID) {
+		if jobStatus(j.State) == "queued" {
+			live++
+		}
+	}
+	if live != 1 {
+		t.Fatalf("%d queued runs of the recurring schedule after the rescue, want 1", live)
+	}
+	if n := s.settleRescuedJobs(ctx); n != 0 {
+		t.Fatalf("settled %d again, want 0", n)
+	}
+}
