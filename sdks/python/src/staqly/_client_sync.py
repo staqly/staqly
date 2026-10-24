@@ -1773,10 +1773,16 @@ class WorkspaceResource(_Resource):
         *,
         name: str | None = None,
         timezone: str | None = None,
+        logo: str | None = None,
         request_options: RequestOptions | None = None,
     ) -> Workspace:
-        """Renames the workspace and/or sets its time zone, an IANA name (needs the ``admin`` scope)."""
-        body = {k: v for k, v in {"name": name, "timezone": timezone}.items() if v is not None}
+        """Renames the workspace, sets its time zone (an IANA name) and/or its logo.
+
+        The logo is a PNG or JPEG ``data:`` URL of at most 64 KB (``""`` for staqly's).
+        Needs the ``admin`` scope.
+        """
+        fields = {"name": name, "timezone": timezone, "logo": logo}
+        body = {k: v for k, v in fields.items() if v is not None}
         r = self._http.request(
             RequestSpec("PATCH", "/v1/workspace", json=body, options=_opts(request_options))
         )

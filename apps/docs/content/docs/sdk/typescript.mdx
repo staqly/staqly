@@ -470,7 +470,7 @@ Every method takes `RequestOptions` (`timeout`, `maxRetries`, `idempotencyKey`, 
 
 | Method | Endpoint |
 |---|---|
-| `workspace.get()`, `workspace.rename(name)`, `workspace.update({ name, timezone })` | `GET` / `PATCH /v1/workspace` |
+| `workspace.get()`, `workspace.rename(name)`, `workspace.update({ name, timezone, logo })` | `GET` / `PATCH /v1/workspace` |
 | `workspace.usage()` | `GET /v1/workspace/usage` |
 | `workspace.members()` | `GET /v1/members` (cloud) |
 | `workspace.agents()`, `workspace.forgetAgent(id)` | `GET /v1/agents`, `DELETE /v1/agents/{id}` |

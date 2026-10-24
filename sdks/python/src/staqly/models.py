@@ -202,6 +202,8 @@ class Workspace(StaqlyModel):
     created_at: datetime
     #: IANA time zone name: post repeats and schedule rules without ``tz`` follow it.
     timezone: str = "UTC"
+    #: The workspace's logo, a PNG or JPEG ``data:`` URL; empty for staqly's.
+    logo: str = ""
 
 
 class Usage(StaqlyModel):

@@ -25,8 +25,8 @@ export class WorkspaceResource extends APIResource {
     return this.http.request({ method: 'PATCH', path: '/v1/workspace', body: { name }, options })
   }
 
-  /** Renames the workspace and/or sets its time zone, an IANA name (needs the `admin` scope). */
-  update(body: { name?: string; timezone?: string }, options?: RequestOptions): Promise<Workspace> {
+  /** Renames the workspace, sets its time zone (an IANA name) and/or its logo (a PNG or JPEG data: URL, at most 64 KB; `''` for staqly's). Needs the `admin` scope. */
+  update(body: { name?: string; timezone?: string; logo?: string }, options?: RequestOptions): Promise<Workspace> {
     return this.http.request({ method: 'PATCH', path: '/v1/workspace', body, options })
   }
 

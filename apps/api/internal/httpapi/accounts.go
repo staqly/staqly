@@ -343,13 +343,11 @@ func (s *Server) switchWorkspace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renameMe(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Name string `json:"name"`
-	}
+	var in app.AccountUpdate
 	if !decode(w, r, &in) {
 		return
 	}
-	out, err := s.svc.RenameMe(r.Context(), principal(r), in.Name)
+	out, err := s.svc.RenameMe(r.Context(), principal(r), in)
 	respond(w, r, 200, out, err)
 }
 

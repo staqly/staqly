@@ -222,7 +222,7 @@ func (q *Queries) GetSessionByHash(ctx context.Context, tokenHash string) (Sessi
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
-SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone FROM workspaces WHERE id = ?
+SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone, logo FROM workspaces WHERE id = ?
 `
 
 func (q *Queries) GetWorkspace(ctx context.Context, id string) (Workspace, error) {
@@ -244,12 +244,13 @@ func (q *Queries) GetWorkspace(ctx context.Context, id string) (Workspace, error
 		&i.OnboardedAt,
 		&i.Entitlements,
 		&i.Timezone,
+		&i.Logo,
 	)
 	return i, err
 }
 
 const getWorkspaceByRecoveryVerifier = `-- name: GetWorkspaceByRecoveryVerifier :one
-SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone FROM workspaces WHERE recovery_verifier = ?
+SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone, logo FROM workspaces WHERE recovery_verifier = ?
 `
 
 func (q *Queries) GetWorkspaceByRecoveryVerifier(ctx context.Context, recoveryVerifier string) (Workspace, error) {
@@ -271,6 +272,7 @@ func (q *Queries) GetWorkspaceByRecoveryVerifier(ctx context.Context, recoveryVe
 		&i.OnboardedAt,
 		&i.Entitlements,
 		&i.Timezone,
+		&i.Logo,
 	)
 	return i, err
 }
@@ -488,6 +490,21 @@ func (q *Queries) UpdateRecoveryVerifier(ctx context.Context, arg UpdateRecovery
 		arg.UpdatedAt,
 		arg.ID,
 	)
+	return err
+}
+
+const updateWorkspaceLogo = `-- name: UpdateWorkspaceLogo :exec
+UPDATE workspaces SET logo = ?, updated_at = ? WHERE id = ?
+`
+
+type UpdateWorkspaceLogoParams struct {
+	Logo      string `json:"logo"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+}
+
+func (q *Queries) UpdateWorkspaceLogo(ctx context.Context, arg UpdateWorkspaceLogoParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspaceLogo, arg.Logo, arg.UpdatedAt, arg.ID)
 	return err
 }
 

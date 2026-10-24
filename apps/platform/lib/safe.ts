@@ -77,3 +77,11 @@ export function safeCssColor(value: string | null | undefined): string | undefin
 
   return HEX_COLOR.test(v) || FUNC_COLOR.test(v) || NAMED_COLOR.test(v) ? v : undefined
 }
+
+/** A picture uploaded to staqly (the API accepts only these): a PNG or JPEG data: URL. */
+const DATA_IMAGE = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+=*$/
+
+/** An image `src` from the API: an http(s) URL (a provider's picture) or an uploaded PNG/JPEG data: URL. */
+export function safeImageSrc(value: string | null | undefined): string | null {
+  return value && DATA_IMAGE.test(value) ? value : safeHttpUrl(value)
+}

@@ -936,7 +936,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Change the signed-in person's name (how members, the activity log and emails show them) */
+        /**
+         * Change the signed-in person's name (how members, the activity log and emails show them) or picture
+         * @description Send `name`, `avatar` or both; fields left out stay as they are.
+         */
         patch: operations["renameMe"];
         trace?: never;
     };
@@ -1182,8 +1185,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Rename the workspace or change its time zone (admin)
-         * @description Send the new `name`, `timezone` (an IANA name; an unknown zone is 422), or both. Fields left out stay as they are.
+         * Rename the workspace, change its time zone or its logo (admin)
+         * @description Send the new `name`, `timezone` (an IANA name; an unknown zone is 422), `logo`, or any of them. Fields left out stay as they are.
          */
         patch: operations["updateWorkspace"];
         trace?: never;
@@ -3909,6 +3912,8 @@ export interface components {
         Workspace: {
             id: string;
             name: string;
+            /** @description The workspace's logo as a PNG or JPEG data: URL; empty for staqly's. */
+            logo: string;
             /**
              * @description starter, plus, pro or business (cloud; an operator may also set a plan of their own), unlocked (Community Edition)
              * @example plus
@@ -7028,7 +7033,12 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    name: string;
+                    name?: string;
+                    /**
+                     * @description A PNG or JPEG as a data: URL, at most 64 KB and 512 px a side (no SVG). Kept over the sign-in provider's picture; an empty string drops it (the provider's picture returns at the next sign-in).
+                     * @example data:image/png;base64,iVBORw0KGgo...
+                     */
+                    avatar?: string;
                 };
             };
         };
@@ -7677,6 +7687,11 @@ export interface operations {
                      * @example Europe/Warsaw
                      */
                     timezone?: string;
+                    /**
+                     * @description A PNG or JPEG as a data: URL, at most 64 KB and 512 px a side (no SVG); an empty string brings back staqly's logo.
+                     * @example data:image/png;base64,iVBORw0KGgo...
+                     */
+                    logo?: string;
                 };
             };
         };

@@ -1,6 +1,5 @@
 'use client'
 
-import { LogoMark } from '@staqly/brand/logo'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
@@ -38,7 +37,7 @@ import { daysLeft } from '@/components/billing/billing-format'
 import { PlanBadge } from '@/components/plans/plan-badge'
 import { NewWorkspaceDialog } from '@/components/settings/new-workspace-dialog'
 import { UserAvatar } from '@/components/settings/user-avatar'
-import { WorkspaceTile } from '@/components/shell/workspace-tile'
+import { WorkspaceLogo, WorkspaceTile } from '@/components/shell/workspace-tile'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -185,7 +184,7 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
       aria-label={triggerLabel}
       data-testid="workspace-menu-trigger"
     >
-      <LogoMark className="size-7" />
+      <WorkspaceLogo src={ws?.logo} className="size-7" />
       <span className="min-w-0 truncate text-[15px] font-semibold">{name}</span> {plan && <PlanBadge plan={plan} />}
       <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
     </button>
@@ -197,7 +196,7 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
       aria-label={triggerLabel}
       data-testid="workspace-menu-trigger"
     >
-      <LogoMark className="size-8" />
+      <WorkspaceLogo src={ws?.logo} className="size-8" />
       <div className="grid min-w-0 flex-1 text-left leading-tight">
         <span className="truncate text-sm font-semibold" data-testid="workspace-name">
           {name}
@@ -218,7 +217,7 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
         className="w-[min(18rem,calc(100vw-1rem))] [&_[role=menuitem]]:pointer-coarse:min-h-11"
       >
         <DropdownMenuLabel className="flex items-center gap-2 py-2">
-          <LogoMark className="size-6" />
+          <WorkspaceLogo src={ws?.logo} className="size-6" />
           <div className="grid min-w-0 leading-tight">
             <span className="truncate text-sm font-semibold text-foreground" title={name}>
               {name}
