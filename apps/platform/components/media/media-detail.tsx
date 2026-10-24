@@ -23,7 +23,7 @@ import { folderPath } from '@/components/media/media-folders'
 import { deletedToast } from '@/components/media/media-trash'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -95,6 +95,7 @@ export function MediaDetail({
 const sameTags = (a: string[], b: string[]) => a.length === b.length && a.every((t, i) => t === b[i])
 
 type Tab = 'file' | 'details' | 'fits' | 'used'
+type Saved = { name: string; alt: string; folder: string; tags: string[] }
 
 function DetailForm({
   item,
@@ -122,6 +123,9 @@ function DetailForm({
   const [folder, setFolder] = useState(initial.folder)
   const [tags, setTags] = useState(initial.tags)
   const [tab, setTab] = useState<Tab>('file')
+  // Errors show from the first Save on, then follow every change (the dashboard's form pattern).
+  const [submitted, setSubmitted] = useState(false)
+  const nameError = submitted && !name.trim() ? 'Give the file a name.' : undefined
   const [picking, setPicking] = useState(false)
   const [purging, setPurging] = useState(false)
   const kind = mediaKind(item.mime_type)
@@ -138,27 +142,28 @@ function DetailForm({
   const fitCount = fits.filter((r) => r.verdict.tone === 'fits').length
 
   const save = useMutation({
-    mutationFn: () => {
-      const patch: MediaPatch = { name: name.trim(), alt_text: alt.trim() }
+    mutationFn: (sent: Saved) => {
+      const patch: MediaPatch = { name: sent.name, alt_text: sent.alt }
 
-      if (folder !== saved.folder) {
-        patch.folder_id = folder
+      if (sent.folder !== saved.folder) {
+        patch.folder_id = sent.folder
       }
 
-      if (!sameTags(tags, saved.tags)) {
-        patch.tags = tags
+      if (!sameTags(sent.tags, saved.tags)) {
+        patch.tags = sent.tags
       }
 
       return api.updateMedia(item.id, patch)
     },
-    onSuccess: (m) => {
+    onSuccess: (m, sent) => {
       const next = { name: m.original_name, alt: m.alt_text ?? '', folder: m.folder_id ?? '', tags: m.tags ?? [] }
 
       setSaved(next)
-      setName(next.name)
-      setAlt(next.alt)
-      setFolder(next.folder)
-      setTags(next.tags)
+      // The fields stay editable while saving: what was typed meanwhile stays, only what was sent takes the answer.
+      setName((cur) => (cur.trim() === sent.name ? next.name : cur))
+      setAlt((cur) => (cur.trim() === sent.alt ? next.alt : cur))
+      setFolder((cur) => (cur === sent.folder ? next.folder : cur))
+      setTags((cur) => (sameTags(cur, sent.tags) ? next.tags : cur))
       patchMedia(qc, [m.id], (old) => ({ ...old, ...m }))
       // Lists the file may now belong to: another folder or tag, a search or a by-name order.
       invalidateLists(
@@ -294,14 +299,16 @@ function DetailForm({
         onSubmit={(e) => {
           e.preventDefault()
 
+          setSubmitted(true)
+
           if (!name.trim()) {
             setTab('file')
-            toast.error('Give the file a name.')
+            requestAnimationFrame(() => document.getElementById('media-name')?.focus())
 
             return
           }
 
-          save.mutate()
+          save.mutate({ name: name.trim(), alt: alt.trim(), folder, tags })
         }}
       >
         <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="block min-h-0 flex-1 overflow-y-auto">
@@ -338,7 +345,7 @@ function DetailForm({
           </div>
 
           <TabsContent value="file" className="grid content-start gap-4 p-4">
-            <Field>
+            <Field data-invalid={!!nameError || undefined}>
               <FieldLabel htmlFor="media-name" required>
                 Name
               </FieldLabel>
@@ -348,8 +355,10 @@ function DetailForm({
                 maxLength={200}
                 disabled={!editable}
                 aria-required
+                aria-invalid={!!nameError || undefined}
                 onChange={(e) => setName(e.target.value)}
               />
+              <FieldError>{nameError}</FieldError>
             </Field>
             {visual && (
               <Field>
