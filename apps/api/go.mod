@@ -13,6 +13,7 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/posthog/posthog-go v1.37.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/riverqueue/river v0.49.0
 	github.com/riverqueue/river/riverdriver v0.49.0
@@ -20,12 +21,12 @@ require (
 	github.com/riverqueue/river/riverdriver/riversqlite v0.49.0
 	github.com/riverqueue/river/rivertype v0.49.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
-	github.com/yuin/goldmark v1.8.2
+	github.com/yuin/goldmark v1.8.6
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/image v0.47.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
-	modernc.org/sqlite v1.60.1
+	modernc.org/sqlite v1.61.0
 	mvdan.cc/xurls/v2 v2.6.0
 )
 
@@ -58,7 +59,6 @@ require (
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/posthog/posthog-go v1.37.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.49.0 // indirect
 	github.com/riverqueue/river/rivershared v0.49.0 // indirect
@@ -81,7 +81,7 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
-	modernc.org/libc v1.78.0 // indirect
+	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
