@@ -2,7 +2,7 @@
 
 import { ProviderTile } from '@staqly/brand/providers'
 import { ImageUp, Lightbulb, Ratio } from 'lucide-react'
-import { useEffect, useId, useState, type DragEvent } from 'react'
+import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
 
 import { CopyButton, fieldClass } from '@/components/tools/shared'
 import {
@@ -82,6 +82,8 @@ export function AspectRatioChecker() {
   const [mode, setMode] = useState<Mode>('fill')
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
+  // The latest pick wins: a large video picked first must not replace a picture picked after it.
+  const picks = useRef(0)
   const w = Number(width)
   const h = Number(height)
   const valid = Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0 && w <= 100_000 && h <= 100_000
@@ -99,6 +101,8 @@ export function AspectRatioChecker() {
   )
 
   function load(file: File | undefined) {
+    const pick = ++picks.current
+
     setError('')
 
     if (!file) {
@@ -115,6 +119,12 @@ export function AspectRatioChecker() {
 
     const url = URL.createObjectURL(file)
     const done = (nw: number, nh: number) => {
+      if (pick !== picks.current) {
+        URL.revokeObjectURL(url)
+
+        return
+      }
+
       if (!nw || !nh) {
         URL.revokeObjectURL(url)
         setError('Could not read the size of this file.')
@@ -152,6 +162,7 @@ export function AspectRatioChecker() {
   const typed = (set: (v: string) => void) => (v: string) => {
     set(v.replace(/\D/g, ''))
     setMedia(null) // a typed size no longer describes the file
+    picks.current++ // nor does a file still loading
   }
 
   return (
