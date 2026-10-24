@@ -1,6 +1,6 @@
 'use client'
 
-import { ImageUp } from 'lucide-react'
+import { ImageUp, Trash2 } from 'lucide-react'
 import { useId, useRef, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -49,8 +49,17 @@ export function ImagePicker({
             <ImageUp /> {src ? `Replace ${label}` : `Upload ${label}`}
           </Button>
           {src && (
-            <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => onChange('')}>
-              Remove
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-destructive hover:text-destructive"
+              aria-label={`Remove ${label}`}
+              tooltip={`Remove ${label}`}
+              disabled={pending}
+              onClick={() => onChange('')}
+            >
+              <Trash2 />
             </Button>
           )}
         </div>
