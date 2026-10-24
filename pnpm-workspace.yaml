@@ -79,3 +79,6 @@ patchedDependencies:
 overrides:
   # @scalar/json-magic (docs build only) pins undici 7.29.1 exactly; 7.30.1 fixes its advisories. Drop when it moves on.
   'undici@7.29.1': 7.30.1
+  # express 5.3 (via @modelcontextprotocol/sdk, shadcn's CLI: dashboard dev only) takes body-parser ^2.3; 2.4.0 fixes
+  # a DoS on trailing bytes after a compressed body. Drop when express requires it.
+  'body-parser@<2.4.0': ^2.4.0
