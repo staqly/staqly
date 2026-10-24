@@ -118,7 +118,7 @@ function UsageMeter({
 
 const count = (n: number) => n.toLocaleString('en-US')
 
-/** One platform's own allowance: a compact chip (name, used / limit, a tiny bar) in the Posts per platform row. */
+/** One platform's own allowance: one line (name, used / limit, a bar) in the Posts per platform list. */
 function PlatformChip({
   id,
   name,
@@ -140,12 +140,12 @@ function PlatformChip({
 
   return (
     <li
-      className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border bg-background px-2.5 py-1 text-xs"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm"
       data-testid={`platform-posts-${id}`}
       data-level={level}
       title={hint}
     >
-      <span className="font-medium">{name}</span>
+      <span className="min-w-32 font-medium">{name}</span>
       <span className="text-muted-foreground tabular-nums">
         <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> / {count(max)}
       </span>
@@ -156,7 +156,7 @@ function PlatformChip({
         aria-valuemax={max}
         aria-valuenow={used}
         aria-valuetext={`${count(used)} of ${count(max)}`}
-        className="h-1.5 w-10 shrink-0 overflow-hidden rounded-full bg-muted"
+        className="h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-muted"
       >
         <span
           className={cn('block h-full rounded-full transition-[width] duration-500', tone.fill)}
@@ -377,14 +377,18 @@ export function PlanUsagePage() {
     u && !isLocal && !unlocked ? PLATFORM_POSTS.filter((p) => (u.plan?.limits?.[p.key] ?? UNLIMITED) !== UNLIMITED) : []
   const platformPosts =
     u && metered.length > 0 ? (
-      <div
-        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-3.5 py-2.5 sm:px-4"
-        data-testid="platform-posts"
-      >
-        <span id="platform-posts-heading" className="text-[13px] font-medium sm:text-sm">
-          Posts per platform
-        </span>
-        <ul className="flex min-w-0 flex-wrap gap-2" aria-labelledby="platform-posts-heading">
+      <div className="grid gap-2 rounded-xl border bg-card p-3.5 sm:p-4" data-testid="platform-posts">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <span id="platform-posts-heading" className="text-[13px] font-medium sm:text-sm">
+            Posts per platform
+          </span>
+          <p className="text-xs text-muted-foreground">
+            {metered.some((p) => p.id === 'x')
+              ? 'Included in the plan; bought X posts come on top.'
+              : 'Included in the plan.'}
+          </p>
+        </div>
+        <ul className="divide-y rounded-lg border bg-background" aria-labelledby="platform-posts-heading">
           {metered.map((p) => (
             <PlatformChip
               key={p.key}
@@ -397,11 +401,6 @@ export function PlanUsagePage() {
             />
           ))}
         </ul>
-        <p className="text-xs text-muted-foreground sm:ml-auto">
-          {metered.some((p) => p.id === 'x')
-            ? 'Included in the plan; bought X posts come on top.'
-            : 'Included in the plan.'}
-        </p>
       </div>
     ) : null
 
@@ -498,8 +497,8 @@ export function PlanUsagePage() {
 
       <div className="mt-6 grid gap-8">
         {summary}
-        {usageGroup}
         {extras}
+        {usageGroup}
         {payments}
       </div>
     </PageContainer>
