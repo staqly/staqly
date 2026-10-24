@@ -278,4 +278,15 @@ describe('schedule page', () => {
       window.matchMedia = original
     }
   })
+
+  it('switching from this month to the week opens the week of today, not of the 1st', async () => {
+    const first = new Date()
+
+    first.setDate(1)
+    nav.set('/schedule', `view=month&at=${dayKey(first)}`)
+    mockApi({ 'GET /v1/posts': { data: [] }, 'GET /v1/collections': { data: [] }, 'GET /v1/events': { data: [] } })
+    renderWithProviders(<SchedulePage />, { mode: 'local' })
+    await userEvent.setup().click(await screen.findByRole('radio', { name: 'Week' }))
+    expect(nav.replace).toHaveBeenLastCalledWith(expect.stringContaining(`at=${dayKey(new Date())}`), expect.anything())
+  })
 })
