@@ -1,5 +1,6 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { DatePicker } from '@/components/common/date-picker'
@@ -10,6 +11,49 @@ import { addDays, dayFromKey, dayKey } from '@/lib/schedule'
 const name = (d: Date) => d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
 
 describe('calendar', () => {
+  it.each([
+    ['2026-10-31', 'ArrowRight', '2026-11-01'],
+    ['2026-11-01', 'ArrowLeft', '2026-10-31'],
+    ['2026-12-31', 'ArrowRight', '2027-01-01'],
+    ['2027-01-01', 'ArrowUp', '2026-12-25'],
+  ])('keeps keyboard focus from %s via %s to %s', async (from, key, to) => {
+    const selected = dayFromKey(from)
+    const target = dayFromKey(to)
+    const onSelect = vi.fn<(d: Date) => void>()
+    const user = userEvent.setup()
+
+    function Picker() {
+      const [month, setMonth] = useState(selected)
+
+      return <Calendar mode="single" selected={selected} onSelect={onSelect} month={month} onMonthChange={setMonth} />
+    }
+
+    render(<Picker />)
+    screen.getByRole('button', { name: name(selected) }).focus()
+    await user.keyboard(`{${key}}`)
+    await waitFor(() => expect(screen.getByRole('button', { name: name(target) })).toHaveFocus())
+    await user.keyboard('{Enter}')
+    expect(onSelect).toHaveBeenLastCalledWith(target)
+  })
+
+  it('moves back to the selected day after focus moves independently', async () => {
+    const selected = dayFromKey('2026-10-15')
+    const user = userEvent.setup()
+
+    render(
+      <Calendar
+        mode="single"
+        selected={selected}
+        onSelect={vi.fn<(d: Date) => void>()}
+        month={selected}
+        onMonthChange={vi.fn<(d: Date) => void>()}
+      />,
+    )
+    screen.getByRole('button', { name: name(addDays(selected, -1)) }).focus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('button', { name: name(selected) })).toHaveFocus()
+  })
+
   it('range mode: the first click starts a range, the second ends it (ordered), a third starts over', () => {
     const a = dayFromKey('2026-10-12')
     const b = dayFromKey('2026-10-18')

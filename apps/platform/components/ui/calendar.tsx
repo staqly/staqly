@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { useNow } from '@/hooks/use-now'
@@ -52,6 +52,16 @@ export function Calendar({
   const single = mode === 'single' ? (selected as Date | null) : null
   const [hover, setHover] = useState<string | null>(null)
   const [focus, setFocus] = useState(() => dayKey(single ?? range?.from ?? month))
+  const pendingFocus = useRef(false)
+
+  useLayoutEffect(() => {
+    if (pendingFocus.current) {
+      // Changing months replaces the day buttons, including the adjacent month's visible days.
+      document.getElementById(`${id}-day-${focus}`)?.focus()
+      pendingFocus.current = false
+    }
+  })
+
   const months = Array.from(
     { length: numberOfMonths },
     (_, i) => new Date(month.getFullYear(), month.getMonth() + i, 1),
@@ -84,18 +94,13 @@ export function Calendar({
     const lastShown = new Date(month.getFullYear(), month.getMonth() + numberOfMonths, 0)
 
     if (next < new Date(month.getFullYear(), month.getMonth(), 1)) {
+      pendingFocus.current = true
       onMonthChange(new Date(next.getFullYear(), next.getMonth(), 1))
     } else if (next > lastShown) {
+      pendingFocus.current = true
       onMonthChange(new Date(next.getFullYear(), next.getMonth() - numberOfMonths + 1, 1))
-    }
-
-    const focusNext = () => document.getElementById(`${id}-day-${k}`)?.focus()
-
-    // Same month: the button exists; another month renders first.
-    if (document.getElementById(`${id}-day-${k}`)) {
-      focusNext()
     } else {
-      requestAnimationFrame(focusNext)
+      document.getElementById(`${id}-day-${k}`)?.focus()
     }
   }
 
