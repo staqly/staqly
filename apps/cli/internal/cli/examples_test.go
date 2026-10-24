@@ -9,21 +9,44 @@ import (
 )
 
 // Help examples and texts about channels, posts and schedules use only the platforms that can be connected
-// today (your own automation and X); every other catalog entry is "soon" (apps/api internal/providers).
+// today: those with an implementation that registers itself; the catalog's other entries are "soon"
+// (apps/api internal/providers).
 func TestHelpNamesOnlyAvailablePlatforms(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("..", "..", "..", "api", "internal", "providers", "catalog.go"))
+	dir := filepath.Join("..", "..", "..", "api", "internal", "providers")
+	b, err := os.ReadFile(filepath.Join(dir, "catalog.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	available := map[string]bool{"custom": true, "x": true}
+	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	available := map[string]bool{}
+	registered := regexp.MustCompile(`Register\(\w+\{NewBase\("([a-z_]+)"`)
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || strings.HasSuffix(f, "catalog.go") {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range registered.FindAllStringSubmatch(string(src), -1) {
+			available[m[1]] = true
+		}
+	}
+	if !available["custom"] || !available["x"] {
+		t.Fatalf("implementations not parsed: %v", available)
+	}
 	soon := map[string]bool{}
-	for _, m := range regexp.MustCompile(`\{"([a-z_]+)", "([^"]+)", Auth`).FindAllStringSubmatch(string(b), -1) {
+	catalog := regexp.MustCompile(`\{"([a-z_]+)", "([^"]+)", Auth`).FindAllStringSubmatch(string(b), -1)
+	for _, m := range catalog {
 		if !available[m[1]] {
 			soon[m[1]], soon[strings.ToLower(m[2])] = true, true
 		}
 	}
-	if len(soon) < 20 {
-		t.Fatalf("catalog not parsed: %v", soon)
+	if len(catalog) < 20 {
+		t.Fatalf("catalog not parsed: %d entries", len(catalog))
 	}
 	word := regexp.MustCompile(`[a-z_.]+`)
 	var walk func(path string, c *Command)

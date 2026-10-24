@@ -2344,7 +2344,7 @@ paths:
         settles when its last target does.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [published, failed] }, url: { type: string, description: "Where the post lives now" }, external_id: { type: string, description: "The platform's id of the post" }, error: { type: string, description: "Why it failed" } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [published, failed] }, url: { type: string, maxLength: 2048, description: "Where the post lives now" }, external_id: { type: string, maxLength: 500, description: "The platform's id of the post" }, error: { type: string, description: "Why it failed" } } } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Post" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }

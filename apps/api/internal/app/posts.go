@@ -1459,6 +1459,13 @@ func (s *Service) ReportTargetResult(ctx context.Context, p Principal, postID, c
 	if in.Status != "published" && in.Status != "failed" {
 		return Post{}, invalid("status", "must be published or failed")
 	}
+	// Both are stored on the target and copied into events and webhooks.
+	if len(in.ExternalID) > 500 {
+		return Post{}, invalid("external_id", "must be at most 500 characters")
+	}
+	if len(in.URL) > 2048 {
+		return Post{}, invalid("url", "must be at most 2048 characters")
+	}
 	if _, _, err := s.loadPost(ctx, s.Q, p.WorkspaceID, postID); err != nil {
 		return Post{}, err
 	}
