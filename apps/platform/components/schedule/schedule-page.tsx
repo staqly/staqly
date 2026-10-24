@@ -195,7 +195,8 @@ const Entry = memo(function Entry({
         variant === 'cell'
           ? 'min-h-9 px-2.5 pointer-coarse:min-h-10 py-1.5 text-[13px]'
           : 'min-h-11 gap-2 px-3 py-2 text-sm',
-        muted && 'opacity-70',
+        // Published: a quieter card, not a see-through one (text under opacity drops below 4.5:1).
+        muted && 'bg-muted/50 shadow-none',
         draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
       )}
       style={color ? { borderLeftColor: color } : undefined}
@@ -203,8 +204,12 @@ const Entry = memo(function Entry({
       {/* One line: the state as an icon, the time, the title, the platform's icon. The state's name, the channel's
           name and the collection are in the title and the accessible name. */}
       <StateIcon aria-hidden className={cn('size-4 shrink-0', tone.text, state === 'publishing' && 'animate-spin')} />
-      <span className="shrink-0 font-medium text-foreground tabular-nums">{time}</span>{' '}
-      <span className="min-w-0 flex-1 truncate font-medium text-foreground">{title}</span>
+      <span className={cn('shrink-0 font-medium tabular-nums', muted ? 'text-muted-foreground' : 'text-foreground')}>
+        {time}
+      </span>{' '}
+      <span className={cn('min-w-0 flex-1 truncate font-medium', muted ? 'text-muted-foreground' : 'text-foreground')}>
+        {title}
+      </span>
       {target && <ProviderTile id={target.provider} className="size-5 shrink-0" />}
     </button>
   )
@@ -446,17 +451,19 @@ export function SchedulePage() {
     [range.publish_after, range.publish_before],
   )
   // No polling: the recent events tell when someone else changed a post.
-  const { data, error, isLoading, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } = usePostsInfinite(query)
+  const { data, error, isLoading, refetch, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } =
+    usePostsInfinite(query)
 
   // Published by the queue, scheduled by an agent or a slot: refetch when someone else changes a post.
   useRefetchOnForeignChange(refetch)
 
-  // The whole range at once: a calendar cannot show "load more".
+  // The whole range at once: a calendar cannot show "load more". A page that failed waits for Try again (which
+  // refetches and clears the error) instead of being asked for again in a loop.
   useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage) {
+    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) {
       void fetchNextPage()
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage])
 
   const items = useMemo(() => data?.pages.flatMap((p) => p.data) ?? NO_POSTS, [data])
   // By local day (month, list) and by day and hour (day, week), each publish time parsed once.
