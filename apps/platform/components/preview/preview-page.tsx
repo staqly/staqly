@@ -530,19 +530,25 @@ export function PreviewPage() {
     setReviewer(readReviewer())
   }, [])
 
-  // A selection inside the post offers "Comment" next to it (mouse, touch and keyboard selections alike).
+  // A selection inside the post offers "Comment" next to it (mouse, touch and keyboard selections alike). The button
+  // is placed on the screen, so it is placed again when the page scrolls or resizes under the selection.
   useEffect(() => {
     let frame = 0
     const onChange = () => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => setPending(readSelection()))
     }
+    const move = { passive: true, capture: true } as const
 
     document.addEventListener('selectionchange', onChange)
+    window.addEventListener('scroll', onChange, move)
+    window.addEventListener('resize', onChange)
 
     return () => {
       cancelAnimationFrame(frame)
       document.removeEventListener('selectionchange', onChange)
+      window.removeEventListener('scroll', onChange, move)
+      window.removeEventListener('resize', onChange)
     }
   }, [])
 
