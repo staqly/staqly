@@ -15,10 +15,11 @@ on:
 permissions:
   contents: read
 
-# A newer push cancels the build still running: only the latest docs get deployed.
+# One deployment at a time. Never cancelled: a deployment stopped halfway can leave Pages broken; a
+# newer push waits and deploys right after.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
