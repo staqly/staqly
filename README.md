@@ -27,7 +27,7 @@
   <a href="https://docs.staqly.ai/cli">CLI</a>
 </p>
 
-<p align="center"><strong>Publish today</strong> to <strong>X</strong>, <strong>LinkedIn</strong> and through your own automation: n8n, Make, Zapier or a script of yours.<br><strong>More native platforms, rolling out:</strong></p>
+<p align="center"><strong>Publish directly</strong> to X, LinkedIn, Instagram, TikTok, YouTube and two dozen more platforms,<br>and anywhere else through your own automation: n8n, Make, Zapier or a script of yours.</p>
 <p align="center">
   <img alt="X" src="https://cdn.simpleicons.org/x/8b949e" width="26">&nbsp;
   <img alt="Bluesky" src="https://cdn.simpleicons.org/bluesky" width="26">&nbsp;
@@ -70,7 +70,7 @@ You stay in charge from one calendar on your desktop or phone. Nothing leaves yo
 | 📅 **Calendar** | Day, week, month and list views. One card per channel. Drag a post to another hour, or press **+** on a free slot. |
 | ✍️ **Composer** | Write once, pick channels, give a channel its own text, with a character counter per platform. Bold, italic, lists and links become plain text every platform takes. |
 | 🖼️ **Media** | A media library for pictures and videos, with a built-in image editor to crop, resize and add text before you post. |
-| 💬 **Comments** | Add comments under a post: on X they go out as a thread, each after its own delay. |
+| 💬 **Comments** | Add comments under a post: on X, LinkedIn, Threads, Bluesky and the other platforms that take replies they go out under it, each after its own delay. |
 | 🔂 **Repeat** | Publish a post again every day, week or month: the next copy is scheduled as soon as one goes out. |
 | 🔁 **Collection schedules** | Weekdays at 09:00, every six hours or once. The next waiting post, chosen posts or all of them, in your time zone. |
 | 🤖 **Agents that refill** | An empty schedule asks your agent (`list_requested_work`) or calls your endpoint, which returns new posts. |
@@ -162,7 +162,7 @@ flowchart LR
   A[Claude Code · Codex · OpenCode] -- MCP --> S((staqly))
   N[n8n · scripts · CLI · SDKs] -- REST --> S
   P[You: dashboard and phone] --> S
-  S -- schedules and job queue --> C[X today, more platforms rolling out]
+  S -- schedules and job queue --> C[X, LinkedIn, Instagram, TikTok and more]
   S -- post.publish_requested --> O[Your own automation]
   O -- result and link --> S
   S -- webhooks and alerts --> T[Your tools and your phone]

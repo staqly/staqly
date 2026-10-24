@@ -97,15 +97,11 @@ function Integrations() {
   )
 }
 
-// From the provider catalog (apps/api/internal/providers): [id, name]. Available: the ones registered with
-// StatusAvailable (x.go, custom.go); every other catalog entry is "soon" and is never shown as available.
-const channelsLive: [string, string][] = [
+// From the provider catalog (apps/api/internal/providers): [id, name], the ones registered with StatusAvailable,
+// the creator platforms first. Farcaster and Skool are still "soon" (catalog.go) and are never shown here.
+const channels: [string, string][] = [
   ['x', 'X'],
   ['linkedin', 'LinkedIn'],
-  ['custom', 'Your own automation'],
-]
-// Not built yet (catalog.go), the creator platforms first.
-const channelsSoon: [string, string][] = [
   ['instagram', 'Instagram'],
   ['tiktok', 'TikTok'],
   ['youtube', 'YouTube'],
@@ -124,6 +120,7 @@ const channelsSoon: [string, string][] = [
   ['wordpress', 'WordPress'],
   ['medium', 'Medium'],
   ['devto', 'Dev.to'],
+  ['custom', 'Your own automation'],
 ]
 
 function Channels() {
@@ -133,11 +130,12 @@ function Channels() {
         <Eyebrow>Channels</Eyebrow>
         <H2>Every platform your audience is on.</H2>
         <p className="mt-4 text-muted-foreground">
-          Post to X and LinkedIn directly, and to every other platform through your own n8n workflow or script.
+          Publish directly to X, LinkedIn, Instagram, TikTok, YouTube and two dozen more platforms, and anywhere else
+          through your own n8n workflow or script.
         </p>
       </div>
       <ul className="mt-8 grid grid-cols-2 gap-3 sm:mt-12 sm:grid-cols-3 lg:grid-cols-4">
-        {[...channelsLive, ...channelsSoon].map(([id, name]) => (
+        {channels.map(([id, name]) => (
           <li
             key={id}
             className="flex h-14 min-w-0 items-center gap-3 rounded-2xl border border-[color-mix(in_oklch,var(--brand)_40%,transparent)] bg-card px-4 font-semibold tracking-tight"
@@ -481,7 +479,7 @@ const faqs: [string, string][] = [
   ],
   [
     'Which platforms can it publish to?',
-    "X and LinkedIn directly, and Instagram, TikTok, YouTube and every other platform through your own automation: an n8n workflow or a script that publishes the post and sends the link back. The composer knows each platform's limits and settings.",
+    "X, LinkedIn, Instagram, Facebook, Threads, TikTok, YouTube, Pinterest, Bluesky, Mastodon, Telegram, Discord, Slack, Reddit, WordPress, Medium and more, directly. Anything else goes through your own automation: an n8n workflow or a script that publishes the post and sends the link back. The composer knows each platform's limits and settings.",
   ],
   [
     'Can I use it without an AI agent?',
