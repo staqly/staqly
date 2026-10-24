@@ -130,8 +130,8 @@ describe('composer', () => {
     await pickChannels(user, 'ch_1', 'ch_2')
     await user.type(screen.getByTestId('post-content'), 'Hello world')
     // The counter shows the tightest limit; its popover lists every channel against its platform's limit.
-    expect(screen.getByRole('button', { name: 'Characters per channel' })).toHaveTextContent('11/300')
-    await user.click(screen.getByRole('button', { name: 'Characters per channel' }))
+    expect(screen.getByRole('button', { name: /characters per channel$/ })).toHaveTextContent('11/300')
+    await user.click(screen.getByRole('button', { name: /characters per channel$/ }))
     expect(await screen.findByTestId('counters')).toHaveTextContent('11/500')
     expect(screen.getByTestId('counters')).toHaveTextContent('11/300')
     await user.click(screen.getByTestId('publish-now'))
@@ -178,11 +178,11 @@ describe('composer', () => {
       'Links will be removed from: Brand on X (https://example.com/a)',
     )
     expect(screen.getByTestId('links-notices')).not.toHaveTextContent('Brand on Mastodon')
-    await user.click(screen.getByRole('button', { name: 'Characters per channel' }))
+    await user.click(screen.getByRole('button', { name: /characters per channel$/ }))
     // Mastodon keeps the link (31 characters), X receives "New post:" (9).
     expect(await screen.findByTestId('counters')).toHaveTextContent('31/500')
     expect(screen.getByTestId('counters')).toHaveTextContent('9')
-    expect(screen.getByRole('button', { name: 'Characters per channel' })).toHaveClass('border-destructive')
+    expect(screen.getByRole('button', { name: /characters per channel$/ })).toHaveClass('border-destructive')
   })
 
   it('a per-channel text override and a platform setting travel with that target', async () => {
@@ -240,7 +240,7 @@ describe('composer', () => {
     const card = await screen.findByTestId('settings-ch_x')
 
     await user.click(within(card).getByRole('switch', { name: 'Made with AI' }))
-    await user.click(within(card).getByRole('button', { name: 'Repost from' }))
+    await user.click(within(card).getByRole('button', { name: /^Repost from/ }))
     await user.click(await screen.findByRole('option', { name: /Second X/ }))
     await user.keyboard('{Escape}')
     expect(screen.getByRole('tab', { name: /Settings/ })).toHaveTextContent('1')

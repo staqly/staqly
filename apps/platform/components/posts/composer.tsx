@@ -160,6 +160,7 @@ function Counter({ counts }: { counts: Count[] }) {
   const tight = limited.toSorted((a, b) => a.max - a.n - (b.max - b.n))[0]
   const over = limited.some((c) => c.n > c.max) || counts.some((c) => c.links.length > 0)
   const Icon = over ? AlertTriangle : CheckCircle2
+  const shown = tight ? `${tight.n}/${tight.max}` : String(counts[0]!.n)
 
   return (
     <Popover>
@@ -169,11 +170,12 @@ function Counter({ counts }: { counts: Count[] }) {
           variant="outline"
           size="sm"
           className={cn('tabular-nums', over && 'border-destructive text-destructive')}
-          aria-label="Characters per channel"
+          // Starts with the count it shows (speech input names it by its visible text).
+          aria-label={`${shown} characters per channel`}
           data-testid="counter"
         >
           <Icon className={over ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'} />
-          {tight ? `${tight.n}/${tight.max}` : counts[0]!.n}
+          {shown}
           <ChevronDown className="opacity-60" />
         </Button>
       </PopoverTrigger>

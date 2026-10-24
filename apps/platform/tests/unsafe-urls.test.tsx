@@ -45,6 +45,6 @@ describe('URLs from the API', () => {
     const { container } = render(<UserAvatar name="Ada Lovelace" src="javascript:alert(1)" />)
 
     expect(container.querySelector('img')).toBeNull()
-    expect(screen.getByText('AL')).toBeInTheDocument()
+    expect(container.querySelector('[data-initials="AL"]')).toBeInTheDocument()
   })
 })

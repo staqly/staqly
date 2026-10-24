@@ -203,7 +203,7 @@ const Entry = memo(function Entry({
       {/* One line: the state as an icon, the time, the title, the platform's icon. The state's name, the channel's
           name and the collection are in the title and the accessible name. */}
       <StateIcon aria-hidden className={cn('size-4 shrink-0', tone.text, state === 'publishing' && 'animate-spin')} />
-      <span className="shrink-0 font-medium text-foreground tabular-nums">{time}</span>
+      <span className="shrink-0 font-medium text-foreground tabular-nums">{time}</span>{' '}
       <span className="min-w-0 flex-1 truncate font-medium text-foreground">{title}</span>
       {target && <ProviderTile id={target.provider} className="size-5 shrink-0" />}
     </button>

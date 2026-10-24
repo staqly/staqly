@@ -72,7 +72,7 @@ import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { api, setCsrfToken } from '@/lib/api'
 import { pluralize } from '@/lib/format'
-import { toastApiError } from '@/lib/notify'
+import { planName, toastApiError } from '@/lib/notify'
 import { LIVE_SUBSCRIPTION } from '@/lib/plans'
 import { useBilling, useMode, usePlans, useRole, useSession, useSwitchWorkspace, useUsage } from '@/lib/queries'
 import { rememberApiKey } from '@/lib/session-key'
@@ -156,6 +156,8 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
   const ws = session.data?.workspace
   const plan = isLocal ? 'unlocked' : ws?.plan
   const name = ws?.name ?? 'staqly'
+  // Starts with what the trigger shows (the name, then the plan) so speech input can say what is on screen.
+  const triggerLabel = `${name}${plan ? ` ${planName(plan)}` : ''}, workspace menu`
   const go = (href: string) => {
     setOpenMobile(false)
     router.push(href)
@@ -165,12 +167,11 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
     <button
       type="button"
       className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1.5 text-left outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50"
-      aria-label="Workspace menu"
+      aria-label={triggerLabel}
       data-testid="workspace-menu-trigger"
     >
       <LogoMark className="size-7" />
-      <span className="min-w-0 truncate text-[15px] font-semibold">{name}</span>
-      {plan && <PlanBadge plan={plan} />}
+      <span className="min-w-0 truncate text-[15px] font-semibold">{name}</span> {plan && <PlanBadge plan={plan} />}
       <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
     </button>
   ) : (
@@ -178,14 +179,14 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
       size="lg"
       tooltip={name}
       className="select-none data-[state=open]:bg-sidebar-accent pointer-coarse:group-data-[collapsible=icon]:p-1!"
-      aria-label="Workspace menu"
+      aria-label={triggerLabel}
       data-testid="workspace-menu-trigger"
     >
       <LogoMark className="size-8" />
       <div className="grid min-w-0 flex-1 text-left leading-tight">
         <span className="truncate text-sm font-semibold" data-testid="workspace-name">
           {name}
-        </span>
+        </span>{' '}
         <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
           {plan && <PlanBadge plan={plan} />}
         </span>
@@ -327,14 +328,15 @@ function UserMenu() {
             <SidebarMenuButton
               size="lg"
               tooltip={name}
-              aria-label={`Account menu, ${name}`}
+              // Starts with what the button shows (the name, then the address or role): speech input can say it.
+              aria-label={`${name} ${detail}, account menu`}
               data-testid="user-menu-trigger"
             >
               <UserAvatar name={name} src={user?.avatar_url} className="size-8 rounded-lg" logo />
               <div className="grid min-w-0 flex-1 text-left leading-tight">
                 <span className="truncate text-sm font-medium" data-testid="user-name">
                   {name}
-                </span>
+                </span>{' '}
                 <span className="truncate text-[11px] text-muted-foreground">{detail}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4 text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden" />
