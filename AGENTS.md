@@ -55,9 +55,9 @@ Run `test:ui-responsive` for dashboard layout changes.
 
 | Workflow | When | What |
 |---|---|---|
-| `ci.yml` | push to `main` (every job), pull requests (only the jobs whose code changed: the `changes` job) | `pnpm check` tasks per package, generated code up to date, the Docker e2e suite, actionlint on the workflows |
-| `cross-client.yml` | push to `main`, pull requests touching the API, CLI, SDKs or the suite | `pnpm --filter @staqly/e2e test:cross-client` (Go, uv, Node; no secrets) |
-| `n8n.yml` | push to `main`, nightly, by hand | the dev stack built from the checkout + a real n8n: `test:n8n` (no secrets) |
+| `ci.yml` | push to `main` and pull requests (affected jobs); nightly and by hand (all jobs) | `pnpm check` tasks per package, generated code up to date, the Docker e2e suite, actionlint on the workflows |
+| `cross-client.yml` | pushes/PRs touching the API, CLI, SDKs or the suite; nightly and by hand | `pnpm --filter @staqly/e2e test:cross-client` (Go, uv, Node; no secrets) |
+| `n8n.yml` | relevant pushes to `main`, nightly, by hand | the dev stack built from the checkout + a real n8n: `test:n8n` (no secrets) |
 | `ui.yml` | nightly, by hand | the dashboard in a real browser: `test:ui` (flows, axe) and `test:ui-responsive` against `staqly serve` built from the checkout (no secrets) |
 | `docs.yml`, `release.yml`, `codeql.yml` | docs changes on `main`; `v*` tags; pushes, pull requests and weekly | docs site; binaries + image, then (stable tags, this repository only) a `repository_dispatch` `staqly-release` to the repository in the variable `DEPLOY_DISPATCH_REPO` with the secret `DEPLOY_DISPATCH_TOKEN` (fails when either is missing); code scanning |
 
