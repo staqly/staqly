@@ -1,0 +1,109 @@
+---
+title: Analytics
+description: Optional product analytics and error reports to your own PostHog project. Off unless you set POSTHOG_KEY.
+---
+
+staqly can send a small, fixed set of product events and its error reports to a
+[PostHog](https://posthog.com) project of yours. **It is off by default: an install without
+`POSTHOG_KEY` sends nothing anywhere** and the dashboard never loads the PostHog script. staqly
+cloud (app.staqly.ai) turns it on for its own project.
+
+```bash
+POSTHOG_KEY=phc_yourProjectToken          # Project settings › Project token (public: it can only send events)
+POSTHOG_HOST=https://eu.i.posthog.com     # default; https://us.i.posthog.com, self-hosted PostHog or a reverse proxy
+POSTHOG_ENVIRONMENT=production            # default; use development or test on other servers
+```
+
+Pass them like any other [setting](/self-hosting/configuration#how-to-change-a-setting).
+
+## What is sent
+
+| Source | What | How |
+|---|---|---|
+| Server (`app=api`) | The product events below, after the change they describe is saved | [posthog-go](https://posthog.com/docs/libraries/go), batched in memory, sent in the background; at most 5 s to send what is left at shutdown |
+| Server (`app=api`) | Error reports: every `ERROR` log line (5xx, panics, failing workers) as an exception | Same client; see [Logs & tracing](/self-hosting/logs-and-tracing#posthog) |
+| Dashboard (`app=dashboard`) | Page views, Core Web Vitals and unhandled errors (including errors the pages' error boundaries catch) | posthog-js, loaded after the page only when the server has `POSTHOG_KEY`, from your own server (no third-party scripts) |
+
+Every event carries `environment`, `release` (the server's version) and `app`. PostHog being
+slow or down never slows a request: events wait in memory and are dropped if it stays
+unreachable.
+
+### Identification
+
+- **A person** is their user id (`usr_...`), never an email address or a name, and only on
+  server events. Events a person causes through an API key are theirs too (`actor=api_key`).
+- **Work staqly does for a workspace** (publishing, Stripe webhooks) and every event of a local
+  install has no person: it is the workspace's (`workspace:<id>`, PostHog's personless events).
+- Every server event has `workspace_id`; activation and publishing are counted per workspace.
+- **The dashboard is cookieless**: nothing is stored in the browser, there is no person and no
+  link to the server's events. A visitor is a hash of the day, address and browser that PostHog
+  computes and forgets the next day.
+
+### Never sent
+
+Post text, comments, media, file names, channel names and handles, collection names, email
+addresses, names, URLs of published posts, access tokens, API keys, cookies, passwords, OAuth
+codes and Stripe card details. Dashboard URLs are sent without their query string and fragment
+(sign-in, invitation and preview links carry tokens there). No clicks or text are captured
+(autocapture is off) and **sessions are never recorded**.
+
+## Event catalog
+
+Names are `snake_case`, past tense, `object_action`. Properties appear on the event they are
+listed with; `workspace_id`, `actor` (`session`, `api_key`, `local`, `system`) and, when an agent
+acted, `agent` (the MCP or REST client's name, e.g. `Claude Code`) are on every server event.
+
+| Event | When | Properties |
+|---|---|---|
+| `user_signed_up` | A new account (cloud) | `method` (`google`, `email`) |
+| `user_signed_in` | A sign-in | `method` (`google`, `email`, `passkey`, `access_token`, `api_key`) |
+| `sign_in_failed` | A sign-in that did not go through (personless) | `method`, `code` (e.g. `invalid_code`, `login_expired`) |
+| `user_active` | First authenticated request of a person in a workspace each day | — |
+| `workspace_created` | A new workspace | — |
+| `member_invited`, `member_joined` | Invitations | `role` |
+| `channel_connected` | A channel connected or reconnected | `platform`, `reconnected` |
+| `channel_disconnected`, `channel_needs_reconnect` | A channel removed / its sign-in stopped working | `platform` |
+| `post_created`, `post_scheduled` | A post created / scheduled | `status`, `channel_count`, `platforms`, `media_count`, `thread_parts`, `repeats` |
+| `post_updated` | A post saved | — |
+| `post_published` | One channel of a post went out | `platform`, `attempts`, `delay_seconds` (how late after the due time) |
+| `post_publish_failed` | One channel of a post failed for good | `platform`, `attempts`, `error_class` (`reauth`, `rejected`, `timeout`, `start_failed`, `credentials`, `limit`, `validation`, `platform_error`), `error` (the platform's message, at most 200 characters) |
+| `schedule_created`, `schedule_failed` | Schedules | — |
+| `media_uploaded` | A file uploaded | `type` (`image`, `video`...), `size_bytes` |
+| `media_edited` | The media editor saved a file or a project | `kind` (`file`, `project`) |
+| `ai_image_requested` | An AI picture (media editor) | `op`, `model`, `duration_ms`, `ok` |
+| `api_key_created`, `webhook_created`, `alert_created` | Integrations | — |
+| `checkout_started` | A Stripe checkout was opened (cloud) | `plan`, `interval`, `trial` |
+| `plan_changed` | A workspace's plan changed (Stripe webhooks, the operator CLI, trials) | `from`, `to`, `reason` (e.g. `stripe:active`, `stripe:canceled`) |
+| `subscription_payment_failed` | Stripe says a renewal did not go through (`past_due`, `incomplete`) | `status`, `plan` |
+| `credits_purchased` | A bundle of extra posts paid | `posts` |
+| `$exception` | An error report (server or dashboard) | PostHog's exception properties; server: `request_id`, `trace_id`, `route`, `workspace_id`, `worker` and the log line's fields |
+| `$pageview`, `$web_vitals` | Dashboard pages | PostHog's, URL without query and fragment |
+
+Billing numbers in PostHog are counts of what the server confirmed from Stripe webhooks, not
+revenue: MRR, ARR and churn come from Stripe.
+
+### Adding an event
+
+1. Prefer a domain event that already exists: map it in `analyticsEvents` in
+   `apps/api/internal/app/analytics.go` and pick its properties in `trackEvent`. It is sent only
+   after its transaction commits, once.
+2. For something with no domain event, call `s.trackAs(q, p, "noun_verbed", "key", value)` (pass
+   the transaction's `q` inside `s.tx`, `nil` outside one).
+3. Properties are enums, counts and ids. Never text people wrote, names, addresses or URLs.
+4. Add it to the table above and a case to `analytics_internal_test.go`.
+
+## Cost
+
+PostHog's free tier (checked October 2026) covers 1 million events, 100,000 exceptions and 5
+insight alerts a month. staqly sends one event per action above, at most one `user_active` per
+person, workspace and day, and in the dashboard one page view per navigation plus web vitals; no
+autocapture, page leave, heatmap or recording events. Set a billing limit in PostHog to be sure.
+Group analytics is a paid PostHog add-on, so workspaces are a property (`workspace_id`), not a
+group.
+
+## Privacy
+
+If you turn this on for people other than yourself, you are the controller of that data: say
+so in your privacy policy. The dashboard sets no cookies for analytics. PostHog derives an
+approximate location from the IP address of each request; turn on **Discard client IP data** in
+the PostHog project if you don't want it. Event retention follows your PostHog plan.

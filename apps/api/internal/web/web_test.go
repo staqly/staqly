@@ -263,3 +263,24 @@ func TestOAuthCallbackLandingIsThePage(t *testing.T) {
 		t.Fatalf("the platform's answers forwarded: %v", forwarded)
 	}
 }
+
+// With POSTHOG_KEY the pages (the editor's too) may send to the PostHog host, and only to its origin.
+func TestAnalyticsHostInCSP(t *testing.T) {
+	site := fstest.MapFS{"index.html": {Data: []byte("<html></html>")}}
+	nowhere, _ := url.Parse("http://127.0.0.1:1")
+	off := do(Handler(site, nowhere, slog.New(slog.DiscardHandler), false, ""), "GET", "/", nil, nil).Header().Get("Content-Security-Policy")
+	if !strings.Contains(off, "connect-src 'self';") {
+		t.Fatalf("CSP without analytics: %s", off)
+	}
+	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", "https://eu.i.posthog.com/some/path")
+	for _, path := range []string{"/", "/media/edit"} {
+		csp := do(h, "GET", path, nil, nil).Header().Get("Content-Security-Policy")
+		if !strings.Contains(csp, "connect-src 'self' https://eu.i.posthog.com") || strings.Contains(csp, "/some/path") {
+			t.Fatalf("%s: %s", path, csp)
+		}
+	}
+	if csp := do(Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", "javascript:alert(1)"), "GET", "/", nil, nil).
+		Header().Get("Content-Security-Policy"); !strings.Contains(csp, "connect-src 'self';") {
+		t.Fatalf("a bad host opened the CSP: %s", csp)
+	}
+}

@@ -135,6 +135,15 @@ paths:
                   legacy_sign_in: { type: boolean, description: "Cloud: the sign-in from before accounts (admin API key, recovery key, POST /v1/workspaces) works here" }
                   passkey_sign_in: { type: boolean, description: "Cloud accounts: people sign in with a passkey (POST /v1/auth/passkey/start); needs PUBLIC_DASHBOARD_URL" }
                   public_api_url: { type: string, description: "PUBLIC_API_URL: the API's base URL for agents and tools (shown in dashboard snippets)" }
+                  analytics:
+                    type: object
+                    description: "POSTHOG_KEY set: where the dashboard sends its page views, web vitals and errors (cookieless). Absent when analytics are off."
+                    required: [key, host, environment, release]
+                    properties:
+                      key: { type: string, description: "PostHog project token (public: it only sends events)" }
+                      host: { type: string, description: POSTHOG_HOST }
+                      environment: { type: string, description: POSTHOG_ENVIRONMENT }
+                      release: { type: string, description: The server's version }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
 

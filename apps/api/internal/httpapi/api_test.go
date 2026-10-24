@@ -1499,3 +1499,16 @@ func (f *feedServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func rssItem(guid, title, desc string) string {
 	return fmt.Sprintf(`<item><guid>%s</guid><title>%s</title><link>https://example.com/%s</link><description><![CDATA[<p>%s</p>]]></description></item>`, guid, title, guid, desc)
 }
+
+// The dashboard learns where to send its analytics from /v1/setup, only when the operator set POSTHOG_KEY.
+func TestSetupStatusAnalytics(t *testing.T) {
+	svc, srv := newLocal(t)
+	if _, body := localReqWith(t, srv, "GET", "/v1/setup", "", "", "", ""); strings.Contains(body, `"analytics"`) {
+		t.Fatalf("analytics without POSTHOG_KEY: %s", body)
+	}
+	svc.Cfg.PostHog = app.PostHogConfig{Key: "phc_test", Host: "https://eu.i.posthog.com", Environment: "test"}
+	_, body := localReqWith(t, srv, "GET", "/v1/setup", "", "", "", "")
+	if !strings.Contains(body, `"analytics":{"environment":"test","host":"https://eu.i.posthog.com","key":"phc_test","release":`) {
+		t.Fatalf("setup status: %s", body)
+	}
+}

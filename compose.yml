@@ -73,6 +73,9 @@ services:
       PROCESSING_TIMEOUT: ${PROCESSING_TIMEOUT:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      POSTHOG_KEY: ${POSTHOG_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-}
+      POSTHOG_ENVIRONMENT: ${POSTHOG_ENVIRONMENT:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       # Prices are found by their Stripe lookup keys (staqly_<plan>_<month|year>); the optional

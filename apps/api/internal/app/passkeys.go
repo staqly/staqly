@@ -233,7 +233,8 @@ func (s *Service) BeginPasskeySignIn(ctx context.Context) (PasskeyChallenge, err
 
 // FinishPasskeySignIn checks the answer and signs the passkey's person in with a fresh session. A sign
 // counter that went backwards (a cloned authenticator) is refused.
-func (s *Service) FinishPasskeySignIn(ctx context.Context, challengeID string, response json.RawMessage, next, userAgent string) (LoginResult, error) {
+func (s *Service) FinishPasskeySignIn(ctx context.Context, challengeID string, response json.RawMessage, next, userAgent string) (_ LoginResult, err error) {
+	defer func() { s.trackSignInFailed("passkey", err) }()
 	if err := accountsOnly(s); err != nil {
 		return LoginResult{}, err
 	}

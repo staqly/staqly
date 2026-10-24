@@ -1,12 +1,13 @@
 'use client'
 
-import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { startAnalytics } from '@/lib/analytics'
 import { api, ApiError, onUnauthorized } from '@/lib/api'
 import { captureLinkToken, scrubLinkToken } from '@/lib/local-token'
 import { setNavigator } from '@/lib/notify'
@@ -77,6 +78,20 @@ function checkLocalSession(client: QueryClient) {
   }
 }
 
+/** Starts the dashboard's analytics when the server has them on (POSTHOG_KEY); self-hosted installs send nothing. */
+function Analytics() {
+  const setup = useQuery({ queryKey: SETUP_KEY, queryFn: api.setupStatus, staleTime: 30_000 })
+  const cfg = setup.data?.analytics
+
+  useEffect(() => {
+    if (cfg) {
+      startAnalytics(cfg)
+    }
+  }, [cfg])
+
+  return null
+}
+
 export function Providers({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -141,6 +156,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <QueryClientProvider client={client}>
+        <Analytics />
         <TooltipProvider delayDuration={300}>
           {children}
           <Toaster

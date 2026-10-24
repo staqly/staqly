@@ -73,6 +73,7 @@ func (s *Service) ReplaceMedia(ctx context.Context, p Principal, id, filename st
 		_ = s.DiscardUpload(ctx, p, edited.ID)
 		return Media{}, err
 	}
+	s.trackAs(nil, p, "media_edited", "kind", "file")
 	return s.GetMediaInfo(ctx, p, edited.ID)
 }
 
@@ -245,6 +246,7 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 			s.logger(ctx).Warn("old project file not removed", "project_id", id, "err", err)
 		}
 	}
+	s.trackAs(nil, p, "media_edited", "kind", "project")
 	return s.GetMediaProject(ctx, p, id)
 }
 

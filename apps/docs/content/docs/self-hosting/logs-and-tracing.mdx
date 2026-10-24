@@ -157,6 +157,13 @@ Every log line at level `ERROR` becomes a Sentry event: internal server errors (
 
 Any Sentry-compatible service works as well, for example GlitchTip or a self-hosted Sentry.
 
+## PostHog
+
+With `POSTHOG_KEY` set, the same `ERROR` lines also go to PostHog error tracking as exceptions
+(title: the log message, description: the error, grouped by message and route), alongside the
+product events described in [Analytics](/self-hosting/analytics). You can use Sentry, PostHog,
+both or neither.
+
 ## Next steps
 
 <Cards>

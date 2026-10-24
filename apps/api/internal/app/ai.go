@@ -238,7 +238,9 @@ func (s *Service) AIImage(ctx context.Context, p Principal, op string, in AIImag
 	}
 	start := s.clock()
 	out, err := s.callOpenAIImage(ctx, c.APIKey, st.Model, op, in)
-	s.logger(ctx).Info("ai image", "op", op, "model", st.Model, "ms", s.clock().Sub(start).Milliseconds(), "ok", err == nil)
+	ms := s.clock().Sub(start).Milliseconds()
+	s.logger(ctx).Info("ai image", "op", op, "model", st.Model, "ms", ms, "ok", err == nil)
+	s.trackAs(nil, p, "ai_image_requested", "op", op, "model", st.Model, "duration_ms", ms, "ok", err == nil)
 	return out, err
 }
 

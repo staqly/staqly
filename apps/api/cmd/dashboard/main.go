@@ -48,7 +48,12 @@ func main() {
 	}
 	site, _ := fs.Sub(api.Web, "web")
 	// No WriteTimeout: long-polls, MCP streams and downloads pass through.
-	srv := &http.Server{Addr: env("ADDR", ":8080"), Handler: web.Handler(site, upstream, log, trustProxy, ""),
+	// The pages may send analytics where the API says (GET /v1/setup): the same POSTHOG_KEY / POSTHOG_HOST.
+	var analyticsHost []string
+	if os.Getenv("POSTHOG_KEY") != "" {
+		analyticsHost = append(analyticsHost, env("POSTHOG_HOST", "https://eu.i.posthog.com"))
+	}
+	srv := &http.Server{Addr: env("ADDR", ":8080"), Handler: web.Handler(site, upstream, log, trustProxy, "", analyticsHost...),
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Minute, IdleTimeout: 120 * time.Second}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

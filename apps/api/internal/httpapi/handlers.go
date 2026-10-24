@@ -42,7 +42,7 @@ func (s *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cloud := s.svc.Cfg.Mode == app.ModeCloud
-	writeJSON(w, 200, map[string]any{"initialized": ok, "mode": s.svc.Cfg.Mode,
+	out := map[string]any{"initialized": ok, "mode": s.svc.Cfg.Mode,
 		"signup_open": s.svc.SignupOpen(), "setup_token_required": cloud && !s.svc.SignupOpen(),
 		// Paid plans can be bought here (Stripe configured); the sign-up page words its pricing by it.
 		"billing_enabled": s.svc.BillingEnabled(),
@@ -52,7 +52,13 @@ func (s *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
 		"passkey_sign_in": s.svc.PasskeySignIn(),
 		// The dashboard shows it in snippets; read here so a pre-built web
 		// image needs no build-time URL.
-		"public_api_url": strings.TrimRight(s.svc.Cfg.PublicURL, "/")})
+		"public_api_url": strings.TrimRight(s.svc.Cfg.PublicURL, "/")}
+	if ph := s.svc.Cfg.PostHog; ph.Key != "" {
+		// The dashboard's page views, web vitals and errors go to the same PostHog project (cookieless). The
+		// project token only sends events; nothing that reads data ever reaches the browser.
+		out["analytics"] = map[string]any{"key": ph.Key, "host": ph.Host, "environment": ph.Environment, "release": s.cfg.Version}
+	}
+	writeJSON(w, 200, out)
 }
 
 func (s *Server) listPlans(w http.ResponseWriter, r *http.Request) {
