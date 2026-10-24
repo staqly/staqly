@@ -1301,7 +1301,8 @@ const MonthCell = memo(function MonthCell({
       past={k < today}
       addLabel={`Schedule a post for ${day.long}`}
       className={cn(
-        'flex min-h-24 min-w-0 flex-col gap-1 border-r border-b p-1.5',
+        // Touch: less side padding, so the "N posts" button stays 40 px wide in a 320 px month.
+        'flex min-h-24 min-w-0 flex-col gap-1 border-r border-b p-1.5 pointer-coarse:px-0.5',
         !inMonth && 'bg-muted/40 text-muted-foreground',
         // Days before today get the same hatch as past hours in the week view.
         k < today && HATCH,
