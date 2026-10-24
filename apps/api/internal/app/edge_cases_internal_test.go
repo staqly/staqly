@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -262,5 +263,29 @@ func TestScheduleIgnoresARemovedChannel(t *testing.T) {
 	t.Logf("draft %s, schedule channels %v, last_result %q", got.Status, sch.Channels, sch.LastResult)
 	if got.Status == "draft" {
 		t.Fatalf("draft never published: the schedule still names the removed channel")
+	}
+}
+
+// Was a bug: a reported result took an external id and a URL as long as the request body allows; both are
+// stored on the target and copied into events and webhooks.
+func TestReportedResultRefusesOverlongFields(t *testing.T) {
+	s, p, post := publishTest(t)
+	ctx := context.Background()
+	custom := post.Targets[0].ChannelID
+	if _, err := s.PublishPost(ctx, p, post.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.RunDueJobsOnce(ctx)
+	var invalidErr *Error
+	for _, in := range []ResultInput{
+		{Status: "published", ExternalID: strings.Repeat("a", 501)},
+		{Status: "published", URL: "https://example.com/" + strings.Repeat("a", 2048)},
+	} {
+		if _, err := s.ReportTargetResult(ctx, p, post.ID, custom, in); !errors.As(err, &invalidErr) || invalidErr.Status != 422 {
+			t.Fatalf("an overlong field: %v, want 422", err)
+		}
+	}
+	if _, err := s.ReportTargetResult(ctx, p, post.ID, custom, ResultInput{Status: "published", ExternalID: strings.Repeat("a", 500)}); err != nil {
+		t.Fatalf("500 characters: %v", err)
 	}
 }
