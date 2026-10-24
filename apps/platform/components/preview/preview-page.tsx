@@ -42,6 +42,7 @@ import {
 } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
 import { safeHttpUrl } from '@/lib/safe'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 type Target = PublicPreview['targets'][number]
@@ -89,7 +90,7 @@ function statusLine(p: PublicPreview) {
     return {
       Icon: CalendarClock,
       text: `Scheduled for ${formatDateTime(p.publish_at)}`,
-      tone: 'text-sky-600 dark:text-sky-400',
+      tone: TONES.info.text,
     }
   }
 
@@ -504,7 +505,9 @@ function readSelection(): Pending | null {
 
 /** The read-only page a preview link opens: the post per channel, its status, and the comment threads. */
 export function PreviewPage() {
-  const token = useSyncExternalStore(subscribeHash, readToken, () => '')
+  // null until the browser reads the address (the static HTML and hydration): the skeleton, not "not available".
+  const hash = useSyncExternalStore(subscribeHash, readToken, () => null)
+  const token = hash ?? ''
   const qc = useQueryClient()
   const preview = useQuery({
     queryKey: ['preview', token],
@@ -663,7 +666,8 @@ export function PreviewPage() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-        {!token || preview.error ? (
+        {/* A failed refresh keeps the post and the comment being typed; only a link that never opened is gone. */}
+        {hash === '' || (preview.error && !p) ? (
           <div className="mx-auto grid max-w-md justify-items-center gap-3 rounded-2xl border bg-card p-8 text-center">
             <Link2Off className="size-8 text-muted-foreground" />
             <h1 className="text-lg font-semibold">This preview is not available</h1>
