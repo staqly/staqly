@@ -839,7 +839,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 			return map[string]any{"ok": false, "error": truncateRunes(err.Error(), 500)}, nil
 		}
 		if sealed, err := s.seal(fresh); err == nil {
-			_ = s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID})
+			_ = s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID})
 			s.shareRefresh(ctx, row, creds, fresh)
 		}
 		profile = providers.Profile{Handle: row.Handle, Name: row.Name}
@@ -935,7 +935,8 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
+	// Saved even if the job's budget just ran out: the platform may have spent the old refresh token already.
+	if err := s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
 		return err
 	}
 	s.shareRefresh(ctx, row, creds, fresh)
@@ -1015,7 +1016,7 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if err != nil {
 		return nil, err
 	}
-	if err := s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
+	if err := s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
 		return nil, err
 	}
 	s.shareRefresh(ctx, row, creds, fresh)
@@ -1049,7 +1050,7 @@ func (s *Service) shareRefresh(ctx context.Context, row db.Channel, old, fresh p
 			}
 		}
 		if sealed, err := s.seal(c); err == nil {
-			_ = s.W.SetChannelCredentials(ctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: other.ID})
+			_ = s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: other.ID})
 		}
 	}
 }
