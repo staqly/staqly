@@ -133,9 +133,7 @@ function PromotionCodeField({
         >
           <p role="status" className="inline-flex items-center gap-1.5 text-foreground">
             <TicketPercent className="size-4 text-brand" aria-hidden />
-            <span className="font-mono font-medium">{promotion.code}</span>
-            <span className="text-muted-foreground">·</span>
-            <span>{promotionSummary(promotion)}</span>
+            <span className="font-mono font-medium">{promotion.code}</span> <span>{promotionSummary(promotion)}</span>
           </p>
           <span className="h-4 w-px bg-border" aria-hidden />
           <Button ref={trigger} type="button" variant="link" className={triggerClass} onClick={show}>

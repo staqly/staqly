@@ -54,7 +54,7 @@ export function BuyXPosts({ x }: { x: XPosts }) {
     <>
       <Button
         size="sm"
-        variant={x.left <= 0 ? 'default' : 'outline'}
+        variant="info"
         onClick={() => setBuying(true)}
         aria-label="Buy more X posts"
         data-testid="buy-x-posts"

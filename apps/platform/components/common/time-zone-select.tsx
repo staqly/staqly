@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 
@@ -58,19 +58,26 @@ export function TimeZoneSelect({
           <CommandInput placeholder="Search, e.g. Warsaw" />
           <CommandList>
             <CommandEmpty>No time zone found.</CommandEmpty>
-            {options.map((z) => (
-              <CommandItem
-                key={z}
-                value={z.replaceAll('_', ' ')}
-                data-checked={z === value}
-                onSelect={() => {
-                  onChange(z)
-                  setOpen(false)
-                }}
-              >
-                {z.replaceAll('_', ' ')}
-              </CommandItem>
-            ))}
+            {Object.entries(Object.groupBy(options, (z) => (z.includes('/') ? z.split('/')[0] : ''))).map(
+              ([continent, zones]) => (
+                <CommandGroup key={continent} heading={continent || undefined}>
+                  {zones!.map((z) => (
+                    <CommandItem
+                      key={z}
+                      value={z.replaceAll('_', ' ')}
+                      data-checked={z === value}
+                      onSelect={() => {
+                        onChange(z)
+                        setOpen(false)
+                      }}
+                    >
+                      {/* The group heading names the continent. */}
+                      {z.slice(continent ? continent.length + 1 : 0).replaceAll('_', ' ')}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ),
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
