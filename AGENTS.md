@@ -10,7 +10,7 @@ and publish them to connected channels (the posts pivot, 2026-10-19). Monorepo:
 | `apps/cli` | `staqly` CLI and `staqly serve` (one binary, goreleaser) | — |
 | `apps/docs` | docs.staqly.ai (Fumadocs, GitHub Pages) | [apps/docs/AGENTS.md](apps/docs/AGENTS.md) |
 | `apps/web` | staqly.ai landing page (Next.js static export) | [apps/web/README.md](apps/web/README.md) |
-| `packages/brand` | `@staqly/brand`: logo, hero demo, brand CSS tokens and site helpers shared by dashboard, docs and web (TS source, `transpilePackages`; CSS `@source`s itself) | — |
+| `packages/brand` | `@staqly/brand`: logo, hero demo, site footer (and the free tools it lists), brand CSS tokens and site helpers shared by dashboard, docs and web (TS source, `transpilePackages`; CSS `@source`s itself) | — |
 | `packages/check-links` | `@staqly/check-links`: link check of the docs and web static exports | — |
 | `sdks/typescript` | TypeScript SDK (types from OpenAPI) | [sdks/typescript/AGENTS.md](sdks/typescript/AGENTS.md) |
 | `sdks/python` | Python SDK (sync + async) | [sdks/python/AGENTS.md](sdks/python/AGENTS.md) |
