@@ -33,6 +33,7 @@ jobs:
         # results.json lands in $TMPDIR/staqly-n8n-e2e/<run>/
         run: echo "TMPDIR=$RUNNER_TEMP" >>"$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # the image compose.yml names (ghcr.io/staqly/staqly:latest), built from this
       # checkout with the layer cache, so compose does not build it again

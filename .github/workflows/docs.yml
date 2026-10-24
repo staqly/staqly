@@ -24,10 +24,12 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       SITE_URL: https://docs.staqly.ai
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/docs..." }
       - name: Build (static export + link check)
@@ -39,6 +41,7 @@ jobs:
     name: Deploy
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       pages: write
       id-token: write

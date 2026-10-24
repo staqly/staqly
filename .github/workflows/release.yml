@@ -26,11 +26,13 @@ jobs:
   image:
     name: Image
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
 
       # Cross-compiles on the runner (BUILDPLATFORM), no QEMU.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -61,11 +63,12 @@ jobs:
   binaries:
     name: Binaries (goreleaser)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0 } # changelog since the previous v* tag
+        with: { fetch-depth: 0, persist-credentials: false } # changelog since the previous v* tag
       - uses: ./.github/actions/setup   # goreleaser's hook builds the dashboard (make dashboard)
         with: { filter: "@staqly/platform..." }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -84,6 +87,8 @@ jobs:
     needs: [image]
     if: github.repository == 'staqly/staqly' && !contains(github.ref_name, '-')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {} # calls another repository with DEPLOY_DISPATCH_TOKEN; GITHUB_TOKEN is not used
     steps:
       - name: Send the release to the deployment repository
         env:
