@@ -51,6 +51,7 @@ use `S3_CREATE_BUCKET`. The bucket can stay private.
   seeking works (ranged reads), and the bucket needs no CORS settings.
 - **Platforms that download media themselves** get a signed link to the bucket that works for two
   hours. With `S3_PUBLIC_URL` (a CDN in front of a public bucket) they get a plain link there instead.
+  When platforms reach the bucket at another address than staqly does, set that one as `S3_SIGN_ENDPOINT`.
 - **Thumbnails** are made on first use and kept next to the files.
 
 Every workspace has its own folder in the store, on disk and in a bucket alike:
