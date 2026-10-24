@@ -472,6 +472,9 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		form.Set("line_items[0][price]", found)
 		err = s.stripe(ctx, "POST", "/v1/checkout/sessions", form, &cs)
 	}
+	if err == nil {
+		s.trackAs(nil, p, "checkout_started", "plan", plan.ID, "interval", interval, "trial", plan.ID == TrialPlan && trial == TrialAvailable)
+	}
 	return cs.URL, err
 }
 
@@ -1089,6 +1092,9 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 	case "past_due", "incomplete":
 		// Stripe advances the period even when the renewal fails: keep the
 		// paid end (plus grace); the workspace is suspended if it passes.
+		if cur.SubscriptionStatus.String != sub.Status {
+			s.trackAs(q, actor, "subscription_payment_failed", "status", sub.Status, "plan", planID)
+		}
 		return nil
 	case "active", "trialing":
 		paidUntil := sub.periodEnd()

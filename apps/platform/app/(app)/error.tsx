@@ -1,10 +1,17 @@
 'use client'
 
+import { useEffect } from 'react'
+
 import { ErrorState } from '@/components/common/error-state'
+import { captureError } from '@/lib/analytics'
 
 // A page that fails to render keeps the sidebar and the navigation (app/error.tsx would replace the whole shell).
-// React logs the error itself (onCaughtError), so nothing is logged here.
+// React logs the error itself (onCaughtError), so nothing is logged here; it is reported (analytics on).
 export default function AppError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+  useEffect(() => {
+    captureError(error, 'page')
+  }, [error])
+
   return (
     <div className="p-4 sm:p-6">
       <ErrorState

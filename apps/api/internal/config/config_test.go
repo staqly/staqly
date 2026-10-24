@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/staqly/staqly/apps/api/internal/app"
 )
 
 func clearEnv(t *testing.T) {
@@ -13,7 +15,8 @@ func clearEnv(t *testing.T) {
 		"DASHBOARD_EXPOSED", "DASHBOARD_PORT", "CORS_ALLOWED_ORIGINS", "DATABASE_URL", "GOOGLE_CLIENT_ID",
 		"GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URL", "GOOGLE_ISSUER", "AUTH_DEV_SIGNIN", "PUBLIC_DASHBOARD_URL",
 		"MAIL_SMTP_HOST", "MAIL_FROM", "STORAGE_DRIVER", "S3_ENDPOINT", "S3_REGION",
-		"S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_FORCE_PATH_STYLE", "S3_PREFIX", "S3_PUBLIC_URL"} {
+		"S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_FORCE_PATH_STYLE", "S3_PREFIX", "S3_PUBLIC_URL",
+		"POSTHOG_KEY", "POSTHOG_HOST", "POSTHOG_ENVIRONMENT"} {
 		t.Setenv(k, "")
 	}
 }
@@ -220,5 +223,26 @@ func TestStripePricePlaceholdersAreIgnored(t *testing.T) {
 	got := stripePrices()
 	if _, ok := got["plus_month"]; ok || got["plus_year"] != "price_1QabcDEF234" || len(got) != 1 {
 		t.Fatalf("prices: %v", got)
+	}
+}
+
+// PostHog is off unless POSTHOG_KEY is set; the host defaults to the EU cloud.
+func TestPostHogConfig(t *testing.T) {
+	clearEnv(t)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.App.PostHog.Key != "" || c.App.PostHog.Host != "https://eu.i.posthog.com" || c.App.PostHog.Environment != "production" {
+		t.Fatalf("defaults = %+v", c.App.PostHog)
+	}
+	t.Setenv("POSTHOG_KEY", "phc_test")
+	t.Setenv("POSTHOG_HOST", "https://us.i.posthog.com/")
+	t.Setenv("POSTHOG_ENVIRONMENT", "development")
+	if c, err = Load(); err != nil {
+		t.Fatal(err)
+	}
+	if c.App.PostHog != (app.PostHogConfig{Key: "phc_test", Host: "https://us.i.posthog.com", Environment: "development"}) {
+		t.Fatalf("set = %+v", c.App.PostHog)
 	}
 }

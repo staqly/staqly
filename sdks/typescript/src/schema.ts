@@ -5257,6 +5257,17 @@ export interface operations {
                         passkey_sign_in?: boolean;
                         /** @description PUBLIC_API_URL: the API's base URL for agents and tools (shown in dashboard snippets) */
                         public_api_url: string;
+                        /** @description POSTHOG_KEY set: where the dashboard sends its page views, web vitals and errors (cookieless). Absent when analytics are off. */
+                        analytics?: {
+                            /** @description PostHog project token (public: it only sends events) */
+                            key: string;
+                            /** @description POSTHOG_HOST */
+                            host: string;
+                            /** @description POSTHOG_ENVIRONMENT */
+                            environment: string;
+                            /** @description The server's version */
+                            release: string;
+                        };
                     };
                 };
             };

@@ -111,6 +111,12 @@ it by hand (e2e/README.md). Every workflow step runs a command that works the sa
   until the collection's processing timeout.
 * **Webhooks are at-least-once** via the transactional outbox; never make
   HTTP calls inside a DB transaction.
+* **Analytics are opt-in and content-free.** Product events and error reports go to PostHog only
+  when the operator sets `POSTHOG_KEY` (staqly cloud does; installs send nothing, the dashboard
+  doesn't even load posthog-js). Server events are sent after their transaction commits
+  (`internal/app/analytics.go`); the dashboard is cookieless, no autocapture, no session replay.
+  Never put post text, names, emails, URLs or secrets in an event. Catalog and how to add one:
+  `apps/docs/content/docs/self-hosting/analytics.mdx`.
 * **How users run it.** Locally: the binary (`staqly serve`, `staqly service
   install`) or the single image `ghcr.io/staqly/staqly` with plain `docker run`
   (container `staqly`, volume `staqly-data`; see

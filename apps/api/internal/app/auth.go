@@ -391,6 +391,7 @@ func (s *Service) AuthenticateAPIKey(ctx context.Context, raw string) (Principal
 		}
 		p.Scopes, p.UserID, p.Role = intersectScopes(scopes, up.Scopes), up.UserID, up.Role
 	}
+	s.trackActive(p)
 	return p, nil
 }
 
@@ -430,6 +431,7 @@ func (s *Service) AuthenticateSession(ctx context.Context, token string) (Princi
 			return Principal{}, "", ErrUnauthorized
 		}
 		p.Kind, p.ID = PrincipalSession, sess.ID
+		s.trackActive(p)
 		return p, sess.CsrfToken, nil
 	}
 	// A session with no person behind it (development API-key sign-in): name what it is, not the page.

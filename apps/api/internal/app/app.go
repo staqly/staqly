@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/posthog/posthog-go"
 	"github.com/riverqueue/river"
 
 	"github.com/staqly/staqly/apps/api/internal/blob"
@@ -189,6 +190,11 @@ func isNotFound(err error) bool {
 
 type Config struct {
 	Mode string // ModeLocal (default) or ModeCloud
+	// PostHog: the operator's own PostHog project for product analytics and error reporting (POSTHOG_KEY);
+	// empty Key = off, so an install sends nothing unless its operator sets it (analytics.go).
+	PostHog PostHogConfig
+	// Analytics receives the product events (server.Main makes it from PostHog); nil = off.
+	Analytics posthog.EnqueueClient
 	// AI: the media editor's AI tools, called with each workspace's own provider key (see ai.go).
 	AI AIConfig
 	// TrialPlan: the plan a new cloud workspace tries for TrialDays (TRIAL_PLAN). Empty = Starter, the only plan
@@ -249,6 +255,8 @@ type Service struct {
 	river      *river.Client[*sql.Tx]
 	completeTx func(context.Context, *sql.Tx, *river.Job[jobArgs]) error
 	txs        sync.Map // *db.Queries → *sql.Tx
+	tracked    sync.Map // *db.Queries → *[]posthog.Capture: product events sent once their transaction commits (analytics.go)
+	active     activeUsers
 	fair       fairShare
 	oidc       oidcCache  // Google sign-in, discovered once (accounts.go)
 	devCodes   devCodeBox // AUTH_DEV_SIGNIN: the last email code per address (email_codes.go)
@@ -426,12 +434,14 @@ func (s *Service) tx(ctx context.Context, fn func(q *db.Queries) error) error {
 	q := s.Q.WithTx(t)
 	s.txs.Store(q, t)
 	defer s.txs.Delete(q)
+	defer s.tracked.Delete(q)
 	if err := fn(q); err != nil {
 		return err
 	}
 	if err := t.Commit(); err != nil {
 		return err
 	}
+	s.sendTracked(q)
 	s.wake() // the transaction may have queued webhook deliveries
 	return nil
 }
@@ -450,6 +460,7 @@ func (s *Service) rehearseTx(ctx context.Context, fn func(q *db.Queries) error) 
 	q := s.Q.WithTx(t)
 	s.txs.Store(q, t)
 	defer s.txs.Delete(q)
+	defer s.tracked.Delete(q)
 	return fn(q)
 }
 
@@ -494,10 +505,15 @@ func (s *Service) txOnce(ctx context.Context, fn func(q *db.Queries) error) erro
 	q := s.Q.WithTx(t)
 	s.txs.Store(q, t)
 	defer s.txs.Delete(q)
+	defer s.tracked.Delete(q) // a rerun after a serialization failure starts with no events
 	if err := fn(q); err != nil {
 		return err
 	}
-	return t.Commit()
+	if err := t.Commit(); err != nil {
+		return err
+	}
+	s.sendTracked(q)
+	return nil
 }
 
 func nullStr(v string) sql.NullString { return sql.NullString{String: v, Valid: v != ""} }

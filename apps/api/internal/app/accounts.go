@@ -221,7 +221,8 @@ func loginErr(code, msg string) *Error { return &Error{Code: code, Status: 401, 
 // verifier), verifies the ID token (signature, issuer, audience, expiry, nonce), then signs the person in:
 // an invitation they came with is accepted, a returning person lands in their workspace, a new person gets
 // a first workspace (when sign-ups are open). Always a fresh session (no fixation).
-func (s *Service) CompleteGoogleLogin(ctx context.Context, sealedState, state, code, userAgent string) (LoginResult, error) {
+func (s *Service) CompleteGoogleLogin(ctx context.Context, sealedState, state, code, userAgent string) (_ LoginResult, err error) {
+	defer func() { s.trackSignInFailed(ProviderGoogle, err) }()
 	if err := googleOnly(s); err != nil {
 		return LoginResult{}, err
 	}
@@ -416,6 +417,7 @@ func (s *Service) upsertUser(ctx context.Context, q *db.Queries, id Identity) (d
 			CreatedAt: now, UpdatedAt: now, LastLoginAt: nullStr(now)}); err != nil {
 			return db.User{}, err
 		}
+		s.trackAs(q, Principal{Kind: PrincipalSession, UserID: u.ID}, "user_signed_up", "method", id.Provider)
 		return u, q.CreateIdentity(ctx, db.CreateIdentityParams{Provider: id.Provider, Subject: id.Subject, UserID: u.ID, Email: email,
 			CreatedAt: now, LastLoginAt: nullStr(now)})
 	case err != nil:
