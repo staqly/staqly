@@ -70,7 +70,7 @@ var (
 	positiveIntVars = []string{"JOB_CONCURRENCY", "MAIL_SMTP_PORT", "MAX_UPLOAD_MB", "NOTIFY_CONCURRENCY", "NOTIFY_MAX_ATTEMPTS",
 		"NOTIFY_MAX_FAILS", "RATE_LIMIT_AUTH_BURST", "RATE_LIMIT_AUTH_PER_MINUTE", "RATE_LIMIT_BURST", "RATE_LIMIT_PER_MINUTE"}
 	positiveDurVars = []string{"NOTIFY_DISABLED_GRACE", "NOTIFY_POLL_INTERVAL", "NOTIFY_RETRY_BASE", "SESSION_TTL",
-		"WEBHOOK_RETRY_BASE", "WEBHOOK_RETRY_MAX"}
+		"WEBHOOK_LEASE", "WEBHOOK_RETRY_BASE", "WEBHOOK_RETRY_MAX"}
 	nonNegativeDurVars = []string{"PROCESSING_TIMEOUT"} // 0 = never
 )
 
@@ -98,6 +98,12 @@ func checkEnv() error {
 		d, err := time.ParseDuration(v) // "0" parses too
 		if err != nil || d < 0 || d == 0 && !slices.Contains(nonNegativeDurVars, k) {
 			return fmt.Errorf("%s must be a positive duration such as 90s, 15m or 720h (got %q)", k, v)
+		}
+	}
+	// A lease no longer than the longest attempt (timeout_ms is at most 60 s) would send a delivery still in flight again.
+	if v := os.Getenv("WEBHOOK_LEASE"); v != "" {
+		if d, _ := time.ParseDuration(v); d <= time.Minute {
+			return fmt.Errorf("WEBHOOK_LEASE must be longer than 1m, the longest delivery attempt (got %q)", v)
 		}
 	}
 	return nil
@@ -236,6 +242,7 @@ func Load() (Config, error) {
 				AllowLoopback: envBool("WEBHOOK_ALLOW_LOOPBACK", false),
 				RetryBase:     envDur("WEBHOOK_RETRY_BASE", 15*time.Second),
 				RetryMax:      envDur("WEBHOOK_RETRY_MAX", time.Hour),
+				Lease:         envDur("WEBHOOK_LEASE", 2*time.Minute),
 				// Deliveries in flight (2 per workspace): a cloud instance serves many workspaces, so a few
 				// with hanging receivers must not take every slot.
 				Concurrency: webhookConcurrency(local),
