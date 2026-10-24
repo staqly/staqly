@@ -98,4 +98,26 @@ describe('picking accounts after a sign-in', () => {
       account_ids: ['101', '102'],
     })
   })
+
+  it('on a connect link page: a sign-in with no accounts says so and goes back to the platforms', async () => {
+    window.history.replaceState(null, '', '/add-channel?pending=pc_3#tok_abc')
+    mockApi({
+      'GET /v1/connect-links/tok_abc': {
+        workspace: 'Acme Studio',
+        note: '',
+        providers: [facebook],
+        expires_at: '2026-10-27T10:00:00Z',
+        uses_left: 2,
+      },
+      'GET /v1/connect-links/tok_abc/pending/pc_3': { ...pending, id: 'pc_3', accounts: [] },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<AddChannelPage />)
+    expect(await screen.findByText(/no Facebook Page accounts to post as/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(window.location.search).toBe('')
+    expect(window.location.hash).toBe('#tok_abc')
+    expect(await screen.findByRole('button', { name: /Facebook Page/ })).toBeInTheDocument()
+  })
 })

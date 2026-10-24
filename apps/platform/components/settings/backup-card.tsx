@@ -107,7 +107,8 @@ function CloudBackups() {
   })
   const { mutate: create, isPending } = useMutation({
     mutationFn: () => api.requestWorkspaceExport(),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.workspaceExports }),
+    // Pending until the list shows the new backup, so the button can't start a second one in between.
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.workspaceExports }),
     onError: (e) => toastApiError(e),
   })
   const rows = list.data?.data ?? []
