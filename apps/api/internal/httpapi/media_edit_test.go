@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,8 +17,10 @@ import (
 	"github.com/staqly/staqly/apps/api/internal/app"
 )
 
-// gpexFile is a stand-in project file: OpenGPEX's container starts with "GPEX".
-func gpexFile(body string) []byte { return append([]byte("GPEX\x01\x00\x14\x00"), body...) }
+// designFile is a minimal design editor project; body tells versions apart.
+func designFile(body string) []byte {
+	return []byte(`{"version":1,"name":"` + body + `","width":1080,"height":1080,"pages":[{"id":"p1","background":{"kind":"color","color":"#fff"},"elements":[]}]}`)
+}
 
 // sendFile is upload with any method (PUT for a new version of a project).
 func (e *env) sendFile(method, path, key string, fields map[string]string, content []byte, want int, out any) {
@@ -84,7 +87,7 @@ func TestMediaReplace(t *testing.T) {
 	}
 }
 
-// Projects: an editable .gpex file per picture, listed by the files it was made from, saved again in place,
+// Projects: an editable design per picture, listed by the files it was made from, saved again in place,
 // readable back byte for byte, deleted with posts:delete, invisible to another workspace.
 func TestMediaProjects(t *testing.T) {
 	e := newEnv(t)
@@ -94,10 +97,11 @@ func TestMediaProjects(t *testing.T) {
 	e.upload("/v1/media", e.key, nil, "photo.png", realPNG(t, 20, 10), 201, &a)
 
 	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Poster"}, []byte("not a project"), 415, nil)
-	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"source_ids": "med_nope"}, gpexFile("x"), 422, nil)
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Old"}, []byte("GPEX\x01\x00\x14\x00x"), 415, nil)
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"source_ids": "med_nope"}, designFile("x"), 422, nil)
 
 	var p app.MediaProject
-	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Poster", "source_ids": a.ID}, gpexFile("v1"), 201, &p)
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Poster", "source_ids": a.ID}, designFile("v1"), 201, &p)
 	if p.Name != "Poster" || len(p.SourceIDs) != 1 || p.SourceIDs[0] != a.ID {
 		t.Fatalf("project: %+v", p)
 	}
@@ -111,7 +115,7 @@ func TestMediaProjects(t *testing.T) {
 		t.Fatalf("other media: %+v", list)
 	}
 
-	e.sendFile("PUT", "/v1/media-projects/"+p.ID, e.key, map[string]string{"name": "Poster 2", "source_ids": a.ID, "output_id": a.ID}, gpexFile("v2"), 200, &p)
+	e.sendFile("PUT", "/v1/media-projects/"+p.ID, e.key, map[string]string{"name": "Poster 2", "source_ids": a.ID, "output_id": a.ID}, designFile("v2"), 200, &p)
 	if p.Name != "Poster 2" || p.OutputID != a.ID {
 		t.Fatalf("saved again: %+v", p)
 	}
@@ -123,7 +127,7 @@ func TestMediaProjects(t *testing.T) {
 	}
 	body, _ := io.ReadAll(res.Body)
 	res.Body.Close()
-	if res.StatusCode != 200 || !bytes.Equal(body, gpexFile("v2")) {
+	if res.StatusCode != 200 || !bytes.Equal(body, designFile("v2")) {
 		t.Fatalf("file: %d %q", res.StatusCode, body)
 	}
 
@@ -325,4 +329,52 @@ func TestAIImages(t *testing.T) {
 	if st.Configured {
 		t.Fatalf("forgotten: %+v", st)
 	}
+}
+
+func TestStockPhotos(t *testing.T) {
+	e := newEnv(t)
+	var pinged atomic.Int32
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Client-ID test-key" {
+			w.WriteHeader(401)
+			return
+		}
+		photo := `{"id":"p1","width":4000,"height":3000,"alt_description":"a lake","urls":{"small":"https://images.example/s","raw":"https://images.example/r?ixid=1"},"links":{"html":"https://unsplash.example/p1"},"user":{"name":"Jane Doe","links":{"html":"https://unsplash.example/jane"}}}`
+		switch r.URL.Path {
+		case "/search/photos":
+			fmt.Fprintf(w, `{"results":[%s]}`, photo)
+		case "/photos":
+			fmt.Fprintf(w, `[%s]`, photo)
+		case "/photos/p1/download":
+			pinged.Add(1)
+			fmt.Fprint(w, `{"url":"x"}`)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(fake.Close)
+
+	var page app.StockPage
+	e.do(nil, "GET", "/v1/stock/photos?query=lake", e.key, nil, 200, &page)
+	if page.Configured || len(page.Data) != 0 {
+		t.Fatalf("off without a key: %+v", page)
+	}
+	e.do(nil, "POST", "/v1/stock/photos/p1/use", e.key, nil, 409, nil)
+
+	e.svc.Cfg.Stock = app.StockConfig{UnsplashKey: "test-key", UnsplashBaseURL: fake.URL}
+	for _, q := range []string{"?query=lake", ""} {
+		e.do(nil, "GET", "/v1/stock/photos"+q, e.key, nil, 200, &page)
+		if !page.Configured || len(page.Data) != 1 {
+			t.Fatalf("%q: %+v", q, page)
+		}
+		p := page.Data[0]
+		if p.URL != "https://images.example/r?ixid=1&w=2000&fm=jpg&q=85" || p.Author != "Jane Doe" || !strings.Contains(p.AuthorURL, "utm_source=staqly") {
+			t.Fatalf("%q: %+v", q, p)
+		}
+	}
+	e.do(nil, "POST", "/v1/stock/photos/p1/use", e.key, nil, 204, nil)
+	if pinged.Load() != 1 {
+		t.Fatalf("download ping: %d", pinged.Load())
+	}
+	e.do(nil, "POST", "/v1/stock/photos/p1/use", e.keyWith(app.ScopeMediaRead), nil, 403, nil)
 }

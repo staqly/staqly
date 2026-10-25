@@ -29,6 +29,8 @@ import { KEY_PLACEHOLDER, MCP_TOOL_COUNT, useApiKeyValue } from './shared'
 
 // Local installs only: out of the cloud pages' first load.
 const AccessTokenCard = dynamic(() => import('./access-token').then((m) => m.AccessTokenCard))
+// Below the fold: loads after the page.
+const AiKeyCard = dynamic(() => import('./ai-key').then((m) => m.AiKeyCard))
 
 interface ProbeResult {
   ok: boolean
@@ -462,6 +464,7 @@ export function IntegrationsPage() {
               )
             })}
           </Tabs>
+          <AiKeyCard />
         </div>
       )}
     </PageContainer>

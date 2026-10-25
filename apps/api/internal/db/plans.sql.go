@@ -175,7 +175,7 @@ SELECT CAST((SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE media.workspac
   + (SELECT COALESCE(SUM(size_bytes), 0) FROM media_projects WHERE media_projects.workspace_id = ?1) AS INTEGER) AS used
 `
 
-// Library files (Deleted included) and media editor project files.
+// Library files (Deleted included) and design editor project files.
 func (q *Queries) StorageUsed(ctx context.Context, workspaceID string) (int64, error) {
 	row := q.db.QueryRowContext(ctx, storageUsed, workspaceID)
 	var used int64

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/staqly/staqly/apps/api/internal/app"
 )
 
-// The media editor's endpoints: replace a file with its edit, editable projects, and the AI tools on the
+// The design editor's endpoints: replace a file with its edit, editable projects, and the AI tools on the
 // workspace's own provider key.
 func init() {
 	RegisterAuthedRoutes(func(s *Server, r chi.Router) {
@@ -29,6 +30,9 @@ func init() {
 		r.Put("/ai", s.setAI)
 		r.Delete("/ai", s.deleteAI)
 		r.Post("/ai/images/{op}", s.aiImage)
+
+		r.Get("/stock/photos", s.stockPhotos)
+		r.Post("/stock/photos/{id}/use", s.useStockPhoto)
 	})
 }
 
@@ -107,11 +111,12 @@ func (s *Server) getMediaProjectFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 	h := w.Header()
-	h.Set("Content-Type", "application/octet-stream")
-	h.Set("Content-Disposition", `attachment; filename="project.gpex"`)
+	// ponytail: projects from before 2026-10-25 are .gpex files and download under this name too.
+	h.Set("Content-Type", "application/json")
+	h.Set("Content-Disposition", `attachment; filename="design.json"`)
 	h.Set("Cache-Control", "private, no-cache")
 	modified, _ := time.Parse(time.RFC3339Nano, p.UpdatedAt)
-	http.ServeContent(w, r, "project.gpex", modified, f)
+	http.ServeContent(w, r, "design.json", modified, f)
 }
 
 func (s *Server) deleteMediaProject(w http.ResponseWriter, r *http.Request) {
@@ -177,4 +182,15 @@ func (s *Server) aiImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	_, _ = io.Copy(w, bytes.NewReader(out))
+}
+
+func (s *Server) stockPhotos(w http.ResponseWriter, r *http.Request) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	out, err := s.svc.StockPhotos(r.Context(), principal(r), r.URL.Query().Get("query"), page)
+	respond(w, r, 200, out, err)
+}
+
+func (s *Server) useStockPhoto(w http.ResponseWriter, r *http.Request) {
+	err := s.svc.UseStockPhoto(r.Context(), principal(r), chi.URLParam(r, "id"))
+	respond(w, r, 204, nil, err)
 }

@@ -142,7 +142,7 @@ type Limits struct {
 	Links     string   `json:"links"`
 	LinkModes []string `json:"link_modes"`
 	// Image is what the platform refuses in a picture (its API's documented limits); nil when it states none.
-	// The composer and the media editor check pictures against it; recommended shapes are not rules.
+	// The composer and the design editor check pictures against it; recommended shapes are not rules.
 	Image *ImageRules `json:"image,omitempty"`
 	// XWeighted: MaxChars is X's weighted length (TextLength), not characters.
 	XWeighted bool `json:"-"`

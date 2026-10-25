@@ -19,9 +19,7 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"],
-      "@opengpex/editor/*": ["./lib/opengpex/*"],
-      "@opengpex/components/*": ["./lib/opengpex/components/*"]
+      "@/*": ["./*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts", "**/*.mts"],

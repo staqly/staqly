@@ -229,7 +229,7 @@ type RepointDraftMediaParams struct {
 	WorkspaceID string `json:"workspace_id"`
 }
 
-// The media editor's "Replace the original": drafts that carry the file carry the edited one instead.
+// The design editor's "Replace the original": drafts that carry the file carry the edited one instead.
 func (q *Queries) RepointDraftMedia(ctx context.Context, arg RepointDraftMediaParams) error {
 	_, err := q.db.ExecContext(ctx, repointDraftMedia,
 		arg.FromQuoted,

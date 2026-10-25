@@ -25,7 +25,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     actionTimeout: 15_000,
-    // The media editor draws with WebGPU: headless Chromium has it with a software adapter.
+    // The design editor's background removal runs on WebGPU when there is one: a software adapter here.
     launchOptions: {
       args: [
         '--enable-unsafe-webgpu',

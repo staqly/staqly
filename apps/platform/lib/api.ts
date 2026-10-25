@@ -76,6 +76,8 @@ export type JobStats = Schemas['JobStats']
 export type Media = Schemas['Media']
 export type MediaProject = Schemas['MediaProject']
 export type AIStatus = Schemas['AIStatus']
+export type StockPhoto = Schemas['StockPhoto']
+export type StockPage = Schemas['StockPage']
 export type ImageRules = Schemas['ImageRules']
 export type MediaLibraryItem = Schemas['MediaLibraryItem']
 export type MediaPage = Schemas['MediaPage']
@@ -366,7 +368,7 @@ interface RequestOptions {
   public?: boolean
   /** Let the request finish after the page is gone (an approval sent while the tab closes or reloads). */
   keepalive?: boolean
-  /** Answer the body as a Blob (files, the media editor's AI pictures and projects). */
+  /** Answer the body as a Blob (files, the design editor's AI pictures and projects). */
   blob?: boolean
 }
 
@@ -774,7 +776,7 @@ export const api = {
     request<{ updated: string[]; missing: string[] }>('/v1/media/bulk', { method: 'POST', json: body }),
   mediaFile: (id: string, signal?: AbortSignal) =>
     request<Blob>(`/v1/media/${encodeURIComponent(id)}`, { blob: true, signal }),
-  /** The media editor's "Replace the original": answers the edited file (a new id; drafts follow it). */
+  /** The design editor's "Replace the original": answers the edited file (a new id; drafts follow it). */
   replaceMedia: (id: string, file: Blob, fileName: string) => {
     const form = new FormData()
 
@@ -784,6 +786,8 @@ export const api = {
   },
   mediaProject: (id: string) => request<MediaProject>(`/v1/media-projects/${encodeURIComponent(id)}`),
   mediaProjectFile: (id: string) => request<Blob>(`/v1/media-projects/${encodeURIComponent(id)}/file`, { blob: true }),
+  mediaProjects: (media?: string) =>
+    request<{ data: MediaProject[] }>('/v1/media-projects', { query: { media: media || undefined } }),
   saveMediaProject: (body: { id?: string; name: string; source_ids: string[]; output_id?: string }, file: Blob) => {
     // Fields before the file: the server reads them first.
     const form = new FormData()
@@ -791,12 +795,15 @@ export const api = {
     form.append('name', body.name)
     form.append('source_ids', body.source_ids.join(','))
     form.append('output_id', body.output_id ?? '')
-    form.append('file', file, 'project.gpex')
+    form.append('file', file, 'design.json')
 
     return body.id
       ? request<MediaProject>(`/v1/media-projects/${encodeURIComponent(body.id)}`, { method: 'PUT', form })
       : request<MediaProject>('/v1/media-projects', { method: 'POST', form })
   },
+  stockPhotos: (query: string, page = 1, signal?: AbortSignal) =>
+    request<StockPage>('/v1/stock/photos', { query: { query: query || undefined, page }, signal }),
+  stockPhotoUsed: (id: string) => request<void>(`/v1/stock/photos/${encodeURIComponent(id)}/use`, { method: 'POST' }),
   ai: () => request<AIStatus>('/v1/ai'),
   setAI: (body: { model?: string; api_key?: string }) => request<AIStatus>('/v1/ai', { method: 'PUT', json: body }),
   deleteAI: () => request<void>('/v1/ai', { method: 'DELETE' }),

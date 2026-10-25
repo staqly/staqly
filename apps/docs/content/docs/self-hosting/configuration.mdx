@@ -116,12 +116,13 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `PROVIDER_<ID>_ENABLED` | `true` | `false` turns one platform off on this server: no tile, no connecting, no publishing (e.g. `PROVIDER_TIKTOK_ENABLED=false`). See [Developer apps](/channels/developer-apps). |
 | `PROVIDER_<ID>_CLIENT_ID`, `PROVIDER_<ID>_CLIENT_SECRET` | — | The OAuth developer app of one platform, e.g. `PROVIDER_X_CLIENT_ID` / `PROVIDER_X_CLIENT_SECRET`. See [Developer apps](/channels/developer-apps). |
 
-## Media editor AI
+## Editors: AI and stock photos
 
 | Variable | Default | Description |
 |---|---|---|
-| `AI_DISABLED` | `false` | `true` turns the [media editor's](/dashboard/media-editor) AI tools off for the whole server, whatever key a workspace added. |
+| `AI_DISABLED` | `false` | `true` turns the [design editor's](/dashboard/design-editor) AI tools off for the whole server, whatever key a workspace added. |
 | `AI_OPENAI_BASE_URL` | `https://api.openai.com/v1` | The OpenAI-compatible endpoint the AI tools call with the workspace's own key. Change it only for a compatible proxy or tests. |
+| `UNSPLASH_ACCESS_KEY` | — | An [Unsplash](https://unsplash.com/developers) app's access key: the [design editor](/dashboard/design-editor) gets an **Unsplash** tab with stock photos. The key stays on the server; searches go through staqly, the pictures load from Unsplash. Unset, the tab is not shown. |
 
 ## Webhooks and schedule endpoints
 

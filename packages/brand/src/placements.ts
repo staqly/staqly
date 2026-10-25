@@ -1,7 +1,7 @@
 /**
  * Where a picture or video fits without cropping: the common shape per placement, by platform (provider ids
  * of the API's catalog). Ratios only: platforms change pixel sizes often. One table for the media library's
- * "Where it fits", the media editor's channel check and the aspect ratio tool on staqly.ai.
+ * "Where it fits", the design editor's sizes and the aspect ratio tool on staqly.ai.
  *
  * These are recommendations. What a platform refuses (file size, formats, ratio range) is in the API's
  * provider catalog (image_rules on GET /v1/providers).

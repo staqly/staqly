@@ -22,7 +22,7 @@ SELECT COUNT(*) FROM webhooks WHERE workspace_id = ?;
 SELECT COUNT(*) FROM api_keys WHERE workspace_id = @workspace_id AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > @now);
 
 -- name: StorageUsed :one
--- Library files (Deleted included) and media editor project files.
+-- Library files (Deleted included) and design editor project files.
 SELECT CAST((SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE media.workspace_id = @workspace_id)
   + (SELECT COALESCE(SUM(size_bytes), 0) FROM media_projects WHERE media_projects.workspace_id = @workspace_id) AS INTEGER) AS used;
 

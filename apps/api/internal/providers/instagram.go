@@ -55,7 +55,7 @@ func instagramValidate(l Limits, fields []Field, p PostContent, s Settings) erro
 		case strings.HasPrefix(m.MimeType, "video/"):
 			videos++
 		case m.MimeType != "image/jpeg":
-			return invalid("media", "Instagram takes pictures as JPEG; save "+m.Name+" as JPEG (the media editor does it)")
+			return invalid("media", "Instagram takes pictures as JPEG; save "+m.Name+" as JPEG (open it in the design editor and save it: photos save as JPEG)")
 		}
 	}
 	switch s["post_type"] {

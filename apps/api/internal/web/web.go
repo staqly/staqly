@@ -57,15 +57,14 @@ var securityHeaders = map[string]string{
 	"Permissions-Policy":     "camera=(), microphone=(), geolocation=(), interest-cohort=()",
 }
 
-// The media editor (/media/edit, OpenGPEX in apps/platform/lib/opengpex) has its codecs and workers at /ext.
-// Its wasm codecs need cross-origin isolation (COOP + COEP), and its on-device AI tools load ONNX Runtime and
-// transformers.js (pinned versions, jsDelivr) and download model weights from Hugging Face when someone uses
-// them. Text layers may load Google Fonts. Nothing else leaves the page.
+// The design editor (/media/design) removes backgrounds on the device: transformers.js and ONNX Runtime (pinned
+// versions, jsDelivr) and the model weights from Hugging Face, fetched when someone uses it. Its pictures may come
+// from Unsplash's CDN (stock photos), which the AI tools read back to change them. Nothing else leaves the page.
 //
 // jsDelivr is allowed per package version only: a CSP source path without a trailing "/" matches that exact
 // path, and with one only what lies under it, so scripts and wasm from any other npm package stay blocked.
-// The versions: ORT_VERSION (ort-session.ts), transformers.js (tfm-session.ts) and the ONNX Runtime build that
-// transformers.js 4.2.0 loads by itself; apps/platform/tests/editor-csp.test.ts checks the first two.
+// The versions: transformers.js (apps/platform/components/design/background.ts) and the ONNX Runtime builds it
+// loads by itself; apps/platform/tests/design-csp.test.ts checks the first.
 const editorCDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/ " +
 	"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.20260416-b7804b056c/ " +
 	"https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0 " +
@@ -76,26 +75,21 @@ var editorHeaders = map[string]string{
 		"default-src 'self'",
 		"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' " + editorCDN,
 		"worker-src 'self' blob:",
-		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-		"img-src 'self' data: blob:",
+		"style-src 'self' 'unsafe-inline'",
+		"img-src 'self' data: blob: https:",
 		"media-src 'self' blob:",
-		"font-src 'self' data: https://fonts.gstatic.com",
-		"connect-src 'self' blob: data: https://huggingface.co https://*.huggingface.co https://*.hf.co " + editorCDN + " https://fonts.googleapis.com https://fonts.gstatic.com https://www.googleapis.com",
+		"font-src 'self' data:",
+		"connect-src 'self' blob: data: https://huggingface.co https://*.huggingface.co https://*.hf.co https://images.unsplash.com " + editorCDN,
 		"object-src 'none'",
 		"base-uri 'none'",
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 	}, "; "),
-	"Cross-Origin-Opener-Policy":   "same-origin",
-	"Cross-Origin-Embedder-Policy": "require-corp",
-	"Cross-Origin-Resource-Policy": "same-origin",
 }
 
-// editorPath: the editor's page and files (see editorHeaders). The editor's workers are bundled chunks under
-// /_next/static: a worker of an isolated page needs the same headers (on other script files they do nothing).
+// editorPath: the design editor's page (see editorHeaders).
 func editorPath(p string) bool {
-	return p == "/media/edit" || strings.HasPrefix(p, "/media/edit/") || strings.HasPrefix(p, "/ext/") ||
-		strings.HasPrefix(p, "/_next/static/")
+	return p == "/media/design" || strings.HasPrefix(p, "/media/design/") || p == "/media/design.html"
 }
 
 // Pages with an [id] segment are exported once, as id "_": the route prefix and the segment that holds
@@ -144,6 +138,14 @@ func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, r
 	for from, to := range moved {
 		mux.Handle(from, http.RedirectHandler(to, http.StatusMovedPermanently))
 	}
+	// The photo editor gave way to the design editor (2026-10-25): its links open the same pictures there.
+	mux.HandleFunc("/media/edit", func(rw http.ResponseWriter, r *http.Request) {
+		to := "/media/design"
+		if r.URL.RawQuery != "" {
+			to += "?" + r.URL.RawQuery
+		}
+		http.Redirect(rw, r, to, http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("/collections/", func(rw http.ResponseWriter, r *http.Request) {
 		id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/collections/"), "/")
 		if id == "" || strings.Contains(id, "/") {

@@ -103,7 +103,7 @@ the dashboard's events with any content blocker; to object to the server's event
 ## Cookies
 
 The dashboard uses only what it needs to work: an HttpOnly **session cookie** (valid for up to
-30 days) and a CSRF token, plus a few display preferences (such as the media editor's theme) in your browser's local storage. No advertising or tracking
+30 days) and a CSRF token, plus a few display preferences (such as the theme) in your browser's local storage. No advertising or tracking
 cookies.
 
 ## Who else processes data
@@ -115,9 +115,10 @@ cookies.
 - **Payments:** Stripe, once payments are available. Stripe receives your card details
   directly; we never see them.
 - **Services you connect:** when you connect a channel, set up webhooks, alerts or schedule endpoints,
-  or add your own OpenAI key for the media editor's AI tools, staqly sends data to (or fetches
+  or add your own OpenAI key for the design editor's AI tools, staqly sends data to (or fetches
   from) those services on your instruction. Their own terms and
-  policies apply.
+  policies apply. A server whose operator added an Unsplash key sends your stock photo searches to
+  Unsplash, and your browser loads the photos from it.
 
 We do not sell personal data. We disclose it to authorities only when the law requires it.
 

@@ -52,7 +52,7 @@ const COMMON = [
   { label: '1.91:1', w: 1.91, h: 1 },
 ]
 
-/** Where a picture or video fits without cropping, by placement (shared with the media editor). */
+/** Where a picture or video fits without cropping, by placement (shared with the design editor). */
 export { PLACEMENTS } from '@staqly/brand/placements'
 
 /** Fits (under 1% cropped), crops a little (up to 25%) or crops a lot. */

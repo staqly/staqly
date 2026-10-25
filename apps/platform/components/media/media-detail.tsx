@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, FileText, Folder, Maximize2, Music, PenSquare, Trash2, Undo2, Wand2 } from 'lucide-react'
+import { Download, FileText, Folder, Maximize2, Music, Palette, PenSquare, Trash2, Undo2 } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -278,9 +278,9 @@ function DetailForm({
               </Button>
             )}
             {editable && kind === 'image' && (
-              <Button variant="ghost" size="icon-sm" aria-label="Edit" tooltip="Edit in the editor" asChild>
-                <Link href={`/media/edit?ids=${item.id}`} prefetch={false}>
-                  <Wand2 />
+              <Button variant="ghost" size="icon-sm" aria-label="Edit" tooltip="Edit in the design editor" asChild>
+                <Link href={`/media/design?ids=${item.id}`} prefetch={false}>
+                  <Palette />
                 </Link>
               </Button>
             )}

@@ -169,7 +169,7 @@ func (d Dribbble) Publish(ctx context.Context, c Credentials, p PostContent, s S
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Dribbble takes pictures up to 8 MB"}
 	}
 	if w, h, ok := imageSize(data); ok && !(w == 400 && h == 300) && !(w == 800 && h == 600) {
-		return Result{}, &Failure{Kind: ErrRejected, Msg: fmt.Sprintf("Dribbble takes pictures of exactly 400x300 or 800x600 pixels; %s is %dx%d (the media editor can crop it)", m.Name, w, h)}
+		return Result{}, &Failure{Kind: ErrRejected, Msg: fmt.Sprintf("Dribbble takes pictures of exactly 400x300 or 800x600 pixels; %s is %dx%d (set that size in the design editor)", m.Name, w, h)}
 	}
 	title := strings.TrimSpace(s["title"])
 	fields := [][2]string{{"title", title}}

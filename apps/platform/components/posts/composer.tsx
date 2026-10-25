@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Send,
   X,
+  Palette,
   Pencil,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -29,7 +30,7 @@ import { Callout } from '@/components/common/callout'
 import { DateTimeFields, formatShort } from '@/components/common/date-time-picker'
 import { MultiSelect } from '@/components/common/multi-select'
 import { PostStatusBadge, TargetStatusBadge } from '@/components/common/status-badge'
-import { useEditedMedia } from '@/components/media-editor/edited-media'
+import { useDesignedMedia, useEditedMedia } from '@/components/design/edited-media'
 import { LibraryPickerButton } from '@/components/media/library-picker'
 import { PostStats } from '@/components/posts/post-actions'
 import { Button } from '@/components/ui/button'
@@ -297,7 +298,7 @@ function ChannelPicker({
   )
 }
 
-/** Uploaded pictures and files as thumbnails with a remove button (and, for pictures, Edit in the media editor). */
+/** Uploaded pictures and files as thumbnails with a remove button (and, for pictures, Edit in the design editor). */
 function MediaStrip({
   media,
   onRemove,
@@ -329,7 +330,7 @@ function MediaStrip({
           {editable && m.mime_type.startsWith('image/') && (
             // A new tab: this draft stays open; the edited picture replaces this one here when it is saved.
             <a
-              href={`/media/edit?ids=${encodeURIComponent(m.id)}&from=composer`}
+              href={`/media/design?ids=${encodeURIComponent(m.id)}&from=composer`}
               target="_blank"
               rel="noopener"
               aria-label={`Edit ${m.original_name}`}
@@ -358,6 +359,10 @@ function MediaStrip({
 /** The "Insert media" button: uploads and hands each file back. */
 function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
   const input = useRef<HTMLInputElement>(null)
+  // Design opens the design editor in a new tab; what it saves for this token lands here.
+  const [token] = useState(() => Math.random().toString(36).slice(2, 12))
+
+  useDesignedMedia(token, onAdd)
   const upload = useMutation({
     mutationFn: (file: File) => api.uploadMedia(file),
     onSuccess: onAdd,
@@ -392,6 +397,11 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
         <ImagePlus /> {upload.isPending ? 'Uploading...' : 'Insert media'}
       </Button>
       <LibraryPickerButton onAdd={onAdd} />
+      <Button type="button" variant="outline" size="sm" asChild>
+        <a href={`/media/design?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="design-new">
+          <Palette /> Design
+        </a>
+      </Button>
     </>
   )
 }

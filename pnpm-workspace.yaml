@@ -8,8 +8,6 @@ allowBuilds:
   # posthog-js's polyfills: the install step only prints a banner.
   core-js: false
   esbuild: true
-  # The media editor's EXIF reader: its install step is not needed in the browser.
-  exifreader: false
 
 # pnpm refuses releases younger than a day (supply-chain safety). Exact
 # versions installed before they were a day old are listed here; prune the

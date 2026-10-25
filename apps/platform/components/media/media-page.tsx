@@ -15,8 +15,8 @@ import {
   Search,
   Trash2,
   Undo2,
+  Palette,
   Upload,
-  Wand2,
   X,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
@@ -682,6 +682,11 @@ export function MediaPage() {
               e.target.value = ''
             }}
           />
+          <Button variant="outline" asChild className="shrink-0">
+            <Link href="/media/design" prefetch={false} data-testid="media-design">
+              <Palette /> <span className="max-sm:sr-only">Design</span>
+            </Link>
+          </Button>
           <Button onClick={() => input.current?.click()} data-testid="media-upload" className="shrink-0">
             <Upload /> Upload
           </Button>
@@ -740,12 +745,12 @@ export function MediaPage() {
           {canWrite && (
             <Button variant="ghost" aria-label="Edit" disabled={editable.length === 0} asChild={editable.length > 0}>
               {editable.length > 0 ? (
-                <Link href={`/media/edit?ids=${editable.map((m) => m.id).join(',')}`} prefetch={false}>
-                  <Wand2 /> {barLabel('Edit')}
+                <Link href={`/media/design?ids=${editable.map((m) => m.id).join(',')}`} prefetch={false}>
+                  <Palette /> {barLabel('Edit')}
                 </Link>
               ) : (
                 <>
-                  <Wand2 /> {barLabel('Edit')}
+                  <Palette /> {barLabel('Edit')}
                 </>
               )}
             </Button>
