@@ -4104,7 +4104,7 @@ export interface components {
             output_id?: string;
             /**
              * Format: binary
-             * @description The design: JSON with version 1, width, height and elements
+             * @description The design: JSON with version 1, width, height and pages
              */
             file: string;
         };
