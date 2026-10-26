@@ -183,12 +183,28 @@ const MediaTile = memo(function MediaTile({
       // Off-screen tiles skip layout and paint; the negative margin and padding keep the rings inside the box.
       className={cn(
         'group relative -m-1 min-w-0 p-1 [contain-intrinsic-size:auto_13rem] [content-visibility:auto]',
+        // content-visibility clips to the tile's box: a carousel's cards reach past it.
+        pages > 1 && '[content-visibility:visible]',
         isMoving && 'opacity-40',
       )}
+      data-id={item.id}
       draggable={draggable}
       onDragStart={(e) => on.dragStart(item, e)}
       onDragEnd={on.dragEnd}
     >
+      {pages > 1 && (
+        // A carousel: two more cards under it, rounded like the tile, peeking out at the top right.
+        <>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-1 top-1 aspect-square translate-x-[10px] -translate-y-[10px] scale-[0.94] rounded-xl border bg-muted/60"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-1 top-1 aspect-square translate-x-[5px] -translate-y-[5px] scale-[0.97] rounded-xl border bg-muted"
+          />
+        </>
+      )}
       {/* The picture opens the file for a pointer; the name below is the tile's button (keyboard, screen
           readers), so the select box is the only control over the picture and nothing overlaps. */}
       {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the name button below is the keyboard equivalent */}
@@ -284,6 +300,7 @@ export function MediaGrid({
   caption,
   highlight = NO_IDS,
   stacks,
+  onSelectMany,
   className,
 }: {
   items: MediaLibraryItem[]
@@ -298,16 +315,18 @@ export function MediaGrid({
   caption?: (item: MediaLibraryItem) => React.ReactNode
   /** Tiles to ring for a moment (just uploaded). */
   highlight?: Set<string>
+  /** Selecting with a box: drag over empty space (Shift or Cmd/Ctrl adds to what is selected). */
+  onSelectMany?: (ids: string[]) => void
   /** Carousels: a first page's id and all its pages (useCarousels). */
   stacks?: Map<string, string[]>
   className?: string
 }) {
   const grid = useRef<HTMLUListElement>(null)
   const [moving, setMoving] = useState<Set<string>>(NO_IDS)
-  const latest = useRef({ items, selected, onOpen, onToggle, onSelectAll, dragIds })
+  const latest = useRef({ items, selected, onOpen, onToggle, onSelectAll, dragIds, onSelectMany })
 
   useEffect(() => {
-    latest.current = { items, selected, onOpen, onToggle, onSelectAll, dragIds }
+    latest.current = { items, selected, onOpen, onToggle, onSelectAll, dragIds, onSelectMany }
   })
 
   const [on] = useState<Tile>(() => ({
@@ -369,27 +388,98 @@ export function MediaGrid({
     dragEnd: () => setMoving(NO_IDS),
   }))
 
+  // The selection box, in the wrapper's coordinates, while a drag over empty space draws it.
+  const wrap = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+
+  const marquee = (e: React.PointerEvent<HTMLDivElement>) => {
+    const pick = latest.current.onSelectMany
+
+    if (!pick || e.button !== 0 || e.pointerType !== 'mouse' || (e.target as Element).closest('li, button, a, input')) {
+      return
+    }
+
+    const x0 = e.clientX
+    const y0 = e.clientY
+    const base = e.shiftKey || e.metaKey || e.ctrlKey ? [...latest.current.selected] : []
+    let moved = false
+
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) {
+        return
+      }
+
+      moved = true
+      ev.preventDefault()
+
+      const r = wrap.current!.getBoundingClientRect()
+      const left = Math.min(x0, ev.clientX)
+      const top = Math.min(y0, ev.clientY)
+      const right = Math.max(x0, ev.clientX)
+      const bottom = Math.max(y0, ev.clientY)
+
+      setBox({ x: left - r.left, y: top - r.top, w: right - left, h: bottom - top })
+
+      const hits = [...(grid.current?.querySelectorAll<HTMLElement>('li[data-id]') ?? [])]
+        .filter((li) => {
+          const t = li.getBoundingClientRect()
+
+          return t.left < right && t.right > left && t.top < bottom && t.bottom > top
+        })
+        .map((li) => li.dataset.id!)
+
+      pick([...new Set([...base, ...hits])])
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setBox(null)
+
+      // A click on empty space (no box drawn) selects nothing.
+      if (!moved && !base.length) {
+        pick([])
+      }
+    }
+
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
   return (
-    <ul
-      ref={grid}
-      className={cn('group/grid grid grid-cols-[repeat(auto-fill,minmax(min(100%,9rem),1fr))] gap-3', className)}
-      aria-label="Media files"
-      data-selecting={selected.size > 0 || undefined}
+    // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- the box is a pointer shortcut; Space, Shift+click and Cmd/Ctrl+A select by keyboard
+    <div
+      ref={wrap}
+      onPointerDown={onSelectMany ? marquee : undefined}
+      className={cn('relative', onSelectMany && 'min-h-[50svh] pb-8', box && 'select-none')}
     >
-      {items.map((item) => (
-        <MediaTile
-          key={item.id}
-          item={item}
-          isSelected={selected.has(item.id)}
-          isHighlighted={highlight.has(item.id)}
-          isMoving={moving.has(item.id)}
-          selectable={!!onToggle}
-          draggable={!!dragIds}
-          caption={caption?.(item)}
-          pages={stacks?.get(item.id)?.length}
-          on={on}
+      <ul
+        ref={grid}
+        className={cn('group/grid grid grid-cols-[repeat(auto-fill,minmax(min(100%,9rem),1fr))] gap-3', className)}
+        aria-label="Media files"
+        data-selecting={selected.size > 0 || undefined}
+      >
+        {items.map((item) => (
+          <MediaTile
+            key={item.id}
+            item={item}
+            isSelected={selected.has(item.id)}
+            isHighlighted={highlight.has(item.id)}
+            isMoving={moving.has(item.id)}
+            selectable={!!onToggle}
+            draggable={!!dragIds}
+            caption={caption?.(item)}
+            pages={stacks?.get(item.id)?.length}
+            on={on}
+          />
+        ))}
+      </ul>
+      {box && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute z-30 rounded-sm border border-brand bg-brand/15"
+          style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
         />
-      ))}
-    </ul>
+      )}
+    </div>
   )
 }

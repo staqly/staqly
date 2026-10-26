@@ -85,7 +85,7 @@ test.describe('the design editor', () => {
 
     // A new design asks for its name and folder first.
     await page.getByTestId('design-save').click()
-    await expect(page.getByRole('combobox', { name: 'Folder' })).toHaveValue('')
+    await expect(page.getByRole('radio', { name: 'Media library (no folder)' })).toBeChecked()
     await page.getByTestId('design-save-confirm').click()
     await expect(page.getByText('Saved 3 pages to Media')).toBeVisible({ timeout: 30_000 })
     await expect(page).toHaveURL(/\?project=/)

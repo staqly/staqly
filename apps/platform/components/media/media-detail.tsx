@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  ChevronLeft,
+  ChevronRight,
   Clapperboard,
   Download,
   FileText,
@@ -15,7 +17,7 @@ import {
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
@@ -82,11 +84,14 @@ export function MediaDetail({
   onOpenChange,
   onNewPost,
   onOpenMedia,
+  pages,
 }: {
   item: MediaLibraryItem | null
   onOpenChange: (open: boolean) => void
   onNewPost: (item: MediaLibraryItem) => void
   onOpenMedia?: (id: string) => void
+  /** A carousel's pages, in order, when the file is its first page. */
+  pages?: string[]
 }) {
   return (
     <Sheet open={!!item} onOpenChange={onOpenChange}>
@@ -103,6 +108,7 @@ export function MediaDetail({
             onClose={() => onOpenChange(false)}
             onNewPost={onNewPost}
             onOpenMedia={onOpenMedia}
+            pages={pages}
           />
         )}
       </SheetContent>
@@ -120,11 +126,13 @@ function DetailForm({
   onClose,
   onNewPost,
   onOpenMedia,
+  pages,
 }: {
   item: MediaLibraryItem
   onClose: () => void
   onNewPost: (item: MediaLibraryItem) => void
   onOpenMedia?: (id: string) => void
+  pages?: string[]
 }) {
   const qc = useQueryClient()
   const { canWrite } = useRole()
@@ -345,7 +353,7 @@ function DetailForm({
       >
         <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="block min-h-0 flex-1 overflow-y-auto">
           <div className="grid gap-3 p-4 pb-3">
-            <Preview item={item} />
+            <Preview item={item} pages={pages} />
             <p
               className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground"
               data-testid="media-facts"
@@ -726,10 +734,16 @@ function CropFrame({ item, w, h }: { item: MediaLibraryItem; w: number; h: numbe
  * The preview: one box of the same height for every file, on a checkerboard, the picture centred and never
  * stretched (tiny pictures are scaled up pixel by pixel). A picture opens full screen.
  */
-function Preview({ item }: { item: MediaLibraryItem }) {
+function Preview({ item, pages }: { item: MediaLibraryItem; pages?: string[] }) {
   const kind = mediaKind(item.mime_type)
   const [broken, setBroken] = useState(false)
   const [full, setFull] = useState(false)
+  // A carousel: one page at a time, with arrows, dots, the arrow keys and a swipe.
+  const [at, setAt] = useState(0)
+  const n = pages && pages.length > 1 ? pages.length : 1
+  const shown = n > 1 ? pages![at]! : item.id
+  const go = (by: number) => setAt((i) => (i + by + n) % n)
+  const swipe = useRef<number | null>(null)
   const tiny = !!item.width && !!item.height && item.width < 64 && item.height < 64
   const box =
     'relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border sm:aspect-auto sm:h-56'
@@ -766,8 +780,8 @@ function Preview({ item }: { item: MediaLibraryItem }) {
 
   const picture = (big: boolean) => (
     <img
-      src={mediaUrl(item.id)}
-      alt={item.alt_text || item.original_name}
+      src={mediaUrl(shown)}
+      alt={n > 1 ? `Page ${at + 1} of ${n}` : item.alt_text || item.original_name}
       draggable={false}
       onError={() => setBroken(true)}
       className={cn('max-h-full max-w-full object-contain', tiny && '[image-rendering:pixelated]')}
@@ -783,20 +797,93 @@ function Preview({ item }: { item: MediaLibraryItem }) {
     />
   )
 
+  const pager = (dark: boolean) =>
+    n > 1 && (
+      <>
+        {[
+          { by: -1, label: 'Previous page', icon: <ChevronLeft />, side: 'left-2' },
+          { by: 1, label: 'Next page', icon: <ChevronRight />, side: 'right-2' },
+        ].map((b) => (
+          <Button
+            key={b.label}
+            type="button"
+            size="icon-sm"
+            variant="secondary"
+            aria-label={b.label}
+            onClick={(e) => {
+              e.stopPropagation()
+              go(b.by)
+            }}
+            className={cn('absolute top-1/2 z-10 -translate-y-1/2 rounded-full shadow-md', b.side)}
+          >
+            {b.icon}
+          </Button>
+        ))}
+        <span
+          className={cn(
+            'absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-2 py-1 shadow-sm',
+            dark ? 'bg-white/15' : 'bg-background/90',
+          )}
+        >
+          {pages!.map((id, i) => (
+            <button
+              key={id}
+              type="button"
+              aria-label={`Page ${i + 1}`}
+              aria-current={i === at ? 'true' : undefined}
+              onClick={(e) => {
+                e.stopPropagation()
+                setAt(i)
+              }}
+              className={cn(
+                'size-1.5 rounded-full transition-all',
+                i === at ? 'w-4 bg-brand' : dark ? 'bg-white/50' : 'bg-muted-foreground/50',
+              )}
+            />
+          ))}
+          <span className={cn('ml-1 text-[11px] tabular-nums', dark ? 'text-white' : 'text-muted-foreground')}>
+            {at + 1} / {n}
+          </span>
+        </span>
+      </>
+    )
+  const keys = (e: React.KeyboardEvent) => {
+    if (n > 1 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault()
+      go(e.key === 'ArrowLeft' ? -1 : 1)
+    }
+  }
+  const swipeProps = {
+    onPointerDown: (e: React.PointerEvent) => void (swipe.current = e.clientX),
+    onPointerUp: (e: React.PointerEvent) => {
+      const dx = swipe.current === null ? 0 : e.clientX - swipe.current
+
+      swipe.current = null
+
+      if (n > 1 && Math.abs(dx) > 40 && e.pointerType !== 'mouse') {
+        go(dx < 0 ? 1 : -1)
+      }
+    },
+  }
+
   return (
     <>
-      <button
-        type="button"
-        aria-label="Open full screen preview"
-        onClick={() => setFull(true)}
-        className={cn(box, 'group cursor-zoom-in p-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50')}
-        style={CHECKER}
-      >
-        {picture(false)}
-        <span className="absolute top-2 right-2 rounded-md bg-background/90 p-1 opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-visible:opacity-100">
-          <Maximize2 className="size-3.5" aria-hidden />
-        </span>
-      </button>
+      {/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- the arrows and dots are the buttons; keys and swipes are shortcuts */}
+      <div className="relative" onKeyDown={keys} {...swipeProps}>
+        {pager(false)}
+        <button
+          type="button"
+          aria-label="Open full screen preview"
+          onClick={() => setFull(true)}
+          className={cn(box, 'group cursor-zoom-in p-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50')}
+          style={CHECKER}
+        >
+          {picture(false)}
+          <span className="absolute top-2 right-2 rounded-md bg-background/90 p-1 opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-visible:opacity-100">
+            <Maximize2 className="size-3.5" aria-hidden />
+          </span>
+        </button>
+      </div>
       <Dialog open={full} onOpenChange={setFull}>
         <DialogContent
           className="flex h-svh w-screen max-w-none flex-col gap-3 rounded-none border-0 bg-black/95 p-4 text-white sm:max-w-none"
@@ -813,16 +900,20 @@ function Preview({ item }: { item: MediaLibraryItem }) {
               </a>
             </Button>
           </div>
-          <button
-            type="button"
-            aria-label="Close the preview"
-            onClick={() => setFull(false)}
-            className="flex min-h-0 flex-1 cursor-zoom-out items-center justify-center outline-none"
-          >
-            <span className="flex max-h-full max-w-full" style={CHECKER}>
-              {picture(true)}
-            </span>
-          </button>
+          {/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- the arrows and dots are the buttons; keys and swipes are shortcuts */}
+          <div className="relative flex min-h-0 flex-1" onKeyDown={keys} {...swipeProps}>
+            {pager(true)}
+            <button
+              type="button"
+              aria-label="Close the preview"
+              onClick={() => setFull(false)}
+              className="flex min-h-0 flex-1 cursor-zoom-out items-center justify-center outline-none"
+            >
+              <span className="flex max-h-full max-w-full" style={CHECKER}>
+                {picture(true)}
+              </span>
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
     </>
