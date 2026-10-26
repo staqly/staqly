@@ -204,6 +204,17 @@ export function AddChannelSheet({
 }) {
   const providers = useProviders()
   const [picked, setPicked] = useState<string | null>(null)
+  // Every opening starts at the platform grid, however it closed last time (a connection done, the page closing it).
+  const [wasOpen, setWasOpen] = useState(open)
+
+  if (open !== wasOpen) {
+    setWasOpen(open)
+
+    if (open) {
+      setPicked(null)
+    }
+  }
+
   const providerId = reconnect?.provider ?? picked
   const provider = providers.data?.find((p) => p.id === providerId) ?? null
 
