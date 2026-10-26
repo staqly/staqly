@@ -24,16 +24,25 @@ import { ProviderGrid } from './provider-grid'
 // Only for Telegram through the server's bot: loaded when that panel opens.
 const TelegramConnect = dynamic(() => import('./telegram-connect').then((m) => m.TelegramConnect), { ssr: false })
 
+/** The other way into the same platform, offered under its form: Bluesky signs in, or takes an app password. */
+const ALTERNATIVES: Record<string, { id: string; label: string }> = {
+  bluesky: { id: 'bluesky_app_password', label: 'Use an app password instead (an account on a server of its own)' },
+  bluesky_app_password: { id: 'bluesky', label: 'Sign in with Bluesky instead (no app password)' },
+}
+
 /** Connect one account of a chosen provider: OAuth sends the browser to the platform; token providers take their fields here. */
 export function ConnectForm({
   provider,
   reconnect,
   onDone,
   oauthReturnTo,
+  alternative,
 }: {
   provider: Provider
   reconnect: Channel | null
   onDone: () => void
+  /** The other way into this platform, when there is one and it works on this server. */
+  alternative?: { label: string; onPick: () => void }
   /** Where the platform's callback lands instead of Channels (the welcome wizard). */
   oauthReturnTo?: string
 }) {
@@ -122,6 +131,7 @@ export function ConnectForm({
             {opening ? `Opening ${provider.name}...` : `Connect with ${provider.name}`}
           </Button>
         </div>
+        {alternative && <AlternativeLink {...alternative} />}
       </div>
     )
   }
@@ -173,6 +183,7 @@ export function ConnectForm({
           Connect with {provider.bot_name || provider.bot} instead (no token needed)
         </button>
       )}
+      {alternative && !reconnect && <AlternativeLink {...alternative} />}
       <ProviderFields
         idPrefix={`connect-${provider.id}`}
         fields={provider.credential_fields ?? []}
@@ -217,6 +228,9 @@ export function AddChannelSheet({
 
   const providerId = reconnect?.provider ?? picked
   const provider = providers.data?.find((p) => p.id === providerId) ?? null
+  const alt = provider && !reconnect ? ALTERNATIVES[provider.id] : undefined
+  const altProvider =
+    alt && providers.data?.find((p) => p.id === alt.id && p.status === 'available' && p.app_configured)
 
   return (
     <Sheet
@@ -272,12 +286,32 @@ export function AddChannelSheet({
           ) : providers.error ? (
             <ErrorState error={providers.error} onRetry={() => providers.refetch()} />
           ) : provider ? (
-            <ConnectForm provider={provider} reconnect={reconnect} onDone={() => onOpenChange(false)} />
+            <ConnectForm
+              key={provider.id}
+              provider={provider}
+              reconnect={reconnect}
+              onDone={() => onOpenChange(false)}
+              alternative={
+                alt && altProvider ? { label: alt.label, onPick: () => setPicked(altProvider.id) } : undefined
+              }
+            />
           ) : (
             <ProviderGrid providers={providers.data ?? []} onPick={(p) => setPicked(p.id)} />
           )}
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+function AlternativeLink({ label, onPick }: { label: string; onPick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className="justify-self-start text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+    >
+      {label}
+    </button>
   )
 }

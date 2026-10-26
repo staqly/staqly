@@ -165,7 +165,7 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 			continue // turned off on this server: no tile, no connecting, no publishing
 		}
 		_, serverOK := s.serverApp(e.ID())
-		info := providerInfo(e, (configured[e.ID()] && !needsBotToken(e.ID())) || serverOK)
+		info := providerInfo(e, (configured[e.ID()] && !needsBotToken(e.ID()) && !ownClient(e.ID())) || serverOK)
 		if !info.AppConfigured {
 			info.Status = providers.StatusSoon // an OAuth platform waits for its app's keys in the environment
 		}
@@ -191,6 +191,15 @@ func providerEnv(providerID string) string {
 // serverApp is the OAuth client the operator configured for a provider (PROVIDER_<ID>_CLIENT_ID/SECRET). A
 // platform that posts with the server's own bot (Needs.BotToken) also needs PROVIDER_<ID>_BOT_TOKEN.
 func (s *Service) serverApp(providerID string) (providers.App, bool) {
+	if ownClient(providerID) {
+		// The server is the client: its client id is its metadata's address, its key derived from the server's key.
+		// The platform fetches that address, so it must be https.
+		mac := hmac.New(sha256.New, s.Cfg.SecretKey)
+		mac.Write([]byte("oauth-client-key:" + providerID))
+		web := s.webURL()
+		return providers.App{ClientID: web + "/v1/oauth/" + providerID + "/client-metadata.json",
+			ClientSecret: hex.EncodeToString(mac.Sum(nil))}, strings.HasPrefix(web, "https://") && len(s.Cfg.SecretKey) > 0
+	}
 	key := providerEnv(providerID) + "CLIENT_"
 	app := providers.App{ClientID: s.Env(key+"ID", ""), ClientSecret: s.Env(key+"SECRET", "")}
 	if needsBotToken(providerID) && s.Env(providerEnv(providerID)+"BOT_TOKEN", "") == "" {
@@ -209,6 +218,39 @@ func needsBotToken(providerID string) bool {
 	return ok && n.Needs().BotToken
 }
 
+// ownClient: the server is its own OAuth client for this platform (Bluesky), so only the server's app works for it.
+func ownClient(providerID string) bool {
+	e, ok := providers.Get(providerID)
+	if !ok {
+		return false
+	}
+	n, ok := e.Provider.(providers.Needer)
+	return ok && n.Needs().OwnClient
+}
+
+// ClientMetadata is the document behind an own-client platform's client id (public: the platform fetches it).
+func (s *Service) ClientMetadata(providerID string) (map[string]any, error) {
+	app, ok := s.serverApp(providerID)
+	if !ownClient(providerID) || !ok {
+		return nil, notFound("client")
+	}
+	return providers.BlueskyClientMetadata(app, s.webURL(), s.webURL()+"/channels/callback/"+providerID)
+}
+
+// authURL asks the provider for its sign-in URL; one that needs the network for it (Bluesky) gets the guarded client.
+func (s *Service) authURL(ctx context.Context, e providers.Entry, app providers.App, redirect, state string, extra map[string]string) (string, error) {
+	if p, ok := e.Provider.(providers.AuthURLContexter); ok {
+		cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
+		defer cancel()
+		u, err := p.AuthURLContext(cctx, app, redirect, state, extra)
+		if err != nil {
+			return "", connectError(err)
+		}
+		return u, nil
+	}
+	return e.AuthURL(app, redirect, state, extra)
+}
+
 // providerCtx is what a provider call runs with: the SSRF-guarded client, and the server's settings for a platform
 // that reads its bot token at use time.
 func (s *Service) providerCtx(ctx context.Context) context.Context {
@@ -217,6 +259,13 @@ func (s *Service) providerCtx(ctx context.Context) context.Context {
 
 // providerApp: the workspace's developer app, else the server's.
 func (s *Service) providerApp(ctx context.Context, workspaceID, providerID string) (providers.App, error) {
+	if ownClient(providerID) {
+		if app, ok := s.serverApp(providerID); ok {
+			return app, nil
+		}
+		return providers.App{}, &Error{Code: "app_not_configured", Status: 409,
+			Message: "signing in to this platform needs the dashboard on an https address (PUBLIC_DASHBOARD_URL)"}
+	}
 	if needsBotToken(providerID) {
 		if app, ok := s.serverApp(providerID); ok {
 			return app, nil
@@ -532,7 +581,7 @@ func (s *Service) StartOAuth(ctx context.Context, p Principal, providerID, redir
 	if err != nil {
 		return "", err
 	}
-	return e.AuthURL(app, redirect, state, withVerifier(extra, s.pkceVerifier(st)))
+	return s.authURL(ctx, e, app, redirect, state, withVerifier(extra, s.pkceVerifier(st)))
 }
 
 // CompleteOAuth exchanges the code the platform sent back and saves the account as a channel. An existing

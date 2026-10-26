@@ -1,11 +1,32 @@
 ---
 title: Bluesky
-description: Publish posts with up to 4 pictures, clickable links, mentions and hashtags, and replies to Bluesky, with an app password.
+description: Publish posts with up to 4 pictures, clickable links, mentions and hashtags, and replies to Bluesky. Sign in with Bluesky, or connect with an app password.
 ---
 
-Staqly publishes to a **Bluesky** account (or an account on any AT Protocol server, a PDS) with an
-**app password**. There is nothing for whoever runs staqly to register. A published target links to
-the post on bsky.app.
+Staqly publishes to a **Bluesky** account. A published target links to the post on bsky.app. There are two
+ways to connect, and nothing for whoever runs staqly to register:
+
+- **Sign in with Bluesky** (OAuth): the usual way. Works with two-factor sign-in on.
+- **An app password**: for an account on a server of its own (a PDS other than Bluesky's), or a staqly whose
+  dashboard has no https address.
+
+## Sign in with Bluesky
+
+**Channels → Add channel → Bluesky → Connect with Bluesky** opens Bluesky's sign-in page; sign in and allow
+staqly. You come back with the account connected: its display name, `@handle` and picture.
+
+Staqly is its own OAuth client here (AT Protocol OAuth has no app to register): its client id is the address
+of a document the dashboard serves, `https://<your dashboard>/v1/oauth/bluesky/client-metadata.json`, which
+Bluesky fetches. So signing in needs the dashboard on a public **https** address (`PUBLIC_DASHBOARD_URL`);
+without one, Bluesky connects with an app password only. The sign-in asks for `atproto transition:generic`:
+posting, pictures and the account's profile, not direct messages.
+
+The client signs its requests with a key derived from the server's secret key (`DATA_DIR/secret.key` /
+`STAQLY_SECRET_KEY`), and every token is bound to a key of the connection's own (DPoP). Staqly renews the
+sign-in by itself. Removing staqly in Bluesky (**Settings → Privacy and security → Apps**) disconnects it; the
+channel then shows **Needs reconnect**.
+
+## With an app password
 
 <Steps>
 <Step>
@@ -21,7 +42,7 @@ direct messages** off. Never use your account password: staqly refuses it.
 
 ### Connect the account
 
-In **Channels → Add channel → Bluesky**, enter:
+In **Channels → Add channel → Bluesky**, pick **Use an app password instead** and enter:
 
 | Field | What |
 |---|---|
@@ -29,9 +50,9 @@ In **Channels → Add channel → Bluesky**, enter:
 | **App password** | the app password from the previous step |
 | **Server** | `https://bsky.social` (the default); change it only if your account lives on its own PDS |
 
-The channel shows your display name, `@handle` and picture. Staqly keeps the app password sealed and
-signs in with it for every publish, so there is no sign-in to renew. Deleting the app password in
-Bluesky disconnects staqly.
+Staqly keeps the app password sealed and signs in with it for every publish, so there is no sign-in to
+renew. Deleting the app password in Bluesky disconnects staqly. Over the API this is the provider
+`bluesky_app_password`; channels connected before Bluesky had OAuth moved there and keep working.
 
 </Step>
 </Steps>
@@ -59,7 +80,7 @@ before, all in the same thread.
 
 | Bluesky says | Staqly does |
 |---|---|
-| The app password was deleted or is wrong, the account is suspended | Marks the channel **Needs reconnect** and fails the target; make a new app password and reconnect |
+| The sign-in was revoked or can't be renewed, the app password was deleted or is wrong, the account is suspended | Marks the channel **Needs reconnect** and fails the target; reconnect (with an app password: make a new one) |
 | Rate limit, Bluesky unavailable or unreachable | Retries through the job queue (after 1, 5, then 15 minutes) |
 | A refused post (too long, a picture too large) | Fails the target with Bluesky's reason |
 
@@ -67,6 +88,6 @@ Each post gets a record key made from the post and the channel, and every attemp
 that record. So when an answer is lost, the next attempt finds the post Bluesky already made
 instead of posting it twice.
 
-Bluesky limits sign-ins (about 30 every 5 minutes and 300 a day per account). Staqly signs in once
-per post and once per reply, so a channel with many long threads can reach it; staqly then retries
-later.
+With an app password, Bluesky limits sign-ins (about 30 every 5 minutes and 300 a day per account). Staqly
+signs in once per post and once per reply, so a channel with many long threads can reach it; staqly then
+retries later. A channel signed in with Bluesky has no such limit.

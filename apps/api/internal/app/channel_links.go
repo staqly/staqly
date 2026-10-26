@@ -348,7 +348,7 @@ func (s *Service) StartOAuthViaLink(ctx context.Context, token, providerID, redi
 	if err != nil {
 		return "", err
 	}
-	return e.AuthURL(app, redirect, state, withVerifier(extra, s.pkceVerifier(st)))
+	return s.authURL(ctx, e, app, redirect, state, withVerifier(extra, s.pkceVerifier(st)))
 }
 
 // IsLinkState tells the callback which flow a platform's answer belongs to (the signature is checked later).

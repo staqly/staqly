@@ -31,7 +31,7 @@ func init() {
 		{"kick", "Kick", AuthOAuth2, Limits{MaxChars: 500}},
 		{"twitch", "Twitch", AuthOAuth2, Limits{MaxChars: 500}},
 		{"mastodon", "Mastodon", AuthToken, Limits{MaxChars: 500, MaxMedia: 4, MediaKinds: imgVid}},
-		{"bluesky", "Bluesky", AuthToken, Limits{MaxChars: 300, MaxMedia: 4, MediaKinds: img}},
+		{"bluesky", "Bluesky", AuthOAuth2, Limits{MaxChars: 300, MaxMedia: 4, MediaKinds: img}},
 		{"lemmy", "Lemmy", AuthToken, Limits{MaxChars: 10000, MaxMedia: 1, MediaKinds: img, NeedsTitle: true}},
 		{"farcaster", "Farcaster", AuthToken, Limits{MaxChars: 320, MaxMedia: 2, MediaKinds: img}},
 		{"telegram", "Telegram", AuthToken, Limits{MaxChars: 4096, MaxMedia: 10, MediaKinds: imgVid}},

@@ -132,7 +132,7 @@ func blueskyPNG(t *testing.T, w, h int) MediaFile {
 
 func TestBlueskyConnect(t *testing.T) {
 	f, creds := useFakeBluesky(t)
-	e, _ := Get("bluesky")
+	e, _ := Get("bluesky_app_password")
 	if e.Status != StatusAvailable {
 		t.Fatalf("bluesky is %q", e.Status)
 	}
@@ -160,7 +160,7 @@ func TestBlueskyConnect(t *testing.T) {
 
 func TestBlueskyPublish(t *testing.T) {
 	f, creds := useFakeBluesky(t)
-	e, _ := Get("bluesky")
+	e, _ := Get("bluesky_app_password")
 	text := "Hi @ben.example.com and @nobody.example.com see example.com/x #golang and https://example.com/#frag café"
 	res, err := e.Publish(context.Background(), creds, PostContent{PostID: "p1", ChannelID: "c1", Text: text, Media: []MediaFile{blueskyPNG(t, 40, 20)}}, nil)
 	if err != nil {
@@ -229,7 +229,7 @@ func TestBlueskyPublish(t *testing.T) {
 
 func TestBlueskyRetryFindsThePost(t *testing.T) {
 	f, creds := useFakeBluesky(t)
-	e, _ := Get("bluesky")
+	e, _ := Get("bluesky_app_password")
 	post := PostContent{PostID: "p1", ChannelID: "c1", Text: "Hello"}
 	f.drop = true
 	_, err := e.Publish(context.Background(), creds, post, nil)
@@ -248,7 +248,7 @@ func TestBlueskyRetryFindsThePost(t *testing.T) {
 
 func TestBlueskyErrors(t *testing.T) {
 	f, creds := useFakeBluesky(t)
-	e, _ := Get("bluesky")
+	e, _ := Get("bluesky_app_password")
 	post := PostContent{PostID: "p1", ChannelID: "c1", Text: "Hello"}
 	for _, c := range []struct {
 		code int
@@ -270,7 +270,7 @@ func TestBlueskyErrors(t *testing.T) {
 }
 
 func TestBlueskyValidate(t *testing.T) {
-	e, _ := Get("bluesky")
+	e, _ := Get("bluesky_app_password")
 	img := MediaFile{Name: "a.jpg", MimeType: "image/jpeg", Size: 500_000}
 	for _, c := range []struct {
 		p  PostContent
