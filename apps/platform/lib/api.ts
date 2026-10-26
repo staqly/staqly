@@ -1,4 +1,4 @@
-import type { components, paths } from './api-types'
+import type { components, operations, paths } from './api-types'
 
 type Schemas = components['schemas']
 
@@ -79,6 +79,8 @@ export type AIStatus = Schemas['AIStatus']
 export type AIOperation = Schemas['AIOperation']
 export type AIJob = Schemas['AIJob']
 export type AIOperationId = AIOperation['id']
+export type AIWriteInput = operations['writeWithAI']['requestBody']['content']['application/json']
+export type AIWriting = operations['writeWithAI']['responses']['200']['content']['application/json']
 export type StockPhoto = Schemas['StockPhoto']
 export type DesignBrand = Schemas['DesignBrand']
 export type StockPage = Schemas['StockPage']
@@ -869,6 +871,7 @@ export const api = {
 
     return request<AIJob>('/v1/ai/jobs', { method: 'POST', form, headers: { 'Idempotency-Key': idempotencyKey } })
   },
+  writeWithAI: (body: AIWriteInput) => request<AIWriting>('/v1/ai/write', { method: 'POST', json: body }),
   aiJob: (id: string) => request<AIJob>(`/v1/ai/jobs/${encodeURIComponent(id)}`),
   acceptAiJob: (id: string) => request<Media>(`/v1/ai/jobs/${encodeURIComponent(id)}/accept`, { method: 'POST' }),
   discardAiJob: (id: string) => request<void>(`/v1/ai/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),

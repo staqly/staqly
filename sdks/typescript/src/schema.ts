@@ -2970,6 +2970,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ai/write": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write a post or a thread with AI (posts:write)
+         * @description A language model on the server's AI provider writes a post or a thread from a description; the answer comes back in the response (a few seconds). Nothing is saved as a post: the dashboard puts it in the composer. It counts towards the workspace's monthly AI allowance (402 ai_limit_reached when used up); 409 not_available without an AI provider for text.
+         */
+        post: operations["writeWithAI"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/stock/photos": {
         parameters: {
             query?: never;
@@ -4226,12 +4246,12 @@ export interface components {
         /** @description An AI operation this server offers, what it takes and who runs it */
         AIOperation: {
             /** @enum {string} */
-            id: "generate" | "edit" | "inpaint" | "erase" | "expand" | "remove_background" | "replace_background" | "upscale" | "enhance" | "text_to_video" | "image_to_video";
+            id: "generate" | "edit" | "inpaint" | "erase" | "expand" | "remove_background" | "replace_background" | "upscale" | "enhance" | "text_to_video" | "image_to_video" | "write";
             /**
-             * @description What it makes
+             * @description What it makes (write, the only text one, runs with POST /v1/ai/write)
              * @enum {string}
              */
-            kind: "image" | "video";
+            kind: "image" | "video" | "text";
             /** @enum {string} */
             prompt: "required" | "optional" | "none";
             /** @description Needs a picture */
@@ -11765,6 +11785,50 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    writeWithAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description What the post is about */
+                    prompt: string;
+                    /** @enum {string} */
+                    format: "short" | "long" | "thread_short" | "thread_long";
+                    /** @enum {string} */
+                    voice: "personal" | "company";
+                    /** @description Also suggest a description of a picture to go with it */
+                    picture?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The post, or a thread's posts in order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        posts: string[];
+                        picture_prompt?: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["BadGateway"];
         };
     };
     listStockPhotos: {

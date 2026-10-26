@@ -125,6 +125,8 @@ func newFakeFal(t *testing.T) *fakeAI {
 				_, _ = io.WriteString(w, `{"detail":"The model ran out of memory"}`)
 			case st == "video":
 				fmt.Fprintf(w, `{"video":{"url":%q}}`, f.srv.URL+"/files/out.mp4")
+			case st == "text":
+				_, _ = io.WriteString(w, `{"output":"We shipped it.\n---\nHere is how.\nIMAGE: a rocket over a city","partial":false}`)
 			default:
 				fmt.Fprintf(w, `{"images":[{"url":%q,"width":64,"height":48}],"has_nsfw_concepts":[false]}`, f.srv.URL+"/files/out.png")
 			}
@@ -149,6 +151,8 @@ func newFakeFal(t *testing.T) *fakeAI {
 			st = "fail"
 		case strings.Contains(r.URL.Path, "video"):
 			st = "video"
+		case strings.Contains(r.URL.Path, "openrouter"):
+			st = "text"
 		}
 		smu.Lock()
 		state[id] = st
@@ -331,7 +335,7 @@ func TestAIFalOnly(t *testing.T) {
 
 	var st app.AIStatus
 	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
-	if !st.Configured || len(st.Operations) != 11 || st.Providers[0] != "fal" || st.Usage.LimitUSD == nil || *st.Usage.LimitUSD != app.DefaultAIMonthlyLimitUSD {
+	if !st.Configured || len(st.Operations) != 12 || st.Providers[0] != "fal" || st.Usage.LimitUSD == nil || *st.Usage.LimitUSD != app.DefaultAIMonthlyLimitUSD {
 		t.Fatalf("fal only: %+v", st)
 	}
 	for _, o := range st.Operations {
@@ -656,4 +660,33 @@ func TestAICancelRunning(t *testing.T) {
 	if job.Status != "canceled" || fal.cancels.Load() != 1 || job.CostUSD != 0 || job.Result != nil {
 		t.Fatalf("cancelled while running: %+v cancels %d", job, fal.cancels.Load())
 	}
+}
+
+func TestAIWrite(t *testing.T) {
+	e := newEnv(t)
+	e.paid()
+	fal := newFakeFal(t)
+	e.aiSetup(fal, nil)
+
+	var out app.AIWriting
+	e.do(nil, "POST", "/v1/ai/write", e.key, map[string]any{"prompt": "our launch", "format": "thread_short", "voice": "company", "picture": true}, 200, &out)
+	if len(out.Posts) != 2 || out.Posts[0] != "We shipped it." || out.Posts[1] != "Here is how." || out.PicturePrompt != "a rocket over a city" {
+		t.Fatalf("writing: %+v", out)
+	}
+	sent := fal.last()
+	if sent["prompt"] != "our launch" || !strings.Contains(sent["system_prompt"].(string), "company voice") || sent["model"] == "" {
+		t.Fatalf("fal input: %v", sent)
+	}
+	// It counts towards the allowance.
+	var st app.AIStatus
+	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
+	if st.Usage.UsedUSD <= 0 {
+		t.Fatalf("usage: %+v", st.Usage)
+	}
+	// A picture job can't be a text one; bad settings and a key without posts:write are refused.
+	if code, _, body := e.aiJob(e.key, map[string]string{"operation": "write", "prompt": "x"}, nil, nil); code != 422 {
+		t.Fatalf("write as a job: %d %s", code, body)
+	}
+	e.do(nil, "POST", "/v1/ai/write", e.key, map[string]any{"prompt": "x", "format": "poem", "voice": "company"}, 422, nil)
+	e.do(nil, "POST", "/v1/ai/write", e.keyWith(app.ScopeMediaWrite), map[string]any{"prompt": "x", "format": "short", "voice": "company"}, 403, nil)
 }

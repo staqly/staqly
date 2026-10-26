@@ -192,81 +192,105 @@ function apply(ctx: PanelCtx, r: AiRun, media: Media) {
 
 const NONE: AIOperation[] = []
 
+/** Every tool, in the order the panel lists them: `device` runs in the browser when the server can't. */
+const TOOLS: { id: AIOperationId | 'cutout'; photo: boolean; device?: LocalOp }[] = [
+  { id: 'generate', photo: false },
+  { id: 'inpaint', photo: true },
+  { id: 'edit', photo: true },
+  { id: 'erase', photo: true, device: 'erase' },
+  { id: 'cutout', photo: true, device: 'cutout' },
+  { id: 'replace_background', photo: true },
+  { id: 'expand', photo: true },
+  { id: 'upscale', photo: true, device: 'upscale' },
+  { id: 'enhance', photo: true },
+]
+
+function toolLabel(id: AIOperationId | 'cutout') {
+  return id === 'cutout' ? 'Remove background' : AI_OPS[id].label
+}
+
 export function AiPanel({ ctx }: { ctx: PanelCtx }) {
   const status = useAiStatus()
   const run = useRun()
   const sel = ctx.selected.length === 1 ? ctx.page.elements.find((e) => e.id === ctx.selected[0]) : undefined
   const picture = sel?.type === 'image' ? sel : undefined
   const usedUp = allowanceUsedUp(status.data)
-  // With the allowance used up the server's tools wait for next month; without AI on the server there are none.
+  // With the allowance used up the server's tools wait for next month.
   const ops = usedUp ? NONE : (status.data?.operations ?? NONE).filter((o) => o.kind === 'image')
-  const usable = ops.filter((o) => !o.image || picture)
-  // Removing an object and upscaling also run on this device: offered when the server doesn't do them now.
-  const local = LOCAL_OPS.filter((id) => !ops.some((o) => o.id === id))
+  const tools = TOOLS.map((t) => {
+    const server = t.id === 'cutout' ? undefined : ops.find((o) => o.id === t.id)
+    const where = server ? 'server' : t.device ? 'device' : null
+    const why = where
+      ? ''
+      : usedUp
+        ? `Back on ${usedUp.renews}`
+        : status.data?.configured
+          ? 'Not offered on this server'
+          : 'Needs AI set up on the server'
+
+    return { ...t, server, where, why, enabled: !!where && (!t.photo || !!picture) }
+  })
   const [chosen, setChosen] = useState<string | null>(null)
-  const op =
-    usable.find((o) => o.id === chosen) ??
-    (local.includes(chosen as LocalOp) ? undefined : usable.find((o) => o.id === (picture ? 'edit' : 'generate'))) ??
-    (local.includes(chosen as LocalOp) ? undefined : usable[0])
-  const localOp = !op && picture ? (local.find((id) => id === chosen) ?? local[0]) : undefined
+  const tool =
+    tools.find((t) => t.id === chosen && t.enabled) ??
+    tools.find((t) => t.enabled && t.photo === !!picture) ??
+    tools.find((t) => t.enabled)
 
   if (status.isPending) {
     return <p className="text-sm text-muted-foreground">Loading the AI tools...</p>
   }
 
   const note = usedUp ? '' : allowanceNote(status.data)
+  const row = (t: (typeof tools)[number]) => (
+    <button
+      key={t.id}
+      type="button"
+      role="radio"
+      aria-checked={tool?.id === t.id}
+      disabled={!t.enabled}
+      onClick={() => setChosen(t.id)}
+      className={cn(
+        'flex min-h-8 items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-transparent pointer-coarse:min-h-11',
+        tool?.id === t.id && 'border-brand bg-brand-soft text-brand',
+      )}
+    >
+      {toolLabel(t.id)}
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {t.why || (t.where === 'device' ? 'this device, free' : '')}
+      </span>
+    </button>
+  )
 
   return (
     <div className="flex flex-col gap-4 text-sm">
       {usedUp && (
         <Callout tone="info">
-          This month&apos;s AI allowance is used up; it starts again on {usedUp.renews}. Removing an object and
-          upscaling still work, on this device.
+          This month&apos;s AI allowance is used up; it starts again on {usedUp.renews}. Removing an object or the
+          background and upscaling still work, on this device.
         </Callout>
       )}
       {run ? (
         <RunView ctx={ctx} run={run} />
       ) : (
         <>
-          <div role="radiogroup" aria-label="AI tool" className="flex flex-wrap gap-1.5">
-            {local.map((id) => (
-              <button
-                key={id}
-                type="button"
-                role="radio"
-                aria-checked={localOp === id}
-                disabled={!picture}
-                onClick={() => setChosen(id)}
-                className={cn(
-                  'rounded-full border px-2.5 py-1 text-xs hover:bg-muted disabled:opacity-50 pointer-coarse:py-2',
-                  localOp === id && 'border-brand bg-brand-soft text-brand',
-                )}
-              >
-                {AI_OPS[id].label} <span className="text-muted-foreground">· this device</span>
-              </button>
-            ))}
-            {usable.map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                role="radio"
-                aria-checked={op?.id === o.id}
-                onClick={() => setChosen(o.id)}
-                className={cn(
-                  'rounded-full border px-2.5 py-1 text-xs hover:bg-muted pointer-coarse:py-2',
-                  op?.id === o.id && 'border-brand bg-brand-soft text-brand',
-                )}
-              >
-                {AI_OPS[o.id].label}
-              </button>
-            ))}
+          <div role="radiogroup" aria-label="AI tool" className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Make</h3>
+              {tools.filter((t) => !t.photo).map(row)}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Change the selected photo
+              </h3>
+              {!picture && <p className="text-xs text-muted-foreground">Select a photo on the page to change it.</p>}
+              {tools.filter((t) => t.photo).map(row)}
+            </div>
           </div>
-          {op && <AiForm key={`${op.id}:${picture?.id ?? ''}`} ctx={ctx} op={op} picture={picture} />}
-          {localOp && picture && (
-            <LocalForm key={`${localOp}:${picture.id}`} ctx={ctx} op={localOp} picture={picture} />
+          {tool?.server && (
+            <AiForm key={`${tool.id}:${picture?.id ?? ''}`} ctx={ctx} op={tool.server} picture={picture} />
           )}
-          {!picture && (ops.some((o) => o.image) || local.length > 0) && (
-            <p className="text-xs text-muted-foreground">Select a photo on the page to change it with AI.</p>
+          {tool && !tool.server && tool.device && picture && (
+            <LocalForm key={`${tool.id}:${picture.id}`} ctx={ctx} op={tool.device} picture={picture} />
           )}
         </>
       )}
@@ -389,9 +413,28 @@ function AiForm({ ctx, op, picture }: { ctx: PanelCtx; op: AIOperation; picture?
   )
 }
 
-const LOCAL_OPS = ['erase', 'upscale'] as const
+type LocalOp = 'erase' | 'upscale' | 'cutout'
 
-type LocalOp = (typeof LOCAL_OPS)[number]
+const LOCAL_COPY: Record<LocalOp, { hint: string; model: string; run: string; done: string }> = {
+  erase: {
+    hint: 'Paint over what should go; the rest of the photo stays as it is.',
+    model: 'about 200 MB',
+    run: 'Remove it',
+    done: 'Object removed',
+  },
+  cutout: {
+    hint: 'Keeps the subject and makes the background transparent.',
+    model: 'a few hundred MB',
+    run: 'Remove the background',
+    done: 'Background removed',
+  },
+  upscale: {
+    hint: 'Four times the pixels, sharper than stretching (up to about 3000 pixels across).',
+    model: 'about 5 MB',
+    run: 'Upscale',
+    done: 'Upscaled four times',
+  },
+}
 
 /** Removing an object or upscaling on this device (components/design/local-ai.ts): free, nothing uploaded. */
 function LocalForm({ ctx, op, picture }: { ctx: PanelCtx; op: LocalOp; picture: ImageEl }) {
@@ -425,19 +468,25 @@ function LocalForm({ ctx, op, picture }: { ctx: PanelCtx; op: LocalOp; picture: 
     const progress = (share: number) =>
       setBusy(share < 1 ? `Downloading the model ${Math.round(share * 100)}%` : 'Working on it')
 
-    void import('./local-ai')
-      .then(async (m) => {
-        const blob =
-          op === 'erase'
-            ? await m.eraseOnDevice(source!.blob, mask!, progress)
-            : await m.upscaleOnDevice((await pictureOf(picture, m.UPSCALE_FROM)).blob, progress)
-        const name = `${op === 'erase' ? 'Object removed' : 'Upscaled'}.png`
+    const made = async () => {
+      if (op === 'cutout') {
+        const { removeBackground } = await import('./background')
 
-        return api.uploadMedia(blob, name)
-      })
+        return removeBackground(await (await fetch(picture.src)).blob(), progress)
+      }
+
+      const m = await import('./local-ai')
+
+      return op === 'erase'
+        ? m.eraseOnDevice(source!.blob, mask!, progress)
+        : m.upscaleOnDevice((await pictureOf(picture, m.UPSCALE_FROM)).blob, progress)
+    }
+
+    void made()
+      .then((blob) => api.uploadMedia(blob, `${LOCAL_COPY[op].done}.png`))
       .then((media) => {
         swapPicture(ctx, picture.id, media)
-        toast.success(op === 'erase' ? 'Object removed' : 'Upscaled four times', {
+        toast.success(LOCAL_COPY[op].done, {
           description: 'Made on this device and saved in your library. Undo brings the photo back.',
         })
         setMask(null)
@@ -446,16 +495,13 @@ function LocalForm({ ctx, op, picture }: { ctx: PanelCtx; op: LocalOp; picture: 
       .finally(() => setBusy(null))
   }
 
-  const ready = op === 'upscale' || (!!mask && !!source)
+  const ready = op !== 'erase' || (!!mask && !!source)
 
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-muted-foreground">
-        {op === 'erase'
-          ? 'Paint over what should go; the rest of the photo stays as it is.'
-          : 'Four times the pixels, sharper than stretching (up to about 3000 pixels across).'}{' '}
-        Runs on this device: free, nothing is uploaded. The first time downloads the model (
-        {op === 'erase' ? 'about 200 MB' : 'about 5 MB'}).
+        {LOCAL_COPY[op].hint} Runs on this device: free, nothing is uploaded. The first time downloads the model (
+        {LOCAL_COPY[op].model}).
       </p>
       {op === 'erase' && (
         <Button type="button" variant="outline" onClick={paint} disabled={!!busy}>
@@ -465,10 +511,10 @@ function LocalForm({ ctx, op, picture }: { ctx: PanelCtx; op: LocalOp; picture: 
       {op === 'erase' && mask && <p className="text-xs text-muted-foreground">Area painted.</p>}
       {/* No spinner while it works: an animation redrawn on a slow graphics card starves the model. */}
       <Button type="button" onClick={run} disabled={!ready || !!busy}>
-        <Sparkles /> {busy ?? (op === 'erase' ? 'Remove it' : 'Upscale')}
+        <Sparkles /> {busy ?? LOCAL_COPY[op].run}
       </Button>
       {source && painting && (
-        <MaskDialog open onOpenChange={setPainting} picture={source} title={AI_OPS[op].label} onDone={setMask} />
+        <MaskDialog open onOpenChange={setPainting} picture={source} title={AI_OPS.erase.label} onDone={setMask} />
       )}
     </div>
   )

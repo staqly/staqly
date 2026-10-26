@@ -100,16 +100,18 @@ A design with Unsplash photos reminds you whom to credit when you save.
 
 ## AI tools
 
-The **AI** tool lists what the server offers. Without a photo selected it makes a **New picture** from a
-description, in the page's shape. With a photo selected:
+The **AI** tool lists every tool; one the server can't run now stays in the list, greyed, saying why (no AI on
+the server, or the month's allowance is used up and when it starts again). **New picture** makes a picture from
+a description ("an avatar, a smiling woman on a beach"), in the page's shape, with or without a photo selected.
+With a photo selected:
 
 | Tool | What it does |
 |---|---|
 | **Change it** | Changes the photo as you describe ("make it a winter scene", "put this product on a marble table"). |
-| **Redraw an area** | Paint over an area, then describe what goes there (generative fill). |
+| **Edit an area** | Paint over an area, then say what to do there: add something, remove it or replace it (generative fill). |
 | **Remove an object** | Paint over something; AI removes it and fills in behind it. |
 | **Expand** | Paints new space around the photo so it fits the page's shape; the frame grows with it. |
-| **Cut out with AI** | Removes the background on the AI service. **Remove background** in the photo's bar does the same on your device, free; it stays the default. |
+| **Remove background** | Cuts the subject out on your device, free (the same as **Remove background** in the photo's bar). |
 | **New background** | Keeps the subject and paints a new background from your description. |
 | **Upscale** | More pixels, the same picture. |
 | **Enhance** | Sharper, cleaner detail at twice the size. |
@@ -149,10 +151,11 @@ already have started (it did not answer) is not sent anywhere again, so nothing 
 |---|---|---|
 | New picture | `fal-ai/flux/schnell` | `higgsfield-ai/soul/standard` |
 | Change it | `fal-ai/flux-pro/kontext` | — |
-| Redraw an area | `fal-ai/flux-pro/v1/fill` | — |
+| Edit an area | `fal-ai/flux-pro/v1/fill` | — |
 | Remove an object | `fal-ai/bria/eraser` | — |
 | Expand | `fal-ai/bria/expand` | — |
-| Cut out with AI | `fal-ai/bria/background/remove` | — |
+| Cut out with AI (API only) | `fal-ai/bria/background/remove` | — |
+| Write with AI (posts) | `openrouter/router` (Gemini 2.5 Flash) | — |
 | New background | `fal-ai/bria/background/replace` | — |
 | Upscale | `fal-ai/recraft/upscale/crisp` | — |
 | Enhance | `fal-ai/clarity-upscaler` | — |

@@ -5,6 +5,7 @@ import { AudioWaveform, Captions, Copy, Film, Loader2, Music, Scissors, Search, 
 import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
+import { ColorInput } from '@/components/common/color-input'
 import { NativeSelect } from '@/components/common/native-select'
 import { FONTS } from '@/components/design/fonts'
 import { Button } from '@/components/ui/button'
@@ -494,13 +495,28 @@ export function AddPanelBody({ ctx, panel }: { ctx: Ctx; panel: AddPanel }) {
             ))}
           </Section>
           <Section title="Behind pictures that don't fill it">
-            <input
-              type="color"
-              aria-label="Background colour"
-              value={ctx.doc.background}
-              onChange={(e) => ctx.update((t) => void (t.background = e.target.value), 'bg')}
-              className="h-9 w-full cursor-pointer rounded-md border bg-transparent"
-            />
+            <div className="flex flex-wrap items-center gap-1.5">
+              {['#000000', '#ffffff', '#111827', '#f3f4f6', '#1f8a4c'].map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={`Background ${c}`}
+                  aria-pressed={ctx.doc.background.toLowerCase() === c}
+                  onClick={() => ctx.update((t) => void (t.background = c))}
+                  className={cn(
+                    'size-8 rounded-md border shadow-xs pointer-coarse:size-11',
+                    ctx.doc.background.toLowerCase() === c && 'ring-2 ring-brand ring-offset-1 ring-offset-background',
+                  )}
+                  style={{ background: c }}
+                />
+              ))}
+              <ColorInput
+                label="Background colour"
+                value={ctx.doc.background}
+                onChange={(c) => ctx.update((t) => void (t.background = c), 'bg')}
+              />
+              <span className="ml-1 font-mono text-xs text-muted-foreground uppercase">{ctx.doc.background}</span>
+            </div>
           </Section>
         </div>
       )
@@ -584,7 +600,7 @@ function ClipInspector({ ctx, c }: { ctx: Ctx; c: Clip }) {
           onChange={(v) => set((k) => void (k.volume = v), 'volume')}
         />
       )}
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-1 flex flex-wrap items-center gap-2 border-t pt-4">
         <Button
           variant="outline"
           size="sm"
@@ -612,7 +628,7 @@ function ClipInspector({ ctx, c }: { ctx: Ctx; c: Clip }) {
         <Button
           variant="outline"
           size="sm"
-          className="text-red-700 dark:text-red-400"
+          className="ml-auto text-red-700 dark:text-red-400"
           onClick={() => {
             ctx.update((t) => void t.clips.splice(i, 1))
             ctx.onSelect(null)
@@ -731,7 +747,7 @@ function CaptionInspector({ ctx, c }: { ctx: Ctx; c: Caption }) {
       <Button
         variant="outline"
         size="sm"
-        className="self-start text-red-700 dark:text-red-400"
+        className="mt-1 self-end text-red-700 dark:text-red-400"
         onClick={() => {
           ctx.update((t) => void (t.captions = t.captions.filter((x) => x.id !== c.id)))
           ctx.onSelect(null)
@@ -791,7 +807,7 @@ function SoundInspector({ ctx, s }: { ctx: Ctx; s: Sound }) {
         onChange={(v) => set((k) => void (k.start = v), 'start')}
       />
       <BeatButton ctx={ctx} s={s} />
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-1 flex flex-wrap items-center gap-2 border-t pt-4">
         <Button
           variant="outline"
           size="sm"
@@ -813,7 +829,7 @@ function SoundInspector({ ctx, s }: { ctx: Ctx; s: Sound }) {
         <Button
           variant="outline"
           size="sm"
-          className="text-red-700 dark:text-red-400"
+          className="ml-auto text-red-700 dark:text-red-400"
           onClick={() => {
             ctx.update((t) => void (t.sounds = t.sounds.filter((x) => x.id !== s.id)))
             ctx.onSelect(null)

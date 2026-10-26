@@ -1,6 +1,6 @@
 'use client'
 
-import { Archive, PenSquare, Plus, Search, Settings2, X } from 'lucide-react'
+import { Archive, PenSquare, Plus, Search, Settings2, Sparkles, X } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -13,6 +13,7 @@ import { PageContainer } from '@/components/common/page-header'
 import { SkeletonList } from '@/components/common/skeleton-list'
 import { TagFilter } from '@/components/common/tag-filter'
 import { Button } from '@/components/ui/button'
+import { ButtonGroup } from '@/components/ui/button-group'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDebounced } from '@/hooks/use-debounced'
@@ -32,8 +33,10 @@ import { cn, hrefWithParams } from '@/lib/utils'
 import { PostsQueryContext, postsQuery } from './post-href'
 import { PostListHeader, PostRow, PostSelectionBar, usePostRowActions } from './post-list'
 import { StatusCounts } from './status-counts'
+import type { Written } from './write-with-ai'
 
 const Composer = dynamic(() => import('./composer').then((m) => m.Composer), { ssr: false })
+const WriteWithAiDialog = dynamic(() => import('./write-with-ai').then((m) => m.WriteWithAiDialog), { ssr: false })
 const CollectionSettingsSheet = dynamic(
   () => import('@/components/collections/collection-settings').then((m) => m.CollectionSettingsSheet),
   { ssr: false },
@@ -86,6 +89,8 @@ export function CollectionPosts({ id }: { id: string }) {
   const posts = usePostsInfinite(query, { refetchOnWindowFocus: false })
   // ?compose=1 (the getting-started checklist) opens the composer at once.
   const compose = useLazyDialog(params.get('compose') === '1')
+  const [writing, setWriting] = useState(false)
+  const [written, setWritten] = useState<Written | null>(null)
   const settings = useLazyDialog()
 
   useRefetchOnForeignChange(posts.refetch)
@@ -252,9 +257,22 @@ export function CollectionPosts({ id }: { id: string }) {
                 />
               </FilterButton>
             )}
-            <Button size="sm" onClick={() => compose.setOpen(true)} disabled={c.archived} data-testid="new-post">
-              <Plus /> New post
-            </Button>
+            <ButtonGroup>
+              <Button size="sm" onClick={() => compose.setOpen(true)} disabled={c.archived} data-testid="new-post">
+                <Plus /> New post
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setWriting(true)}
+                disabled={c.archived}
+                aria-label="Write with AI"
+                title="Write with AI"
+                className="text-brand"
+              >
+                <Sparkles />
+              </Button>
+            </ButtonGroup>
           </div>
         </div>
         {/* Filters in use, as chips under the title; each one comes off with its ×. */}
@@ -361,7 +379,33 @@ export function CollectionPosts({ id }: { id: string }) {
       </div>
 
       {rowActions.dialogs}
-      {compose.used && <Composer open={compose.open} onOpenChange={compose.setOpen} collectionId={c.id} />}
+      {compose.used && (
+        <Composer
+          key={written ? 'written' : 'new'}
+          open={compose.open}
+          onOpenChange={(o) => {
+            compose.setOpen(o)
+
+            if (!o) {
+              setWritten(null)
+            }
+          }}
+          collectionId={c.id}
+          defaultContent={written?.content}
+          defaultThread={written?.thread}
+          defaultMedia={written?.media}
+        />
+      )}
+      {writing && (
+        <WriteWithAiDialog
+          open
+          onOpenChange={setWriting}
+          onWritten={(w) => {
+            setWritten(w)
+            compose.setOpen(true)
+          }}
+        />
+      )}
       {settings.used && <CollectionSettingsSheet collection={c} open={settings.open} onOpenChange={settings.setOpen} />}
     </div>
   )

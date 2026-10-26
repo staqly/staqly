@@ -224,4 +224,25 @@ test.describe('posts', () => {
     expect((await getPost(api, col.posts[0]!.id)).status).toBe('scheduled')
     expect(titleOf(col.posts[0]!.content)).toBe(`${col.name} post 1`)
   })
+
+  test('Write with AI fills the composer with a thread and a picture', async ({ page, api }) => {
+    const col = await freshCollection(api, { posts: 0 })
+
+    await page.goto(`/posts?collection=${col.id}`)
+    await ready(page, col.name)
+    await page.getByRole('button', { name: 'Write with AI' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Write with AI' })
+
+    await dialog.getByLabel('What is it about?').fill('Our second cafe opens on Monday')
+    await dialog.getByLabel('Format').selectOption('thread_short')
+    await dialog.getByLabel('Voice').selectOption('company')
+    await dialog.getByLabel('Add a picture made by AI').check()
+    await dialog.getByRole('button', { name: 'Write it' }).click()
+    const sheet = page.getByRole('dialog', { name: 'New post' })
+
+    await expect(sheet).toBeVisible({ timeout: 20_000 })
+    await expect(sheet.getByTestId('post-content')).toContainText('We opened a second cafe.')
+    await expect(sheet.getByTestId('thread-part-0')).toContainText('First coffee is on us.')
+    await expect(sheet.getByRole('button', { name: 'Save draft' })).toBeEnabled()
+  })
 })
