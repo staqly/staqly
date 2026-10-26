@@ -32,9 +32,9 @@ import { Toggle } from '@/components/ui/toggle'
 import { api, errorMessage, type Media } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-import { NO_FILTERS, type El, type ImageEl, type MaskKind, type ShapeEl, type TextEl } from './doc'
+import { NO_FILTERS, type El, type Fade, type ImageEl, type MaskKind, type ShapeEl, type TextEl } from './doc'
 import { FONTS } from './fonts'
-import { ColorInput, swapPicture, type PanelCtx } from './panels'
+import { ColorInput, css, FillPicker, swapPicture, type PanelCtx } from './panels'
 
 function Slider({
   label,
@@ -152,6 +152,9 @@ export function Toolbar({
       )}
       {el && <Sep />}
       <Pop label="Look" icon={<SlidersHorizontal />}>
+        {el && fadeable(el) && (
+          <FadeControls fade={el.fade} onChange={(f, key) => set((x) => void (x.fade = f), key)} />
+        )}
         <Slider
           label="Transparency"
           value={Math.round((1 - (el?.opacity ?? 1)) * 100)}
@@ -249,6 +252,58 @@ export function Toolbar({
       >
         <Trash2 />
       </Button>
+    </div>
+  )
+}
+
+/** Pictures and filled shapes fade; text and lines don't. */
+const fadeable = (e: El) => e.type === 'image' || (e.type === 'shape' && e.shape !== 'line' && e.shape !== 'arrow')
+
+const FADE_SIDES: { side: Fade['side']; label: string; css: string }[] = [
+  { side: 'left', label: 'From the left', css: 'to right' },
+  { side: 'right', label: 'From the right', css: 'to left' },
+  { side: 'top', label: 'From the top', css: 'to bottom' },
+  { side: 'bottom', label: 'From the bottom', css: 'to top' },
+]
+
+/** Fading out towards one side: off, or which side and how far in. */
+function FadeControls({ fade, onChange }: { fade?: Fade; onChange: (f: Fade | undefined, key?: string) => void }) {
+  return (
+    <div className="flex flex-col gap-2 border-b pb-3">
+      <span className="text-xs text-muted-foreground">Fade to see-through</span>
+      <div className="grid grid-cols-5 gap-1" role="group" aria-label="Fade">
+        <button
+          type="button"
+          aria-pressed={!fade}
+          title="No fade"
+          onClick={() => onChange(undefined)}
+          className="flex h-9 items-center justify-center rounded-md border text-xs aria-pressed:ring-2 aria-pressed:ring-brand"
+        >
+          None
+        </button>
+        {FADE_SIDES.map((f) => (
+          <button
+            key={f.side}
+            type="button"
+            aria-label={f.label}
+            title={f.label}
+            aria-pressed={fade?.side === f.side}
+            onClick={() => onChange({ side: f.side, size: fade?.size ?? 0.5 })}
+            className="h-9 rounded-md border aria-pressed:ring-2 aria-pressed:ring-brand"
+            style={{ background: `linear-gradient(${f.css}, transparent, var(--foreground))` }}
+          />
+        ))}
+      </div>
+      {fade && (
+        <Slider
+          label="Fade length"
+          value={Math.round(fade.size * 100)}
+          min={5}
+          max={100}
+          format={(v) => `${v}%`}
+          onChange={(v) => onChange({ ...fade, size: v / 100 }, 'fade')}
+        />
+      )}
     </div>
   )
 }
@@ -405,11 +460,36 @@ function ShapeTools({ el, set }: { el: ShapeEl; set: Setter }) {
 
   return (
     <>
-      <ColorInput
-        label={line ? 'Colour' : 'Fill'}
-        value={el.fill}
-        onChange={(c) => st((s) => void (s.fill = c), 'fill')}
-      />
+      {line ? (
+        <ColorInput label="Colour" value={el.fill} onChange={(c) => st((s) => void (s.fill = c), 'fill')} />
+      ) : (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Fill"
+              title="Fill: a colour or a gradient"
+              className="size-8 shrink-0 rounded-md border shadow-xs pointer-coarse:size-11"
+              style={{ background: css(el.gradient ?? { kind: 'color', color: el.fill }) }}
+            />
+          </PopoverTrigger>
+          <PopoverContent className="max-h-[70vh] w-80 overflow-y-auto">
+            <FillPicker
+              value={el.gradient ?? { kind: 'color', color: el.fill }}
+              onChange={(f, key) =>
+                st((s) => {
+                  if (f.kind === 'color') {
+                    s.fill = f.color
+                    s.gradient = undefined
+                  } else {
+                    s.gradient = f
+                  }
+                }, key)
+              }
+            />
+          </PopoverContent>
+        </Popover>
+      )}
       {!line && (
         <ColorInput
           label="Border colour"

@@ -14,20 +14,20 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
-// The design editor's AI tools run on the workspace's own provider account: an admin adds an OpenAI API key,
-// which is sealed like channel credentials and never sent back to a browser (only its last four characters).
-// Every call goes through here: scopes checked, workspace scoped, rate limited, with a timeout, and only when a
-// person clicks an AI action. staqly never pays for these calls; the provider bills the key's owner.
+// The design editor's AI tools run on the server's own OpenAI account: the operator sets AI_OPENAI_API_KEY (and
+// optionally AI_OPENAI_FALLBACK_API_KEY, used when the provider refuses or fails on the first). Workspaces never
+// see or set a key; without one the editor hides its AI tools. Every call goes through here: scopes checked,
+// rate limited per workspace, with a timeout, and only when a person clicks an AI action.
 
-// AIConfig: AI_DISABLED turns the tools off for the whole server; AI_OPENAI_BASE_URL points at another
-// OpenAI-compatible endpoint (tests use a fake one).
+// AIConfig is the server's AI provider: the keys, the image model and the OpenAI-compatible endpoint
+// (AI_OPENAI_BASE_URL; tests use a fake one).
 type AIConfig struct {
-	Disabled      bool
-	OpenAIBaseURL string
+	APIKey         string
+	FallbackAPIKey string
+	Model          string
+	OpenAIBaseURL  string
 }
 
 // AICapabilities: what the configured model can do for the editor.
@@ -49,34 +49,20 @@ var aiModels = map[string]struct {
 	"dall-e-2":         {AICapabilities{Generate: true, Edit: true, Inpaint: true}, []string{"256x256", "512x512", "1024x1024"}},
 }
 
-// DefaultAIModel is what a new key uses unless the admin picks another image model.
+// DefaultAIModel is the image model unless AI_OPENAI_MODEL names another.
 const DefaultAIModel = "gpt-image-1"
 
-// AIStatus is what the editor shows: whether AI is set up, with which model, and what it can do.
+// AIStatus is what the editor needs: whether AI is on, with which model, and what it can do.
 type AIStatus struct {
 	Configured   bool           `json:"configured"`
-	Provider     string         `json:"provider"`
 	Model        string         `json:"model"`
-	KeyHint      string         `json:"key_hint"`
 	Capabilities AICapabilities `json:"capabilities"`
-	// Reason says why AI is off or limited, in plain words ("" when everything works).
-	Reason    string   `json:"reason"`
-	Models    []string `json:"models"`
-	CanManage bool     `json:"can_manage"`
-	UpdatedAt string   `json:"updated_at,omitempty"`
 }
 
-type aiCredentials struct {
-	APIKey string `json:"api_key"`
-}
-
-func knownAIModels() []string {
-	out := make([]string, 0, len(aiModels))
-	for m := range aiModels {
-		out = append(out, m)
-	}
-	slices.Sort(out)
-	return out
+// KnownAIModel reports whether the editor knows the image model (config checks AI_OPENAI_MODEL with it).
+func KnownAIModel(m string) bool {
+	_, ok := aiModels[m]
+	return ok
 }
 
 // GetAIStatus tells anyone who can use the media library whether the editor's AI tools work.
@@ -84,92 +70,11 @@ func (s *Service) GetAIStatus(ctx context.Context, p Principal) (AIStatus, error
 	if err := p.require(ScopeMediaRead); err != nil {
 		return AIStatus{}, err
 	}
-	st := AIStatus{Provider: "openai", Models: knownAIModels(), CanManage: p.Has(ScopeAdmin)}
-	if s.Cfg.AI.Disabled {
-		st.Reason = "AI tools are turned off on this server."
-		return st, nil
+	m, ok := aiModels[s.Cfg.AI.Model]
+	if s.Cfg.AI.APIKey == "" || !ok {
+		return AIStatus{}, nil
 	}
-	row, err := s.Q.GetWorkspaceAI(ctx, p.WorkspaceID)
-	if isNoRows(err) {
-		st.Reason = "Add an OpenAI API key under Integrations to use the AI tools."
-		return st, nil
-	}
-	if err != nil {
-		return AIStatus{}, err
-	}
-	st.Configured, st.Provider, st.Model, st.KeyHint, st.UpdatedAt = true, row.Provider, row.Model, row.KeyHint, row.UpdatedAt
-	if m, ok := aiModels[row.Model]; ok {
-		st.Capabilities = m.caps
-	} else {
-		st.Reason = row.Model + " makes no pictures: choose an image model."
-	}
-	return st, nil
-}
-
-// AISettingsInput sets the workspace's AI key (admin only). An empty APIKey keeps the stored one (to change
-// only the model).
-type AISettingsInput struct {
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	APIKey   string `json:"api_key"`
-}
-
-// SetAISettings checks the key with the provider (listing the model costs nothing), then seals and stores it.
-func (s *Service) SetAISettings(ctx context.Context, p Principal, in AISettingsInput) (AIStatus, error) {
-	if err := p.require(ScopeAdmin); err != nil {
-		return AIStatus{}, err
-	}
-	if s.Cfg.AI.Disabled {
-		return AIStatus{}, &Error{Code: "not_available", Status: 409, Message: "AI tools are turned off on this server"}
-	}
-	if in.Provider == "" {
-		in.Provider = "openai"
-	}
-	if in.Provider != "openai" {
-		return AIStatus{}, invalid("provider", "must be openai")
-	}
-	if in.Model == "" {
-		in.Model = DefaultAIModel
-	}
-	if _, ok := aiModels[in.Model]; !ok {
-		return AIStatus{}, invalid("model", "must be one of "+strings.Join(knownAIModels(), ", "))
-	}
-	key := strings.TrimSpace(in.APIKey)
-	if key == "" {
-		row, err := s.Q.GetWorkspaceAI(ctx, p.WorkspaceID)
-		if err != nil {
-			return AIStatus{}, invalid("api_key", "is required")
-		}
-		var c aiCredentials
-		if err := s.unseal(row.Credentials, &c); err != nil {
-			return AIStatus{}, err
-		}
-		key = c.APIKey
-	}
-	if len(key) < 20 || len(key) > 400 || strings.ContainsAny(key, " \r\n\t") {
-		return AIStatus{}, invalid("api_key", "does not look like an API key")
-	}
-	if err := s.checkAIKey(ctx, key, in.Model); err != nil {
-		return AIStatus{}, err
-	}
-	sealed, err := s.seal(aiCredentials{APIKey: key})
-	if err != nil {
-		return AIStatus{}, err
-	}
-	if err := s.W.UpsertWorkspaceAI(ctx, db.UpsertWorkspaceAIParams{WorkspaceID: p.WorkspaceID, Provider: in.Provider,
-		Model: in.Model, Credentials: sealed, KeyHint: "..." + key[len(key)-4:], UpdatedBy: p.UserID, UpdatedAt: s.now()}); err != nil {
-		return AIStatus{}, err
-	}
-	return s.GetAIStatus(ctx, p)
-}
-
-// DeleteAISettings forgets the workspace's AI key (admin only).
-func (s *Service) DeleteAISettings(ctx context.Context, p Principal) error {
-	if err := p.require(ScopeAdmin); err != nil {
-		return err
-	}
-	_, err := s.W.DeleteWorkspaceAI(ctx, p.WorkspaceID)
-	return err
+	return AIStatus{Configured: true, Model: s.Cfg.AI.Model, Capabilities: m.caps}, nil
 }
 
 // AIImageRequest is one generate or edit call. Image and Mask are PNG/JPEG/WebP bytes; the mask's transparent
@@ -196,8 +101,8 @@ func (s *Service) AIImage(ctx context.Context, p Principal, op string, in AIImag
 	if err != nil {
 		return nil, err
 	}
-	if !st.Configured || s.Cfg.AI.Disabled {
-		return nil, &Error{Code: "not_available", Status: 409, Message: st.Reason}
+	if !st.Configured {
+		return nil, &Error{Code: "not_available", Status: 409, Message: "AI pictures are not available on this server"}
 	}
 	in.Prompt = strings.TrimSpace(in.Prompt)
 	switch {
@@ -219,7 +124,7 @@ func (s *Service) AIImage(ctx context.Context, p Principal, op string, in AIImag
 	case op == "generate" && !model.caps.Generate,
 		op == "edit" && len(in.Mask) == 0 && !model.caps.Edit,
 		op == "edit" && len(in.Mask) > 0 && !model.caps.Inpaint:
-		return nil, &Error{Code: "not_available", Status: 409, Message: st.Model + " cannot do this; choose gpt-image-1 under Integrations"}
+		return nil, &Error{Code: "not_available", Status: 409, Message: st.Model + " cannot do this"}
 	case op == "edit" && len(in.Image) == 0:
 		return nil, invalid("image", "is required")
 	case op != "generate" && op != "edit":
@@ -228,16 +133,15 @@ func (s *Service) AIImage(ctx context.Context, p Principal, op string, in AIImag
 	if !aiLimiter.allow(p.WorkspaceID, s.clock()) {
 		return nil, &Error{Code: "rate_limited", Status: 429, Message: fmt.Sprintf("at most %d AI pictures per %s per workspace; try again in a few minutes", aiLimitCalls, aiLimitWindow)}
 	}
-	row, err := s.Q.GetWorkspaceAI(ctx, p.WorkspaceID)
-	if err != nil {
-		return nil, err
-	}
-	var c aiCredentials
-	if err := s.unseal(row.Credentials, &c); err != nil {
-		return nil, err
-	}
 	start := s.clock()
-	out, err := s.callOpenAIImage(ctx, c.APIKey, st.Model, op, in)
+	out, err := s.callOpenAIImage(ctx, s.Cfg.AI.APIKey, st.Model, op, in)
+	var e *Error
+	// The fallback key when the first one is refused, limited or the provider failed (not for a refused prompt
+	// or a timeout: the same request would fail again, or take as long).
+	if s.Cfg.AI.FallbackAPIKey != "" && errors.As(err, &e) && e.Code != "validation_failed" && e.Code != "timeout" {
+		s.logger(ctx).Warn("ai image: trying the fallback key", "code", e.Code)
+		out, err = s.callOpenAIImage(ctx, s.Cfg.AI.FallbackAPIKey, st.Model, op, in)
+	}
 	ms := s.clock().Sub(start).Milliseconds()
 	s.logger(ctx).Info("ai image", "op", op, "model", st.Model, "ms", ms, "ok", err == nil)
 	s.trackAs(nil, p, "ai_image_requested", "op", op, "model", st.Model, "duration_ms", ms, "ok", err == nil)
@@ -280,32 +184,6 @@ func (l *windowLimiter) allow(key string, now time.Time) bool {
 
 // aiHTTP waits long enough for a large picture (gpt-image-1 takes up to a minute or two).
 var aiHTTP = &http.Client{Timeout: 3 * time.Minute}
-
-// checkAIKey asks the provider about the model: 401 = wrong key, 404 = the key cannot use that model.
-func (s *Service) checkAIKey(ctx context.Context, key, model string) error {
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.Cfg.AI.OpenAIBaseURL+"/models/"+model, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+key)
-	res, err := aiHTTP.Do(req)
-	if err != nil {
-		return &Error{Code: "ai_provider_error", Status: 502, Message: "OpenAI did not answer; try again"}
-	}
-	defer res.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 1<<16))
-	switch {
-	case res.StatusCode == http.StatusUnauthorized:
-		return invalid("api_key", "OpenAI does not accept this key")
-	case res.StatusCode == http.StatusNotFound, res.StatusCode == http.StatusForbidden:
-		return invalid("model", "this key cannot use "+model+" (verify the organization for gpt-image-1, or pick another model)")
-	case res.StatusCode >= 300:
-		return &Error{Code: "ai_provider_error", Status: 502, Message: fmt.Sprintf("OpenAI answered %d; try again", res.StatusCode)}
-	}
-	return nil
-}
 
 func (s *Service) callOpenAIImage(ctx context.Context, key, model, op string, in AIImageRequest) ([]byte, error) {
 	var (
@@ -404,9 +282,9 @@ func openAIError(status int, e *struct {
 	}
 	switch {
 	case status == http.StatusUnauthorized:
-		return &Error{Code: "ai_key_rejected", Status: 409, Message: "OpenAI no longer accepts the workspace's key; an admin can replace it under Integrations"}
+		return &Error{Code: "ai_key_rejected", Status: 409, Message: "AI pictures are not available right now; try again later"}
 	case status == http.StatusTooManyRequests:
-		return &Error{Code: "rate_limited", Status: 429, Message: "OpenAI is limiting this key (rate or billing): " + msg}
+		return &Error{Code: "rate_limited", Status: 429, Message: "AI pictures are busy right now; try again in a few minutes"}
 	case status == http.StatusBadRequest && msg != "":
 		return &Error{Code: "validation_failed", Status: 422, Message: "OpenAI refused it: " + msg}
 	}

@@ -226,37 +226,38 @@ func multipartImage(t testing.TB, fields map[string]string, image []byte) (*byte
 	return bytes.NewBufferString(strings.Replace(body.String(), `name="file"`, `name="image"`, 1)), ct
 }
 
-// The editor's AI tools on the workspace's own key: off until an admin adds a key the provider accepts, the
-// key stored sealed and shown by its last four characters only, capabilities by model, generate and edit
-// through the server, the provider's refusals and timeouts as plain errors, and a per-workspace rate limit.
+// The editor's AI tools on the server's keys: off (and hidden) without one, the fallback key when the provider
+// refuses the first, capabilities by model, generate and edit through the server, the provider's refusals and
+// timeouts as plain errors, and a per-workspace rate limit.
 func TestAIImages(t *testing.T) {
 	e := newEnv(t)
 	e.paid()
 	fake, calls := fakeOpenAI(t)
-	e.svc.Cfg.AI.OpenAIBaseURL = fake.URL
+	e.svc.Cfg.AI = app.AIConfig{Model: app.DefaultAIModel, OpenAIBaseURL: fake.URL}
 
 	var st app.AIStatus
 	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
-	if st.Configured || st.CanManage || st.Reason == "" {
-		t.Fatalf("not set up: %+v", st)
+	if st.Configured {
+		t.Fatalf("no key: %+v", st)
 	}
 	if code, _ := e.aiCall("generate", e.key, map[string]string{"prompt": "a cat"}, nil); code != 409 {
 		t.Fatalf("generate without a key: %d", code)
 	}
 
-	// Only an admin sets the key; the provider must accept it and let it use the model.
-	e.do(nil, "PUT", "/v1/ai", e.key, map[string]any{"api_key": "sk-test-good-key-0123456789"}, 403, nil)
-	e.do(nil, "PUT", "/v1/ai", e.admin, map[string]any{"api_key": "sk-test-wrong-key-0123456789"}, 422, nil)
-	e.do(nil, "PUT", "/v1/ai", e.admin, map[string]any{"api_key": "sk-test-good-key-0123456789", "model": "gpt-image-1-mini"}, 422, nil)
-	e.do(nil, "PUT", "/v1/ai", e.admin, map[string]any{"api_key": "sk-test-good-key-0123456789", "model": "gpt-4o"}, 422, nil)
-	e.do(nil, "PUT", "/v1/ai", e.admin, map[string]any{"api_key": "sk-test-good-key-0123456789"}, 200, &st)
-	if !st.Configured || st.Model != "gpt-image-1" || st.KeyHint != "...6789" || !st.Capabilities.Expand || !st.CanManage {
+	// The first key is refused: the fallback key answers.
+	e.svc.Cfg.AI.APIKey, e.svc.Cfg.AI.FallbackAPIKey = "sk-test-wrong-key-0123456789", "sk-test-good-key-0123456789"
+	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
+	if !st.Configured || st.Model != "gpt-image-1" || !st.Capabilities.Expand {
 		t.Fatalf("set up: %+v", st)
 	}
-	row, err := e.svc.Q.GetWorkspaceAI(context.Background(), workspaceID(e))
-	if err != nil || strings.Contains(row.Credentials, "good-key") {
-		t.Fatalf("the key is stored sealed: %v %q", err, row.Credentials)
+	if code, _ := e.aiCall("generate", e.key, map[string]string{"prompt": "a cat"}, nil); code != 200 {
+		t.Fatalf("fallback key: %d", code)
 	}
+	e.svc.Cfg.AI.FallbackAPIKey = ""
+	if code, body := e.aiCall("generate", e.key, map[string]string{"prompt": "a cat"}, nil); code != 409 || strings.Contains(string(body), "OpenAI") {
+		t.Fatalf("refused key, no fallback: %d %s", code, body)
+	}
+	e.svc.Cfg.AI.APIKey = "sk-test-good-key-0123456789"
 
 	// Generate and edit answer a picture; the editor's prompt mistakes and the provider's refusals are errors.
 	code, pic := e.aiCall("generate", e.key, map[string]string{"prompt": "a cat", "size": "1024x1024"}, nil)
@@ -284,24 +285,16 @@ func TestAIImages(t *testing.T) {
 	}
 
 	// A model that only generates: editing is refused before any call to the provider.
-	e.do(nil, "PUT", "/v1/ai", e.admin, map[string]any{"model": "dall-e-3"}, 200, &st)
-	if st.Capabilities.Edit || !st.Capabilities.Generate || st.KeyHint != "...6789" {
-		t.Fatalf("dall-e-3 keeps the key: %+v", st)
+	e.svc.Cfg.AI.Model = "dall-e-3"
+	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
+	if st.Capabilities.Edit || !st.Capabilities.Generate {
+		t.Fatalf("dall-e-3: %+v", st)
 	}
 	before := calls.Load()
 	if code, _ := e.aiCall("edit", e.key, map[string]string{"prompt": "x", "size": "1024x1024"}, realPNG(t, 8, 8)); code != 409 || calls.Load() != before {
 		t.Fatalf("unsupported edit: %d, calls %d -> %d", code, before, calls.Load())
 	}
-	e.do(nil, "PUT", "/v1/ai", e.admin, map[string]any{"model": "gpt-image-1"}, 200, nil)
-
-	// Another workspace sees no key.
-	other := app.Principal{WorkspaceID: "ws_ai_other", Kind: app.PrincipalAPIKey, ID: "key_o", Name: "o", Scopes: app.AdminKeyScopes}
-	if s, err := e.svc.GetAIStatus(context.Background(), other); err != nil || s.Configured {
-		t.Fatalf("other workspace: %+v %v", s, err)
-	}
-	if _, err := e.svc.AIImage(context.Background(), other, "generate", app.AIImageRequest{Prompt: "x"}); err == nil {
-		t.Fatal("another workspace used the key")
-	}
+	e.svc.Cfg.AI.Model = "gpt-image-1"
 
 	// A provider that hangs: the caller's deadline ends the call.
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -323,12 +316,6 @@ func TestAIImages(t *testing.T) {
 		t.Fatal("no rate limit")
 	}
 
-	// Forgetting the key turns AI off again.
-	e.do(nil, "DELETE", "/v1/ai", e.admin, nil, 204, nil)
-	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
-	if st.Configured {
-		t.Fatalf("forgotten: %+v", st)
-	}
 }
 
 func TestStockPhotos(t *testing.T) {

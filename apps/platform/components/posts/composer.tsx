@@ -330,7 +330,7 @@ function MediaStrip({
           {editable && m.mime_type.startsWith('image/') && (
             // A new tab: this draft stays open; the edited picture replaces this one here when it is saved.
             <a
-              href={`/media/design?ids=${encodeURIComponent(m.id)}&from=composer`}
+              href={`/media/edit?ids=${encodeURIComponent(m.id)}&from=composer`}
               target="_blank"
               rel="noopener"
               aria-label={`Edit ${m.original_name}`}
@@ -398,7 +398,7 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
       </Button>
       <LibraryPickerButton onAdd={onAdd} />
       <Button type="button" variant="outline" size="sm" asChild>
-        <a href={`/media/design?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="design-new">
+        <a href={`/media/edit?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="design-new">
           <Palette /> Design
         </a>
       </Button>

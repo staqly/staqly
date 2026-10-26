@@ -3,7 +3,23 @@
 // next to the pictures it exports, one per page.
 import { PLACEMENTS } from '@staqly/brand/placements'
 
-export type Fill = { kind: 'color'; color: string } | { kind: 'gradient'; from: string; to: string; angle: number }
+export type Fill = { kind: 'color'; color: string } | Gradient
+
+/** From one colour to another (through a third one when `via` is set), along an angle or out from the centre. */
+export interface Gradient {
+  kind: 'gradient'
+  from: string
+  via?: string
+  to: string
+  angle: number
+  radial?: boolean
+}
+
+/** The element turns see-through towards one side: fully at that edge, not at all `size` (a share) away. */
+export interface Fade {
+  side: 'left' | 'right' | 'top' | 'bottom'
+  size: number
+}
 
 interface Base {
   id: string
@@ -16,6 +32,8 @@ interface Base {
   locked?: boolean
   hidden?: boolean
   shadow?: { color: string; blur: number; x: number; y: number; opacity: number }
+  /** Pictures and filled shapes only. */
+  fade?: Fade
 }
 
 export interface TextEl extends Base {
@@ -67,6 +85,8 @@ export interface ShapeEl extends Base {
   type: 'shape'
   shape: ShapeKind
   fill: string
+  /** Paints the shape instead of `fill` (not lines and arrows). */
+  gradient?: Gradient
   stroke: string
   strokeWidth: number
   radius: number

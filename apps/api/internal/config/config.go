@@ -64,7 +64,7 @@ func env(k, def string) string {
 // (Service.Env, httpapi). checkEnv refuses a value they would not take, so none silently means its
 // default. Booleans are what strconv.ParseBool accepts (1/0, t/f, true/false in any case).
 var (
-	boolVars = []string{"AI_DISABLED", "AUTH_DEV_SIGNIN", "COOKIE_SECURE", "DASHBOARD_EXPOSED", "NOTIFY_ALLOW_LOOPBACK",
+	boolVars = []string{"AUTH_DEV_SIGNIN", "COOKIE_SECURE", "DASHBOARD_EXPOSED", "NOTIFY_ALLOW_LOOPBACK",
 		"NOTIFY_ALLOW_PRIVATE", "RATE_LIMIT_DISABLED", "S3_CREATE_BUCKET", "S3_FORCE_PATH_STYLE", "STRIPE_MANAGED_PAYMENTS",
 		"TRUST_PROXY", "WEBHOOK_ALLOW_LOOPBACK", "WEBHOOK_ALLOW_PRIVATE"}
 	positiveIntVars = []string{"JOB_CONCURRENCY", "MAIL_SMTP_PORT", "MAX_UPLOAD_MB", "NOTIFY_CONCURRENCY", "NOTIFY_MAX_ATTEMPTS",
@@ -219,8 +219,10 @@ func Load() (Config, error) {
 			PostHog: app.PostHogConfig{Key: os.Getenv("POSTHOG_KEY"), Host: strings.TrimRight(env("POSTHOG_HOST", "https://eu.i.posthog.com"), "/"),
 				Environment: env("POSTHOG_ENVIRONMENT", "production")},
 			AI: app.AIConfig{
-				Disabled:      envBool("AI_DISABLED", false),
-				OpenAIBaseURL: strings.TrimRight(env("AI_OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
+				APIKey:         os.Getenv("AI_OPENAI_API_KEY"),
+				FallbackAPIKey: os.Getenv("AI_OPENAI_FALLBACK_API_KEY"),
+				Model:          env("AI_OPENAI_MODEL", app.DefaultAIModel),
+				OpenAIBaseURL:  strings.TrimRight(env("AI_OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
 			},
 			Stock:              app.StockConfig{UnsplashKey: os.Getenv("UNSPLASH_ACCESS_KEY")},
 			LocalTokenPath:     filepath.Join(dataDir, app.LocalTokenFile),
@@ -281,6 +283,9 @@ func Load() (Config, error) {
 		if c.App.Google, err = googleConfig(c.App.PublicDashboardURL, c.App.EmailSignIn); err != nil {
 			return Config{}, err
 		}
+	}
+	if !app.KnownAIModel(c.App.AI.Model) {
+		return Config{}, fmt.Errorf("AI_OPENAI_MODEL must be an image model: gpt-image-1, gpt-image-1-mini, dall-e-3 or dall-e-2 (got %q)", c.App.AI.Model)
 	}
 	if c.App.Blob, err = storage(c.App.UploadDir, dataDir); err != nil {
 		return Config{}, err

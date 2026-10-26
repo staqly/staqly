@@ -93,18 +93,6 @@ func (q *Queries) DeleteMediaProject(ctx context.Context, arg DeleteMediaProject
 	return result.RowsAffected()
 }
 
-const deleteWorkspaceAI = `-- name: DeleteWorkspaceAI :execrows
-DELETE FROM workspace_ai WHERE workspace_id = ?
-`
-
-func (q *Queries) DeleteWorkspaceAI(ctx context.Context, workspaceID string) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteWorkspaceAI, workspaceID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const getMediaProject = `-- name: GetMediaProject :one
 SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at FROM media_projects WHERE workspace_id = ? AND id = ?
 `
@@ -127,25 +115,6 @@ func (q *Queries) GetMediaProject(ctx context.Context, arg GetMediaProjectParams
 		&i.SizeBytes,
 		&i.CreatedBy,
 		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getWorkspaceAI = `-- name: GetWorkspaceAI :one
-SELECT workspace_id, provider, model, credentials, key_hint, updated_by, updated_at FROM workspace_ai WHERE workspace_id = ?
-`
-
-func (q *Queries) GetWorkspaceAI(ctx context.Context, workspaceID string) (WorkspaceAi, error) {
-	row := q.db.QueryRowContext(ctx, getWorkspaceAI, workspaceID)
-	var i WorkspaceAi
-	err := row.Scan(
-		&i.WorkspaceID,
-		&i.Provider,
-		&i.Model,
-		&i.Credentials,
-		&i.KeyHint,
-		&i.UpdatedBy,
 		&i.UpdatedAt,
 	)
 	return i, err
@@ -272,35 +241,4 @@ func (q *Queries) UpdateMediaProject(ctx context.Context, arg UpdateMediaProject
 		return 0, err
 	}
 	return result.RowsAffected()
-}
-
-const upsertWorkspaceAI = `-- name: UpsertWorkspaceAI :exec
-INSERT INTO workspace_ai (workspace_id, provider, model, credentials, key_hint, updated_by, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT (workspace_id) DO UPDATE SET provider = excluded.provider, model = excluded.model,
-  credentials = excluded.credentials, key_hint = excluded.key_hint, updated_by = excluded.updated_by,
-  updated_at = excluded.updated_at
-`
-
-type UpsertWorkspaceAIParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	Provider    string `json:"provider"`
-	Model       string `json:"model"`
-	Credentials string `json:"credentials"`
-	KeyHint     string `json:"key_hint"`
-	UpdatedBy   string `json:"updated_by"`
-	UpdatedAt   string `json:"updated_at"`
-}
-
-func (q *Queries) UpsertWorkspaceAI(ctx context.Context, arg UpsertWorkspaceAIParams) error {
-	_, err := q.db.ExecContext(ctx, upsertWorkspaceAI,
-		arg.WorkspaceID,
-		arg.Provider,
-		arg.Model,
-		arg.Credentials,
-		arg.KeyHint,
-		arg.UpdatedBy,
-		arg.UpdatedAt,
-	)
-	return err
 }

@@ -2854,17 +2854,12 @@ export interface paths {
         };
         /**
          * Whether the design editor's AI tools work, with which model (media:read)
-         * @description The AI tools run on the workspace's own OpenAI key; staqly never pays for these calls. The key is never returned, only its last four characters.
+         * @description The AI tools run on the server's own OpenAI keys (AI_OPENAI_API_KEY, AI_OPENAI_FALLBACK_API_KEY); without one, configured is false and the editor hides them.
          */
         get: operations["getAI"];
-        /**
-         * Set the workspace's OpenAI key and image model (admin)
-         * @description The key is checked with OpenAI (listing the model, which costs nothing), then stored encrypted. Without api_key, only the model changes.
-         */
-        put: operations["setAI"];
+        put?: never;
         post?: never;
-        /** Forget the workspace's AI key (admin) */
-        delete: operations["deleteAI"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4127,12 +4122,10 @@ export interface components {
             data: components["schemas"]["StockPhoto"][];
         };
         AIStatus: {
+            /** @description The server has an AI key; false hides the AI tools */
             configured: boolean;
-            /** @enum {string} */
-            provider: "openai";
+            /** @description The server's image model; empty when not configured */
             model: string;
-            /** @description The key's last four characters, e.g. ...a1b2 */
-            key_hint: string;
             capabilities: {
                 generate: boolean;
                 edit: boolean;
@@ -4141,13 +4134,6 @@ export interface components {
                 /** @description Fill new space around a picture */
                 expand: boolean;
             };
-            /** @description Why AI is off or limited, in plain words; empty when everything works */
-            reason: string;
-            models: string[];
-            /** @description The caller may set or remove the key (admin) */
-            can_manage: boolean;
-            /** Format: date-time */
-            updated_at?: string;
         };
         /** @description What a platform refuses in a picture (its API's documented limits); recommended shapes are not rules */
         ImageRules: {
@@ -11383,68 +11369,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AIStatus"];
                 };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    setAI: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    provider?: "openai";
-                    /**
-                     * @description Defaults to gpt-image-1
-                     * @enum {string}
-                     */
-                    model?: "gpt-image-1" | "gpt-image-1-mini" | "dall-e-3" | "dall-e-2";
-                    /** @description An OpenAI API key (sk-...) */
-                    api_key?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description AI status */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AIStatus"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
-            429: components["responses"]["RateLimited"];
-            502: components["responses"]["BadGateway"];
-        };
-    };
-    deleteAI: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Forgotten */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

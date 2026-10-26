@@ -3489,43 +3489,10 @@ paths:
       tags: [media]
       summary: Whether the design editor's AI tools work, with which model (media:read)
       description: >
-        The AI tools run on the workspace's own OpenAI key; staqly never pays for these calls. The key is never
-        returned, only its last four characters.
+        The AI tools run on the server's own OpenAI keys (AI_OPENAI_API_KEY, AI_OPENAI_FALLBACK_API_KEY); without
+        one, configured is false and the editor hides them.
       responses:
         "200": { description: AI status, content: { application/json: { schema: { $ref: "#/components/schemas/AIStatus" } } } }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-    put:
-      operationId: setAI
-      tags: [media]
-      summary: Set the workspace's OpenAI key and image model (admin)
-      description: The key is checked with OpenAI (listing the model, which costs nothing), then stored encrypted. Without api_key, only the model changes.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                provider: { type: string, enum: [openai] }
-                model: { type: string, enum: [gpt-image-1, gpt-image-1-mini, dall-e-3, dall-e-2], description: Defaults to gpt-image-1 }
-                api_key: { type: string, description: "An OpenAI API key (sk-...)" }
-      responses:
-        "200": { description: AI status, content: { application/json: { schema: { $ref: "#/components/schemas/AIStatus" } } } }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-        "502": { $ref: "#/components/responses/BadGateway" }
-    delete:
-      operationId: deleteAI
-      tags: [media]
-      summary: Forget the workspace's AI key (admin)
-      responses:
-        "204": { description: Forgotten }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -4795,12 +4762,10 @@ components:
         data: { type: array, items: { $ref: "#/components/schemas/StockPhoto" } }
     AIStatus:
       type: object
-      required: [configured, provider, model, key_hint, capabilities, reason, models, can_manage]
+      required: [configured, model, capabilities]
       properties:
-        configured: { type: boolean }
-        provider: { type: string, enum: [openai] }
-        model: { type: string }
-        key_hint: { type: string, description: "The key's last four characters, e.g. ...a1b2" }
+        configured: { type: boolean, description: The server has an AI key; false hides the AI tools }
+        model: { type: string, description: The server's image model; empty when not configured }
         capabilities:
           type: object
           required: [generate, edit, inpaint, expand]
@@ -4809,10 +4774,6 @@ components:
             edit: { type: boolean }
             inpaint: { type: boolean, description: Change only a marked area }
             expand: { type: boolean, description: Fill new space around a picture }
-        reason: { type: string, description: "Why AI is off or limited, in plain words; empty when everything works" }
-        models: { type: array, items: { type: string } }
-        can_manage: { type: boolean, description: The caller may set or remove the key (admin) }
-        updated_at: { type: string, format: date-time }
     ImageRules:
       type: object
       description: "What a platform refuses in a picture (its API's documented limits); recommended shapes are not rules"

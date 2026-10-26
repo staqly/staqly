@@ -279,9 +279,9 @@ function DetailForm({
             )}
             {editable && kind === 'image' && (
               <Button variant="ghost" size="icon-sm" aria-label="Edit" tooltip="Edit in the design editor" asChild>
-                <Link href={`/media/design?ids=${item.id}`} prefetch={false}>
+                <a href={`/media/edit?ids=${item.id}`}>
                   <Palette />
-                </Link>
+                </a>
               </Button>
             )}
             <Button variant="ghost" size="icon-sm" aria-label="Download" tooltip="Download" asChild>

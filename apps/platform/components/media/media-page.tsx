@@ -20,7 +20,6 @@ import {
   X,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -683,9 +682,10 @@ export function MediaPage() {
             }}
           />
           <Button variant="outline" asChild className="shrink-0">
-            <Link href="/media/design" prefetch={false} data-testid="media-design">
+            {/* oxlint-disable-next-line next/no-html-link-for-pages -- a full load: the editor's own CSP */}
+            <a href="/media/edit" data-testid="media-design">
               <Palette /> <span className="max-sm:sr-only">Design</span>
-            </Link>
+            </a>
           </Button>
           <Button onClick={() => input.current?.click()} data-testid="media-upload" className="shrink-0">
             <Upload /> Upload
@@ -745,9 +745,9 @@ export function MediaPage() {
           {canWrite && (
             <Button variant="ghost" aria-label="Edit" disabled={editable.length === 0} asChild={editable.length > 0}>
               {editable.length > 0 ? (
-                <Link href={`/media/design?ids=${editable.map((m) => m.id).join(',')}`} prefetch={false}>
+                <a href={`/media/edit?ids=${editable.map((m) => m.id).join(',')}`}>
                   <Palette /> {barLabel('Edit')}
-                </Link>
+                </a>
               ) : (
                 <>
                   <Palette /> {barLabel('Edit')}

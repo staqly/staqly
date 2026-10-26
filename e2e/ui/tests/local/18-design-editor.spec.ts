@@ -35,7 +35,7 @@ test.describe('the design editor', () => {
 
     // Edit from the selection: the first picture fills the page, the second sits on it.
     await page.getByTestId('media-selection').getByRole('link', { name: 'Edit' }).click()
-    await expect(page).toHaveURL(/\/media\/design\?ids=/)
+    await expect(page).toHaveURL(/\/media\/edit\?ids=/)
     await expect(page.getByTestId('design-canvas')).toBeVisible({ timeout: 30_000 })
 
     const tools = page.getByRole('navigation', { name: 'Design tools' })
@@ -75,10 +75,6 @@ test.describe('the design editor', () => {
     await page.getByRole('button', { name: 'Page 1' }).click()
     await tools.getByRole('button', { name: 'Layers' }).click()
     await expect(page.getByRole('complementary', { name: 'Layers' }).getByText('Add a heading')).toBeVisible()
-
-    // Old links of the former photo editor open here.
-    await page.goto(`/media/edit?ids=${encodeURIComponent('med_none')}`)
-    await expect(page).toHaveURL(/\/media\/design\?ids=med_none/)
 
     await page.goto('/media')
     await ready(page, 'All files')

@@ -120,8 +120,10 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 
 | Variable | Default | Description |
 |---|---|---|
-| `AI_DISABLED` | `false` | `true` turns the [design editor's](/dashboard/design-editor) AI tools off for the whole server, whatever key a workspace added. |
-| `AI_OPENAI_BASE_URL` | `https://api.openai.com/v1` | The OpenAI-compatible endpoint the AI tools call with the workspace's own key. Change it only for a compatible proxy or tests. |
+| `AI_OPENAI_API_KEY` | — | An OpenAI API key: the [design editor](/dashboard/design-editor) gets its **AI** tool (make or change a picture from a description) for every workspace, on this account. Unset, the tool is not shown. |
+| `AI_OPENAI_FALLBACK_API_KEY` | — | A second key, used when OpenAI refuses the first, limits it or fails. |
+| `AI_OPENAI_MODEL` | `gpt-image-1` | The image model: `gpt-image-1`, `gpt-image-1-mini`, `dall-e-3` (makes pictures, can't change them) or `dall-e-2`. |
+| `AI_OPENAI_BASE_URL` | `https://api.openai.com/v1` | The OpenAI-compatible endpoint the AI tools call. Change it only for a compatible proxy or tests. |
 | `UNSPLASH_ACCESS_KEY` | — | An [Unsplash](https://unsplash.com/developers) app's access key: the [design editor](/dashboard/design-editor) gets an **Unsplash** tab with stock photos. The key stays on the server; searches go through staqly, the pictures load from Unsplash. Unset, the tab is not shown. |
 
 ## Webhooks and schedule endpoints

@@ -805,8 +805,6 @@ export const api = {
     request<StockPage>('/v1/stock/photos', { query: { query: query || undefined, page }, signal }),
   stockPhotoUsed: (id: string) => request<void>(`/v1/stock/photos/${encodeURIComponent(id)}/use`, { method: 'POST' }),
   ai: () => request<AIStatus>('/v1/ai'),
-  setAI: (body: { model?: string; api_key?: string }) => request<AIStatus>('/v1/ai', { method: 'PUT', json: body }),
-  deleteAI: () => request<void>('/v1/ai', { method: 'DELETE' }),
   aiImage: (
     op: 'generate' | 'edit',
     body: { prompt: string; size?: string; image?: Blob; mask?: Blob },

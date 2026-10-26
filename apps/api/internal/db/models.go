@@ -513,16 +513,6 @@ type Workspace struct {
 	Logo                     string         `json:"logo"`
 }
 
-type WorkspaceAi struct {
-	WorkspaceID string `json:"workspace_id"`
-	Provider    string `json:"provider"`
-	Model       string `json:"model"`
-	Credentials string `json:"credentials"`
-	KeyHint     string `json:"key_hint"`
-	UpdatedBy   string `json:"updated_by"`
-	UpdatedAt   string `json:"updated_at"`
-}
-
 type WorkspaceExport struct {
 	ID            string         `json:"id"`
 	WorkspaceID   string         `json:"workspace_id"`

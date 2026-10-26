@@ -31,18 +31,6 @@ ORDER BY updated_at DESC LIMIT 100;
 -- name: DeleteMediaProject :execrows
 DELETE FROM media_projects WHERE workspace_id = ? AND id = ?;
 
--- name: GetWorkspaceAI :one
-SELECT * FROM workspace_ai WHERE workspace_id = ?;
-
--- name: UpsertWorkspaceAI :exec
-INSERT INTO workspace_ai (workspace_id, provider, model, credentials, key_hint, updated_by, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT (workspace_id) DO UPDATE SET provider = excluded.provider, model = excluded.model,
-  credentials = excluded.credentials, key_hint = excluded.key_hint, updated_by = excluded.updated_by,
-  updated_at = excluded.updated_at;
-
--- name: DeleteWorkspaceAI :execrows
-DELETE FROM workspace_ai WHERE workspace_id = ?;
 
 -- name: AllMediaProjectFiles :many
 -- Every project file of every workspace, for moving files to the workspace folders once (MoveLegacyFiles).

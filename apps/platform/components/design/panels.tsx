@@ -2,16 +2,16 @@
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import {
-  ArrowDown,
-  ArrowUp,
   Eye,
   EyeOff,
+  GripVertical,
   ImageIcon,
   Layers,
   LayoutTemplate,
   Loader2,
   Lock,
   PaintBucket,
+  Plus,
   Scaling,
   Search,
   Shapes,
@@ -19,8 +19,9 @@ import {
   Type,
   Unlock,
   Upload,
+  X,
 } from 'lucide-react'
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { Callout } from '@/components/common/callout'
@@ -33,7 +34,7 @@ import { api, errorMessage, mediaThumbUrl, mediaUrl, type Media, type StockPhoto
 import { qk } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
-import { DesignView } from './canvas'
+import { DesignView, dragged } from './canvas'
 import {
   newImage,
   newShape,
@@ -48,6 +49,7 @@ import {
   type ShapeKind,
   type Size,
 } from './doc'
+import { loadFont } from './fonts'
 import { aiSize, downscale } from './raster'
 import type { DesignStore } from './store'
 import { templates } from './templates'
@@ -74,6 +76,21 @@ export interface PanelCtx {
   onSelect: (ids: string[]) => void
   /** Adds elements on top and selects them. */
   add: (...els: El[]) => void
+}
+
+/** A side panel tool that can also be dragged onto the page (dropped there instead of in the middle). */
+function dragProps(make: () => El) {
+  return {
+    draggable: true,
+    onDragStart: (e: DragEvent) => {
+      e.dataTransfer.effectAllowed = 'copy'
+      e.dataTransfer.setData('text/plain', '')
+      dragged.make = make
+    },
+    onDragEnd: () => {
+      dragged.make = null
+    },
+  }
 }
 
 function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
@@ -130,12 +147,21 @@ export function Panel({ id, ctx }: { id: PanelId; ctx: PanelCtx }) {
 }
 
 function Preview({ design, onClick, label }: { design: Design; onClick: () => void; label: string }) {
-  const w = 132
+  // Every template in a square of the same size, its first page fitted in the middle.
+  const fit = 112
+  const n = design.pages.length
 
   return (
-    <button type="button" onClick={onClick} aria-label={label} className="group flex flex-col gap-1 text-left">
-      <span className="overflow-hidden rounded-lg border bg-background shadow-xs transition group-hover:ring-2 group-hover:ring-brand">
-        <DesignView design={design} page={design.pages[0]!} scale={w / design.width} />
+    <button type="button" onClick={onClick} aria-label={label} className="group flex flex-col gap-1.5 text-left">
+      <span className="relative flex aspect-square items-center justify-center rounded-lg border bg-muted/40 transition group-hover:border-brand group-hover:ring-2 group-hover:ring-brand">
+        <span className="overflow-hidden rounded-sm shadow-md">
+          <DesignView design={design} page={design.pages[0]!} scale={fit / Math.max(design.width, design.height)} />
+        </span>
+        {n > 1 && (
+          <span className="absolute right-1.5 bottom-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium shadow-xs">
+            {n} pages
+          </span>
+        )}
       </span>
       <span className="truncate text-xs text-muted-foreground">{label}</span>
     </button>
@@ -144,6 +170,20 @@ function Preview({ design, onClick, label }: { design: Design; onClick: () => vo
 
 function TemplatesPanel({ ctx }: { ctx: PanelCtx }) {
   const [list] = useState(templates)
+  // The previews draw with the templates' fonts: draw them again once those have loaded.
+  const [fonts, setFonts] = useState(0)
+
+  useEffect(() => {
+    const families = new Set(
+      list.flatMap((d) =>
+        d.pages[0]!.elements.flatMap((e) => (e.type === 'text' ? [`${e.fontFamily}|${e.bold}`] : [])),
+      ),
+    )
+
+    void Promise.all([...families].map((f) => loadFont(f.split('|')[0]!, f.endsWith('true')))).then(() =>
+      setFonts((n) => n + 1),
+    )
+  }, [list])
   const mine = useQuery({
     queryKey: ['design-projects'],
     queryFn: async () => {
@@ -169,7 +209,7 @@ function TemplatesPanel({ ctx }: { ctx: PanelCtx }) {
     ctx.onSelect([])
 
     if (had) {
-      toast('Template applied', { action: { label: 'Undo', onClick: ctx.store.undo } })
+      toast.success('Template applied', { action: { label: 'Undo', onClick: ctx.store.undo } })
     }
   }
 
@@ -179,10 +219,14 @@ function TemplatesPanel({ ctx }: { ctx: PanelCtx }) {
         <Section title="Your designs">
           <div className="grid grid-cols-2 gap-3">
             {mine.data.map((p) => (
-              <a key={p.id} href={`/media/design?project=${encodeURIComponent(p.id)}`} className="flex flex-col gap-1">
-                <span className="flex aspect-square items-center justify-center overflow-hidden rounded-lg border bg-muted">
+              <a key={p.id} href={`/media/edit?project=${encodeURIComponent(p.id)}`} className="flex flex-col gap-1">
+                <span className="flex aspect-square items-center justify-center overflow-hidden rounded-lg border bg-muted/40 p-3">
                   {p.output_id ? (
-                    <img src={mediaThumbUrl(p.output_id, 320)} alt="" className="size-full object-contain" />
+                    <img
+                      src={mediaThumbUrl(p.output_id, 320)}
+                      alt=""
+                      className="max-h-full max-w-full rounded-sm object-contain shadow-md"
+                    />
                   ) : (
                     <LayoutTemplate className="text-muted-foreground" />
                   )}
@@ -197,7 +241,8 @@ function TemplatesPanel({ ctx }: { ctx: PanelCtx }) {
         <div className="grid grid-cols-2 gap-3">
           {list.map((d) => (
             <Preview
-              key={d.name}
+              // Drawn anew (remounted) once the fonts are in: Konva draws only when its props change.
+              key={`${d.name}-${fonts}`}
               design={d}
               label={d.name}
               onClick={() => apply(templates().find((x) => x.name === d.name)!)}
@@ -220,6 +265,13 @@ const TEXT_STYLES: { label: string; font: string; bold: boolean; italic?: boolea
 
 function TextPanel({ ctx }: { ctx: PanelCtx }) {
   const d = ctx.store.design
+  const styled = (s: (typeof TEXT_STYLES)[number]) => ({
+    ...newText(d, 'heading'),
+    text: s.label,
+    fontFamily: s.font,
+    bold: s.bold,
+    letterSpacing: s.spacing ?? 0,
+  })
 
   return (
     <div className="flex flex-col gap-5">
@@ -228,6 +280,7 @@ function TextPanel({ ctx }: { ctx: PanelCtx }) {
           variant="secondary"
           className="h-12 justify-start text-xl font-bold"
           onClick={() => ctx.add(newText(d, 'heading'))}
+          {...dragProps(() => newText(d, 'heading'))}
         >
           Add a heading
         </Button>
@@ -235,10 +288,16 @@ function TextPanel({ ctx }: { ctx: PanelCtx }) {
           variant="secondary"
           className="h-10 justify-start text-base font-semibold"
           onClick={() => ctx.add(newText(d, 'subheading'))}
+          {...dragProps(() => newText(d, 'subheading'))}
         >
           Add a subheading
         </Button>
-        <Button variant="secondary" className="justify-start" onClick={() => ctx.add(newText(d, 'body'))}>
+        <Button
+          variant="secondary"
+          className="justify-start"
+          onClick={() => ctx.add(newText(d, 'body'))}
+          {...dragProps(() => newText(d, 'body'))}
+        >
           Add body text
         </Button>
       </Section>
@@ -254,15 +313,8 @@ function TextPanel({ ctx }: { ctx: PanelCtx }) {
                 fontWeight: s.bold ? 700 : 400,
                 letterSpacing: s.spacing ? s.spacing / 2 : 0,
               }}
-              onClick={() =>
-                ctx.add({
-                  ...newText(d, 'heading'),
-                  text: s.label,
-                  fontFamily: s.font,
-                  bold: s.bold,
-                  letterSpacing: s.spacing ?? 0,
-                })
-              }
+              onClick={() => ctx.add(styled(s))}
+              {...dragProps(() => styled(s))}
             >
               {s.label}
             </button>
@@ -501,6 +553,12 @@ const SHAPES: { kind: ShapeKind; label: string; icon: ReactNode; round?: boolean
 ]
 
 function ElementsPanel({ ctx }: { ctx: PanelCtx }) {
+  const make = (s: (typeof SHAPES)[number]) => {
+    const el = newShape(ctx.store.design, s.kind)
+
+    return s.round ? { ...el, radius: el.width * 0.15 } : el
+  }
+
   return (
     <Section title="Shapes">
       <div className="grid grid-cols-3 gap-2">
@@ -511,11 +569,8 @@ function ElementsPanel({ ctx }: { ctx: PanelCtx }) {
             aria-label={s.label}
             title={s.label}
             className="flex aspect-square items-center justify-center rounded-lg border bg-background text-brand hover:ring-2 hover:ring-brand"
-            onClick={() => {
-              const el = newShape(ctx.store.design, s.kind)
-
-              ctx.add(s.round ? { ...el, radius: el.width * 0.15 } : el)
-            }}
+            onClick={() => ctx.add(make(s))}
+            {...dragProps(() => make(s))}
           >
             <svg viewBox="0 0 40 40" className="size-10 fill-current" aria-hidden>
               {s.icon}
@@ -567,10 +622,141 @@ const GRADIENTS: Fill[] = [
   { kind: 'gradient', from: '#fde68a', to: '#f9a8d4', angle: 135 },
   { kind: 'gradient', from: '#e0e7ff', to: '#fae8ff', angle: 90 },
   { kind: 'gradient', from: '#111827', to: '#4b5563', angle: 90 },
+  { kind: 'gradient', from: '#f97316', via: '#ec4899', to: '#8b5cf6', angle: 45 },
+  { kind: 'gradient', from: '#22d3ee', via: '#a78bfa', to: '#f472b6', angle: 0 },
+  { kind: 'gradient', from: '#fde047', to: '#f97316', angle: 0, radial: true },
+  { kind: 'gradient', from: '#6366f1', to: '#0f172a', angle: 0, radial: true },
 ]
 
-export const css = (f: Fill) =>
-  f.kind === 'color' ? f.color : `linear-gradient(${f.angle + 90}deg, ${f.from}, ${f.to})`
+export const css = (f: Fill) => {
+  if (f.kind === 'color') {
+    return f.color
+  }
+
+  const colours = [f.from, f.via, f.to].filter(Boolean).join(', ')
+
+  return f.radial ? `radial-gradient(circle, ${colours})` : `linear-gradient(${f.angle + 90}deg, ${colours})`
+}
+
+/** A colour or a gradient (two or three colours, along an angle or out from the centre). */
+export function FillPicker({ value, onChange }: { value: Fill; onChange: (f: Fill, key?: string) => void }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <Section title="Colour">
+        <div className="grid grid-cols-7 gap-1.5">
+          {SWATCHES.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-label={c}
+              onClick={() => onChange({ kind: 'color', color: c })}
+              className={cn(
+                'aspect-square rounded-md border',
+                value.kind === 'color' && value.color === c && 'ring-2 ring-brand ring-offset-1',
+              )}
+              style={{ background: c }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <ColorInput
+            label="Custom colour"
+            value={value.kind === 'color' ? value.color : value.from}
+            onChange={(c) => onChange({ kind: 'color', color: c }, 'fill')}
+          />
+          Custom colour
+        </div>
+      </Section>
+      <Section title="Gradient">
+        <div className="grid grid-cols-6 gap-1.5">
+          {GRADIENTS.map((g) => (
+            <button
+              key={css(g)}
+              type="button"
+              aria-label="Gradient"
+              onClick={() => onChange(g)}
+              className={cn(
+                'aspect-square rounded-md border',
+                css(value) === css(g) && 'ring-2 ring-brand ring-offset-1',
+              )}
+              style={{ background: css(g) }}
+            />
+          ))}
+        </div>
+        {value.kind === 'gradient' && (
+          <div className="flex flex-col gap-3 text-sm">
+            <div className="flex items-center gap-1.5">
+              <ColorInput
+                label="First colour"
+                value={value.from}
+                onChange={(c) => onChange({ ...value, from: c }, 'fill')}
+              />
+              {value.via ? (
+                <span className="group relative">
+                  <ColorInput
+                    label="Middle colour"
+                    value={value.via}
+                    onChange={(c) => onChange({ ...value, via: c }, 'fill')}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Remove the middle colour"
+                    onClick={() => onChange({ ...value, via: undefined })}
+                    className="absolute -top-1.5 -right-1.5 hidden size-4 items-center justify-center rounded-full border bg-background group-hover:flex focus-visible:flex"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="Add a middle colour"
+                  title="Add a middle colour"
+                  onClick={() => onChange({ ...value, via: '#ffffff' })}
+                >
+                  <Plus />
+                </Button>
+              )}
+              <ColorInput
+                label="Last colour"
+                value={value.to}
+                onChange={(c) => onChange({ ...value, to: c }, 'fill')}
+              />
+              <div className="ml-auto flex rounded-md border p-0.5" role="group" aria-label="Gradient type">
+                {(['Linear', 'Radial'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    aria-pressed={(t === 'Radial') === !!value.radial}
+                    onClick={() => onChange({ ...value, radial: t === 'Radial' })}
+                    className="rounded px-2 py-0.5 text-xs aria-pressed:bg-brand-soft aria-pressed:text-brand"
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {!value.radial && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Angle
+                <input
+                  type="range"
+                  min={0}
+                  max={360}
+                  value={value.angle}
+                  onChange={(e) => onChange({ ...value, angle: +e.target.value }, 'fill-angle')}
+                  className="min-w-0 flex-1 accent-[var(--brand)]"
+                />
+                <span className="w-9 text-right text-foreground tabular-nums">{value.angle}°</span>
+              </label>
+            )}
+          </div>
+        )}
+      </Section>
+    </div>
+  )
+}
 
 /** A colour field: the browser's own picker in a swatch. */
 export function ColorInput({
@@ -607,60 +793,7 @@ function BackgroundPanel({ ctx }: { ctx: PanelCtx }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <Section title="Colour">
-        <div className="grid grid-cols-7 gap-1.5">
-          {SWATCHES.map((c) => (
-            <button
-              key={c}
-              type="button"
-              aria-label={c}
-              onClick={() => set({ kind: 'color', color: c })}
-              className={cn(
-                'aspect-square rounded-md border',
-                bg.kind === 'color' && bg.color === c && 'ring-2 ring-brand ring-offset-1',
-              )}
-              style={{ background: c }}
-            />
-          ))}
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <ColorInput
-            label="Custom colour"
-            value={bg.kind === 'color' ? bg.color : bg.from}
-            onChange={(c) => set({ kind: 'color', color: c }, 'bg')}
-          />
-          Custom colour
-        </div>
-      </Section>
-      <Section title="Gradient">
-        <div className="grid grid-cols-4 gap-1.5">
-          {GRADIENTS.map((g) => (
-            <button
-              key={css(g)}
-              type="button"
-              aria-label="Gradient"
-              onClick={() => set(g)}
-              className="aspect-square rounded-md border"
-              style={{ background: css(g) }}
-            />
-          ))}
-        </div>
-        {bg.kind === 'gradient' && (
-          <div className="flex items-center gap-2">
-            <ColorInput label="From" value={bg.from} onChange={(c) => set({ ...bg, from: c }, 'bg')} />
-            <ColorInput label="To" value={bg.to} onChange={(c) => set({ ...bg, to: c }, 'bg')} />
-            <input
-              type="range"
-              aria-label="Angle"
-              min={0}
-              max={360}
-              value={bg.angle}
-              onChange={(e) => set({ ...bg, angle: +e.target.value }, 'bg')}
-              className="min-w-0 flex-1 accent-[var(--brand)]"
-            />
-          </div>
-        )}
-      </Section>
+      <FillPicker value={bg} onChange={(f, key) => set(f, key && `bg-${key}`)} />
       {sel?.type === 'image' && (
         <Section title="Photo">
           <Button
@@ -753,26 +886,9 @@ function AiPanel({ ctx }: { ctx: PanelCtx }) {
     return <Loader2 className="mx-auto animate-spin text-muted-foreground" />
   }
 
+  // The tools button hides without the server's AI key (see the editor); this guards a stale status.
   if (!st?.configured) {
-    return (
-      <div className="flex flex-col gap-3 text-sm">
-        <p>
-          Describe a picture and AI makes it, or tell it how to change a photo on your design: &quot;put this product on
-          a marble table&quot;.
-        </p>
-        <Callout tone="info">
-          {st?.reason || 'AI runs on your own OpenAI key.'}{' '}
-          {st?.can_manage ? 'Add it under Integrations, AI pictures.' : 'Ask an admin of this workspace to add one.'}
-        </Callout>
-        {st?.can_manage && (
-          <Button variant="outline" asChild>
-            <a href="/integrations#ai" target="_blank" rel="noopener">
-              Add an OpenAI key
-            </a>
-          </Button>
-        )}
-      </div>
-    )
+    return null
   }
 
   const caps = st.capabilities
@@ -808,7 +924,6 @@ function AiPanel({ ctx }: { ctx: PanelCtx }) {
 
   return (
     <div className="flex flex-col gap-4 text-sm">
-      {st.reason && <Callout tone="warning">{st.reason}</Callout>}
       <Textarea
         aria-label="What should AI do?"
         placeholder={
@@ -859,9 +974,6 @@ function AiPanel({ ctx }: { ctx: PanelCtx }) {
           )}
         </div>
       )}
-      <p className="text-xs text-muted-foreground">
-        Uses {st.model} on your workspace&apos;s OpenAI key ({st.key_hint}).
-      </p>
     </div>
   )
 }
@@ -881,15 +993,21 @@ export function elLabel(e: El) {
 }
 
 function LayersPanel({ ctx }: { ctx: PanelCtx }) {
+  // Top of the page first, as the stack is seen.
   const list = ctx.page.elements.toReversed()
+  const [dragging, setDragging] = useState<string | null>(null)
+  // Where the dragged layer would land: before the layer at this index (list.length = at the bottom).
+  const [over, setOver] = useState<number | null>(null)
 
-  const move = (id: string, by: number) =>
+  /** Puts a layer before the one at `before` in the list (top first). */
+  const reorder = (id: string, before: number) =>
     ctx.updatePage((p) => {
-      const i = p.elements.findIndex((e) => e.id === id)
-      const j = Math.max(0, Math.min(p.elements.length - 1, i + by))
-      const [el] = p.elements.splice(i, 1)
+      const shown = p.elements.toReversed()
+      const from = shown.findIndex((e) => e.id === id)
+      const [el] = shown.splice(from, 1)
 
-      p.elements.splice(j, 0, el!)
+      shown.splice(before > from ? before - 1 : before, 0, el!)
+      p.elements = shown.toReversed()
     })
   const toggle = (id: string, key: 'hidden' | 'locked') =>
     ctx.updatePage((p) => {
@@ -899,36 +1017,78 @@ function LayersPanel({ ctx }: { ctx: PanelCtx }) {
         el[key] = !el[key]
       }
     })
+  const end = () => {
+    setDragging(null)
+    setOver(null)
+  }
 
   if (!list.length) {
     return <p className="text-sm text-muted-foreground">Nothing on the page yet.</p>
   }
 
   return (
-    <ul className="flex flex-col gap-1">
+    <ul className="flex flex-col gap-1" aria-label="Layers, top first">
       {list.map((e, i) => (
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dragging is for the pointer; the handle reorders by keyboard
         <li
           key={e.id}
+          draggable
+          onDragStart={(ev) => {
+            ev.dataTransfer.effectAllowed = 'move'
+            ev.dataTransfer.setData('text/plain', e.id)
+            setDragging(e.id)
+          }}
+          onDragOver={(ev) => {
+            if (!dragging) {
+              return
+            }
+
+            ev.preventDefault()
+            ev.stopPropagation()
+
+            const r = ev.currentTarget.getBoundingClientRect()
+
+            setOver(ev.clientY < r.top + r.height / 2 ? i : i + 1)
+          }}
+          onDrop={(ev) => {
+            ev.preventDefault()
+            ev.stopPropagation()
+
+            if (dragging && over !== null) {
+              reorder(dragging, over)
+            }
+
+            end()
+          }}
+          onDragEnd={end}
           className={cn(
-            'flex items-center gap-1 rounded-md border bg-background py-1 pr-1 pl-2 text-sm',
+            'flex items-center gap-1 rounded-md border bg-background py-1 pr-1 pl-0.5 text-sm transition-[opacity,box-shadow]',
             ctx.selected.includes(e.id) && 'border-brand ring-1 ring-brand',
+            dragging === e.id && 'opacity-40',
+            dragging && over === i && 'shadow-[0_-3px_0_0_var(--brand)]',
+            dragging && over === list.length && i === list.length - 1 && 'shadow-[0_3px_0_0_var(--brand)]',
           )}
         >
+          <button
+            type="button"
+            aria-label={`Move ${elLabel(e)}: drag, or press the up and down arrows`}
+            title="Drag to reorder"
+            className="flex h-7 w-5 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            onKeyDown={(ev) => {
+              if (ev.key === 'ArrowUp' && i > 0) {
+                ev.preventDefault()
+                reorder(e.id, i - 1)
+              } else if (ev.key === 'ArrowDown' && i < list.length - 1) {
+                ev.preventDefault()
+                reorder(e.id, i + 2)
+              }
+            }}
+          >
+            <GripVertical className="size-4" />
+          </button>
           <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => ctx.onSelect([e.id])}>
             <span className={cn(e.hidden && 'text-muted-foreground line-through')}>{elLabel(e)}</span>
           </button>
-          <Button variant="ghost" size="icon-sm" aria-label="Move up" disabled={i === 0} onClick={() => move(e.id, 1)}>
-            <ArrowUp />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Move down"
-            disabled={i === list.length - 1}
-            onClick={() => move(e.id, -1)}
-          >
-            <ArrowDown />
-          </Button>
           <Button
             variant="ghost"
             size="icon-sm"

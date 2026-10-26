@@ -27,8 +27,6 @@ func init() {
 		r.Delete("/media-projects/{id}", s.deleteMediaProject)
 
 		r.Get("/ai", s.getAI)
-		r.Put("/ai", s.setAI)
-		r.Delete("/ai", s.deleteAI)
 		r.Post("/ai/images/{op}", s.aiImage)
 
 		r.Get("/stock/photos", s.stockPhotos)
@@ -126,19 +124,6 @@ func (s *Server) deleteMediaProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getAI(w http.ResponseWriter, r *http.Request) {
 	out, err := s.svc.GetAIStatus(r.Context(), principal(r))
 	respond(w, r, 200, out, err)
-}
-
-func (s *Server) setAI(w http.ResponseWriter, r *http.Request) {
-	var in app.AISettingsInput
-	if !decode(w, r, &in) {
-		return
-	}
-	out, err := s.svc.SetAISettings(r.Context(), principal(r), in)
-	respond(w, r, 200, out, err)
-}
-
-func (s *Server) deleteAI(w http.ResponseWriter, r *http.Request) {
-	respondEmpty(w, r, s.svc.DeleteAISettings(r.Context(), principal(r)))
 }
 
 // aiImage: POST /v1/ai/images/generate (prompt, size) or /v1/ai/images/edit (prompt, size, image, mask), as
