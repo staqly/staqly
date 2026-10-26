@@ -63,6 +63,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -760,18 +761,32 @@ export function MediaPage() {
                   </a>
                 </DropdownMenuItem>
               ))}
+              {/* Made by AI, apart from the editors (as the design editor's AI section). */}
+              {aiVideo && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs font-medium text-muted-foreground uppercase">
+                    AI
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onSelect={() => video.setOpen(true)}
+                    data-testid="media-ai-video"
+                    className="flex items-start gap-3 py-2"
+                  >
+                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-violet-500/15 text-violet-600 dark:text-violet-400 [&_svg]:size-4">
+                      <Clapperboard />
+                    </span>
+                    <span className="flex flex-col">
+                      <span className="font-medium">AI video</span>
+                      <span className="text-xs text-muted-foreground">
+                        A short clip from a description or a picture
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
-          {aiVideo && (
-            <Button
-              variant="outline"
-              className="shrink-0"
-              onClick={() => video.setOpen(true)}
-              data-testid="media-ai-video"
-            >
-              <Clapperboard /> <span className="max-sm:sr-only">AI video</span>
-            </Button>
-          )}
           <Button onClick={() => input.current?.click()} data-testid="media-upload" className="shrink-0">
             <Upload /> Upload
           </Button>

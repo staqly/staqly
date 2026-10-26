@@ -221,10 +221,16 @@ func (b aiBase) download(ctx context.Context, rawURL string, max int64) ([]byte,
 func aiDetail(raw []byte) string {
 	var v struct {
 		Detail json.RawMessage `json:"detail"`
-		Error  string          `json:"error"`
+		Error  json.RawMessage `json:"error"` // a string, or OpenAI's {"message": ...}
 	}
 	if json.Unmarshal(raw, &v) != nil {
 		return ""
+	}
+	var e struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(v.Error, &e) == nil && e.Message != "" {
+		return truncate(e.Message, 300)
 	}
 	var s string
 	if json.Unmarshal(v.Detail, &s) == nil && s != "" {
@@ -236,7 +242,9 @@ func aiDetail(raw []byte) string {
 	if json.Unmarshal(v.Detail, &list) == nil && len(list) > 0 {
 		return truncate(list[0].Msg, 300)
 	}
-	return truncate(v.Error, 300)
+	var str string
+	_ = json.Unmarshal(v.Error, &str)
+	return truncate(str, 300)
 }
 
 func truncate(s string, n int) string {

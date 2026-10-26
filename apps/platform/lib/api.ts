@@ -80,6 +80,8 @@ export type AIOperation = Schemas['AIOperation']
 export type AIJob = Schemas['AIJob']
 export type AIOperationId = AIOperation['id']
 export type AssistantMessage = Schemas['AssistantMessage']
+/** A kept conversation with the assistant (the list leaves out messages and pending). */
+export type AssistantChat = Schemas['AssistantChat']
 export type AssistantRequest = operations['assistantChat']['requestBody']['content']['application/json']
 
 /** What the assistant streams (POST /v1/assistant/chat). */
@@ -894,7 +896,8 @@ export const api = {
   },
   stockPhotos: (query: string, page = 1, signal?: AbortSignal) =>
     request<StockPage>('/v1/stock/photos', { query: { query: query || undefined, page }, signal }),
-  stockPhotoUsed: (id: string) => request<void>(`/v1/stock/photos/${encodeURIComponent(id)}/use`, { method: 'POST' }),
+  /** Copies a stock photo into the library (Pixabay allows no hotlinking). */
+  keepStockPhoto: (id: string) => request<Media>(`/v1/stock/photos/${encodeURIComponent(id)}/use`, { method: 'POST' }),
   designBrand: () => request<DesignBrand>('/v1/design/brand'),
   setDesignBrand: (b: DesignBrand) => request<DesignBrand>('/v1/design/brand', { method: 'PUT', json: b }),
   ai: () => request<AIStatus>('/v1/ai'),
@@ -1057,6 +1060,19 @@ export const api = {
   /** Asks the platform who the account is: `ok` false with `error` when the sign-in no longer works. */
   testChannel: (id: string) =>
     request<ChannelTestResult>(`/v1/channels/${encodeURIComponent(id)}/test`, { method: 'POST' }),
+  /** The person's assistant chats, newest first, a page at a time; q finds words in titles. */
+  assistantChats: (q: string, cursor?: string) =>
+    request<{ data: AssistantChat[]; next_cursor?: string }>(
+      `/v1/assistant/chats?${new URLSearchParams({ q, limit: '30', ...(cursor ? { cursor } : {}) })}`,
+    ),
+  assistantChatById: (id: string) => request<AssistantChat>(`/v1/assistant/chats/${encodeURIComponent(id)}`),
+  deleteAssistantChat: (id: string) =>
+    request<void>(`/v1/assistant/chats/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** The choices of a channel's remote setting, from its platform (Slack's channels). */
+  channelOptions: (id: string, key: string) =>
+    request<{ data: { value: string; label: string }[] }>(
+      `/v1/channels/${encodeURIComponent(id)}/options/${encodeURIComponent(key)}`,
+    ),
   /** This server's setup for a platform (app keys, return address, media), independent of any account. */
   checkProvider: (id: string) =>
     request<ProviderCheck>(`/v1/providers/${encodeURIComponent(id)}/check`, { method: 'POST' }),

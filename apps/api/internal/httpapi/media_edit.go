@@ -238,6 +238,6 @@ func (s *Server) stockPhotos(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) useStockPhoto(w http.ResponseWriter, r *http.Request) {
-	err := s.svc.UseStockPhoto(r.Context(), principal(r), chi.URLParam(r, "id"))
-	respond(w, r, 204, nil, err)
+	m, err := s.svc.UseStockPhoto(r.Context(), principal(r), chi.URLParam(r, "id"))
+	respond(w, r, 201, m, err)
 }

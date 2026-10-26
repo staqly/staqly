@@ -32,7 +32,7 @@ func TestDashboardRelayKeepsPerBrowserLimits(t *testing.T) {
 	api := httptest.NewServer(httpapi.New(svc, log, httpapi.Config{TrustProxy: true, OpenAPISpec: []byte("openapi: 3.1.0")}))
 	t.Cleanup(api.Close)
 	u, _ := url.Parse(api.URL)
-	dash := httptest.NewServer(web.Handler(fstest.MapFS{}, u, log, true, ""))
+	dash := httptest.NewServer(web.Handler(fstest.MapFS{}, u, log, true, "", false))
 	t.Cleanup(dash.Close)
 
 	signup := func(browser string) int {

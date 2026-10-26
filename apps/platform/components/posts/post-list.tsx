@@ -106,7 +106,10 @@ export function PostListHeader({ allSelected, onSelectAll }: { allSelected: bool
       <span>When</span>
       <span>Channels</span>
       <span>Created</span>
-      <span className="sr-only">Feedback</span>
+      {/* sr-only is absolutely positioned and would leave the grid: its own cell keeps the columns in step. */}
+      <span>
+        <span className="sr-only">Feedback</span>
+      </span>
       <span className="w-[8.5rem]" />
     </div>
   )

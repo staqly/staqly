@@ -53,7 +53,7 @@ func main() {
 	if os.Getenv("POSTHOG_KEY") != "" {
 		analyticsHost = append(analyticsHost, env("POSTHOG_HOST", "https://eu.i.posthog.com"))
 	}
-	srv := &http.Server{Addr: env("ADDR", ":8080"), Handler: web.Handler(site, upstream, log, trustProxy, "", analyticsHost...),
+	srv := &http.Server{Addr: env("ADDR", ":8080"), Handler: web.Handler(site, upstream, log, trustProxy, "", os.Getenv("AI_ASSISTANT_BROWSER_MODEL") != "", analyticsHost...),
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Minute, IdleTimeout: 120 * time.Second}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

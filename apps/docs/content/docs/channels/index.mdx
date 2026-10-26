@@ -42,7 +42,7 @@ How you connect depends on the platform's `auth`:
 
 Some sign-ins can publish as several accounts: the Facebook Pages you manage, the Instagram accounts
 linked to them, LinkedIn Pages, YouTube channels, Google Business Profile locations, Tumblr blogs,
-Slack channels, MeWe groups. When there is only one, staqly connects it right away. When there are
+MeWe groups. When there is only one, staqly connects it right away. When there are
 several, the platform sends you back to a list: tick the ones you want and click **Connect**. Every
 account you pick becomes its own channel (one already connected is reconnected instead), and nothing is
 ticked for you. The list waits ten minutes; after that, connect again. The same list appears on a
@@ -126,7 +126,7 @@ has their app keys; token platforms right away.
 | [Pinterest](/channels/pinterest) (**available**) | `pinterest` | OAuth | 500 | 1 picture | a title, a board, the picture and a link |
 | [Dribbble](/channels/dribbble) (**available**) | `dribbble` | OAuth | 1,000 | 1 picture (400x300 or 800x600) | a title and the picture |
 | [Discord](/channels/discord) (**available**) | `discord` | token (webhook) | 2,000 | 10 | — |
-| [Slack](/channels/slack) (**available**) | `slack` | OAuth, pick channels | 40,000 | 10 | — |
+| [Slack](/channels/slack) (**available**) | `slack` | OAuth, a workspace; each post picks its channel | 40,000 | 10 | — |
 | [Kick](/channels/kick) (**available**) | `kick` | OAuth | 500 | — | — |
 | [Twitch](/channels/twitch) (**available**) | `twitch` | OAuth | 500 | — | — |
 | [Mastodon](/channels/mastodon) (**available**) | `mastodon` | token | 500 | 4 pictures or 1 video | — |
@@ -161,6 +161,30 @@ PROVIDER_X_CLIENT_SECRET=...
   on its channels still publish, and can still be edited.
 - Enabled but without `_CLIENT_ID` and `_CLIENT_SECRET`, an OAuth platform is listed as **soon**.
 - Restart the server after changing them. `.env.example` has a block for every platform.
+
+### Platforms that need https
+
+Some platforms send the browser back to staqly only at a secure (`https://`) address after you
+allow the app: Facebook, Instagram Business, Threads, TikTok and Slack (`needs_https` in
+`GET /v1/providers`). On a dashboard opened at a plain `http://` address, such as
+`http://localhost:8080`, they show **Not available** in **Add channel** and can't be connected.
+
+To connect them on your own computer:
+
+1. Give staqly an https address that reaches the dashboard on port 8080: a tunnel (Cloudflare
+   Tunnel, Tailscale Funnel, ngrok) or a reverse proxy with a certificate, for example
+   `https://staqly.example.com`.
+2. Tell staqly that address and restart it: `PUBLIC_DASHBOARD_URL=https://staqly.example.com`
+   (Docker: `-e PUBLIC_DASHBOARD_URL=...`). Platforms send people back to
+   `<that address>/channels/callback/<platform>`, which is what you register as the redirect URL
+   of the platform's app.
+3. Open the dashboard **at that address**, sign in there and connect the platform. A connection
+   started at `http://localhost:8080` can't finish at the https address: the browser keeps their
+   sign-ins apart (**The connection did not start in this browser**).
+
+Once connected, the channel publishes whichever address you use the dashboard at, localhost
+included; only connecting (and reconnecting) needs the https address. **Settings → System →
+Platforms** checks the setup for each platform.
 
 All limits in one place: [Limits](/limits).
 

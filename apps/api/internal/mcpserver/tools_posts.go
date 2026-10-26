@@ -31,6 +31,7 @@ func (t *tools) addPostTools(s *mcp.Server) {
 	add(s, t, &mcp.Tool{Name: "revoke_channel_link", Description: "Stop a connect link from working; channels already connected through it stay. Requires channels:manage.", Annotations: destructive()}, t.revokeChannelLink)
 	add(s, t, &mcp.Tool{Name: "delete_channel", Description: "Remove a channel; targets on it go with it. Requires channels:manage.", Annotations: destructive()}, t.deleteChannel)
 	add(s, t, &mcp.Tool{Name: "test_channel", Description: "Check a channel's stored credentials against its platform. Rate-limited. Requires channels:manage.", Annotations: wr()}, t.testChannel)
+	add(s, t, &mcp.Tool{Name: "list_channel_options", Description: "The choices of a channel's remote setting (a settings_fields entry of kind remote), from its platform right now: for Slack, key channel lists the workspace's channels a post can go to. Requires channels:read.", Annotations: ro()}, t.listChannelOptions)
 
 	add(s, t, &mcp.Tool{Name: "create_post", Description: "Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. Requires posts:write.",
 		Annotations: wr()}, t.createPost)
@@ -165,6 +166,16 @@ func (t *tools) testChannel(ctx context.Context, _ *mcp.CallToolRequest, in chan
 		return nil, nil, err
 	}
 	return nil0(t.svc.TestChannel(ctx, t.principal(ctx), in.ChannelID))
+}
+
+type channelOptionsIn struct {
+	ChannelID string `json:"channel_id" jsonschema:"channel ID (ch_...)"`
+	Key       string `json:"key" jsonschema:"the setting's key (channel for Slack)"`
+}
+
+func (t *tools) listChannelOptions(ctx context.Context, _ *mcp.CallToolRequest, in channelOptionsIn) (*mcp.CallToolResult, any, error) {
+	out, err := t.svc.ChannelOptions(ctx, t.principal(ctx), in.ChannelID, in.Key)
+	return nil, map[string]any{"options": out}, err
 }
 
 // ---- posts ----

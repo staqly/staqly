@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// fakeSlack answers like slack.com/api for the bot token "xoxb-1".
+// fakeSlack answers like slack.com/api for the bot token "xoxb-1" and the user token "xoxp-1".
 type fakeSlack struct {
 	mu        sync.Mutex
 	calls     []string
@@ -53,7 +53,7 @@ func (f *fakeSlack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"ok":false,"error":"` + code + `"}`))
 		return
 	}
-	if method != "oauth.v2.access" && r.Header.Get("Authorization") != "Bearer xoxb-1" && r.Header.Get("Authorization") != "Bearer xoxb-2" {
+	if method != "oauth.v2.access" && r.Header.Get("Authorization") != "Bearer xoxb-1" && r.Header.Get("Authorization") != "Bearer xoxb-2" && r.Header.Get("Authorization") != "Bearer xoxp-1" {
 		_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_auth"}`))
 		return
 	}
@@ -69,6 +69,14 @@ func (f *fakeSlack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"ok":false,"error":"bad_client_secret"}`))
 			return
 		}
+		if r.Form.Get("refresh_token") == "xoxe-gone" {
+			_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_refresh_token"}`))
+			return
+		}
+		if r.Form.Get("refresh_token") == "xoxe-u1" {
+			_, _ = w.Write([]byte(`{"ok":true,"access_token":"xoxp-2","token_type":"user","refresh_token":"xoxe-u2","expires_in":43200}`))
+			return
+		}
 		if r.Form.Get("grant_type") == "refresh_token" {
 			_, _ = w.Write([]byte(`{"ok":true,"access_token":"xoxb-2","refresh_token":"xoxe-2","expires_in":43200,"team":{"id":"T1","name":"Acme"}}`))
 			return
@@ -77,7 +85,7 @@ func (f *fakeSlack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_code"}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"ok":true,"access_token":"xoxb-1","token_type":"bot","bot_user_id":"U9","team":{"id":"T1","name":"Acme"}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"access_token":"xoxb-1","token_type":"bot","bot_user_id":"U9","team":{"id":"T1","name":"Acme"},"authed_user":{"id":"U1","access_token":"xoxp-1","token_type":"user"}}`))
 	case "auth.test":
 		_, _ = w.Write([]byte(`{"ok":true,"url":"https://acme.slack.com/","team":"Acme","team_id":"T1","user_id":"U9"}`))
 	case "conversations.list":
@@ -85,15 +93,23 @@ func (f *fakeSlack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"ok":true,"channels":[{"id":"C1","name":"general","is_member":false},{"id":"G1","name":"secret","is_private":true,"is_member":false}],"response_metadata":{"next_cursor":"p2"}}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"ok":true,"channels":[{"id":"G2","name":"team","is_private":true,"is_member":true}],"response_metadata":{"next_cursor":""}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"channels":[{"id":"G2","name":"team","is_private":true,"is_member":true},{"id":"C3","name":"random","is_member":true}],"response_metadata":{"next_cursor":""}}`))
 	case "conversations.info":
 		ch := r.Form.Get("channel")
 		private := strings.HasPrefix(ch, "G")
 		b, _ := json.Marshal(map[string]any{"ok": true, "channel": map[string]any{"id": ch, "name": "general", "is_private": private, "is_member": f.member}})
 		_, _ = w.Write(b)
+	case "team.info":
+		_, _ = w.Write([]byte(`{"ok":true,"team":{"id":"T1","name":"Acme","icon":{"image_132":"https://avatars.slack-edge.com/acme_132.png","image_default":false}}}`))
+	case "users.profile.get":
+		_, _ = w.Write([]byte(`{"ok":true,"profile":{"real_name":"Jane Doe","image_48":"https://avatars.slack-edge.com/jane_48.png"}}`))
 	case "conversations.join":
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	case "chat.postMessage":
+		if f.bodies[method]["channel"] == "C404" {
+			_, _ = w.Write([]byte(`{"ok":false,"error":"not_in_channel"}`))
+			return
+		}
 		if f.status != 0 {
 			w.WriteHeader(f.status)
 			_, _ = w.Write([]byte(`{"ok":false,"error":"ratelimited"}`))
@@ -139,7 +155,7 @@ func TestSlackConnect(t *testing.T) {
 
 	u, _ := s.AuthURL(app, "https://app.example/channels/callback/slack", "st", nil)
 	q, _ := url.ParseQuery(u[strings.Index(u, "?")+1:])
-	if q.Get("scope") != slackScopes || q.Get("client_id") != "cid" || q.Get("state") != "st" {
+	if q.Get("scope") != slackScopes || q.Get("user_scope") != slackUserScopes || q.Get("client_id") != "cid" || q.Get("state") != "st" {
 		t.Fatalf("auth url %s", u)
 	}
 
@@ -147,37 +163,31 @@ func TestSlackConnect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if creds["access_token"] != "xoxb-1" || creds["team_url"] != "https://acme.slack.com/" || creds["expires_at"] != "" || profile.Name != "Acme" {
+	if creds["access_token"] != "xoxb-1" || creds["team_url"] != "https://acme.slack.com/" || creds["expires_at"] != "" || profile.Name != "Acme" || profile.Handle != "acme.slack.com" || profile.AvatarURL != "https://avatars.slack-edge.com/acme_132.png" ||
+		creds["user_token"] != "xoxp-1" || creds["user_id"] != "U1" {
 		t.Fatalf("%v %+v", creds, profile)
 	}
 	if _, _, err := s.Exchange(ctx, App{ClientID: "cid", ClientSecret: "wrong"}, "x", "good", nil); !errors.Is(err, ErrRejected) {
 		t.Fatalf("bad keys: %v", err)
 	}
 
-	accounts, err := s.Accounts(ctx, creds)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(accounts) != 2 || accounts[0].ID != "C1" || accounts[1].ID != "G2" || accounts[0].ProfileURL != "https://acme.slack.com/archives/C1" {
-		t.Fatalf("accounts %+v", accounts) // the private channel the app was not invited to is left out
+	// The channels to post in: every public one and the private ones the app was invited to.
+	opts, err := s.Options(ctx, creds, "channel")
+	if err != nil || len(opts) != 3 || opts[0] != (Option{Value: "C1", Label: "#general"}) || opts[1].Value != "G2" {
+		t.Fatalf("options %+v %v", opts, err)
 	}
 
-	ch, p, err := s.UseAccount(ctx, creds, "C1")
-	if err != nil {
-		t.Fatal(err)
+	// Post as: the app with staqly's mark, the person with their Slack photo.
+	who, err := s.Options(ctx, creds, "post_as")
+	if err != nil || len(who) != 2 || who[0].Icon != "staqly" || who[1].Value != "me" || who[1].Icon != "https://avatars.slack-edge.com/jane_48.png" {
+		t.Fatalf("post as %+v %v", who, err)
 	}
-	if ch["channel_id"] != "C1" || ch["access_token"] != "xoxb-1" || p.Handle != "#general (C1)" || p.Name != "#general" {
-		t.Fatalf("%v %+v", ch, p)
-	}
-	if f.bodies["conversations.join"]["channel"] != "C1" {
-		t.Fatal("the bot did not join the public channel")
-	}
-	if _, _, err := s.UseAccount(ctx, creds, "G1"); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "/invite") {
-		t.Fatalf("private channel without the app: %v", err)
+	if slackPostAs[1].Icon != "" {
+		t.Fatal("the shared list got the photo")
 	}
 
 	f.errFor["conversations.list"] = "invalid_auth"
-	if _, err := s.Accounts(ctx, creds); !errors.Is(err, ErrReauth) {
+	if _, err := s.Options(ctx, creds, "channel"); !errors.Is(err, ErrReauth) {
 		t.Fatalf("revoked: %v", err)
 	}
 }
@@ -198,6 +208,18 @@ func TestSlackRefresh(t *testing.T) {
 	if err != nil || c["access_token"] != "xoxb-2" || c["refresh_token"] != "xoxe-2" || c["expires_at"] == "" || c["channel_id"] != "C1" {
 		t.Fatalf("rotated %v %v", c, err)
 	}
+	// Rotation renews the person's token too; when that fails only posting as them goes.
+	rot["user_token"], rot["user_refresh_token"] = "xoxp-1", "xoxe-u1"
+	c, err = Slack{}.Refresh(ctx, app, rot)
+	if err != nil || c["access_token"] != "xoxb-2" || c["user_token"] != "xoxp-2" || c["user_refresh_token"] != "xoxe-u2" {
+		t.Fatalf("rotated user %v %v", c, err)
+	}
+	rot["user_refresh_token"] = "xoxe-gone"
+	c, err = Slack{}.Refresh(ctx, app, rot)
+	if err != nil || c["access_token"] != "xoxb-2" || c["user_token"] != "" {
+		t.Fatalf("user refresh failed %v %v", c, err)
+	}
+
 	f.errFor["auth.test"] = "token_revoked"
 	if _, err := (Slack{}).Refresh(ctx, app, slackCreds()); !errors.Is(err, ErrReauth) {
 		t.Fatalf("revoked: %v", err)
@@ -213,7 +235,7 @@ func TestSlackPublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.ExternalID != "1700000000.000200" || res.URL != "https://acme.slack.com/archives/C1/p1700000000000200" {
+	if res.ExternalID != "C1:1700000000.000200" || res.URL != "https://acme.slack.com/archives/C1/p1700000000000200" {
 		t.Fatalf("%+v", res)
 	}
 	b := f.bodies["chat.postMessage"]
@@ -225,9 +247,13 @@ func TestSlackPublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.bodies["chat.postMessage"]["thread_ts"] != "1700000000.000200" || reply.ExternalID != "1700000000.000200/1700000000.000200" ||
+	if f.bodies["chat.postMessage"]["thread_ts"] != "1700000000.000200" || reply.ExternalID != "C1:1700000000.000200/1700000000.000200" ||
 		!strings.Contains(reply.URL, "thread_ts=1700000000.000200") {
 		t.Fatalf("reply %+v %v", reply, f.bodies["chat.postMessage"])
+	}
+	// A post from before several channels (a bare ts) still takes replies in its channel.
+	if r, err := s.Reply(ctx, slackCreds(), "1700000000.000200", PostContent{Text: "Old"}, Settings{}); err != nil || r.ExternalID != "C1:1700000000.000200/1700000000.000200" {
+		t.Fatalf("legacy reply %+v %v", r, err)
 	}
 	// A later part names the thread, not the reply before it.
 	if _, err := s.Reply(ctx, slackCreds(), reply.ExternalID, PostContent{Text: "Even more"}, Settings{}); err != nil || f.bodies["chat.postMessage"]["thread_ts"] != "1700000000.000200" {
@@ -239,7 +265,7 @@ func TestSlackPublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.ExternalID != "1700000000.000300" || f.uploaded["Fa.jpg"] != "jpg" || f.uploaded["Fb.mp4"] != "mp4!" || f.forms["files.getUploadURLExternal"].Get("length") != "4" {
+	if res.ExternalID != "C1:1700000000.000300" || f.uploaded["Fa.jpg"] != "jpg" || f.uploaded["Fb.mp4"] != "mp4!" || f.forms["files.getUploadURLExternal"].Get("length") != "4" {
 		t.Fatalf("files %+v %v", res, f.uploaded)
 	}
 	cb := f.bodies["files.completeUploadExternal"]
@@ -252,6 +278,82 @@ func TestSlackPublish(t *testing.T) {
 	res, err = s.Publish(ctx, slackCreds(), PostContent{Media: []MediaFile{chatMedia("a.jpg", "image/jpeg", "jpg")}}, Settings{})
 	if err != nil || res.ExternalID != "" || res.URL != "https://acme.slack.com/archives/C1" {
 		t.Fatalf("no share %+v %v", res, err)
+	}
+}
+
+func TestSlackPostAsAndChannel(t *testing.T) {
+	f := useFakeSlack(t)
+	ctx := context.Background()
+	s := Slack{}
+	auth := ""
+	f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "chat.postMessage") {
+			auth = r.Header.Get("Authorization")
+		}
+		f.ServeHTTP(w, r)
+	})
+
+	// Not reconnected since posting as the person came: the post fails, the channel stays fine.
+	if _, err := s.Publish(ctx, slackCreds(), PostContent{Text: "Hi"}, Settings{"post_as": "me"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "reconnect") {
+		t.Fatalf("no user token: %v", err)
+	}
+	c := slackCreds()
+	c["user_token"] = "xoxp-1"
+	if _, err := s.Publish(ctx, c, PostContent{Text: "Hi"}, Settings{"post_as": "me"}); err != nil || auth != "Bearer xoxp-1" {
+		t.Fatalf("as me: %v %s", err, auth)
+	}
+
+	// A workspace connection posts where the post says, and only there.
+	ws := slackCreds()
+	delete(ws, "channel_id")
+	// A workspace post names its channels (#names work like ids); none named is refused.
+	if _, err := s.Publish(ctx, ws, PostContent{Text: "Hi"}, Settings{}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "pick the Slack channels") {
+		t.Fatalf("no channel: %v", err)
+	}
+	if res, err := s.Publish(ctx, ws, PostContent{Text: "Hi"}, Settings{"channel": "#random"}); err != nil || f.bodies["chat.postMessage"]["channel"] != "C3" || !strings.HasPrefix(res.ExternalID, "C3:") {
+		t.Fatalf("by name %+v %v", res, err)
+	}
+	if _, err := s.Publish(ctx, ws, PostContent{Text: "Hi"}, Settings{"channel": "#nope"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "#nope") {
+		t.Fatalf("unknown name: %v", err)
+	}
+	// Several channels: one message each, replies under each.
+	f.calls = nil
+	multi, err := s.Publish(ctx, ws, PostContent{Text: "Hi"}, Settings{"channel": "C2,#random"})
+	if err != nil || multi.ExternalID != "C2:1700000000.000200,C3:1700000000.000200" || !strings.Contains(multi.URL, "/archives/C2/") {
+		t.Fatalf("several %+v %v", multi, err)
+	}
+	r, err := s.Reply(ctx, ws, multi.ExternalID, PostContent{Text: "More"}, Settings{"channel": "C2,#random"})
+	if err != nil || r.ExternalID != "C2:1700000000.000200/1700000000.000200,C3:1700000000.000200/1700000000.000200" || f.bodies["chat.postMessage"]["channel"] != "C3" {
+		t.Fatalf("replies %+v %v", r, err)
+	}
+	// One refused after another took it: final, so retrying can't post twice.
+	if _, err := s.Publish(ctx, ws, PostContent{Text: "Hi"}, Settings{"channel": "C2,C404"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "published in C2") {
+		t.Fatalf("partly: %v", err)
+	}
+	if _, err := s.Publish(ctx, ws, PostContent{Text: "Hi"}, Settings{"channel": "C404"}); !errors.Is(err, ErrRejected) || errors.Is(err, ErrReauth) {
+		t.Fatalf("refused channel on a workspace: %v", err)
+	}
+
+	// Another channel: the app joins it first, and the link points there.
+	res, err := s.Publish(ctx, c, PostContent{Text: "Hi"}, Settings{"channel": "C2"})
+	if err != nil || auth != "Bearer xoxb-1" || f.bodies["chat.postMessage"]["channel"] != "C2" || f.bodies["conversations.join"]["channel"] != "C2" ||
+		!strings.Contains(res.URL, "/archives/C2/") {
+		t.Fatalf("other channel %+v %v %v", res, err, f.bodies)
+	}
+	// A reply follows the post into that channel.
+	if _, err := s.Reply(ctx, c, res.ExternalID, PostContent{Text: "More"}, Settings{"channel": "C2"}); err != nil || f.bodies["chat.postMessage"]["channel"] != "C2" {
+		t.Fatalf("reply %v %v", err, f.bodies["chat.postMessage"])
+	}
+
+	// A channel Slack refuses fails the post, not the connection.
+	for _, set := range []Settings{{"channel": "C404"}, {"channel": "C404", "post_as": "me"}} {
+		if _, err := s.Publish(ctx, c, PostContent{Text: "Hi"}, set); !errors.Is(err, ErrRejected) || errors.Is(err, ErrReauth) {
+			t.Fatalf("%v: %v", set, err)
+		}
+	}
+	c["channel_id"] = "C404"
+	if _, err := s.Publish(ctx, c, PostContent{Text: "Hi"}, Settings{}); !errors.Is(err, ErrReauth) {
+		t.Fatalf("own channel gone: %v", err)
 	}
 }
 
@@ -318,10 +420,19 @@ func TestSlackValidate(t *testing.T) {
 	if err := s.Validate(PostContent{Text: "a"}, Settings{"link_preview": "nope"}); err == nil {
 		t.Fatal("link_preview must be a boolean")
 	}
-	if err := s.Validate(PostContent{Text: "a", Media: make([]MediaFile, 11)}, Settings{}); err == nil {
+	if err := s.Validate(PostContent{Text: "a", Media: make([]MediaFile, 11)}, Settings{"channel": "C1"}); err == nil {
 		t.Fatal("11 files")
 	}
-	if err := s.Validate(PostContent{Text: strings.Repeat("a", 40000)}, Settings{}); err != nil {
+	if err := s.Validate(PostContent{Text: "a"}, Settings{}); err == nil {
+		t.Fatal("a post names its Slack channels")
+	}
+	if err := s.Validate(PostContent{Text: "a"}, Settings{"post_as": "someone"}); err == nil {
+		t.Fatal("post_as is app or me")
+	}
+	if err := s.Validate(PostContent{Text: "a"}, Settings{"channel": "C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11"}); err == nil {
+		t.Fatal("11 channels")
+	}
+	if err := s.Validate(PostContent{Text: strings.Repeat("a", 40000)}, Settings{"channel": "C1"}); err != nil {
 		t.Fatal(err)
 	}
 }

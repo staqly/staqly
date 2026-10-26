@@ -2406,6 +2406,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/channels/{id}/options/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+                /** @description A settings field of kind remote */
+                key: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The choices of a channel's remote setting, from its platform (channels:read)
+         * @description For Slack, `channel` lists the workspace's channels a post can go to (every public one and the private ones the app was invited to).
+         */
+        get: operations["listChannelOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/schedules": {
         parameters: {
             query?: never;
@@ -2990,6 +3014,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/assistant/chats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's assistant chats in this workspace, newest first */
+        get: operations["listAssistantChats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/assistant/chats/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        /** One of the caller's assistant chats, with its messages and the change waiting for a decision */
+        get: operations["getAssistantChat"];
+        put?: never;
+        post?: never;
+        /** Remove one of the caller's assistant chats */
+        delete: operations["deleteAssistantChat"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/stock/photos": {
         parameters: {
             query?: never;
@@ -2998,8 +3059,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Stock photos from Unsplash for the design editor (media:read)
-         * @description Searches Unsplash on the server's key (UNSPLASH_ACCESS_KEY); without a query, its editorial feed. Without a key, configured is false and data is empty. Pictures load straight from Unsplash's CDN; credit the author with author_url and page_url.
+         * Stock photos from Pixabay for the design editor (media:read)
+         * @description Searches Pixabay's photos on the server's key (PIXABAY_API_KEY), safe search on; without a query, its editors' choice. Answers are kept for a day, as Pixabay asks. Without a key, configured is false and data is empty. Thumbnails load straight from Pixabay's CDN; a photo for a design goes through POST /v1/stock/photos/{id}/use, which copies it into the library (Pixabay allows no permanent hotlinking).
          */
         get: operations["listStockPhotos"];
         put?: never;
@@ -3021,7 +3082,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Tell Unsplash a photo went into a design (media:write) */
+        /**
+         * Copy a Pixabay photo into the media library, for a design (media:write)
+         * @description The photo at most 1280 px wide or tall, as a new library file (pixabay-<id>.jpg).
+         */
         post: operations["useStockPhoto"];
         delete?: never;
         options?: never;
@@ -4216,24 +4280,25 @@ export interface components {
             id: string;
             width: number;
             height: number;
+            /** @description Pixabay's tags, comma-separated */
             alt: string;
-            /** @description About 400 px wide */
+            /** @description At most 640 px wide or tall */
             thumb: string;
-            /** @description About 2000 px wide */
+            /** @description At most 1280 px; temporary (use POST /v1/stock/photos/{id}/use to keep it) */
             url: string;
             author: string;
             author_url: string;
             page_url: string;
         };
         StockPage: {
-            /** @description Whether this server has an Unsplash key */
+            /** @description Whether this server has a Pixabay key */
             configured: boolean;
             data: components["schemas"]["StockPhoto"][];
         };
         AIStatus: {
             /** @description At least one AI operation works; false hides the AI tools */
             configured: boolean;
-            /** @description The configured providers, the primary first */
+            /** @description The configured media providers, in the order they are tried (AI_MEDIA_PROVIDERS) */
             providers: ("fal" | "higgsfield")[];
             operations: components["schemas"]["AIOperation"][];
             usage: {
@@ -4244,6 +4309,8 @@ export interface components {
                 /** @description The monthly limit of the workspace's plan (ai_monthly_cents); null: none */
                 limit_usd: number | null;
             };
+            /** @description A WebLLM model the dashboard may run on the device, text only, when the assistant can't answer on the server (AI_ASSISTANT_BROWSER_MODEL); absent: none */
+            assistant_browser_model?: string;
         };
         AssistantMessage: {
             /** @enum {string} */
@@ -4256,6 +4323,23 @@ export interface components {
                 arguments: string;
             }[];
             tool_call_id?: string;
+        };
+        /** @description A conversation with the assistant, kept for the person who had it; lists leave out messages and pending */
+        AssistantChat: {
+            id: string;
+            /** @description The first thing the person asked */
+            title: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            messages?: components["schemas"]["AssistantMessage"][];
+            /** @description The tool call waiting for Allow or Deny */
+            pending?: {
+                id: string;
+                name: string;
+                arguments: string;
+            };
         };
         /** @description An AI operation this server offers, what it takes and who runs it */
         AIOperation: {
@@ -4272,8 +4356,11 @@ export interface components {
             image: boolean;
             /** @description Needs a mask (white: the area to change) */
             mask: boolean;
-            /** @enum {string} */
-            provider: "fal" | "higgsfield";
+            /**
+             * @description openai_compatible: the assistant on the server's own OpenAI-compatible endpoint (AI_ASSISTANT_BASE_URL)
+             * @enum {string}
+             */
+            provider: "fal" | "higgsfield" | "openai_compatible";
             /** @description The provider's model id */
             model: string;
             /** @description The provider that takes over when the first does not take a request; empty: none */
@@ -4699,6 +4786,8 @@ export interface components {
                 provider_name: string;
                 /** @description The text this channel gets */
                 content: string;
+                /** @description The post's tags as the platform gets them after the text (#launch #news); empty for none and for your own automation */
+                hashtags: string;
                 status: string;
                 external_url: string;
                 /** Format: date-time */
@@ -4854,17 +4943,21 @@ export interface components {
             label: string;
             help?: string;
             /**
-             * @description list: comma-separated free values (tags, usernames). channels: comma-separated ids of other connected channels of the same platform (for example the accounts that repost a post). Booleans are "true" / "false".
+             * @description list: comma-separated free values (tags, usernames). channels: comma-separated ids of other connected channels of the same platform (for example the accounts that repost a post). remote: values from the list the platform gives for the channel (GET /v1/channels/{id}/options/{key}), for example Slack channels; several, comma-separated, when max_items is above 1; options, when set, are the fixed choices (the list adds pictures). Booleans are "true" / "false".
              * @enum {string}
              */
-            kind: "text" | "secret" | "url" | "select" | "textarea" | "boolean" | "number" | "list" | "channels";
+            kind: "text" | "secret" | "url" | "select" | "textarea" | "boolean" | "number" | "list" | "channels" | "remote";
             /** @description At most this many characters (text, textarea, url) */
             max_length?: number;
-            /** @description At most this many values (list, channels) */
+            /** @description At most this many values (list, channels, remote) */
             max_items?: number;
+            /** @description remote: the option labels to pick while the field is empty, the first the list has (Slack: #random, then #general) */
+            prefer?: string[];
             options?: {
                 value: string;
                 label: string;
+                /** @description Shown with the option: a picture's URL, or staqly for staqly's mark */
+                icon?: string;
             }[];
             required: boolean;
             default?: string;
@@ -4922,6 +5015,8 @@ export interface components {
             app_configured: boolean;
             /** Format: uri */
             docs_url: string;
+            /** @description The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise) */
+            needs_https: boolean;
         };
         /** @description When a recurring schedule runs: times (HH:MM) on weekdays in tz, or every N minutes */
         ScheduleRule: {
@@ -10565,6 +10660,42 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
+    listChannelOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+                /** @description A settings field of kind remote */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            value: string;
+                            label: string;
+                            icon?: string;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
     listSchedules: {
         parameters: {
             query?: {
@@ -11818,6 +11949,8 @@ export interface operations {
                     };
                     /** @description The dashboard page the person is on */
                     page?: string;
+                    /** @description The chat to keep the conversation in, named by the client (GET /v1/assistant/chats lists them); the server saves it once the turn ends */
+                    chat_id?: string;
                 };
             };
         };
@@ -11836,6 +11969,83 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listAssistantChats: {
+        parameters: {
+            query?: {
+                /** @description Words found in the title */
+                q?: string;
+                /** @description next_cursor of the page before */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AssistantChat"][];
+                        next_cursor?: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getAssistantChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantChat"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAssistantChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     listStockPhotos: {
@@ -11877,12 +12087,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Told */
-            204: {
+            /** @description The library file */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

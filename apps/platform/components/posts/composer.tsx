@@ -595,6 +595,12 @@ function settingsSummary(fields: ProviderField[], values: Record<string, string>
         return [`${f.label}: ${f.options?.find((o) => o.value === v)?.label ?? v}`]
       }
 
+      if (f.kind === 'remote') {
+        const fixed = f.options?.find((o) => o.value === v)
+
+        return [fixed ? fixed.label : f.label]
+      }
+
       if (f.kind === 'channels') {
         const names = v.split(',').map((id) => all.find((c) => c.id === id.trim())?.name ?? id)
 
@@ -1096,6 +1102,13 @@ const SettingsCard = memo(function SettingsCard({
 }) {
   const fields = provider?.settings_fields ?? []
   const summary = settingsSummary(fields, values, channels)
+  const remote = useMemo(
+    () => ({
+      channelId: channel.id,
+      load: async (key: string) => (await api.channelOptions(channel.id, key)).data,
+    }),
+    [channel.id],
+  )
   const prefix = `targets.${channel.id}.settings.`
   const fieldErrors = Object.fromEntries(
     Object.entries(errors)
@@ -1129,6 +1142,7 @@ const SettingsCard = memo(function SettingsCard({
             values={values}
             onChange={(k, v) => onSetting(channel.id, k, v)}
             errors={fieldErrors}
+            remote={remote}
             channelOptions={channels
               .filter((o) => o.provider === channel.provider && o.id !== channel.id)
               .map((o) => ({ value: o.id, label: o.name, hint: o.handle ?? undefined }))}

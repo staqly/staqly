@@ -4,7 +4,7 @@ description: Connect an AI agent to staqly over MCP so it can write posts, sched
 ---
 
 Staqly is an MCP server named **`staqly`**. Connect it to an AI agent (Claude Code, Codex,
-OpenCode, Cursor, Windsurf) and the agent gets 100 tools to write and schedule posts, connect
+OpenCode, Cursor, Windsurf) and the agent gets 104 tools to write and schedule posts, connect
 channels, set up schedules, webhooks and alerts, and see what the workspace asks of it.
 Nearly everything the REST API can do is available as a tool, no HTTP code needed: browser
 sign-in flows, managing people and a few dashboard-only endpoints are left out
@@ -91,7 +91,7 @@ On connect, staqly sends instructions so the agent uses it well:
 | Posts | `list_posts`, `search_posts`, `get_post`, `create_post`, `update_post`, `schedule_post`, `publish_post`, `cancel_post`, `duplicate_post`, `delete_post`, `delete_posts`, `purge_post`, `preview_post`, `get_post_history`, `get_post_metrics`, `retry_target`, `list_tags` |
 | Preview links and feedback | `create_preview_link`, `list_preview_links`, `revoke_preview_link`, `list_post_comments`, `reply_to_post_comment`, `resolve_post_comment` |
 | Your own automation | `list_requested_work`, `report_publish_result`, `report_post_metrics` |
-| Channels | `list_providers`, `list_channels`, `get_channel`, `connect_channel`, `update_channel`, `delete_channel`, `test_channel`, `list_channel_groups`, `create_channel_group`, `update_channel_group`, `delete_channel_group`, `create_channel_link`, `list_channel_links`, `revoke_channel_link` |
+| Channels | `list_providers`, `list_channels`, `get_channel`, `connect_channel`, `update_channel`, `delete_channel`, `test_channel`, `list_channel_options`, `list_channel_groups`, `create_channel_group`, `update_channel_group`, `delete_channel_group`, `create_channel_link`, `list_channel_links`, `revoke_channel_link` |
 | Schedules | `list_schedules`, `create_schedule`, `update_schedule`, `delete_schedule`, `run_schedule` |
 | Queue | `list_jobs`, `retry_job` |
 | Media | `upload_media`, `list_media`, `get_media`, `get_media_usage`, `update_media`, `organize_media`, `delete_media`, `restore_media`, `keep_media`, `list_media_folders`, `create_media_folder`, `update_media_folder`, `delete_media_folder` |
@@ -123,7 +123,7 @@ Inputs and scopes for each: [Tools reference](/mcp/tools).
 ## Next steps
 
 <Cards>
-  <Card title="Tools reference" href="/mcp/tools">All 100 tools with inputs and scopes.</Card>
+  <Card title="Tools reference" href="/mcp/tools">All 104 tools with inputs and scopes.</Card>
   <Card title="Example prompts" href="/mcp/prompts">Things to ask your agent.</Card>
   <Card title="Let an agent fill a collection" href="/cookbook/agent-fills-a-collection">Drafts every night, a post every morning.</Card>
 </Cards>

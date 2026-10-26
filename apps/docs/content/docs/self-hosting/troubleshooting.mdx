@@ -60,6 +60,14 @@ dashboard, another agent) edited it meanwhile. Reload the post and apply your ch
   `PROVIDER_<ID>_ENABLED=false`. Posts already scheduled on its channels still go out; new ones
   are refused.
 </Accordion>
+<Accordion title="A platform shows Not available, or: The connection did not start in this browser">
+The platform (Facebook, Instagram Business, Threads, TikTok, Slack) sends the browser back to
+staqly only at an `https://` address. Put staqly behind a tunnel or a reverse proxy with https, set
+`PUBLIC_DASHBOARD_URL` to that address, restart, and connect from the dashboard opened at that
+address, not at `http://localhost:8080`
+([Platforms that need https](/channels#platforms-that-need-https)).
+</Accordion>
+
 <Accordion title="A channel shows Needs reconnect">
 A publish, a test or a token refresh failed with the stored credentials; the row shows the
 platform's error. **Reconnect** in the row's menu: OAuth platforms go through the platform again,

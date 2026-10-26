@@ -1,20 +1,45 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, Check, Loader2, Plus, Sparkles, Square, X } from 'lucide-react'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  AlertCircle,
+  ArrowUp,
+  CalendarDays,
+  Check,
+  FolderPlus,
+  History,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  PenLine,
+  Plus,
+  RotateCcw,
+  Search,
+  SearchX,
+  Sparkles,
+  Square,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { assistantChat, errorMessage, type AssistantEvent, type AssistantMessage } from '@/lib/api'
+import { useAiStatus } from '@/lib/ai-status'
+import { api, ApiError, assistantChat, errorMessage, type AssistantEvent, type AssistantMessage } from '@/lib/api'
+import { timeAgo } from '@/lib/format'
 import { useSession } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
+import { answerOnDevice, canRunOnDevice } from './on-device'
+
 // The assistant: a chat docked on the right (a sheet on phones) that works on the workspace with staqly's tools,
 // as the person signed in (POST /v1/assistant/chat). Reading runs at once; every change shows a card to allow or
-// deny first. The conversation stays in this browser, per workspace, until New chat.
+// deny first. The conversation stays in this browser, per workspace, until New chat. When the server can't answer
+// (the allowance ran out, its models refused) and it names a model for the device, the chat can go on in this
+// browser, text only (on-device.ts), until New chat.
 
 type ToolCall = NonNullable<AssistantMessage['tool_calls']>[number]
 
@@ -25,33 +50,40 @@ interface Saved {
 
 const EMPTY: Saved = { messages: [], pending: null }
 
-function storeKey(workspaceId: string) {
-  return `staqly.assistant.${workspaceId}`
+// The open chat is remembered per workspace in this browser (to come back to it); the chats themselves are kept
+// on the server, which saves each turn (GET /v1/assistant/chats).
+function currentKey(workspaceId: string) {
+  return `staqly.assistant.${workspaceId}.current`
 }
 
-function load(workspaceId: string): Saved {
+function loadCurrent(workspaceId: string) {
   try {
-    const raw = localStorage.getItem(storeKey(workspaceId))
-
-    return raw ? { ...EMPTY, ...(JSON.parse(raw) as Saved) } : EMPTY
+    return localStorage.getItem(currentKey(workspaceId))
   } catch {
-    return EMPTY
+    return null
   }
 }
 
-function save(workspaceId: string, s: Saved) {
+function saveCurrent(workspaceId: string, id: string) {
   try {
-    localStorage.setItem(storeKey(workspaceId), JSON.stringify({ ...s, messages: s.messages.slice(-80) }))
+    localStorage.setItem(currentKey(workspaceId), id)
   } catch {
-    // A full or blocked storage only loses the chat on reload.
+    // A private window: the panel opens a new chat next time.
   }
+}
+
+/** A chat's id, named here so its first turn can carry it: ach_ and 16 letters or digits. */
+function newChatId() {
+  const abc = 'abcdefghijklmnopqrstuvwxyz0123456789'
+
+  return `ach_${Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => abc[b % abc.length]).join('')}`
 }
 
 const SUGGESTIONS = [
-  'Write a LinkedIn post about our newest feature',
-  'What is scheduled for this week?',
-  'Which posts failed, and why?',
-  'Create a collection for Instagram that posts every weekday at 9:00',
+  { icon: PenLine, text: 'Write a LinkedIn post about our newest feature' },
+  { icon: CalendarDays, text: 'What is scheduled for this week?' },
+  { icon: SearchX, text: 'Which posts failed, and why?' },
+  { icon: FolderPlus, text: 'Create a collection for Instagram that posts every weekday at 9:00' },
 ]
 
 /** Tools that only read: the rest change something, so the pages refresh after them. */
@@ -151,8 +183,14 @@ function ConfirmCard({ call, onDecide, busy }: { call: ToolCall; onDecide: (allo
   const entries = Object.entries(args).filter(([, v]) => v !== '' && v !== null && v !== undefined)
 
   return (
-    <div className="grid gap-3 rounded-xl border border-brand/40 bg-brand-soft/40 p-3" data-testid="assistant-confirm">
-      <p className="text-sm font-medium">{toolLabel(call.name)}?</p>
+    <div
+      className="grid gap-3 rounded-xl border border-brand/40 bg-brand-soft/30 p-3 shadow-xs"
+      data-testid="assistant-confirm"
+    >
+      <p className="flex items-center gap-2 text-sm font-medium">
+        <span className="size-2 animate-pulse rounded-full bg-brand" aria-hidden />
+        {toolLabel(call.name)}?
+      </p>
       {entries.length > 0 && (
         <dl className="grid max-h-56 gap-1.5 overflow-auto text-xs">
           {entries.map(([k, v]) => (
@@ -199,7 +237,7 @@ function Conversation({
           return (
             <div
               key={i}
-              className="ml-8 self-end rounded-2xl rounded-br-md bg-muted px-3 py-2 text-sm whitespace-pre-wrap"
+              className="ml-10 max-w-[85%] self-end rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm whitespace-pre-wrap text-primary-foreground"
             >
               {m.content}
             </div>
@@ -212,7 +250,7 @@ function Conversation({
 
         return (
           <Fragment key={i}>
-            {m.content && <Rich text={m.content} />}
+            {m.content && <AssistantBubble>{<Rich text={m.content} />}</AssistantBubble>}
             {(m.tool_calls ?? []).map((c) => {
               const res = results.get(c.id)
 
@@ -225,10 +263,19 @@ function Conversation({
               return (
                 <p
                   key={c.id}
-                  className={cn('flex items-center gap-1.5 text-xs text-muted-foreground', failed && 'line-through')}
+                  className={cn(
+                    'ml-9 flex w-fit items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground',
+                    failed && 'line-through',
+                  )}
                   title={failed ? res : undefined}
                 >
-                  {res === undefined ? <span className="size-3.5" /> : <Check className="size-3.5 text-brand" />}
+                  {res === undefined ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : failed ? (
+                    <X className="size-3.5 text-destructive" />
+                  ) : (
+                    <Check className="size-3.5 text-brand" />
+                  )}
                   {toolLabel(c.name)}
                 </p>
               )
@@ -236,23 +283,253 @@ function Conversation({
           </Fragment>
         )
       })}
-      {draft && <Rich text={draft} />}
+      {draft && (
+        <AssistantBubble>
+          <Rich text={draft} />
+        </AssistantBubble>
+      )}
     </>
   )
 }
 
-function Chat({ workspaceId, onClose }: { workspaceId: string; onClose: () => void }) {
+/** The assistant's mark beside its words. */
+function AssistantAvatar() {
+  return (
+    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand" aria-hidden>
+      <Sparkles className="size-3.5" />
+    </span>
+  )
+}
+
+function AssistantBubble({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex gap-2">
+      <AssistantAvatar />
+      <div className="min-w-0 flex-1 pt-0.5">{children}</div>
+    </div>
+  )
+}
+
+/**
+ * The person's chats, newest first, a page at a time (there may be very many): search by title, open one, or
+ * remove it.
+ */
+function ChatHistory({
+  current,
+  onOpen,
+  onRemoved,
+}: {
+  current: string
+  onOpen: (id: string) => void
+  onRemoved: (id: string) => void
+}) {
+  const qc = useQueryClient()
+  const [q, setQ] = useState('')
+  const [query, setQuery] = useState('')
+
+  // The search runs once typing pauses.
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(q.trim()), 250)
+
+    return () => clearTimeout(t)
+  }, [q])
+
+  const chats = useInfiniteQuery({
+    queryKey: ['assistant-chats', query],
+    queryFn: ({ pageParam }) => api.assistantChats(query, pageParam || undefined),
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next_cursor || undefined,
+  })
+  const remove = useMutation({
+    mutationFn: (id: string) => api.deleteAssistantChat(id),
+    onSuccess: (_, id) => {
+      onRemoved(id)
+      void qc.invalidateQueries({ queryKey: ['assistant-chats'] })
+    },
+  })
+  const rows = chats.data?.pages.flatMap((p) => p.data) ?? []
+
+  return (
+    <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+      <div className="p-3">
+        <div className="flex h-9 items-center gap-2 rounded-lg border bg-background px-2.5 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search chats"
+            aria-label="Search chats"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        {chats.isPending ? (
+          <p className="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> Loading chats...
+          </p>
+        ) : chats.isError ? (
+          <p className="px-2 py-3 text-sm text-destructive">{errorMessage(chats.error)}</p>
+        ) : rows.length === 0 ? (
+          <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+            {query ? 'No chat has these words in its title.' : 'No chats yet.'}
+          </p>
+        ) : (
+          <ul className="grid gap-0.5">
+            {rows.map((c) => (
+              <li key={c.id} className="group/chat flex items-center rounded-lg hover:bg-muted">
+                <button
+                  type="button"
+                  className={cn(
+                    'grid min-w-0 flex-1 gap-0.5 rounded-lg px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    c.id === current && 'bg-muted',
+                  )}
+                  onClick={() => onOpen(c.id)}
+                >
+                  <span className="truncate text-sm">{c.title}</span>
+                  <span className="text-xs text-muted-foreground">{timeAgo(c.updated_at)}</span>
+                </button>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  className="mr-1.5 opacity-0 group-hover/chat:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                  aria-label={`Remove ${c.title}`}
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate(c.id)}
+                >
+                  <Trash2 />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {chats.hasNextPage && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-1 w-full"
+            onClick={() => void chats.fetchNextPage()}
+            disabled={chats.isFetchingNextPage}
+          >
+            {chats.isFetchingNextPage && <Loader2 className="animate-spin" />} Load more
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Chat({
+  workspaceId,
+  onClose,
+  expanded,
+  onExpand,
+}: {
+  workspaceId: string
+  onClose: () => void
+  /** Full screen on wide screens; absent on phones. */
+  expanded?: boolean
+  onExpand?: () => void
+}) {
   const qc = useQueryClient()
   const pathname = usePathname()
-  const [state, setState] = useState<Saved>(() => load(workspaceId))
+  // The open chat: its id, and its conversation (loaded from the server when it is an old one).
+  const [chatId, setChatId] = useState(() => loadCurrent(workspaceId) ?? newChatId())
+  const [state, setState] = useState<Saved>(EMPTY)
+  const [title, setTitle] = useState('')
+  const [history, setHistory] = useState(false)
+  const fresh = useRef(false) // a new chat: nothing on the server to load yet
   const [draft, setDraft] = useState('')
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // The server couldn't answer and a model for this device is there: offer it; onDevice once the person took it.
+  const [offer, setOffer] = useState(false)
+  const [onDevice, setOnDevice] = useState(false)
+  const [progress, setProgress] = useState<number | null>(null)
+  const browserModel = useAiStatus().data?.assistant_browser_model
   const abort = useRef<AbortController | null>(null)
 
-  useEffect(() => save(workspaceId, state), [workspaceId, state])
+  useEffect(() => {
+    saveCurrent(workspaceId, chatId)
+
+    if (fresh.current) {
+      return
+    }
+
+    let live = true
+
+    api
+      .assistantChatById(chatId)
+      .then((c) => {
+        if (live) {
+          setState({ messages: c.messages ?? [], pending: c.pending ?? null })
+          setTitle(c.title)
+        }
+      })
+      .catch(() => live && setState(EMPTY)) // gone (removed, or never saved): a new chat under this id
+
+    return () => {
+      live = false
+    }
+  }, [workspaceId, chatId])
+
+  const switchTo = (id: string, isNew = false) => {
+    abort.current?.abort()
+    fresh.current = isNew
+    setChatId(id)
+    setState(EMPTY)
+    setTitle('')
+    setHistory(false)
+    setError('')
+    setOffer(false)
+    setOnDevice(false)
+  }
+
+  const lastUser = state.messages.toReversed().find((m) => m.role === 'user')
+  // Try again: the conversation up to the last thing the person asked, sent once more.
+  const retry = () => {
+    const at = state.messages.lastIndexOf(lastUser!)
+
+    run(state.messages.slice(0, at + 1))
+  }
+
   useEffect(() => () => abort.current?.abort(), [])
+
+  const offerDevice = (code?: string) =>
+    setOffer(!!browserModel && canRunOnDevice() && (code === 'ai_limit_reached' || code === 'ai_failed'))
+
+  const runOnDevice = (messages: AssistantMessage[]) => {
+    const ac = new AbortController()
+
+    abort.current = ac
+    setBusy(true)
+    setError('')
+    setOffer(false)
+    setState({ messages, pending: null })
+    void answerOnDevice(
+      browserModel ?? '',
+      messages,
+      (t) => setDraft((d) => d + t),
+      (p) => setProgress(p < 1 ? p : null),
+      ac.signal,
+    )
+      .then((text) => {
+        if (text) {
+          setState({ messages: [...messages, { role: 'assistant', content: text }], pending: null })
+        }
+      })
+      .catch((e: unknown) => {
+        if (!ac.signal.aborted) {
+          setError(e instanceof Error ? e.message : 'The model could not run on this device.')
+        }
+      })
+      .finally(() => {
+        setBusy(false)
+        setDraft('')
+        setProgress(null)
+      })
+  }
 
   const run = (messages: AssistantMessage[], decision?: { tool_call_id: string; allow: boolean }) => {
     const ac = new AbortController()
@@ -261,9 +538,10 @@ function Chat({ workspaceId, onClose }: { workspaceId: string; onClose: () => vo
     abort.current = ac
     setBusy(true)
     setError('')
+    setOffer(false)
     setState({ messages, pending: null })
     void assistantChat(
-      { messages, decision, page: pathname },
+      { messages, decision, page: pathname, chat_id: chatId },
       (e: AssistantEvent) => {
         if (e.type === 'text') {
           setDraft((d) => d + (e.text ?? ''))
@@ -280,6 +558,7 @@ function Chat({ workspaceId, onClose }: { workspaceId: string; onClose: () => vo
           setState({ messages: cur, pending: e.tool_call })
         } else if (e.type === 'error') {
           setError(e.error?.message ?? 'Something went wrong; try again.')
+          offerDevice(e.error?.code)
         }
       },
       ac.signal,
@@ -287,11 +566,13 @@ function Chat({ workspaceId, onClose }: { workspaceId: string; onClose: () => vo
       .catch((e: unknown) => {
         if (!ac.signal.aborted) {
           setError(errorMessage(e))
+          offerDevice(e instanceof ApiError ? e.code : 'ai_failed')
         }
       })
       .finally(() => {
         setBusy(false)
         setDraft('')
+        void qc.invalidateQueries({ queryKey: ['assistant-chats'] })
       })
   }
 
@@ -303,7 +584,14 @@ function Chat({ workspaceId, onClose }: { workspaceId: string; onClose: () => vo
     }
 
     setInput('')
-    run([...state.messages, { role: 'user', content: t }])
+
+    const next: AssistantMessage[] = [...state.messages, { role: 'user', content: t }]
+
+    if (onDevice) {
+      runOnDevice(next)
+    } else {
+      run(next)
+    }
   }
 
   const decide = (allow: boolean) => {
@@ -314,68 +602,165 @@ function Chat({ workspaceId, onClose }: { workspaceId: string; onClose: () => vo
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="assistant">
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-        <Sparkles className="size-4 text-brand" />
-        <h2 className="flex-1 text-sm font-semibold">Assistant</h2>
+      <div className="flex h-12 shrink-0 items-center gap-1 border-b px-3">
+        <AssistantAvatar />
+        <div className="ml-1 grid min-w-0 flex-1 leading-tight">
+          <h2 className="truncate text-sm font-semibold">
+            {history ? 'Chats' : title || state.messages.find((m) => m.role === 'user')?.content || 'Assistant'}
+          </h2>
+          {onDevice && <span className="text-xs text-muted-foreground">On this device</span>}
+        </div>
         <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            abort.current?.abort()
-            setState(EMPTY)
-            setError('')
-          }}
-          disabled={state.messages.length === 0}
+          size="icon-sm"
+          variant={history ? 'secondary' : 'ghost'}
+          aria-label="Chats"
+          aria-pressed={history}
+          tooltip="Chats"
+          onClick={() => setHistory((h) => !h)}
         >
-          <Plus /> New chat
+          <History />
         </Button>
-        <Button size="icon-sm" variant="ghost" onClick={onClose} aria-label="Close the assistant">
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label="New chat"
+          tooltip="New chat"
+          onClick={() => switchTo(newChatId(), true)}
+          disabled={state.messages.length === 0 && !history}
+        >
+          <Plus />
+        </Button>
+        {onExpand && (
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={expanded ? 'Back to the side panel' : 'Full screen'}
+            tooltip={expanded ? 'Back to the side panel' : 'Full screen'}
+            onClick={onExpand}
+          >
+            {expanded ? <Minimize2 /> : <Maximize2 />}
+          </Button>
+        )}
+        <Button size="icon-sm" variant="ghost" onClick={onClose} aria-label="Close the assistant" tooltip="Close">
           <X />
         </Button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" aria-live="polite">
-        {state.messages.length === 0 ? (
-          <div className="grid gap-3 py-6">
-            <p className="text-sm text-muted-foreground">
-              Ask for anything in this workspace: write and schedule posts, set up collections and schedules, find what
-              failed. Changes wait for you to allow them.
-            </p>
-            <div className="grid gap-1.5">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => send(s)}
-                  className="rounded-lg border px-3 py-2 text-left text-sm hover:bg-muted pointer-coarse:py-3"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <Conversation messages={state.messages} draft={draft} pending={state.pending} busy={busy} onDecide={decide} />
-        )}
-        {busy && !draft && (
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> Working on it...
-          </p>
-        )}
-        {error && <p className="text-sm text-red-700 dark:text-red-400">{error}</p>}
-        {/* Remounted as the chat grows, so the newest message stays in view. */}
-        <div
-          key={`${state.messages.length}:${draft.length}:${state.pending?.id ?? ''}`}
-          ref={(el) => el?.scrollIntoView({ block: 'end' })}
+      {history && (
+        <ChatHistory
+          current={chatId}
+          onOpen={(id) => (id === chatId ? setHistory(false) : switchTo(id))}
+          onRemoved={(id) => id === chatId && switchTo(newChatId(), true)}
         />
+      )}
+      <div hidden={history} className="@container min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+        <div
+          className={cn('mx-auto flex min-h-full w-full max-w-2xl flex-col gap-4 p-4', expanded && 'max-w-3xl py-8')}
+        >
+          {state.messages.length === 0 ? (
+            <div className="my-auto grid justify-items-center gap-5 py-8 text-center">
+              <span className="grid size-12 place-items-center rounded-2xl bg-brand-soft text-brand">
+                <Sparkles className="size-6" />
+              </span>
+              <div className="grid gap-1.5">
+                <p className="text-lg font-semibold">How can I help?</p>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  Write and schedule posts, set up collections, find what failed. Changes wait for you to allow them.
+                </p>
+              </div>
+              <div className="grid w-full gap-2 text-left @xl:grid-cols-2">
+                {SUGGESTIONS.map(({ icon: Icon, text }) => (
+                  <button
+                    key={text}
+                    type="button"
+                    onClick={() => send(text)}
+                    className="flex items-start gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-sm transition-colors outline-none hover:border-brand/40 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:py-3"
+                  >
+                    <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                    {text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Conversation
+              messages={state.messages}
+              draft={draft}
+              pending={state.pending}
+              busy={busy}
+              onDecide={decide}
+            />
+          )}
+          {busy && !draft && (
+            <div className="flex items-center gap-2">
+              <AssistantAvatar />
+              {progress === null ? (
+                <span className="flex gap-1" aria-label="Working on it">
+                  {[0, 150, 300].map((d) => (
+                    <span
+                      key={d}
+                      className="size-1.5 animate-bounce rounded-full bg-muted-foreground/60"
+                      style={{ animationDelay: `${d}ms` }}
+                    />
+                  ))}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  Loading the model on this device... {Math.round(progress * 100)}%
+                </span>
+              )}
+            </div>
+          )}
+          {error && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm"
+            >
+              <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <div className="grid min-w-0 flex-1 gap-2">
+                <p className="break-words">{error}</p>
+                {lastUser && !busy && (
+                  <Button size="sm" variant="outline" className="justify-self-start" onClick={retry}>
+                    <RotateCcw /> Try again
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+          {offer && !busy && (
+            <div className="grid gap-2 rounded-xl border bg-card p-3" data-testid="assistant-on-device">
+              <p className="text-sm">
+                Continue on this device instead? The assistant then runs in this browser: free, and nothing leaves it,
+                but it only writes text and cannot change anything in your workspace. The first time downloads the model
+                (a few GB).
+              </p>
+              <Button
+                size="sm"
+                className="justify-self-start"
+                onClick={() => {
+                  setOnDevice(true)
+                  runOnDevice(state.messages)
+                }}
+              >
+                Continue on this device
+              </Button>
+            </div>
+          )}
+          {/* Remounted as the chat grows, so the newest message stays in view. */}
+          <div
+            key={`${state.messages.length}:${draft.length}:${state.pending?.id ?? ''}`}
+            ref={(el) => el?.scrollIntoView({ block: 'end' })}
+          />
+        </div>
       </div>
       <form
-        className="shrink-0 border-t p-3"
+        hidden={history}
+        className={cn('mx-auto w-full max-w-2xl shrink-0 p-3', expanded && 'max-w-3xl pb-6')}
         onSubmit={(e) => {
           e.preventDefault()
           send(input)
         }}
       >
-        <div className="flex items-end gap-2 rounded-xl border bg-background p-1.5 focus-within:ring-2 focus-within:ring-ring/40">
+        <div className="rounded-2xl border bg-background shadow-xs transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -385,28 +770,40 @@ function Chat({ workspaceId, onClose }: { workspaceId: string; onClose: () => vo
                 send(input)
               }
             }}
-            rows={2}
+            rows={1}
             maxLength={8000}
             placeholder={state.pending ? 'Allow or deny the change above first' : 'Ask the assistant...'}
             aria-label="Message to the assistant"
             disabled={!!state.pending}
-            className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-1.5 py-1 text-sm outline-none"
+            className="block max-h-48 min-h-11 w-full resize-none bg-transparent px-3.5 pt-3 text-sm outline-none [field-sizing:content] placeholder:text-muted-foreground"
           />
-          {busy ? (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              onClick={() => abort.current?.abort()}
-              aria-label="Stop"
-            >
-              <Square />
-            </Button>
-          ) : (
-            <Button type="submit" size="icon-sm" disabled={!input.trim() || !!state.pending} aria-label="Send">
-              <ArrowUp />
-            </Button>
-          )}
+          <div className="flex items-center gap-2 px-2 pb-2">
+            <span className="ml-1.5 flex-1 truncate text-xs text-muted-foreground max-sm:hidden">
+              Enter to send, Shift+Enter for a new line
+            </span>
+            {busy ? (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="ml-auto rounded-full"
+                onClick={() => abort.current?.abort()}
+                aria-label="Stop"
+              >
+                <Square className="fill-current" />
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                size="icon-sm"
+                className="ml-auto rounded-full"
+                disabled={!input.trim() || !!state.pending}
+                aria-label="Send"
+              >
+                <ArrowUp />
+              </Button>
+            )}
+          </div>
         </div>
       </form>
     </div>
@@ -423,9 +820,9 @@ export function AssistantPanel({ open, onOpenChange }: { open: boolean; onOpenCh
     return null
   }
 
-  const chat = <Chat key={workspaceId} workspaceId={workspaceId} onClose={() => onOpenChange(false)} />
-
   if (isMobile) {
+    const chat = <Chat key={workspaceId} workspaceId={workspaceId} onClose={() => onOpenChange(false)} />
+
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md" showCloseButton={false}>
@@ -436,12 +833,154 @@ export function AssistantPanel({ open, onOpenChange }: { open: boolean; onOpenCh
     )
   }
 
-  return open ? (
+  return open ? <DockedPanel workspaceId={workspaceId} onClose={() => onOpenChange(false)} /> : null
+}
+
+const MIN_WIDTH = 320
+const DEFAULT_WIDTH = 420
+// Dragged narrower than this, the panel closes (it reopens at its last real width).
+const CLOSE_BELOW = 220
+const WIDTH_KEY = 'staqly.assistant.width'
+// The sidebar (16rem) and a page that still reads well (40rem) stay beside the panel.
+const PAGE_MIN = 896
+
+function savedWidth() {
+  try {
+    const w = Number(localStorage.getItem(WIDTH_KEY))
+
+    return w >= MIN_WIDTH ? w : DEFAULT_WIDTH
+  } catch {
+    return DEFAULT_WIDTH
+  }
+}
+
+/**
+ * The panel on the right, in the sidebar's colour so it reads apart from the page. Its left edge drags to resize
+ * (at least MIN_WIDTH, at most most of the window); dragged nearly shut it closes. The edge also takes the arrow
+ * keys, 16 px a press.
+ */
+function DockedPanel({ workspaceId, onClose }: { workspaceId: string; onClose: () => void }) {
+  const [width, setWidth] = useState(savedWidth)
+  const [expanded, setExpanded] = useState(false)
+  // One element whatever the mode, so the chat (and an answer on its way) stays mounted.
+  const children = (
+    <Chat
+      key={workspaceId}
+      workspaceId={workspaceId}
+      onClose={onClose}
+      expanded={expanded}
+      onExpand={() => setExpanded((e) => !e)}
+    />
+  )
+
+  // Full screen: over the whole dashboard, Escape back to the side.
+  useEffect(() => {
+    if (!expanded) {
+      return
+    }
+
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setExpanded(false)
+
+    window.addEventListener('keydown', onKey)
+
+    return () => window.removeEventListener('keydown', onKey)
+  }, [expanded])
+
+  const [dragging, setDragging] = useState(false)
+  // A narrower window (or a width saved on a wider one) gives the page its room back.
+  const [viewport, setViewport] = useState(() => window.innerWidth)
+
+  useEffect(() => {
+    const onResize = () => setViewport(window.innerWidth)
+
+    window.addEventListener('resize', onResize)
+
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const shown = dragging ? width : Math.min(width, Math.max(MIN_WIDTH, Math.min(viewport * 0.5, viewport - PAGE_MIN)))
+  // The page beside it keeps room to work: at least PAGE_MIN wide next to the sidebar.
+  const max = () => Math.max(MIN_WIDTH, Math.min(Math.round(window.innerWidth * 0.5), window.innerWidth - PAGE_MIN))
+  const keep = (w: number) => {
+    const next = Math.min(max(), Math.max(MIN_WIDTH, w))
+
+    setWidth(next)
+
+    try {
+      localStorage.setItem(WIDTH_KEY, String(next))
+    } catch {
+      // A private window: the width lasts until the page reloads.
+    }
+  }
+
+  const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragging(true)
+  }
+
+  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (dragging) {
+      setWidth(Math.min(max(), window.innerWidth - e.clientX))
+    }
+  }
+
+  const endDrag = () => {
+    if (!dragging) {
+      return
+    }
+
+    setDragging(false)
+
+    if (width < CLOSE_BELOW) {
+      setWidth(savedWidth())
+      onClose()
+    } else {
+      keep(width)
+    }
+  }
+
+  return (
     <aside
       aria-label="Assistant"
-      className="sticky top-0 flex h-svh w-[min(420px,40vw)] shrink-0 flex-col border-l bg-background"
+      style={expanded ? undefined : { width: Math.max(shown, 0) }}
+      className={cn(
+        expanded
+          ? 'fixed inset-0 z-50 flex flex-col bg-background'
+          : 'sticky top-0 flex h-svh shrink-0 flex-col border-l bg-sidebar shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.35)]',
+        dragging && 'select-none',
+      )}
     >
-      {chat}
+      {/* The edge: drag to resize, or focus and use the arrow keys. */}
+      <div
+        hidden={expanded}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the assistant"
+        aria-valuemin={MIN_WIDTH}
+        aria-valuenow={Math.round(width)}
+        tabIndex={0}
+        onPointerDown={startDrag}
+        onPointerMove={drag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault()
+            keep(width + (e.key === 'ArrowLeft' ? 16 : -16))
+          }
+        }}
+        className={cn(
+          'absolute inset-y-0 -left-1 z-20 w-2 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:transition-colors hover:after:bg-ring focus-visible:after:w-0.5 focus-visible:after:bg-ring',
+          dragging && 'after:bg-ring',
+        )}
+      />
+      {children}
+      {!expanded && width < MIN_WIDTH && (
+        <p className="absolute inset-0 z-10 grid place-items-center bg-sidebar/90 px-4 text-center text-sm text-muted-foreground">
+          Release to close
+        </p>
+      )}
     </aside>
-  ) : null
+  )
 }

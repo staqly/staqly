@@ -16,13 +16,39 @@ only look. Looking things up happens at once. **Every change waits for you**: a 
 (the post's text, the time, the channels) with **Allow** and **Deny**. Posts it writes are drafts unless you ask
 for a time or to publish now.
 
-The conversation stays in this browser, per workspace, until **New chat**. What you type and what the tools find
+Your chats are kept on the server, yours alone in each workspace: **Chats** (the clock) lists them newest first,
+searched by title, and opens one where you left it, a change still waiting for Allow included; **New chat** starts
+another. The panel's left edge drags to make it wider, and **Full screen** gives the chat the whole window (Esc
+goes back). What you type and what the tools find
 (post texts, names) go to the AI service to answer; secrets don't (it has no tools that show API keys, webhook
 secrets or channel tokens, and none that connects a channel or deletes the workspace).
 
 ## Where it runs
 
 On the server's AI provider, like the [design editor's AI tools](/dashboard/design-editor#where-ai-runs): staqly
-cloud includes it; on your own server it needs `AI_FAL_KEY`, and `AI_ASSISTANT_MODEL` picks the model
-([configuration](/self-hosting/configuration#ai-tools)). Without it the Assistant is not shown. Each answer counts
-as AI usage of the workspace.
+cloud includes it. On your own server, either:
+
+- `AI_FAL_KEY`: fal.ai's router, where `AI_ASSISTANT_MODEL` picks any OpenRouter model (Gemini by default, or
+  `anthropic/claude-sonnet-4.5`, `openai/gpt-5`...), or
+- `AI_ASSISTANT_BASE_URL` (+ `AI_ASSISTANT_API_KEY`, `AI_ASSISTANT_MODEL`): any OpenAI-compatible API, such as OpenAI,
+  OpenRouter, DigitalOcean's serverless inference, a local Ollama or your own LiteLLM.
+
+See [configuration](/self-hosting/configuration#ai-tools). Without either the Assistant is not shown. Each answer
+counts as AI usage of the workspace (`AI_ASSISTANT_PRICES` when the endpoint reports no cost).
+
+### When it can't answer
+
+`AI_ASSISTANT_FALLBACK_*` sets a second, usually cheaper model. It answers when the workspace's monthly AI
+allowance has run out, and when the first model refuses before answering (its own quota ran out, it is down). A
+model that already started answering is not replaced halfway.
+
+When neither can answer and the server names a model for the device (`AI_ASSISTANT_BROWSER_MODEL`), the chat offers
+**Continue on this device**: the assistant then runs in your browser (it needs WebGPU: Chrome, Edge, Safari 26 or
+later). It is free and nothing leaves the browser, but it only writes text: it can't read or change anything in the
+workspace. The first time downloads the model (a few GB); New chat goes back to the server.
+
+### Pictures and videos
+
+Ask for a picture or a video ("make a 9:16 video of a sunrise over the city") and the assistant makes it with the
+server's AI tools (`generate_media`), after you allow it. A picture takes about a minute, a video a few; it then
+offers to keep the result in the media library, ready for a post.

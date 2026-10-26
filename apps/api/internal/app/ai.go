@@ -19,7 +19,7 @@ import (
 )
 
 // The design editor's and the media library's AI tools run on the server's own provider accounts: the operator
-// sets AI_FAL_KEY (fal.ai, the primary) and/or AI_HIGGSFIELD_API_KEY (Higgsfield, the fallback). Workspaces never
+// sets AI_FAL_KEY (fal.ai) and/or AI_HIGGSFIELD_API_KEY (Higgsfield), tried in AI_MEDIA_PROVIDERS' order. Workspaces never
 // see or set a key, and no key reaches a browser; without one the AI tools are hidden and everything else works.
 //
 // Every request is a job (ai_jobs + the job queue): it is checked here (scopes, workspace, input, rate limit,
@@ -40,10 +40,30 @@ type AIConfig struct {
 	Operations []string
 	// Prices overrides the catalog's price of a model (AI_PRICES).
 	Prices map[string]float64
-	// AssistantModel: the language model of the dashboard's assistant (AI_ASSISTANT_MODEL; "" = DefaultAssistantModel).
-	AssistantModel string
+	// TokenPrices: the assistant's language models per million tokens (ai_prices.json + AI_PRICES_FILE).
+	TokenPrices map[string]TokenPrice
+	// Assistant: the language model of the dashboard's assistant (AI_ASSISTANT_*). AssistantFallback answers when
+	// it can't (AI_ASSISTANT_FALLBACK_*; optional): the workspace's allowance ran out, or the model refused the
+	// request before answering (its own quota, an outage).
+	Assistant, AssistantFallback AIEndpoint
+	// AssistantBrowserModel: a WebLLM model the dashboard can run on the device, text only, when neither answers
+	// (AI_ASSISTANT_BROWSER_MODEL; "" = none).
+	AssistantBrowserModel string
+	// MediaProviders: the order the picture and video tools try the providers in (AI_MEDIA_PROVIDERS; nil = fal,
+	// higgsfield). A provider left out is not used for media.
+	MediaProviders []string
 	// PollInterval: how often a running job asks its provider (0: 2 s for pictures, 5 s for videos; tests shorten it).
 	PollInterval time.Duration
+}
+
+// AIEndpoint is an OpenAI-compatible language model; without BaseURL it is fal.ai's router (AI_FAL_KEY).
+type AIEndpoint struct {
+	Model   string // "" = DefaultAssistantModel
+	BaseURL string // e.g. https://api.openai.com/v1
+	APIKey  string // empty for none (a local model server)
+	// Prices: USD per million input and output tokens, counted when the endpoint reports no cost
+	// (nil = Gemini 2.5 Flash's; 0,0 for a model that costs nothing, such as a local one).
+	Prices *[2]float64
 }
 
 // aiMonthlyLimit: what the workspace may spend on AI this month in USD (estimated), from its plan's
@@ -70,14 +90,20 @@ const (
 	aiFilesKept      = 24 * time.Hour // inputs, results and the prompt
 )
 
-// aiProviders are the configured providers, primary first.
+// aiProviders are the configured media providers, in AI_MEDIA_PROVIDERS' order.
 func (s *Service) aiProviders() []aiProvider {
 	var out []aiProvider
-	if s.Cfg.AI.FalKey != "" {
-		out = append(out, newFal(s.Cfg.AI.FalKey, s.Cfg.AI.FalBaseURL))
+	order := s.Cfg.AI.MediaProviders
+	if order == nil {
+		order = []string{AIProviderFal, AIProviderHiggsfield}
 	}
-	if s.Cfg.AI.HiggsfieldKey != "" {
-		out = append(out, newHiggsfield(s.Cfg.AI.HiggsfieldKey, s.Cfg.AI.HiggsfieldBaseURL))
+	for _, name := range order {
+		switch {
+		case name == AIProviderFal && s.Cfg.AI.FalKey != "":
+			out = append(out, newFal(s.Cfg.AI.FalKey, s.Cfg.AI.FalBaseURL))
+		case name == AIProviderHiggsfield && s.Cfg.AI.HiggsfieldKey != "":
+			out = append(out, newHiggsfield(s.Cfg.AI.HiggsfieldKey, s.Cfg.AI.HiggsfieldBaseURL))
+		}
 	}
 	return out
 }
@@ -136,6 +162,9 @@ type AIStatus struct {
 	Providers  []string      `json:"providers"`
 	Operations []AIOperation `json:"operations"`
 	Usage      AIUsage       `json:"usage"`
+	// AssistantBrowserModel: the WebLLM model the dashboard may run on the device when the assistant can't
+	// answer on the server ("" = none).
+	AssistantBrowserModel string `json:"assistant_browser_model,omitempty"`
 }
 
 // AIOperation is one offered operation: what it takes, and who runs it (Provider with Model, Fallback when that
@@ -163,11 +192,22 @@ func (s *Service) GetAIStatus(ctx context.Context, p Principal) (AIStatus, error
 	if err := p.require(ScopeMediaRead); err != nil {
 		return AIStatus{}, err
 	}
-	st := AIStatus{Providers: []string{}, Operations: []AIOperation{}}
+	st := AIStatus{Providers: []string{}, Operations: []AIOperation{}, AssistantBrowserModel: s.Cfg.AI.AssistantBrowserModel}
 	for _, pr := range s.aiProviders() {
 		st.Providers = append(st.Providers, pr.Name())
 	}
 	for _, o := range aiOps {
+		if o.ID == AIAssistant { // its own endpoints, or fal.ai's router
+			if s.AssistantAvailable() {
+				eps := s.assistantEndpoints()
+				op := AIOperation{ID: o.ID, Kind: o.Kind, Prompt: o.Prompt, Provider: eps[0].provider(), Model: eps[0].Model}
+				if len(eps) > 1 {
+					op.Fallback = eps[1].provider()
+				}
+				st.Operations = append(st.Operations, op)
+			}
+			continue
+		}
 		if !s.aiOffered(o.ID) {
 			continue
 		}

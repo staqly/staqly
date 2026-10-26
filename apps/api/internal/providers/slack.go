@@ -14,11 +14,13 @@ import (
 	"time"
 )
 
-// Slack over the Web API: the person installs the server's Slack app into a workspace (OAuth v2) and staqly keeps
-// the bot token; every channel the bot may post to can become a staqly channel (AccountLister). Messages go out with
-// chat.postMessage, files through files.getUploadURLExternal + files.completeUploadExternal, a post's thread as
-// replies in the message's Slack thread. Bot tokens last until the app is removed, unless the app turned token
-// rotation on: then a refresh token renews them every 12 hours.
+// Slack over the Web API: the person installs the server's Slack app into a workspace (OAuth v2); the workspace is
+// the staqly channel and each post names the Slack channel it goes to (the channel setting, picked from Options).
+// Messages go out with chat.postMessage, files through files.getUploadURLExternal + files.completeUploadExternal, a
+// post's thread as replies in the message's Slack thread. Bot tokens last until the app is removed, unless the app
+// turned token rotation on: then a refresh token renews them every 12 hours. The same sign-in also gives a user token
+// for the person who connected, so a post can go out as them instead of the app (the post_as setting). Channels
+// connected before v0.6 hold one Slack channel (channel_id), used when a post names none.
 type Slack struct{ Base }
 
 // Endpoints, variables so tests point them at httptest.
@@ -33,7 +35,12 @@ var (
 // slackScopes are bot scopes: post (chat:write), join public channels to post files there (channels:join), upload
 // files and find the message they made (files:write, files:read), list the channels to pick from (channels:read,
 // groups:read).
-const slackScopes = "chat:write,channels:join,channels:read,groups:read,files:write,files:read"
+// team:read gives the workspace's icon.
+const slackScopes = "chat:write,channels:join,channels:read,groups:read,files:write,files:read,team:read"
+
+// slackUserScopes let a post go out as the person who connected: post, upload files and find their message.
+// users.profile:read shows the person's photo next to "As myself".
+const slackUserScopes = "chat:write,files:write,files:read,users.profile:read"
 
 func init() {
 	Register(Slack{NewBase("slack", "Slack", AuthOAuth2,
@@ -44,7 +51,14 @@ func init() {
 var slackSettings = []Field{
 	{Key: "link_preview", Label: "Show link previews", Kind: "boolean", Default: "true",
 		Help: "Slack unfurls links in the message into previews."},
+	// remote, one value: the list carries the person's Slack photo; Options is what a client without it shows.
+	{Key: "post_as", Label: "Post as", Kind: "remote", Default: "app", MaxItems: 1, Options: slackPostAs,
+		Help: "As yourself, the message shows the name and photo of whoever connected Slack; they must be in the channel."},
+	{Key: "channel", Label: "Slack channels", Kind: "remote", Required: true, Prefer: []string{"#random", "#general"},
+		MaxItems: 10, MaxLength: 400, Help: "Public channels, and private ones after /invite @YourApp in them."},
 }
+
+var slackPostAs = []Option{{Value: "app", Label: "As the app", Icon: "staqly"}, {Value: "me", Label: "As myself"}}
 
 // Slack calls back over https only.
 func (Slack) Needs() Needs { return Needs{HTTPS: true} }
@@ -53,6 +67,7 @@ func (Slack) AuthURL(app App, redirect, state string, _ map[string]string) (stri
 	q := url.Values{
 		"client_id":    {app.ClientID},
 		"scope":        {slackScopes},
+		"user_scope":   {slackUserScopes},
 		"redirect_uri": {redirect},
 		"state":        {state},
 	}
@@ -65,7 +80,12 @@ type slackToken struct {
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int64  `json:"expires_in"`
 	BotUserID    string `json:"bot_user_id"`
-	Team         struct {
+	AuthedUser   struct {
+		ID           string `json:"id"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	} `json:"authed_user"`
+	Team struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"team"`
@@ -88,6 +108,9 @@ func (t slackToken) into(c Credentials, now time.Time) Credentials {
 	}
 	if t.Team.ID != "" {
 		out["team_id"], out["team_name"] = t.Team.ID, t.Team.Name
+	}
+	if u := t.AuthedUser; u.AccessToken != "" {
+		out["user_id"], out["user_token"], out["user_refresh_token"] = u.ID, u.AccessToken, u.RefreshToken
 	}
 	return out
 }
@@ -123,7 +146,33 @@ func (s Slack) Exchange(ctx context.Context, app App, redirect, code string, _ m
 	if who.Team != "" {
 		creds["team_name"] = who.Team
 	}
-	return creds, Profile{Name: creds["team_name"], Handle: creds["team_name"], ProfileURL: who.URL}, nil
+	// The workspace's address stays unique (two workspaces may share a name) and reads well: acme.slack.com.
+	handle := strings.TrimSuffix(strings.TrimPrefix(who.URL, "https://"), "/")
+	if handle == "" {
+		handle = creds["team_id"]
+	}
+	return creds, Profile{Name: creds["team_name"], Handle: handle, ProfileURL: who.URL, AvatarURL: s.teamIcon(ctx, creds["access_token"])}, nil
+}
+
+// teamIcon is the workspace's own icon; "" for Slack's stand-in (the dashboard then draws the name's first letter,
+// as Slack does) or when the sign-in can't read it (connected before team:read).
+func (Slack) teamIcon(ctx context.Context, token string) string {
+	var res struct {
+		Team struct {
+			Icon struct {
+				Image132 string `json:"image_132"`
+				Default  bool   `json:"image_default"`
+			} `json:"icon"`
+		} `json:"team"`
+	}
+	req, err := slackRequest(ctx, token, "team.info", nil)
+	if err != nil || slackDo(ctx, req, &res) != nil || res.Team.Icon.Default {
+		return ""
+	}
+	if u, err := url.Parse(res.Team.Icon.Image132); err == nil && u.Scheme == "https" {
+		return u.String()
+	}
+	return ""
 }
 
 type slackWho struct {
@@ -154,11 +203,20 @@ func (s Slack) Refresh(ctx context.Context, app App, c Credentials) (Credentials
 	if err != nil {
 		return nil, err
 	}
-	return t.into(c, time.Now()), nil
+	out := t.into(c, time.Now())
+	if c["user_refresh_token"] != "" {
+		// Rotation covers the user token too. The bot's old refresh token is spent by now, so a failure here drops
+		// only posting as the person (it asks to reconnect) instead of losing the bot token as well.
+		u, err := s.token(ctx, app, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {c["user_refresh_token"]}})
+		if err != nil {
+			delete(out, "user_token")
+			delete(out, "user_refresh_token")
+		} else {
+			out["user_token"], out["user_refresh_token"] = u.AccessToken, u.RefreshToken
+		}
+	}
+	return out, nil
 }
-
-// Slack signs in a workspace; each of its channels the bot may post to becomes a staqly channel.
-var _ AccountLister = Slack{}
 
 type slackChannel struct {
 	ID        string `json:"id"`
@@ -168,10 +226,50 @@ type slackChannel struct {
 	IsArchive bool   `json:"is_archived"`
 }
 
-// Accounts lists the public channels (the bot joins one when it is picked) and the private ones the app was
-// invited to.
-func (s Slack) Accounts(ctx context.Context, c Credentials) ([]Account, error) {
-	var out []Account
+// Slack lists the workspace's channels for the channel setting.
+var _ OptionLister = Slack{}
+
+func (s Slack) Options(ctx context.Context, c Credentials, key string) ([]Option, error) {
+	if key == "post_as" {
+		return s.postAs(ctx, c), nil
+	}
+	if key != "channel" {
+		return nil, nil
+	}
+	chans, err := s.channels(ctx, c["access_token"])
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Option, 0, len(chans))
+	for _, ch := range chans {
+		out = append(out, Option{Value: ch.ID, Label: "#" + ch.Name})
+	}
+	return out, nil
+}
+
+// postAs is "As the app" and "As myself" with the person's Slack photo when the sign-in may read it (connected
+// before users.profile:read, or posting as the person not set up: no photo).
+func (Slack) postAs(ctx context.Context, c Credentials) []Option {
+	out := append([]Option(nil), slackPostAs...)
+	if c["user_token"] == "" {
+		return out
+	}
+	var res struct {
+		Profile struct {
+			Image48 string `json:"image_48"`
+		} `json:"profile"`
+	}
+	if req, err := slackRequest(ctx, c["user_token"], "users.profile.get", nil); err == nil && slackDo(ctx, req, &res) == nil {
+		if u, err := url.Parse(res.Profile.Image48); err == nil && u.Scheme == "https" {
+			out[1].Icon = u.String()
+		}
+	}
+	return out
+}
+
+// channels lists the channels the app may post to: every public one and the private ones it was invited to.
+func (Slack) channels(ctx context.Context, token string) ([]slackChannel, error) {
+	var out []slackChannel
 	cursor := ""
 	for page := 0; page < 20; page++ {
 		q := url.Values{"types": {"public_channel,private_channel"}, "exclude_archived": {"true"}, "limit": {"200"}}
@@ -184,7 +282,7 @@ func (s Slack) Accounts(ctx context.Context, c Credentials) ([]Account, error) {
 				NextCursor string `json:"next_cursor"`
 			} `json:"response_metadata"`
 		}
-		req, err := slackRequest(ctx, c["access_token"], "conversations.list?"+q.Encode(), nil)
+		req, err := slackRequest(ctx, token, "conversations.list?"+q.Encode(), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -192,60 +290,15 @@ func (s Slack) Accounts(ctx context.Context, c Credentials) ([]Account, error) {
 			return nil, err
 		}
 		for _, ch := range res.Channels {
-			if ch.IsArchive || (ch.IsPrivate && !ch.IsMember) {
-				continue
+			if !ch.IsArchive && (!ch.IsPrivate || ch.IsMember) {
+				out = append(out, ch)
 			}
-			out = append(out, Account{ID: ch.ID, Name: "#" + ch.Name, Handle: "#" + ch.Name,
-				ProfileURL: slackChannelURL(c["team_url"], ch.ID)})
 		}
 		if cursor = res.Meta.NextCursor; cursor == "" {
 			break
 		}
 	}
-	if len(out) == 0 {
-		return nil, &Failure{Kind: ErrRejected, Msg: "Slack: the app sees no channel to post to in " + c["team_name"] + "; create a channel (or invite the app to a private one with /invite), then connect again"}
-	}
 	return out, nil
-}
-
-// UseAccount narrows the workspace sign-in to one channel; the bot joins a public channel it is not in yet, so
-// files can be shared there too.
-func (s Slack) UseAccount(ctx context.Context, c Credentials, accountID string) (Credentials, Profile, error) {
-	var info struct {
-		Channel slackChannel `json:"channel"`
-	}
-	req, err := slackRequest(ctx, c["access_token"], "conversations.info?"+url.Values{"channel": {accountID}}.Encode(), nil)
-	if err != nil {
-		return nil, Profile{}, err
-	}
-	if err := slackDo(ctx, req, &info); err != nil {
-		return nil, Profile{}, err
-	}
-	ch := info.Channel
-	switch {
-	case ch.ID == "":
-		return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: "Slack: that channel is not there any more"}
-	case ch.IsArchive:
-		return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: "Slack: #" + ch.Name + " is archived; unarchive it or pick another channel"}
-	case ch.IsPrivate && !ch.IsMember:
-		return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: "Slack: invite the app to #" + ch.Name + " (/invite in the channel), then connect again"}
-	case !ch.IsMember:
-		req, err := slackRequest(ctx, c["access_token"], "conversations.join", map[string]any{"channel": ch.ID})
-		if err != nil {
-			return nil, Profile{}, err
-		}
-		if err := slackDo(ctx, req, nil); err != nil {
-			return nil, Profile{}, err
-		}
-	}
-	out := Credentials{}
-	for k, v := range c {
-		out[k] = v
-	}
-	out["channel_id"], out["channel_name"] = ch.ID, ch.Name
-	// The channel id is what stays unique: two workspaces may both have a #general.
-	return out, Profile{Name: "#" + ch.Name, Handle: "#" + ch.Name + " (" + ch.ID + ")",
-		ProfileURL: slackChannelURL(c["team_url"], ch.ID)}, nil
 }
 
 func slackChannelURL(teamURL, channel string) string {
@@ -259,29 +312,169 @@ func slackChannelURL(teamURL, channel string) string {
 var _ Replier = Slack{}
 
 func (s Slack) Publish(ctx context.Context, c Credentials, p PostContent, set Settings) (Result, error) {
-	return s.send(ctx, c, p, set, "")
+	token, asMe, err := slackAuthFor(c, set)
+	if err != nil {
+		return Result{}, err
+	}
+	chans, err := s.targets(ctx, c, set)
+	if err != nil {
+		return Result{}, err
+	}
+	parts := make([]slackPart, 0, len(chans))
+	for _, ch := range chans {
+		ts, err := s.send(ctx, c, token, ch, asMe, p, set, "")
+		if err != nil {
+			return Result{}, slackPartly(parts, err)
+		}
+		parts = append(parts, slackPart{channel: ch, ts: ts})
+	}
+	return slackResult(c, parts), nil
 }
 
-// Reply posts a thread part into the thread of the post. Slack threads hang off the first message, so a reply's
-// ExternalID is "<thread ts>/<reply ts>" and every part names the thread's ts.
+// Reply posts a thread part under the post in every channel it went to. A post's ExternalID lists
+// "<channel>:<thread ts>" per channel (a reply's "<channel>:<thread ts>/<reply ts>"); posts from before several
+// channels hold the bare "<thread ts>" of their one channel.
 func (s Slack) Reply(ctx context.Context, c Credentials, parentExternalID string, p PostContent, set Settings) (Result, error) {
-	root, _, _ := strings.Cut(parentExternalID, "/")
-	if root == "" {
+	token, asMe, err := slackAuthFor(c, set)
+	if err != nil {
+		return Result{}, err
+	}
+	var roots []slackPart
+	if !strings.Contains(parentExternalID, ":") {
+		chans, err := s.targets(ctx, c, set)
+		if err != nil {
+			return Result{}, err
+		}
+		root, _, _ := strings.Cut(parentExternalID, "/")
+		roots = append(roots, slackPart{channel: chans[0], ts: root})
+	} else {
+		for _, e := range strings.Split(parentExternalID, ",") {
+			ch, rest, _ := strings.Cut(e, ":")
+			if root, _, _ := strings.Cut(rest, "/"); root != "" {
+				roots = append(roots, slackPart{channel: ch, ts: root})
+			}
+		}
+	}
+	if len(roots) == 0 || roots[0].ts == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Slack: nothing to reply to (the post has no id)"}
 	}
-	return s.send(ctx, c, p, set, root)
+	parts := make([]slackPart, 0, len(roots))
+	for _, r := range roots {
+		ts, err := s.send(ctx, c, token, r.channel, asMe, p, set, r.ts)
+		if err != nil {
+			return Result{}, slackPartly(parts, err)
+		}
+		parts = append(parts, slackPart{channel: r.channel, thread: r.ts, ts: ts})
+	}
+	return slackResult(c, parts), nil
+}
+
+// slackPart is one channel's message of a post: its ts ("" when Slack did not say), and the thread it replies in.
+type slackPart struct{ channel, thread, ts string }
+
+// slackResult: the post's id in every channel, linked to its first message.
+func slackResult(c Credentials, parts []slackPart) Result {
+	var ids []string
+	res := Result{URL: slackChannelURL(c["team_url"], parts[0].channel)}
+	for _, p := range parts {
+		if p.ts == "" {
+			continue // published, but Slack has not said where: no replies there
+		}
+		id := p.ts
+		if p.thread != "" {
+			id = p.thread + "/" + p.ts
+		}
+		ids = append(ids, p.channel+":"+id)
+		if len(ids) == 1 {
+			res.URL = slackMessageURL(c["team_url"], p.channel, p.ts, p.thread)
+		}
+	}
+	res.ExternalID = strings.Join(ids, ",")
+	return res
+}
+
+// slackPartly: once some channels have the post, trying again would post it there twice, so the failure is final
+// and names where it went.
+func slackPartly(done []slackPart, err error) error {
+	if len(done) == 0 {
+		return err
+	}
+	var where []string
+	for _, p := range done {
+		where = append(where, p.channel)
+	}
+	return &Failure{Kind: ErrRejected, Msg: "Slack: published in " + strings.Join(where, ", ") + " but not in the next channel (" + err.Error() + "); post the rest separately"}
+}
+
+// slackAuthFor is the token a post goes out with: the app's, or the person's (post_as me).
+func slackAuthFor(c Credentials, set Settings) (token string, asMe bool, err error) {
+	if c["access_token"] == "" {
+		return "", false, &Failure{Kind: ErrReauth, Msg: "Slack: no sign-in stored; reconnect the workspace"}
+	}
+	if set["post_as"] != "me" {
+		return c["access_token"], false, nil
+	}
+	if c["user_token"] == "" {
+		return "", true, &Failure{Kind: ErrRejected, Msg: "Slack: this channel can't post as a person yet; reconnect it from the channel's menu, or post as the app"}
+	}
+	return c["user_token"], true, nil
+}
+
+// targets are the channel ids a post goes to: the ones it names (#names are looked up), else the one Slack channel
+// a channel connected before workspaces holds. A post saved before the setting was required names none.
+func (s Slack) targets(ctx context.Context, c Credentials, set Settings) ([]string, error) {
+	picked := ListValues(set["channel"])
+	if len(picked) == 0 && c["channel_id"] != "" {
+		return []string{c["channel_id"]}, nil
+	}
+	if len(picked) == 0 {
+		return nil, &Failure{Kind: ErrRejected, Msg: "Slack: pick the Slack channels the post goes to in its Slack settings"}
+	}
+	var byName map[string]string
+	out := make([]string, 0, len(picked))
+	for _, v := range picked {
+		if !strings.HasPrefix(v, "#") {
+			out = append(out, v)
+			continue
+		}
+		if byName == nil {
+			chans, err := s.channels(ctx, c["access_token"])
+			if err != nil {
+				return nil, err
+			}
+			byName = map[string]string{}
+			for _, ch := range chans {
+				byName["#"+ch.Name] = ch.ID
+			}
+		}
+		id, ok := byName[v]
+		if !ok {
+			return nil, &Failure{Kind: ErrRejected, Msg: "Slack: the app sees no channel " + v + " in " + c["team_name"] + "; pick another, or /invite the app to a private one"}
+		}
+		out = append(out, id)
+	}
+	return out, nil
 }
 
 // slackEscape escapes what Slack's message format reserves.
 var slackEscape = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 
-func (s Slack) send(ctx context.Context, c Credentials, p PostContent, set Settings, threadTS string) (Result, error) {
-	token, channel := c["access_token"], c["channel_id"]
-	if token == "" || channel == "" {
-		return Result{}, &Failure{Kind: ErrReauth, Msg: "Slack: no channel stored; reconnect it"}
+// send posts one message in one channel (in threadTS's thread when set) and answers its ts, "" when Slack did not
+// say where the files went.
+func (s Slack) send(ctx context.Context, c Credentials, token, channel string, asMe bool, p PostContent, set Settings, threadTS string) (_ string, err error) {
+	if channel != c["channel_id"] || asMe {
+		// Only the connected channel posting as the app says anything about the connection: elsewhere, a channel
+		// Slack refuses is about this post.
+		defer func() { err = slackNotHere(err, asMe) }()
+		if !asMe && threadTS == "" {
+			// The app joins a public channel so it can post and share files there (a no-op once it is in). A private
+			// channel it is not in fails below with Slack's own answer.
+			if req, err := slackRequest(ctx, token, "conversations.join", map[string]any{"channel": channel}); err == nil {
+				_ = slackDo(ctx, req, nil)
+			}
+		}
 	}
 	text := slackEscape.Replace(p.Text)
-	var ts string
 	if len(p.Media) == 0 {
 		body := map[string]any{"channel": channel, "text": text}
 		if threadTS != "" {
@@ -292,51 +485,56 @@ func (s Slack) send(ctx context.Context, c Credentials, p PostContent, set Setti
 		}
 		req, err := slackRequest(ctx, token, "chat.postMessage", body)
 		if err != nil {
-			return Result{}, err
+			return "", err
 		}
 		var out struct {
 			TS string `json:"ts"`
 		}
 		if err := slackDo(ctx, req, &out); err != nil {
-			return Result{}, slackLost(err)
+			return "", slackLost(err)
 		}
-		ts = out.TS
-	} else {
-		// Upload every file first (safe to retry: nothing is shared yet), then share them in one message.
-		files := make([]map[string]string, 0, len(p.Media))
-		for _, m := range p.Media {
-			id, err := s.upload(ctx, token, m)
-			if err != nil {
-				return Result{}, err
-			}
-			files = append(files, map[string]string{"id": id, "title": m.Name})
-		}
-		body := map[string]any{"files": files, "channel_id": channel}
-		if text != "" {
-			body["initial_comment"] = text
-		}
-		if threadTS != "" {
-			body["thread_ts"] = threadTS
-		}
-		req, err := slackRequest(ctx, token, "files.completeUploadExternal", body)
+		return out.TS, nil
+	}
+	// Upload every file first (safe to retry: nothing is shared yet), then share them in one message.
+	files := make([]map[string]string, 0, len(p.Media))
+	for _, m := range p.Media {
+		id, err := s.upload(ctx, token, m)
 		if err != nil {
-			return Result{}, err
+			return "", err
 		}
-		if err := slackDo(ctx, req, nil); err != nil {
-			return Result{}, slackLost(err)
-		}
-		// The answer names the files, not the message: find the message the share made.
-		ts = s.sharedTS(ctx, token, files[0]["id"], channel)
+		files = append(files, map[string]string{"id": id, "title": m.Name})
 	}
-	if ts == "" {
-		// Published, but Slack has not said where yet: the post links to the channel and takes no replies.
-		return Result{URL: slackChannelURL(c["team_url"], channel)}, nil
+	body := map[string]any{"files": files, "channel_id": channel}
+	if text != "" {
+		body["initial_comment"] = text
 	}
-	res := Result{ExternalID: ts, URL: slackMessageURL(c["team_url"], channel, ts, threadTS)}
 	if threadTS != "" {
-		res.ExternalID = threadTS + "/" + ts
+		body["thread_ts"] = threadTS
 	}
-	return res, nil
+	req, err := slackRequest(ctx, token, "files.completeUploadExternal", body)
+	if err != nil {
+		return "", err
+	}
+	if err := slackDo(ctx, req, nil); err != nil {
+		return "", slackLost(err)
+	}
+	// The answer names the files, not the message: find the message the share made.
+	return s.sharedTS(ctx, token, files[0]["id"], channel), nil
+}
+
+const slackGone = "Slack: the app can no longer post in this channel"
+
+// slackNotHere turns a channel Slack refuses into a failed post when the post went to another channel or as the
+// person: the connected channel itself is fine.
+func slackNotHere(err error, asMe bool) error {
+	var f *Failure
+	if !errors.As(err, &f) || !strings.HasPrefix(f.Msg, slackGone) {
+		return err
+	}
+	if asMe {
+		return &Failure{Kind: ErrRejected, Msg: "Slack: the person who connected Slack can't post in that channel (they are not in it, or it is archived); post as the app or pick another channel"}
+	}
+	return &Failure{Kind: ErrRejected, Msg: "Slack: the app can't post in that channel (invite it with /invite, or unarchive the channel), or pick another one"}
 }
 
 // slackLost: Slack has no idempotency key, so posting again after an answer that never came could post twice.
@@ -507,7 +705,7 @@ func slackError(code string) error {
 	case "missing_scope", "no_permission", "not_allowed_token_type":
 		return &Failure{Kind: ErrReauth, Msg: "Slack: the app is missing a permission (" + code + "); reconnect the channel to grant it"}
 	case "channel_not_found", "not_in_channel", "is_archived":
-		return &Failure{Kind: ErrReauth, Msg: "Slack: the app can no longer post in this channel (" + code + "); invite it back or unarchive the channel, then reconnect"}
+		return &Failure{Kind: ErrReauth, Msg: slackGone + " (" + code + "); invite it back or unarchive the channel, then reconnect"}
 	case "ratelimited", "rate_limited":
 		return &Failure{Msg: "Slack rate limit reached; staqly tries again in a few minutes"}
 	case "internal_error", "fatal_error", "service_unavailable", "request_timeout":

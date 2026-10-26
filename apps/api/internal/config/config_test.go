@@ -246,3 +246,49 @@ func TestPostHogConfig(t *testing.T) {
 		t.Fatalf("set = %+v", c.App.PostHog)
 	}
 }
+
+// The assistant's model, its fallback and the model on the device, and the media providers' order.
+func TestAIAssistantAndMediaConfig(t *testing.T) {
+	clearEnv(t)
+	for _, k := range []string{"AI_FAL_KEY", "AI_HIGGSFIELD_API_KEY", "AI_ASSISTANT_MODEL", "AI_ASSISTANT_BASE_URL", "AI_ASSISTANT_API_KEY",
+		"AI_ASSISTANT_PRICES", "AI_ASSISTANT_FALLBACK_MODEL", "AI_ASSISTANT_FALLBACK_BASE_URL", "AI_ASSISTANT_FALLBACK_API_KEY",
+		"AI_ASSISTANT_FALLBACK_PRICES", "AI_ASSISTANT_BROWSER_MODEL", "AI_MEDIA_PROVIDERS"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("AI_ASSISTANT_BASE_URL", "https://api.openai.com/v1/")
+	t.Setenv("AI_ASSISTANT_MODEL", "gpt-big")
+	t.Setenv("AI_ASSISTANT_API_KEY", "sk-1")
+	t.Setenv("AI_ASSISTANT_FALLBACK_BASE_URL", "https://inference.do-ai.run/v1")
+	t.Setenv("AI_ASSISTANT_FALLBACK_MODEL", "llama-cheap")
+	t.Setenv("AI_ASSISTANT_FALLBACK_PRICES", "0.1,0.2")
+	t.Setenv("AI_ASSISTANT_BROWSER_MODEL", "Qwen2.5-3B-Instruct-q4f16_1-MLC")
+	t.Setenv("AI_MEDIA_PROVIDERS", "higgsfield, fal")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ai := c.App.AI
+	if ai.Assistant.BaseURL != "https://api.openai.com/v1" || ai.Assistant.Model != "gpt-big" || ai.Assistant.APIKey != "sk-1" ||
+		ai.AssistantFallback.Model != "llama-cheap" || *ai.AssistantFallback.Prices != [2]float64{0.1, 0.2} ||
+		ai.AssistantBrowserModel != "Qwen2.5-3B-Instruct-q4f16_1-MLC" || strings.Join(ai.MediaProviders, ",") != "higgsfield,fal" {
+		t.Fatalf("ai = %+v", ai)
+	}
+	for k, v := range map[string]string{
+		"AI_MEDIA_PROVIDERS":             "higgsfield,higgsfield",
+		"AI_ASSISTANT_FALLBACK_PRICES":   "cheap",
+		"AI_ASSISTANT_FALLBACK_BASE_URL": "ftp://x",
+		"AI_ASSISTANT_BROWSER_MODEL":     "https://evil/model",
+	} {
+		t.Run(k, func(t *testing.T) {
+			t.Setenv(k, v)
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), k) {
+				t.Fatalf("%s=%s: %v", k, v, err)
+			}
+		})
+	}
+	// A fallback on fal.ai's router needs its key.
+	t.Setenv("AI_ASSISTANT_FALLBACK_BASE_URL", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "AI_FAL_KEY") {
+		t.Fatalf("router fallback without a key: %v", err)
+	}
+}

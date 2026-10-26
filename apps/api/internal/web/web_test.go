@@ -39,7 +39,7 @@ func do(h http.Handler, method, target string, body io.Reader, hdr map[string]st
 }
 
 func TestFiles(t *testing.T) {
-	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "")
+	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", false)
 	for path, want := range map[string]string{
 		"/": "home", "/schedule": "schedule", "/schedule.txt": "schedule-rsc",
 		"/posts/post_1": "post-shell", "/posts/post_1.txt": "post-rsc",
@@ -74,7 +74,7 @@ func TestFiles(t *testing.T) {
 	if w := do(h, "POST", "/schedule", nil, nil); w.Code != 405 {
 		t.Errorf("POST page: %d", w.Code)
 	}
-	if w := do(Handler(fstest.MapFS{}, nowhere, slog.New(slog.DiscardHandler), false, ""), "GET", "/", nil, nil); w.Code != 503 {
+	if w := do(Handler(fstest.MapFS{}, nowhere, slog.New(slog.DiscardHandler), false, "", false), "GET", "/", nil, nil); w.Code != 503 {
 		t.Errorf("unbuilt dashboard: %d", w.Code)
 	}
 }
@@ -89,7 +89,7 @@ func TestFilesCompressionAndETag(t *testing.T) {
 		"_next/static/app.js":  {Data: []byte(big)},
 		"brand/icon-192.png":   {Data: bytes.Repeat([]byte{0x89, 'P', 'N', 'G'}, 400)},
 		"_next/static/tiny.js": {Data: []byte("x")},
-	}, nowhere, slog.New(slog.DiscardHandler), false, "")
+	}, nowhere, slog.New(slog.DiscardHandler), false, "", false)
 
 	w := do(h, "GET", "/_next/static/app.js", nil, map[string]string{"Accept-Encoding": "gzip, deflate, br"})
 	if w.Header().Get("Content-Encoding") != "gzip" || !strings.Contains(w.Header().Get("Vary"), "Accept-Encoding") {
@@ -155,7 +155,7 @@ func TestAPIProxy(t *testing.T) {
 	}))
 	defer upstream.Close()
 	u, _ := url.Parse(upstream.URL)
-	h := Handler(site, u, slog.New(slog.DiscardHandler), false, "")
+	h := Handler(site, u, slog.New(slog.DiscardHandler), false, "", false)
 
 	w := do(h, "POST", "http://phone.lan:8080/api/v1/posts?x=1", strings.NewReader("payload"), map[string]string{
 		"X-Forwarded-For": "1.2.3.4", "X-Forwarded-Host": "localhost", "Forwarded": "for=1.2.3.4", "X-Real-Ip": "1.2.3.4",
@@ -172,7 +172,7 @@ func TestAPIProxy(t *testing.T) {
 		t.Fatalf("forwarding headers: %v", got.Header)
 	}
 	// Behind your own proxy (TRUST_PROXY) the browser is its right-most X-Forwarded-For entry.
-	behind := Handler(site, u, slog.New(slog.DiscardHandler), true, "")
+	behind := Handler(site, u, slog.New(slog.DiscardHandler), true, "", false)
 	do(behind, "GET", "/api/v1/posts", nil, map[string]string{"X-Forwarded-For": "6.6.6.6, 1.2.3.4"})
 	if xff := got.Header.Values("X-Forwarded-For"); len(xff) != 1 || xff[0] != "1.2.3.4" {
 		t.Fatalf("trusted proxy: X-Forwarded-For %v", xff)
@@ -182,7 +182,7 @@ func TestAPIProxy(t *testing.T) {
 	if v := got.Header.Values(RelayHeader); len(v) != 0 {
 		t.Fatalf("browser relay header passed on: %v", v)
 	}
-	relayed := Handler(site, u, slog.New(slog.DiscardHandler), false, "s3cret")
+	relayed := Handler(site, u, slog.New(slog.DiscardHandler), false, "s3cret", false)
 	do(relayed, "GET", "/api/v1/posts", nil, map[string]string{RelayHeader: "forged"})
 	if v := got.Header.Values(RelayHeader); len(v) != 1 || v[0] != "s3cret" {
 		t.Fatalf("relay header: %v", v)
@@ -199,7 +199,7 @@ func TestAPIProxy(t *testing.T) {
 		t.Fatalf("declared oversize body: %d", rec.Code)
 	}
 
-	down := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "")
+	down := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", false)
 	if w := do(down, "GET", "/api/health", nil, nil); w.Code != 502 || !strings.Contains(w.Body.String(), "bad_gateway") {
 		t.Fatalf("API down: %d %s", w.Code, w.Body.String())
 	}
@@ -217,7 +217,7 @@ func TestDialURL(t *testing.T) {
 // The editor's jsDelivr sources are per package version: a source path without a trailing "/" matches only that
 // exact path, so "onnxruntime-web@" blocked every ONNX Runtime file, and a bare host would allow any package.
 func TestEditorCSPPinsCDN(t *testing.T) {
-	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "")
+	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", false)
 	editor := do(h, "GET", "/media/edit", nil, nil).Header()
 	csp := editor.Get("Content-Security-Policy")
 	// Isolated, for ONNX Runtime's threads; credentialless keeps cross-origin pictures loading.
@@ -263,7 +263,7 @@ func TestOAuthCallbackLandingIsThePage(t *testing.T) {
 	}))
 	defer upstream.Close()
 	u, _ := url.Parse(upstream.URL)
-	h := Handler(site, u, slog.New(slog.DiscardHandler), false, "")
+	h := Handler(site, u, slog.New(slog.DiscardHandler), false, "", false)
 	if w := do(h, "GET", "/channels/callback/linkedin?error=The+connection+failed", nil, nil); w.Code != 200 || len(forwarded) != 0 {
 		t.Fatalf("landing: %d, forwarded %v", w.Code, forwarded)
 	}
@@ -278,19 +278,38 @@ func TestOAuthCallbackLandingIsThePage(t *testing.T) {
 func TestAnalyticsHostInCSP(t *testing.T) {
 	site := fstest.MapFS{"index.html": {Data: []byte("<html></html>")}}
 	nowhere, _ := url.Parse("http://127.0.0.1:1")
-	off := do(Handler(site, nowhere, slog.New(slog.DiscardHandler), false, ""), "GET", "/", nil, nil).Header().Get("Content-Security-Policy")
+	off := do(Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", false), "GET", "/", nil, nil).Header().Get("Content-Security-Policy")
 	if !strings.Contains(off, "connect-src 'self';") {
 		t.Fatalf("CSP without analytics: %s", off)
 	}
-	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", "https://eu.i.posthog.com/some/path")
+	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", false, "https://eu.i.posthog.com/some/path")
 	for _, path := range []string{"/", "/media/edit"} {
 		csp := do(h, "GET", path, nil, nil).Header().Get("Content-Security-Policy")
 		if !strings.Contains(csp, "connect-src 'self' https://eu.i.posthog.com") || strings.Contains(csp, "/some/path") {
 			t.Fatalf("%s: %s", path, csp)
 		}
 	}
-	if csp := do(Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", "javascript:alert(1)"), "GET", "/", nil, nil).
+	if csp := do(Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", false, "javascript:alert(1)"), "GET", "/", nil, nil).
 		Header().Get("Content-Security-Policy"); !strings.Contains(csp, "connect-src 'self';") {
 		t.Fatalf("a bad host opened the CSP: %s", csp)
+	}
+}
+
+// With AI_ASSISTANT_BROWSER_MODEL every page (the editor's too) may run WebAssembly and fetch the model; without it
+// neither.
+func TestWebLLMInCSP(t *testing.T) {
+	site := fstest.MapFS{"index.html": {Data: []byte("<html></html>")}}
+	nowhere, _ := url.Parse("http://127.0.0.1:1")
+	if csp := do(Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", false), "GET", "/", nil, nil).
+		Header().Get("Content-Security-Policy"); strings.Contains(csp, "wasm-unsafe-eval") || strings.Contains(csp, "githubusercontent") {
+		t.Fatalf("CSP without a model on the device: %s", csp)
+	}
+	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", true, "https://eu.i.posthog.com")
+	for _, path := range []string{"/", "/media/edit"} {
+		csp := do(h, "GET", path, nil, nil).Header().Get("Content-Security-Policy")
+		if strings.Count(csp, "'wasm-unsafe-eval'") != 1 || !strings.Contains(csp, "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/") ||
+			!strings.Contains(csp, "https://*.hf.co") || !strings.Contains(csp, "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.86/lib/index.js") || !strings.Contains(csp, "https://eu.i.posthog.com") {
+			t.Fatalf("%s: %s", path, csp)
+		}
 	}
 }

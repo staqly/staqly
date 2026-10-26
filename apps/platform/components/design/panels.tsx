@@ -453,7 +453,7 @@ function PhotosPanel({ ctx }: { ctx: PanelCtx }) {
               onClick={() => setSource(s)}
               className={cn('h-7 rounded-md', source === s && 'bg-background shadow-xs')}
             >
-              {s === 'library' ? 'Your library' : 'Unsplash'}
+              {s === 'library' ? 'Your library' : 'Pixabay'}
             </button>
           ))}
         </div>
@@ -468,7 +468,7 @@ function PhotosPanel({ ctx }: { ctx: PanelCtx }) {
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           aria-label="Search photos"
-          placeholder={source === 'stock' ? 'Search Unsplash' : 'Search your library'}
+          placeholder={source === 'stock' ? 'Search Pixabay' : 'Search your library'}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           className="pl-8"
@@ -544,15 +544,20 @@ function StockGrid({ ctx, query }: { ctx: PanelCtx; query: string }) {
   })
   const items = stock.data?.pages.flatMap((p) => p.data) ?? []
 
-  // Unsplash counts a photo as used when it lands on a design (clicked or dropped).
+  const [adding, setAdding] = useState('')
+
+  // Pixabay allows no hotlinking: the photo is copied into the library first, and the design uses that file.
   const place = (p: StockPhoto) => {
-    const k = Math.min(1, 2000 / p.width)
-
-    void api.stockPhotoUsed(p.id).catch(() => undefined)
-
-    return newImage(ctx.store.design, p.url, p.width * k, p.height * k, {
-      stock: { id: p.id, author: p.author, url: p.author_url },
-    })
+    setAdding(p.id)
+    api
+      .keepStockPhoto(p.id)
+      .then((m) =>
+        ctx.add(
+          newImage(ctx.store.design, mediaUrl(m.id), m.width || p.width, m.height || p.height, { mediaId: m.id }),
+        ),
+      )
+      .catch((e: unknown) => toast.error(errorMessage(e)))
+      .finally(() => setAdding(''))
   }
 
   if (stock.isError) {
@@ -567,10 +572,13 @@ function StockGrid({ ctx, query }: { ctx: PanelCtx; query: string }) {
             <button
               type="button"
               aria-label={`Add ${p.alt || 'photo'} by ${p.author}`}
-              className="block w-full overflow-hidden rounded-md hover:ring-2 hover:ring-brand"
-              onClick={() => ctx.add(place(p))}
-              {...dragProps(() => place(p))}
+              className="relative block w-full overflow-hidden rounded-md hover:ring-2 hover:ring-brand disabled:opacity-60"
+              onClick={() => place(p)}
+              disabled={!!adding}
             >
+              {adding === p.id && (
+                <Loader2 className="absolute inset-0 m-auto animate-spin text-white drop-shadow" aria-label="Adding" />
+              )}
               <img
                 draggable={false}
                 src={p.thumb}
@@ -599,15 +607,10 @@ function StockGrid({ ctx, query }: { ctx: PanelCtx; query: string }) {
       )}
       <p className="text-xs text-muted-foreground">
         Photos from{' '}
-        <a
-          className="underline"
-          href="https://unsplash.com/?utm_source=staqly&utm_medium=referral"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Unsplash
+        <a className="underline" href="https://pixabay.com/" target="_blank" rel="noopener noreferrer">
+          Pixabay
         </a>
-        . Hover a photo to see who made it.
+        , free to use. Hover a photo to see who made it; adding one keeps a copy in your library.
       </p>
     </>
   )

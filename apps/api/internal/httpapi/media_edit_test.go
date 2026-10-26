@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -192,48 +193,63 @@ func TestDesignBrand(t *testing.T) {
 
 func TestStockPhotos(t *testing.T) {
 	e := newEnv(t)
-	var pinged atomic.Int32
+	png := realPNG(t, 64, 48)
+	var calls atomic.Int32
+	var lastQuery, large atomic.Value // what the fake was asked; the photo's address it answers
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Client-ID test-key" {
-			w.WriteHeader(401)
+		if r.URL.Path == "/photo.png" {
+			_, _ = w.Write(png)
 			return
 		}
-		photo := `{"id":"p1","width":4000,"height":3000,"alt_description":"a lake","urls":{"small":"https://images.example/s","raw":"https://images.example/r?ixid=1"},"links":{"html":"https://unsplash.example/p1"},"user":{"name":"Jane Doe","links":{"html":"https://unsplash.example/jane"}}}`
-		switch r.URL.Path {
-		case "/search/photos":
-			fmt.Fprintf(w, `{"results":[%s]}`, photo)
-		case "/photos":
-			fmt.Fprintf(w, `[%s]`, photo)
-		case "/photos/p1/download":
-			pinged.Add(1)
-			fmt.Fprint(w, `{"url":"x"}`)
-		default:
-			w.WriteHeader(404)
+		if r.URL.Query().Get("key") != "test-key" {
+			w.WriteHeader(400)
+			return
 		}
+		calls.Add(1)
+		lastQuery.Store(r.URL.Query())
+		fmt.Fprintf(w, `{"total":1,"totalHits":1,"hits":[{"id":736885,"pageURL":"https://pixabay.com/photos/tree-736885/","tags":"tree, lake","webformatURL":"https://cdn.pixabay.com/photo/t_640.jpg","largeImageURL":%q,"imageWidth":4000,"imageHeight":3000,"user_id":909086,"user":"Jane Doe"}]}`, large.Load())
 	}))
 	t.Cleanup(fake.Close)
+	large.Store(fake.URL + "/photo.png")
 
 	var page app.StockPage
 	e.do(nil, "GET", "/v1/stock/photos?query=lake", e.key, nil, 200, &page)
 	if page.Configured || len(page.Data) != 0 {
 		t.Fatalf("off without a key: %+v", page)
 	}
-	e.do(nil, "POST", "/v1/stock/photos/p1/use", e.key, nil, 409, nil)
+	e.do(nil, "POST", "/v1/stock/photos/736885/use", e.key, nil, 409, nil)
 
-	e.svc.Cfg.Stock = app.StockConfig{UnsplashKey: "test-key", UnsplashBaseURL: fake.URL}
-	for _, q := range []string{"?query=lake", ""} {
-		e.do(nil, "GET", "/v1/stock/photos"+q, e.key, nil, 200, &page)
-		if !page.Configured || len(page.Data) != 1 {
-			t.Fatalf("%q: %+v", q, page)
+	e.svc.Cfg.Stock = app.StockConfig{PixabayKey: "test-key", PixabayBaseURL: fake.URL}
+	for _, q := range []string{"lake", ""} {
+		e.do(nil, "GET", "/v1/stock/photos?query="+q, e.key, nil, 200, &page)
+		asked := lastQuery.Load().(url.Values)
+		if !page.Configured || len(page.Data) != 1 || asked.Get("q") != q || asked.Get("safesearch") != "true" ||
+			asked.Get("image_type") != "photo" || (q == "") != (asked.Get("editors_choice") == "true") {
+			t.Fatalf("%q: %+v (asked %v)", q, page, asked)
 		}
 		p := page.Data[0]
-		if p.URL != "https://images.example/r?ixid=1&w=2000&fm=jpg&q=85" || p.Author != "Jane Doe" || !strings.Contains(p.AuthorURL, "utm_source=staqly") {
+		if p.ID != "736885" || p.Thumb != "https://cdn.pixabay.com/photo/t_640.jpg" || p.Author != "Jane Doe" || p.Alt != "tree, lake" ||
+			p.AuthorURL != "https://pixabay.com/users/Jane%20Doe-909086/" || p.PageURL != "https://pixabay.com/photos/tree-736885/" {
 			t.Fatalf("%q: %+v", q, p)
 		}
 	}
-	e.do(nil, "POST", "/v1/stock/photos/p1/use", e.key, nil, 204, nil)
-	if pinged.Load() != 1 {
-		t.Fatalf("download ping: %d", pinged.Load())
+	// Pixabay asks for answers to be kept a day: the same search again is not sent.
+	before := calls.Load()
+	e.do(nil, "GET", "/v1/stock/photos?query=lake", e.key, nil, 200, &page)
+	if calls.Load() != before {
+		t.Fatal("the same search was asked again")
 	}
-	e.do(nil, "POST", "/v1/stock/photos/p1/use", e.keyWith(app.ScopeMediaRead), nil, 403, nil)
+
+	// Put on a design, it is copied into the library (no hotlinking).
+	var m app.Media
+	e.do(nil, "POST", "/v1/stock/photos/736885/use", e.key, nil, 201, &m)
+	if !strings.HasPrefix(m.ID, "med_") || m.Width != 64 || m.Height != 48 {
+		t.Fatalf("copied: %+v", m)
+	}
+	e.do(nil, "POST", "/v1/stock/photos/736885/use", e.keyWith(app.ScopeMediaRead), nil, 403, nil)
+	e.do(nil, "POST", "/v1/stock/photos/not-a-number/use", e.key, nil, 404, nil)
+
+	// A photo address anywhere but Pixabay is not fetched.
+	large.Store("https://evil.example/photo.png")
+	e.do(nil, "POST", "/v1/stock/photos/12/use", e.key, nil, 502, nil)
 }

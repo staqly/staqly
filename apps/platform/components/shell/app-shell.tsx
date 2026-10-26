@@ -30,7 +30,7 @@ import {
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { daysLeft } from '@/components/billing/billing-format'
@@ -51,7 +51,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Kbd } from '@/components/ui/kbd'
+import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import {
   Sidebar,
   SidebarContent,
@@ -201,7 +201,8 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
     <SidebarMenuButton
       size="lg"
       tooltip={name}
-      className="select-none data-[state=open]:bg-sidebar-accent pointer-coarse:group-data-[collapsible=icon]:p-1!"
+      // Collapsed, the button is the logo itself (the default icon padding would clip it away).
+      className="select-none data-[state=open]:bg-sidebar-accent group-data-[collapsible=icon]:p-0!"
       aria-label={triggerLabel}
       data-testid="workspace-menu-trigger"
     >
@@ -532,9 +533,21 @@ function SidebarTrial() {
 }
 
 /** Notifications above the user menu, the list beside the sidebar: one panel, never next to another menu. */
+const noSubscribe = () => () => {}
+
+/** The shortcut key as this computer names it: ⌘ on a Mac, Ctrl elsewhere (⌘ in the static render). */
+function useModKey() {
+  return useSyncExternalStore(
+    noSubscribe,
+    () => (/Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'),
+    () => '⌘',
+  )
+}
+
 /** Opens the assistant on the right (⌘J); only when the server has AI for it. */
 function SidebarAssistant() {
   const { assistant } = useShell()
+  const MOD_KEY = useModKey()
 
   if (!assistant) {
     return null
@@ -544,14 +557,17 @@ function SidebarAssistant() {
     <SidebarMenu className="in-data-[mobile=true]:hidden">
       <SidebarMenuItem>
         <SidebarMenuButton
-          tooltip="Assistant (⌘J)"
+          tooltip={`Assistant (${MOD_KEY}J)`}
           isActive={assistant.open}
           onClick={assistant.toggle}
           data-testid="assistant-toggle"
         >
           <Sparkles className="text-brand" />
           <span>Assistant</span>
-          <kbd className="ml-auto text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">⌘J</kbd>
+          <KbdGroup className="ml-auto group-data-[collapsible=icon]:hidden">
+            <Kbd className="border bg-sidebar-accent text-sidebar-foreground/80">{MOD_KEY}</Kbd>
+            <Kbd className="border bg-sidebar-accent text-sidebar-foreground/80">J</Kbd>
+          </KbdGroup>
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
@@ -623,6 +639,18 @@ function AppSidebar() {
           <span className="flex-1 text-left">Search or jump to...</span>
           <Kbd className="in-data-[mobile=true]:hidden">⌘K</Kbd>
         </button>
+        {/* Collapsed, search is an icon like the rest. */}
+        <SidebarMenu className="hidden group-data-[collapsible=icon]:flex">
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Search or jump to (⌘K)"
+              onClick={openCommandPalette}
+              aria-label="Search or jump to"
+            >
+              <Search />
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
 
       {/* A landmark, so screen readers can jump to the navigation (and skip it). */}
@@ -702,8 +730,11 @@ function AppSidebar() {
       <SidebarFooter className="in-data-[mobile=true]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {/* Theme lives in Settings and ⌘K; collapsing in the sidebar edge (rail) and ⌘B. Phones have the bell in
             the top bar. Plan & usage is in the workspace menu. */}
-        <SidebarAssistant />
-        <SidebarNotifications />
+        <SidebarGroup className="p-0 in-data-[mobile=true]:hidden">
+          <SidebarGroupLabel>System</SidebarGroupLabel>
+          <SidebarAssistant />
+          <SidebarNotifications />
+        </SidebarGroup>
         <SidebarTrial />
         <UserMenu />
       </SidebarFooter>

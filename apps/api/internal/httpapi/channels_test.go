@@ -134,6 +134,8 @@ func TestChannelsTokenProvider(t *testing.T) {
 	if test["ok"] != true {
 		t.Fatalf("test: %v", test)
 	}
+	// Options exist only for a remote setting of a platform that lists them (Slack's channels).
+	e.do(nil, "GET", "/v1/channels/"+ch.ID+"/options/channel", e.key, nil, 404, nil)
 
 	// The provider's limit is applied per target when the post is written.
 	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "this text is far longer than twenty characters",

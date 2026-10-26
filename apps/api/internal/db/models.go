@@ -68,6 +68,17 @@ type ApiKey struct {
 	CreatedByUserID sql.NullString `json:"created_by_user_id"`
 }
 
+type AssistantChat struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Owner       string `json:"owner"`
+	Title       string `json:"title"`
+	Messages    string `json:"messages"`
+	Pending     string `json:"pending"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
 type Channel struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`

@@ -1,6 +1,6 @@
 ---
 title: Design editor
-description: "Make post graphics and carousels in the browser: templates, text in self-hosted fonts, shapes, photos from your library or Unsplash with crop, shapes and background removal, AI tools (new pictures, edits, object removal, expanding, upscaling), and a size for every channel."
+description: "Make post graphics and carousels in the browser: templates, text in self-hosted fonts, shapes, photos from your library or Pixabay with crop, shapes and background removal, AI tools (new pictures, edits, object removal, expanding, upscaling), and a size for every channel."
 ---
 
 The design editor makes graphics for posts: a quote card, an announcement, a story, a carousel, a YouTube
@@ -34,7 +34,8 @@ The left bar holds the tools:
   letter spacing, line height, an outline, **Box** (a coloured box behind the text with padding and round
   corners) and **Effects**: bend the line into an arch or a smile, or paint the letters with a gradient.
 - **Photos**: upload pictures (or drop or paste them onto the editor), pick them from your library, or, when the
-  server has an Unsplash key, search Unsplash; click a photo or drag it onto the page. Uploaded pictures go to your library too. With a photo selected,
+  server has a Pixabay key, search Pixabay and click a photo: a copy goes to your library and onto the page. Uploaded
+  pictures go to your library too. With a photo selected,
   the bar above the page offers:
   - **Crop** (or double-click the photo): drag the photo inside its frame, zoom with the slider or the mouse
     wheel. Dragging a side handle of the frame crops too; the photo always fills its frame.
@@ -96,7 +97,8 @@ outside what it accepts.
 The Save button shows a dot while there are unsaved changes; going back to Media then asks first. Unsaved changes
 are also kept in this browser: after a closed tab or a crash, the same design offers **Restore** when it opens.
 
-A design with Unsplash photos reminds you whom to credit when you save.
+Pixabay photos are free to use without credit. A design with Unsplash photos (from before Pixabay) still reminds you
+whom to credit when you save.
 
 ## AI tools
 
@@ -144,7 +146,7 @@ server; the browser only learns which tools exist. Without a key the **AI** tool
 
 fal.ai runs every tool; Higgsfield's public API has new pictures (Soul) and videos (Kling 2.5 Turbo), so with
 both keys fal.ai goes first and Higgsfield takes over **New picture** and the videos when fal.ai is down, busy or
-refuses the server's key. It never stands in with a different kind of operation, and a request fal.ai may
+refuses the server's key (`AI_MEDIA_PROVIDERS=higgsfield,fal` turns that around for them). It never stands in with a different kind of operation, and a request fal.ai may
 already have started (it did not answer) is not sent anywhere again, so nothing is paid twice.
 
 | Tool | fal.ai model | Higgsfield model |

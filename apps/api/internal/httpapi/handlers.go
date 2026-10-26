@@ -832,6 +832,11 @@ func (s *Server) testChannel(w http.ResponseWriter, r *http.Request) {
 	respond(w, r, 200, out, err)
 }
 
+func (s *Server) channelOptions(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.ChannelOptions(r.Context(), principal(r), chi.URLParam(r, "id"), chi.URLParam(r, "key"))
+	respond(w, r, 200, map[string]any{"data": out}, err)
+}
+
 const oauthCookie = "staqly_oauth_state"
 
 // oauthRedirect is the URL the platform sends the browser back to: the dashboard's callback page, which the

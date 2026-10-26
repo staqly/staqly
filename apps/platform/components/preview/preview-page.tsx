@@ -1,7 +1,6 @@
 'use client'
 
 import { Logo } from '@staqly/brand/logo'
-import { ProviderIcon, ProviderTile } from '@staqly/brand/providers'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarClock,
@@ -16,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 
+import { ChannelAvatar } from '@/components/channels/channel-avatars'
 import { FeedbackThreads } from '@/components/preview/feedback-threads'
 import { Button } from '@/components/ui/button'
 import {
@@ -182,16 +182,11 @@ function TargetCard({
       aria-label={`${target.provider_name}: ${target.channel_name}`}
     >
       <header className="flex items-center gap-3">
-        <span className="relative">
-          {avatar ? (
-            <img src={avatar} alt="" className="size-10 rounded-full bg-muted object-cover" />
-          ) : (
-            <ProviderTile id={target.provider} name={target.provider_name} className="size-10" />
-          )}
-          <span className="absolute -right-1 -bottom-1 flex size-5 items-center justify-center rounded-full bg-background ring-2 ring-background">
-            <ProviderIcon id={target.provider} name={target.provider_name} className="size-3.5" />
-          </span>
-        </span>
+        {/* The same picture as in the dashboard: the platform's, else (a Slack workspace) its first letter. */}
+        <ChannelAvatar
+          channel={{ id: target.channel_id, provider: target.provider, name: target.channel_name, avatar_url: avatar }}
+          className="size-10"
+        />
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate font-semibold">{target.channel_name}</p>
           <p className="truncate text-sm text-muted-foreground">
@@ -219,6 +214,12 @@ function TargetCard({
         />
       ) : (
         <p className="mt-3 text-[15px] text-muted-foreground italic">No text</p>
+      )}
+      {/* The tags as the platform gets them, after the text (kept apart so comments anchored in the text stay put). */}
+      {target.hashtags && (
+        <p className="mt-3 text-[15px] leading-relaxed wrap-anywhere text-sky-700 dark:text-sky-400">
+          {target.hashtags}
+        </p>
       )}
       <MediaGrid token={token} media={preview.media} />
       {preview.thread.length > 0 && (
