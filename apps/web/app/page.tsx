@@ -42,6 +42,7 @@ import {
   wrap,
   wrapWide,
 } from '@/lib/site'
+import { TOOLS } from '@/lib/tools'
 import { allCases } from '@/lib/use-cases'
 
 function Hero() {
@@ -443,7 +444,8 @@ function ToolsTeaser() {
         </Link>
       </div>
       <div className="mt-10">
-        <ToolCards />
+        {/* Six fill two rows; the rest are a click away. */}
+        <ToolCards items={TOOLS.slice(0, 6)} />
       </div>
     </section>
   )

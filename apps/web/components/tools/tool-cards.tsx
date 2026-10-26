@@ -1,4 +1,15 @@
-import { ArrowRight, CalendarCheck, Clock, Link2Off, Ratio, Type } from 'lucide-react'
+import {
+  ArrowRight,
+  Bold,
+  CalendarCheck,
+  Clock,
+  GalleryHorizontalEnd,
+  LayoutGrid,
+  Link2Off,
+  Ratio,
+  TvMinimalPlay,
+  Type,
+} from 'lucide-react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
@@ -12,6 +23,10 @@ const ICONS: Record<Tool['icon'], ReactNode> = {
   link: <Link2Off />,
   check: <CalendarCheck />,
   ratio: <Ratio />,
+  grid: <LayoutGrid />,
+  slides: <GalleryHorizontalEnd />,
+  format: <Bold />,
+  title: <TvMinimalPlay />,
 }
 
 export function ToolCards({ items = TOOLS }: { items?: Tool[] }) {
