@@ -117,9 +117,10 @@ func (s *Service) runTelegramBot(ctx context.Context) {
 	log := s.logger(ctx)
 	var username string
 	for username == "" {
-		u, err := providers.TelegramMe(cctx, token)
+		u, name, err := providers.TelegramMe(cctx, token)
 		if err == nil {
 			username = u
+			providers.SetTelegramBotName(name)
 			break
 		}
 		log.Warn("telegram bot not reachable", "err", err)

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, RotateCcw } from 'lucide-react'
+import { Loader2, Megaphone, RotateCcw, Users } from 'lucide-react'
 import { useEffect } from 'react'
 
 import { CopyButton } from '@/components/common/copy-button'
@@ -14,7 +14,18 @@ import { qk } from '@/lib/queries'
  * Telegram through the server's bot: add the bot to the channel or group, send /connect CODE there, and the
  * server connects that chat; this waits for it. `bot` is the bot's @username.
  */
-export function TelegramConnect({ bot, onDone, onOwnBot }: { bot: string; onDone: () => void; onOwnBot: () => void }) {
+export function TelegramConnect({
+  bot,
+  botName,
+  onDone,
+  onOwnBot,
+}: {
+  bot: string
+  /** The bot's display name ("Staqly"), shown before its @username. */
+  botName?: string
+  onDone: () => void
+  onOwnBot: () => void
+}) {
   const qc = useQueryClient()
   const start = useMutation({ mutationFn: api.startTelegramConnect })
   const code = start.data?.code
@@ -61,7 +72,17 @@ export function TelegramConnect({ bot, onDone, onOwnBot }: { bot: string; onDone
     <div className="grid gap-5" data-testid="telegram-connect">
       <ol className="grid gap-5">
         <li className="grid gap-2">
-          <p className="text-sm font-medium">1. Add {bot} to your channel or group</p>
+          <p className="text-sm font-medium">
+            1. Add{' '}
+            {botName ? (
+              <>
+                {botName} <span className="font-normal text-muted-foreground">({bot})</span>
+              </>
+            ) : (
+              bot
+            )}{' '}
+            to your channel or group
+          </p>
           <p className="text-xs text-muted-foreground">
             In a channel it must be an administrator allowed to post messages (and to delete them, so it can tidy up).
           </p>
@@ -72,12 +93,12 @@ export function TelegramConnect({ bot, onDone, onOwnBot }: { bot: string; onDone
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Add to a channel
+                <Megaphone /> Add to a channel
               </a>
             </Button>
             <Button asChild variant="outline" size="sm">
               <a href={`https://t.me/${name}?startgroup=true`} target="_blank" rel="noopener noreferrer">
-                Add to a group
+                <Users /> Add to a group
               </a>
             </Button>
           </div>

@@ -1039,6 +1039,8 @@ class Provider(StaqlyModel):
     needs_https: bool = False
     #: Telegram: the server's own bot (@username) that connects a chat with /connect CODE.
     bot: str = ""
+    #: That bot's display name.
+    bot_name: str = ""
 
 
 # ---- schedules & jobs -------------------------------------------------------

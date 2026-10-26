@@ -171,12 +171,18 @@ func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Creden
 // The server's own bot (PROVIDER_TELEGRAM_BOT_TOKEN), set by the app at start. A chat connected through it (the
 // person adds the bot and sends /connect CODE there) holds "bot": "shared" instead of a token, so a new token for
 // the same bot keeps every such channel working.
-var telegramShared struct{ token, username string }
+var telegramShared struct{ token, username, name string }
 
 // SetTelegramBot records the server's bot: its token and its @username (without the @).
 func SetTelegramBot(token, username string) {
 	telegramShared.token, telegramShared.username = token, username
 }
+
+// SetTelegramBotName records the bot's display name ("Staqly"), shown beside its @username.
+func SetTelegramBotName(name string) { telegramShared.name = name }
+
+// TelegramBotName is the server's bot's display name, "" when unknown.
+func TelegramBotName() string { return telegramShared.name }
 
 // TelegramBot is the server's bot, "" when it has none.
 func TelegramBot() (token, username string) { return telegramShared.token, telegramShared.username }
@@ -188,15 +194,16 @@ func telegramToken(c Credentials) string {
 	return c["bot_token"]
 }
 
-// TelegramMe asks Telegram whose token this is: the bot's @username (without the @).
-func TelegramMe(ctx context.Context, token string) (string, error) {
+// TelegramMe asks Telegram whose token this is: the bot's @username (without the @) and its display name.
+func TelegramMe(ctx context.Context, token string) (username, name string, err error) {
 	var bot struct {
-		Username string `json:"username"`
+		Username  string `json:"username"`
+		FirstName string `json:"first_name"`
 	}
 	if err := telegramCall(ctx, token, "getMe", map[string]any{}, &bot); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return bot.Username, nil
+	return bot.Username, bot.FirstName, nil
 }
 
 // TelegramCommand is a /connect CODE someone sent in a chat the server's bot is in.

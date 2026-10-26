@@ -5110,6 +5110,8 @@ export interface components {
             docs_url: string;
             /** @description Telegram: the server's own bot (@username). Present when a chat connects by adding it and sending /connect CODE there (POST /v1/channels/telegram/connect) instead of with credential_fields */
             bot?: string;
+            /** @description Telegram: the server's bot's display name, shown beside its @username */
+            bot_name?: string;
             /** @description The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise) */
             needs_https: boolean;
         };

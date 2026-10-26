@@ -119,6 +119,8 @@ type ProviderInfo struct {
 	// Bot: the server's own bot (@username) that connects a chat with /connect CODE (Telegram); "" = connect with
 	// the credential fields.
 	Bot string `json:"bot,omitempty"`
+	// BotName: that bot's display name ("Staqly"), when it has one.
+	BotName string `json:"bot_name,omitempty"`
 }
 
 func providerInfo(e providers.Entry, appConfigured bool) ProviderInfo {
@@ -168,7 +170,7 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 			info.Status = providers.StatusSoon // an OAuth platform waits for its app's keys in the environment
 		}
 		if _, bot := providers.TelegramBot(); e.ID() == "telegram" && bot != "" {
-			info.Bot = "@" + bot
+			info.Bot, info.BotName = "@"+bot, providers.TelegramBotName()
 		}
 		out = append(out, info)
 	}

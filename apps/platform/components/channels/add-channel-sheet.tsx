@@ -97,7 +97,14 @@ export function ConnectForm({
   })
 
   if (provider.bot && !ownBot) {
-    return <TelegramConnect bot={provider.bot} onDone={onDone} onOwnBot={() => setOwnBot(true)} />
+    return (
+      <TelegramConnect
+        bot={provider.bot}
+        botName={provider.bot_name}
+        onDone={onDone}
+        onOwnBot={() => setOwnBot(true)}
+      />
+    )
   }
 
   if (provider.auth === 'oauth2') {
@@ -156,6 +163,15 @@ export function ConnectForm({
           </FieldDescription>
           <FieldError>{errors.name}</FieldError>
         </Field>
+      )}
+      {provider.bot && ownBot && (
+        <button
+          type="button"
+          onClick={() => setOwnBot(false)}
+          className="justify-self-start text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Connect with {provider.bot_name || provider.bot} instead (no token needed)
+        </button>
       )}
       <ProviderFields
         idPrefix={`connect-${provider.id}`}

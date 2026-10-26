@@ -5701,6 +5701,7 @@ components:
         app_configured: { type: boolean, description: "OAuth platforms: a developer app is set (the workspace's or the server's)" }
         docs_url: { type: string, format: uri }
         bot: { type: string, description: "Telegram: the server's own bot (@username). Present when a chat connects by adding it and sending /connect CODE there (POST /v1/channels/telegram/connect) instead of with credential_fields" }
+        bot_name: { type: string, description: "Telegram: the server's bot's display name, shown beside its @username" }
         needs_https: { type: boolean, description: "The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise)" }
 
     ScheduleRule:
