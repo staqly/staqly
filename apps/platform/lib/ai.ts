@@ -71,6 +71,20 @@ export function allowanceNote(st: AIStatus | undefined) {
   return share >= 50 ? `This workspace has used ${share}% of this month's AI allowance.` : ''
 }
 
+/** Whether this month's AI allowance is used up, and when it starts again (the 1st of next month, UTC). */
+export function allowanceUsedUp(st: AIStatus | undefined) {
+  const limit = st?.usage.limit_usd
+
+  if (!st || limit === null || limit === undefined || st.usage.used_usd < limit) {
+    return null
+  }
+
+  const [y, m] = st.usage.period.split('-').map(Number)
+  const renews = new Date(Date.UTC(y!, m!, 1))
+
+  return { renews: renews.toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) }
+}
+
 /** A key that makes a repeated send of the same request answer the same job (no secure context needed). */
 export function requestKey() {
   const b = new Uint8Array(16)
