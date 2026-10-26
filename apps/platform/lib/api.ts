@@ -79,8 +79,19 @@ export type AIStatus = Schemas['AIStatus']
 export type AIOperation = Schemas['AIOperation']
 export type AIJob = Schemas['AIJob']
 export type AIOperationId = AIOperation['id']
-export type AIWriteInput = operations['writeWithAI']['requestBody']['content']['application/json']
-export type AIWriting = operations['writeWithAI']['responses']['200']['content']['application/json']
+export type AssistantMessage = Schemas['AssistantMessage']
+export type AssistantRequest = operations['assistantChat']['requestBody']['content']['application/json']
+
+/** What the assistant streams (POST /v1/assistant/chat). */
+export interface AssistantEvent {
+  type: 'text' | 'tool' | 'confirm' | 'message' | 'done' | 'error'
+  text?: string
+  tool?: string
+  ok?: boolean
+  tool_call?: NonNullable<AssistantMessage['tool_calls']>[number]
+  message?: AssistantMessage
+  error?: ErrorBody
+}
 export type StockPhoto = Schemas['StockPhoto']
 export type DesignBrand = Schemas['DesignBrand']
 export type StockPage = Schemas['StockPage']
@@ -424,6 +435,58 @@ async function fetchCsrf(): Promise<string> {
   }
 
   return csrfPromise
+}
+
+/** One turn of the assistant: its events, as they stream in, go to onEvent. */
+export async function assistantChat(
+  body: AssistantRequest,
+  onEvent: (e: AssistantEvent) => void,
+  signal?: AbortSignal,
+) {
+  const token = csrfToken !== null ? csrfToken : await fetchCsrf().catch(() => null)
+  const res = await fetch(`${API_PREFIX}/v1/assistant/chat`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...(token ? { 'X-CSRF-Token': token } : {}),
+    },
+    body: JSON.stringify(body),
+    signal,
+  })
+
+  if (!res.ok || !res.body) {
+    const err = (await parseBody(res)) as { error?: ErrorBody } | undefined
+
+    throw new ApiError(res.status, err?.error)
+  }
+
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buf = ''
+
+  for (;;) {
+    const { done, value } = await reader.read()
+
+    if (done) {
+      break
+    }
+
+    buf += value
+
+    let at = buf.indexOf('\n\n')
+
+    while (at >= 0) {
+      const line = buf.slice(0, at)
+
+      buf = buf.slice(at + 2)
+      at = buf.indexOf('\n\n')
+
+      if (line.startsWith('data: ')) {
+        onEvent(JSON.parse(line.slice(6)) as AssistantEvent)
+      }
+    }
+  }
 }
 
 /**
@@ -871,7 +934,6 @@ export const api = {
 
     return request<AIJob>('/v1/ai/jobs', { method: 'POST', form, headers: { 'Idempotency-Key': idempotencyKey } })
   },
-  writeWithAI: (body: AIWriteInput) => request<AIWriting>('/v1/ai/write', { method: 'POST', json: body }),
   aiJob: (id: string) => request<AIJob>(`/v1/ai/jobs/${encodeURIComponent(id)}`),
   acceptAiJob: (id: string) => request<Media>(`/v1/ai/jobs/${encodeURIComponent(id)}/accept`, { method: 'POST' }),
   discardAiJob: (id: string) => request<void>(`/v1/ai/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),

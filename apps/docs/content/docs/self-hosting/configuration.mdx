@@ -130,8 +130,8 @@ set up: its requests fail (or fall back) and the tools stay. A key of the wrong 
 |---|---|---|
 | `AI_FAL_KEY` | — | A [fal.ai](https://fal.ai/dashboard/keys) API key. Turns on every AI tool. |
 | `AI_HIGGSFIELD_API_KEY` | — | A [Higgsfield](https://console.higgsfield.ai) API key as `<key id>:<key secret>`. Alone: new pictures and videos; with `AI_FAL_KEY`: their fallback. |
+| `AI_ASSISTANT_MODEL` | `google/gemini-2.5-flash` | The language model of the dashboard's [assistant](/dashboard/assistant), an OpenRouter model id run through fal.ai's router (needs `AI_FAL_KEY`). Pick one that calls tools well. |
 | `AI_OPERATIONS` | every one | The tools offered, comma-separated: `generate`, `edit`, `inpaint`, `erase`, `expand`, `remove_background`, `replace_background`, `upscale`, `enhance`, `text_to_video`, `image_to_video` (e.g. `generate,edit,erase` keeps videos off). |
-| `AI_MONTHLY_LIMIT_USD` | `10` | What one workspace may spend on AI per calendar month (UTC), in US dollars as estimated from list prices; running requests count with their estimate. `unlimited` turns the limit off. |
 | `AI_PRICES` | built in | Overrides the estimate of a model, `model=price` per its unit (image, megapixel or video second), comma-separated: `fal-ai/flux/schnell=0.004,fal-ai/flux-pro/kontext=0.05`. |
 | `AI_FAL_BASE_URL` | `https://queue.fal.run` | fal.ai's queue API (a proxy or tests). |
 | `AI_HIGGSFIELD_BASE_URL` | `https://api.higgsfield.ai` | Higgsfield's API (a proxy or tests). |
@@ -148,7 +148,7 @@ its CDN under your account's retention setting (set it in fal.ai's dashboard). L
 the model, never a key, a description or a picture.
 
 To try the tools locally, put a key in `.env` (or the environment of `staqly serve`) and restart; the AI tool
-appears in the editor. Every request is billed by the provider, so keep `AI_MONTHLY_LIMIT_USD` low while testing.
+appears in the editor. Every request is billed by the provider, so test with a few requests first.
 
 ### Stock photos
 

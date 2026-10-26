@@ -2970,7 +2970,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ai/write": {
+    "/v1/assistant/chat": {
         parameters: {
             query?: never;
             header?: never;
@@ -2980,10 +2980,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Write a post or a thread with AI (posts:write)
-         * @description A language model on the server's AI provider writes a post or a thread from a description; the answer comes back in the response (a few seconds). Nothing is saved as a post: the dashboard puts it in the composer. It counts towards the workspace's monthly AI allowance (402 ai_limit_reached when used up); 409 not_available without an AI provider for text.
+         * One turn of the dashboard's assistant (server-sent events)
+         * @description The dashboard's chat assistant: a language model on the server's AI provider (AI_ASSISTANT_MODEL through fal.ai) works on the workspace with staqly's MCP tools, as the caller and with the caller's scopes. Tools that only read run at once; any other tool is announced with a confirm event and runs only when the next request carries the person's decision. The conversation lives with the client: each request sends it (the messages streamed as message events are appended to it). Each model call counts as AI usage. Answers text/event-stream, one JSON event per data line; errors after the stream started come as an error event.
          */
-        post: operations["writeWithAI"];
+        post: operations["assistantChat"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3945,6 +3945,8 @@ export interface components {
              * @example 60
              */
             linkedin_videos_per_period: number;
+            /** @description What the workspace may spend on AI per calendar month (UTC), in US dollar cents estimated from list prices. -1 = unlimited */
+            ai_monthly_cents: number;
         };
         Addon: {
             /** @example channels_pack */
@@ -4239,16 +4241,28 @@ export interface components {
                 period: string;
                 /** @description The workspace's estimated AI spending this month (running requests count with their estimate) */
                 used_usd: number;
-                /** @description The monthly limit (AI_MONTHLY_LIMIT_USD); null: none */
+                /** @description The monthly limit of the workspace's plan (ai_monthly_cents); null: none */
                 limit_usd: number | null;
             };
+        };
+        AssistantMessage: {
+            /** @enum {string} */
+            role: "user" | "assistant" | "tool";
+            content: string;
+            tool_calls?: {
+                id: string;
+                name: string;
+                /** @description JSON text */
+                arguments: string;
+            }[];
+            tool_call_id?: string;
         };
         /** @description An AI operation this server offers, what it takes and who runs it */
         AIOperation: {
             /** @enum {string} */
-            id: "generate" | "edit" | "inpaint" | "erase" | "expand" | "remove_background" | "replace_background" | "upscale" | "enhance" | "text_to_video" | "image_to_video" | "write";
+            id: "generate" | "edit" | "inpaint" | "erase" | "expand" | "remove_background" | "replace_background" | "upscale" | "enhance" | "text_to_video" | "image_to_video" | "assistant";
             /**
-             * @description What it makes (write, the only text one, runs with POST /v1/ai/write)
+             * @description What it makes (assistant, the only text one, is the dashboard's chat: POST /v1/assistant/chat)
              * @enum {string}
              */
             kind: "image" | "video" | "text";
@@ -11787,7 +11801,7 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
-    writeWithAI: {
+    assistantChat: {
         parameters: {
             query?: never;
             header?: never;
@@ -11797,38 +11811,31 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description What the post is about */
-                    prompt: string;
-                    /** @enum {string} */
-                    format: "short" | "long" | "thread_short" | "thread_long";
-                    /** @enum {string} */
-                    voice: "personal" | "company";
-                    /** @description Also suggest a description of a picture to go with it */
-                    picture?: boolean;
+                    messages: components["schemas"]["AssistantMessage"][];
+                    decision?: {
+                        tool_call_id: string;
+                        allow: boolean;
+                    };
+                    /** @description The dashboard page the person is on */
+                    page?: string;
                 };
             };
         };
         responses: {
-            /** @description The post, or a thread's posts in order */
+            /** @description Events: text (streamed text), tool (a tool ran), confirm (a tool waits for the person), message (add it to the conversation), done, error */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        posts: string[];
-                        picture_prompt?: string;
-                    };
+                    "text/event-stream": string;
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
-            429: components["responses"]["RateLimited"];
-            502: components["responses"]["BadGateway"];
         };
     };
     listStockPhotos: {

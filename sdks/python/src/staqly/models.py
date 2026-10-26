@@ -160,6 +160,8 @@ class PlanLimits(StaqlyModel):
     linkedin_posts_per_period: int = -1
     #: How many of those can have a video (each also counts as a post); ``-1`` = unlimited.
     linkedin_videos_per_period: int = -1
+    #: What the workspace may spend on AI per month, in US dollar cents (estimated); ``-1`` = unlimited.
+    ai_monthly_cents: int = -1
 
 
 class LimitBonus(StaqlyModel):

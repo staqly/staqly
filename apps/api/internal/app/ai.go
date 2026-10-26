@@ -38,24 +38,25 @@ type AIConfig struct {
 	HiggsfieldBaseURL string
 	// Operations offered (empty: every operation a configured provider has a model for).
 	Operations []string
-	// MonthlyLimitUSD: the estimated cost one workspace may spend per calendar month (UTC); 0 =
-	// DefaultAIMonthlyLimitUSD, < 0 = no limit.
-	MonthlyLimitUSD float64
 	// Prices overrides the catalog's price of a model (AI_PRICES).
 	Prices map[string]float64
+	// AssistantModel: the language model of the dashboard's assistant (AI_ASSISTANT_MODEL; "" = DefaultAssistantModel).
+	AssistantModel string
 	// PollInterval: how often a running job asks its provider (0: 2 s for pictures, 5 s for videos; tests shorten it).
 	PollInterval time.Duration
 }
 
-// DefaultAIMonthlyLimitUSD: unless AI_MONTHLY_LIMIT_USD says otherwise, a workspace may spend about this much per
-// month (no unrestricted generation by default).
-const DefaultAIMonthlyLimitUSD = 10.0
-
-func (s *Service) aiMonthlyLimit() float64 {
-	if s.Cfg.AI.MonthlyLimitUSD == 0 {
-		return DefaultAIMonthlyLimitUSD
+// aiMonthlyLimit: what the workspace may spend on AI this month in USD (estimated), from its plan's
+// ai_monthly_cents; < 0 = no limit (local mode, and every plan for now: usage is recorded so limits can come).
+func (s *Service) aiMonthlyLimit(ctx context.Context, q *db.Queries, workspaceID string) (float64, error) {
+	if s.Cfg.Mode == ModeLocal {
+		return -1, nil
 	}
-	return s.Cfg.AI.MonthlyLimitUSD
+	plan, err := s.planFor(ctx, q, workspaceID)
+	if err != nil || plan.Limits.AIMonthlyCents < 0 {
+		return -1, err
+	}
+	return float64(plan.Limits.AIMonthlyCents) / 100, nil
 }
 
 // Bounds of one request.
@@ -188,7 +189,11 @@ func (s *Service) GetAIStatus(ctx context.Context, p Principal) (AIStatus, error
 		return AIStatus{}, err
 	}
 	st.Usage = AIUsage{Period: s.period(), UsedUSD: float64(used) / 1e6}
-	if l := s.aiMonthlyLimit(); l >= 0 {
+	l, err := s.aiMonthlyLimit(ctx, s.Q, p.WorkspaceID)
+	if err != nil {
+		return AIStatus{}, err
+	}
+	if l >= 0 {
 		st.Usage.LimitUSD = &l
 	}
 	return st, nil
@@ -482,7 +487,11 @@ func (s *Service) CreateAIJob(ctx context.Context, p Principal, in AIJobInput) (
 		if n >= aiMaxLive {
 			return &Error{Code: "rate_limited", Status: 429, Message: fmt.Sprintf("at most %d AI requests run at once per workspace; wait for one to finish", aiMaxLive)}
 		}
-		if limit := s.aiMonthlyLimit(); limit >= 0 {
+		limit, err := s.aiMonthlyLimit(ctx, q, p.WorkspaceID)
+		if err != nil {
+			return err
+		}
+		if limit >= 0 {
 			used, err := q.SumAICost(ctx, db.SumAICostParams{WorkspaceID: p.WorkspaceID, CreatedAt: s.monthStart()})
 			if err != nil {
 				return err

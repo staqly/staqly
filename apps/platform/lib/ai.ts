@@ -39,7 +39,7 @@ export const AI_OPS: Record<AIOperationId, { label: string; hint: string; run: s
   },
   text_to_video: { label: 'New video', hint: 'Describe a short video clip.', run: 'Make the video' },
   image_to_video: { label: 'Animate', hint: 'Describe how the picture should move.', run: 'Make the video' },
-  write: { label: 'Write with AI', hint: 'Describe the post; AI writes it.', run: 'Write it' },
+  assistant: { label: 'Assistant', hint: 'Ask in the chat.', run: 'Send' },
 }
 
 const PROVIDERS: Record<string, string> = { fal: 'fal.ai', higgsfield: 'Higgsfield' }

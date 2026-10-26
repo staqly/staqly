@@ -52,7 +52,7 @@ func newEnv(t testing.TB) *env {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc := app.New(database, log, app.Config{Mode: app.ModeCloud, TrialPlan: "pro", SetupToken: "tok", UploadDir: dir + "/uploads", MaxUploadBytes: 1 << 20, PublicURL: "http://test",
 		Webhook: app.WebhookConfig{AllowLoopback: true, RetryBase: 20 * time.Millisecond, RetryMax: 50 * time.Millisecond, PollInterval: 10 * time.Millisecond}})
-	h := httpapi.New(svc, log, httpapi.Config{MCP: mcpserver.HTTPHandler(svc, "test"), OpenAPISpec: []byte("openapi: 3.1.0")})
+	h := httpapi.New(svc, log, httpapi.Config{MCP: mcpserver.HTTPHandler(svc, "test"), AssistantTools: mcpserver.AssistantTools(svc, "test"), OpenAPISpec: []byte("openapi: 3.1.0")})
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	jar, _ := cookiejar.New(nil)

@@ -33,7 +33,9 @@ type Config struct {
 	RelayToken  string
 	OpenAPISpec []byte
 	MCP         http.Handler // mounted at /mcp behind API-key auth
-	Version     string
+	// AssistantTools: the dashboard assistant's tools for a person (the MCP server in memory); nil = no assistant.
+	AssistantTools func(ctx context.Context, p app.Principal) (app.AssistantTools, func(), error)
+	Version        string
 	// CORSOrigins may call the API from a browser with an API key (cloud mode
 	// only, e.g. the docs playground). Never with cookies.
 	CORSOrigins []string

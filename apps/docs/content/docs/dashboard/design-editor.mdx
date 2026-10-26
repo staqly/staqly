@@ -155,13 +155,13 @@ already have started (it did not answer) is not sent anywhere again, so nothing 
 | Remove an object | `fal-ai/bria/eraser` | — |
 | Expand | `fal-ai/bria/expand` | — |
 | Cut out with AI (API only) | `fal-ai/bria/background/remove` | — |
-| Write with AI (posts) | `openrouter/router` (Gemini 2.5 Flash) | — |
+| [Assistant](/dashboard/assistant) | `openrouter/router/openai` (`AI_ASSISTANT_MODEL`, Gemini 2.5 Flash by default) | — |
 | New background | `fal-ai/bria/background/replace` | — |
 | Upscale | `fal-ai/recraft/upscale/crisp` | — |
 | Enhance | `fal-ai/clarity-upscaler` | — |
 | New video, Animate ([media library](/dashboard/media#ai-videos)) | `fal-ai/kling-video/v2.5-turbo/pro/text-to-video`, `.../image-to-video` | `kling-video/v2.5-turbo/pro/text-to-video`, `.../image-to-video` (landscape only) |
 
-Each workspace has a monthly AI allowance (estimated cost, `AI_MONTHLY_LIMIT_USD`); the AI tool says when half or
-more of it is used, and a request past it is refused until the next month. A workspace starts at most 30 requests
+A plan can include a monthly AI allowance (estimated cost; none for now, and none on your own server); the AI
+tool then says when half or more of it is used, and a request past it is refused until the next month. A workspace starts at most 30 requests
 per 10 minutes and runs 4 at once. The picture you change and your description go to the AI service; results
 wait on the server for a day at most unless you use them.

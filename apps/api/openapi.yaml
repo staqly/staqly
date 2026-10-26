@@ -3629,48 +3629,48 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "429": { $ref: "#/components/responses/RateLimited" }
-  /v1/ai/write:
+  /v1/assistant/chat:
     post:
-      operationId: writeWithAI
-      tags: [posts]
-      summary: Write a post or a thread with AI (posts:write)
+      operationId: assistantChat
+      tags: [workspace]
+      summary: One turn of the dashboard's assistant (server-sent events)
       description: >
-        A language model on the server's AI provider writes a post or a thread from a description; the answer
-        comes back in the response (a few seconds). Nothing is saved as a post: the dashboard puts it in the
-        composer. It counts towards the workspace's monthly AI allowance (402 ai_limit_reached when used up);
-        409 not_available without an AI provider for text.
+        The dashboard's chat assistant: a language model on the server's AI provider (AI_ASSISTANT_MODEL through
+        fal.ai) works on the workspace with staqly's MCP tools, as the caller and with the caller's scopes. Tools
+        that only read run at once; any other tool is announced with a confirm event and runs only when the next
+        request carries the person's decision. The conversation lives with the client: each request sends it
+        (the messages streamed as message events are appended to it). Each model call counts as AI usage.
+        Answers text/event-stream, one JSON event per data line; errors after the stream started come as an
+        error event.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              additionalProperties: false
-              required: [prompt, format, voice]
+              required: [messages]
               properties:
-                prompt: { type: string, maxLength: 4000, description: What the post is about }
-                format: { type: string, enum: [short, long, thread_short, thread_long] }
-                voice: { type: string, enum: [personal, company] }
-                picture: { type: boolean, description: Also suggest a description of a picture to go with it }
+                messages:
+                  type: array
+                  items: { $ref: "#/components/schemas/AssistantMessage" }
+                decision:
+                  type: object
+                  required: [tool_call_id, allow]
+                  properties:
+                    tool_call_id: { type: string }
+                    allow: { type: boolean }
+                page: { type: string, description: The dashboard page the person is on }
       responses:
         "200":
-          description: The post, or a thread's posts in order
+          description: "Events: text (streamed text), tool (a tool ran), confirm (a tool waits for the person), message (add it to the conversation), done, error"
           content:
-            application/json:
-              schema:
-                type: object
-                required: [posts]
-                properties:
-                  posts: { type: array, items: { type: string } }
-                  picture_prompt: { type: string }
+            text/event-stream:
+              schema: { type: string }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "402": { $ref: "#/components/responses/PaymentRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-        "502": { $ref: "#/components/responses/BadGateway" }
   /v1/stock/photos:
     get:
       operationId: listStockPhotos
@@ -4635,7 +4635,7 @@ components:
 
     PlanLimits:
       type: object
-      required: [posts_per_month, channels, alerts, webhooks, api_keys, storage_bytes, max_upload_bytes, data_export, x_posts_per_period, linkedin_posts_per_period, linkedin_videos_per_period]
+      required: [posts_per_month, channels, alerts, webhooks, api_keys, storage_bytes, max_upload_bytes, data_export, x_posts_per_period, linkedin_posts_per_period, linkedin_videos_per_period, ai_monthly_cents]
       properties:
         posts_per_month: { type: integer, description: "Posts created per calendar month (people, agents and schedules); -1 = unlimited" }
         channels: { type: integer, description: "Connected channels; -1 = unlimited" }
@@ -4648,6 +4648,7 @@ components:
         x_posts_per_period: { type: integer, description: "Posts to X included per month (each post and thread reply; a post with a live link counts 14). Bought credits come on top. -1 = unlimited", examples: [450] }
         linkedin_posts_per_period: { type: integer, description: "Posts to LinkedIn profiles and Pages included per month (comments don't count; no bought posts). -1 = unlimited", examples: [600] }
         linkedin_videos_per_period: { type: integer, description: "How many of the month's posts to LinkedIn can have a video (each also counts as a post). -1 = unlimited", examples: [60] }
+        ai_monthly_cents: { type: integer, description: "What the workspace may spend on AI per calendar month (UTC), in US dollar cents estimated from list prices. -1 = unlimited" }
 
     Addon:
       type: object
@@ -4916,14 +4917,30 @@ components:
           properties:
             period: { type: string, description: "The month (UTC), YYYY-MM" }
             used_usd: { type: number, description: "The workspace's estimated AI spending this month (running requests count with their estimate)" }
-            limit_usd: { type: [number, "null"], description: "The monthly limit (AI_MONTHLY_LIMIT_USD); null: none" }
+            limit_usd: { type: [number, "null"], description: "The monthly limit of the workspace's plan (ai_monthly_cents); null: none" }
+    AssistantMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string, enum: [user, assistant, tool] }
+        content: { type: string }
+        tool_calls:
+          type: array
+          items:
+            type: object
+            required: [id, name, arguments]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              arguments: { type: string, description: JSON text }
+        tool_call_id: { type: string }
     AIOperation:
       type: object
       description: An AI operation this server offers, what it takes and who runs it
       required: [id, kind, prompt, image, mask, provider, model, fallback]
       properties:
-        id: { type: string, enum: [generate, edit, inpaint, erase, expand, remove_background, replace_background, upscale, enhance, text_to_video, image_to_video, write] }
-        kind: { type: string, enum: [image, video, text], description: "What it makes (write, the only text one, runs with POST /v1/ai/write)" }
+        id: { type: string, enum: [generate, edit, inpaint, erase, expand, remove_background, replace_background, upscale, enhance, text_to_video, image_to_video, assistant] }
+        kind: { type: string, enum: [image, video, text], description: "What it makes (assistant, the only text one, is the dashboard's chat: POST /v1/assistant/chat)" }
         prompt: { type: string, enum: [required, optional, none] }
         image: { type: boolean, description: Needs a picture }
         mask: { type: boolean, description: "Needs a mask (white: the area to change)" }

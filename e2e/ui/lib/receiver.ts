@@ -46,12 +46,49 @@ function fakeFal(base: string, method: string, path: string): { status: number; 
     return json({ status: 'OK' })
   }
 
-  // The language model (Write with AI) answers text: a thread of two posts and a picture's description.
-  if (parts[1] === 'openrouter') {
-    return json({ output: 'We opened a second cafe.\n---\nFirst coffee is on us.\nIMAGE: a cosy cafe', partial: false })
+  return json({ images: [{ url: `${base}/fal/files/out.png`, width: 4, height: 3 }], has_nsfw_concepts: [false] })
+}
+
+/**
+ * The assistant's language model (fal.ai's OpenAI-compatible router, streamed): asked by a person it looks up the
+ * collections, then creates a draft in the first one (which waits for Allow), then says it is done.
+ */
+function fakeAssistant(body: string): { status: number; type: string; body: string } {
+  const req = JSON.parse(body) as {
+    messages: { role: string; content: string; tool_calls?: { function: { name: string } }[] }[]
+  }
+  const last = req.messages.at(-1)!
+  const prev = req.messages.findLast((m) => m.role === 'assistant' && m.tool_calls?.length)?.tool_calls?.[0]?.function
+    .name
+  const chunks: unknown[] = []
+  const call = (id: string, name: string, args: unknown) =>
+    chunks.push({
+      choices: [{ delta: { tool_calls: [{ index: 0, id, function: { name, arguments: JSON.stringify(args) } }] } }],
+    })
+
+  if (last.role === 'user') {
+    chunks.push({ choices: [{ delta: { content: 'Let me check your collections.' } }] })
+    call('c1', 'list_collections', {})
+  } else if (prev === 'list_collections') {
+    const { collections } = JSON.parse(last.content) as { collections: { id: string }[] }
+
+    call('c2', 'create_post', {
+      collection: collections[0]!.id,
+      content: 'Fresh coffee, fresh week. See you at the cafe!',
+    })
+  } else if (last.content.startsWith('The person declined')) {
+    chunks.push({ choices: [{ delta: { content: 'Okay, I left it.' } }] })
+  } else {
+    chunks.push({ choices: [{ delta: { content: 'Done: the **draft** is in your collection.' } }] })
   }
 
-  return json({ images: [{ url: `${base}/fal/files/out.png`, width: 4, height: 3 }], has_nsfw_concepts: [false] })
+  chunks.push({ choices: [], usage: { prompt_tokens: 900, completion_tokens: 40, cost: 0.0003 } })
+
+  return {
+    status: 200,
+    type: 'text/event-stream',
+    body: chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join('') + 'data: [DONE]\n\n',
+  }
 }
 
 export async function startReceiver(port = 0): Promise<Receiver> {
@@ -69,7 +106,9 @@ export async function startReceiver(port = 0): Promise<Receiver> {
       if (path.startsWith('/fal/')) {
         const out =
           req.headers.authorization === `Key ${FAL_E2E_KEY}` || path.startsWith('/fal/files/')
-            ? fakeFal(base, req.method ?? 'GET', path)
+            ? path.endsWith('/chat/completions')
+              ? fakeAssistant(body)
+              : fakeFal(base, req.method ?? 'GET', path)
             : { status: 401, type: 'application/json', body: '{"detail":"Invalid key"}' }
 
         res.writeHead(out.status, { 'Content-Type': out.type }).end(out.body)
