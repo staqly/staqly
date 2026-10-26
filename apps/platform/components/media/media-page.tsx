@@ -8,6 +8,7 @@ import {
   FolderInput,
   FolderPlus,
   Hash,
+  Clapperboard,
   Images,
   MoreHorizontal,
   PenSquare,
@@ -20,7 +21,6 @@ import {
   X,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -29,6 +29,7 @@ import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState, LoadMore } from '@/components/common/error-state'
 import { FilterButton } from '@/components/common/filter-button'
 import { SkeletonList } from '@/components/common/skeleton-list'
+import { stackCarousels, useCarousels } from '@/components/media/carousels'
 import {
   folderGoneInCache,
   invalidateLists,
@@ -63,6 +64,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useLazyDialog } from '@/hooks/use-lazy-dialog'
+import { useAiStatus } from '@/lib/ai-status'
 import {
   api,
   ApiError,
@@ -91,6 +94,9 @@ const FolderNameDialog = dynamic(
   () => import('@/components/media/media-folder-dialogs').then((m) => m.FolderNameDialog),
   { ssr: false },
 )
+const AiVideoDialog = dynamic(() => import('@/components/media/ai-video-dialog').then((m) => m.AiVideoDialog), {
+  ssr: false,
+})
 const TagsDialog = dynamic(() => import('@/components/media/media-tags-dialog').then((m) => m.TagsDialog), {
   ssr: false,
 })
@@ -157,6 +163,7 @@ const NO_FOLDERS: MediaFolder[] = []
 // Never mutated: every change to a selection makes a new set.
 const NO_IDS = new Set<string>()
 const NO_ITEMS: MediaLibraryItem[] = []
+const NO_STACKS = new Map<string, string[]>()
 
 // Action bar labels show from sm up; below, icon buttons keep their names (and tooltips) through aria-label.
 const barLabel = (text: string) => <span className="hidden sm:inline">{text}</span>
@@ -229,6 +236,9 @@ export function MediaPage() {
   const [keeping, setKeeping] = useState<MediaLibraryItem[] | null>(null)
   const [fresh, setFresh] = useState<Set<string>>(new Set())
   const input = useRef<HTMLInputElement>(null)
+  // A new video from a prompt, when the server offers it.
+  const video = useLazyDialog()
+  const aiVideo = useAiStatus().data?.operations.some((o) => o.id === 'text_to_video') ?? false
   const onUploaded = useCallback((m: Media) => {
     setFresh((prev) => new Set(prev).add(m.id))
     setTimeout(() => setFresh((prev) => new Set([...prev].filter((id) => id !== m.id))), 5000)
@@ -320,17 +330,19 @@ export function MediaPage() {
       structuralSharing: shareMediaPages,
     })
   const pages = data?.pages
-  const items = useMemo(() => {
+  const carousels = useCarousels()
+  const stacked = useMemo(() => {
     if (!pages) {
-      return NO_ITEMS
+      return { items: NO_ITEMS, pages: NO_STACKS }
     }
 
     // A file added here while paging can come again on the next page: once is enough.
     const seen = new Set<string>()
     const loaded = pages.flatMap((p) => p.data).filter((m) => !seen.has(m.id) && !!seen.add(m.id))
 
-    return recent ? loaded.filter((m) => Date.parse(m.created_at) >= since) : loaded
-  }, [pages, recent, since])
+    return stackCarousels(recent ? loaded.filter((m) => Date.parse(m.created_at) >= since) : loaded, carousels)
+  }, [pages, recent, since, carousels])
+  const items = stacked.items
   const searching = !!q || !!tag
   const picked = useMemo(() => items.filter((m) => selected.has(m.id)), [items, selected])
 
@@ -682,11 +694,26 @@ export function MediaPage() {
               e.target.value = ''
             }}
           />
-          <Button variant="outline" asChild className="shrink-0">
-            <Link href="/media/design" prefetch={false} data-testid="media-design">
+          {/* The way into the design editor: violet, so it reads as making something, not filtering or uploading. */}
+          <Button
+            asChild
+            className="shrink-0 border-0 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm hover:from-violet-500 hover:to-fuchsia-500"
+          >
+            {/* oxlint-disable-next-line next/no-html-link-for-pages -- a full load: the editor's own CSP */}
+            <a href="/media/edit" data-testid="media-design">
               <Palette /> <span className="max-sm:sr-only">Design</span>
-            </Link>
+            </a>
           </Button>
+          {aiVideo && (
+            <Button
+              variant="outline"
+              className="shrink-0"
+              onClick={() => video.setOpen(true)}
+              data-testid="media-ai-video"
+            >
+              <Clapperboard /> <span className="max-sm:sr-only">AI video</span>
+            </Button>
+          )}
           <Button onClick={() => input.current?.click()} data-testid="media-upload" className="shrink-0">
             <Upload /> Upload
           </Button>
@@ -745,9 +772,9 @@ export function MediaPage() {
           {canWrite && (
             <Button variant="ghost" aria-label="Edit" disabled={editable.length === 0} asChild={editable.length > 0}>
               {editable.length > 0 ? (
-                <Link href={`/media/design?ids=${editable.map((m) => m.id).join(',')}`} prefetch={false}>
+                <a href={`/media/edit?ids=${editable.map((m) => m.id).join(',')}`}>
                   <Palette /> {barLabel('Edit')}
-                </Link>
+                </a>
               ) : (
                 <>
                   <Palette /> {barLabel('Edit')}
@@ -847,6 +874,7 @@ export function MediaPage() {
       <MediaGrid
         items={items}
         highlight={fresh}
+        stacks={trash ? undefined : stacked.pages}
         caption={trash ? (m) => `Deletes ${timeAgo(m.purge_at)}` : undefined}
         selected={selected}
         onOpen={setOpen}
@@ -1021,6 +1049,7 @@ export function MediaPage() {
           onSubmit={(name) => saveFolder({ d: folderDialog, name })}
         />
       )}
+      {video.used && <AiVideoDialog open={video.open} onOpenChange={video.setOpen} />}
       {tagging && (
         <TagsDialog
           open

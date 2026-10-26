@@ -1,7 +1,7 @@
 'use client'
 
 import Konva from 'konva'
-import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   Arrow,
   Ellipse,
@@ -14,13 +14,16 @@ import {
   Stage,
   Tag,
   Text,
+  TextPath,
   Transformer,
 } from 'react-konva'
 
 import {
   cropRect,
+  curvePath,
   type Design,
   type El,
+  type Fade,
   type Fill,
   type ImageEl,
   type MaskKind,
@@ -99,9 +102,23 @@ function useImage(src: string) {
   return state.src === src ? state.img : null
 }
 
-export function fillProps(fill: Fill, w: number, h: number) {
+/** Konva's paint for a fill over a w x h box whose top left corner is at (x, y) in the node's own coordinates. */
+export function fillProps(fill: Fill, w: number, h: number, x = 0, y = 0) {
   if (fill.kind === 'color') {
     return { fill: fill.color }
+  }
+
+  const stops = fill.via ? [0, fill.from, 0.5, fill.via, 1, fill.to] : [0, fill.from, 1, fill.to]
+  const centre = { x: x + w / 2, y: y + h / 2 }
+
+  if (fill.radial) {
+    return {
+      fillRadialGradientStartPoint: centre,
+      fillRadialGradientEndPoint: centre,
+      fillRadialGradientStartRadius: 0,
+      fillRadialGradientEndRadius: Math.hypot(w, h) / 2,
+      fillRadialGradientColorStops: stops,
+    }
   }
 
   const a = (fill.angle * Math.PI) / 180
@@ -109,10 +126,61 @@ export function fillProps(fill: Fill, w: number, h: number) {
   const dy = (Math.sin(a) * h) / 2
 
   return {
-    fillLinearGradientStartPoint: { x: w / 2 - dx, y: h / 2 - dy },
-    fillLinearGradientEndPoint: { x: w / 2 + dx, y: h / 2 + dy },
-    fillLinearGradientColorStops: [0, fill.from, 1, fill.to],
+    fillLinearGradientStartPoint: { x: centre.x - dx, y: centre.y - dy },
+    fillLinearGradientEndPoint: { x: centre.x + dx, y: centre.y + dy },
+    fillLinearGradientColorStops: stops,
   }
+}
+
+/** A Konva filter: the pixels turn see-through towards the node's `fade` side. */
+function fadeFilter(this: Konva.Node, d: ImageData) {
+  const f = this.getAttr('fade') as Fade | undefined
+
+  if (!f) {
+    return
+  }
+
+  const { width: w, height: h, data } = d
+  const reach = Math.max(1, (f.side === 'left' || f.side === 'right' ? w : h) * f.size)
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const t = f.side === 'left' ? x : f.side === 'right' ? w - 1 - x : f.side === 'top' ? y : h - 1 - y
+
+      if (t < reach) {
+        data[(y * w + x) * 4 + 3]! *= t / reach
+      }
+    }
+  }
+}
+
+/**
+ * Draws its children faded (see fadeFilter): a filter needs the group cached, and cached again whenever what it
+ * draws changes (`look`).
+ */
+function Faded({ fade, look, children }: { fade?: Fade; look: string; children: ReactNode }) {
+  const ref = useRef<Konva.Group>(null)
+
+  useEffect(() => {
+    const g = ref.current
+
+    if (!g || !fade) {
+      return
+    }
+
+    g.setAttr('look', look)
+    g.cache()
+
+    return () => void g.clearCache()
+  }, [fade, look])
+
+  return fade ? (
+    <Group ref={ref} filters={[fadeFilter]} fade={fade}>
+      {children}
+    </Group>
+  ) : (
+    children
+  )
 }
 
 function shadowProps(el: El) {
@@ -247,31 +315,48 @@ function ImageNode({ el }: { el: ImageEl }) {
     />
   )
 
-  return el.mask ? (
-    <Group clipFunc={(ctx) => maskPath(ctx, el.mask!, el.width, el.height)}>
-      {/* The box the transformer and clicks use: the masked picture alone has holes. */}
-      <Rect width={el.width} height={el.height} fill="transparent" />
-      {picture}
-    </Group>
-  ) : (
-    picture
+  return (
+    <Faded fade={el.fade} look={`${look}|${el.mask}|${el.flipX}|${el.flipY}|${img.src}`}>
+      {el.mask ? (
+        <Group clipFunc={(ctx) => maskPath(ctx, el.mask!, el.width, el.height)}>
+          {/* The box the transformer and clicks use: the masked picture alone has holes. */}
+          <Rect width={el.width} height={el.height} fill="transparent" />
+          {picture}
+        </Group>
+      ) : (
+        picture
+      )}
+    </Faded>
   )
 }
 
 function ShapeNode({ el }: { el: ShapeEl }) {
+  const line = el.shape === 'line' || el.shape === 'arrow'
+
+  return line ? (
+    <ShapeDraw el={el} />
+  ) : (
+    <Faded fade={el.fade} look={JSON.stringify(el)}>
+      <ShapeDraw el={el} />
+    </Faded>
+  )
+}
+
+function ShapeDraw({ el }: { el: ShapeEl }) {
+  const { width: w, height: h } = el
+  const paint = (x = 0, y = 0) => (el.gradient ? fillProps(el.gradient, w, h, x, y) : { fill: el.fill })
   const common = {
-    fill: el.fill,
+    ...paint(),
     stroke: el.strokeWidth ? el.stroke : undefined,
     strokeWidth: el.strokeWidth,
     ...shadowProps(el),
   }
-  const { width: w, height: h } = el
 
   switch (el.shape) {
     case 'rect':
       return <Rect width={w} height={h} cornerRadius={el.radius} {...common} />
     case 'ellipse':
-      return <Ellipse x={w / 2} y={h / 2} radiusX={w / 2} radiusY={h / 2} {...common} />
+      return <Ellipse x={w / 2} y={h / 2} radiusX={w / 2} radiusY={h / 2} {...common} {...paint(-w / 2, -h / 2)} />
     case 'triangle':
       return <Line points={[w / 2, 0, w, h, 0, h]} closed lineJoin="round" {...common} />
     case 'star':
@@ -303,6 +388,32 @@ function ShapeNode({ el }: { el: ShapeEl }) {
 }
 
 function TextNode({ el }: { el: TextEl }) {
+  const paint = el.gradient ? fillProps(el.gradient, el.width, el.fontSize * el.lineHeight) : { fill: el.fill }
+
+  if (el.curve) {
+    return (
+      <>
+        {/* The box the transformer and clicks use: the letters alone are hard to grab. */}
+        <Rect width={el.width} height={el.height} fill="transparent" />
+        <TextPath
+          text={el.text.replaceAll('\n', ' ')}
+          data={curvePath(el.width, el.curve, el.fontSize)}
+          fontFamily={`"${el.fontFamily}"`}
+          fontSize={el.fontSize}
+          fontStyle={`${el.italic ? 'italic ' : ''}${el.bold ? 'bold' : 'normal'}`}
+          textDecoration={el.underline ? 'underline' : ''}
+          align="center"
+          letterSpacing={el.letterSpacing}
+          stroke={el.stroke?.width ? el.stroke.color : undefined}
+          strokeWidth={el.stroke?.width ?? 0}
+          fillAfterStrokeEnabled
+          {...paint}
+          {...shadowProps(el)}
+        />
+      </>
+    )
+  }
+
   const text = (
     <Text
       text={el.text}
@@ -312,7 +423,7 @@ function TextNode({ el }: { el: TextEl }) {
       fontSize={el.fontSize}
       fontStyle={`${el.italic ? 'italic ' : ''}${el.bold ? 'bold' : 'normal'}`}
       textDecoration={el.underline ? 'underline' : ''}
-      fill={el.fill}
+      {...paint}
       align={el.align}
       lineHeight={el.lineHeight}
       letterSpacing={el.letterSpacing}
@@ -343,13 +454,15 @@ export function DesignView({
   design,
   page,
   scale,
+  stageRef,
 }: {
   design: Pick<Design, 'width' | 'height'>
   page: Page
   scale: number
+  stageRef?: RefObject<Konva.Stage | null>
 }) {
   return (
-    <Stage width={design.width * scale} height={design.height * scale} listening={false}>
+    <Stage ref={stageRef} width={design.width * scale} height={design.height * scale} listening={false}>
       <Layer scaleX={scale} scaleY={scale}>
         <Rect
           width={design.width}
@@ -368,11 +481,6 @@ export function DesignView({
   )
 }
 
-export interface CanvasHandle {
-  /** The page at its full size, without selection or guides. */
-  toBlob: (type: 'image/png' | 'image/jpeg') => Promise<Blob>
-}
-
 interface Props {
   design: Design
   page: Page
@@ -384,8 +492,12 @@ interface Props {
   onCropping: (id: string | null) => void
   zoom: number | 'fit'
   onFitScale: (scale: number) => void
-  handle: RefObject<CanvasHandle | null>
+  /** Elements dragged in from the side panel, already placed where they were dropped. */
+  onDropEls: (els: El[]) => void
 }
+
+/** What the side panel is dragging onto the page: a native drag carries strings, not elements. */
+export const dragged: { make: (() => El | El[]) | null } = { make: null }
 
 export function DesignCanvas({
   design,
@@ -397,12 +509,11 @@ export function DesignCanvas({
   onCropping,
   zoom,
   onFitScale,
-  handle,
+  onDropEls,
 }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const stage = useRef<Konva.Stage>(null)
   const pageNode = useRef<Konva.Group>(null)
-  const ui = useRef<Konva.Layer>(null)
   const tr = useRef<Konva.Transformer>(null)
   const [view, setView] = useState({ w: 800, h: 600 })
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] })
@@ -463,25 +574,6 @@ export function DesignCanvas({
     t.getLayer()?.batchDraw()
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- a changed page can remount the selected nodes
   }, [selected, page, editing, cropping])
-
-  useImperativeHandle(handle, () => ({
-    toBlob: (type: 'image/png' | 'image/jpeg') => {
-      ui.current?.hide()
-
-      return stage
-        .current!.toBlob({
-          x: ox,
-          y: oy,
-          width: design.width * scale,
-          height: design.height * scale,
-          pixelRatio: 1 / scale,
-          mimeType: type,
-          quality: 0.92,
-        })
-        .then((b) => b as Blob)
-        .finally(() => ui.current?.show())
-    },
-  }))
 
   const byId = (id: string) => elements.find((e) => e.id === id)
   const one = selected.length === 1 ? byId(selected[0]!) : undefined
@@ -598,6 +690,37 @@ export function DesignCanvas({
       ref={box}
       className="relative size-full overflow-auto bg-muted/60 [background-image:radial-gradient(var(--border)_1px,transparent_1px)] [background-size:16px_16px]"
       data-testid="design-canvas"
+      onDragOver={(e) => {
+        if (dragged.make) {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }
+      }}
+      onDrop={(e) => {
+        const make = dragged.make
+        const st = stage.current
+
+        if (!make || !st) {
+          return
+        }
+
+        e.preventDefault()
+        e.stopPropagation()
+        dragged.make = null
+        st.setPointersPositions(e.nativeEvent)
+
+        const at = st.getPointerPosition()!
+        const els = [make()].flat()
+        // Centred where it was dropped (several, a sticker: their box is).
+        const left = Math.min(...els.map((x) => x.x))
+        const top = Math.min(...els.map((x) => x.y))
+        const w = Math.max(...els.map((x) => x.x + x.width)) - left
+        const h = Math.max(...els.map((x) => x.y + x.height)) - top
+        const dx = (at.x - ox) / scale - w / 2 - left
+        const dy = (at.y - oy) / scale - h / 2 - top
+
+        onDropEls(els.map((x) => ({ ...x, x: x.x + dx, y: x.y + dy })))
+      }}
       onWheel={(e) => {
         // In crop mode the wheel zooms the picture inside its frame.
         if (croppingEl?.type === 'image') {
@@ -730,7 +853,7 @@ export function DesignCanvas({
             listening={false}
           />
         </Layer>
-        <Layer ref={ui}>
+        <Layer>
           <Group x={ox} y={oy} scaleX={scale} scaleY={scale} listening={false}>
             {guides.v.map((x) => (
               <Line

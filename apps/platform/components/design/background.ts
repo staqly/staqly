@@ -1,12 +1,31 @@
 // Background removal on the device: transformers.js (pinned, from jsDelivr: the design editor's CSP in
 // apps/api/internal/web/web.go allows exactly this version) runs InSPyReNet (MIT) in the browser. Nothing is
-// uploaded; the first use downloads the model (~200 MB), which the browser keeps for next time.
+// uploaded; the first use downloads the model (~200 MB on a graphics card, ~400 MB without: the half-precision
+// model answers NaN on WebAssembly), which the browser keeps for next time.
 
 export const TRANSFORMERS_CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0'
 const MODEL = 'OS-Software/InSPyReNet-SwinB-Plus-Ultra-ONNX'
 
 // oxlint-disable-next-line typescript/no-explicit-any -- transformers.js loads from the CDN, without types
 type Tf = any
+
+/**
+ * Whether the device draws with a graphics card, read from WebGL's renderer name. Not by asking WebGPU for an
+ * adapter: holding one (a software one especially) stalled ONNX Runtime's WebAssembly session after it.
+ */
+function realGpu() {
+  if (!('gpu' in navigator)) {
+    return false
+  }
+
+  const gl = document.createElement('canvas').getContext('webgl')
+  const ext = gl?.getExtension('WEBGL_debug_renderer_info')
+  const renderer = ext ? String(gl!.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : ''
+
+  gl?.getExtension('WEBGL_lose_context')?.loseContext()
+
+  return !!renderer && !/swiftshader|llvmpipe|softpipe|software|basic render|microsoft basic/i.test(renderer)
+}
 
 let loading: Promise<{ tf: Tf; model: Tf; processor: Tf }> | null = null
 
@@ -25,9 +44,10 @@ function load(onProgress?: (share: number) => void) {
 
     const processor = await tf.AutoProcessor.from_pretrained(MODEL)
     const open = (device: 'webgpu' | 'wasm') =>
-      tf.AutoModel.from_pretrained(MODEL, { device, dtype: 'fp16', progress_callback })
-    // WebGPU when the browser has it (seconds), WebAssembly otherwise (slower, same result).
-    const model = 'gpu' in navigator ? await open('webgpu').catch(() => open('wasm')) : await open('wasm')
+      tf.AutoModel.from_pretrained(MODEL, { device, dtype: device === 'webgpu' ? 'fp16' : 'fp32', progress_callback })
+    // WebGPU on a real graphics card (seconds), WebAssembly otherwise (slower, same result). A software adapter
+    // (no GPU, a VM, a blocklisted driver) runs a model like this for many minutes: WebAssembly is faster there.
+    const model = realGpu() ? await open('webgpu').catch(() => open('wasm')) : await open('wasm')
 
     return { tf, model, processor }
   })().catch((e: unknown) => {
@@ -71,6 +91,10 @@ export async function removeBackground(blob: Blob, onProgress?: (share: number) 
   for (let i = 0; i < Math.min(1000, mw * mh); i++) {
     lo = Math.min(lo, data[off + i]!)
     hi = Math.max(hi, data[off + i]!)
+  }
+
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+    throw new Error('The model gave no usable mask on this device')
   }
 
   const logits = lo < -0.5 || hi > 1.5

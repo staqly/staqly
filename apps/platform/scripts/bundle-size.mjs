@@ -59,10 +59,10 @@ const all = walk(join(out, '_next/static'))
   .filter((p) => p.endsWith('.js'))
   .map((p) => relative(out, p))
 
-// The design editor (/media/design: Konva, its fonts' CSS, templates) and what only it loads have a budget of
+// The design editor (/media/edit: Konva, its fonts' CSS, templates) and what only it loads have a budget of
 // their own. A chunk is the editor's when its page or lazy-load manifest reaches it (directly, or through chunks
 // that name it, like dynamic imports do) and no other page does.
-const EDITORS = ['/media/design']
+const EDITORS = ['/media/edit']
 const isEditor = (route) => EDITORS.includes(route)
 const lazy = (editor) =>
   walk(join(root, '.next/server/app'))

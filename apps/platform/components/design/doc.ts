@@ -3,7 +3,23 @@
 // next to the pictures it exports, one per page.
 import { PLACEMENTS } from '@staqly/brand/placements'
 
-export type Fill = { kind: 'color'; color: string } | { kind: 'gradient'; from: string; to: string; angle: number }
+export type Fill = { kind: 'color'; color: string } | Gradient
+
+/** From one colour to another (through a third one when `via` is set), along an angle or out from the centre. */
+export interface Gradient {
+  kind: 'gradient'
+  from: string
+  via?: string
+  to: string
+  angle: number
+  radial?: boolean
+}
+
+/** The element turns see-through towards one side: fully at that edge, not at all `size` (a share) away. */
+export interface Fade {
+  side: 'left' | 'right' | 'top' | 'bottom'
+  size: number
+}
 
 interface Base {
   id: string
@@ -16,6 +32,10 @@ interface Base {
   locked?: boolean
   hidden?: boolean
   shadow?: { color: string; blur: number; x: number; y: number; opacity: number }
+  /** Pictures and filled shapes only. */
+  fade?: Fade
+  /** Elements with the same group are picked, moved and changed together. */
+  group?: string
 }
 
 export interface TextEl extends Base {
@@ -33,6 +53,10 @@ export interface TextEl extends Base {
   stroke?: { color: string; width: number }
   /** A box behind the text (a highlight, a label). */
   box?: { color: string; padding: number; radius: number }
+  /** Paints the letters instead of `fill`. */
+  gradient?: Gradient
+  /** Bends the line along an arc: up to 100 (an arch) or -100 (a smile); 0 or unset is straight. */
+  curve?: number
 }
 
 export interface ImageEl extends Base {
@@ -49,6 +73,8 @@ export interface ImageEl extends Base {
   crop?: Crop
   /** A shape the picture is cut to. */
   mask?: MaskKind
+  /** An icon: its SVG (drawn in currentColor) and colour; `src` is the two together. */
+  icon?: { svg: string; color: string }
 }
 
 export interface Crop {
@@ -67,6 +93,8 @@ export interface ShapeEl extends Base {
   type: 'shape'
   shape: ShapeKind
   fill: string
+  /** Paints the shape instead of `fill` (not lines and arrows). */
+  gradient?: Gradient
   stroke: string
   strokeWidth: number
   radius: number
@@ -92,6 +120,83 @@ export interface Design {
 
 /** The size of a page, what new elements are placed by. */
 export type Size = Pick<Design, 'width' | 'height'>
+
+/** The ids with every other member of their groups. */
+export function withGroups(els: El[], ids: string[]) {
+  const groups = new Set(els.flatMap((e) => (ids.includes(e.id) && e.group ? [e.group] : [])))
+
+  return groups.size ? els.flatMap((e) => (ids.includes(e.id) || (e.group && groups.has(e.group)) ? [e.id] : [])) : ids
+}
+
+type Box = Pick<Base, 'x' | 'y' | 'width' | 'height'>
+
+export type AlignTo = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+
+/**
+ * Lines the elements up on one edge or centre of `frame` (the selection's box, or the page for one element).
+ * ponytail: by their unrotated boxes; a rotated element lines up by its frame, not what is drawn.
+ */
+export function align(els: Box[], to: AlignTo, frame: Box) {
+  const k = { left: 0, top: 0, center: 0.5, middle: 0.5, right: 1, bottom: 1 }[to]
+
+  for (const e of els) {
+    if (to === 'left' || to === 'center' || to === 'right') {
+      e.x = frame.x + (frame.width - e.width) * k
+    } else {
+      e.y = frame.y + (frame.height - e.height) * k
+    }
+  }
+}
+
+/** Equal gaps between the elements, the outermost staying where they are. */
+export function distribute(els: Box[], axis: 'x' | 'y') {
+  const size = axis === 'x' ? 'width' : 'height'
+  const sorted = els.toSorted((a, b) => a[axis] - b[axis])
+  const first = sorted[0]!
+  const last = sorted.at(-1)!
+  const total = sorted.reduce((n, e) => n + e[size], 0)
+  const gap = (last[axis] + last[size] - first[axis] - total) / (sorted.length - 1)
+  let at = first[axis]
+
+  for (const e of sorted) {
+    e[axis] = at
+    at += e[size] + gap
+  }
+}
+
+/** The box around them all. */
+export function bounds(els: Box[]): Box {
+  const x = Math.min(...els.map((e) => e.x))
+  const y = Math.min(...els.map((e) => e.y))
+
+  return {
+    x,
+    y,
+    width: Math.max(...els.map((e) => e.x + e.width)) - x,
+    height: Math.max(...els.map((e) => e.y + e.height)) - y,
+  }
+}
+
+/** An icon's picture: its SVG in that colour, as a data URL. */
+export const iconSrc = (svg: string, color: string) =>
+  `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.replaceAll('currentColor', color))}`
+
+/**
+ * The arc a curved text sits on, as SVG path data in a box `width` wide, with the letters (fontSize high) inside the
+ * box: the arc spans `curve` % of a half circle and keeps the line's length.
+ */
+export function curvePath(width: number, curve: number, fontSize: number) {
+  const theta = (Math.min(100, Math.abs(curve)) / 100) * Math.PI
+  const r = width / theta
+  const half = r * Math.sin(theta / 2)
+  const sag = r * (1 - Math.cos(theta / 2))
+  const c = width / 2
+  const y = (v: number) => (v + fontSize).toFixed(2)
+
+  return curve > 0
+    ? `M ${(c - half).toFixed(2)} ${y(sag)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 0 1 ${(c + half).toFixed(2)} ${y(sag)}`
+    : `M ${(c - half).toFixed(2)} ${y(0)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 0 0 ${(c + half).toFixed(2)} ${y(0)}`
+}
 
 export const uid = () => Math.random().toString(36).slice(2, 10)
 

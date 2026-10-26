@@ -70,7 +70,8 @@ acted, `agent` (the MCP or REST client's name, e.g. `Claude Code`) are on every 
 | `schedule_created`, `schedule_failed` | Schedules | — |
 | `media_uploaded` | A file uploaded | `type` (`image`, `video`...), `size_bytes` |
 | `media_edited` | The design editor saved a file or a project | `kind` (`file`, `project`) |
-| `ai_image_requested` | An AI picture (design editor) | `op`, `model`, `duration_ms`, `ok` |
+| `ai_job_requested` | An AI request (design editor, media library) | `op`, `provider`, `model` |
+| `ai_job_finished` | It ended | `op`, `provider`, `model`, `status`, `error_code`, `fallback`, `duration_ms` |
 | `api_key_created`, `webhook_created`, `alert_created` | Integrations | — |
 | `checkout_started` | A Stripe checkout was opened (cloud) | `plan`, `interval`, `trial` |
 | `plan_changed` | A workspace's plan changed (Stripe webhooks, the operator CLI, trials) | `from`, `to`, `reason` (e.g. `stripe:active`, `stripe:canceled`) |

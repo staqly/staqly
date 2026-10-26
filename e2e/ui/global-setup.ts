@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { chromium, type FullConfig } from '@playwright/test'
 
 import { Api } from './lib/api.js'
-import { startReceiver } from './lib/receiver.js'
+import { FAL_E2E_KEY, startReceiver } from './lib/receiver.js'
 import { seedWorkspace } from './lib/seed.js'
 import { buildBinary, type RunningServer, startServer, tokenLink } from './lib/stack.js'
 import { type State, state, STATE_DIR } from './lib/state.js'
@@ -72,7 +72,8 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
       port: port('UI_LOCAL_PORT', 61333),
       dashboardPort: port('UI_LOCAL_DASHBOARD_PORT', 61080),
       // As in the Docker image: the dashboard is reachable from other devices (connect links point there).
-      env: { DASHBOARD_EXPOSED: 'true' },
+      // AI tools on the receiver's fake fal.ai (the cloud server has none: there they are hidden).
+      env: { DASHBOARD_EXPOSED: 'true', AI_FAL_KEY: FAL_E2E_KEY, AI_FAL_BASE_URL: `${receiver.url}/fal` },
     })
 
     servers.push(local)

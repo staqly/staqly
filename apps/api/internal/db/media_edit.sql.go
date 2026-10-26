@@ -43,8 +43,8 @@ func (q *Queries) AllMediaProjectFiles(ctx context.Context) ([]AllMediaProjectFi
 }
 
 const createMediaProject = `-- name: CreateMediaProject :exec
-INSERT INTO media_projects (id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO media_projects (id, workspace_id, name, source_ids, output_id, page_ids, storage_name, size_bytes, created_by, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateMediaProjectParams struct {
@@ -53,6 +53,7 @@ type CreateMediaProjectParams struct {
 	Name        string `json:"name"`
 	SourceIds   string `json:"source_ids"`
 	OutputID    string `json:"output_id"`
+	PageIds     string `json:"page_ids"`
 	StorageName string `json:"storage_name"`
 	SizeBytes   int64  `json:"size_bytes"`
 	CreatedBy   string `json:"created_by"`
@@ -67,6 +68,7 @@ func (q *Queries) CreateMediaProject(ctx context.Context, arg CreateMediaProject
 		arg.Name,
 		arg.SourceIds,
 		arg.OutputID,
+		arg.PageIds,
 		arg.StorageName,
 		arg.SizeBytes,
 		arg.CreatedBy,
@@ -93,20 +95,8 @@ func (q *Queries) DeleteMediaProject(ctx context.Context, arg DeleteMediaProject
 	return result.RowsAffected()
 }
 
-const deleteWorkspaceAI = `-- name: DeleteWorkspaceAI :execrows
-DELETE FROM workspace_ai WHERE workspace_id = ?
-`
-
-func (q *Queries) DeleteWorkspaceAI(ctx context.Context, workspaceID string) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteWorkspaceAI, workspaceID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const getMediaProject = `-- name: GetMediaProject :one
-SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at FROM media_projects WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at, page_ids FROM media_projects WHERE workspace_id = ? AND id = ?
 `
 
 type GetMediaProjectParams struct {
@@ -128,31 +118,24 @@ func (q *Queries) GetMediaProject(ctx context.Context, arg GetMediaProjectParams
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PageIds,
 	)
 	return i, err
 }
 
-const getWorkspaceAI = `-- name: GetWorkspaceAI :one
-SELECT workspace_id, provider, model, credentials, key_hint, updated_by, updated_at FROM workspace_ai WHERE workspace_id = ?
+const getWorkspaceDesignBrand = `-- name: GetWorkspaceDesignBrand :one
+SELECT design_brand FROM workspaces WHERE id = ?
 `
 
-func (q *Queries) GetWorkspaceAI(ctx context.Context, workspaceID string) (WorkspaceAi, error) {
-	row := q.db.QueryRowContext(ctx, getWorkspaceAI, workspaceID)
-	var i WorkspaceAi
-	err := row.Scan(
-		&i.WorkspaceID,
-		&i.Provider,
-		&i.Model,
-		&i.Credentials,
-		&i.KeyHint,
-		&i.UpdatedBy,
-		&i.UpdatedAt,
-	)
-	return i, err
+func (q *Queries) GetWorkspaceDesignBrand(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getWorkspaceDesignBrand, id)
+	var design_brand string
+	err := row.Scan(&design_brand)
+	return design_brand, err
 }
 
 const listMediaProjects = `-- name: ListMediaProjects :many
-SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at FROM media_projects
+SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at, page_ids FROM media_projects
 WHERE workspace_id = ?1
   AND (CAST(?2 AS TEXT) = '' OR output_id = ?2 OR instr(source_ids, '"' || ?2 || '"') > 0)
 ORDER BY updated_at DESC LIMIT 100
@@ -184,6 +167,7 @@ func (q *Queries) ListMediaProjects(ctx context.Context, arg ListMediaProjectsPa
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PageIds,
 		); err != nil {
 			return nil, err
 		}
@@ -241,15 +225,16 @@ func (q *Queries) RepointDraftMedia(ctx context.Context, arg RepointDraftMediaPa
 }
 
 const updateMediaProject = `-- name: UpdateMediaProject :execrows
-UPDATE media_projects SET name = ?1, source_ids = ?2, output_id = ?3, storage_name = ?4,
-  size_bytes = ?5, updated_at = ?6
-WHERE workspace_id = ?7 AND id = ?8
+UPDATE media_projects SET name = ?1, source_ids = ?2, output_id = ?3, page_ids = ?4, storage_name = ?5,
+  size_bytes = ?6, updated_at = ?7
+WHERE workspace_id = ?8 AND id = ?9
 `
 
 type UpdateMediaProjectParams struct {
 	Name        string `json:"name"`
 	SourceIds   string `json:"source_ids"`
 	OutputID    string `json:"output_id"`
+	PageIds     string `json:"page_ids"`
 	StorageName string `json:"storage_name"`
 	SizeBytes   int64  `json:"size_bytes"`
 	UpdatedAt   string `json:"updated_at"`
@@ -262,6 +247,7 @@ func (q *Queries) UpdateMediaProject(ctx context.Context, arg UpdateMediaProject
 		arg.Name,
 		arg.SourceIds,
 		arg.OutputID,
+		arg.PageIds,
 		arg.StorageName,
 		arg.SizeBytes,
 		arg.UpdatedAt,
@@ -274,33 +260,17 @@ func (q *Queries) UpdateMediaProject(ctx context.Context, arg UpdateMediaProject
 	return result.RowsAffected()
 }
 
-const upsertWorkspaceAI = `-- name: UpsertWorkspaceAI :exec
-INSERT INTO workspace_ai (workspace_id, provider, model, credentials, key_hint, updated_by, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT (workspace_id) DO UPDATE SET provider = excluded.provider, model = excluded.model,
-  credentials = excluded.credentials, key_hint = excluded.key_hint, updated_by = excluded.updated_by,
-  updated_at = excluded.updated_at
+const updateWorkspaceDesignBrand = `-- name: UpdateWorkspaceDesignBrand :exec
+UPDATE workspaces SET design_brand = ?, updated_at = ? WHERE id = ?
 `
 
-type UpsertWorkspaceAIParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	Provider    string `json:"provider"`
-	Model       string `json:"model"`
-	Credentials string `json:"credentials"`
-	KeyHint     string `json:"key_hint"`
-	UpdatedBy   string `json:"updated_by"`
+type UpdateWorkspaceDesignBrandParams struct {
+	DesignBrand string `json:"design_brand"`
 	UpdatedAt   string `json:"updated_at"`
+	ID          string `json:"id"`
 }
 
-func (q *Queries) UpsertWorkspaceAI(ctx context.Context, arg UpsertWorkspaceAIParams) error {
-	_, err := q.db.ExecContext(ctx, upsertWorkspaceAI,
-		arg.WorkspaceID,
-		arg.Provider,
-		arg.Model,
-		arg.Credentials,
-		arg.KeyHint,
-		arg.UpdatedBy,
-		arg.UpdatedAt,
-	)
+func (q *Queries) UpdateWorkspaceDesignBrand(ctx context.Context, arg UpdateWorkspaceDesignBrandParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspaceDesignBrand, arg.DesignBrand, arg.UpdatedAt, arg.ID)
 	return err
 }

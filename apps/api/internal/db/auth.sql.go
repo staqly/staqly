@@ -222,7 +222,7 @@ func (q *Queries) GetSessionByHash(ctx context.Context, tokenHash string) (Sessi
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
-SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone, logo FROM workspaces WHERE id = ?
+SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone, logo, design_brand FROM workspaces WHERE id = ?
 `
 
 func (q *Queries) GetWorkspace(ctx context.Context, id string) (Workspace, error) {
@@ -245,12 +245,13 @@ func (q *Queries) GetWorkspace(ctx context.Context, id string) (Workspace, error
 		&i.Entitlements,
 		&i.Timezone,
 		&i.Logo,
+		&i.DesignBrand,
 	)
 	return i, err
 }
 
 const getWorkspaceByRecoveryVerifier = `-- name: GetWorkspaceByRecoveryVerifier :one
-SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone, logo FROM workspaces WHERE recovery_verifier = ?
+SELECT id, name, recovery_verifier, recovery_rotated_at, created_at, updated_at, "plan", plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status, processing_timeout_seconds, onboarded_at, entitlements, timezone, logo, design_brand FROM workspaces WHERE recovery_verifier = ?
 `
 
 func (q *Queries) GetWorkspaceByRecoveryVerifier(ctx context.Context, recoveryVerifier string) (Workspace, error) {
@@ -273,6 +274,7 @@ func (q *Queries) GetWorkspaceByRecoveryVerifier(ctx context.Context, recoveryVe
 		&i.Entitlements,
 		&i.Timezone,
 		&i.Logo,
+		&i.DesignBrand,
 	)
 	return i, err
 }

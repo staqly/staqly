@@ -1,6 +1,8 @@
 // A loopback HTTP server the seeded webhooks and alerts talk to: /ok answers
 // 200, /fail 500, /slow never answers in time, /posts answers an empty posts
 // list for a schedule's endpoint source, anything else (ntfy pushes) 200.
+// /fal/... plays fal.ai's queue API for the local server's AI tools (AI_FAL_BASE_URL): every request completes
+// at once with a small picture (nothing billable is ever called).
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
@@ -10,8 +12,46 @@ export interface Receiver {
   close: () => Promise<void>
 }
 
+// A 4 x 3 PNG: what the fake AI makes.
+const AI_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGM4YVMBRww4OQBfThHR5zkcVQAAAABJRU5ErkJggg==',
+  'base64',
+)
+
+export const FAL_E2E_KEY = 'fal-e2e-key-0123456789'
+
+function json(v: unknown, status = 200) {
+  return { status, type: 'application/json', body: JSON.stringify(v) }
+}
+
+function fakeFal(base: string, method: string, path: string): { status: number; type: string; body: string | Buffer } {
+  if (path === '/fal/files/out.png') {
+    return { status: 200, type: 'image/png', body: AI_PNG }
+  }
+
+  const parts = path.split('/').filter(Boolean) // fal, owner, app, ...
+  const at = parts.indexOf('requests')
+
+  if (at < 0 && method === 'POST') {
+    const app = `${base}/fal/${parts[1]}/${parts[2]}/requests/req-1`
+
+    return json({ request_id: 'req-1', status_url: `${app}/status`, response_url: app, cancel_url: `${app}/cancel` })
+  }
+
+  if (path.endsWith('/status')) {
+    return json({ status: 'COMPLETED' })
+  }
+
+  if (path.endsWith('/cancel')) {
+    return json({ status: 'OK' })
+  }
+
+  return json({ images: [{ url: `${base}/fal/files/out.png`, width: 4, height: 3 }], has_nsfw_concepts: [false] })
+}
+
 export async function startReceiver(port = 0): Promise<Receiver> {
   const hits: Receiver['hits'] = []
+  let base = ''
   const server: Server = createServer((req, res) => {
     let body = ''
 
@@ -21,7 +61,14 @@ export async function startReceiver(port = 0): Promise<Receiver> {
 
       hits.push({ path, body })
 
-      if (path.startsWith('/fail')) {
+      if (path.startsWith('/fal/')) {
+        const out =
+          req.headers.authorization === `Key ${FAL_E2E_KEY}` || path.startsWith('/fal/files/')
+            ? fakeFal(base, req.method ?? 'GET', path)
+            : { status: 401, type: 'application/json', body: '{"detail":"Invalid key"}' }
+
+        res.writeHead(out.status, { 'Content-Type': out.type }).end(out.body)
+      } else if (path.startsWith('/fail')) {
         res.writeHead(500, { 'Content-Type': 'text/plain' }).end('receiver says no')
       } else if (path.startsWith('/slow')) {
         setTimeout(() => res.writeHead(200).end('late'), 30_000)
@@ -35,6 +82,7 @@ export async function startReceiver(port = 0): Promise<Receiver> {
 
   await new Promise<void>((r) => server.listen(port, '127.0.0.1', r))
   port = (server.address() as AddressInfo).port
+  base = `http://127.0.0.1:${port}`
 
   return {
     url: `http://127.0.0.1:${port}`,

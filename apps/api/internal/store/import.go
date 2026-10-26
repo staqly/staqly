@@ -17,9 +17,9 @@ var importOrder = []string{
 	"email_codes", "workspace_members", "workspace_invitations", "api_keys", "sessions", "collections",
 	"media_folders", "media", "media_projects", "events", "webhooks", "webhook_deliveries", "idempotency_keys",
 	"usage_counters", "usage_events", "credit_grants", "device_links", "notification_channels",
-	"notification_outbox", "workspace_exports", "workspace_ai", "stripe_events", "agents", "channel_groups",
+	"notification_outbox", "workspace_exports", "stripe_events", "agents", "channel_groups",
 	"channels", "provider_apps", "posts", "post_targets", "preview_links", "post_comments", "schedules", "jobs",
-	"job_requeues", "channel_links", "pending_connections",
+	"job_requeues", "channel_links", "pending_connections", "ai_jobs",
 }
 
 // ImportReport is how many rows each table received; NULReplaced counts text values whose NUL characters

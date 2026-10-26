@@ -76,7 +76,11 @@ export type JobStats = Schemas['JobStats']
 export type Media = Schemas['Media']
 export type MediaProject = Schemas['MediaProject']
 export type AIStatus = Schemas['AIStatus']
+export type AIOperation = Schemas['AIOperation']
+export type AIJob = Schemas['AIJob']
+export type AIOperationId = AIOperation['id']
 export type StockPhoto = Schemas['StockPhoto']
+export type DesignBrand = Schemas['DesignBrand']
 export type StockPage = Schemas['StockPage']
 export type ImageRules = Schemas['ImageRules']
 export type MediaLibraryItem = Schemas['MediaLibraryItem']
@@ -345,6 +349,11 @@ export function eventsExportUrl(query: EventExportQuery) {
   return `${API_PREFIX}/v1/events/export${buildQuery(query)}`
 }
 
+/** The AI job's result for its preview (same origin: the session cookie authenticates it). */
+export function aiResultUrl(jobId: string) {
+  return `${API_PREFIX}/v1/ai/jobs/${encodeURIComponent(jobId)}/result`
+}
+
 export function mediaUrl(mediaId: string, opts?: { download?: boolean }) {
   return `${API_PREFIX}/v1/media/${encodeURIComponent(mediaId)}${opts?.download ? '?download=1' : ''}`
 }
@@ -368,8 +377,10 @@ interface RequestOptions {
   public?: boolean
   /** Let the request finish after the page is gone (an approval sent while the tab closes or reloads). */
   keepalive?: boolean
-  /** Answer the body as a Blob (files, the design editor's AI pictures and projects). */
+  /** Answer the body as a Blob (files and the design editor's projects). */
   blob?: boolean
+  /** Extra request headers (Idempotency-Key). */
+  headers?: Record<string, string>
 }
 
 async function parseBody(res: Response): Promise<unknown> {
@@ -506,7 +517,7 @@ function readSignal(signal: AbortSignal | undefined): AbortSignal | undefined {
 
 export async function request<T>(path: string, opts: RequestOptions = {}, retried = false): Promise<T> {
   const method = opts.method ?? 'GET'
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers }
   let body: BodyInit | undefined
 
   if (opts.form) {
@@ -788,13 +799,17 @@ export const api = {
   mediaProjectFile: (id: string) => request<Blob>(`/v1/media-projects/${encodeURIComponent(id)}/file`, { blob: true }),
   mediaProjects: (media?: string) =>
     request<{ data: MediaProject[] }>('/v1/media-projects', { query: { media: media || undefined } }),
-  saveMediaProject: (body: { id?: string; name: string; source_ids: string[]; output_id?: string }, file: Blob) => {
+  saveMediaProject: (
+    body: { id?: string; name: string; source_ids: string[]; output_id?: string; page_ids?: string[] },
+    file: Blob,
+  ) => {
     // Fields before the file: the server reads them first.
     const form = new FormData()
 
     form.append('name', body.name)
     form.append('source_ids', body.source_ids.join(','))
     form.append('output_id', body.output_id ?? '')
+    form.append('page_ids', (body.page_ids ?? []).join(','))
     form.append('file', file, 'design.json')
 
     return body.id
@@ -804,20 +819,33 @@ export const api = {
   stockPhotos: (query: string, page = 1, signal?: AbortSignal) =>
     request<StockPage>('/v1/stock/photos', { query: { query: query || undefined, page }, signal }),
   stockPhotoUsed: (id: string) => request<void>(`/v1/stock/photos/${encodeURIComponent(id)}/use`, { method: 'POST' }),
+  designBrand: () => request<DesignBrand>('/v1/design/brand'),
+  setDesignBrand: (b: DesignBrand) => request<DesignBrand>('/v1/design/brand', { method: 'PUT', json: b }),
   ai: () => request<AIStatus>('/v1/ai'),
-  setAI: (body: { model?: string; api_key?: string }) => request<AIStatus>('/v1/ai', { method: 'PUT', json: body }),
-  deleteAI: () => request<void>('/v1/ai', { method: 'DELETE' }),
-  aiImage: (
-    op: 'generate' | 'edit',
-    body: { prompt: string; size?: string; image?: Blob; mask?: Blob },
-    signal?: AbortSignal,
+  /**
+   * Starts an AI request: the settings first, then the files (the server reads them in that order). The key makes a
+   * repeated send (a retry after a lost answer) answer the same job instead of paying twice.
+   */
+  startAiJob: (
+    body: {
+      operation: AIOperationId
+      prompt?: string
+      fields?: Record<string, number | string>
+      image?: Blob
+      mask?: Blob
+    },
+    idempotencyKey: string,
   ) => {
     const form = new FormData()
 
-    form.append('prompt', body.prompt)
+    form.append('operation', body.operation)
 
-    if (body.size) {
-      form.append('size', body.size)
+    if (body.prompt) {
+      form.append('prompt', body.prompt)
+    }
+
+    for (const [k, v] of Object.entries(body.fields ?? {})) {
+      form.append(k, String(v))
     }
 
     if (body.image) {
@@ -828,8 +856,11 @@ export const api = {
       form.append('mask', body.mask, 'mask.png')
     }
 
-    return request<Blob>(`/v1/ai/images/${op}`, { method: 'POST', form, signal, blob: true })
+    return request<AIJob>('/v1/ai/jobs', { method: 'POST', form, headers: { 'Idempotency-Key': idempotencyKey } })
   },
+  aiJob: (id: string) => request<AIJob>(`/v1/ai/jobs/${encodeURIComponent(id)}`),
+  acceptAiJob: (id: string) => request<Media>(`/v1/ai/jobs/${encodeURIComponent(id)}/accept`, { method: 'POST' }),
+  discardAiJob: (id: string) => request<void>(`/v1/ai/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   mediaFolders: () => request<MediaFolders>('/v1/media-folders'),
   createMediaFolder: (body: { name: string; parent_id?: string }) =>
     request<MediaFolder>('/v1/media-folders', { method: 'POST', json: body }),

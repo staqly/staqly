@@ -2853,39 +2853,117 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Whether the design editor's AI tools work, with which model (media:read)
-         * @description The AI tools run on the workspace's own OpenAI key; staqly never pays for these calls. The key is never returned, only its last four characters.
+         * Which AI tools work on this server, and the workspace's AI usage this month (media:read)
+         * @description The AI tools run on the server's own provider accounts: fal.ai (AI_FAL_KEY) first, Higgsfield (AI_HIGGSFIELD_API_KEY) as the fallback for the operations it does the same way. Without a key, configured is false, operations is empty and the editor hides its AI tools. Nothing here is secret: no key is ever sent.
          */
         get: operations["getAI"];
-        /**
-         * Set the workspace's OpenAI key and image model (admin)
-         * @description The key is checked with OpenAI (listing the model, which costs nothing), then stored encrypted. Without api_key, only the model changes.
-         */
-        put: operations["setAI"];
+        put?: never;
         post?: never;
-        /** Forget the workspace's AI key (admin) */
-        delete: operations["deleteAI"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/ai/images/{op}": {
+    "/v1/design/brand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The workspace's brand kit for the design editor (media:read) */
+        get: operations["getDesignBrand"];
+        /** Replace the workspace's brand kit (media:write) */
+        put: operations["setDesignBrand"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ai/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an AI request (media:write)
+         * @description Queues one AI operation (GET /v1/ai lists the ones this server offers); poll GET /v1/ai/jobs/{id} until it has succeeded, failed or was cancelled. Send the settings before the files. A repeated Idempotency-Key, or the same request from the same person while it still runs, answers 200 with that earlier job instead of starting another. At most 30 requests per 10 minutes and 4 running at once per workspace (429); a request that would pass the workspace's monthly AI limit is refused with 402 ai_limit_reached.
+         */
+        post: operations["createAIJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ai/jobs/{id}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                op: "generate" | "edit";
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        /** An AI request's state (media:read) */
+        get: operations["getAIJob"];
+        put?: never;
+        post?: never;
+        /**
+         * Discard an AI request (media:write)
+         * @description Cancels a request that still runs (the provider is asked to drop it; one it already started may still be charged) and deletes its temporary files. A result already kept stays in the library.
+         */
+        delete: operations["discardAIJob"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ai/jobs/{id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The made picture or video, for the preview (media:read)
+         * @description Kept for a day, until the result is kept or discarded.
+         */
+        get: operations["getAIJobResult"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ai/jobs/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
         /**
-         * Make a picture with the workspace's AI key (media:write)
-         * @description generate makes a picture from a prompt; edit changes the image by the prompt, only inside the mask's transparent pixels when a mask is sent. Answers the picture; nothing is stored. At most 30 pictures per 10 minutes per workspace; the provider's own limits and refusals come back as 429 or 422.
+         * Keep the result in the media library (media:write)
+         * @description The result becomes a library file (plan limits apply as for an upload). Accepting again answers the same file.
          */
-        post: operations["aiImage"];
+        post: operations["acceptAIJob"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4090,6 +4168,8 @@ export interface components {
             source_ids: string[];
             /** @description The file it last saved; empty until saved */
             output_id: string;
+            /** @description The files its pages saved as, in page order (a carousel); output_id is the first */
+            page_ids: string[];
             size_bytes: number;
             /** Format: date-time */
             created_at: string;
@@ -4102,6 +4182,8 @@ export interface components {
             /** @description Comma-separated media ids */
             source_ids?: string;
             output_id?: string;
+            /** @description Comma-separated media ids of the saved pages, in order */
+            page_ids?: string;
             /**
              * Format: binary
              * @description The design: JSON with version 1, width, height and pages
@@ -4127,27 +4209,83 @@ export interface components {
             data: components["schemas"]["StockPhoto"][];
         };
         AIStatus: {
+            /** @description At least one AI operation works; false hides the AI tools */
             configured: boolean;
-            /** @enum {string} */
-            provider: "openai";
-            model: string;
-            /** @description The key's last four characters, e.g. ...a1b2 */
-            key_hint: string;
-            capabilities: {
-                generate: boolean;
-                edit: boolean;
-                /** @description Change only a marked area */
-                inpaint: boolean;
-                /** @description Fill new space around a picture */
-                expand: boolean;
+            /** @description The configured providers, the primary first */
+            providers: ("fal" | "higgsfield")[];
+            operations: components["schemas"]["AIOperation"][];
+            usage: {
+                /** @description The month (UTC), YYYY-MM */
+                period: string;
+                /** @description The workspace's estimated AI spending this month (running requests count with their estimate) */
+                used_usd: number;
+                /** @description The monthly limit (AI_MONTHLY_LIMIT_USD); null: none */
+                limit_usd: number | null;
             };
-            /** @description Why AI is off or limited, in plain words; empty when everything works */
-            reason: string;
-            models: string[];
-            /** @description The caller may set or remove the key (admin) */
-            can_manage: boolean;
+        };
+        /** @description An AI operation this server offers, what it takes and who runs it */
+        AIOperation: {
+            /** @enum {string} */
+            id: "generate" | "edit" | "inpaint" | "erase" | "expand" | "remove_background" | "replace_background" | "upscale" | "enhance" | "text_to_video" | "image_to_video";
+            /**
+             * @description What it makes
+             * @enum {string}
+             */
+            kind: "image" | "video";
+            /** @enum {string} */
+            prompt: "required" | "optional" | "none";
+            /** @description Needs a picture */
+            image: boolean;
+            /** @description Needs a mask (white: the area to change) */
+            mask: boolean;
+            /** @enum {string} */
+            provider: "fal" | "higgsfield";
+            /** @description The provider's model id */
+            model: string;
+            /** @description The provider that takes over when the first does not take a request; empty: none */
+            fallback: string;
+        };
+        /** @description One AI request */
+        AIJob: {
+            id: string;
+            operation: string;
+            /** @enum {string} */
+            kind: "image" | "video";
+            /** @enum {string} */
+            status: "queued" | "running" | "succeeded" | "failed" | "canceled";
+            /** @description The provider that runs it; empty until it is sent */
+            provider: string;
+            model: string;
+            /** @description The provider that did not take it first; empty: none */
+            fallback_from: string;
+            error: null | {
+                /** @description ai_refused, ai_unavailable, ai_failed, ai_status_unknown, ai_timeout or canceled */
+                code: string;
+                message: string;
+            };
+            result: null | {
+                mime_type: string;
+                /** @description 0 for a video */
+                width: number;
+                height: number;
+            };
+            /** @description The library file it was kept as; empty until accepted */
+            media_id: string;
+            /** @description Estimated from the catalog's list prices; 0 when nothing was charged */
+            estimated_cost_usd: number;
+            duration_ms: number;
             /** Format: date-time */
-            updated_at?: string;
+            created_at: string;
+            /** @description Empty while it runs */
+            finished_at: string;
+        };
+        /** @description The design editor's brand kit, shared by the workspace */
+        DesignBrand: {
+            colors: string[];
+            /** @description Names from the editor's font list */
+            fonts: string[];
+            /** @description Media ids of pictures in the library */
+            logos: string[];
         };
         /** @description What a platform refuses in a picture (its API's documented limits); recommended shapes are not rules */
         ImageRules: {
@@ -11389,48 +11527,7 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
-    setAI: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    provider?: "openai";
-                    /**
-                     * @description Defaults to gpt-image-1
-                     * @enum {string}
-                     */
-                    model?: "gpt-image-1" | "gpt-image-1-mini" | "dall-e-3" | "dall-e-2";
-                    /** @description An OpenAI API key (sk-...) */
-                    api_key?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description AI status */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AIStatus"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
-            429: components["responses"]["RateLimited"];
-            502: components["responses"]["BadGateway"];
-        };
-    };
-    deleteAI: {
+    getDesignBrand: {
         parameters: {
             query?: never;
             header?: never;
@@ -11439,7 +11536,167 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Forgotten */
+            /** @description Brand kit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignBrand"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    setDesignBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesignBrand"];
+            };
+        };
+        responses: {
+            /** @description Brand kit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignBrand"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    createAIJob: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @enum {string} */
+                    operation: "generate" | "edit" | "inpaint" | "erase" | "expand" | "remove_background" | "replace_background" | "upscale" | "enhance" | "text_to_video" | "image_to_video";
+                    /** @description Required or optional as the operation's prompt says; ignored when it is none */
+                    prompt?: string;
+                    /** @description generate: the picture's width (default 1024, rounded down to a multiple of 16) */
+                    width?: number;
+                    height?: number;
+                    /**
+                     * @description Videos: seconds (default 5)
+                     * @enum {integer}
+                     */
+                    duration?: 5 | 10;
+                    /**
+                     * @description text_to_video (default 16:9)
+                     * @enum {string}
+                     */
+                    aspect_ratio?: "16:9" | "9:16" | "1:1";
+                    /** @description expand: the new size */
+                    canvas_width?: number;
+                    canvas_height?: number;
+                    /** @description expand: where the picture sits in the new size */
+                    image_x?: number;
+                    image_y?: number;
+                    /** @description expand: the picture's size there (default its own) */
+                    place_width?: number;
+                    place_height?: number;
+                    /**
+                     * Format: binary
+                     * @description PNG, JPEG or WebP, at most 20 MB and 4096 px a side (PNG for upscale)
+                     */
+                    image?: string;
+                    /**
+                     * Format: binary
+                     * @description inpaint, erase: a PNG of the picture's size; white marks the area to change
+                     */
+                    mask?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The earlier job that answers this request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIJob"];
+                };
+            };
+            /** @description The queued job */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIJob"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getAIJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    discardAIJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discarded */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -11448,56 +11705,66 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
         };
     };
-    aiImage: {
+    getAIJobResult: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                op: "generate" | "edit";
+                id: components["parameters"]["id"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "multipart/form-data": {
-                    prompt: string;
-                    /** @description The model's sizes, e.g. 1024x1024, 1536x1024, 1024x1536 (gpt-image-1) */
-                    size?: string;
-                    /**
-                     * Format: binary
-                     * @description Required for edit
-                     */
-                    image?: string;
-                    /**
-                     * Format: binary
-                     * @description PNG; transparent pixels mark what may change
-                     */
-                    mask?: string;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description The picture */
+            /** @description The file */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "image/png": string;
+                    "image/jpeg": string;
+                    "image/webp": string;
+                    "video/mp4": string;
                 };
             };
-            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    acceptAIJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The library file */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
-            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
-            502: components["responses"]["BadGateway"];
         };
     };
     listStockPhotos: {

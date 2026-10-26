@@ -46,7 +46,7 @@ func (a jobArgs) Kind() string { return a.kind }
 // jobKinds are the kinds the workers run (execJob). testJobKindNames are registered too so the queue's
 // own tests can run jobs of their making (testJobKinds); a missing one fails like an unknown kind.
 var (
-	jobKinds         = []string{"publish_post", "publish_target", "target_timeout", "run_schedule", "refresh_channel", "repeat_post", "publish_reply", "repost", "notify_people", "notify_person", "sync_seats", "sync_entitlements"}
+	jobKinds         = []string{"publish_post", "publish_target", "target_timeout", "run_schedule", "refresh_channel", "repeat_post", "publish_reply", "repost", "notify_people", "notify_person", "sync_seats", "sync_entitlements", "ai_run"}
 	testJobKindNames = []string{"test_slow", "test_fast", "test_fail", "test_budget", "test_count"}
 )
 
@@ -521,6 +521,7 @@ func (s *Service) RunJobs(ctx context.Context) {
 				s.logger(ctx).Info("job requeues swept", "keys", n)
 			}
 			s.settleRescuedJobs(ctx)
+			s.sweepAIFiles(ctx)
 		}
 	}
 }

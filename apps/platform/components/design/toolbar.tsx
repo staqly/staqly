@@ -2,6 +2,17 @@
 
 import {
   AlignCenter,
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalDistributeCenter,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalDistributeCenter,
+  Group,
+  LayoutGrid,
+  Ungroup,
   AlignLeft,
   AlignRight,
   ArrowDownToLine,
@@ -12,6 +23,7 @@ import {
   Crop,
   Eraser,
   FlipHorizontal2,
+  Files,
   FlipVertical2,
   Italic,
   Loader2,
@@ -21,20 +33,36 @@ import {
   Trash2,
   Underline,
   Unlock,
+  WandSparkles,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { NativeSelect } from '@/components/common/native-select'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Toggle } from '@/components/ui/toggle'
 import { api, errorMessage, type Media } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-import { NO_FILTERS, type El, type ImageEl, type MaskKind, type ShapeEl, type TextEl } from './doc'
+import {
+  align,
+  bounds,
+  distribute,
+  iconSrc,
+  NO_FILTERS,
+  uid,
+  type AlignTo,
+  type El,
+  type Fade,
+  type ImageEl,
+  type MaskKind,
+  type ShapeEl,
+  type TextEl,
+} from './doc'
 import { FONTS } from './fonts'
-import { ColorInput, swapPicture, type PanelCtx } from './panels'
+import { ColorInput, css, Elapsed, FillPicker, MoveToPageItems, swapPicture, type PanelCtx } from './panels'
 
 function Slider({
   label,
@@ -136,12 +164,42 @@ export function Toolbar({
   }
 
   const locked = els.every((e) => e.locked)
+  const grouped = els.some((e) => e.group)
+
+  // Several: to the box around them; one: to the page.
+  const lineUp = (to: AlignTo) =>
+    update((p) => {
+      const picked = p.elements.filter((e) => selected.includes(e.id) && !e.locked)
+
+      align(picked, to, els.length > 1 ? bounds(els) : { x: 0, y: 0, ...ctx.store.design })
+    })
+  const spread = (axis: 'x' | 'y') =>
+    update((p) =>
+      distribute(
+        p.elements.filter((e) => selected.includes(e.id)),
+        axis,
+      ),
+    )
 
   return (
     <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto px-2 [scrollbar-width:thin]">
       {el?.type === 'text' && <TextTools el={el} set={set} />}
       {el?.type === 'shape' && <ShapeTools el={el} set={set} />}
-      {el?.type === 'image' && (
+      {el?.type === 'image' && el.icon && (
+        <ColorInput
+          label="Icon colour"
+          value={el.icon.color}
+          onChange={(c) =>
+            set<ImageEl>((x) => {
+              if (x.icon) {
+                x.icon.color = c
+                x.src = iconSrc(x.icon.svg, c)
+              }
+            }, 'icon-colour')
+          }
+        />
+      )}
+      {el?.type === 'image' && !el.icon && (
         <ImageTools
           el={el}
           set={set}
@@ -152,6 +210,9 @@ export function Toolbar({
       )}
       {el && <Sep />}
       <Pop label="Look" icon={<SlidersHorizontal />}>
+        {el && fadeable(el) && (
+          <FadeControls fade={el.fade} onChange={(f, key) => set((x) => void (x.fade = f), key)} />
+        )}
         <Slider
           label="Transparency"
           value={Math.round((1 - (el?.opacity ?? 1)) * 100)}
@@ -211,6 +272,59 @@ export function Toolbar({
           </>
         )}
       </Pop>
+      <Pop label="Arrange" icon={<LayoutGrid />}>
+        <span className="text-xs text-muted-foreground">
+          {els.length > 1 ? 'Line up the selection' : 'Line up on the page'}
+        </span>
+        <div className="grid grid-cols-6 gap-1">
+          {ALIGN.map((a) => (
+            <Button
+              key={a.to}
+              variant="outline"
+              size="icon-sm"
+              aria-label={a.label}
+              tooltip={a.label}
+              onClick={() => lineUp(a.to)}
+            >
+              {a.icon}
+            </Button>
+          ))}
+        </div>
+        {els.length > 2 && (
+          <div className="grid grid-cols-2 gap-1">
+            <Button variant="outline" size="sm" onClick={() => spread('x')}>
+              <AlignHorizontalDistributeCenter /> Space across
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => spread('y')}>
+              <AlignVerticalDistributeCenter /> Space down
+            </Button>
+          </div>
+        )}
+      </Pop>
+      {(els.length > 1 || grouped) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          title={grouped ? 'Ungroup (Ctrl+Shift+G)' : 'Group (Ctrl+G)'}
+          onClick={() => {
+            const id = uid()
+
+            set((e) => void (e.group = grouped ? undefined : id))
+          }}
+        >
+          {grouped ? <Ungroup /> : <Group />} <span className="max-md:sr-only">{grouped ? 'Ungroup' : 'Group'}</span>
+        </Button>
+      )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" title="Move to another page">
+            <Files /> <span className="max-md:sr-only">Move to page</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <MoveToPageItems ctx={ctx} ids={selected} />
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Sep />
       <Button
         variant="ghost"
@@ -253,6 +367,81 @@ export function Toolbar({
   )
 }
 
+/** One-click looks for a photo: the Adjust sliders set for it. */
+const LOOKS: { name: string; filters: ImageEl['filters'] }[] = [
+  { name: 'Original', filters: { ...NO_FILTERS } },
+  { name: 'Vivid', filters: { ...NO_FILTERS, saturation: 0.6, contrast: 12 } },
+  { name: 'Bright', filters: { ...NO_FILTERS, brightness: 0.1, contrast: 5 } },
+  { name: 'Dramatic', filters: { ...NO_FILTERS, contrast: 35, saturation: -0.3, brightness: -0.05 } },
+  { name: 'Mono', filters: { ...NO_FILTERS, grayscale: true, contrast: 15 } },
+  { name: 'Muted', filters: { ...NO_FILTERS, saturation: -0.8, brightness: 0.04 } },
+]
+
+/** A CSS look close to the Konva filters, for the previews. */
+const cssFilter = (f: ImageEl['filters']) =>
+  `brightness(${1 + f.brightness}) contrast(${1 + f.contrast / 100}) saturate(${Math.max(0, 1 + f.saturation / 2)}) blur(${f.blur / 10}px)${f.grayscale ? ' grayscale(1)' : ''}`
+
+const ALIGN: { to: AlignTo; label: string; icon: ReactNode }[] = [
+  { to: 'left', label: 'Align left', icon: <AlignStartVertical /> },
+  { to: 'center', label: 'Align centres', icon: <AlignCenterVertical /> },
+  { to: 'right', label: 'Align right', icon: <AlignEndVertical /> },
+  { to: 'top', label: 'Align top', icon: <AlignStartHorizontal /> },
+  { to: 'middle', label: 'Align middles', icon: <AlignCenterHorizontal /> },
+  { to: 'bottom', label: 'Align bottom', icon: <AlignEndHorizontal /> },
+]
+
+/** Pictures and filled shapes fade; text and lines don't. */
+const fadeable = (e: El) => e.type === 'image' || (e.type === 'shape' && e.shape !== 'line' && e.shape !== 'arrow')
+
+const FADE_SIDES: { side: Fade['side']; label: string; css: string }[] = [
+  { side: 'left', label: 'From the left', css: 'to right' },
+  { side: 'right', label: 'From the right', css: 'to left' },
+  { side: 'top', label: 'From the top', css: 'to bottom' },
+  { side: 'bottom', label: 'From the bottom', css: 'to top' },
+]
+
+/** Fading out towards one side: off, or which side and how far in. */
+function FadeControls({ fade, onChange }: { fade?: Fade; onChange: (f: Fade | undefined, key?: string) => void }) {
+  return (
+    <div className="flex flex-col gap-2 border-b pb-3">
+      <span className="text-xs text-muted-foreground">Fade to see-through</span>
+      <div className="grid grid-cols-5 gap-1" role="group" aria-label="Fade">
+        <button
+          type="button"
+          aria-pressed={!fade}
+          title="No fade"
+          onClick={() => onChange(undefined)}
+          className="flex h-9 items-center justify-center rounded-md border text-xs aria-pressed:ring-2 aria-pressed:ring-brand"
+        >
+          None
+        </button>
+        {FADE_SIDES.map((f) => (
+          <button
+            key={f.side}
+            type="button"
+            aria-label={f.label}
+            title={f.label}
+            aria-pressed={fade?.side === f.side}
+            onClick={() => onChange({ side: f.side, size: fade?.size ?? 0.5 })}
+            className="h-9 rounded-md border aria-pressed:ring-2 aria-pressed:ring-brand"
+            style={{ background: `linear-gradient(${f.css}, transparent, var(--foreground))` }}
+          />
+        ))}
+      </div>
+      {fade && (
+        <Slider
+          label="Fade length"
+          value={Math.round(fade.size * 100)}
+          min={5}
+          max={100}
+          format={(v) => `${v}%`}
+          onChange={(v) => onChange({ ...fade, size: v / 100 }, 'fade')}
+        />
+      )}
+    </div>
+  )
+}
+
 type Setter = <T extends El>(fn: (e: T) => void, key?: string) => void
 
 function TextTools({ el, set }: { el: TextEl; set: Setter }) {
@@ -283,6 +472,55 @@ function TextTools({ el, set }: { el: TextEl; set: Setter }) {
         className="h-8 w-16 shrink-0 rounded-lg border bg-transparent px-2 text-sm tabular-nums pointer-coarse:h-11"
       />
       <ColorInput label="Text colour" value={el.fill} onChange={(c) => st((t) => void (t.fill = c), 'fill')} />
+      <Pop label="Effects" icon={<WandSparkles />}>
+        <Slider
+          label="Curve"
+          value={el.curve ?? 0}
+          min={-100}
+          max={100}
+          format={(v) => (v ? `${v > 0 ? 'Arch' : 'Smile'} ${Math.abs(v)}` : 'Straight')}
+          onChange={(v) => st((t) => void (t.curve = v || undefined), 'curve')}
+        />
+        <label className="flex items-center justify-between text-sm">
+          Gradient letters
+          <input
+            type="checkbox"
+            className="accent-[var(--brand)]"
+            checked={!!el.gradient}
+            onChange={(e) =>
+              st(
+                (t) =>
+                  void (t.gradient = e.target.checked
+                    ? { kind: 'gradient', from: t.fill, to: '#db2777', angle: 0 }
+                    : undefined),
+              )
+            }
+          />
+        </label>
+        {el.gradient && (
+          <div className="flex items-center gap-2">
+            <ColorInput
+              label="First colour"
+              value={el.gradient.from}
+              onChange={(c) => st((t) => void (t.gradient!.from = c), 'tg-from')}
+            />
+            <ColorInput
+              label="Last colour"
+              value={el.gradient.to}
+              onChange={(c) => st((t) => void (t.gradient!.to = c), 'tg-to')}
+            />
+            <input
+              type="range"
+              aria-label="Gradient angle"
+              min={0}
+              max={360}
+              value={el.gradient.angle}
+              onChange={(e) => st((t) => void (t.gradient!.angle = +e.target.value), 'tg-angle')}
+              className="min-w-0 flex-1 accent-[var(--brand)]"
+            />
+          </div>
+        )}
+      </Pop>
       <Sep />
       <Toggle size="sm" aria-label="Bold" pressed={el.bold} onPressedChange={(v) => st((t) => void (t.bold = v))}>
         <Bold />
@@ -405,11 +643,36 @@ function ShapeTools({ el, set }: { el: ShapeEl; set: Setter }) {
 
   return (
     <>
-      <ColorInput
-        label={line ? 'Colour' : 'Fill'}
-        value={el.fill}
-        onChange={(c) => st((s) => void (s.fill = c), 'fill')}
-      />
+      {line ? (
+        <ColorInput label="Colour" value={el.fill} onChange={(c) => st((s) => void (s.fill = c), 'fill')} />
+      ) : (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Fill"
+              title="Fill: a colour or a gradient"
+              className="size-8 shrink-0 rounded-md border shadow-xs pointer-coarse:size-11"
+              style={{ background: css(el.gradient ?? { kind: 'color', color: el.fill }) }}
+            />
+          </PopoverTrigger>
+          <PopoverContent className="max-h-[70vh] w-80 overflow-y-auto">
+            <FillPicker
+              value={el.gradient ?? { kind: 'color', color: el.fill }}
+              onChange={(f, key) =>
+                st((s) => {
+                  if (f.kind === 'color') {
+                    s.fill = f.color
+                    s.gradient = undefined
+                  } else {
+                    s.gradient = f
+                  }
+                }, key)
+              }
+            />
+          </PopoverContent>
+        </Popover>
+      )}
       {!line && (
         <ColorInput
           label="Border colour"
@@ -560,14 +823,38 @@ function ImageTools({
       >
         {cutting !== null ? <Loader2 className="animate-spin" /> : <Eraser />}
         <span className="max-md:sr-only">
-          {cutting === null
-            ? 'Remove background'
-            : cutting > 0 && cutting < 1
-              ? `Downloading ${Math.round(cutting * 100)}%`
-              : 'Removing...'}
+          {cutting === null ? (
+            'Remove background'
+          ) : cutting > 0 && cutting < 1 ? (
+            `Downloading the model ${Math.round(cutting * 100)}%`
+          ) : (
+            <>
+              Cutting out, <Elapsed />
+            </>
+          )}
         </span>
       </Button>
       <Pop label="Adjust" icon={<SlidersHorizontal className={cn(any && 'text-brand')} />}>
+        <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Looks">
+          {LOOKS.map((l) => (
+            <button
+              key={l.name}
+              type="button"
+              aria-pressed={JSON.stringify(f) === JSON.stringify(l.filters)}
+              onClick={() => st((i) => void (i.filters = { ...l.filters }))}
+              className="flex flex-col items-center gap-1 rounded-md border p-1 text-[11px] aria-pressed:ring-2 aria-pressed:ring-brand"
+            >
+              <img
+                src={el.src}
+                alt=""
+                draggable={false}
+                className="aspect-square w-full rounded-sm object-cover"
+                style={{ filter: cssFilter(l.filters) }}
+              />
+              {l.name}
+            </button>
+          ))}
+        </div>
         <Slider
           label="Brightness"
           value={f.brightness}

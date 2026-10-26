@@ -85,6 +85,8 @@ type MediaProject struct {
 	Name      string   `json:"name"`
 	SourceIDs []string `json:"source_ids"`
 	OutputID  string   `json:"output_id"`
+	// PageIDs are the files its pages saved as, in order (OutputID is the first); one for a single page.
+	PageIDs   []string `json:"page_ids"`
 	SizeBytes int64    `json:"size_bytes"`
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
@@ -95,6 +97,7 @@ type MediaProjectInput struct {
 	Name      string
 	SourceIDs []string
 	OutputID  string
+	PageIDs   []string
 }
 
 // designFile: the part of a design editor file the server checks (the editor reads the rest).
@@ -112,8 +115,9 @@ func projectKey(workspaceID, storageName string) string {
 
 func toMediaProject(m db.MediaProject) MediaProject {
 	out := MediaProject{ID: m.ID, Name: m.Name, OutputID: m.OutputID, SizeBytes: m.SizeBytes, CreatedAt: m.CreatedAt,
-		UpdatedAt: m.UpdatedAt, SourceIDs: []string{}}
+		UpdatedAt: m.UpdatedAt, SourceIDs: []string{}, PageIDs: []string{}}
 	_ = json.Unmarshal([]byte(m.SourceIds), &out.SourceIDs)
+	_ = json.Unmarshal([]byte(m.PageIds), &out.PageIDs)
 	return out
 }
 
@@ -124,6 +128,9 @@ func (in *MediaProjectInput) clean() error {
 	}
 	if len([]rune(in.Name)) > 200 {
 		return invalid("name", "must be at most 200 characters")
+	}
+	if len(in.PageIDs) > 20 {
+		return invalid("page_ids", "at most 20 pages")
 	}
 	if len(in.SourceIDs) > 20 {
 		return invalid("source_ids", "at most 20 files")
@@ -140,7 +147,7 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 	if err := in.clean(); err != nil {
 		return MediaProject{}, err
 	}
-	for _, mid := range append(append([]string{}, in.SourceIDs...), in.OutputID) {
+	for _, mid := range append(append(append([]string{}, in.SourceIDs...), in.PageIDs...), in.OutputID) {
 		if mid == "" {
 			continue
 		}
@@ -211,6 +218,7 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 		return MediaProject{}, fmt.Errorf("store project file: %w", err)
 	}
 	sources, _ := json.Marshal(nonNil(in.SourceIDs))
+	pages, _ := json.Marshal(nonNil(in.PageIDs))
 	now := s.now()
 	replaced := "" // the file this version takes the place of, read in the transaction (a concurrent save may have moved it)
 	if id == "" {
@@ -237,11 +245,11 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 		}
 		if prev.ID == "" {
 			return q.CreateMediaProject(ctx, db.CreateMediaProjectParams{ID: id, WorkspaceID: p.WorkspaceID, Name: in.Name,
-				SourceIds: string(sources), OutputID: in.OutputID, StorageName: storage, SizeBytes: n, CreatedBy: p.UserID,
+				SourceIds: string(sources), OutputID: in.OutputID, PageIds: string(pages), StorageName: storage, SizeBytes: n, CreatedBy: p.UserID,
 				CreatedAt: now, UpdatedAt: now})
 		}
 		rows, err := q.UpdateMediaProject(ctx, db.UpdateMediaProjectParams{Name: in.Name, SourceIds: string(sources),
-			OutputID: in.OutputID, StorageName: storage, SizeBytes: n, UpdatedAt: now, WorkspaceID: p.WorkspaceID, ID: id})
+			OutputID: in.OutputID, PageIds: string(pages), StorageName: storage, SizeBytes: n, UpdatedAt: now, WorkspaceID: p.WorkspaceID, ID: id})
 		if err == nil && rows == 0 {
 			err = notFound("project")
 		}

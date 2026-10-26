@@ -1,7 +1,19 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, FileText, Folder, Maximize2, Music, Palette, PenSquare, Trash2, Undo2 } from 'lucide-react'
+import {
+  Clapperboard,
+  Download,
+  FileText,
+  Folder,
+  Maximize2,
+  Music,
+  Palette,
+  PenSquare,
+  Trash2,
+  Undo2,
+} from 'lucide-react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -28,6 +40,8 @@ import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { useLazyDialog } from '@/hooks/use-lazy-dialog'
+import { useAiStatus } from '@/lib/ai-status'
 import { api, mediaThumbUrl, mediaUrl, type MediaLibraryItem, type MediaPatch } from '@/lib/api'
 import { formatBytes, formatDateTime, timeAgo } from '@/lib/format'
 import {
@@ -59,6 +73,10 @@ const shortId = (id: string) => (id.length > 16 ? `${id.slice(0, 8)}...${id.slic
  * A file's drawer: preview, facts and actions on top, then tabs (File, Details, Where it fits, Used in), Delete,
  * Close and Save changes at the bottom. `onOpenMedia` opens another file (the oldest copy of a duplicate).
  */
+const AiVideoDialog = dynamic(() => import('@/components/media/ai-video-dialog').then((m) => m.AiVideoDialog), {
+  ssr: false,
+})
+
 export function MediaDetail({
   item,
   onOpenChange,
@@ -128,6 +146,8 @@ function DetailForm({
   const nameError = submitted && !name.trim() ? 'Give the file a name.' : undefined
   const [picking, setPicking] = useState(false)
   const [purging, setPurging] = useState(false)
+  const animate = useLazyDialog()
+  const ai = useAiStatus()
   const kind = mediaKind(item.mime_type)
   const visual = kind === 'image' || kind === 'video'
   const trashed = !!item.deleted_at
@@ -277,11 +297,23 @@ function DetailForm({
                 <PenSquare />
               </Button>
             )}
+            {editable && kind === 'image' && ai.data?.operations.some((o) => o.id === 'image_to_video') && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Animate with AI"
+                tooltip="Animate with AI"
+                onClick={() => animate.setOpen(true)}
+              >
+                <Clapperboard />
+              </Button>
+            )}
             {editable && kind === 'image' && (
               <Button variant="ghost" size="icon-sm" aria-label="Edit" tooltip="Edit in the design editor" asChild>
-                <Link href={`/media/design?ids=${item.id}`} prefetch={false}>
+                <a href={`/media/edit?ids=${item.id}`}>
                   <Palette />
-                </Link>
+                </a>
               </Button>
             )}
             <Button variant="ghost" size="icon-sm" aria-label="Download" tooltip="Download" asChild>
@@ -292,6 +324,7 @@ function DetailForm({
           </div>
         </div>
       </SheetHeader>
+      {animate.used && <AiVideoDialog open={animate.open} onOpenChange={animate.setOpen} from={item} />}
 
       <form
         className="flex min-h-0 flex-1 flex-col"

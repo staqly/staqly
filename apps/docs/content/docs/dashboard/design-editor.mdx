@@ -1,6 +1,6 @@
 ---
 title: Design editor
-description: "Make post graphics and carousels in the browser: templates, text in self-hosted fonts, shapes, photos from your library or Unsplash with crop, shapes and background removal, AI pictures from a description, and a size for every channel."
+description: "Make post graphics and carousels in the browser: templates, text in self-hosted fonts, shapes, photos from your library or Unsplash with crop, shapes and background removal, AI tools (new pictures, edits, object removal, expanding, upscaling), and a size for every channel."
 ---
 
 The design editor makes graphics for posts: a quote card, an announcement, a story, a carousel, a YouTube
@@ -10,11 +10,10 @@ shapes, and save to **Media**. It runs in your browser.
 ## Open it
 
 - **Design** at the top of **Media** starts a new design.
-- **Edit** in a picture's drawer, or on pictures you selected in Media, opens them as a page of the first one's
-  size. A picture saved by the design editor opens as its design again, at its page, with everything editable.
+- **Edit** in a picture's drawer opens it as a page of its size; **Edit** on several pictures selected in Media
+  opens a page per picture (a carousel), in the first one's size. A picture saved by the design editor opens as its design again, at its page, with everything editable.
 - In a post, the pencil on an attached picture opens it in a new tab. Save it there and the post uses the result.
-- Links to the former photo editor (`/media/edit`) open here. Its projects can't be edited any more: their saved
-  pictures open as new designs.
+- Projects of the former photo editor can't be edited any more: their saved pictures open as new designs.
 - **Design** under a post's text opens a new design in a new tab. Save it there and the post gets the picture;
   saving again later replaces it in the post.
 
@@ -23,55 +22,132 @@ shapes, and save to **Media**. It runs in your browser.
 The left bar holds the tools:
 
 - **Templates**: ready-made designs (quote, announcement, sale, event story, tips, testimonial, YouTube
-  thumbnail) and your saved designs. A template replaces the page; **Undo** brings your page back.
-- **Text**: a heading, subheading or body text, or a styled one. Double-click a text to type in it. The bar above
+  thumbnail, launch, big number, hiring, LinkedIn post, story question, a 4-page carousel) and your saved designs.
+  A template replaces the design; **Undo** brings yours back.
+- **Brand**: the workspace's brand kit, shared by everyone who edits media: colours (a click paints the selection,
+  or the page's background when nothing is selected; they also head every colour picker), fonts (a click adds a
+  heading in it) and logos from the library (upload one, or add the selected picture).
+- **Text**: a heading, subheading or body text, or a styled one: click it to add it in the middle, or drag it
+  onto the page where you want it. Double-click a text to type in it. The bar above
   the page sets the font (13 fonts, served by staqly itself), size, colour, bold, italic, underline, alignment,
-  letter spacing, line height, an outline, and **Box**: a coloured box behind the text with padding and round
-  corners.
+  letter spacing, line height, an outline, **Box** (a coloured box behind the text with padding and round
+  corners) and **Effects**: bend the line into an arch or a smile, or paint the letters with a gradient.
 - **Photos**: upload pictures (or drop or paste them onto the editor), pick them from your library, or, when the
-  server has an Unsplash key, search Unsplash. Uploaded pictures go to your library too. With a photo selected,
+  server has an Unsplash key, search Unsplash; click a photo or drag it onto the page. Uploaded pictures go to your library too. With a photo selected,
   the bar above the page offers:
   - **Crop** (or double-click the photo): drag the photo inside its frame, zoom with the slider or the mouse
     wheel. Dragging a side handle of the frame crops too; the photo always fills its frame.
   - **Shape**: cut the photo to a circle, arch, hexagon, triangle, star or heart.
-  - **Remove background**: done on your device, nothing is uploaded. The first use downloads the model (about
-    200 MB) from Hugging Face; your browser keeps it for next time. The cut-out goes to your library too.
-  - **Adjust** (brightness, contrast, saturation, blur, black and white), **Corners** and flips.
-- **Elements**: squares, rounded squares, circles, triangles, stars, lines and arrows.
-- **Background**: a colour or a gradient, or the selected photo stretched over the page.
-- **AI**: describe a picture and AI makes it, or select a photo and tell AI how to change it ("put this product on
-  a marble table"). It needs the workspace's OpenAI key (see below).
-- **Layers**: the order of everything on the page, with show/hide and lock.
+  - **Remove background**: done on your device, nothing is uploaded. The first use downloads the model from
+    Hugging Face (about 200 MB with a graphics card, 400 MB without); your browser keeps it for next time. With a
+    graphics card it takes seconds, without one about a minute. The cut-out goes to your library too.
+  - **Adjust**: one-click looks (vivid, bright, dramatic, mono, muted) or brightness, contrast, saturation, blur
+    and black and white by hand; **Corners** and flips.
+- **Elements**: squares, rounded squares, circles, triangles, stars, lines and arrows; stickers (NEW, SALE,
+  -20%, FREE, LIMITED, Swipe); and icons you can recolour. Click them, or drag them onto the page. A shape is filled
+  with a colour or a gradient, like the background.
+- **Background**: a colour or a gradient (two or three colours, along an angle or out from the centre), or the
+  selected photo stretched over the page.
+- **AI**: make a new picture from a description, or select a photo and change it with AI (see
+  [AI tools](#ai-tools)). Shown only when the server has an AI provider set up.
+- **Layers**: the order of everything on the page, top first: drag a layer up or down (or focus its handle and
+  use the arrow keys), show/hide and lock. A layer's **...** menu (or a right-click on it) moves it to another
+  page or a new one; **Move to page** above the page does the same for the selection.
 - **Size**: a page size per channel (Instagram feed and stories, TikTok, YouTube, X, LinkedIn, Facebook,
   Threads, Pinterest, Open Graph) or your own. With **Fit the content to the new size**, the design scales and
   stays centred.
 
-The bar under the page holds the **pages**: add one, duplicate it, move it left or right, delete it. Several pages
-make a carousel; every page has its own background and elements, and they share the size.
+The bar under the page holds the **pages**: add one, duplicate it, drag it (or use the arrows) to reorder, delete
+it. Several pages
+make a carousel (a post people swipe through on Instagram, LinkedIn, Threads, X or TikTok); every page has its
+own background and elements, and they share the size.
 
 Every element can be made see-through, given a shadow, brought to the front or sent to the back, locked,
-duplicated and deleted. Elements snap to the page's edges and centre and to each other; pink lines show where.
+duplicated and deleted. Under **Look**, a photo or a shape can also fade to see-through towards one side, over
+the length you choose. **Arrange** lines up the selection (or one element on the page) left, centre, right, top,
+middle or bottom, and spaces three or more evenly. **Group** keeps several elements together: a click on one picks
+them all. Elements snap to the page's edges and centre and to each other; pink lines show where.
 
 | Keys | |
 |---|---|
 | Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z | Undo, redo |
 | Ctrl/Cmd+D | Duplicate |
 | Ctrl/Cmd+A | Select everything not locked |
+| Ctrl/Cmd+G, Ctrl/Cmd+Shift+G | Group, ungroup |
 | Arrows (Shift: 10 px) | Move the selection |
 | Delete, Backspace | Delete the selection |
 | Esc | Select nothing |
 
 ## Save
 
-**Save to Media** saves every page as a picture (JPG when it has photos, PNG otherwise; "Name (2 of 3)" for a
+The first **Save to Media** of a new design asks for its name and the library folder its pictures go to (the top
+of the library unless you pick one). **Save to Media** saves every page as a picture (JPG when it has photos, PNG otherwise; "Name (2 of 3)" for a
 carousel) and keeps the design itself, so it opens again editable. Saving again replaces the pictures; posts that
 use them follow. Opened from a post's **Design** button, a new design's pages are added to that post.
-**Download** saves the page on screen, or every page, as PNG or JPG without touching the library.
+In Media, a carousel's pages show as one tile ("3 pages"); picking it for a post adds every page, in order, and a
+post with several pictures goes out as a carousel where the platform has one.
+
+**Download** saves the page on screen, or every page, as PNG or JPG without touching the library; **PDF** puts
+every page in one PDF (LinkedIn posts a PDF as a document people swipe through); **For a channel** makes every page
+fit that platform: its format, its largest size and its file size limit, with a warning when the page's shape is
+outside what it accepts.
+
+The Save button shows a dot while there are unsaved changes; going back to Media then asks first. Unsaved changes
+are also kept in this browser: after a closed tab or a crash, the same design offers **Restore** when it opens.
 
 A design with Unsplash photos reminds you whom to credit when you save.
 
-## AI pictures
+## AI tools
 
-The AI tools run on your workspace's own OpenAI key: an admin adds it under **Integrations › AI pictures**, and
-OpenAI bills that account. Adding the key turns the tools on; **Turn off** forgets it. The server's
-operator can turn AI off for everyone with `AI_DISABLED` ([configuration](/self-hosting/configuration)).
+The **AI** tool lists what the server offers. Without a photo selected it makes a **New picture** from a
+description, in the page's shape. With a photo selected:
+
+| Tool | What it does |
+|---|---|
+| **Change it** | Changes the photo as you describe ("make it a winter scene", "put this product on a marble table"). |
+| **Redraw an area** | Paint over an area, then describe what goes there (generative fill). |
+| **Remove an object** | Paint over something; AI removes it and fills in behind it. |
+| **Expand** | Paints new space around the photo so it fits the page's shape; the frame grows with it. |
+| **Cut out with AI** | Removes the background on the AI service. **Remove background** in the photo's bar does the same on your device, free; it stays the default. |
+| **New background** | Keeps the subject and paints a new background from your description. |
+| **Upscale** | More pixels, the same picture. |
+| **Enhance** | Sharper, cleaner detail at twice the size. |
+
+A request runs on the server while you keep editing; nothing on the page changes until you look at the result
+and pick **Use it** (it takes the photo's place, or goes on the page as a new picture, in one step that Undo
+takes back), **Try again** or **Discard**. A result you use goes to your library too and stays an ordinary
+picture: move it, crop it or change it again. The result says which AI service made it. Leaving the editor
+cancels a request that is still running.
+
+Crop, resize, text, layers and the other tools never call AI.
+
+### Where AI runs
+
+The AI tools run on the server's own provider accounts, never on keys of a workspace: staqly cloud includes them;
+on your own server the operator sets `AI_FAL_KEY` ([fal.ai](https://fal.ai)) and/or `AI_HIGGSFIELD_API_KEY`
+([Higgsfield](https://higgsfield.ai)) ([configuration](/self-hosting/configuration#ai-tools)). Keys stay on the
+server; the browser only learns which tools exist. Without a key the **AI** tool is not shown and everything else
+works.
+
+fal.ai runs every tool; Higgsfield's public API has new pictures (Soul) and videos (Kling 2.5 Turbo), so with
+both keys fal.ai goes first and Higgsfield takes over **New picture** and the videos when fal.ai is down, busy or
+refuses the server's key. It never stands in with a different kind of operation, and a request fal.ai may
+already have started (it did not answer) is not sent anywhere again, so nothing is paid twice.
+
+| Tool | fal.ai model | Higgsfield model |
+|---|---|---|
+| New picture | `fal-ai/flux/schnell` | `higgsfield-ai/soul/standard` |
+| Change it | `fal-ai/flux-pro/kontext` | — |
+| Redraw an area | `fal-ai/flux-pro/v1/fill` | — |
+| Remove an object | `fal-ai/bria/eraser` | — |
+| Expand | `fal-ai/bria/expand` | — |
+| Cut out with AI | `fal-ai/bria/background/remove` | — |
+| New background | `fal-ai/bria/background/replace` | — |
+| Upscale | `fal-ai/recraft/upscale/crisp` | — |
+| Enhance | `fal-ai/clarity-upscaler` | — |
+| New video, Animate ([media library](/dashboard/media#ai-videos)) | `fal-ai/kling-video/v2.5-turbo/pro/text-to-video`, `.../image-to-video` | `kling-video/v2.5-turbo/pro/text-to-video`, `.../image-to-video` (landscape only) |
+
+Each workspace has a monthly AI allowance (estimated cost, `AI_MONTHLY_LIMIT_USD`); the AI tool says when half or
+more of it is used, and a request past it is refused until the next month. A workspace starts at most 30 requests
+per 10 minutes and runs 4 at once. The picture you change and your description go to the AI service; results
+wait on the server for a day at most unless you use them.

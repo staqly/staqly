@@ -33,6 +33,7 @@ var (
 		"run_schedule":    3 * time.Minute, // the schedule's endpoint call has its own 60 s limit
 		"refresh_channel": 2 * time.Minute,
 		"publish_reply":   10 * time.Minute, // a reply uploads its media like a post
+		"ai_run":          10 * time.Minute, // a video takes a few minutes at the AI provider
 	}
 	jobDefaultRunTimeout = time.Minute
 )
@@ -72,6 +73,7 @@ type jobPayload struct {
 	EventID    string `json:"event_id,omitempty"`  // notify_people, notify_person: the event to tell about
 	UserID     string `json:"user_id,omitempty"`   // notify_person: who gets the email
 	At         string `json:"at,omitempty"`        // sync_seats: when the membership changed (the proration date)
+	AIJobID    string `json:"ai_job_id,omitempty"` // ai_run: the AI request
 }
 
 func parsePayload(raw string) jobPayload {
@@ -108,6 +110,8 @@ func (s *Service) execJob(ctx context.Context, kind string, a jobArgs) error {
 		return s.runSyncSeats(ctx, a.WorkspaceID, p.At)
 	case "sync_entitlements":
 		return s.runSyncEntitlements(ctx, a.WorkspaceID)
+	case "ai_run":
+		return s.runAIJob(ctx, a.WorkspaceID, p.AIJobID)
 	}
 	if run, ok := testJobKinds[kind]; ok {
 		return run(ctx, a)
@@ -125,6 +129,8 @@ func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause e
 		}
 	case "publish_post":
 		s.scheduledPublishFailed(ctx, a.WorkspaceID, p.PostID, cause)
+	case "ai_run":
+		s.aiRunFailed(ctx, a.WorkspaceID, p.AIJobID)
 	case "run_schedule":
 		s.scheduleFailed(ctx, p.ScheduleID, cause)
 	case "refresh_channel":

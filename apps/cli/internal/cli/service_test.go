@@ -44,7 +44,7 @@ func TestServiceUnitFiles(t *testing.T) {
 	if u := systemdUnitFile(serviceSpec{Exe: "/s", Env: map[string]string{"STAQLY_X": "a\nExecStartPre=/bin/evil"}}); strings.Contains(u, "\nExecStartPre") {
 		t.Fatalf("line break not escaped:\n%s", u)
 	}
-	env := serviceEnv([]string{"MAIL_SMTP_HOST=x", "HOME=/h", "PATH=/bin", "STAQLY_MODE=local", "TAGGER_API_KEY=y", "AI_DISABLED="})
+	env := serviceEnv([]string{"MAIL_SMTP_HOST=x", "HOME=/h", "PATH=/bin", "STAQLY_MODE=local", "TAGGER_API_KEY=y", "AI_OPENAI_API_KEY="})
 	// PATH is kept so the service finds the AI CLI (claude, codex) for summaries; HOME and retired names are not.
 	if len(env) != 3 || env["MAIL_SMTP_HOST"] != "x" || env["STAQLY_MODE"] != "local" || env["PATH"] != "/bin" {
 		t.Fatalf("env %v", env)

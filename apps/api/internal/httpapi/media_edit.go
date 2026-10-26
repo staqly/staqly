@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 	"strconv"
@@ -27,9 +26,14 @@ func init() {
 		r.Delete("/media-projects/{id}", s.deleteMediaProject)
 
 		r.Get("/ai", s.getAI)
-		r.Put("/ai", s.setAI)
-		r.Delete("/ai", s.deleteAI)
-		r.Post("/ai/images/{op}", s.aiImage)
+		r.Post("/ai/jobs", s.createAIJob)
+		r.Get("/ai/jobs/{id}", s.getAIJob)
+		r.Delete("/ai/jobs/{id}", s.discardAIJob)
+		r.Get("/ai/jobs/{id}/result", s.getAIJobResult)
+		r.Post("/ai/jobs/{id}/accept", s.acceptAIJob)
+
+		r.Get("/design/brand", s.getDesignBrand)
+		r.Put("/design/brand", s.setDesignBrand)
 
 		r.Get("/stock/photos", s.stockPhotos)
 		r.Post("/stock/photos/{id}/use", s.useStockPhoto)
@@ -85,15 +89,18 @@ func (s *Server) saveMediaProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var out app.MediaProject
 	err := multipartFields(w, r, s.svc.Cfg.MaxUploadBytes+(1<<20), func(fields map[string]string, _ string, f io.Reader) error {
-		var sources []string
-		for _, v := range strings.Split(fields["source_ids"], ",") {
-			if v = strings.TrimSpace(v); v != "" {
-				sources = append(sources, v)
+		ids := func(field string) []string {
+			var out []string
+			for _, v := range strings.Split(fields[field], ",") {
+				if v = strings.TrimSpace(v); v != "" {
+					out = append(out, v)
+				}
 			}
+			return out
 		}
 		var err error
-		out, err = s.svc.SaveMediaProject(r.Context(), principal(r), id,
-			app.MediaProjectInput{Name: fields["name"], SourceIDs: sources, OutputID: strings.TrimSpace(fields["output_id"])}, f)
+		out, err = s.svc.SaveMediaProject(r.Context(), principal(r), id, app.MediaProjectInput{Name: fields["name"],
+			SourceIDs: ids("source_ids"), OutputID: strings.TrimSpace(fields["output_id"]), PageIDs: ids("page_ids")}, f)
 		return err
 	})
 	status := 201
@@ -123,31 +130,32 @@ func (s *Server) deleteMediaProject(w http.ResponseWriter, r *http.Request) {
 	respondEmpty(w, r, s.svc.DeleteMediaProject(r.Context(), principal(r), chi.URLParam(r, "id")))
 }
 
+func (s *Server) getDesignBrand(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.GetDesignBrand(r.Context(), principal(r))
+	respond(w, r, 200, out, err)
+}
+
+func (s *Server) setDesignBrand(w http.ResponseWriter, r *http.Request) {
+	var in app.DesignBrand
+	if !decode(w, r, &in) {
+		return
+	}
+	out, err := s.svc.SetDesignBrand(r.Context(), principal(r), in)
+	respond(w, r, 200, out, err)
+}
+
 func (s *Server) getAI(w http.ResponseWriter, r *http.Request) {
 	out, err := s.svc.GetAIStatus(r.Context(), principal(r))
 	respond(w, r, 200, out, err)
 }
 
-func (s *Server) setAI(w http.ResponseWriter, r *http.Request) {
-	var in app.AISettingsInput
-	if !decode(w, r, &in) {
-		return
-	}
-	out, err := s.svc.SetAISettings(r.Context(), principal(r), in)
-	respond(w, r, 200, out, err)
-}
-
-func (s *Server) deleteAI(w http.ResponseWriter, r *http.Request) {
-	respondEmpty(w, r, s.svc.DeleteAISettings(r.Context(), principal(r)))
-}
-
-// aiImage: POST /v1/ai/images/generate (prompt, size) or /v1/ai/images/edit (prompt, size, image, mask), as
-// multipart/form-data; answers the picture (PNG). Nothing is stored: the editor adds it as a layer and saves it
-// to the library only when the person does.
-func (s *Server) aiImage(w http.ResponseWriter, r *http.Request) {
+// createAIJob: POST /v1/ai/jobs, multipart/form-data (the operation and its settings, then the image and mask
+// files). Answers 202 with the queued job, or 200 with the earlier job a repeated Idempotency-Key or a request
+// still running answers (multipart bodies skip the idempotency middleware: the service matches the key itself).
+func (s *Server) createAIJob(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 2*app.MaxAIImageBytes+(1<<20))
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
-		writeErr(w, r, &app.Error{Code: "bad_request", Status: 400, Message: "expected multipart/form-data with a prompt"})
+		writeErr(w, r, &app.Error{Code: "bad_request", Status: 400, Message: "expected multipart/form-data with an operation"})
 		return
 	}
 	defer r.MultipartForm.RemoveAll()
@@ -162,26 +170,65 @@ func (s *Server) aiImage(w http.ResponseWriter, r *http.Request) {
 		defer f.Close()
 		return io.ReadAll(io.LimitReader(f, app.MaxAIImageBytes+1))
 	}
-	image, err := read("image")
+	in := app.AIJobInput{Operation: r.FormValue("operation"), Prompt: r.FormValue("prompt"),
+		AspectRatio: r.FormValue("aspect_ratio"), IdempotencyKey: r.Header.Get("Idempotency-Key")}
+	for name, dst := range map[string]*int{"width": &in.Width, "height": &in.Height, "duration": &in.Duration,
+		"canvas_width": &in.CanvasWidth, "canvas_height": &in.CanvasHeight, "image_x": &in.ImageX, "image_y": &in.ImageY,
+		"place_width": &in.PlaceWidth, "place_height": &in.PlaceHeight} {
+		if v := r.FormValue(name); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				writeErr(w, r, &app.Error{Code: "validation_failed", Status: 422, Message: name + ": must be a whole number", Fields: map[string]string{name: "must be a whole number"}})
+				return
+			}
+			*dst = n
+		}
+	}
+	var err error
+	if in.Image, err = read("image"); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	if in.Mask, err = read("mask"); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	job, created, err := s.svc.CreateAIJob(r.Context(), principal(r), in)
+	status := 202
+	if !created {
+		status = 200
+	}
+	respond(w, r, status, job, err)
+}
+
+func (s *Server) getAIJob(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.GetAIJob(r.Context(), principal(r), chi.URLParam(r, "id"))
+	respond(w, r, 200, out, err)
+}
+
+func (s *Server) discardAIJob(w http.ResponseWriter, r *http.Request) {
+	respondEmpty(w, r, s.svc.DiscardAIJob(r.Context(), principal(r), chi.URLParam(r, "id")))
+}
+
+func (s *Server) acceptAIJob(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.AcceptAIJob(r.Context(), principal(r), chi.URLParam(r, "id"))
+	respond(w, r, 201, out, err)
+}
+
+// getAIJobResult serves the made file for the preview (never cached, sandboxed like library files).
+func (s *Server) getAIJobResult(w http.ResponseWriter, r *http.Request) {
+	f, ct, err := s.svc.ReadAIJobResult(r.Context(), principal(r), chi.URLParam(r, "id"))
 	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	mask, err := read("mask")
-	if err != nil {
-		writeErr(w, r, err)
-		return
-	}
-	out, err := s.svc.AIImage(r.Context(), principal(r), chi.URLParam(r, "op"), app.AIImageRequest{
-		Prompt: r.FormValue("prompt"), Size: r.FormValue("size"), Image: image, Mask: mask})
-	if err != nil {
-		writeErr(w, r, err)
-		return
-	}
-	w.Header().Set("Content-Type", http.DetectContentType(out))
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
-	_, _ = io.Copy(w, bytes.NewReader(out))
+	defer f.Close()
+	h := w.Header()
+	h.Set("Content-Type", ct)
+	h.Set("Cache-Control", "private, no-store")
+	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	h.Set("X-Content-Type-Options", "nosniff")
+	http.ServeContent(w, r, "", time.Time{}, f)
 }
 
 func (s *Server) stockPhotos(w http.ResponseWriter, r *http.Request) {

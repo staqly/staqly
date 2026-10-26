@@ -1,7 +1,11 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
+import type Konva from 'konva'
 import {
   ArrowLeft,
+  Check,
+  CircleHelp,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -9,6 +13,7 @@ import {
   Loader2,
   Maximize,
   Minus,
+  Pencil,
   Plus,
   Redo2,
   Save,
@@ -19,15 +24,27 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { api, mediaUrl, type Media } from '@/lib/api'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useAiStatus } from '@/lib/ai-status'
+import { api, mediaUrl, type Media, type Provider } from '@/lib/api'
 import { downloadBlob } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
+import { qk } from '@/lib/queries'
 import { safeNextPath } from '@/lib/safe'
 import { cn } from '@/lib/utils'
 
-import { DesignCanvas, DesignView, preloadPage, type CanvasHandle } from './canvas'
+import { discardAiRun } from './ai-panel'
+import { DesignCanvas, DesignView, preloadPage } from './canvas'
 import {
   copyPage,
   credits,
@@ -35,6 +52,7 @@ import {
   newImage,
   newPage,
   parseDesign,
+  withGroups,
   uid,
   type Design,
   type El,
@@ -42,6 +60,8 @@ import {
 } from './doc'
 import { announceEdited } from './edited-media'
 import { addFile, Panel, PANELS, type PanelCtx, type PanelId } from './panels'
+import { jpegsToPdf } from './pdf'
+import { SaveDialog } from './save-dialog'
 import { useDesignStore } from './store'
 import { Toolbar } from './toolbar'
 
@@ -73,9 +93,26 @@ function designFor(media: Media[]): Design {
   const d = newDesign(Math.round((first.width || 1080) * k), Math.round((first.height || 1080) * k))
 
   d.name = first.original_name.replace(/\.[a-z0-9]+$/i, '')
-  d.pages[0]!.elements = media.map((m, i) =>
-    newImage(d, mediaUrl(m.id), m.width || 1080, m.height || 1080, { mediaId: m.id }, i === 0),
-  )
+  // A page per picture (a carousel), in the order they were picked, each the size of the first: a picture of
+  // another shape fits inside its page, whole.
+  d.pages = media.map((m) => {
+    const page = newPage()
+    const w = m.width || 1080
+    const h = m.height || 1080
+    const fit = Math.min(d.width / w, d.height / h)
+
+    page.elements = [
+      {
+        ...newImage(d, mediaUrl(m.id), w, h, { mediaId: m.id }),
+        x: (d.width - w * fit) / 2,
+        y: (d.height - h * fit) / 2,
+        width: w * fit,
+        height: h * fit,
+      },
+    ]
+
+    return page
+  })
 
   return d
 }
@@ -133,6 +170,61 @@ async function open(params: Params): Promise<Opened | null> {
   return media.length ? { design: designFor(media) } : null
 }
 
+/** A width-to-height ratio as people say it: 0.8 = 4:5, 1.91 = 1.91:1. */
+const shape = (r?: number) =>
+  !r ? 'any' : r < 1 ? `1:${Math.round((1 / r) * 100) / 100}` : `${Math.round(r * 100) / 100}:1`
+
+// Unsaved work survives a closed tab or a crash: the editor keeps a draft in this browser (per design) and offers
+// it back when the same design opens again. ponytail: this browser only; a server-side draft if people ask.
+const DRAFT = 'staqly-design-draft:'
+
+const draftKey = (p: Params) => DRAFT + (p.project || p.ids.join(',') || 'new')
+
+function readDraft(key: string): { at: number; design: Design } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? 'null') as { at: number; design: unknown } | null
+    const design = v && parseDesign(JSON.stringify(v.design))
+
+    return v && design ? { at: v.at, design } : null
+  } catch {
+    return null
+  }
+}
+
+function writeDraft(key: string, design: Design) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ at: Date.now(), design }))
+  } catch {
+    // Full or blocked storage: no draft, the editor works on.
+  }
+}
+
+function dropDraft(key: string) {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Nothing to drop.
+  }
+}
+
+function offerDraft(key: string, restore: (d: Design) => void) {
+  const d = readDraft(key)
+
+  if (!d) {
+    return
+  }
+
+  toast(`Unsaved changes from ${new Date(d.at).toLocaleString()}`, {
+    description: 'The editor kept them when it was closed.',
+    duration: 30_000,
+    action: { label: 'Restore', onClick: () => restore(d.design) },
+    cancel: { label: 'Discard', onClick: () => dropDraft(key) },
+  })
+}
+
+// The off-screen copy is small; the file is drawn at full size from it (Konva redraws at the pixel ratio).
+const RENDER_SCALE = 0.25
+
 const twoFrames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 
 const hasPhotos = (p: Page) => p.elements.some((e) => e.type === 'image' && !e.hidden)
@@ -174,15 +266,21 @@ async function saveAll({ design, saved, project, render }: SaveArgs) {
     ]),
   ].slice(0, 20)
   const p = await api.saveMediaProject(
-    { id: project || undefined, name: base, source_ids: sources, output_id: media[0]!.after.id },
+    {
+      id: project || undefined,
+      name: base,
+      source_ids: sources,
+      output_id: media[0]!.after.id,
+      page_ids: media.map((m) => m.after.id),
+    },
     new Blob([JSON.stringify(file)], { type: 'application/json' }),
   )
 
   return { project: p.id, saved: files, media }
 }
 
-export default function DesignEditor() {
-  const [params] = useState(() => readParams(window.location.search))
+export default function DesignEditor({ search }: { search: string }) {
+  const [params] = useState(() => readParams(search))
   const store = useDesignStore(newDesign())
   const { design, update, undo, redo, replace } = store
   const [phase, setPhase] = useState<'loading' | 'ready'>(params.project || params.ids.length ? 'loading' : 'ready')
@@ -196,15 +294,30 @@ export default function DesignEditor() {
   const [project, setProject] = useState(params.project)
   const [files, setFiles] = useState<Saved>({})
   const [baseline, setBaseline] = useState<Design | null>(null)
-  const canvas = useRef<CanvasHandle | null>(null)
+  // Saving and downloading draw each page off screen: the page on screen stays put.
+  const [rendering, setRendering] = useState<Page | null>(null)
+  const view = useRef<Konva.Stage | null>(null)
   const page = design.pages.find((p) => p.id === pageId) ?? design.pages[0]!
-  const dirty = baseline !== design && (baseline !== null || design.pages.some((p) => p.elements.length > 0))
+  // AI shows only when the server offers an AI tool for pictures (a provider key and an operation).
+  const ai = useAiStatus()
+  const tools = PANELS.filter((p) => p.id !== 'ai' || ai.data?.operations.some((o) => o.kind === 'image'))
+  // Platforms with picture rules, for downloads made to fit them.
+  const providers = useQuery({ queryKey: qk.providers, queryFn: async () => (await api.providers()).data ?? [] })
+  const channels = (providers.data ?? []).filter((p) => p.status === 'available' && p.limits.image?.max_bytes)
+  // Any change since it opened or saved (a new design: anything at all, even only its name).
+  const dirty = baseline ? baseline !== design : store.canUndo
+  const [leaving, setLeaving] = useState(false)
+  const [draft, setDraft] = useState(() => draftKey(params))
+  const left = useRef(false)
 
   const showPage = useCallback((id: string) => {
     setPageId(id)
     setSelected([])
     setCropping(null)
   }, [])
+
+  // An AI request still waiting when the editor closes is cancelled (its files go too).
+  useEffect(() => discardAiRun, [])
 
   useEffect(() => {
     void open(params)
@@ -224,15 +337,35 @@ export default function DesignEditor() {
         }
       })
       .catch((e: unknown) => toastApiError(e, 'Could not open it'))
-      .finally(() => setPhase('ready'))
+      .finally(() => {
+        setPhase('ready')
+        offerDraft(draftKey(params), replace)
+      })
   }, [params, replace])
+
+  // The draft follows every change, a second after the last one.
+  useEffect(() => {
+    if (!dirty || phase !== 'ready') {
+      return
+    }
+
+    const t = window.setTimeout(() => writeDraft(draft, design), 1000)
+
+    return () => window.clearTimeout(t)
+  }, [dirty, phase, draft, design])
 
   useEffect(() => {
     if (!dirty) {
       return
     }
 
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    // Closing the tab or reloading: only the browser's own question can stop that. Leaving by the back link
+    // asks in the editor instead (and then goes without this one).
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!left.current) {
+        e.preventDefault()
+      }
+    }
 
     window.addEventListener('beforeunload', warn)
 
@@ -255,7 +388,9 @@ export default function DesignEditor() {
     },
     [updatePage],
   )
-  const ctx: PanelCtx = { store, page, updatePage, selected, onSelect: setSelected, add }
+  // Picking one member of a group picks the whole group.
+  const select = useCallback((ids: string[]) => setSelected(withGroups(page.elements, ids)), [page])
+  const ctx: PanelCtx = { store, page, updatePage, selected, onSelect: select, add, showPage }
 
   // Shortcuts, unless a field has the keyboard.
   useEffect(() => {
@@ -288,6 +423,19 @@ export default function DesignEditor() {
           .map((x) => ({ ...structuredClone(x), id: uid(), x: x.x + 24, y: x.y + 24, locked: false }))
 
         add(...copies)
+      } else if (mod && key === 'g' && selected.length) {
+        e.preventDefault()
+
+        const id = uid()
+        const ungroup = e.shiftKey
+
+        updatePage((p) => {
+          for (const x of p.elements) {
+            if (selected.includes(x.id)) {
+              x.group = ungroup ? undefined : id
+            }
+          }
+        })
       } else if (mod && key === 'a') {
         e.preventDefault()
         setSelected(page.elements.filter((x) => !x.locked && !x.hidden).map((x) => x.id))
@@ -352,16 +500,72 @@ export default function DesignEditor() {
     return () => window.removeEventListener('paste', onPaste)
   }, [])
 
-  /** Shows page i, waits until its pictures and fonts are drawn, and answers it as a file. */
-  const render = async (i: number, type: 'image/png' | 'image/jpeg') => {
+  /** Draws page i off screen once its pictures and fonts are in, and answers it as a file at full size. */
+  const render = async (i: number, type: 'image/png' | 'image/jpeg', quality = 0.92, k = 1) => {
     const p = design.pages[i]!
 
-    setPageId(p.id)
     await preloadPage(p)
+    setRendering(p)
     await twoFrames()
 
-    return canvas.current!.toBlob(type)
+    const stage = view.current!
+
+    return (await stage.toBlob({ pixelRatio: k / RENDER_SCALE, mimeType: type, quality })) as Blob
   }
+
+  /**
+   * Every page as the platform takes it: its format, at most its pixels, under its file size (JPEG quality down to
+   * 0.6 first, then smaller), and a word when the page's shape is outside what it accepts.
+   */
+  const forChannel = (p: Provider) =>
+    run('download', async () => {
+      const rules = p.limits.image ?? {}
+      const type = !rules.formats?.length || rules.formats.includes('image/jpeg') ? 'image/jpeg' : 'image/png'
+      const base = design.name.trim() || 'Design'
+      const n = design.pages.length
+      const ratio = design.width / design.height
+
+      for (const i of design.pages.keys()) {
+        let k = rules.max_pixels ? Math.min(1, Math.sqrt(rules.max_pixels / (design.width * design.height))) : 1
+        let q = 0.92
+        let blob = await render(i, type, q, k)
+
+        while (rules.max_bytes && blob.size > rules.max_bytes && k > 0.2) {
+          if (type === 'image/jpeg' && q > 0.65) {
+            q -= 0.1
+          } else {
+            k *= 0.85
+          }
+
+          blob = await render(i, type, q, k)
+        }
+
+        downloadBlob(
+          `${base}${n > 1 ? ` (${i + 1} of ${n})` : ''} (${p.name}).${type === 'image/jpeg' ? 'jpg' : 'png'}`,
+          blob,
+        )
+      }
+
+      if ((rules.min_ratio && ratio < rules.min_ratio - 0.01) || (rules.max_ratio && ratio > rules.max_ratio + 0.01)) {
+        toast.warning(`${p.name} may crop or refuse this shape`, {
+          description: `It takes pictures from ${shape(rules.min_ratio)} to ${shape(rules.max_ratio)}: pick a ${p.name} size under Size.`,
+        })
+      } else if (rules.min_width && design.width < rules.min_width) {
+        toast.warning(`${p.name} wants pictures at least ${rules.min_width} pixels wide`)
+      }
+    })
+
+  /** Every page in one PDF (LinkedIn posts a PDF as a document people swipe through). */
+  const pdf = () =>
+    run('download', async () => {
+      const pages: Uint8Array[] = []
+
+      for (const i of design.pages.keys()) {
+        pages.push(new Uint8Array(await (await render(i, 'image/jpeg', 0.9)).arrayBuffer()))
+      }
+
+      downloadBlob(`${design.name.trim() || 'Design'}.pdf`, jpegsToPdf(pages))
+    })
 
   const run = (label: string, fn: () => Promise<void>) => {
     setBusy(label)
@@ -371,18 +575,28 @@ export default function DesignEditor() {
     void twoFrames()
       .then(fn)
       .catch((e: unknown) => toastApiError(e, label === 'save' ? 'Could not save' : 'Could not download'))
-      .finally(() => setBusy(''))
+      .finally(() => {
+        setBusy('')
+        setRendering(null)
+      })
   }
 
-  const save = () =>
+  // A new design asks for its name and folder first (once); a saved one saves straight away.
+  const [asking, setAsking] = useState(false)
+  const save = () => (project || params.fromComposer ? persist(design, '') : setAsking(true))
+  const persist = (doc: Design, folder: string) =>
     run('save', async () => {
-      const at = page.id
-      const out = await saveAll({ design, saved: files, project, render })
+      const out = await saveAll({ design: doc, saved: files, project, render })
 
-      setPageId(at)
+      if (folder) {
+        await api.organizeMedia({ ids: out.media.map((m) => m.after.id), folder_id: folder })
+      }
+
       setProject(out.project)
       setFiles(out.saved)
-      setBaseline(design)
+      setBaseline(doc)
+      dropDraft(draft)
+      setDraft(DRAFT + out.project)
       window.history.replaceState(
         null,
         '',
@@ -402,7 +616,7 @@ export default function DesignEditor() {
         }
       }
 
-      const owed = credits(design)
+      const owed = credits(doc)
       const n = out.media.length
 
       toast.success(n > 1 ? `Saved ${n} pages to Media` : `Saved to Media as ${out.media[0]!.after.original_name}`, {
@@ -426,8 +640,6 @@ export default function DesignEditor() {
           downloadBlob(`${base}${n > 1 ? ` (${i + 1} of ${n})` : ''}.${ext}`, await render(i, type))
         }
       }
-
-      setPageId(at)
     })
 
   const scale = zoom === 'fit' ? fitScale : zoom
@@ -460,6 +672,14 @@ export default function DesignEditor() {
 
         d.pages.splice(Math.max(0, Math.min(d.pages.length, index + by)), 0, p!)
       }),
+    /** Puts a page before the one at `before` (the number of pages: at the end). */
+    moveTo: (id: string, before: number) =>
+      update((d) => {
+        const from = d.pages.findIndex((p) => p.id === id)
+        const [p] = d.pages.splice(from, 1)
+
+        d.pages.splice(before > from ? before - 1 : before, 0, p!)
+      }),
   }
 
   return (
@@ -471,22 +691,51 @@ export default function DesignEditor() {
         void addFiles([...e.dataTransfer.files])
       }}
     >
+      {asking && (
+        <SaveDialog
+          name={design.name}
+          pages={design.pages.length}
+          onClose={() => setAsking(false)}
+          onSave={(name, folder) => {
+            setAsking(false)
+
+            const named = { ...design, name }
+
+            replace(named)
+            persist(named, folder)
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={leaving}
+        onOpenChange={setLeaving}
+        title="Leave without saving?"
+        description="Your changes to this design are not saved yet. Leave and they are gone, or stay and save them to Media."
+        confirmLabel="Leave without saving"
+        variant="destructive"
+        onConfirm={() => {
+          left.current = true
+          dropDraft(draft)
+          window.location.href = params.back
+        }}
+      />
       <header className="flex h-14 shrink-0 items-center gap-1.5 border-b px-2 sm:px-3">
         <Button variant="ghost" asChild>
-          <a href={params.back}>
+          <a
+            href={params.back}
+            onClick={(e) => {
+              if (dirty) {
+                e.preventDefault()
+                setLeaving(true)
+              }
+            }}
+          >
             <ArrowLeft aria-hidden />
             <span className="max-sm:sr-only">{toPost ? 'Back to the post' : 'Media'}</span>
           </a>
         </Button>
         <span className="h-5 w-px bg-border" aria-hidden />
-        <input
-          aria-label="Design name"
-          value={design.name}
-          maxLength={150}
-          onChange={(e) => update((d) => void (d.name = e.target.value), 'name')}
-          className="h-8 w-40 min-w-0 rounded-md border border-transparent bg-transparent px-2 text-sm font-medium hover:border-border focus:border-ring focus:outline-none sm:w-56"
-        />
-        {dirty && <span className="text-xs text-muted-foreground max-lg:hidden">Unsaved changes</span>}
+        <NameField value={design.name} onChange={(name) => update((d) => void (d.name = name), 'name')} />
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="ghost"
@@ -533,11 +782,40 @@ export default function DesignEditor() {
                   <DropdownMenuItem onSelect={() => download('image/jpeg', true)}>Every page, JPG</DropdownMenuItem>
                 </>
               )}
+              <DropdownMenuItem onSelect={pdf}>
+                {design.pages.length > 1 ? 'Every page in one PDF (LinkedIn document)' : 'PDF'}
+              </DropdownMenuItem>
+              {channels.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>For a channel</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {channels.map((p) => (
+                      <DropdownMenuItem key={p.id} onSelect={() => forChannel(p)}>
+                        {p.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button onClick={save} disabled={!!busy || phase !== 'ready'} data-testid="design-save">
-            {busy === 'save' ? <Loader2 className="animate-spin" /> : <Save />}
-            {params.fromComposer ? 'Save and use in the post' : 'Save to Media'}
+          <Button
+            onClick={save}
+            variant={dirty || !project ? 'default' : 'outline'}
+            disabled={!!busy || phase !== 'ready'}
+            tooltip={dirty ? 'You have unsaved changes' : project ? 'Everything is saved' : undefined}
+            className="relative"
+            data-testid="design-save"
+          >
+            {busy === 'save' ? <Loader2 className="animate-spin" /> : dirty || !project ? <Save /> : <Check />}
+            {params.fromComposer ? 'Save and use in the post' : dirty || !project ? 'Save to Media' : 'Saved'}
+            {dirty && (
+              <span className="absolute -top-1 -right-1 flex size-2.5" aria-hidden>
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60 motion-reduce:hidden" />
+                <span className="relative inline-flex size-2.5 rounded-full bg-brand ring-2 ring-background" />
+              </span>
+            )}
+            {dirty && <span className="sr-only">(unsaved changes)</span>}
           </Button>
         </div>
       </header>
@@ -547,7 +825,7 @@ export default function DesignEditor() {
           aria-label="Design tools"
           className="flex shrink-0 gap-0.5 border-r bg-background p-1.5 md:w-[76px] md:flex-col max-md:overflow-x-auto max-md:border-t max-md:border-r-0"
         >
-          {PANELS.map((p) => (
+          {tools.map((p) => (
             <button
               key={p.id}
               type="button"
@@ -594,7 +872,7 @@ export default function DesignEditor() {
                 page={page}
                 updatePage={updatePage}
                 selected={selected}
-                onSelect={setSelected}
+                onSelect={select}
                 cropping={cropping}
                 onCropping={(id) => {
                   setCropping(id)
@@ -605,7 +883,7 @@ export default function DesignEditor() {
                 }}
                 zoom={zoom}
                 onFitScale={setFitScale}
-                handle={canvas}
+                onDropEls={(els) => add(...els)}
               />
             )}
             <div className="absolute right-3 bottom-3 flex items-center gap-0.5 rounded-lg border bg-background p-0.5 shadow-sm">
@@ -629,9 +907,55 @@ export default function DesignEditor() {
             </div>
           </div>
           <PagesBar design={design} current={page.id} onShow={showPage} actions={pages} />
+          {rendering && (
+            <div className="pointer-events-none fixed top-0 -left-[10000px]" aria-hidden>
+              <DesignView design={design} page={rendering} scale={RENDER_SCALE} stageRef={view} />
+            </div>
+          )}
         </main>
       </div>
     </div>
+  )
+}
+
+/** The design's name: a label with a pencil that opens into a field (Enter or leaving it keeps the name). */
+function NameField({ value, onChange }: { value: string; onChange: (name: string) => void }) {
+  const [editing, setEditing] = useState(false)
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        aria-label={`Rename ${value || 'the design'}`}
+        onClick={() => setEditing(true)}
+        className="group flex h-8 max-w-40 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium hover:bg-muted sm:max-w-64"
+      >
+        <span className="truncate">{value || 'Untitled design'}</span>
+        <Pencil
+          className="size-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+          aria-hidden
+        />
+      </button>
+    )
+  }
+
+  return (
+    <input
+      aria-label="Design name"
+      // oxlint-disable-next-line jsx-a11y/no-autofocus -- the person just clicked to rename it
+      autoFocus
+      value={value}
+      maxLength={150}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={() => setEditing(false)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          e.currentTarget.blur()
+        }
+      }}
+      className="h-8 w-40 min-w-0 origin-left animate-in rounded-md border border-ring bg-transparent px-2 text-sm font-medium duration-200 fade-in-0 zoom-in-95 slide-in-from-left-1 focus:outline-none sm:w-64"
+    />
   )
 }
 
@@ -645,14 +969,23 @@ function PagesBar({
   design: Design
   current: string
   onShow: (id: string) => void
-  actions: { add: () => void; duplicate: () => void; remove: () => void; move: (by: number) => void }
+  actions: {
+    add: () => void
+    duplicate: () => void
+    remove: () => void
+    move: (by: number) => void
+    moveTo: (id: string, before: number) => void
+  }
 }) {
   const h = 52
   const index = design.pages.findIndex((p) => p.id === current)
+  const [dragging, setDragging] = useState<string | null>(null)
+  const [over, setOver] = useState<number | null>(null)
+  const n = design.pages.length
 
   return (
     <div className="flex h-[76px] shrink-0 items-center gap-2 border-t px-2" aria-label="Pages" role="group">
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-1">
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto p-1.5">
         {design.pages.map((p, i) => (
           <button
             key={p.id}
@@ -660,9 +993,46 @@ function PagesBar({
             aria-label={`Page ${i + 1}`}
             aria-current={p.id === current ? 'page' : undefined}
             onClick={() => onShow(p.id)}
+            // Dragged sideways to reorder (the arrows on the right do the same from the keyboard).
+            draggable={n > 1}
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('text/plain', p.id)
+              setDragging(p.id)
+            }}
+            onDragOver={(e) => {
+              if (!dragging) {
+                return
+              }
+
+              e.preventDefault()
+              e.stopPropagation()
+
+              const r = e.currentTarget.getBoundingClientRect()
+
+              setOver(e.clientX < r.left + r.width / 2 ? i : i + 1)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+
+              if (dragging && over !== null) {
+                actions.moveTo(dragging, over)
+              }
+
+              setDragging(null)
+              setOver(null)
+            }}
+            onDragEnd={() => {
+              setDragging(null)
+              setOver(null)
+            }}
             className={cn(
-              'relative shrink-0 overflow-hidden rounded-md border bg-background',
+              'relative shrink-0 overflow-hidden rounded-md border bg-background transition-[opacity,box-shadow]',
               p.id === current ? 'ring-2 ring-brand' : 'hover:ring-2 hover:ring-border',
+              dragging === p.id && 'opacity-40',
+              dragging && over === i && 'shadow-[-4px_0_0_0_var(--brand)]',
+              dragging && over === n && i === n - 1 && 'shadow-[4px_0_0_0_var(--brand)]',
             )}
           >
             <DesignView design={design} page={p} scale={h / design.height} />
@@ -681,12 +1051,22 @@ function PagesBar({
         >
           <Plus />
         </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="What are pages for?"
+          tooltip="Several pages make a carousel: a post people swipe through on Instagram, LinkedIn, Threads, X or TikTok. Each page saves as its own picture in Media, in order, and a post gets them all."
+          className="shrink-0 text-muted-foreground"
+        >
+          <CircleHelp />
+        </Button>
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <Button
           variant="ghost"
           size="icon-sm"
           aria-label="Move the page left"
+          tooltip="Move the page left"
           disabled={index === 0}
           onClick={() => actions.move(-1)}
         >
@@ -696,18 +1076,26 @@ function PagesBar({
           variant="ghost"
           size="icon-sm"
           aria-label="Move the page right"
+          tooltip="Move the page right"
           disabled={index === design.pages.length - 1}
           onClick={() => actions.move(1)}
         >
           <ChevronRight />
         </Button>
-        <Button variant="ghost" size="icon-sm" aria-label="Duplicate the page" onClick={actions.duplicate}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Duplicate the page"
+          tooltip="Duplicate the page"
+          onClick={actions.duplicate}
+        >
           <Copy />
         </Button>
         <Button
           variant="ghost"
           size="icon-sm"
           aria-label="Delete the page"
+          tooltip="Delete the page"
           className="text-red-700 dark:text-red-400"
           disabled={design.pages.length === 1}
           onClick={actions.remove}

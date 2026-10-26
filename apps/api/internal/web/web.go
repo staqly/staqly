@@ -57,7 +57,7 @@ var securityHeaders = map[string]string{
 	"Permissions-Policy":     "camera=(), microphone=(), geolocation=(), interest-cohort=()",
 }
 
-// The design editor (/media/design) removes backgrounds on the device: transformers.js and ONNX Runtime (pinned
+// The design editor (/media/edit) removes backgrounds on the device: transformers.js and ONNX Runtime (pinned
 // versions, jsDelivr) and the model weights from Hugging Face, fetched when someone uses it. Its pictures may come
 // from Unsplash's CDN (stock photos), which the AI tools read back to change them. Nothing else leaves the page.
 //
@@ -73,7 +73,8 @@ const editorCDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/ " +
 var editorHeaders = map[string]string{
 	"Content-Security-Policy": strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' " + editorCDN,
+		// blob: ONNX Runtime imports its wasm glue from a blob URL it makes from the pinned file.
+		"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: " + editorCDN,
 		"worker-src 'self' blob:",
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data: blob: https:",
@@ -85,11 +86,16 @@ var editorHeaders = map[string]string{
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 	}, "; "),
+	// Cross-origin isolated, so ONNX Runtime runs WebAssembly on every core (one thread otherwise: minutes per
+	// picture on a device without a usable GPU). credentialless, not require-corp: pictures from Unsplash and the
+	// model files still load (without cookies), and browsers without it (Safari) just stay unisolated.
+	"Cross-Origin-Opener-Policy":   "same-origin",
+	"Cross-Origin-Embedder-Policy": "credentialless",
 }
 
 // editorPath: the design editor's page (see editorHeaders).
 func editorPath(p string) bool {
-	return p == "/media/design" || strings.HasPrefix(p, "/media/design/") || p == "/media/design.html"
+	return p == "/media/edit" || strings.HasPrefix(p, "/media/edit/") || p == "/media/edit.html"
 }
 
 // Pages with an [id] segment are exported once, as id "_": the route prefix and the segment that holds
@@ -138,14 +144,6 @@ func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, r
 	for from, to := range moved {
 		mux.Handle(from, http.RedirectHandler(to, http.StatusMovedPermanently))
 	}
-	// The photo editor gave way to the design editor (2026-10-25): its links open the same pictures there.
-	mux.HandleFunc("/media/edit", func(rw http.ResponseWriter, r *http.Request) {
-		to := "/media/design"
-		if r.URL.RawQuery != "" {
-			to += "?" + r.URL.RawQuery
-		}
-		http.Redirect(rw, r, to, http.StatusMovedPermanently)
-	})
 	mux.HandleFunc("/collections/", func(rw http.ResponseWriter, r *http.Request) {
 		id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/collections/"), "/")
 		if id == "" || strings.Contains(id, "/") {
