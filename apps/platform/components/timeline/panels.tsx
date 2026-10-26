@@ -1,7 +1,7 @@
 'use client'
 
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { Copy, Film, Loader2, Music, Scissors, Search, Trash2, Upload } from 'lucide-react'
+import { AudioWaveform, Captions, Copy, Film, Loader2, Music, Scissors, Search, Trash2, Upload } from 'lucide-react'
 import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { api, errorMessage, mediaThumbUrl, mediaUrl, type Media, type MediaLibraryItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
+import { beats, decode, mix } from './audio'
 import {
   clipAt,
   clipStarts,
@@ -159,6 +160,122 @@ export function addFromLibrary(
 
   ctx.update((t) => void t.clips.push(c))
   ctx.onSelect({ kind: 'clip', id: c.id })
+}
+
+/**
+ * Cuts on the music's beat: every picture lasts a whole number of beats (about two and a half seconds), and the
+ * music's lead-in is trimmed so a beat falls where it starts. Video clips keep their length.
+ */
+export async function fitToBeat(ctx: Ctx, s: Sound) {
+  const buf = await decode(s.src)
+
+  if (!buf) {
+    throw new Error('This sound could not be read')
+  }
+
+  const b = beats(buf.getChannelData(0), buf.sampleRate)
+  const per = Math.max(1, Math.round(2.5 / b.period))
+  // The first beat at or after where the sound starts in its file.
+  const lead = (((b.first - s.in) % b.period) + b.period) % b.period
+
+  ctx.update((t) => {
+    for (const c of t.clips) {
+      if (c.kind === 'image') {
+        c.duration = per * b.period
+      }
+    }
+
+    const k = t.sounds.find((x) => x.id === s.id)
+
+    if (k) {
+      k.in += lead
+      k.duration = Math.max(0.5, Math.min(k.fileDuration - k.in, k.duration))
+    }
+  })
+
+  return { bpm: Math.round(b.bpm), per }
+}
+
+function BeatButton({ ctx, s }: { ctx: Ctx; s: Sound }) {
+  const [busy, setBusy] = useState(false)
+
+  if (ctx.doc.kind !== 'video' || !ctx.doc.clips.some((c) => c.kind === 'image')) {
+    return null
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={busy}
+      title="Every picture lasts a whole number of beats"
+      onClick={() => {
+        setBusy(true)
+        void fitToBeat(ctx, s)
+          .then(({ bpm, per }) =>
+            toast.success('Pictures fitted to the beat', {
+              description: `${bpm} beats a minute: a new picture every ${per} ${per === 1 ? 'beat' : 'beats'}.`,
+            }),
+          )
+          .catch((e: unknown) => toast.error('Could not find the beat', { description: errorMessage(e) }))
+          .finally(() => setBusy(false))
+      }}
+    >
+      {busy ? <Loader2 className="animate-spin" /> : <AudioWaveform />} Fit pictures to the beat
+    </Button>
+  )
+}
+
+/** Captions for everything said on the timeline (music, voice-over, videos' own sound), made on the device. */
+function SpeechButton({ ctx }: { ctx: Ctx }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const sounds = ctx.doc.sounds.length > 0 || ctx.doc.clips.some((c) => c.kind === 'video' && c.volume > 0)
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Button
+        variant="secondary"
+        className="justify-start"
+        disabled={!!busy || !sounds}
+        onClick={() => {
+          setBusy('Getting the speech model ready')
+          void Promise.all([mix(ctx.doc), import('./speech')])
+            .then(([buf, speech]) =>
+              speech
+                .transcribe(buf, (share) => setBusy(`Downloading the speech model ${Math.round(share * 100)}%`))
+                .then((pieces) => ({ pieces: speech.splitSpoken(pieces), speech })),
+            )
+            .then(({ pieces }) => {
+              if (!pieces.length) {
+                toast.info('No speech found', { description: 'Captions come from voices in the sound or the videos.' })
+
+                return
+              }
+
+              const made = pieces.map((p) => ({
+                ...newCaption(ctx.doc, p.start, p.text),
+                end: Math.max(p.start + 0.4, p.end),
+              }))
+
+              ctx.update((t) => void t.captions.push(...made))
+              toast.success(`${made.length} captions added`, {
+                description: 'Check the words: select one to change it.',
+              })
+            })
+            .catch((e: unknown) => toast.error('Could not make captions', { description: errorMessage(e) }))
+            .finally(() => setBusy(null))
+        }}
+      >
+        {busy ? <Loader2 className="animate-spin" /> : <Captions />} Captions from speech
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        {busy ??
+          (sounds
+            ? 'Listens on this device; the first time downloads a model (about 80 MB).'
+            : 'Add a voice or a video with sound first.')}
+      </p>
+    </div>
+  )
 }
 
 /** The library's files this editor takes: pictures and videos for a video (and sounds), sounds for a sound. */
@@ -325,13 +442,15 @@ export function AddPanelBody({ ctx, panel }: { ctx: Ctx; panel: AddPanel }) {
               ? 'A sound starts at the playhead. Drag it on the timeline to move it.'
               : 'Sounds line up one after another.'}
           </p>
+          {video && ctx.doc.sounds[0] && <BeatButton ctx={ctx} s={ctx.doc.sounds[0]} />}
           <Library ctx={ctx} kind="audio" />
         </div>
       )
     case 'text':
       return (
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-muted-foreground">A caption starts at the playhead, for two seconds.</p>
+          <SpeechButton ctx={ctx} />
+          <p className="pt-2 text-xs text-muted-foreground">A caption starts at the playhead, for two seconds.</p>
           {CAPTION_STYLES.map((s) => (
             <Button
               key={s.label}
@@ -670,6 +789,7 @@ function SoundInspector({ ctx, s }: { ctx: Ctx; s: Sound }) {
         format={(v) => `${v.toFixed(1)} s`}
         onChange={(v) => set((k) => void (k.start = v), 'start')}
       />
+      <BeatButton ctx={ctx} s={s} />
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"

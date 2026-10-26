@@ -14,6 +14,7 @@ nothing is uploaded until you save.
 - Select pictures, videos and sounds in **Media** and press **Video** in the selection bar: the pictures and clips
   become the video, in the order you picked them, and the sound its music (cut and faded out with the pictures
   when it is longer). Sounds alone open the sound editor.
+- **Video** under a post's text opens a new video in a new tab; save it there and the post gets the file.
 - **Edit** in a video's or a sound's drawer opens it. A file the editor saved opens as its timeline again, with
   everything editable.
 
@@ -25,6 +26,9 @@ The left bar adds things to the timeline:
   seconds; a video its own length.
 - **Music**: your sounds. A sound starts at the playhead; drag it along the timeline to move it.
 - **Text**: captions (subtitle, title, label, handwritten). A caption starts at the playhead for two seconds.
+  **Captions from speech** listens to everything said on the timeline (a voice-over, the videos' own sound) and
+  adds captions with their times, in the spoken language. It runs on your device with Whisper: nothing is
+  uploaded, and the first use downloads the model (about 80 MB) from Hugging Face.
 - **Size**: the frame (9:16 for stories, reels, TikTok and Shorts; 4:5 feed; 1:1; 16:9 for YouTube) and the colour
   behind pictures that don't fill it.
 
@@ -39,7 +43,9 @@ Select something to change it on the right:
   whole**, a movement (zoom in or out, pan left or right), how it comes in (cut, fade, slide, zoom) and a video's
   own sound.
 - **A caption**: its words, when it shows, font, size, height on the frame, colour, bold and a box behind it.
-- **A sound**: volume, fade in and out, where it starts.
+- **A sound**: volume, fade in and out, where it starts, and **Fit pictures to the beat**: the music's tempo is
+  found on your device, every picture then lasts a whole number of beats (about two and a half seconds), and the
+  music's lead-in is trimmed so the cuts land on the beat.
 
 **Split** cuts the clip or sound under the playhead in two.
 
@@ -55,6 +61,9 @@ Select something to change it on the right:
 
 The sound editor shows only sound rows: add sounds from the left (they line up one after another), then trim,
 split, fade and move them, and set each one's volume. It saves one file.
+
+Unsaved changes are kept in this browser: after a closed tab or a crash, the same video or sound offers
+**Restore** when it opens.
 
 ## Save
 

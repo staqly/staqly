@@ -189,3 +189,99 @@ export function wav(buf: AudioBuffer): Blob {
 
   return new Blob([out], { type: 'audio/wav' })
 }
+
+/**
+ * The music's beat: its tempo and where the first beat falls, found from how its loudness rises (an onset envelope)
+ * by autocorrelation over 60 to 180 beats a minute, leaning towards 120. ponytail: one tempo for the whole sound;
+ * music that speeds up or has no clear beat gets an approximate one.
+ */
+export function beats(samples: Float32Array, rate: number) {
+  const hop = 256
+  const n = Math.floor(samples.length / hop)
+  const energy = new Float32Array(n)
+
+  for (let i = 0; i < n; i++) {
+    let sum = 0
+
+    for (let j = 0; j < hop; j++) {
+      const v = samples[i * hop + j]!
+
+      sum += v * v
+    }
+
+    energy[i] = Math.log(1e-9 + sum / hop)
+  }
+
+  // How much louder each moment is than the one before: beats are where it jumps.
+  const raw = new Float32Array(n)
+
+  for (let i = 1; i < n; i++) {
+    raw[i] = Math.max(0, energy[i]! - energy[i - 1]!)
+  }
+
+  // Smoothed over a few frames (1-4-6-4-1), so a beat between two frames still lines up.
+  const onset = new Float32Array(n)
+
+  for (let i = 2; i < n - 2; i++) {
+    onset[i] = (raw[i - 2]! + 4 * raw[i - 1]! + 6 * raw[i]! + 4 * raw[i + 1]! + raw[i + 2]!) / 16
+  }
+
+  const hopSec = hop / rate
+  // The envelope between two of its points, so fractional lags keep their precision.
+  const at = (x: number) => {
+    const i = Math.floor(x)
+    const f = x - i
+
+    return (onset[i] ?? 0) * (1 - f) + (onset[i + 1] ?? 0) * f
+  }
+  let best = { lag: Math.round(0.5 / hopSec), score: -Infinity }
+
+  for (let bpm = 60; bpm <= 180; bpm += 0.25) {
+    const lag = 60 / bpm / hopSec
+    let score = 0
+    let terms = 0
+
+    for (let i = 0; i + lag < n; i++) {
+      score += onset[i]! * at(i + lag)
+      terms++
+    }
+
+    // Per pair: a longer lag has fewer pairs, which would favour fast tempos.
+    score /= Math.max(1, terms)
+
+    // A gentle lean towards common tempos, so a half or double tempo doesn't win on a tie.
+    score *= Math.exp(-0.5 * Math.log2(bpm / 120) ** 2)
+
+    if (score > best.score) {
+      best = { lag, score }
+    }
+  }
+
+  // Refined together with the first beat: a comb over the whole sound, around the rough tempo. A slightly wrong
+  // period drifts off the beats over many of them, so the exact one stands out.
+  let lag = best.lag
+  let phase = 0
+  let top = -Infinity
+
+  for (let l = best.lag * 0.96; l <= best.lag * 1.04; l += 0.02) {
+    for (let p = 0; p < l; p += 0.25) {
+      let score = 0
+      let k = 0
+
+      for (let i = p; i < n; i += l) {
+        score += at(i)
+        k++
+      }
+
+      score /= Math.max(1, k)
+
+      if (score > top) {
+        top = score
+        lag = l
+        phase = p
+      }
+    }
+  }
+
+  return { bpm: 60 / (lag * hopSec), first: phase * hopSec, period: lag * hopSec }
+}

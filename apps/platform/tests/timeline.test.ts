@@ -101,3 +101,38 @@ describe('the video and sound timeline', () => {
     expect(head.startsWith('RIFF') && head.endsWith('WAVE')).toBe(true)
   })
 })
+
+describe('the beat of a sound', () => {
+  it('finds the tempo and the first beat of clicks at 120 a minute', async () => {
+    const { beats } = await import('@/components/timeline/audio')
+    const rate = 8000
+    const s = new Float32Array(rate * 12)
+
+    // A short click every half second, from 0.25 s on.
+    for (let t = 0.25; t < 12; t += 0.5) {
+      for (let j = 0; j < 200; j++) {
+        s[Math.round(t * rate) + j] = Math.sin(j / 3) * 0.8
+      }
+    }
+
+    const b = beats(s, rate)
+
+    expect(b.bpm).toBeGreaterThan(117)
+    expect(b.bpm).toBeLessThan(123)
+    expect(Math.abs(((b.first - 0.25 + b.period / 2) % b.period) - b.period / 2)).toBeLessThan(0.07)
+  })
+})
+
+describe('captions from speech', () => {
+  it('splits a long sentence into short captions that share its time', async () => {
+    const { splitSpoken } = await import('@/components/timeline/speech')
+    const parts = splitSpoken([{ text: 'one two three four five six seven eight nine ten', start: 0, end: 10 }], 4)
+
+    expect(parts.map((p) => p.text)).toEqual(['one two three four', 'five six seven eight', 'nine ten'])
+    expect(parts.map((p) => [p.start, p.end])).toEqual([
+      [0, 4],
+      [4, 8],
+      [8, 10],
+    ])
+  })
+})

@@ -34,7 +34,8 @@ transformers.js (Apache-2.0) and ONNX Runtime Web (MIT).
 
 The video and sound editor (apps/platform/components/timeline) writes MP4 and M4A files with Mediabunny
 (https://mediabunny.dev) by the Mediabunny authors, under the Mozilla Public License 2.0, used unmodified
-(its source: https://github.com/Vanilagy/mediabunny).
+(its source: https://github.com/Vanilagy/mediabunny). Its captions from speech download, on use, Whisper base
+(Xenova/whisper-base, Apache-2.0; OpenAI's Whisper weights, MIT) and run it with transformers.js.
 
 packages/brand/fonts holds Geist and Geist Mono (https://github.com/vercel/geist-font), Copyright (c)
 2023 Vercel, in collaboration with basement.studio, SIL Open Font License 1.1

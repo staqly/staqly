@@ -24,6 +24,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
+import { draftKey, dropDraft, offerDraft, writeDraft } from '@/components/design/drafts'
+import { announceEdited } from '@/components/design/edited-media'
 import { loadFont } from '@/components/design/fonts'
 import { NameField } from '@/components/design/name-field'
 import { SaveDialog } from '@/components/design/save-dialog'
@@ -58,6 +60,9 @@ interface Params {
   ids: string[]
   project: string
   back: string
+  fromComposer: boolean
+  /** The post's token when its Video button opened a new video (see useDesignedMedia). */
+  for: string
 }
 
 function readParams(search: string): Params {
@@ -67,6 +72,8 @@ function readParams(search: string): Params {
     ids: (q.get('ids') ?? '').split(',').filter(Boolean).slice(0, 30),
     project: q.get('project') ?? '',
     back: safeNextPath(q.get('return'), 'http://localhost', '/media'),
+    fromComposer: q.get('from') === 'composer',
+    for: q.get('for') ?? '',
   }
 }
 
@@ -302,6 +309,7 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
   const videos = useRef(new Map<string, HTMLVideoElement>())
   const total = length(doc)
   const dirty = baseline ? baseline !== doc : canUndo
+  const [draft, setDraft] = useState(() => draftKey(`staqly-${kind}-draft:`, params))
   const video = kind === 'video'
 
   useEffect(() => {
@@ -315,8 +323,22 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
         }
       })
       .catch((e: unknown) => toastApiError(e, 'Could not open it'))
-      .finally(() => setPhase('ready'))
+      .finally(() => {
+        setPhase('ready')
+        offerDraft(draftKey(`staqly-${kind}-draft:`, params), parseTimeline, replace)
+      })
   }, [params, kind, replace])
+
+  // The draft follows every change, a second after the last one.
+  useEffect(() => {
+    if (!dirty || phase !== 'ready') {
+      return
+    }
+
+    const t = window.setTimeout(() => writeDraft(draft, doc), 1000)
+
+    return () => window.clearTimeout(t)
+  }, [dirty, phase, draft, doc])
 
   useEffect(() => {
     if (video) {
@@ -580,9 +602,17 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
           new Blob([JSON.stringify(d)], { type: 'application/json' }),
         )
 
+        // A post open in another tab follows: it takes the new file (a new video made from its Video button, or
+        // this one saved again).
+        if (params.fromComposer && (output || params.for)) {
+          announceEdited(output ? { from: output, to: media.id } : { from: '', to: media.id, for: params.for })
+        }
+
         setProject(p.id)
         setOutput(media.id)
         setBaseline(d)
+        dropDraft(draft)
+        setDraft(`staqly-${kind}-draft:${p.id}`)
         window.history.replaceState(null, '', `?project=${encodeURIComponent(p.id)}`)
         toast.success(`Saved to Media as ${media.original_name}`, {
           description: 'Open it from Media to keep editing.',
@@ -650,6 +680,7 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
         variant="destructive"
         onConfirm={() => {
           left.current = true
+          dropDraft(draft)
           window.location.href = params.back
         }}
       />

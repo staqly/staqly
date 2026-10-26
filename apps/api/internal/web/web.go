@@ -57,7 +57,8 @@ var securityHeaders = map[string]string{
 	"Permissions-Policy":     "camera=(), microphone=(), geolocation=(), interest-cohort=()",
 }
 
-// The design editor (/media/edit) removes backgrounds on the device: transformers.js and ONNX Runtime (pinned
+// The design editor (/media/edit) removes backgrounds on the device, and the video and sound editor (/media/video,
+// /media/audio) turns speech into captions there: transformers.js and ONNX Runtime (pinned
 // versions, jsDelivr) and the model weights from Hugging Face, fetched when someone uses it. Its pictures may come
 // from Unsplash's CDN (stock photos), which the AI tools read back to change them. Nothing else leaves the page.
 //
@@ -93,9 +94,15 @@ var editorHeaders = map[string]string{
 	"Cross-Origin-Embedder-Policy": "credentialless",
 }
 
-// editorPath: the design editor's page (see editorHeaders).
+// editorPath: the editors' pages (see editorHeaders): the design editor, and the video and sound editor, which
+// runs speech recognition on the device the same way.
 func editorPath(p string) bool {
-	return p == "/media/edit" || strings.HasPrefix(p, "/media/edit/") || p == "/media/edit.html"
+	for _, e := range []string{"/media/edit", "/media/video", "/media/audio"} {
+		if p == e || strings.HasPrefix(p, e+"/") || p == e+".html" {
+			return true
+		}
+	}
+	return false
 }
 
 // Pages with an [id] segment are exported once, as id "_": the route prefix and the segment that holds

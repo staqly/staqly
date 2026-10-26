@@ -242,6 +242,11 @@ func TestEditorCSPPinsCDN(t *testing.T) {
 			t.Errorf("editor CSP allows all of jsDelivr: %s", csp)
 		}
 	}
+	for _, p := range []string{"/media/video", "/media/audio"} {
+		if got := do(h, "GET", p, nil, nil).Header().Get("Content-Security-Policy"); got != csp {
+			t.Errorf("%s has its own CSP, not the editors': %s", p, got)
+		}
+	}
 	if dash := do(h, "GET", "/schedule", nil, nil).Header().Get("Content-Security-Policy"); strings.Contains(dash, "jsdelivr") {
 		t.Errorf("dashboard CSP allows jsDelivr: %s", dash)
 	}
