@@ -269,7 +269,8 @@ function TemplatesPanel({ ctx }: { ctx: PanelCtx }) {
         ),
       )
 
-      return all.flatMap((p, i) => (files[i]?.startsWith('{') ? [p] : []))
+      // Designs only: the video and sound editor's timelines are projects too (they have a kind).
+      return all.flatMap((p, i) => (files[i]?.startsWith('{') && !/"kind":"(video|audio)"/.test(files[i]!) ? [p] : []))
     },
   })
 

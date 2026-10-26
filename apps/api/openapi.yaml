@@ -4841,7 +4841,7 @@ components:
         source_ids: { type: string, description: Comma-separated media ids }
         output_id: { type: string }
         page_ids: { type: string, description: "Comma-separated media ids of the saved pages, in order" }
-        file: { type: string, format: binary, description: "The design: JSON with version 1, width, height and pages" }
+        file: { type: string, format: binary, description: "The editor file: a design (JSON, version 1, width, height and pages) or a timeline of the video and sound editor (version 1, kind video or audio, with clips or sounds)" }
     StockPhoto:
       type: object
       required: [id, width, height, alt, thumb, url, author, author_url, page_url]

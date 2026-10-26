@@ -2,9 +2,11 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AudioLines,
   ChevronDown,
   CircleAlert,
   Download,
+  Film,
   FolderInput,
   FolderPlus,
   Hash,
@@ -14,6 +16,7 @@ import {
   PenSquare,
   RotateCw,
   Search,
+  Sparkle,
   Trash2,
   Undo2,
   Palette,
@@ -164,6 +167,30 @@ const NO_FOLDERS: MediaFolder[] = []
 const NO_IDS = new Set<string>()
 const NO_ITEMS: MediaLibraryItem[] = []
 const NO_STACKS = new Map<string, string[]>()
+
+const CREATE = [
+  {
+    href: '/media/edit',
+    label: 'Design',
+    hint: 'A post graphic or a carousel',
+    icon: <Palette />,
+    testId: 'media-design',
+  },
+  {
+    href: '/media/video',
+    label: 'Video',
+    hint: 'Pictures, clips, captions and music',
+    icon: <Film />,
+    testId: 'media-video',
+  },
+  {
+    href: '/media/audio',
+    label: 'Sound',
+    hint: 'Trim, fade and join sound clips',
+    icon: <AudioLines />,
+    testId: 'media-audio',
+  },
+]
 
 // Action bar labels show from sm up; below, icon buttons keep their names (and tooltips) through aria-label.
 const barLabel = (text: string) => <span className="hidden sm:inline">{text}</span>
@@ -696,16 +723,34 @@ export function MediaPage() {
               e.target.value = ''
             }}
           />
-          {/* The way into the design editor: violet, so it reads as making something, not filtering or uploading. */}
-          <Button
-            asChild
-            className="shrink-0 border-0 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm hover:from-violet-500 hover:to-fuchsia-500"
-          >
-            {/* oxlint-disable-next-line next/no-html-link-for-pages -- a full load: the editor's own CSP */}
-            <a href="/media/edit" data-testid="media-design">
-              <Palette /> <span className="max-sm:sr-only">Design</span>
-            </a>
-          </Button>
+          {/* Making something new: violet, so it reads apart from filtering and uploading. Each editor is a full
+              page load (its own CSP). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                className="shrink-0 border-0 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm hover:from-violet-500 hover:to-fuchsia-500"
+                data-testid="media-create"
+              >
+                <Sparkle /> <span className="max-sm:sr-only">Create</span> <ChevronDown className="opacity-80" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              {CREATE.map((c) => (
+                <DropdownMenuItem key={c.href} asChild>
+                  {/* oxlint-disable-next-line next/no-html-link-for-pages -- a full load: the editors' own CSP */}
+                  <a href={c.href} data-testid={c.testId} className="flex items-start gap-3 py-2">
+                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand [&_svg]:size-4">
+                      {c.icon}
+                    </span>
+                    <span className="flex flex-col">
+                      <span className="font-medium">{c.label}</span>
+                      <span className="text-xs text-muted-foreground">{c.hint}</span>
+                    </span>
+                  </a>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {aiVideo && (
             <Button
               variant="outline"
@@ -725,6 +770,9 @@ export function MediaPage() {
   )
 
   const editable = useMemo(() => picked.filter((m) => m.mime_type.startsWith('image/')), [picked])
+  // Pictures and videos make a video (with the sounds picked as its music); sounds alone open the sound editor.
+  const visualPicked = useMemo(() => picked.filter((m) => /^(image|video)\//.test(m.mime_type)), [picked])
+  const soundPicked = useMemo(() => picked.filter((m) => m.mime_type.startsWith('audio/')), [picked])
   const actionBar = selected.size > 0 && (
     <div
       role="toolbar"
@@ -775,6 +823,20 @@ export function MediaPage() {
           <Button variant="ghost" aria-label="Download" onClick={() => download(picked)}>
             <Download /> {barLabel('Download')}
           </Button>
+          {canWrite && (visualPicked.length > 0 || soundPicked.length > 0) && (
+            <Button variant="ghost" aria-label={visualPicked.length ? 'Make a video' : 'Edit the sound'} asChild>
+              <a
+                href={
+                  visualPicked.length
+                    ? `/media/video?ids=${withPages([...visualPicked, ...soundPicked].map((m) => m.id)).join(',')}`
+                    : `/media/audio?ids=${soundPicked.map((m) => m.id).join(',')}`
+                }
+                data-testid="media-make-video"
+              >
+                {visualPicked.length ? <Film /> : <AudioLines />} {barLabel(visualPicked.length ? 'Video' : 'Sound')}
+              </a>
+            </Button>
+          )}
           {canWrite && (
             <Button variant="ghost" aria-label="Edit" disabled={editable.length === 0} asChild={editable.length > 0}>
               {editable.length > 0 ? (

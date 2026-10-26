@@ -25,12 +25,15 @@ import { folderTree } from '@/lib/media'
  */
 export function SaveDialog({
   name,
-  pages,
+  pages = 1,
+  description,
   onSave,
   onClose,
 }: {
   name: string
-  pages: number
+  pages?: number
+  /** What saving makes, in place of the design's pages. */
+  description?: string
   onSave: (name: string, folder: string) => void
   onClose: () => void
 }) {
@@ -46,15 +49,16 @@ export function SaveDialog({
           className="contents"
           onSubmit={(e) => {
             e.preventDefault()
-            onSave(value.trim() || 'Untitled design', folder)
+            onSave(value.trim() || name, folder)
           }}
         >
           <DialogHeader>
             <DialogTitle>Save to Media</DialogTitle>
             <DialogDescription>
-              {pages > 1
-                ? `Each of the ${pages} pages is saved as a picture, and the design stays editable.`
-                : 'The page is saved as a picture, and the design stays editable.'}
+              {description ??
+                (pages > 1
+                  ? `Each of the ${pages} pages is saved as a picture, and the design stays editable.`
+                  : 'The page is saved as a picture, and the design stays editable.')}
             </DialogDescription>
           </DialogHeader>
           <Field>

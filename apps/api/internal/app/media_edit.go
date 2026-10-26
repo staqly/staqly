@@ -100,12 +100,30 @@ type MediaProjectInput struct {
 	PageIDs   []string
 }
 
-// designFile: the part of a design editor file the server checks (the editor reads the rest).
+// designFile: the part of an editor file the server checks (the editors read the rest). A design has pages; a
+// timeline of the video and sound editor has a kind ("video": a frame size, picture clips, captions, sound clips;
+// "audio": sound clips).
 type designFile struct {
 	Version int               `json:"version"`
+	Kind    string            `json:"kind"`
 	Width   float64           `json:"width"`
 	Height  float64           `json:"height"`
 	Pages   []json.RawMessage `json:"pages"`
+	Clips   []json.RawMessage `json:"clips"`
+	Sounds  []json.RawMessage `json:"sounds"`
+}
+
+func (d designFile) valid() bool {
+	switch {
+	case d.Version != 1:
+		return false
+	case d.Kind == "video":
+		return d.Width > 0 && d.Height > 0 && len(d.Clips)+len(d.Sounds) > 0
+	case d.Kind == "audio":
+		return len(d.Sounds) > 0
+	default:
+		return d.Kind == "" && d.Width > 0 && d.Height > 0 && len(d.Pages) > 0
+	}
 }
 
 // projectKey is where a design editor project lives in the store: "workspaces/<id>/projects/abcdef.json".
@@ -192,9 +210,9 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 		return MediaProject{}, err
 	}
 	var d designFile
-	if err := json.NewDecoder(f).Decode(&d); err != nil || d.Version != 1 || d.Width <= 0 || d.Height <= 0 || len(d.Pages) == 0 {
+	if err := json.NewDecoder(f).Decode(&d); err != nil || !d.valid() {
 		f.Close()
-		return MediaProject{}, &Error{Code: "unsupported_media_type", Status: 415, Message: "not a design editor project (design JSON, version 1, with pages)"}
+		return MediaProject{}, &Error{Code: "unsupported_media_type", Status: 415, Message: "not an editor project (design JSON with pages, or a video or sound timeline, version 1)"}
 	}
 	if plan.Limits.StorageBytes != Unlimited {
 		used, err := s.Q.StorageUsed(ctx, p.WorkspaceID) // files and projects
