@@ -134,6 +134,7 @@ type EventFilter struct {
 	PostID, CollectionID, ChannelID, ScheduleID, Type, ActorType string
 	ActorID, TypePrefix                                          string
 	Agents                                                       []string // any of these agent names
+	Types                                                        []string // any of these event types
 	From, To                                                     string   // RFC 3339 or YYYY-MM-DD; from inclusive, to exclusive
 	Before                                                       string   // seq cursor
 	Limit                                                        int
@@ -167,10 +168,16 @@ func (s *Service) ListEvents(ctx context.Context, p Principal, f EventFilter) (E
 	}
 	var rows []db.Event
 	onlyPost := f.CollectionID == "" && f.ChannelID == "" && f.ScheduleID == "" && f.Type == "" && f.ActorType == "" && f.ActorID == "" &&
-		f.TypePrefix == "" && from == nil && to == nil && len(f.Agents) == 0
-	var agents any
+		f.TypePrefix == "" && from == nil && to == nil && len(f.Agents) == 0 && len(f.Types) == 0
+	var agents, types any
 	if len(f.Agents) > 0 {
 		agents = mustJSON(f.Agents)
+	}
+	if len(f.Types) > 0 {
+		if len(f.Types) > 50 {
+			return EventPage{}, invalid("types", "at most 50")
+		}
+		types = mustJSON(f.Types)
 	}
 	if f.PostID != "" && onlyPost {
 		// Post history: a dedicated query that walks events_item directly.
@@ -187,7 +194,7 @@ func (s *Service) ListEvents(ctx context.Context, p Principal, f EventFilter) (E
 		}
 		rows, err = s.Q.ListEvents(ctx, db.ListEventsParams{
 			WorkspaceID: p.WorkspaceID, PostID: optAny(f.PostID), CollectionID: optAny(f.CollectionID),
-			ChannelID: optAny(f.ChannelID), ScheduleID: optAny(f.ScheduleID), Type: optAny(f.Type), ActorType: optAny(f.ActorType), ActorID: optAny(f.ActorID), Agents: agents, TypePrefix: optAny(f.TypePrefix),
+			ChannelID: optAny(f.ChannelID), ScheduleID: optAny(f.ScheduleID), Type: optAny(f.Type), ActorType: optAny(f.ActorType), ActorID: optAny(f.ActorID), Agents: agents, Types: types, TypePrefix: optAny(f.TypePrefix),
 			FromTs: from, ToTs: to, BeforeSeq: before, IncludeAudit: int64(audit), Lim: int64(lim + 1),
 		})
 	}

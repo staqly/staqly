@@ -114,19 +114,21 @@ WHERE workspace_id = ?1
   AND (?4 IS NULL OR channel_id = ?4)
   AND (?5 IS NULL OR schedule_id = ?5)
   AND (?6 IS NULL OR type = ?6)
-  AND (?7 IS NULL OR actor_type = ?7)
-  AND (?8 IS NULL OR actor_id = ?8)
+  -- types: a JSON array of event types (any of them).
+  AND (?7 IS NULL OR type IN (SELECT value FROM json_each(?7)))
+  AND (?8 IS NULL OR actor_type = ?8)
+  AND (?9 IS NULL OR actor_id = ?9)
   -- agents: a JSON array of agent names (any of them).
-  AND (?9 IS NULL OR agent IN (SELECT value FROM json_each(?9)))
-  AND (?10 IS NULL OR substr(type, 1, length(?10)) = ?10)
-  AND (?11 IS NULL OR created_at >= ?11)
-  AND (?12 IS NULL OR created_at < ?12)
-  AND (?13 IS NULL OR seq < ?13)
+  AND (?10 IS NULL OR agent IN (SELECT value FROM json_each(?10)))
+  AND (?11 IS NULL OR substr(type, 1, length(?11)) = ?11)
+  AND (?12 IS NULL OR created_at >= ?12)
+  AND (?13 IS NULL OR created_at < ?13)
+  AND (?14 IS NULL OR seq < ?14)
   -- Credential/session audit events are visible to admin principals only.
-  AND (CAST(?14 AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
+  AND (CAST(?15 AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
        OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'))
 ORDER BY seq DESC
-LIMIT ?15
+LIMIT ?16
 `
 
 type ListEventsParams struct {
@@ -136,6 +138,7 @@ type ListEventsParams struct {
 	ChannelID    interface{} `json:"channel_id"`
 	ScheduleID   interface{} `json:"schedule_id"`
 	Type         interface{} `json:"type"`
+	Types        interface{} `json:"types"`
 	ActorType    interface{} `json:"actor_type"`
 	ActorID      interface{} `json:"actor_id"`
 	Agents       interface{} `json:"agents"`
@@ -155,6 +158,7 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]Event
 		arg.ChannelID,
 		arg.ScheduleID,
 		arg.Type,
+		arg.Types,
 		arg.ActorType,
 		arg.ActorID,
 		arg.Agents,

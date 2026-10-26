@@ -274,6 +274,10 @@ func TestChannelsTokenProvider(t *testing.T) {
 	if types["channel.connected"] != 1 || types["channel.updated"] != 4 || // rename + off, links on and off
 		types["channel.disconnected"] != 1 {
 		t.Fatalf("channel events: %v", types)
+	} // Several types at once (the dashboard's notifications): only those.
+	e.do(nil, "GET", "/v1/events?types=channel.connected&types=channel.disconnected", e.key, nil, 200, &evs)
+	if len(evs.Data) != 2 || evs.Data[0].Type != "channel.disconnected" || evs.Data[1].Type != "channel.connected" {
+		t.Fatalf("types filter: %+v", evs.Data)
 	}
 }
 
