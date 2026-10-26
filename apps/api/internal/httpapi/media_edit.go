@@ -31,7 +31,6 @@ func init() {
 		r.Delete("/ai/jobs/{id}", s.discardAIJob)
 		r.Get("/ai/jobs/{id}/result", s.getAIJobResult)
 		r.Post("/ai/jobs/{id}/accept", s.acceptAIJob)
-		r.Post("/ai/write", s.writeWithAI)
 
 		r.Get("/design/brand", s.getDesignBrand)
 		r.Put("/design/brand", s.setDesignBrand)
@@ -209,16 +208,6 @@ func (s *Server) getAIJob(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) discardAIJob(w http.ResponseWriter, r *http.Request) {
 	respondEmpty(w, r, s.svc.DiscardAIJob(r.Context(), principal(r), chi.URLParam(r, "id")))
-}
-
-// writeWithAI: POST /v1/ai/write, a post or a thread written by AI (waits for it, a few seconds).
-func (s *Server) writeWithAI(w http.ResponseWriter, r *http.Request) {
-	var in app.AIWriteInput
-	if !decode(w, r, &in) {
-		return
-	}
-	out, err := s.svc.WriteWithAI(r.Context(), principal(r), in)
-	respond(w, r, 200, out, err)
 }
 
 func (s *Server) acceptAIJob(w http.ResponseWriter, r *http.Request) {

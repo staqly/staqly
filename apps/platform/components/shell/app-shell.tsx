@@ -71,6 +71,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useAiStatus } from '@/lib/ai-status'
 import { api, setCsrfToken, type MyWorkspace } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { planName, toastApiError } from '@/lib/notify'
@@ -87,12 +88,20 @@ interface ShellContextValue {
   openCreateCollection: () => void
   openCommandPalette: () => void
   openConnectDevice: () => void
+  /** The assistant: null when the server has no AI for it. */
+  assistant: { open: boolean; toggle: () => void } | null
 }
+
+// Loaded when first opened: most pages never need the chat.
+const AssistantPanel = dynamic(() => import('@/components/assistant/assistant-panel').then((m) => m.AssistantPanel), {
+  ssr: false,
+})
 
 const ShellContext = createContext<ShellContextValue>({
   openCreateCollection: () => {},
   openCommandPalette: () => {},
   openConnectDevice: () => {},
+  assistant: null,
 })
 
 export function useShell() {
@@ -523,6 +532,32 @@ function SidebarTrial() {
 }
 
 /** Notifications above the user menu, the list beside the sidebar: one panel, never next to another menu. */
+/** Opens the assistant on the right (⌘J); only when the server has AI for it. */
+function SidebarAssistant() {
+  const { assistant } = useShell()
+
+  if (!assistant) {
+    return null
+  }
+
+  return (
+    <SidebarMenu className="in-data-[mobile=true]:hidden">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          tooltip="Assistant (⌘J)"
+          isActive={assistant.open}
+          onClick={assistant.toggle}
+          data-testid="assistant-toggle"
+        >
+          <Sparkles className="text-brand" />
+          <span>Assistant</span>
+          <kbd className="ml-auto text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">⌘J</kbd>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  )
+}
+
 function SidebarNotifications() {
   const notes = useNotifications()
   const [open, setOpen] = useState(false)
@@ -667,6 +702,7 @@ function AppSidebar() {
       <SidebarFooter className="in-data-[mobile=true]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {/* Theme lives in Settings and ⌘K; collapsing in the sidebar edge (rail) and ⌘B. Phones have the bell in
             the top bar. Plan & usage is in the workspace menu. */}
+        <SidebarAssistant />
         <SidebarNotifications />
         <SidebarTrial />
         <UserMenu />
@@ -679,7 +715,7 @@ function AppSidebar() {
 // ---- mobile chrome ----
 
 function MobileHeader() {
-  const { openCommandPalette } = useShell()
+  const { openCommandPalette, assistant } = useShell()
 
   return (
     <header
@@ -690,6 +726,16 @@ function MobileHeader() {
         <div className="flex min-w-0 flex-1 items-center">
           <WorkspaceMenu compact />
         </div>
+        {assistant && (
+          <button
+            type="button"
+            onClick={assistant.toggle}
+            aria-label="Assistant"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-brand hover:bg-muted"
+          >
+            <Sparkles className="size-5" />
+          </button>
+        )}
         <NotificationsBell className="size-11 shrink-0 rounded-lg [&_svg]:size-5" />
         <button
           type="button"
@@ -824,6 +870,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   const setCommandOpen = command.setOpen
   const setConnectOpen = connect.setOpen
   const toggleCommand = command.toggle
+  const ai = useAiStatus()
+  const hasAssistant = !!ai.data?.operations.some((o) => o.id === 'assistant')
+  const [assistantOpen, setAssistantOpen] = useState(() => {
+    try {
+      return localStorage.getItem('staqly.assistant.open') === '1'
+    } catch {
+      return false
+    }
+  })
+  const openAssistant = (open: boolean) => {
+    setAssistantOpen(open)
+
+    try {
+      localStorage.setItem('staqly.assistant.open', open ? '1' : '0')
+    } catch {
+      // Remembered for this page only.
+    }
+  }
 
   // ⌘K / Ctrl+K lives here, not in the palette, so the palette's code loads only on first use. Not inside a rich
   // text editor: there it adds a link.
@@ -837,12 +901,25 @@ export function AppShell({ children }: { children: ReactNode }) {
         e.preventDefault()
         toggleCommand()
       }
+
+      if (e.key.toLowerCase() === 'j' && (e.metaKey || e.ctrlKey) && hasAssistant) {
+        e.preventDefault()
+        setAssistantOpen((o) => {
+          try {
+            localStorage.setItem('staqly.assistant.open', o ? '0' : '1')
+          } catch {
+            // Remembered for this page only.
+          }
+
+          return !o
+        })
+      }
     }
 
     window.addEventListener('keydown', onKey)
 
     return () => window.removeEventListener('keydown', onKey)
-  }, [toggleCommand])
+  }, [toggleCommand, hasAssistant])
 
   const wide = useIsWide()
   // The phone top bar and tab bar exist only on phones: hidden by CSS alone, desktops would still run a second
@@ -857,8 +934,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       openCreateCollection: () => setCreateOpen(true),
       openCommandPalette: () => setCommandOpen(true),
       openConnectDevice: () => setConnectOpen(true),
+      assistant: hasAssistant ? { open: assistantOpen, toggle: () => openAssistant(!assistantOpen) } : null,
     }),
-    [setCreateOpen, setCommandOpen, setConnectOpen],
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- openAssistant only sets state
+    [setCreateOpen, setCommandOpen, setConnectOpen, hasAssistant, assistantOpen],
   )
 
   return (
@@ -878,6 +957,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {isMobile && <MobileHeader />}
           <PlanGate>{children}</PlanGate>
         </SidebarInset>
+        {hasAssistant && assistantOpen && <AssistantPanel open onOpenChange={openAssistant} />}
         {isMobile && <MobileTabBar />}
       </SidebarProvider>
       {command.used && <CommandPalette open={command.open} onOpenChange={setCommandOpen} />}

@@ -20,10 +20,10 @@ func TestPlanLimitValues(t *testing.T) {
 	const mb, gb = 1 << 20, 1 << 30
 	u := int64(app.Unlimited)
 	want := map[string]app.PlanLimits{
-		"starter":  {PostsPerMonth: u, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 10 * gb, MaxUploadBytes: 25 * mb, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 30},
-		"plus":     {PostsPerMonth: u, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 50 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 450, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 60},
-		"pro":      {PostsPerMonth: u, Channels: 40, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 200 * gb, MaxUploadBytes: 250 * mb, DataExport: true, XPostsPerPeriod: 950, LinkedInPostsPerPeriod: 1200, LinkedInVideosPerPeriod: 150},
-		"business": {PostsPerMonth: u, Channels: u, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 1024 * gb, MaxUploadBytes: 1024 * mb, DataExport: true, XPostsPerPeriod: 1600, LinkedInPostsPerPeriod: 2500, LinkedInVideosPerPeriod: 300},
+		"starter":  {PostsPerMonth: u, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 10 * gb, MaxUploadBytes: 25 * mb, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 30, AIMonthlyCents: u},
+		"plus":     {PostsPerMonth: u, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 50 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 450, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 60, AIMonthlyCents: u},
+		"pro":      {PostsPerMonth: u, Channels: 40, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 200 * gb, MaxUploadBytes: 250 * mb, DataExport: true, XPostsPerPeriod: 950, LinkedInPostsPerPeriod: 1200, LinkedInVideosPerPeriod: 150, AIMonthlyCents: u},
+		"business": {PostsPerMonth: u, Channels: u, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 1024 * gb, MaxUploadBytes: 1024 * mb, DataExport: true, XPostsPerPeriod: 1600, LinkedInPostsPerPeriod: 2500, LinkedInVideosPerPeriod: 300, AIMonthlyCents: u},
 	}
 	prices := map[string][2]int{"starter": {15, 144}, "plus": {29, 276}, "pro": {59, 564}, "business": {99, 948}}
 	for id, pr := range prices {

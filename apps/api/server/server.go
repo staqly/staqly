@@ -164,7 +164,7 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 	}
 	handler := httpapi.New(svc, log, httpapi.Config{
 		CookieSecure: cfg.CookieSecure, TrustProxy: cfg.TrustProxy, RelayToken: relay, OpenAPISpec: api.OpenAPI, Version: version,
-		MCP: mcpserver.HTTPHandler(svc, version), CORSOrigins: cfg.CORSOrigins,
+		MCP: mcpserver.HTTPHandler(svc, version), AssistantTools: mcpserver.AssistantTools(svc, version), CORSOrigins: cfg.CORSOrigins,
 	})
 	// No WriteTimeout on purpose: long-polls (/items/{id}/wait), MCP streams
 	// and large export/media downloads legitimately take minutes. Uploads get

@@ -1,0 +1,28 @@
+---
+title: Assistant
+description: "A chat on the right of the dashboard that works on your workspace: writes and schedules posts, sets up collections and schedules, finds what failed. Changes wait for you to allow them."
+---
+
+The **Assistant** (in the sidebar, or <kbd>⌘</kbd> <kbd>J</kbd>; the sparkles on a phone) opens a chat on the right
+of the dashboard. Ask in your own words:
+
+- "Write a LinkedIn post about our new pricing and schedule it for Monday 9:00"
+- "What is scheduled this week?" or "Which posts failed, and why?"
+- "Create a collection for Instagram that posts every weekday at 9:00"
+- "Move all drafts tagged *launch* to the Launch collection"
+
+It works with the same tools AI agents get over [MCP](/agents), as you and with your role: a viewer's assistant can
+only look. Looking things up happens at once. **Every change waits for you**: a card says what it is about to do
+(the post's text, the time, the channels) with **Allow** and **Deny**. Posts it writes are drafts unless you ask
+for a time or to publish now.
+
+The conversation stays in this browser, per workspace, until **New chat**. What you type and what the tools find
+(post texts, names) go to the AI service to answer; secrets don't (it has no tools that show API keys, webhook
+secrets or channel tokens, and none that connects a channel or deletes the workspace).
+
+## Where it runs
+
+On the server's AI provider, like the [design editor's AI tools](/dashboard/design-editor#where-ai-runs): staqly
+cloud includes it; on your own server it needs `AI_FAL_KEY`, and `AI_ASSISTANT_MODEL` picks the model
+([configuration](/self-hosting/configuration#ai-tools)). Without it the Assistant is not shown. Each answer counts
+as AI usage of the workspace.

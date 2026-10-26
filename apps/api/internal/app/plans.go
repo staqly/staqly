@@ -53,6 +53,9 @@ type PlanLimits struct {
 	// by every workspace of the app, so each one keeps to a fair share. No bought posts.
 	LinkedInPostsPerPeriod  int64 `json:"linkedin_posts_per_period"`
 	LinkedInVideosPerPeriod int64 `json:"linkedin_videos_per_period"`
+	// AIMonthlyCents: what the workspace may spend on AI (pictures, videos, the assistant) per calendar month, in
+	// US dollar cents as estimated from the providers' list prices; Unlimited for now on every plan.
+	AIMonthlyCents int64 `json:"ai_monthly_cents"`
 }
 
 type Plan struct {
@@ -98,22 +101,22 @@ var Plans = []Plan{
 	{ID: "starter", Name: "Starter", PriceMonth: 15, PriceYear: yearly(15), Currency: Currency,
 		Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2,
 			StorageBytes: 10 * gb, MaxUploadBytes: 25 << 20, DataExport: false,
-			XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 30},
+			XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 30, AIMonthlyCents: Unlimited},
 		Features: []string{"5 channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "250 X posts a month included", "300 LinkedIn posts a month, 30 with video", "MCP, REST API and SDKs", "3 alerts, 3 webhooks, 2 API keys", "10 GB storage, 25 MB per file", "Data export without files"}},
 	{ID: "plus", Name: "Plus", PriceMonth: 29, PriceYear: yearly(29), Currency: Currency, Highlight: true,
 		Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10,
 			StorageBytes: 50 * gb, MaxUploadBytes: 100 << 20, DataExport: true,
-			XPostsPerPeriod: 450, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 60},
+			XPostsPerPeriod: 450, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 60, AIMonthlyCents: Unlimited},
 		Features: []string{"15 channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "450 X posts a month included", "600 LinkedIn posts a month, 60 with video", "MCP, REST API and SDKs", "10 alerts, 10 webhooks, 10 API keys", "50 GB storage, 100 MB per file", "Backups and full data export with files"}},
 	{ID: "pro", Name: "Pro", PriceMonth: 59, PriceYear: yearly(59), Currency: Currency,
 		Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: 40, Alerts: Unlimited, Webhooks: Unlimited, APIKeys: Unlimited,
 			StorageBytes: 200 * gb, MaxUploadBytes: 250 << 20, DataExport: true,
-			XPostsPerPeriod: 950, LinkedInPostsPerPeriod: 1200, LinkedInVideosPerPeriod: 150},
+			XPostsPerPeriod: 950, LinkedInPostsPerPeriod: 1200, LinkedInVideosPerPeriod: 150, AIMonthlyCents: Unlimited},
 		Features: []string{"40 channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "950 X posts a month included", "1,200 LinkedIn posts a month, 150 with video", "MCP, REST API and SDKs", "Unlimited alerts, webhooks and API keys", "200 GB storage, 250 MB per file", "Backups and full data export with files"}},
 	{ID: "business", Name: "Business", PriceMonth: 99, PriceYear: yearly(99), Currency: Currency,
 		Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: Unlimited, Alerts: Unlimited, Webhooks: Unlimited, APIKeys: Unlimited,
 			StorageBytes: 1024 * gb, MaxUploadBytes: 1 << 30, DataExport: true,
-			XPostsPerPeriod: 1600, LinkedInPostsPerPeriod: 2500, LinkedInVideosPerPeriod: 300},
+			XPostsPerPeriod: 1600, LinkedInPostsPerPeriod: 2500, LinkedInVideosPerPeriod: 300, AIMonthlyCents: Unlimited},
 		Features: []string{"Unlimited channels", "Per user: invite as many people as you need", "Unlimited posts, collections and schedules", "1,600 X posts a month included", "2,500 LinkedIn posts a month, 300 with video", "MCP, REST API and SDKs", "Unlimited alerts, webhooks and API keys", "1 TB storage, 1 GB per file", "Backups and full data export with files", "Priority support"}},
 }
 
@@ -160,7 +163,7 @@ func OfferedPlans() []Plan {
 var UnlockedPlan = Plan{ID: "unlocked", Name: "Community Edition",
 	Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: Unlimited, Alerts: Unlimited, Webhooks: Unlimited, APIKeys: Unlimited,
 		StorageBytes: Unlimited, MaxUploadBytes: Unlimited, DataExport: true, XPostsPerPeriod: Unlimited,
-		LinkedInPostsPerPeriod: Unlimited, LinkedInVideosPerPeriod: Unlimited},
+		LinkedInPostsPerPeriod: Unlimited, LinkedInVideosPerPeriod: Unlimited, AIMonthlyCents: Unlimited},
 	Features: []string{"Self-hosted", "No plan limits"}}
 
 func PlanByID(id string) (Plan, bool) {

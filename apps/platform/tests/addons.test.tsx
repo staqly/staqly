@@ -19,6 +19,7 @@ const limits = {
   x_posts_per_period: -1,
   linkedin_posts_per_period: -1,
   linkedin_videos_per_period: -1,
+  ai_monthly_cents: -1,
 }
 
 function plan(over: Partial<Plan> = {}): Plan {

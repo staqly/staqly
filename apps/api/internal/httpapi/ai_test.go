@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -100,6 +101,10 @@ func newFakeFal(t *testing.T) *fakeAI {
 			_, _ = io.WriteString(w, `{"detail":"Invalid key"}`)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/chat/completions") {
+			fakeAssistant(w, r)
+			return
+		}
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if i := indexOf(parts, "requests"); i >= 0 && i+1 < len(parts) {
 			id := parts[i+1]
@@ -125,8 +130,7 @@ func newFakeFal(t *testing.T) *fakeAI {
 				_, _ = io.WriteString(w, `{"detail":"The model ran out of memory"}`)
 			case st == "video":
 				fmt.Fprintf(w, `{"video":{"url":%q}}`, f.srv.URL+"/files/out.mp4")
-			case st == "text":
-				_, _ = io.WriteString(w, `{"output":"We shipped it.\n---\nHere is how.\nIMAGE: a rocket over a city","partial":false}`)
+
 			default:
 				fmt.Fprintf(w, `{"images":[{"url":%q,"width":64,"height":48}],"has_nsfw_concepts":[false]}`, f.srv.URL+"/files/out.png")
 			}
@@ -151,8 +155,6 @@ func newFakeFal(t *testing.T) *fakeAI {
 			st = "fail"
 		case strings.Contains(r.URL.Path, "video"):
 			st = "video"
-		case strings.Contains(r.URL.Path, "openrouter"):
-			st = "text"
 		}
 		smu.Lock()
 		state[id] = st
@@ -335,7 +337,7 @@ func TestAIFalOnly(t *testing.T) {
 
 	var st app.AIStatus
 	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
-	if !st.Configured || len(st.Operations) != 12 || st.Providers[0] != "fal" || st.Usage.LimitUSD == nil || *st.Usage.LimitUSD != app.DefaultAIMonthlyLimitUSD {
+	if !st.Configured || len(st.Operations) != 12 || st.Providers[0] != "fal" || st.Usage.LimitUSD != nil {
 		t.Fatalf("fal only: %+v", st)
 	}
 	for _, o := range st.Operations {
@@ -607,16 +609,21 @@ func TestAIJobRules(t *testing.T) {
 	e.runAI(job.ID)
 
 	// The monthly limit: a request that would pass it is refused with 402.
-	e.svc.Cfg.AI.MonthlyLimitUSD = 0.0001
+	// A plan without AI this month (every plan, whichever the workspace has).
+	saved := append([]app.Plan(nil), app.Plans...)
+	for i := range app.Plans {
+		app.Plans[i].Limits.AIMonthlyCents = 0
+	}
+	t.Cleanup(func() { copy(app.Plans, saved) })
 	if code, _, body := e.aiJob(e.key, map[string]string{"operation": "generate", "prompt": "over"}, nil, nil); code != 402 || !strings.Contains(body, "ai_limit_reached") {
 		t.Fatalf("monthly limit: %d %s", code, body)
 	}
 	var st app.AIStatus
 	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
-	if st.Usage.UsedUSD <= 0 || *st.Usage.LimitUSD != 0.0001 {
+	if st.Usage.UsedUSD <= 0 || st.Usage.LimitUSD == nil || *st.Usage.LimitUSD != 0 {
 		t.Fatalf("usage: %+v", st.Usage)
 	}
-	e.svc.Cfg.AI.MonthlyLimitUSD = -1
+	copy(app.Plans, saved)
 
 	// AI_OPERATIONS turns operations off.
 	e.svc.Cfg.AI.Operations = []string{"generate"}
@@ -662,31 +669,149 @@ func TestAICancelRunning(t *testing.T) {
 	}
 }
 
-func TestAIWrite(t *testing.T) {
+// fakeAssistant plays the router's chat completions for the assistant (streamed): asked by a person it looks up
+// the collections; with them it creates a draft in the first one; once that ran it says so.
+func fakeAssistant(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Messages []struct {
+			Role      string `json:"role"`
+			Content   string `json:"content"`
+			ToolCalls []struct {
+				Function struct {
+					Name string `json:"name"`
+				} `json:"function"`
+			} `json:"tool_calls"`
+		} `json:"messages"`
+		Tools []json.RawMessage `json:"tools"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	w.Header().Set("Content-Type", "text/event-stream")
+	chunk := func(v string) { fmt.Fprintf(w, "data: %s\n\n", v) }
+	call := func(id, name, args string) {
+		raw, _ := json.Marshal(args)
+		chunk(fmt.Sprintf(`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":%q,"function":{"name":%q,"arguments":%s}}]}}]}`, id, name, raw))
+	}
+	last := body.Messages[len(body.Messages)-1]
+	prev := ""
+	for _, m := range body.Messages {
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			prev = m.ToolCalls[0].Function.Name
+		}
+	}
+	switch {
+	case len(body.Tools) == 0:
+		chunk(`{"error":{"message":"no tools sent"}}`)
+	case last.Role == "user":
+		chunk(`{"choices":[{"delta":{"content":"Let me look. "}}]}`)
+		call("c1", "list_collections", "{}")
+	case prev == "list_collections":
+		var out struct {
+			Collections []struct {
+				ID string `json:"id"`
+			} `json:"collections"`
+		}
+		_ = json.Unmarshal([]byte(last.Content), &out)
+		call("c2", "create_post", fmt.Sprintf(`{"collection":%q,"content":"Hello from the assistant"}`, out.Collections[0].ID))
+	case strings.HasPrefix(last.Content, "The person declined"):
+		chunk(`{"choices":[{"delta":{"content":"Okay, I left it."}}]}`)
+	default:
+		chunk(`{"choices":[{"delta":{"content":"Done: "}}]}`)
+		chunk(`{"choices":[{"delta":{"content":"the draft is ready."}}]}`)
+	}
+	chunk(`{"choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":50,"cost":0.0004}}`)
+	chunk("[DONE]")
+}
+
+// assistantTurn posts a turn and reads its events.
+func (e *env) assistantTurn(msgs []app.AssistantMessage, decision *app.AssistantDecision) []app.AssistantEvent {
+	e.t.Helper()
+	raw, _ := json.Marshal(app.AssistantRequest{Messages: msgs, Decision: decision})
+	req, _ := http.NewRequest("POST", e.srv.URL+"/v1/assistant/chat", strings.NewReader(string(raw)))
+	req.Header.Set("Authorization", "Bearer "+e.key)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "text/event-stream" {
+		b, _ := io.ReadAll(res.Body)
+		e.t.Fatalf("assistant: %d %s", res.StatusCode, b)
+	}
+	var out []app.AssistantEvent
+	sc := bufio.NewScanner(res.Body)
+	for sc.Scan() {
+		if d, ok := strings.CutPrefix(sc.Text(), "data: "); ok {
+			var ev app.AssistantEvent
+			_ = json.Unmarshal([]byte(d), &ev)
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+func TestAssistant(t *testing.T) {
 	e := newEnv(t)
 	e.paid()
-	fal := newFakeFal(t)
-	e.aiSetup(fal, nil)
+	e.aiSetup(newFakeFal(t), nil)
+	e.do(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "Launch"}, 201, nil)
 
-	var out app.AIWriting
-	e.do(nil, "POST", "/v1/ai/write", e.key, map[string]any{"prompt": "our launch", "format": "thread_short", "voice": "company", "picture": true}, 200, &out)
-	if len(out.Posts) != 2 || out.Posts[0] != "We shipped it." || out.Posts[1] != "Here is how." || out.PicturePrompt != "a rocket over a city" {
-		t.Fatalf("writing: %+v", out)
+	// Asked, it reads at once (list_collections), then waits for the person before it creates a post.
+	msgs := []app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}
+	evs := e.assistantTurn(msgs, nil)
+	var confirm *app.AssistantToolCall
+	text := ""
+	for _, ev := range evs {
+		switch ev.Type {
+		case "message":
+			msgs = append(msgs, *ev.Message)
+		case "confirm":
+			confirm = ev.ToolCall
+		case "text":
+			text += ev.Text
+		case "error":
+			t.Fatalf("error: %+v", ev.Error)
+		}
 	}
-	sent := fal.last()
-	if sent["prompt"] != "our launch" || !strings.Contains(sent["system_prompt"].(string), "company voice") || sent["model"] == "" {
-		t.Fatalf("fal input: %v", sent)
+	if confirm == nil || confirm.Name != "create_post" || text != "Let me look. " || len(msgs) != 4 {
+		t.Fatalf("first turn: %+v", evs)
 	}
-	// It counts towards the allowance.
+	var posts struct{ Data []app.Post }
+	e.do(nil, "GET", "/v1/posts", e.key, nil, 200, &posts)
+	if len(posts.Data) != 0 {
+		t.Fatal("created before it was allowed")
+	}
+
+	// Allowed: the post is created as the person, and the assistant says so.
+	evs = e.assistantTurn(msgs, &app.AssistantDecision{ToolCallID: confirm.ID, Allow: true})
+	text = ""
+	for _, ev := range evs {
+		if ev.Type == "text" {
+			text += ev.Text
+		}
+		if ev.Type == "tool" && (!ev.OK || ev.Tool != "create_post") {
+			t.Fatalf("tool: %+v", ev)
+		}
+	}
+	if text != "Done: the draft is ready." || evs[len(evs)-1].Type != "done" {
+		t.Fatalf("second turn: %+v", evs)
+	}
+	e.do(nil, "GET", "/v1/posts", e.key, nil, 200, &posts)
+	if len(posts.Data) != 1 || posts.Data[0].Content != "Hello from the assistant" {
+		t.Fatalf("posts: %+v", posts.Data)
+	}
+
+	// Declined: nothing is created. Every model call counts as AI usage.
+	evs = e.assistantTurn(msgs, &app.AssistantDecision{ToolCallID: confirm.ID, Allow: false})
+	if evs[len(evs)-1].Type != "done" {
+		t.Fatalf("declined: %+v", evs)
+	}
 	var st app.AIStatus
 	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
-	if st.Usage.UsedUSD <= 0 {
+	if st.Usage.UsedUSD < 0.0016 {
 		t.Fatalf("usage: %+v", st.Usage)
 	}
-	// A picture job can't be a text one; bad settings and a key without posts:write are refused.
-	if code, _, body := e.aiJob(e.key, map[string]string{"operation": "write", "prompt": "x"}, nil, nil); code != 422 {
-		t.Fatalf("write as a job: %d %s", code, body)
-	}
-	e.do(nil, "POST", "/v1/ai/write", e.key, map[string]any{"prompt": "x", "format": "poem", "voice": "company"}, 422, nil)
-	e.do(nil, "POST", "/v1/ai/write", e.keyWith(app.ScopeMediaWrite), map[string]any{"prompt": "x", "format": "short", "voice": "company"}, 403, nil)
+	// Without AI on the server there is no assistant.
+	e.aiSetup(nil, nil)
+	e.do(nil, "POST", "/v1/assistant/chat", e.key, map[string]any{"messages": msgs}, 409, nil)
 }

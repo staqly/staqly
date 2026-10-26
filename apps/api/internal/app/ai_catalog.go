@@ -31,7 +31,7 @@ const (
 	AIEnhance           = "enhance"            // sharper, cleaner detail at twice the size
 	AITextToVideo       = "text_to_video"      // a video clip from a prompt
 	AIImageToVideo      = "image_to_video"     // a picture brought to life as a video clip
-	AIWrite             = "write"              // a post or a thread from a description (POST /v1/ai/write, not a job)
+	AIAssistant         = "assistant"          // the dashboard's chat assistant (POST /v1/assistant/chat, not a job)
 )
 
 // AI providers.
@@ -62,7 +62,7 @@ var aiOps = []aiOpSpec{
 	{AIEnhance, "image", "optional", true, false},
 	{AITextToVideo, "video", "required", false, false},
 	{AIImageToVideo, "video", "required", true, false},
-	{AIWrite, "text", "required", false, false},
+	{AIAssistant, "text", "required", false, false},
 }
 
 func aiOpByID(id string) (aiOpSpec, bool) {
@@ -105,8 +105,8 @@ var aiCatalog = []aiModel{
 	{AIProviderFal, AIEnhance, "fal-ai/clarity-upscaler", aiPerMegapixel, 0.03},
 	{AIProviderFal, AITextToVideo, "fal-ai/kling-video/v2.5-turbo/pro/text-to-video", aiPerSecond, 0.07},
 	{AIProviderFal, AIImageToVideo, "fal-ai/kling-video/v2.5-turbo/pro/image-to-video", aiPerSecond, 0.07},
-	// Charged per token; a post or a thread with Gemini 2.5 Flash is well under a cent.
-	{AIProviderFal, AIWrite, "openrouter/router", aiPerImage, 0.005},
+	// Charged per token (the router reports the cost); this is what one model call reserves until then.
+	{AIProviderFal, AIAssistant, "openrouter/router/openai", aiPerImage, 0.01},
 
 	// Higgsfield publishes no list prices; these follow its documented estimate example and fal.ai's price of
 	// the same Kling model.

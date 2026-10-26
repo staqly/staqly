@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"net"
 	"net/netip"
 	"net/url"
@@ -81,17 +80,6 @@ func aiConfig(ai *app.AIConfig) error {
 	}
 	if ai.Prices, err = app.ParseAIPrices(os.Getenv("AI_PRICES")); err != nil {
 		return err
-	}
-	switch v := strings.TrimSpace(os.Getenv("AI_MONTHLY_LIMIT_USD")); v {
-	case "":
-	case "unlimited":
-		ai.MonthlyLimitUSD = -1
-	default:
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil || f <= 0 || math.IsInf(f, 0) || math.IsNaN(f) {
-			return fmt.Errorf("AI_MONTHLY_LIMIT_USD must be an amount in US dollars (more than 0) or unlimited (got %q)", v)
-		}
-		ai.MonthlyLimitUSD = f
 	}
 	return nil
 }
@@ -267,6 +255,7 @@ func Load() (Config, error) {
 				FalBaseURL:        strings.TrimRight(env("AI_FAL_BASE_URL", "https://queue.fal.run"), "/"),
 				HiggsfieldKey:     strings.TrimSpace(os.Getenv("AI_HIGGSFIELD_API_KEY")),
 				HiggsfieldBaseURL: strings.TrimRight(env("AI_HIGGSFIELD_BASE_URL", "https://api.higgsfield.ai"), "/"),
+				AssistantModel:    strings.TrimSpace(os.Getenv("AI_ASSISTANT_MODEL")),
 			},
 			Stock:              app.StockConfig{UnsplashKey: os.Getenv("UNSPLASH_ACCESS_KEY")},
 			LocalTokenPath:     filepath.Join(dataDir, app.LocalTokenFile),

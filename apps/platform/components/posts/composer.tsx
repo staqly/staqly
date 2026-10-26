@@ -1257,8 +1257,6 @@ export function Composer({
   post,
   defaultPublishAt,
   defaultMedia,
-  defaultContent,
-  defaultThread,
   onSaved,
 }: {
   open: boolean
@@ -1271,9 +1269,6 @@ export function Composer({
   defaultPublishAt?: string
   /** Files to start with (the media library's "New post with this"). */
   defaultMedia?: Media[]
-  /** Text to start with, and the thread's further posts (Write with AI). */
-  defaultContent?: string
-  defaultThread?: string[]
   onSaved?: (post: Post) => void
 }) {
   return (
@@ -1285,8 +1280,6 @@ export function Composer({
             post={post}
             defaultPublishAt={defaultPublishAt}
             defaultMedia={defaultMedia}
-            defaultContent={defaultContent}
-            defaultThread={defaultThread}
             onDone={(p) => {
               onOpenChange(false)
               onSaved?.(p)
@@ -1307,8 +1300,6 @@ export function ComposerForm({
   post,
   defaultPublishAt,
   defaultMedia,
-  defaultContent,
-  defaultThread,
   initialTab,
   headerActions,
   onDone,
@@ -1317,8 +1308,6 @@ export function ComposerForm({
   post?: Post
   defaultPublishAt?: string
   defaultMedia?: Media[]
-  defaultContent?: string
-  defaultThread?: string[]
   /** A channel id to open on (the calendar's card of that channel). */
   initialTab?: string
   headerActions?: React.ReactNode
@@ -1331,19 +1320,17 @@ export function ComposerForm({
   const [chosenCollection, setCollection] = useState(post?.collection_id ?? collectionId ?? '')
   // Nothing picked yet: the workspace's Default collection.
   const collection = chosenCollection || (collections.data?.find((c) => c.is_default)?.id ?? '')
-  const [content, setContent] = useState(post?.content ?? defaultContent ?? '')
+  const [content, setContent] = useState(post?.content ?? '')
   const [media, setMedia] = useState<Media[]>(post?.media_items ?? defaultMedia ?? [])
 
   useEditedMedia(setMedia)
   const [thread, setThread] = useState<ThreadPart[]>(() =>
-    post
-      ? (post.thread ?? []).map((p) => ({
-          uid: crypto.randomUUID(),
-          content: p.content,
-          media: p.media_items ?? [],
-          delay: p.delay_seconds ?? 0,
-        }))
-      : (defaultThread ?? []).map((c) => ({ uid: crypto.randomUUID(), content: c, media: [], delay: 0 })),
+    (post?.thread ?? []).map((p) => ({
+      uid: crypto.randomUUID(),
+      content: p.content,
+      media: p.media_items ?? [],
+      delay: p.delay_seconds ?? 0,
+    })),
   )
   const [selected, setSelected] = useState<Set<string>>(() => new Set((post?.targets ?? []).map((t) => t.channel_id)))
   const [overrides, setOverrides] = useState<Record<string, Override>>(() =>
