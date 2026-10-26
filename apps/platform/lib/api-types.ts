@@ -4396,7 +4396,7 @@ export interface components {
         /** @description A code to connect a Telegram chat through the server's bot, and what became of it */
         TelegramConnect: {
             code: string;
-            /** @description What to send in the chat: /connect CODE */
+            /** @description What to send in the chat: /connect@bot CODE (addressed to the server's bot, so other bots leave it alone) */
             command: string;
             /** @description The bot to add (@username) */
             bot: string;

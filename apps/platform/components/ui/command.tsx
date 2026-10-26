@@ -41,6 +41,7 @@ function CommandDialog({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <DialogContent
+        closeOnOutsideClick
         className={cn(
           'overflow-hidden rounded-xl! p-0 sm:top-1/3 sm:translate-y-0 max-sm:inset-x-2 max-sm:top-[calc(env(safe-area-inset-top)_+_0.5rem)] max-sm:bottom-auto max-sm:w-auto max-sm:p-0 max-sm:data-open:slide-in-from-top-4',
           className,

@@ -63,7 +63,7 @@ func TestTelegramSharedBotConnects(t *testing.T) {
 	}
 	providers.SetTelegramBot("T0KEN", "staqly_test_bot")
 	code, err := s.StartTelegramConnect(ctx, p, "")
-	if err != nil || len(code.Code) != 6 || code.Command != "/connect "+code.Code || code.Bot != "@staqly_test_bot" {
+	if err != nil || len(code.Code) != 6 || code.Command != "/connect@staqly_test_bot "+code.Code || code.Bot != "@staqly_test_bot" {
 		t.Fatalf("%+v %v", code, err)
 	}
 

@@ -14,7 +14,9 @@ target links to the message on t.me.
 When the server has a bot of its own (`PROVIDER_TELEGRAM_BOT_TOKEN`, staqly cloud does), connecting takes no
 token:
 
-1. **Channels → Add channel → Telegram** shows the bot (`@yourserver_bot`) and a command, `/connect K7M2QX`.
+1. **Channels → Add channel → Telegram** shows the bot (`@yourserver_bot`) and a command,
+   `/connect@yourserver_bot K7M2QX` (addressed to that bot, so other bots in a group that know `/connect` leave it
+   alone).
 2. Add the bot to your channel (**Add to a channel**: as an administrator allowed to post and delete
    messages) or group (**Add to a group**).
 3. Send the command in that chat. The bot checks it may post there, the chat becomes a channel, and the bot

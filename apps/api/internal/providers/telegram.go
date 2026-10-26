@@ -3,6 +3,7 @@ package providers
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -93,6 +94,37 @@ type telegramChat struct {
 	Username string `json:"username"`
 	First    string `json:"first_name"`
 	Last     string `json:"last_name"`
+	Photo    *struct {
+		Small string `json:"small_file_id"`
+	} `json:"photo"`
+}
+
+// telegramAvatar is the chat's picture as a data: URL (a small JPEG, up to 64 KB), or "" when it has none. A
+// Bot API file address carries the bot's token, so the picture is fetched here and kept inline, never linked.
+func telegramAvatar(ctx context.Context, token string, c telegramChat) string {
+	if c.Photo == nil || c.Photo.Small == "" {
+		return ""
+	}
+	var f struct {
+		Path string `json:"file_path"`
+	}
+	if telegramCall(ctx, token, "getFile", map[string]any{"file_id": c.Photo.Small}, &f) != nil || f.Path == "" {
+		return ""
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, telegramAPI+"/file/bot"+token+"/"+f.Path, nil)
+	if err != nil {
+		return ""
+	}
+	res, err := httpClient(ctx).Do(req)
+	if err != nil {
+		return ""
+	}
+	defer res.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(res.Body, 64<<10+1))
+	if err != nil || res.StatusCode != http.StatusOK || len(b) > 64<<10 || http.DetectContentType(b) != "image/jpeg" {
+		return ""
+	}
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(b)
 }
 
 func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Credentials, Profile, error) {
@@ -160,7 +192,7 @@ func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Creden
 	if name == "" {
 		name = strings.TrimSpace(c.First + " " + c.Last)
 	}
-	profile := Profile{Name: name, Handle: id}
+	profile := Profile{Name: name, Handle: id, AvatarURL: telegramAvatar(ctx, token, c)}
 	if c.Username != "" {
 		profile.Handle = "@" + c.Username
 		profile.ProfileURL = "https://t.me/" + c.Username

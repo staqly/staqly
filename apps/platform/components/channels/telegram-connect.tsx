@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Megaphone, RotateCcw, Users } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { CopyButton } from '@/components/common/copy-button'
 import { Button } from '@/components/ui/button'
@@ -45,8 +45,13 @@ export function TelegramConnect({
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- once per opening
   }, [])
 
+  // Once per code: onDone and the query's data change identity on every render, so without this guard the toast
+  // would repeat for as long as the panel stays.
+  const handled = useRef<string | null>(null)
+
   useEffect(() => {
-    if (status.data?.status === 'connected') {
+    if (status.data?.status === 'connected' && handled.current !== status.data.code) {
+      handled.current = status.data.code
       void qc.invalidateQueries({ queryKey: qk.channels })
       void api.channels().then((r) => {
         const c = r.data?.find((ch) => ch.id === status.data!.channel_id)
