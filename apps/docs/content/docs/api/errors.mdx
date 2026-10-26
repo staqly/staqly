@@ -163,9 +163,13 @@ A target that fails while publishing doesn't answer an error code: the post's ta
 | 409 | `conflict` | A checkout for a workspace that already has a subscription, or the billing portal before any checkout |
 | 410 | `gone` | A workspace export or backup is no longer available (after 24 hours) |
 | 502 | `payment_provider_error` | Stripe rejected a checkout or portal request; retry later, the operator sees the reason in the logs |
-| 502 | `ai_provider_error` | OpenAI did not answer a design editor AI request, or sent no picture; retry |
-| 409 | `ai_key_rejected` | OpenAI no longer accepts the workspace's AI key; an admin replaces it under Integrations |
-| 504 | `timeout` | OpenAI took too long on a design editor AI request; try again or ask for a smaller picture |
+| 402 | `ai_limit_reached` | An AI request (`POST /v1/ai/jobs`) would pass the workspace's monthly AI allowance; `details` has `used_usd`, `limit_usd` and `estimate_usd`. It renews on the 1st (UTC) |
+| 409 | `not_available` | An AI operation this server does not offer (no provider key, or `AI_OPERATIONS` leaves it out); `GET /v1/ai` lists the offered ones |
+
+An AI job that ends without a result says why in its `error.code` (the request itself succeeded): `ai_refused`
+(the provider refused the input or its content check held the result back), `ai_unavailable` (no provider took
+it), `ai_failed`, `ai_status_unknown` (the provider did not answer the submit, so it may have started; it was not
+sent again), `ai_timeout` or `canceled`.
 
 ## Common errors in detail
 

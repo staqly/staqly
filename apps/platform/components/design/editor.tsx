@@ -35,6 +35,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useAiStatus } from '@/lib/ai-status'
 import { api, mediaUrl, type Media, type Provider } from '@/lib/api'
 import { downloadBlob } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
@@ -42,6 +43,7 @@ import { qk } from '@/lib/queries'
 import { safeNextPath } from '@/lib/safe'
 import { cn } from '@/lib/utils'
 
+import { discardAiRun } from './ai-panel'
 import { DesignCanvas, DesignView, preloadPage } from './canvas'
 import {
   copyPage,
@@ -278,9 +280,9 @@ export default function DesignEditor({ search }: { search: string }) {
   const [rendering, setRendering] = useState<Page | null>(null)
   const view = useRef<Konva.Stage | null>(null)
   const page = design.pages.find((p) => p.id === pageId) ?? design.pages[0]!
-  // AI shows only when the server has an AI key.
-  const ai = useQuery({ queryKey: qk.ai, queryFn: api.ai, staleTime: 5 * 60_000 })
-  const tools = PANELS.filter((p) => p.id !== 'ai' || ai.data?.configured)
+  // AI shows only when the server offers an AI tool for pictures (a provider key and an operation).
+  const ai = useAiStatus()
+  const tools = PANELS.filter((p) => p.id !== 'ai' || ai.data?.operations.some((o) => o.kind === 'image'))
   // Platforms with picture rules, for downloads made to fit them.
   const providers = useQuery({ queryKey: qk.providers, queryFn: async () => (await api.providers()).data ?? [] })
   const channels = (providers.data ?? []).filter((p) => p.status === 'available' && p.limits.image?.max_bytes)
@@ -295,6 +297,9 @@ export default function DesignEditor({ search }: { search: string }) {
     setSelected([])
     setCropping(null)
   }, [])
+
+  // An AI request still waiting when the editor closes is cancelled (its files go too).
+  useEffect(() => discardAiRun, [])
 
   useEffect(() => {
     void open(params)

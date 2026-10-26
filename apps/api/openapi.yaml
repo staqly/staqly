@@ -3487,10 +3487,11 @@ paths:
     get:
       operationId: getAI
       tags: [media]
-      summary: Whether the design editor's AI tools work, with which model (media:read)
+      summary: Which AI tools work on this server, and the workspace's AI usage this month (media:read)
       description: >
-        The AI tools run on the server's own OpenAI keys (AI_OPENAI_API_KEY, AI_OPENAI_FALLBACK_API_KEY); without
-        one, configured is false and the editor hides them.
+        The AI tools run on the server's own provider accounts: fal.ai (AI_FAL_KEY) first, Higgsfield
+        (AI_HIGGSFIELD_API_KEY) as the fallback for the operations it does the same way. Without a key, configured
+        is false, operations is empty and the editor hides its AI tools. Nothing here is secret: no key is ever sent.
       responses:
         "200": { description: AI status, content: { application/json: { schema: { $ref: "#/components/schemas/AIStatus" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -3520,40 +3521,114 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
-  /v1/ai/images/{op}:
-    parameters:
-      - { name: op, in: path, required: true, schema: { type: string, enum: [generate, edit] } }
+  /v1/ai/jobs:
     post:
-      operationId: aiImage
+      operationId: createAIJob
       tags: [media]
-      summary: Make a picture with the workspace's AI key (media:write)
+      summary: Start an AI request (media:write)
       description: >
-        generate makes a picture from a prompt; edit changes the image by the prompt, only inside the mask's
-        transparent pixels when a mask is sent. Answers the picture; nothing is stored. At most 30 pictures per 10
-        minutes per workspace; the provider's own limits and refusals come back as 429 or 422.
+        Queues one AI operation (GET /v1/ai lists the ones this server offers); poll GET /v1/ai/jobs/{id} until it
+        has succeeded, failed or was cancelled. Send the settings before the files. A repeated Idempotency-Key, or
+        the same request from the same person while it still runs, answers 200 with that earlier job instead of
+        starting another. At most 30 requests per 10 minutes and 4 running at once per workspace (429); a request
+        that would pass the workspace's monthly AI limit is refused with 402 ai_limit_reached.
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 200 } }
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               type: object
-              required: [prompt]
+              required: [operation]
               properties:
-                prompt: { type: string, maxLength: 4000 }
-                size: { type: string, description: "The model's sizes, e.g. 1024x1024, 1536x1024, 1024x1536 (gpt-image-1)" }
-                image: { type: string, format: binary, description: Required for edit }
-                mask: { type: string, format: binary, description: "PNG; transparent pixels mark what may change" }
+                operation:
+                  type: string
+                  enum: [generate, edit, inpaint, erase, expand, remove_background, replace_background, upscale, enhance, text_to_video, image_to_video]
+                prompt: { type: string, maxLength: 4000, description: Required or optional as the operation's prompt says; ignored when it is none }
+                width: { type: integer, minimum: 256, maximum: 2048, description: "generate: the picture's width (default 1024, rounded down to a multiple of 16)" }
+                height: { type: integer, minimum: 256, maximum: 2048 }
+                duration: { type: integer, enum: [5, 10], description: "Videos: seconds (default 5)" }
+                aspect_ratio: { type: string, enum: ["16:9", "9:16", "1:1"], description: "text_to_video (default 16:9)" }
+                canvas_width: { type: integer, minimum: 64, maximum: 4096, description: "expand: the new size" }
+                canvas_height: { type: integer, minimum: 64, maximum: 4096 }
+                image_x: { type: integer, minimum: 0, description: "expand: where the picture sits in the new size" }
+                image_y: { type: integer, minimum: 0 }
+                place_width: { type: integer, description: "expand: the picture's size there (default its own)" }
+                place_height: { type: integer }
+                image: { type: string, format: binary, description: "PNG, JPEG or WebP, at most 20 MB and 4096 px a side (PNG for upscale)" }
+                mask: { type: string, format: binary, description: "inpaint, erase: a PNG of the picture's size; white marks the area to change" }
       responses:
-        "200": { description: The picture, content: { image/png: { schema: { type: string, format: binary } } } }
+        "200": { description: The earlier job that answers this request, content: { application/json: { schema: { $ref: "#/components/schemas/AIJob" } } } }
+        "202": { description: The queued job, content: { application/json: { schema: { $ref: "#/components/schemas/AIJob" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
-        "502": { $ref: "#/components/responses/BadGateway" }
+  /v1/ai/jobs/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getAIJob
+      tags: [media]
+      summary: An AI request's state (media:read)
+      responses:
+        "200": { description: The job, content: { application/json: { schema: { $ref: "#/components/schemas/AIJob" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: discardAIJob
+      tags: [media]
+      summary: Discard an AI request (media:write)
+      description: >
+        Cancels a request that still runs (the provider is asked to drop it; one it already started may still be
+        charged) and deletes its temporary files. A result already kept stays in the library.
+      responses:
+        "204": { description: Discarded }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/ai/jobs/{id}/result:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getAIJobResult
+      tags: [media]
+      summary: The made picture or video, for the preview (media:read)
+      description: Kept for a day, until the result is kept or discarded.
+      responses:
+        "200":
+          description: The file
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+            video/mp4: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/ai/jobs/{id}/accept:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: acceptAIJob
+      tags: [media]
+      summary: Keep the result in the media library (media:write)
+      description: The result becomes a library file (plan limits apply as for an upload). Accepting again answers the same file.
+      responses:
+        "201": { description: The library file, content: { application/json: { schema: { $ref: "#/components/schemas/Media" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /v1/stock/photos:
     get:
       operationId: listStockPhotos
@@ -4788,18 +4863,66 @@ components:
         data: { type: array, items: { $ref: "#/components/schemas/StockPhoto" } }
     AIStatus:
       type: object
-      required: [configured, model, capabilities]
+      required: [configured, providers, operations, usage]
       properties:
-        configured: { type: boolean, description: The server has an AI key; false hides the AI tools }
-        model: { type: string, description: The server's image model; empty when not configured }
-        capabilities:
+        configured: { type: boolean, description: At least one AI operation works; false hides the AI tools }
+        providers: { type: array, items: { type: string, enum: [fal, higgsfield] }, description: "The configured providers, the primary first" }
+        operations: { type: array, items: { $ref: "#/components/schemas/AIOperation" } }
+        usage:
           type: object
-          required: [generate, edit, inpaint, expand]
+          required: [period, used_usd, limit_usd]
           properties:
-            generate: { type: boolean }
-            edit: { type: boolean }
-            inpaint: { type: boolean, description: Change only a marked area }
-            expand: { type: boolean, description: Fill new space around a picture }
+            period: { type: string, description: "The month (UTC), YYYY-MM" }
+            used_usd: { type: number, description: "The workspace's estimated AI spending this month (running requests count with their estimate)" }
+            limit_usd: { type: [number, "null"], description: "The monthly limit (AI_MONTHLY_LIMIT_USD); null: none" }
+    AIOperation:
+      type: object
+      description: An AI operation this server offers, what it takes and who runs it
+      required: [id, kind, prompt, image, mask, provider, model, fallback]
+      properties:
+        id: { type: string, enum: [generate, edit, inpaint, erase, expand, remove_background, replace_background, upscale, enhance, text_to_video, image_to_video] }
+        kind: { type: string, enum: [image, video], description: What it makes }
+        prompt: { type: string, enum: [required, optional, none] }
+        image: { type: boolean, description: Needs a picture }
+        mask: { type: boolean, description: "Needs a mask (white: the area to change)" }
+        provider: { type: string, enum: [fal, higgsfield] }
+        model: { type: string, description: The provider's model id }
+        fallback: { type: string, description: "The provider that takes over when the first does not take a request; empty: none" }
+    AIJob:
+      type: object
+      description: One AI request
+      required: [id, operation, kind, status, provider, model, fallback_from, error, result, media_id, estimated_cost_usd, duration_ms, created_at, finished_at]
+      properties:
+        id: { type: string }
+        operation: { type: string }
+        kind: { type: string, enum: [image, video] }
+        status: { type: string, enum: [queued, running, succeeded, failed, canceled] }
+        provider: { type: string, description: "The provider that runs it; empty until it is sent" }
+        model: { type: string }
+        fallback_from: { type: string, description: "The provider that did not take it first; empty: none" }
+        error:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [code, message]
+              properties:
+                code: { type: string, description: "ai_refused, ai_unavailable, ai_failed, ai_status_unknown, ai_timeout or canceled" }
+                message: { type: string }
+        result:
+          oneOf:
+            - type: "null"
+            - type: object
+              description: The made file, at GET /v1/ai/jobs/{id}/result until it is kept or discarded
+              required: [mime_type, width, height]
+              properties:
+                mime_type: { type: string }
+                width: { type: integer, description: 0 for a video }
+                height: { type: integer }
+        media_id: { type: string, description: The library file it was kept as; empty until accepted }
+        estimated_cost_usd: { type: number, description: "Estimated from the catalog's list prices; 0 when nothing was charged" }
+        duration_ms: { type: integer }
+        created_at: { type: string, format: date-time }
+        finished_at: { type: string, description: Empty while it runs }
     DesignBrand:
       type: object
       description: The design editor's brand kit, shared by the workspace

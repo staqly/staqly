@@ -87,4 +87,37 @@ test.describe('the design editor', () => {
     ).toBeVisible()
     await expect(page.getByRole('button', { name: new RegExp(`\\(2 of 2\\)\\.png$`), exact: false })).toHaveCount(0)
   })
+
+  // The local server's AI runs on a fake fal.ai (e2e/ui/lib/receiver.ts).
+  test('AI makes a picture: a preview first, on the page only when kept, and Undo takes it back', async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.goto('/media/edit')
+    await expect(page.getByTestId('design-canvas')).toBeVisible({ timeout: 30_000 })
+
+    const tools = page.getByRole('navigation', { name: 'Design tools' })
+    const layers = page.getByRole('complementary', { name: 'Layers' })
+
+    await tools.getByRole('button', { name: 'AI' }).click()
+    await expect(page.getByRole('radio', { name: 'New picture' })).toBeChecked()
+    await page.getByRole('textbox', { name: 'What should AI do?' }).fill('A lighthouse at dawn')
+    await page.getByRole('button', { name: 'Make the picture' }).click()
+    await expect(page.getByRole('img', { name: 'What AI made' })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('Made by fal.ai.')).toBeVisible()
+
+    const violations = await axe(page)
+
+    expect(violations, JSON.stringify(violations, null, 2)).toEqual([])
+
+    // Nothing on the page until it is kept.
+    await tools.getByRole('button', { name: 'Layers' }).click()
+    await expect(layers.getByText('Picture')).toHaveCount(0)
+    await tools.getByRole('button', { name: 'AI' }).click()
+    await page.getByRole('button', { name: 'Use it' }).click()
+    await expect(page.getByText('Added to the design')).toBeVisible()
+
+    await tools.getByRole('button', { name: 'Layers' }).click()
+    await expect(layers.getByText('Picture')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect(layers.getByText('Picture')).toHaveCount(0)
+  })
 })

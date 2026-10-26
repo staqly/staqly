@@ -118,12 +118,42 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 
 ## Editors: AI and stock photos
 
+### AI tools
+
+The [design editor's AI tools](/dashboard/design-editor#ai-tools) and the media library's AI videos run on the
+server's own provider accounts. Keys are read on the server only: no browser, workspace or API response ever sees
+them. With both keys fal.ai is the primary and Higgsfield the fallback (for what it does the same way); with one,
+that one runs alone; with none, the AI tools are hidden. A provider that is down is not the same as one that is not
+set up: its requests fail (or fall back) and the tools stay. A key of the wrong shape refuses to start.
+
 | Variable | Default | Description |
 |---|---|---|
-| `AI_OPENAI_API_KEY` | — | An OpenAI API key: the [design editor](/dashboard/design-editor) gets its **AI** tool (make or change a picture from a description) for every workspace, on this account. Unset, the tool is not shown. |
-| `AI_OPENAI_FALLBACK_API_KEY` | — | A second key, used when OpenAI refuses the first, limits it or fails. |
-| `AI_OPENAI_MODEL` | `gpt-image-1` | The image model: `gpt-image-1`, `gpt-image-1-mini`, `dall-e-3` (makes pictures, can't change them) or `dall-e-2`. |
-| `AI_OPENAI_BASE_URL` | `https://api.openai.com/v1` | The OpenAI-compatible endpoint the AI tools call. Change it only for a compatible proxy or tests. |
+| `AI_FAL_KEY` | — | A [fal.ai](https://fal.ai/dashboard/keys) API key. Turns on every AI tool. |
+| `AI_HIGGSFIELD_API_KEY` | — | A [Higgsfield](https://console.higgsfield.ai) API key as `<key id>:<key secret>`. Alone: new pictures and videos; with `AI_FAL_KEY`: their fallback. |
+| `AI_OPERATIONS` | every one | The tools offered, comma-separated: `generate`, `edit`, `inpaint`, `erase`, `expand`, `remove_background`, `replace_background`, `upscale`, `enhance`, `text_to_video`, `image_to_video` (e.g. `generate,edit,erase` keeps videos off). |
+| `AI_MONTHLY_LIMIT_USD` | `10` | What one workspace may spend on AI per calendar month (UTC), in US dollars as estimated from list prices; running requests count with their estimate. `unlimited` turns the limit off. |
+| `AI_PRICES` | built in | Overrides the estimate of a model, `model=price` per its unit (image, megapixel or video second), comma-separated: `fal-ai/flux/schnell=0.004,fal-ai/flux-pro/kontext=0.05`. |
+| `AI_FAL_BASE_URL` | `https://queue.fal.run` | fal.ai's queue API (a proxy or tests). |
+| `AI_HIGGSFIELD_BASE_URL` | `https://api.higgsfield.ai` | Higgsfield's API (a proxy or tests). |
+
+How a request runs: it is checked (scope `media:write`, the workspace, the picture: PNG, JPEG or WebP up to 20 MB
+and 4096 px a side, the limits), its picture is kept as a temporary file and the job queue sends it to the
+provider, then asks how it is going until the result is in. The worker sends a request once: a provider that did not
+answer may have started it, so it is never sent again or to the fallback (Higgsfield deduplicates by the job id,
+so only it gets the same request again after a lost answer). A failed request is not retried; the person asks
+again. Every request is recorded with the person, the provider, the model, the operation, how long it took and
+its estimated cost (the `ai_jobs` table); its files and the description are deleted once the result is used or
+discarded, or after a day. Higgsfield is asked to delete its copy once the result is in; fal.ai keeps results on
+its CDN under your account's retention setting (set it in fal.ai's dashboard). Logs name the job, the provider and
+the model, never a key, a description or a picture.
+
+To try the tools locally, put a key in `.env` (or the environment of `staqly serve`) and restart; the AI tool
+appears in the editor. Every request is billed by the provider, so keep `AI_MONTHLY_LIMIT_USD` low while testing.
+
+### Stock photos
+
+| Variable | Default | Description |
+|---|---|---|
 | `UNSPLASH_ACCESS_KEY` | — | An [Unsplash](https://unsplash.com/developers) app's access key: the [design editor](/dashboard/design-editor) gets an **Unsplash** tab with stock photos. The key stays on the server; searches go through staqly, the pictures load from Unsplash. Unset, the tab is not shown. |
 
 ## Webhooks and schedule endpoints

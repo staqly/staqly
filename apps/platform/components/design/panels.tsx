@@ -30,11 +30,10 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { api, errorMessage, mediaThumbUrl, mediaUrl, type Media, type StockPhoto } from '@/lib/api'
-import { qk } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
+import { AiPanel } from './ai-panel'
 import { BrandPanel, useBrand } from './brand'
 import { DesignView, dragged } from './canvas'
 import {
@@ -49,10 +48,8 @@ import {
   type ImageEl,
   type Page,
   type ShapeKind,
-  type Size,
 } from './doc'
 import { loadFont } from './fonts'
-import { aiSize, downscale } from './raster'
 import { IconsAndStickers } from './stickers'
 import type { DesignStore } from './store'
 import { templates } from './templates'
@@ -867,47 +864,6 @@ function BackgroundPanel({ ctx }: { ctx: PanelCtx }) {
   )
 }
 
-const AI_IDEAS = [
-  'Replace the background with a sunny beach',
-  'Make it look like a watercolour painting',
-  'Add soft studio lighting',
-  'Turn it into a minimal flat illustration',
-]
-
-/** One AI request: a new picture, or the photo changed as the prompt says; the result goes to the library. */
-async function aiPicture(o: {
-  mode: 'generate' | 'edit'
-  prompt: string
-  model: string
-  picture?: ImageEl
-  size: Size
-  signal: AbortSignal
-}): Promise<Media> {
-  const out =
-    o.mode === 'edit' && o.picture
-      ? await api.aiImage(
-          'edit',
-          {
-            prompt: o.prompt,
-            size: aiSize(o.model, o.picture.width, o.picture.height),
-            image: await downscale(await (await fetch(o.picture.src)).blob()),
-          },
-          o.signal,
-        )
-      : await api.aiImage(
-          'generate',
-          { prompt: o.prompt, size: aiSize(o.model, o.size.width, o.size.height) },
-          o.signal,
-        )
-  const name =
-    o.prompt
-      .slice(0, 40)
-      .replace(/[^\w ]+/g, '')
-      .trim() || 'picture'
-
-  return api.uploadMedia(out, `AI ${name}.png`)
-}
-
 /** A picture on the page shows another library file, in the same frame (undo brings the old one back). */
 export function swapPicture(ctx: PanelCtx, id: string, media: Media) {
   ctx.updatePage((p) => {
@@ -919,112 +875,6 @@ export function swapPicture(ctx: PanelCtx, id: string, media: Media) {
       el.stock = undefined
     }
   })
-}
-
-function AiPanel({ ctx }: { ctx: PanelCtx }) {
-  const status = useQuery({ queryKey: qk.ai, queryFn: api.ai })
-  const [prompt, setPrompt] = useState('')
-  const [busy, setBusy] = useState(false)
-  const abort = useRef<AbortController | null>(null)
-  const st = status.data
-  const design = ctx.store.design
-  const sel = ctx.selected.length === 1 ? ctx.page.elements.find((e) => e.id === ctx.selected[0]) : undefined
-  const picture = sel?.type === 'image' ? sel : undefined
-
-  if (status.isPending) {
-    return <Loader2 className="mx-auto animate-spin text-muted-foreground" />
-  }
-
-  // The tools button hides without the server's AI key (see the editor); this guards a stale status.
-  if (!st?.configured) {
-    return null
-  }
-
-  const caps = st.capabilities
-  const canEdit = !!picture && caps.edit
-
-  const run = (mode: 'generate' | 'edit') => {
-    const ctrl = new AbortController()
-
-    abort.current = ctrl
-    setBusy(true)
-    void aiPicture({ mode, prompt, model: st.model, picture, size: design, signal: ctrl.signal })
-      .then((media) => {
-        if (mode === 'edit' && picture) {
-          // The change takes the old picture's place and frame; undo brings the old one back.
-          swapPicture(ctx, picture.id, media)
-        } else {
-          ctx.add(
-            newImage(design, mediaUrl(media.id), media.width || 1024, media.height || 1024, { mediaId: media.id }),
-          )
-        }
-
-        toast.success(mode === 'edit' ? 'Picture changed' : 'Picture added', {
-          description: 'It is in your library too.',
-        })
-      })
-      .catch((e: unknown) => {
-        if (!(e instanceof DOMException && e.name === 'AbortError')) {
-          toast.error('AI could not do it', { description: errorMessage(e) })
-        }
-      })
-      .finally(() => setBusy(false))
-  }
-
-  return (
-    <div className="flex flex-col gap-4 text-sm">
-      <Textarea
-        aria-label="What should AI do?"
-        placeholder={
-          picture ? 'Put this product on a marble table, morning light' : 'A cosy coffee shop at sunrise, photo'
-        }
-        value={prompt}
-        maxLength={4000}
-        rows={4}
-        onChange={(e) => setPrompt(e.target.value)}
-      />
-      <div className="flex flex-wrap gap-1.5">
-        {AI_IDEAS.map((idea) => (
-          <button
-            key={idea}
-            type="button"
-            className="rounded-full border px-2.5 py-1 text-xs hover:bg-muted"
-            onClick={() => setPrompt(idea)}
-          >
-            {idea}
-          </button>
-        ))}
-      </div>
-      {busy ? (
-        <div className="flex items-center gap-2">
-          <Loader2 className="animate-spin" /> Working, up to a minute: <Elapsed />
-          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => abort.current?.abort()}>
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {canEdit && (
-            <Button onClick={() => void run('edit')} disabled={!prompt.trim()}>
-              <Sparkles /> Change the selected photo
-            </Button>
-          )}
-          {caps.generate && (
-            <Button
-              variant={canEdit ? 'outline' : 'default'}
-              onClick={() => void run('generate')}
-              disabled={!prompt.trim()}
-            >
-              <Sparkles /> Make a new picture
-            </Button>
-          )}
-          {!picture && caps.edit && (
-            <p className="text-xs text-muted-foreground">Select a photo on the page to change it with a description.</p>
-          )}
-        </div>
-      )}
-    </div>
-  )
 }
 
 export function elLabel(e: El) {

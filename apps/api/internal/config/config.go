@@ -2,8 +2,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/netip"
 	"net/url"
@@ -51,7 +53,48 @@ type Config struct {
 
 // obsoleteVars: the keyless local mode's guard (peer, Host and Origin checks), gone since local mode
 // requires its access token for every request.
-var obsoleteVars = []string{"LOCAL_TRUSTED_PEERS", "LOCAL_ALLOWED_HOSTS", "LOCAL_ALLOWED_ORIGINS"}
+// The AI_OPENAI_* settings went with the OpenAI provider (AI runs on fal.ai and Higgsfield: AI_FAL_KEY,
+// AI_HIGGSFIELD_API_KEY).
+var obsoleteVars = []string{"LOCAL_TRUSTED_PEERS", "LOCAL_ALLOWED_HOSTS", "LOCAL_ALLOWED_ORIGINS",
+	"AI_OPENAI_API_KEY", "AI_OPENAI_FALLBACK_API_KEY", "AI_OPENAI_MODEL", "AI_OPENAI_BASE_URL"}
+
+// aiConfig checks the AI keys' shape and reads the operations, the monthly limit and price overrides. A key is
+// never printed in an error.
+func aiConfig(ai *app.AIConfig) error {
+	if k := ai.FalKey; k != "" && (len(k) < 16 || strings.ContainsAny(k, " \t\r\n")) {
+		return errors.New("AI_FAL_KEY does not look like a fal.ai key (from fal.ai/dashboard/keys)")
+	}
+	if k := ai.HiggsfieldKey; k != "" {
+		id, secret, ok := strings.Cut(k, ":")
+		if !ok || id == "" || secret == "" || strings.ContainsAny(k, " \t\r\n") {
+			return errors.New("AI_HIGGSFIELD_API_KEY must be <key id>:<key secret> (from console.higgsfield.ai)")
+		}
+	}
+	for name, u := range map[string]string{"AI_FAL_BASE_URL": ai.FalBaseURL, "AI_HIGGSFIELD_BASE_URL": ai.HiggsfieldBaseURL} {
+		if p, err := url.Parse(u); err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" {
+			return fmt.Errorf("%s must be an http(s) URL", name)
+		}
+	}
+	var err error
+	if ai.Operations, err = app.ParseAIOperations(os.Getenv("AI_OPERATIONS")); err != nil {
+		return err
+	}
+	if ai.Prices, err = app.ParseAIPrices(os.Getenv("AI_PRICES")); err != nil {
+		return err
+	}
+	switch v := strings.TrimSpace(os.Getenv("AI_MONTHLY_LIMIT_USD")); v {
+	case "":
+	case "unlimited":
+		ai.MonthlyLimitUSD = -1
+	default:
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || f <= 0 || math.IsInf(f, 0) || math.IsNaN(f) {
+			return fmt.Errorf("AI_MONTHLY_LIMIT_USD must be an amount in US dollars (more than 0) or unlimited (got %q)", v)
+		}
+		ai.MonthlyLimitUSD = f
+	}
+	return nil
+}
 
 func env(k, def string) string {
 	if v := os.Getenv(k); v != "" {
@@ -218,11 +261,12 @@ func Load() (Config, error) {
 			Mode: mode,
 			PostHog: app.PostHogConfig{Key: os.Getenv("POSTHOG_KEY"), Host: strings.TrimRight(env("POSTHOG_HOST", "https://eu.i.posthog.com"), "/"),
 				Environment: env("POSTHOG_ENVIRONMENT", "production")},
+			// AI tools on the server's own provider accounts: fal.ai first, Higgsfield as the fallback (ai.go).
 			AI: app.AIConfig{
-				APIKey:         os.Getenv("AI_OPENAI_API_KEY"),
-				FallbackAPIKey: os.Getenv("AI_OPENAI_FALLBACK_API_KEY"),
-				Model:          env("AI_OPENAI_MODEL", app.DefaultAIModel),
-				OpenAIBaseURL:  strings.TrimRight(env("AI_OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
+				FalKey:            strings.TrimSpace(os.Getenv("AI_FAL_KEY")),
+				FalBaseURL:        strings.TrimRight(env("AI_FAL_BASE_URL", "https://queue.fal.run"), "/"),
+				HiggsfieldKey:     strings.TrimSpace(os.Getenv("AI_HIGGSFIELD_API_KEY")),
+				HiggsfieldBaseURL: strings.TrimRight(env("AI_HIGGSFIELD_BASE_URL", "https://api.higgsfield.ai"), "/"),
 			},
 			Stock:              app.StockConfig{UnsplashKey: os.Getenv("UNSPLASH_ACCESS_KEY")},
 			LocalTokenPath:     filepath.Join(dataDir, app.LocalTokenFile),
@@ -284,8 +328,8 @@ func Load() (Config, error) {
 			return Config{}, err
 		}
 	}
-	if !app.KnownAIModel(c.App.AI.Model) {
-		return Config{}, fmt.Errorf("AI_OPENAI_MODEL must be an image model: gpt-image-1, gpt-image-1-mini, dall-e-3 or dall-e-2 (got %q)", c.App.AI.Model)
+	if err := aiConfig(&c.App.AI); err != nil {
+		return Config{}, err
 	}
 	if c.App.Blob, err = storage(c.App.UploadDir, dataDir); err != nil {
 		return Config{}, err

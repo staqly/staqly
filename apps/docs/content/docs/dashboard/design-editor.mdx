@@ -1,6 +1,6 @@
 ---
 title: Design editor
-description: "Make post graphics and carousels in the browser: templates, text in self-hosted fonts, shapes, photos from your library or Unsplash with crop, shapes and background removal, AI pictures from a description, and a size for every channel."
+description: "Make post graphics and carousels in the browser: templates, text in self-hosted fonts, shapes, photos from your library or Unsplash with crop, shapes and background removal, AI tools (new pictures, edits, object removal, expanding, upscaling), and a size for every channel."
 ---
 
 The design editor makes graphics for posts: a quote card, an announcement, a story, a carousel, a YouTube
@@ -48,8 +48,8 @@ The left bar holds the tools:
   with a colour or a gradient, like the background.
 - **Background**: a colour or a gradient (two or three colours, along an angle or out from the centre), or the
   selected photo stretched over the page.
-- **AI**: describe a picture and AI makes it, or select a photo and tell AI how to change it ("put this product on
-  a marble table"). Shown only when the server has an AI key (see below).
+- **AI**: make a new picture from a description, or select a photo and change it with AI (see
+  [AI tools](#ai-tools)). Shown only when the server has an AI provider set up.
 - **Layers**: the order of everything on the page, top first: drag a layer up or down (or focus its handle and
   use the arrow keys), show/hide and lock.
 - **Size**: a page size per channel (Instagram feed and stories, TikTok, YouTube, X, LinkedIn, Facebook,
@@ -95,9 +95,57 @@ are also kept in this browser: after a closed tab or a crash, the same design of
 
 A design with Unsplash photos reminds you whom to credit when you save.
 
-## AI pictures
+## AI tools
 
-The AI tools run on the server's OpenAI account: its operator sets `AI_OPENAI_API_KEY`, and optionally
-`AI_OPENAI_FALLBACK_API_KEY` for when OpenAI refuses or fails on the first key, and `AI_OPENAI_MODEL`
-([configuration](/self-hosting/configuration)). Workspaces never see or set a key. Without one, the **AI** tool
-is not shown.
+The **AI** tool lists what the server offers. Without a photo selected it makes a **New picture** from a
+description, in the page's shape. With a photo selected:
+
+| Tool | What it does |
+|---|---|
+| **Change it** | Changes the photo as you describe ("make it a winter scene", "put this product on a marble table"). |
+| **Redraw an area** | Paint over an area, then describe what goes there (generative fill). |
+| **Remove an object** | Paint over something; AI removes it and fills in behind it. |
+| **Expand** | Paints new space around the photo so it fits the page's shape; the frame grows with it. |
+| **Cut out with AI** | Removes the background on the AI service. **Remove background** in the photo's bar does the same on your device, free; it stays the default. |
+| **New background** | Keeps the subject and paints a new background from your description. |
+| **Upscale** | More pixels, the same picture. |
+| **Enhance** | Sharper, cleaner detail at twice the size. |
+
+A request runs on the server while you keep editing; nothing on the page changes until you look at the result
+and pick **Use it** (it takes the photo's place, or goes on the page as a new picture, in one step that Undo
+takes back), **Try again** or **Discard**. A result you use goes to your library too and stays an ordinary
+picture: move it, crop it or change it again. The result says which AI service made it. Leaving the editor
+cancels a request that is still running.
+
+Crop, resize, text, layers and the other tools never call AI.
+
+### Where AI runs
+
+The AI tools run on the server's own provider accounts, never on keys of a workspace: staqly cloud includes them;
+on your own server the operator sets `AI_FAL_KEY` ([fal.ai](https://fal.ai)) and/or `AI_HIGGSFIELD_API_KEY`
+([Higgsfield](https://higgsfield.ai)) ([configuration](/self-hosting/configuration#ai-tools)). Keys stay on the
+server; the browser only learns which tools exist. Without a key the **AI** tool is not shown and everything else
+works.
+
+fal.ai runs every tool; Higgsfield's public API has new pictures (Soul) and videos (Kling 2.5 Turbo), so with
+both keys fal.ai goes first and Higgsfield takes over **New picture** and the videos when fal.ai is down, busy or
+refuses the server's key. It never stands in with a different kind of operation, and a request fal.ai may
+already have started (it did not answer) is not sent anywhere again, so nothing is paid twice.
+
+| Tool | fal.ai model | Higgsfield model |
+|---|---|---|
+| New picture | `fal-ai/flux/schnell` | `higgsfield-ai/soul/standard` |
+| Change it | `fal-ai/flux-pro/kontext` | — |
+| Redraw an area | `fal-ai/flux-pro/v1/fill` | — |
+| Remove an object | `fal-ai/bria/eraser` | — |
+| Expand | `fal-ai/bria/expand` | — |
+| Cut out with AI | `fal-ai/bria/background/remove` | — |
+| New background | `fal-ai/bria/background/replace` | — |
+| Upscale | `fal-ai/recraft/upscale/crisp` | — |
+| Enhance | `fal-ai/clarity-upscaler` | — |
+| New video, Animate ([media library](/dashboard/media#ai-videos)) | `fal-ai/kling-video/v2.5-turbo/pro/text-to-video`, `.../image-to-video` | `kling-video/v2.5-turbo/pro/text-to-video`, `.../image-to-video` (landscape only) |
+
+Each workspace has a monthly AI allowance (estimated cost, `AI_MONTHLY_LIMIT_USD`); the AI tool says when half or
+more of it is used, and a request past it is refused until the next month. A workspace starts at most 30 requests
+per 10 minutes and runs 4 at once. The picture you change and your description go to the AI service; results
+wait on the server for a day at most unless you use them.

@@ -28,6 +28,7 @@ import { toastApiError } from './notify'
 
 export const qk = {
   ai: ['ai'] as const,
+  aiJob: (id: string) => ['ai', 'job', id] as const,
   setup: ['setup'] as const,
   session: ['session'] as const,
   sessions: ['sessions'] as const,

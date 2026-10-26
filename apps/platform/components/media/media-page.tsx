@@ -8,6 +8,7 @@ import {
   FolderInput,
   FolderPlus,
   Hash,
+  Clapperboard,
   Images,
   MoreHorizontal,
   PenSquare,
@@ -63,6 +64,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useLazyDialog } from '@/hooks/use-lazy-dialog'
+import { useAiStatus } from '@/lib/ai-status'
 import {
   api,
   ApiError,
@@ -91,6 +94,9 @@ const FolderNameDialog = dynamic(
   () => import('@/components/media/media-folder-dialogs').then((m) => m.FolderNameDialog),
   { ssr: false },
 )
+const AiVideoDialog = dynamic(() => import('@/components/media/ai-video-dialog').then((m) => m.AiVideoDialog), {
+  ssr: false,
+})
 const TagsDialog = dynamic(() => import('@/components/media/media-tags-dialog').then((m) => m.TagsDialog), {
   ssr: false,
 })
@@ -229,6 +235,9 @@ export function MediaPage() {
   const [keeping, setKeeping] = useState<MediaLibraryItem[] | null>(null)
   const [fresh, setFresh] = useState<Set<string>>(new Set())
   const input = useRef<HTMLInputElement>(null)
+  // A new video from a prompt, when the server offers it.
+  const video = useLazyDialog()
+  const aiVideo = useAiStatus().data?.operations.some((o) => o.id === 'text_to_video') ?? false
   const onUploaded = useCallback((m: Media) => {
     setFresh((prev) => new Set(prev).add(m.id))
     setTimeout(() => setFresh((prev) => new Set([...prev].filter((id) => id !== m.id))), 5000)
@@ -689,6 +698,16 @@ export function MediaPage() {
               <Palette /> <span className="max-sm:sr-only">Design</span>
             </a>
           </Button>
+          {aiVideo && (
+            <Button
+              variant="outline"
+              className="shrink-0"
+              onClick={() => video.setOpen(true)}
+              data-testid="media-ai-video"
+            >
+              <Clapperboard /> <span className="max-sm:sr-only">AI video</span>
+            </Button>
+          )}
           <Button onClick={() => input.current?.click()} data-testid="media-upload" className="shrink-0">
             <Upload /> Upload
           </Button>
@@ -1024,6 +1043,7 @@ export function MediaPage() {
           onSubmit={(name) => saveFolder({ d: folderDialog, name })}
         />
       )}
+      {video.used && <AiVideoDialog open={video.open} onOpenChange={video.setOpen} />}
       {tagging && (
         <TagsDialog
           open

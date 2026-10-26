@@ -22,6 +22,38 @@ type Agent struct {
 	ItemsCreated  int64  `json:"items_created"`
 }
 
+type AiJob struct {
+	ID              string `json:"id"`
+	WorkspaceID     string `json:"workspace_id"`
+	CreatedBy       string `json:"created_by"`
+	Operation       string `json:"operation"`
+	Kind            string `json:"kind"`
+	Status          string `json:"status"`
+	Prompt          string `json:"prompt"`
+	Params          string `json:"params"`
+	Inputs          string `json:"inputs"`
+	InputHash       string `json:"input_hash"`
+	IdempotencyKey  string `json:"idempotency_key"`
+	Provider        string `json:"provider"`
+	Model           string `json:"model"`
+	FallbackFrom    string `json:"fallback_from"`
+	SubmitState     string `json:"submit_state"`
+	ProviderRequest string `json:"provider_request"`
+	ResultKey       string `json:"result_key"`
+	ResultType      string `json:"result_type"`
+	ResultWidth     int64  `json:"result_width"`
+	ResultHeight    int64  `json:"result_height"`
+	MediaID         string `json:"media_id"`
+	ErrorCode       string `json:"error_code"`
+	Error           string `json:"error"`
+	CostMicros      int64  `json:"cost_micros"`
+	DurationMs      int64  `json:"duration_ms"`
+	CreatedAt       string `json:"created_at"`
+	StartedAt       string `json:"started_at"`
+	FinishedAt      string `json:"finished_at"`
+	FilesPurged     int64  `json:"files_purged"`
+}
+
 type ApiKey struct {
 	ID              string         `json:"id"`
 	WorkspaceID     string         `json:"workspace_id"`
