@@ -1,6 +1,6 @@
 'use client'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
   CalendarClock,
@@ -1079,6 +1079,43 @@ const ChannelTab = memo(function ChannelTab({
   )
 })
 
+/**
+ * A remote setting with preferred labels (Slack's channels: #random, else #general), filled in as soon as the
+ * channel is picked: the settings card may stay folded, and the post still saves. None of them there, the person
+ * picks.
+ */
+const PreferredDefaults = memo(function PreferredDefaults({
+  channel,
+  provider,
+  values,
+  onSetting,
+}: {
+  channel: Channel
+  provider?: Provider
+  values: Record<string, string>
+  onSetting: (channelId: string, key: string, value: string) => void
+}) {
+  const field = provider?.settings_fields?.find((f) => f.kind === 'remote' && f.prefer?.length && !values[f.key])
+  // The same cache as the field's own list in the settings card.
+  const options = useQuery({
+    queryKey: ['channels', channel.id, 'options', field?.key ?? ''],
+    queryFn: async () => (await api.channelOptions(channel.id, field!.key)).data,
+    enabled: !!field,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+
+  useEffect(() => {
+    const pick = field?.prefer?.map((label) => options.data?.find((o) => o.label === label)).find(Boolean)
+
+    if (field && pick) {
+      onSetting(channel.id, field.key, pick.value)
+    }
+  }, [field, options.data, channel.id, onSetting])
+
+  return null
+})
+
 /** One channel's platform settings, folded under its name with a summary of what was changed. */
 const SettingsCard = memo(function SettingsCard({
   channel,
@@ -1786,6 +1823,16 @@ export function ComposerForm({
               <p className="text-sm text-muted-foreground">
                 Each channel&apos;s own options on its platform. Defaults are fine for most posts.
               </p>
+              {/* Every picked channel gets its preferred defaults (Slack's #random) at once, folded card or not. */}
+              {picked.map((ch) => (
+                <PreferredDefaults
+                  key={ch.id}
+                  channel={ch}
+                  provider={providerOf(ch)}
+                  values={overrides[ch.id]?.settings ?? NO_SETTINGS}
+                  onSetting={onSetting}
+                />
+              ))}
               {settingsChannels.map((ch) => (
                 <SettingsCard
                   key={ch.id}
