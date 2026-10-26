@@ -1,7 +1,7 @@
 'use client'
 
 import { AlertTriangle, CheckCircle2, ImageUp, XCircle } from 'lucide-react'
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 
 import { fieldClass } from '@/components/tools/shared'
 import { MAX_TITLE, SAFE_CUT, SEARCH_CUT, checkTitle, cutTitle, titleLength, type Level } from '@/lib/youtube-title'
@@ -17,12 +17,28 @@ const ICON: Record<Level, ReactNode> = {
 // YouTube's own type: Roboto where the visitor has it, then the usual fallbacks.
 const yt = { fontFamily: 'Roboto, Arial, sans-serif' }
 
-function Thumb({ url, className }: { url: string; className: string }) {
+/** The thumbnail drawn from memory, cropped to 16:9 like YouTube (no address made from the file goes in the page). */
+function ThumbCanvas({ bitmap }: { bitmap: ImageBitmap }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const k = Math.max(320 / bitmap.width, 180 / bitmap.height)
+    const w = 320 / k
+    const h = 180 / k
+
+    ref.current
+      ?.getContext('2d')
+      ?.drawImage(bitmap, (bitmap.width - w) / 2, (bitmap.height - h) / 2, w, h, 0, 0, 320, 180)
+  }, [bitmap])
+
+  return <canvas ref={ref} width={320} height={180} className="block size-full" aria-hidden />
+}
+
+function Thumb({ url, className }: { url: ImageBitmap | null; className: string }) {
   return (
     <span className={`relative block shrink-0 overflow-hidden rounded-xl bg-[#0b3d2a] ${className}`}>
       {url ? (
-        // oxlint-disable-next-line nextjs/no-img-element
-        <img src={url} alt="" className="size-full object-cover" />
+        <ThumbCanvas bitmap={url} />
       ) : (
         <span aria-hidden className="block size-full bg-linear-to-br from-[#1ed27b]/60 to-[#0b3d2a]" />
       )}
@@ -38,7 +54,7 @@ function Thumb({ url, className }: { url: string; className: string }) {
  * (line-clamp), so the cut falls where the visitor's fonts put it. Each preview keeps its real width and scrolls
  * sideways on a narrow screen rather than squeezing.
  */
-function Previews({ title, channel, thumb }: { title: string; channel: string; thumb: string }) {
+function Previews({ title, channel, thumb }: { title: string; channel: string; thumb: ImageBitmap | null }) {
   const meta = <span className="text-[#606060]">{channel || 'Your channel'} · 1.2K views · 2 days ago</span>
 
   return (
@@ -110,19 +126,12 @@ export function YoutubeTitleChecker() {
   const id = useId()
   const [title, setTitle] = useState(SAMPLE)
   const [channel, setChannel] = useState('')
-  const [thumb, setThumb] = useState('')
+  const [thumb, setThumb] = useState<ImageBitmap | null>(null)
   const n = titleLength(title)
   const checks = checkTitle(title)
 
-  // The thumbnail's object URL lives as long as it is shown.
-  useEffect(
-    () => () => {
-      if (thumb) {
-        URL.revokeObjectURL(thumb)
-      }
-    },
-    [thumb],
-  )
+  // The thumbnail's memory goes once another replaces it.
+  useEffect(() => () => thumb?.close(), [thumb])
 
   return (
     <div className="grid gap-8">
@@ -185,7 +194,7 @@ export function YoutubeTitleChecker() {
                     const file = e.target.files?.[0]
 
                     if (file?.type.startsWith('image/')) {
-                      setThumb(URL.createObjectURL(file))
+                      void createImageBitmap(file).then(setThumb, () => undefined)
                     }
 
                     e.target.value = ''

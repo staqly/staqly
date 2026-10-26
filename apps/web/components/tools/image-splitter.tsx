@@ -23,7 +23,9 @@ import {
 } from '@/lib/split-image'
 import { zip } from '@/lib/zip'
 
-type Picture = { url: string; name: string; w: number; h: number; el: HTMLImageElement }
+// The picture is drawn from memory (an ImageBitmap, or the sample's canvas): no address made from the person's
+// file ever goes into the page.
+type Picture = { name: string; w: number; h: number; el: ImageBitmap | HTMLCanvasElement }
 
 export type SplitMode = 'grid' | 'carousel'
 
@@ -56,24 +58,21 @@ function samplePicture(w: number, h: number): Promise<Picture> {
   ctx.lineTo(w, h)
   ctx.fill()
 
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => {
-      const url = URL.createObjectURL(blob!)
-      const el = new Image()
-
-      el.addEventListener('load', () => resolve({ url, name: '', w, h, el }))
-      el.src = url
-    }, 'image/png')
-  })
+  return Promise.resolve({ name: '', w, h, el: canvas })
 }
 
-/** One piece of the picture, drawn in SVG: the viewBox is the piece, the whole picture sits under it. */
+/** One piece of the picture, drawn on a canvas at up to 540 pixels on its long side (enough for a preview). */
 function PieceView({ picture, src }: { picture: Picture; src: Rect }) {
-  return (
-    <svg viewBox={`${src.x} ${src.y} ${src.w} ${src.h}`} className="block size-full" aria-hidden>
-      <image href={picture.url} width={picture.w} height={picture.h} preserveAspectRatio="none" />
-    </svg>
-  )
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const k = Math.min(1, 540 / Math.max(src.w, src.h))
+  const width = Math.max(1, Math.round(src.w * k))
+  const height = Math.max(1, Math.round(src.h * k))
+
+  useEffect(() => {
+    canvas.current?.getContext('2d')?.drawImage(picture.el, src.x, src.y, src.w, src.h, 0, 0, width, height)
+  }, [picture, src.x, src.y, src.w, src.h, width, height])
+
+  return <canvas ref={canvas} width={width} height={height} className="block size-full" aria-hidden />
 }
 
 /** A piece at 1080 pixels wide, as a JPEG. */
@@ -123,23 +122,26 @@ export function ImageSplitter({ mode }: { mode: SplitMode }) {
   const ratio = shape.w / shape.h
   const prefix = grid ? 'grid' : 'slide'
 
-  // A sample until the first pick; every picture's object URL lives as long as it is shown.
+  // A sample until the first pick.
   useEffect(() => {
     let live = true
 
-    void (grid ? samplePicture(2430, 2160) : samplePicture(3240, 1350)).then((p) =>
-      live && !picks.current ? setPicture(p) : URL.revokeObjectURL(p.url),
-    )
+    void (grid ? samplePicture(2430, 2160) : samplePicture(3240, 1350)).then((p) => {
+      if (live && !picks.current) {
+        setPicture(p)
+      }
+    })
 
     return () => {
       live = false
     }
   }, [grid])
 
+  // A picked picture's memory goes once another replaces it.
   useEffect(
     () => () => {
-      if (picture) {
-        URL.revokeObjectURL(picture.url)
+      if (picture?.el instanceof ImageBitmap) {
+        picture.el.close()
       }
     },
     [picture],
@@ -160,31 +162,26 @@ export function ImageSplitter({ mode }: { mode: SplitMode }) {
       return
     }
 
-    const url = URL.createObjectURL(file)
-    const el = new Image()
+    createImageBitmap(file).then(
+      (el) => {
+        if (pick !== picks.current) {
+          el.close()
 
-    el.addEventListener('load', () => {
-      if (pick !== picks.current) {
-        URL.revokeObjectURL(url)
+          return
+        }
 
-        return
-      }
+        const p = { name: file.name, w: el.width, h: el.height, el }
 
-      const p = { url, name: file.name, w: el.naturalWidth, h: el.naturalHeight, el }
+        setPicture(p)
+        setFocusX(50)
+        setFocusY(50)
 
-      setPicture(p)
-      setFocusX(50)
-      setFocusY(50)
-
-      if (!grid) {
-        setCount(suggestSlides(p.w, p.h, ratio))
-      }
-    })
-    el.addEventListener('error', () => {
-      URL.revokeObjectURL(url)
-      setError('Your browser could not read this picture.')
-    })
-    el.src = url
+        if (!grid) {
+          setCount(suggestSlides(p.w, p.h, ratio))
+        }
+      },
+      () => setError('Your browser could not read this picture.'),
+    )
   }
 
   function onDrop(e: DragEvent) {
