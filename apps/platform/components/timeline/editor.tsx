@@ -590,7 +590,7 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
           return
         }
 
-        const media = output ? await api.replaceMedia(output, blob, name) : await api.uploadMedia(blob, name)
+        const media = await api.saveEdited(output, blob, name)
 
         if (folder) {
           await api.organizeMedia({ ids: [media.id], folder_id: folder })

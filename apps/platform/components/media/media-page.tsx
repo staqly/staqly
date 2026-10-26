@@ -10,6 +10,7 @@ import {
   FolderInput,
   FolderPlus,
   Hash,
+  Loader2,
   Clapperboard,
   Images,
   MoreHorizontal,
@@ -167,6 +168,7 @@ const NO_FOLDERS: MediaFolder[] = []
 const NO_IDS = new Set<string>()
 const NO_ITEMS: MediaLibraryItem[] = []
 const NO_STACKS = new Map<string, string[]>()
+const PURGE_TOAST = 'media-purge'
 
 const CREATE = [
   {
@@ -197,12 +199,13 @@ const barLabel = (text: string) => <span className="hidden sm:inline">{text}</sp
 
 const files = (n: number) => `${n} ${n === 1 ? 'file' : 'files'}`
 
-function download(ms: MediaLibraryItem[]) {
-  for (const m of ms) {
+/** Downloads files by id; the server names each one (its Content-Disposition), so a carousel's hidden pages too. */
+function download(ids: string[]) {
+  for (const id of ids) {
     const a = document.createElement('a')
 
-    a.href = mediaUrl(m.id, { download: true })
-    a.download = m.original_name
+    a.href = mediaUrl(id, { download: true })
+    a.download = ''
     a.click()
   }
 }
@@ -469,9 +472,17 @@ export function MediaPage() {
       // Their twins may not be duplicates any more.
       invalidateLists(qc, (list) => !!list.duplicates)
       refreshMediaCounts(qc)
-      toast.success(`Deleted ${files(deleted.length)} for good`)
+      toast.success(`Deleted ${files(deleted.length)} for good`, { id: PURGE_TOAST })
     },
-    onError: (e) => toastApiError(e),
+    onError: (e) => {
+      toast.dismiss(PURGE_TOAST)
+      toastApiError(e)
+    },
+    // Deleting for good takes a moment per file: say so while it runs.
+    onMutate: (ids) =>
+      void toast.loading(ids === 'all' ? 'Emptying Deleted...' : `Deleting ${files(ids.length)} for good...`, {
+        id: PURGE_TOAST,
+      }),
   })
   const { mutate: keepOne } = useMutation({
     mutationFn: (m: MediaLibraryItem) => api.keepMedia(m.id),
@@ -791,8 +802,13 @@ export function MediaPage() {
             <Undo2 /> {barLabel('Restore')}
           </Button>
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
-          <Button variant="destructive" aria-label="Delete forever" onClick={() => setPurgingIds([...selected])}>
-            <Trash2 /> {barLabel('Delete forever')}
+          <Button
+            variant="destructive"
+            aria-label="Delete forever"
+            onClick={() => setPurgingIds([...selected])}
+            disabled={purging}
+          >
+            {purging ? <Loader2 className="animate-spin" /> : <Trash2 />} {barLabel('Delete forever')}
           </Button>
         </>
       )}
@@ -820,7 +836,7 @@ export function MediaPage() {
               </Button>
             </>
           )}
-          <Button variant="ghost" aria-label="Download" onClick={() => download(picked)}>
+          <Button variant="ghost" aria-label="Download" onClick={() => download(withPages(picked.map((m) => m.id)))}>
             <Download /> {barLabel('Download')}
           </Button>
           {canWrite && (visualPicked.length > 0 || soundPicked.length > 0) && (
@@ -1008,7 +1024,8 @@ export function MediaPage() {
               action={
                 canWrite && (
                   <Button variant="destructive" size="sm" onClick={() => setPurgingIds([])} disabled={purging}>
-                    <Trash2 /> Empty Deleted
+                    {purging ? <Loader2 className="animate-spin" /> : <Trash2 />}{' '}
+                    {purging ? 'Emptying...' : 'Empty Deleted'}
                   </Button>
                 )
               }
