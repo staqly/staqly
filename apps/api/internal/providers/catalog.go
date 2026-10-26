@@ -26,7 +26,7 @@ func init() {
 		{"tiktok", "TikTok", AuthOAuth2, Limits{MaxChars: 2200, MaxMedia: 1, MediaKinds: []string{"video"}, NeedsMedia: true}},
 		{"pinterest", "Pinterest", AuthOAuth2, Limits{MaxChars: 500, MaxMedia: 1, MediaKinds: img, NeedsTitle: true, NeedsMedia: true, NeedsLink: true}},
 		{"dribbble", "Dribbble", AuthOAuth2, Limits{MaxChars: 1000, MaxMedia: 1, MediaKinds: img, NeedsTitle: true, NeedsMedia: true}},
-		{"discord", "Discord", AuthToken, Limits{MaxChars: 2000, MaxMedia: 10, MediaKinds: imgVid}},
+		{"discord", "Discord", AuthOAuth2, Limits{MaxChars: 2000, MaxMedia: 10, MediaKinds: imgVid}},
 		{"slack", "Slack", AuthOAuth2, Limits{MaxChars: 40000, MaxMedia: 10, MediaKinds: imgVid}},
 		{"kick", "Kick", AuthOAuth2, Limits{MaxChars: 500}},
 		{"twitch", "Twitch", AuthOAuth2, Limits{MaxChars: 500}},

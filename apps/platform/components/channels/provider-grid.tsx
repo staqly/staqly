@@ -56,11 +56,46 @@ const GROUPS: { title: string; ids: string[] }[] = [
   { title: 'Video and streaming', ids: ['youtube', 'tiktok', 'twitch', 'kick'] },
   {
     title: 'Communities and chat',
-    ids: ['reddit', 'lemmy', 'discord', 'slack', 'telegram', 'skool', 'whop', 'farcaster', 'nostr', 'moltbook'],
+    ids: [
+      'reddit',
+      'lemmy',
+      'discord',
+      'discord_webhook',
+      'slack',
+      'telegram',
+      'skool',
+      'whop',
+      'farcaster',
+      'nostr',
+      'moltbook',
+    ],
   },
   { title: 'Blogs and newsletters', ids: ['wordpress', 'medium', 'devto', 'hashnode', 'listmonk'] },
   { title: 'Business and portfolio', ids: ['google_business', 'dribbble'] },
 ]
+
+/**
+ * A fallback way in, by the platform it stands in for: Discord through a channel webhook shows only while this
+ * server can't add its Discord bot, and then takes the place of the greyed Discord tile.
+ */
+const FALLBACKS: Record<string, string> = { discord_webhook: 'discord' }
+
+/** The catalog without the tiles a fallback settles: the fallback when its platform is available, else the platform. */
+function withoutSettledFallbacks<T extends { id: string; status: string }>(providers: T[]) {
+  const available = new Set(providers.filter((p) => p.status === 'available').map((p) => p.id))
+
+  return providers.filter((p) => {
+    const main = FALLBACKS[p.id]
+
+    if (main) {
+      return !available.has(main)
+    }
+
+    const fallback = Object.keys(FALLBACKS).find((f) => FALLBACKS[f] === p.id)
+
+    return !fallback || available.has(p.id) || !available.has(fallback)
+  })
+}
 
 function groupProviders<T extends { id: string; status: string; usable: boolean }>(providers: T[]) {
   const known = new Set(GROUPS.flatMap((g) => g.ids))
@@ -92,7 +127,7 @@ export function ProviderGrid({
   className?: string
 }) {
   const insecure = useInsecurePage()
-  const cards = providers.map((p) => {
+  const cards = withoutSettledFallbacks(providers).map((p) => {
     const blocked = p.status === 'available' && !!p.needs_https && insecure
 
     return { ...p, blocked, usable: p.status === 'available' && !blocked }

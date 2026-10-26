@@ -3822,7 +3822,7 @@ export interface components {
             ok: boolean;
             checks: {
                 /** @enum {string} */
-                key: "keys" | "platform" | "return_address" | "media";
+                key: "keys" | "bot_token" | "platform" | "return_address" | "media";
                 /** @example App keys */
                 label: string;
                 ok: boolean;

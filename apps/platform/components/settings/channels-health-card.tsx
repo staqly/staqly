@@ -21,6 +21,7 @@ type Outcome = { ok: boolean; key?: string; why?: string }
 /** What a failed check means for the people connecting, by the check's key. */
 const HEADLINES: Record<string, (name: string) => string> = {
   keys: (name) => `${name} isn't set up on this server yet`,
+  bot_token: (name) => `${name} needs its bot token on this server`,
   platform: (name) => `${name} isn't letting this server connect right now`,
   return_address: (name) => `${name} needs a secure (https) address before people can connect`,
   media: (name) => `${name} needs media storage it can reach to post pictures and videos`,

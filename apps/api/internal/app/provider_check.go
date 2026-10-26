@@ -45,6 +45,12 @@ func (s *Service) CheckProvider(ctx context.Context, p Principal, providerID str
 	}
 
 	app, appErr := s.providerApp(ctx, p.WorkspaceID, providerID)
+	if needsBotToken(providerID) && appErr != nil { // the keys are checked on their own
+		app, _ = s.serverApp(providerID)
+		if app.ClientID != "" {
+			appErr = nil
+		}
+	}
 	switch {
 	case !s.providerEnabled(providerID):
 		add(SetupCheck{Key: "keys", Label: "App keys", Detail: e.Name() + " is turned off on this server"})
@@ -53,10 +59,17 @@ func (s *Service) CheckProvider(ctx context.Context, p Principal, providerID str
 	default:
 		add(SetupCheck{Key: "keys", Label: "App keys", OK: true, Detail: "Set"})
 	}
+	if needsBotToken(providerID) {
+		bot := SetupCheck{Key: "bot_token", Label: "Bot token", OK: s.Env(providerEnv(providerID)+"BOT_TOKEN", "") != "", Detail: "Set"}
+		if !bot.OK {
+			bot.Detail = "No bot token yet: set " + providerEnv(providerID) + "BOT_TOKEN to the token on the application's Bot page"
+		}
+		add(bot)
+	}
 
 	redirect := s.WebURL() + "/channels/callback/" + providerID
 	if checker, ok := e.Provider.(providers.AppChecker); ok && appErr == nil {
-		cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), 10*time.Second)
+		cctx, cancel := context.WithTimeout(s.providerCtx(ctx), 10*time.Second)
 		verified, err := checker.CheckApp(cctx, app, redirect)
 		cancel()
 		c := SetupCheck{Key: "platform", Label: e.Name(), OK: err == nil}

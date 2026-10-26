@@ -601,3 +601,44 @@ func TestChannelGroups(t *testing.T) {
 	// Our channel can't be moved into their group either.
 	e.do(nil, "PATCH", "/v1/channels/"+a.ID, e.admin, map[string]any{"group_id": theirs[0].ID}, 422, nil)
 }
+
+// Discord posts with the server's own bot: it is available only with the app's keys and the bot token, never with a
+// workspace's own app, and the webhook way in stays available for servers without the bot.
+func TestDiscordServerBot(t *testing.T) {
+	e := newEnv(t)
+	csrf := []string{"X-CSRF-Token", e.csrf}
+	env := map[string]string{}
+	var mu sync.Mutex
+	set := func(k, v string) { mu.Lock(); env[k] = v; mu.Unlock() }
+	e.svc.Getenv = func(k string) string { mu.Lock(); defer mu.Unlock(); return env[k] }
+	status := func() map[string]app.ProviderInfo {
+		var out struct{ Data []app.ProviderInfo }
+		e.do(nil, "GET", "/v1/providers", e.key, nil, 200, &out)
+		m := map[string]app.ProviderInfo{}
+		for _, p := range out.Data {
+			m[p.ID] = p
+		}
+		return m
+	}
+	if s := status(); s["discord"].Status != "soon" || s["discord_webhook"].Status != "available" || s["discord_webhook"].Auth != "token" {
+		t.Fatalf("no bot: %+v %+v", s["discord"], s["discord_webhook"])
+	}
+	e.do(e.browser, "PUT", "/v1/providers/discord/app", "", map[string]any{"client_id": "cid", "client_secret": "s3cret"}, 422, nil, csrf...)
+	set("PROVIDER_DISCORD_CLIENT_ID", "cid")
+	set("PROVIDER_DISCORD_CLIENT_SECRET", "s3cret")
+	if s := status(); s["discord"].Status != "soon" {
+		t.Fatalf("keys without the bot token: %+v", s["discord"])
+	}
+	e.do(e.browser, "GET", "/v1/channels/oauth/discord/start", "", nil, 409, nil)
+	set("PROVIDER_DISCORD_BOT_TOKEN", "bot-token")
+	if s := status(); s["discord"].Status != "available" || !s["discord"].AppConfigured || s["discord"].Auth != "oauth2" {
+		t.Fatalf("with the bot: %+v", s["discord"])
+	}
+	var start struct {
+		URL string `json:"url"`
+	}
+	e.do(e.browser, "GET", "/v1/channels/oauth/discord/start", "", nil, 200, &start)
+	if !strings.Contains(start.URL, "scope=bot") || !strings.Contains(start.URL, "client_id=cid") {
+		t.Fatal(start.URL)
+	}
+}

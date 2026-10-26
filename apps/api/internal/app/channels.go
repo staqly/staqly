@@ -162,8 +162,8 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 		if !s.providerEnabled(e.ID()) {
 			continue // turned off on this server: no tile, no connecting, no publishing
 		}
-		app, _ := s.serverApp(e.ID())
-		info := providerInfo(e, configured[e.ID()] || app.ClientID != "")
+		_, serverOK := s.serverApp(e.ID())
+		info := providerInfo(e, (configured[e.ID()] && !needsBotToken(e.ID())) || serverOK)
 		if !info.AppConfigured {
 			info.Status = providers.StatusSoon // an OAuth platform waits for its app's keys in the environment
 		}
@@ -186,15 +186,42 @@ func providerEnv(providerID string) string {
 	return "PROVIDER_" + strings.ToUpper(providerID) + "_"
 }
 
-// serverApp is the OAuth client the operator configured for a provider (PROVIDER_<ID>_CLIENT_ID/SECRET).
+// serverApp is the OAuth client the operator configured for a provider (PROVIDER_<ID>_CLIENT_ID/SECRET). A
+// platform that posts with the server's own bot (Needs.BotToken) also needs PROVIDER_<ID>_BOT_TOKEN.
 func (s *Service) serverApp(providerID string) (providers.App, bool) {
 	key := providerEnv(providerID) + "CLIENT_"
 	app := providers.App{ClientID: s.Env(key+"ID", ""), ClientSecret: s.Env(key+"SECRET", "")}
+	if needsBotToken(providerID) && s.Env(providerEnv(providerID)+"BOT_TOKEN", "") == "" {
+		return app, false
+	}
 	return app, app.ClientID != ""
+}
+
+// needsBotToken: the platform posts with the server's own bot (Discord), so only the server's app works for it.
+func needsBotToken(providerID string) bool {
+	e, ok := providers.Get(providerID)
+	if !ok {
+		return false
+	}
+	n, ok := e.Provider.(providers.Needer)
+	return ok && n.Needs().BotToken
+}
+
+// providerCtx is what a provider call runs with: the SSRF-guarded client, and the server's settings for a platform
+// that reads its bot token at use time.
+func (s *Service) providerCtx(ctx context.Context) context.Context {
+	return providers.WithGetenv(providers.WithHTTPClient(ctx, s.safeClient()), func(k string) string { return s.Env(k, "") })
 }
 
 // providerApp: the workspace's developer app, else the server's.
 func (s *Service) providerApp(ctx context.Context, workspaceID, providerID string) (providers.App, error) {
+	if needsBotToken(providerID) {
+		if app, ok := s.serverApp(providerID); ok {
+			return app, nil
+		}
+		return providers.App{}, &Error{Code: "app_not_configured", Status: 409,
+			Message: "this server has no app for this platform yet: whoever runs it sets its client id, secret and bot token"}
+	}
 	row, err := s.Q.GetProviderApp(ctx, db.GetProviderAppParams{WorkspaceID: workspaceID, Provider: providerID})
 	if err == nil {
 		var app providers.App
@@ -238,6 +265,9 @@ func (s *Service) SetProviderApp(ctx context.Context, p Principal, providerID st
 	}
 	if e.Auth() != providers.AuthOAuth2 {
 		return invalid("provider", "this provider connects with a token, no app is needed")
+	}
+	if needsBotToken(providerID) {
+		return invalid("provider", "this platform posts with the server's own bot: whoever runs the server sets its app keys and bot token")
 	}
 	if strings.TrimSpace(app.ClientID) == "" || strings.TrimSpace(app.ClientSecret) == "" {
 		return invalid("client_id", "client_id and client_secret are required")
@@ -307,7 +337,7 @@ func (s *Service) ConnectChannel(ctx context.Context, p Principal, in ChannelInp
 	name := strings.TrimSpace(in.Name)
 	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
 	defer cancel()
-	creds, profile, err := e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), fields)
+	creds, profile, err := e.Connect(s.providerCtx(cctx), fields)
 	if err != nil {
 		return Channel{}, connectError(err)
 	}
@@ -536,7 +566,7 @@ func (s *Service) completeOAuth(ctx context.Context, p Principal, e providers.En
 	if err != nil {
 		return OAuthResult{}, err
 	}
-	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
+	cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
 	defer cancel()
 	creds, profile, err := e.Exchange(cctx, app, redirect, code, withVerifier(extra, s.pkceVerifier(st)))
 	if err != nil {
@@ -686,7 +716,7 @@ func (s *Service) UpdateChannel(ctx context.Context, p Principal, id string, in 
 		}
 		cctx, cancel := context.WithTimeout(ctx, connectTimeout)
 		defer cancel()
-		creds, profile, err := e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), fields)
+		creds, profile, err := e.Connect(s.providerCtx(cctx), fields)
 		if err != nil {
 			return Channel{}, connectError(err)
 		}
@@ -833,7 +863,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 	if err != nil {
 		return nil, err
 	}
-	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
+	cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
 	defer cancel()
 	var profile providers.Profile
 	switch e.Auth() {
@@ -855,7 +885,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		}
 		profile = providers.Profile{Handle: row.Handle, Name: row.Name}
 	default:
-		_, profile, err = e.Connect(providers.WithHTTPClient(cctx, s.safeClient()), map[string]string(creds))
+		_, profile, err = e.Connect(s.providerCtx(cctx), map[string]string(creds))
 		if err != nil {
 			s.markChannel(ctx, row.ID, "needs_reconnect", err.Error())
 			return map[string]any{"ok": false, "error": truncateRunes(err.Error(), 500)}, nil
@@ -892,7 +922,7 @@ func (s *Service) ChannelOptions(ctx context.Context, p Principal, id, key strin
 	if err != nil {
 		return nil, err
 	}
-	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
+	cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
 	defer cancel()
 	out, err := lister.Options(cctx, creds, key)
 	if err != nil {
@@ -967,7 +997,7 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	if err != nil {
 		return s.channelNeedsReconnect(ctx, row, err)
 	}
-	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
+	cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
 	defer cancel()
 	fresh, err := e.Refresh(cctx, app, creds)
 	if errors.Is(err, providers.ErrReauth) {
@@ -1046,7 +1076,7 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if err != nil {
 		return nil, err
 	}
-	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
+	cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
 	defer cancel()
 	fresh, err := e.Refresh(cctx, app, creds)
 	if errors.Is(err, providers.ErrReauth) {
