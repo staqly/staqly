@@ -44,7 +44,7 @@ var runSystem = func(name string, args ...string) (string, error) {
 var serviceEnvPrefixes = []string{"STAQLY_", "PUBLIC_", "NOTIFY_", "WEBHOOK_", "LOG_", "SENTRY_", "POSTHOG_", "MAIL_", "AI_",
 	"RETENTION_", "LOCAL_", "RATE_LIMIT_", "PROVIDER_", "STORAGE_", "S3_", "GOOGLE_", "STRIPE_", "MAX_UPLOAD_MB",
 	"UPLOAD_DIR", "DATABASE_PATH", "DATABASE_URL", "JOB_CONCURRENCY", "PROCESSING_TIMEOUT", "CORS_ALLOWED_ORIGINS",
-	"TRUST_PROXY", "COOKIE_SECURE", "SESSION_TTL", "SETUP_TOKEN", "AUTH_DEV_SIGNIN", "TRIAL_PLAN"}
+	"TRUST_PROXY", "COOKIE_SECURE", "SESSION_TTL", "SETUP_TOKEN", "AUTH_DEV_SIGNIN", "TRIAL_PLAN", "UNSPLASH_"}
 
 type serviceSpec struct {
 	Exe  string

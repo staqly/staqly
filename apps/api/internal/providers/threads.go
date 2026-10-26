@@ -46,7 +46,7 @@ func (t Threads) Validate(p PostContent, s Settings) error {
 	check := func(media []MediaFile) error {
 		for _, m := range media {
 			if !strings.HasPrefix(m.MimeType, "video/") && m.MimeType != "image/jpeg" && m.MimeType != "image/png" {
-				return invalid("media", "Threads takes pictures as JPEG or PNG; save "+m.Name+" as one of them (the media editor does it)")
+				return invalid("media", "Threads takes pictures as JPEG or PNG; save "+m.Name+" as one of them (open it in the design editor and save it)")
 			}
 		}
 		return nil

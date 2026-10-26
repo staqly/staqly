@@ -3,10 +3,6 @@
 @import 'shadcn/tailwind.css';
 @import '@staqly/brand/tokens.css';
 
-/* The media editor (lib/opengpex) brings its own styles, loaded only with it: components/media-editor/editor.css. */
-@source not '../lib/opengpex';
-@source not '../components/media-editor';
-
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

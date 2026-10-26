@@ -65,7 +65,7 @@ func (b Bluesky) Validate(p PostContent, s Settings) error {
 			return invalid("media", "Bluesky takes pictures only")
 		}
 		if rules != nil && m.Size > rules.MaxBytes {
-			return invalid("media", m.Name+" is larger than Bluesky's 1 MB for a picture; make it smaller (the media editor does it)")
+			return invalid("media", m.Name+" is larger than Bluesky's 1 MB for a picture; make it smaller")
 		}
 	}
 	return CheckFields(b.SettingsFields(), s)

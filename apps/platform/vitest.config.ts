@@ -50,8 +50,6 @@ export default defineConfig({
   plugins: [reactCompiler()],
   resolve: {
     alias: {
-      '@opengpex/editor': fileURLToPath(new URL('./lib/opengpex', import.meta.url)),
-      '@opengpex/components': fileURLToPath(new URL('./lib/opengpex/components', import.meta.url)),
       '@': fileURLToPath(new URL('./', import.meta.url)),
     },
   },

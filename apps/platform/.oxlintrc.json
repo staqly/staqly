@@ -105,15 +105,6 @@
       }
     }
   ],
-  "ignorePatterns": [
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-    "lib/api-types.ts",
-    "node_modules/**",
-    "lib/opengpex/**",
-    "public/ext/**"
-  ],
+  "ignorePatterns": [".next/**", "out/**", "build/**", "next-env.d.ts", "lib/api-types.ts", "node_modules/**"],
   "jsPlugins": ["@stylistic/eslint-plugin"]
 }

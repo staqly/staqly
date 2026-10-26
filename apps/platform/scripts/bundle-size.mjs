@@ -59,13 +59,14 @@ const all = walk(join(out, '_next/static'))
   .filter((p) => p.endsWith('.js'))
   .map((p) => relative(out, p))
 
-// The media editor (/media/edit) and what only it loads (OpenGPEX, its codecs' glue, its workers) have a budget
-// of their own. A chunk is the editor's when the editor's page or lazy-load manifest reaches it (directly, or
-// through chunks that name it, like dynamic imports and workers do) and no other page does.
-const EDITOR = '/media/edit'
+// The design editor (/media/design: Konva, its fonts' CSS, templates) and what only it loads have a budget of
+// their own. A chunk is the editor's when its page or lazy-load manifest reaches it (directly, or through chunks
+// that name it, like dynamic imports do) and no other page does.
+const EDITORS = ['/media/design']
+const isEditor = (route) => EDITORS.includes(route)
 const lazy = (editor) =>
   walk(join(root, '.next/server/app'))
-    .filter((p) => p.endsWith('react-loadable-manifest.json') && p.includes('/media/edit/') === editor)
+    .filter((p) => p.endsWith('react-loadable-manifest.json') && EDITORS.some((e) => p.includes(`${e}/`)) === editor)
     .flatMap((p) => Object.values(JSON.parse(readFileSync(p, 'utf8'))).flatMap((v) => v.files ?? []))
     .filter((f) => f.endsWith('.js'))
     .map((f) => `_next/${f}`)
@@ -92,7 +93,7 @@ const reach = (roots) => {
 
   return seen
 }
-const pageFiles = (editor) => rows.filter((r) => (r.route === EDITOR) === editor).flatMap((r) => r.files)
+const pageFiles = (editor) => rows.filter((r) => isEditor(r.route) === editor).flatMap((r) => r.files)
 const dashboard = reach([...pageFiles(false), ...lazy(false)])
 const editorOnly = [...reach([...pageFiles(true), ...lazy(true)])].filter((a) => !dashboard.has(a) && refs.has(a))
 const editorGz = editorOnly.reduce((n, a) => n + size(a).gz, 0)
@@ -114,7 +115,7 @@ if (args.has('--json')) {
   console.table(rows.map(({ files: _f, ...r }) => r))
   console.table(largest)
   console.log(`all JS chunks: ${all.length - editorOnly.length} files, ${kb(totalGz)} KB gzipped`)
-  console.log(`media editor only: ${editorOnly.length} files, ${kb(editorGz)} KB gzipped`)
+  console.log(`design editor only: ${editorOnly.length} files, ${kb(editorGz)} KB gzipped`)
 }
 
 if (args.has('--check')) {
@@ -139,7 +140,7 @@ if (args.has('--check')) {
   }
 
   if (kb(editorGz) > budget.editorJsGzKB) {
-    failures.push(`media editor JS ${kb(editorGz)} KB gz > budget ${budget.editorJsGzKB} KB`)
+    failures.push(`design editor JS ${kb(editorGz)} KB gz > budget ${budget.editorJsGzKB} KB`)
   }
 
   if (rows.length === 0) {

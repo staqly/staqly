@@ -18,7 +18,7 @@ import (
 	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
-// The media editor's AI tools run on the workspace's own provider account: an admin adds an OpenAI API key,
+// The design editor's AI tools run on the workspace's own provider account: an admin adds an OpenAI API key,
 // which is sealed like channel credentials and never sent back to a browser (only its last four characters).
 // Every call goes through here: scopes checked, workspace scoped, rate limited, with a timeout, and only when a
 // person clicks an AI action. staqly never pays for these calls; the provider bills the key's owner.
@@ -187,7 +187,7 @@ const (
 	MaxAIImageBytes  = 20 << 20
 )
 
-// AIImage runs one AI picture operation for the media editor ("generate" or "edit") and answers PNG bytes.
+// AIImage runs one AI picture operation for the design editor ("generate" or "edit") and answers PNG bytes.
 func (s *Service) AIImage(ctx context.Context, p Principal, op string, in AIImageRequest) ([]byte, error) {
 	if err := p.require(ScopeMediaWrite); err != nil {
 		return nil, err

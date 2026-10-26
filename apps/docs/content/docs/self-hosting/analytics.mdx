@@ -69,8 +69,8 @@ acted, `agent` (the MCP or REST client's name, e.g. `Claude Code`) are on every 
 | `post_publish_failed` | One channel of a post failed for good | `platform`, `attempts`, `error_class` (`reauth`, `rejected`, `timeout`, `start_failed`, `credentials`, `limit`, `validation`, `platform_error`), `error` (the platform's message, at most 200 characters) |
 | `schedule_created`, `schedule_failed` | Schedules | — |
 | `media_uploaded` | A file uploaded | `type` (`image`, `video`...), `size_bytes` |
-| `media_edited` | The media editor saved a file or a project | `kind` (`file`, `project`) |
-| `ai_image_requested` | An AI picture (media editor) | `op`, `model`, `duration_ms`, `ok` |
+| `media_edited` | The design editor saved a file or a project | `kind` (`file`, `project`) |
+| `ai_image_requested` | An AI picture (design editor) | `op`, `model`, `duration_ms`, `ok` |
 | `api_key_created`, `webhook_created`, `alert_created` | Integrations | — |
 | `checkout_started` | A Stripe checkout was opened (cloud) | `plan`, `interval`, `trial` |
 | `plan_changed` | A workspace's plan changed (Stripe webhooks, the operator CLI, trials) | `from`, `to`, `reason` (e.g. `stripe:active`, `stripe:canceled`) |

@@ -2,14 +2,14 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 
-import { announceEdited, useEditedMedia } from '@/components/media-editor/edited-media'
+import { announceEdited, useEditedMedia } from '@/components/design/edited-media'
 import type { Media } from '@/lib/api'
 
 import { mockApi } from './utils'
 
 const media = (id: string, name: string) => ({ id, original_name: name, mime_type: 'image/png' }) as Media
 
-describe('a post takes the picture saved in the media editor', () => {
+describe('a post takes the picture saved in the design editor', () => {
   it('swaps the attachment the editor saved as another file, and nothing else', async () => {
     mockApi({ 'GET /v1/media/med_new/info': media('med_new', 'photo (edited).png') })
     const { result } = renderHook(() => {

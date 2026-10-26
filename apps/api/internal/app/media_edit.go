@@ -13,7 +13,7 @@ import (
 	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
-// ReplaceMedia is the media editor's "Replace the original". A media id never changes content (thumbnails and
+// ReplaceMedia is the design editor's "Replace the original". A media id never changes content (thumbnails and
 // links are cached for good), so the edited file is a new file that takes the original's place: its name, alt
 // text, folder and tags, and the drafts that used the original. The original goes to Deleted (restorable).
 // A file that a scheduled, publishing, published or failed post uses is refused: those posts keep what they had.
@@ -77,8 +77,9 @@ func (s *Service) ReplaceMedia(ctx context.Context, p Principal, id, filename st
 	return s.GetMediaInfo(ctx, p, edited.ID)
 }
 
-// MediaProject is an editable picture of the media editor: OpenGPEX's .gpex file (layers, text, masks) kept in
-// the store, the library files it was made from and the file it last saved.
+// MediaProject is an editable picture of the design editor: its design (JSON: page, texts, pictures, shapes) kept
+// in the store, the library files it was made from and the file it last saved. Projects saved before 2026-10-25
+// hold the former photo editor's .gpex files; they stay downloadable.
 type MediaProject struct {
 	ID        string   `json:"id"`
 	Name      string   `json:"name"`
@@ -96,10 +97,15 @@ type MediaProjectInput struct {
 	OutputID  string
 }
 
-// mediaProjectMagic: a .gpex file starts with these bytes (OpenGPEX's container header).
-const mediaProjectMagic = "GPEX"
+// designFile: the part of a design editor file the server checks (the editor reads the rest).
+type designFile struct {
+	Version int               `json:"version"`
+	Width   float64           `json:"width"`
+	Height  float64           `json:"height"`
+	Pages   []json.RawMessage `json:"pages"`
+}
 
-// projectKey is where a media editor project lives in the store: "workspaces/<id>/projects/abcdef.json".
+// projectKey is where a design editor project lives in the store: "workspaces/<id>/projects/abcdef.json".
 func projectKey(workspaceID, storageName string) string {
 	return workspaceKey(workspaceID) + "projects/" + storageName
 }
@@ -174,10 +180,14 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 		f.Close()
 		return MediaProject{}, &Error{Code: "too_large", Status: 413, Message: "project file exceeds the upload limit"}
 	}
-	head := make([]byte, len(mediaProjectMagic))
-	if _, err := f.ReadAt(head, 0); err != nil || string(head) != mediaProjectMagic {
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		f.Close()
-		return MediaProject{}, &Error{Code: "unsupported_media_type", Status: 415, Message: "not a media editor project (.gpex)"}
+		return MediaProject{}, err
+	}
+	var d designFile
+	if err := json.NewDecoder(f).Decode(&d); err != nil || d.Version != 1 || d.Width <= 0 || d.Height <= 0 || len(d.Pages) == 0 {
+		f.Close()
+		return MediaProject{}, &Error{Code: "unsupported_media_type", Status: 415, Message: "not a design editor project (design JSON, version 1, with pages)"}
 	}
 	if plan.Limits.StorageBytes != Unlimited {
 		used, err := s.Q.StorageUsed(ctx, p.WorkspaceID) // files and projects
@@ -194,8 +204,8 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 		f.Close()
 		return MediaProject{}, err
 	}
-	storage := randomString(16) + ".gpex"
-	err = s.Cfg.Blob.Put(ctx, projectKey(p.WorkspaceID, storage), f, n, "application/octet-stream")
+	storage := randomString(16) + ".json"
+	err = s.Cfg.Blob.Put(ctx, projectKey(p.WorkspaceID, storage), f, n, "application/json")
 	f.Close()
 	if err != nil {
 		return MediaProject{}, fmt.Errorf("store project file: %w", err)

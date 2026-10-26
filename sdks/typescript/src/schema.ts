@@ -2775,7 +2775,7 @@ export interface paths {
         put?: never;
         /**
          * Replace a file with its edit (media:write, posts:write, posts:delete)
-         * @description The media editor's "Replace the original". A media id never changes content, so the edit is a new file that takes the original's name, alt text, folder and tags; drafts that used the original use it instead, and the original moves to Deleted (restorable for 30 days). A file that a scheduled, publishing, published or failed post uses answers 409: those posts keep what they had, save the edit as a new file instead.
+         * @description The design editor's "Replace the original". A media id never changes content, so the edit is a new file that takes the original's name, alt text, folder and tags; drafts that used the original use it instead, and the original moves to Deleted (restorable for 30 days). A file that a scheduled, publishing, published or failed post uses answers 409: those posts keep what they had, save the edit as a new file instead.
          */
         post: operations["replaceMedia"];
         delete?: never;
@@ -2791,12 +2791,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The media editor's projects, newest first (media:read) */
+        /** The design editor's projects, newest first (media:read) */
         get: operations["listMediaProjects"];
         put?: never;
         /**
-         * Save an editable project of the media editor (media:write)
-         * @description The file is the editor's .gpex project (layers, text, masks). Projects count toward the workspace's storage.
+         * Save an editable project of the design editor (media:write)
+         * @description The file is the design editor's design (JSON, version 1). Projects count toward the workspace's storage.
          */
         post: operations["createMediaProject"];
         delete?: never;
@@ -2835,7 +2835,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Download a project's .gpex file (media:read) */
+        /** Download a project's file (media:read) */
         get: operations["getMediaProjectFile"];
         put?: never;
         post?: never;
@@ -2853,7 +2853,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Whether the media editor's AI tools work, with which model (media:read)
+         * Whether the design editor's AI tools work, with which model (media:read)
          * @description The AI tools run on the workspace's own OpenAI key; staqly never pays for these calls. The key is never returned, only its last four characters.
          */
         get: operations["getAI"];
@@ -2886,6 +2886,45 @@ export interface paths {
          * @description generate makes a picture from a prompt; edit changes the image by the prompt, only inside the mask's transparent pixels when a mask is sent. Answers the picture; nothing is stored. At most 30 pictures per 10 minutes per workspace; the provider's own limits and refusals come back as 429 or 422.
          */
         post: operations["aiImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stock/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stock photos from Unsplash for the design editor (media:read)
+         * @description Searches Unsplash on the server's key (UNSPLASH_ACCESS_KEY); without a query, its editorial feed. Without a key, configured is false and data is empty. Pictures load straight from Unsplash's CDN; credit the author with author_url and page_url.
+         */
+        get: operations["listStockPhotos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stock/photos/{id}/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tell Unsplash a photo went into a design (media:write) */
+        post: operations["useStockPhoto"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4043,7 +4082,7 @@ export interface components {
             /** @description Posts that carry the file in their files or in a comment */
             uses: number;
         };
-        /** @description An editable picture of the media editor (its .gpex project file is at /v1/media-projects/{id}/file) */
+        /** @description An editable picture of the design editor (its design is at /v1/media-projects/{id}/file) */
         MediaProject: {
             id: string;
             name: string;
@@ -4065,9 +4104,27 @@ export interface components {
             output_id?: string;
             /**
              * Format: binary
-             * @description The .gpex project file
+             * @description The design: JSON with version 1, width, height and pages
              */
             file: string;
+        };
+        StockPhoto: {
+            id: string;
+            width: number;
+            height: number;
+            alt: string;
+            /** @description About 400 px wide */
+            thumb: string;
+            /** @description About 2000 px wide */
+            url: string;
+            author: string;
+            author_url: string;
+            page_url: string;
+        };
+        StockPage: {
+            /** @description Whether this server has an Unsplash key */
+            configured: boolean;
+            data: components["schemas"]["StockPhoto"][];
         };
         AIStatus: {
             configured: boolean;
@@ -11294,13 +11351,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The project file */
+            /** @description The design (JSON); projects saved before 2026-10-25 hold the former photo editor's .gpex file */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": string;
+                    "application/json": Record<string, never>;
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -11439,6 +11496,60 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    listStockPhotos: {
+        parameters: {
+            query?: {
+                query?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photos, 30 a page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    useStockPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Told */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
             502: components["responses"]["BadGateway"];
         };

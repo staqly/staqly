@@ -218,7 +218,7 @@ func TestDialURL(t *testing.T) {
 // exact path, so "onnxruntime-web@" blocked every ONNX Runtime file, and a bare host would allow any package.
 func TestEditorCSPPinsCDN(t *testing.T) {
 	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "")
-	csp := do(h, "GET", "/media/edit", nil, nil).Header().Get("Content-Security-Policy")
+	csp := do(h, "GET", "/media/design", nil, nil).Header().Get("Content-Security-Policy")
 	for _, want := range []string{
 		"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/",
 		"https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0",
@@ -239,6 +239,10 @@ func TestEditorCSPPinsCDN(t *testing.T) {
 	}
 	if dash := do(h, "GET", "/schedule", nil, nil).Header().Get("Content-Security-Policy"); strings.Contains(dash, "jsdelivr") {
 		t.Errorf("dashboard CSP allows jsDelivr: %s", dash)
+	}
+	// Old links of the photo editor open the same pictures in the design editor.
+	if w := do(h, "GET", "/media/edit?ids=med_1&from=composer", nil, nil); w.Code != 301 || w.Header().Get("Location") != "/media/design?ids=med_1&from=composer" {
+		t.Errorf("old editor link: %d %s", w.Code, w.Header().Get("Location"))
 	}
 }
 
@@ -273,7 +277,7 @@ func TestAnalyticsHostInCSP(t *testing.T) {
 		t.Fatalf("CSP without analytics: %s", off)
 	}
 	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", "https://eu.i.posthog.com/some/path")
-	for _, path := range []string{"/", "/media/edit"} {
+	for _, path := range []string{"/", "/media/design"} {
 		csp := do(h, "GET", path, nil, nil).Header().Get("Content-Security-Policy")
 		if !strings.Contains(csp, "connect-src 'self' https://eu.i.posthog.com") || strings.Contains(csp, "/some/path") {
 			t.Fatalf("%s: %s", path, csp)

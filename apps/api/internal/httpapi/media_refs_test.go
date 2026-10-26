@@ -119,13 +119,13 @@ func TestStorageLimitHoldsUnderConcurrentUploads(t *testing.T) {
 func TestConcurrentProjectSavesLeaveNoOrphanFiles(t *testing.T) {
 	e := newEnv(t)
 	var p app.MediaProject
-	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Poster"}, gpexFile("v1"), 201, &p)
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Poster"}, designFile("v1"), 201, &p)
 	var wg sync.WaitGroup
 	for i := range 8 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			body, ct := multipartBody(t, map[string]string{"name": "Poster"}, "file.bin", gpexFile(fmt.Sprint("v", i+2)))
+			body, ct := multipartBody(t, map[string]string{"name": "Poster"}, "file.bin", designFile(fmt.Sprint("v", i+2)))
 			req, _ := http.NewRequest("PUT", e.srv.URL+"/v1/media-projects/"+p.ID, body)
 			req.Header.Set("Content-Type", ct)
 			req.Header.Set("Authorization", "Bearer "+e.key)
@@ -187,15 +187,16 @@ func TestDeletedMediaCannotBeAttached(t *testing.T) {
 	e.do(nil, "POST", "/v1/posts/"+draft.ID+"/schedule", e.key, map[string]any{"publish_at": future(time.Hour)}, 200, nil)
 }
 
-// Media editor projects count toward storage everywhere: the usage shown and the upload check.
+// Design editor projects count toward storage everywhere: the usage shown and the upload check.
 func TestStorageCountsProjects(t *testing.T) {
 	e := newEnv(t)
 	e.plan(tinyStoragePlan) // 3000 bytes
-	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Big"}, gpexFile(strings.Repeat("x", 2500)), 201, nil)
+	big := designFile(strings.Repeat("x", 2400))
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Big"}, big, 201, nil)
 	var u app.Usage
 	e.do(nil, "GET", "/v1/workspace/usage", e.key, nil, 200, &u)
-	if u.Usage[app.LimitStorage] != 2508 {
-		t.Fatalf("storage used: %d, want 2508 (the project)", u.Usage[app.LimitStorage])
+	if u.Usage[app.LimitStorage] != int64(len(big)) {
+		t.Fatalf("storage used: %d, want %d (the project)", u.Usage[app.LimitStorage], len(big))
 	}
 	file := append(append([]byte{}, pngBytes...), make([]byte, 1000-len(pngBytes))...)
 	e.upload("/v1/media", e.key, nil, "f.png", file, 402, nil)

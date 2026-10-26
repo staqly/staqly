@@ -222,6 +222,7 @@ func Load() (Config, error) {
 				Disabled:      envBool("AI_DISABLED", false),
 				OpenAIBaseURL: strings.TrimRight(env("AI_OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
 			},
+			Stock:              app.StockConfig{UnsplashKey: os.Getenv("UNSPLASH_ACCESS_KEY")},
 			LocalTokenPath:     filepath.Join(dataDir, app.LocalTokenFile),
 			UploadDir:          env("UPLOAD_DIR", filepath.Join(dataDir, "uploads")),
 			SetupToken:         os.Getenv("SETUP_TOKEN"),
