@@ -163,6 +163,7 @@ const NO_FOLDERS: MediaFolder[] = []
 // Never mutated: every change to a selection makes a new set.
 const NO_IDS = new Set<string>()
 const NO_ITEMS: MediaLibraryItem[] = []
+const NO_STACKS = new Map<string, string[]>()
 
 // Action bar labels show from sm up; below, icon buttons keep their names (and tooltips) through aria-label.
 const barLabel = (text: string) => <span className="hidden sm:inline">{text}</span>
@@ -330,9 +331,9 @@ export function MediaPage() {
     })
   const pages = data?.pages
   const carousels = useCarousels()
-  const items = useMemo(() => {
+  const stacked = useMemo(() => {
     if (!pages) {
-      return NO_ITEMS
+      return { items: NO_ITEMS, pages: NO_STACKS }
     }
 
     // A file added here while paging can come again on the next page: once is enough.
@@ -341,6 +342,7 @@ export function MediaPage() {
 
     return stackCarousels(recent ? loaded.filter((m) => Date.parse(m.created_at) >= since) : loaded, carousels)
   }, [pages, recent, since, carousels])
+  const items = stacked.items
   const searching = !!q || !!tag
   const picked = useMemo(() => items.filter((m) => selected.has(m.id)), [items, selected])
 
@@ -692,7 +694,11 @@ export function MediaPage() {
               e.target.value = ''
             }}
           />
-          <Button variant="outline" asChild className="shrink-0">
+          {/* The way into the design editor: violet, so it reads as making something, not filtering or uploading. */}
+          <Button
+            asChild
+            className="shrink-0 border-0 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm hover:from-violet-500 hover:to-fuchsia-500"
+          >
             {/* oxlint-disable-next-line next/no-html-link-for-pages -- a full load: the editor's own CSP */}
             <a href="/media/edit" data-testid="media-design">
               <Palette /> <span className="max-sm:sr-only">Design</span>
@@ -868,7 +874,7 @@ export function MediaPage() {
       <MediaGrid
         items={items}
         highlight={fresh}
-        stacks={trash ? undefined : carousels.pages}
+        stacks={trash ? undefined : stacked.pages}
         caption={trash ? (m) => `Deletes ${timeAgo(m.purge_at)}` : undefined}
         selected={selected}
         onOpen={setOpen}

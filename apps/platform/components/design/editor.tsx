@@ -61,6 +61,7 @@ import {
 import { announceEdited } from './edited-media'
 import { addFile, Panel, PANELS, type PanelCtx, type PanelId } from './panels'
 import { jpegsToPdf } from './pdf'
+import { SaveDialog } from './save-dialog'
 import { useDesignStore } from './store'
 import { Toolbar } from './toolbar'
 
@@ -92,9 +93,26 @@ function designFor(media: Media[]): Design {
   const d = newDesign(Math.round((first.width || 1080) * k), Math.round((first.height || 1080) * k))
 
   d.name = first.original_name.replace(/\.[a-z0-9]+$/i, '')
-  d.pages[0]!.elements = media.map((m, i) =>
-    newImage(d, mediaUrl(m.id), m.width || 1080, m.height || 1080, { mediaId: m.id }, i === 0),
-  )
+  // A page per picture (a carousel), in the order they were picked, each the size of the first: a picture of
+  // another shape fits inside its page, whole.
+  d.pages = media.map((m) => {
+    const page = newPage()
+    const w = m.width || 1080
+    const h = m.height || 1080
+    const fit = Math.min(d.width / w, d.height / h)
+
+    page.elements = [
+      {
+        ...newImage(d, mediaUrl(m.id), w, h, { mediaId: m.id }),
+        x: (d.width - w * fit) / 2,
+        y: (d.height - h * fit) / 2,
+        width: w * fit,
+        height: h * fit,
+      },
+    ]
+
+    return page
+  })
 
   return d
 }
@@ -372,7 +390,7 @@ export default function DesignEditor({ search }: { search: string }) {
   )
   // Picking one member of a group picks the whole group.
   const select = useCallback((ids: string[]) => setSelected(withGroups(page.elements, ids)), [page])
-  const ctx: PanelCtx = { store, page, updatePage, selected, onSelect: select, add }
+  const ctx: PanelCtx = { store, page, updatePage, selected, onSelect: select, add, showPage }
 
   // Shortcuts, unless a field has the keyboard.
   useEffect(() => {
@@ -563,13 +581,20 @@ export default function DesignEditor({ search }: { search: string }) {
       })
   }
 
-  const save = () =>
+  // A new design asks for its name and folder first (once); a saved one saves straight away.
+  const [asking, setAsking] = useState(false)
+  const save = () => (project || params.fromComposer ? persist(design, '') : setAsking(true))
+  const persist = (doc: Design, folder: string) =>
     run('save', async () => {
-      const out = await saveAll({ design, saved: files, project, render })
+      const out = await saveAll({ design: doc, saved: files, project, render })
+
+      if (folder) {
+        await api.organizeMedia({ ids: out.media.map((m) => m.after.id), folder_id: folder })
+      }
 
       setProject(out.project)
       setFiles(out.saved)
-      setBaseline(design)
+      setBaseline(doc)
       dropDraft(draft)
       setDraft(DRAFT + out.project)
       window.history.replaceState(
@@ -591,7 +616,7 @@ export default function DesignEditor({ search }: { search: string }) {
         }
       }
 
-      const owed = credits(design)
+      const owed = credits(doc)
       const n = out.media.length
 
       toast.success(n > 1 ? `Saved ${n} pages to Media` : `Saved to Media as ${out.media[0]!.after.original_name}`, {
@@ -666,6 +691,21 @@ export default function DesignEditor({ search }: { search: string }) {
         void addFiles([...e.dataTransfer.files])
       }}
     >
+      {asking && (
+        <SaveDialog
+          name={design.name}
+          pages={design.pages.length}
+          onClose={() => setAsking(false)}
+          onSave={(name, folder) => {
+            setAsking(false)
+
+            const named = { ...design, name }
+
+            replace(named)
+            persist(named, folder)
+          }}
+        />
+      )}
       <ConfirmDialog
         open={leaving}
         onOpenChange={setLeaving}

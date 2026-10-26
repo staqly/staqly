@@ -23,6 +23,7 @@ import {
   Crop,
   Eraser,
   FlipHorizontal2,
+  Files,
   FlipVertical2,
   Italic,
   Loader2,
@@ -39,6 +40,7 @@ import { toast } from 'sonner'
 
 import { NativeSelect } from '@/components/common/native-select'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Toggle } from '@/components/ui/toggle'
 import { api, errorMessage, type Media } from '@/lib/api'
@@ -60,7 +62,7 @@ import {
   type TextEl,
 } from './doc'
 import { FONTS } from './fonts'
-import { ColorInput, css, Elapsed, FillPicker, swapPicture, type PanelCtx } from './panels'
+import { ColorInput, css, Elapsed, FillPicker, MoveToPageItems, swapPicture, type PanelCtx } from './panels'
 
 function Slider({
   label,
@@ -313,6 +315,16 @@ export function Toolbar({
           {grouped ? <Ungroup /> : <Group />} <span className="max-md:sr-only">{grouped ? 'Ungroup' : 'Group'}</span>
         </Button>
       )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" title="Move to another page">
+            <Files /> <span className="max-md:sr-only">Move to page</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <MoveToPageItems ctx={ctx} ids={selected} />
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Sep />
       <Button
         variant="ghost"

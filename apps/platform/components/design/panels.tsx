@@ -4,12 +4,15 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import {
   Eye,
   EyeOff,
+  FilePlus2,
+  Files,
   GripVertical,
   ImageIcon,
   Layers,
   LayoutTemplate,
   Loader2,
   Lock,
+  MoreHorizontal,
   PaintBucket,
   Plus,
   Scaling,
@@ -28,6 +31,13 @@ import { toast } from 'sonner'
 import { Callout } from '@/components/common/callout'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api, errorMessage, mediaThumbUrl, mediaUrl, type Media, type StockPhoto } from '@/lib/api'
@@ -38,6 +48,7 @@ import { BrandPanel, useBrand } from './brand'
 import { DesignView, dragged } from './canvas'
 import {
   newImage,
+  newPage,
   newShape,
   newText,
   resize,
@@ -48,6 +59,7 @@ import {
   type ImageEl,
   type Page,
   type ShapeKind,
+  withGroups,
 } from './doc'
 import { loadFont } from './fonts'
 import { IconsAndStickers } from './stickers'
@@ -77,6 +89,49 @@ export interface PanelCtx {
   onSelect: (ids: string[]) => void
   /** Adds elements on top and selects them. */
   add: (...els: El[]) => void
+  /** Shows another page. */
+  showPage: (id: string) => void
+}
+
+/** Moves elements of the page on screen to another page (on top of it), or to a new page after this one. */
+export function moveToPage(ctx: PanelCtx, ids: string[], target: string | null) {
+  const fresh = target ? null : newPage()
+  const to = target ?? fresh!.id
+
+  ctx.store.update((d) => {
+    const from = d.pages.find((p) => p.id === ctx.page.id)!
+    const moving = from.elements.filter((e) => ids.includes(e.id))
+
+    from.elements = from.elements.filter((e) => !ids.includes(e.id))
+
+    if (fresh) {
+      d.pages.splice(d.pages.indexOf(from) + 1, 0, { ...fresh, background: structuredClone(from.background) })
+    }
+
+    d.pages.find((p) => p.id === to)!.elements.push(...moving)
+  })
+  ctx.showPage(to)
+  ctx.onSelect(ids)
+}
+
+/** The menu items of "Move to page": every other page, and a new one. */
+export function MoveToPageItems({ ctx, ids }: { ctx: PanelCtx; ids: string[] }) {
+  const pages = ctx.store.design.pages
+
+  return (
+    <>
+      {pages.map((p, i) =>
+        p.id === ctx.page.id ? null : (
+          <DropdownMenuItem key={p.id} onSelect={() => moveToPage(ctx, ids, p.id)}>
+            <Files /> To page {i + 1}
+          </DropdownMenuItem>
+        ),
+      )}
+      <DropdownMenuItem onSelect={() => moveToPage(ctx, ids, null)}>
+        <FilePlus2 /> To a new page
+      </DropdownMenuItem>
+    </>
+  )
 }
 
 /** Seconds since it was shown, ticking: something slow is still running. */
@@ -891,21 +946,25 @@ export function elLabel(e: El) {
   ]
 }
 
+// A drag that moves less than this is a click (it picks the layer).
+const DRAG_PX = 4
+
 function LayersPanel({ ctx }: { ctx: PanelCtx }) {
   // Top of the page first, as the stack is seen.
   const list = ctx.page.elements.toReversed()
-  const [dragging, setDragging] = useState<string | null>(null)
-  // Where the dragged layer would land: before the layer at this index (list.length = at the bottom).
-  const [over, setOver] = useState<number | null>(null)
+  const ul = useRef<HTMLUListElement>(null)
+  // The layer being dragged: where it started, how far the pointer went, the slot it would land in.
+  const [drag, setDrag] = useState<{ id: string; from: number; dy: number; to: number; row: number } | null>(null)
+  const [menu, setMenu] = useState<string | null>(null)
 
-  /** Puts a layer before the one at `before` in the list (top first). */
-  const reorder = (id: string, before: number) =>
+  /** Moves a layer to slot `to` of the list (top first). */
+  const moveTo = (id: string, to: number) =>
     ctx.updatePage((p) => {
       const shown = p.elements.toReversed()
       const from = shown.findIndex((e) => e.id === id)
       const [el] = shown.splice(from, 1)
 
-      shown.splice(before > from ? before - 1 : before, 0, el!)
+      shown.splice(to, 0, el!)
       p.elements = shown.toReversed()
     })
   const toggle = (id: string, key: 'hidden' | 'locked') =>
@@ -916,9 +975,75 @@ function LayersPanel({ ctx }: { ctx: PanelCtx }) {
         el[key] = !el[key]
       }
     })
-  const end = () => {
-    setDragging(null)
-    setOver(null)
+
+  // Pointer dragging: the row follows the pointer, the others slide aside to open its slot, and it drops there.
+  const start = (e: React.PointerEvent<HTMLLIElement>, id: string, from: number) => {
+    const target = e.target as HTMLElement
+
+    // The eye and the lock are buttons of their own; on touch, only the handle drags (the rest scrolls).
+    if (
+      e.button !== 0 ||
+      target.closest('[data-no-drag]') ||
+      (e.pointerType !== 'mouse' && !target.closest('[data-grip]'))
+    ) {
+      return
+    }
+
+    const y0 = e.clientY
+    const rows = [...(ul.current?.children ?? [])] as HTMLElement[]
+    // One slot: a row and the gap under it.
+    const row = rows.length > 1 ? rows[1]!.offsetTop - rows[0]!.offsetTop : (rows[0]?.offsetHeight ?? 40)
+    let moved = false
+    let to = from
+
+    const move = (ev: PointerEvent) => {
+      const dy = ev.clientY - y0
+
+      if (!moved && Math.abs(dy) < DRAG_PX) {
+        return
+      }
+
+      moved = true
+      ev.preventDefault()
+      to = Math.max(0, Math.min(list.length - 1, from + Math.round(dy / row)))
+      setDrag({ id, from, dy, to, row })
+    }
+    const end = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      setDrag(null)
+
+      if (moved) {
+        // The click that ends a drag doesn't pick the layer.
+        window.addEventListener('click', (ev) => ev.stopPropagation(), { capture: true, once: true })
+
+        if (to !== from) {
+          moveTo(id, to)
+        }
+      }
+    }
+
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+  }
+
+  /** How far a row slides while another is dragged over it. */
+  const shift = (i: number) => {
+    if (!drag || i === drag.from) {
+      return 0
+    }
+
+    if (drag.from < drag.to && i > drag.from && i <= drag.to) {
+      return -drag.row
+    }
+
+    if (drag.from > drag.to && i >= drag.to && i < drag.from) {
+      return drag.row
+    }
+
+    return 0
   }
 
   if (!list.length) {
@@ -926,87 +1051,93 @@ function LayersPanel({ ctx }: { ctx: PanelCtx }) {
   }
 
   return (
-    <ul className="flex flex-col gap-1" aria-label="Layers, top first">
-      {list.map((e, i) => (
-        // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dragging is for the pointer; the handle reorders by keyboard
-        <li
-          key={e.id}
-          draggable
-          onDragStart={(ev) => {
-            ev.dataTransfer.effectAllowed = 'move'
-            ev.dataTransfer.setData('text/plain', e.id)
-            setDragging(e.id)
-          }}
-          onDragOver={(ev) => {
-            if (!dragging) {
-              return
-            }
+    <div className={cn('relative', drag && 'select-none')}>
+      {drag && (
+        // Where the dragged layer will land.
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 rounded-md border-2 border-dashed border-brand/60 bg-brand-soft/40 transition-[top] duration-150"
+          style={{ top: drag.to * drag.row, height: drag.row - 4 }}
+        />
+      )}
+      <ul ref={ul} className="relative flex flex-col gap-1" aria-label="Layers, top first">
+        {list.map((e, i) => {
+          const lifted = drag?.id === e.id
 
-            ev.preventDefault()
-            ev.stopPropagation()
-
-            const r = ev.currentTarget.getBoundingClientRect()
-
-            setOver(ev.clientY < r.top + r.height / 2 ? i : i + 1)
-          }}
-          onDrop={(ev) => {
-            ev.preventDefault()
-            ev.stopPropagation()
-
-            if (dragging && over !== null) {
-              reorder(dragging, over)
-            }
-
-            end()
-          }}
-          onDragEnd={end}
-          className={cn(
-            'flex items-center gap-1 rounded-md border bg-background py-1 pr-1 pl-0.5 text-sm transition-[opacity,box-shadow]',
-            ctx.selected.includes(e.id) && 'border-brand ring-1 ring-brand',
-            dragging === e.id && 'opacity-40',
-            dragging && over === i && 'shadow-[0_-3px_0_0_var(--brand)]',
-            dragging && over === list.length && i === list.length - 1 && 'shadow-[0_3px_0_0_var(--brand)]',
-          )}
-        >
-          <button
-            type="button"
-            aria-label={`Move ${elLabel(e)}: drag, or press the up and down arrows`}
-            title="Drag to reorder"
-            className="flex h-7 w-5 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:text-foreground active:cursor-grabbing"
-            onKeyDown={(ev) => {
-              if (ev.key === 'ArrowUp' && i > 0) {
+          return (
+            // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dragging is for the pointer; the handle reorders by keyboard
+            <li
+              key={e.id}
+              onPointerDown={(ev) => start(ev, e.id, i)}
+              // Right-click: the same menu as the "..." button.
+              onContextMenu={(ev) => {
                 ev.preventDefault()
-                reorder(e.id, i - 1)
-              } else if (ev.key === 'ArrowDown' && i < list.length - 1) {
-                ev.preventDefault()
-                reorder(e.id, i + 2)
-              }
-            }}
-          >
-            <GripVertical className="size-4" />
-          </button>
-          <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => ctx.onSelect([e.id])}>
-            <span className={cn(e.hidden && 'text-muted-foreground line-through')}>{elLabel(e)}</span>
-          </button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={e.hidden ? 'Show' : 'Hide'}
-            onClick={() => toggle(e.id, 'hidden')}
-          >
-            {e.hidden ? <EyeOff /> : <Eye />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={e.locked ? 'Unlock' : 'Lock'}
-            onClick={() => toggle(e.id, 'locked')}
-          >
-            {e.locked ? <Lock /> : <Unlock />}
-          </Button>
-        </li>
-      ))}
-    </ul>
+                setMenu(e.id)
+              }}
+              style={{ transform: `translateY(${lifted ? drag.dy : shift(i)}px)` }}
+              className={cn(
+                'flex items-center gap-1 rounded-md border bg-background py-1 pr-1 pl-0.5 text-sm',
+                ctx.selected.includes(e.id) && 'border-brand ring-1 ring-brand',
+                lifted
+                  ? 'relative z-10 scale-[1.02] cursor-grabbing shadow-lg ring-2 ring-brand'
+                  : drag && 'transition-transform duration-150',
+              )}
+            >
+              <button
+                type="button"
+                data-grip
+                aria-label={`Move ${elLabel(e)}: drag, or press the up and down arrows`}
+                title="Drag to reorder"
+                className="flex h-7 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                onKeyDown={(ev) => {
+                  if (ev.key === 'ArrowUp' && i > 0) {
+                    ev.preventDefault()
+                    moveTo(e.id, i - 1)
+                  } else if (ev.key === 'ArrowDown' && i < list.length - 1) {
+                    ev.preventDefault()
+                    moveTo(e.id, i + 1)
+                  }
+                }}
+              >
+                <GripVertical className="size-4" />
+              </button>
+              <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => ctx.onSelect([e.id])}>
+                <span className={cn(e.hidden && 'text-muted-foreground line-through')}>{elLabel(e)}</span>
+              </button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                data-no-drag
+                aria-label={e.hidden ? 'Show' : 'Hide'}
+                onClick={() => toggle(e.id, 'hidden')}
+              >
+                {e.hidden ? <EyeOff /> : <Eye />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                data-no-drag
+                aria-label={e.locked ? 'Unlock' : 'Lock'}
+                onClick={() => toggle(e.id, 'locked')}
+              >
+                {e.locked ? <Lock /> : <Unlock />}
+              </Button>
+              <DropdownMenu open={menu === e.id} onOpenChange={(o) => setMenu(o ? e.id : null)}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" data-no-drag aria-label={`More for ${elLabel(e)}`}>
+                    <MoreHorizontal />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Move to another page</DropdownMenuLabel>
+                  <MoveToPageItems ctx={ctx} ids={withGroups(ctx.page.elements, [e.id])} />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 

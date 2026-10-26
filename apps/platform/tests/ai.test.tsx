@@ -71,6 +71,7 @@ function ctxWith(page: Page, selected: string[] = []) {
     selected,
     onSelect: vi.fn<PanelCtx['onSelect']>(),
     add,
+    showPage: vi.fn<PanelCtx['showPage']>(),
   } as PanelCtx
 
   return { ctx, add, updatePage }

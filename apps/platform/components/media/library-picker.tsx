@@ -83,7 +83,7 @@ function LibraryPicker({
   const videoData = videos.data?.data
   // Kept across renders, so the memoised tiles only re-render for their own change (a pick).
   const carousels = useCarousels()
-  const items = useMemo(
+  const stacked = useMemo(
     () =>
       stackCarousels(
         [...(imageData ?? NO_MEDIA), ...(videoData ?? NO_MEDIA)]
@@ -93,9 +93,10 @@ function LibraryPicker({
       ),
     [imageData, videoData, exclude, carousels],
   )
+  const items = stacked.items
   // A carousel picked: every page, in order.
   const expand = (list: MediaLibraryItem[]) =>
-    list.flatMap((m) => (carousels.pages.get(m.id) ?? [m.id]).map((id) => ({ ...m, id })))
+    list.flatMap((m) => (stacked.pages.get(m.id) ?? [m.id]).map((id) => ({ ...m, id })))
   const selected = useMemo(() => new Set(picked.map((m) => m.id)), [picked])
   const toggle = (m: MediaLibraryItem) =>
     setPicked((xs) => (xs.some((x) => x.id === m.id) ? xs.filter((x) => x.id !== m.id) : [...xs, m]))
@@ -138,7 +139,7 @@ function LibraryPicker({
               selected={selected}
               onOpen={toggle}
               onToggle={toggle}
-              stacks={carousels.pages}
+              stacks={stacked.pages}
               className="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-4"
             />
           )}

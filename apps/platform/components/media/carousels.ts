@@ -38,18 +38,51 @@ export function useCarousels() {
   }, [data])
 }
 
-/** The list with a carousel's later pages left out, where its first page is in the list too. */
+// "Launch (2 of 4).png": the names the design editor saves a carousel's pages under.
+const PAGE_NAME = /^(.+) \((\d+) of (\d+)\)\.[a-z0-9]+$/i
+
+/**
+ * The list as the library shows it: a carousel's later pages left out where its first page is in the list too,
+ * and every carousel's pages by its first page's id. Carousels are known from their designs (page_ids), and,
+ * for pages saved before designs kept them, by their names when every page is in the list.
+ */
 export function stackCarousels<T extends MediaLibraryItem>(items: T[], c: ReturnType<typeof useCarousels>) {
-  if (!c.rest.size) {
-    return items
+  const pages = new Map(c.pages)
+  const byName = new Map<string, Map<number, string>>()
+
+  for (const m of items) {
+    const hit = PAGE_NAME.exec(m.original_name)
+
+    if (hit && !c.rest.has(m.id) && !pages.has(m.id)) {
+      const key = `${hit[1]}|${hit[3]}`
+      const group = byName.get(key) ?? new Map<number, string>()
+
+      group.set(Number(hit[2]), m.id)
+      byName.set(key, group)
+    }
+  }
+
+  for (const [key, group] of byName) {
+    const n = Number(key.split('|').pop())
+
+    if (n > 1 && group.size === n) {
+      const ids = Array.from({ length: n }, (_, i) => group.get(i + 1)!)
+
+      if (ids.every(Boolean)) {
+        pages.set(ids[0]!, ids)
+      }
+    }
   }
 
   const shown = new Set(items.map((m) => m.id))
   const firstOf = new Map<string, string>()
 
-  for (const [first, ids] of c.pages) {
+  for (const [first, ids] of pages) {
     ids.slice(1).forEach((id) => firstOf.set(id, first))
   }
 
-  return items.filter((m) => !(firstOf.has(m.id) && shown.has(firstOf.get(m.id)!)))
+  return {
+    items: items.filter((m) => !(firstOf.has(m.id) && shown.has(firstOf.get(m.id)!))),
+    pages,
+  }
 }
