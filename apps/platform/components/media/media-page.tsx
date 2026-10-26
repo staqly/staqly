@@ -345,6 +345,8 @@ export function MediaPage() {
   const items = stacked.items
   const searching = !!q || !!tag
   const picked = useMemo(() => items.filter((m) => selected.has(m.id)), [items, selected])
+  // A carousel's tile stands for all its pages: moving, tagging or deleting it takes every page.
+  const withPages = (ids: Iterable<string>) => [...ids].flatMap((id) => stacked.pages.get(id) ?? [id])
 
   // Paste files (a screenshot, a copied picture) anywhere on the page.
   useEffect(() => {
@@ -394,7 +396,7 @@ export function MediaPage() {
   }, [selected.size, setSelected])
 
   const { mutate: deleteSelected, isPending: deleting } = useMutation({
-    mutationFn: () => api.deleteMediaMany([...selected]),
+    mutationFn: () => api.deleteMediaMany(withPages(selected)),
     onSuccess: (res) => {
       setSelected(new Set())
       // One file is named in the title; more are counted under it.
@@ -750,7 +752,11 @@ export function MediaPage() {
         <>
           {canWrite && (
             <>
-              <Button variant="ghost" aria-label="Move to folder" onClick={() => setMoving({ ids: [...selected] })}>
+              <Button
+                variant="ghost"
+                aria-label="Move to folder"
+                onClick={() => setMoving({ ids: withPages(selected) })}
+              >
                 <FolderInput /> {barLabel('Move to folder')}
               </Button>
               <Button variant="ghost" aria-label="Tags" onClick={() => setTagging(true)}>
@@ -875,12 +881,13 @@ export function MediaPage() {
         items={items}
         highlight={fresh}
         stacks={trash ? undefined : stacked.pages}
+        onSelectMany={canWrite ? (ids) => setSelected(new Set(ids)) : undefined}
         caption={trash ? (m) => `Deletes ${timeAgo(m.purge_at)}` : undefined}
         selected={selected}
         onOpen={setOpen}
         onToggle={canWrite ? toggle : undefined}
         onSelectAll={canWrite ? () => setSelected(new Set(items.map((m) => m.id))) : undefined}
-        dragIds={canWrite && !trash ? (m) => (selected.has(m.id) ? [...selected] : [m.id]) : undefined}
+        dragIds={canWrite && !trash ? (m) => withPages(selected.has(m.id) ? selected : [m.id]) : undefined}
         className="gap-4 lg:grid-cols-[repeat(auto-fill,minmax(11.5rem,1fr))]"
       />
       {hasNextPage && (
@@ -969,6 +976,7 @@ export function MediaPage() {
 
       <MediaDetail
         item={open}
+        pages={open ? stacked.pages.get(open.id) : undefined}
         onOpenChange={(o) => !o && setOpen(null)}
         onNewPost={(m) => {
           setOpen(null)
@@ -1059,7 +1067,7 @@ export function MediaPage() {
           pending={organizing}
           onSubmit={(add, remove) =>
             organizeFiles(
-              { ids: [...selected], add_tags: add, remove_tags: remove },
+              { ids: withPages(selected), add_tags: add, remove_tags: remove },
               { onSuccess: () => setTagging(false) },
             )
           }
