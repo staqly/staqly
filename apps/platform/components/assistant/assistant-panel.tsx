@@ -315,6 +315,11 @@ function Conversation({
   )
 }
 
+/** A thumbnail's address: a file picked here (blob:) or one of the library's (the media id comes from a saved chat). */
+function thumbSrc(src?: string) {
+  return src && (src.startsWith('blob:') || /^\/api\/v1\/media\/[\w%-]+$/.test(src)) ? src : undefined
+}
+
 /** A file added to a message: a picture's thumbnail, else its name. */
 function AttachmentThumb({
   name,
@@ -329,10 +334,12 @@ function AttachmentThumb({
   onRemove?: () => void
   busy?: boolean
 }) {
+  const safe = thumbSrc(src)
+
   return (
     <span className="relative inline-flex">
-      {mime.startsWith('image/') && src ? (
-        <img src={src} alt={name} className="size-14 rounded-lg border object-cover" />
+      {mime.startsWith('image/') && safe ? (
+        <img src={safe} alt={name} className="size-14 rounded-lg border object-cover" />
       ) : (
         <span className="flex h-14 max-w-40 items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 text-xs">
           <FileText className="size-4 shrink-0 text-muted-foreground" />
