@@ -7,7 +7,7 @@ import { wrap } from '@/lib/site'
 
 export const metadata: Metadata = pageMeta(
   'Free social media tools for creators',
-  'Best time to post in your time zone, a character counter for every platform, an aspect ratio checker, a schedule validator and a link cleaner. Free, no sign-up.',
+  'Best time to post, a character counter for every platform, an aspect ratio checker, a schedule validator, a link cleaner, an Instagram grid maker and carousel splitter, a LinkedIn text formatter and a YouTube title checker. Free, no sign-up.',
   '/tools',
 )
 
