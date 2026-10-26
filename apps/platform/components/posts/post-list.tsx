@@ -22,7 +22,7 @@ import { useRouter } from 'next/navigation'
 import { memo, useContext, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { ChannelStack } from '@/components/channels/channel-avatars'
+import { ChannelAvatar, ChannelStack } from '@/components/channels/channel-avatars'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { MultiSelect } from '@/components/common/multi-select'
 import { PostStatusBadge } from '@/components/common/status-badge'
@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api, type Post, type PostQuery, type PostPage } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
@@ -72,7 +73,7 @@ import { postHref, PostsQueryContext } from './post-href'
  * or the checkbox, the post with its time under it, the status, the actions menu).
  */
 const COLUMNS =
-  'grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 @3xl:grid-cols-[1.25rem_minmax(0,1fr)_6.5rem_8.5rem_5.5rem_9rem_2.5rem_auto]'
+  'grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 @3xl:grid-cols-[1.25rem_minmax(0,1fr)_7.5rem_8.5rem_7.5rem_9rem_2.5rem_auto]'
 
 export type PostAction = 'preview' | 'duplicate' | 'delete' | 'publish' | 'unschedule' | 'stats' | 'copy-link'
 
@@ -102,7 +103,7 @@ export function PostListHeader({ allSelected, onSelectAll }: { allSelected: bool
         )}
       </span>
       <span>Post</span>
-      <span>Status</span>
+      <span className="text-center">Status</span>
       <span>When</span>
       <span>Channels</span>
       <span>Created</span>
@@ -211,7 +212,7 @@ export const PostRow = memo(function PostRow({
         </span>
       </span>
 
-      <span>
+      <span className="flex @3xl:justify-center">
         <PostStatusBadge status={post.status} />
       </span>
       <span
@@ -234,7 +235,29 @@ export const PostRow = memo(function PostRow({
               : '@max-3xl:group-hover:invisible @max-3xl:group-data-selecting/list:invisible'),
         )}
       >
-        <ChannelStack channels={targets} max={2} size="size-7 @3xl:size-6" />
+        {/* Hover or focus names every channel: the stack shows a few. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className="relative z-10 inline-flex rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              tabIndex={targets.length ? 0 : -1}
+            >
+              <ChannelStack channels={targets} max={4} size="size-7 @3xl:size-6" />
+            </span>
+          </TooltipTrigger>
+          {targets.length > 0 && (
+            <TooltipContent side="bottom" className="max-w-72">
+              <ul className="grid gap-1 py-0.5">
+                {targets.map((t) => (
+                  <li key={t.id} className="flex min-w-0 items-center gap-1.5">
+                    <ChannelAvatar channel={t} className="size-4" />
+                    <span className="truncate">{t.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </TooltipContent>
+          )}
+        </Tooltip>
       </span>
       <span
         className="hidden min-w-0 truncate text-xs text-muted-foreground @3xl:block"
