@@ -7,9 +7,9 @@ export const AI_OPS: Record<AIOperationId, { label: string; hint: string; run: s
   generate: { label: 'New picture', hint: 'Describe a picture to add to the page.', run: 'Make the picture' },
   edit: { label: 'Change it', hint: 'Describe the change, e.g. "make it a winter scene".', run: 'Change the photo' },
   inpaint: {
-    label: 'Redraw an area',
-    hint: 'Paint over an area, then describe what goes there.',
-    run: 'Redraw the area',
+    label: 'Edit an area',
+    hint: 'Paint over an area, then say what to do there: add something, remove it or replace it.',
+    run: 'Edit the area',
   },
   erase: { label: 'Remove an object', hint: 'Paint over what should go; AI fills in behind it.', run: 'Remove it' },
   expand: {
@@ -39,6 +39,7 @@ export const AI_OPS: Record<AIOperationId, { label: string; hint: string; run: s
   },
   text_to_video: { label: 'New video', hint: 'Describe a short video clip.', run: 'Make the video' },
   image_to_video: { label: 'Animate', hint: 'Describe how the picture should move.', run: 'Make the video' },
+  write: { label: 'Write with AI', hint: 'Describe the post; AI writes it.', run: 'Write it' },
 }
 
 const PROVIDERS: Record<string, string> = { fal: 'fal.ai', higgsfield: 'Higgsfield' }

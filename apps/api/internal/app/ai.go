@@ -417,8 +417,8 @@ func (s *Service) CreateAIJob(ctx context.Context, p Principal, in AIJobInput) (
 		return AIJob{}, false, err
 	}
 	op, ok := aiOpByID(in.Operation)
-	if !ok {
-		return AIJob{}, false, invalid("operation", "is not an AI operation")
+	if !ok || op.Kind == "text" {
+		return AIJob{}, false, invalid("operation", "is not an AI operation for pictures or videos")
 	}
 	if !s.aiOffered(op.ID) {
 		return AIJob{}, false, &Error{Code: "not_available", Status: 409, Message: "this AI tool is not available on this server"}

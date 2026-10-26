@@ -178,6 +178,13 @@ func TestDesignBrand(t *testing.T) {
 	}
 	e.do(nil, "PUT", "/v1/design/brand", e.key, map[string]any{"colors": []string{"red"}, "fonts": []string{}, "logos": []string{}}, 422, nil)
 	e.do(nil, "PUT", "/v1/design/brand", e.key, map[string]any{"colors": []string{}, "fonts": []string{}, "logos": []string{"med_nope"}}, 422, nil)
+	// Its logo in Deleted: the kit leaves it out, and changing the kit still works.
+	e.do(nil, "DELETE", "/v1/media/"+pic, e.admin, nil, 204, nil)
+	e.do(nil, "GET", "/v1/design/brand", e.key, nil, 200, &b)
+	if len(b.Logos) != 0 {
+		t.Fatalf("deleted logo kept: %+v", b)
+	}
+	e.do(nil, "PUT", "/v1/design/brand", e.key, map[string]any{"colors": []string{"#1f8a4c", "#7c3aed"}, "fonts": b.Fonts, "logos": b.Logos}, 200, &b)
 	viewer := e.keyWith(app.ScopeMediaRead)
 	e.do(nil, "GET", "/v1/design/brand", viewer, nil, 200, &b)
 	e.do(nil, "PUT", "/v1/design/brand", viewer, map[string]any{"colors": []string{}, "fonts": []string{}, "logos": []string{}}, 403, nil)

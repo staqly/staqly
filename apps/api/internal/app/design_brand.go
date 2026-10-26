@@ -36,9 +36,15 @@ func (s *Service) GetDesignBrand(ctx context.Context, p Principal) (DesignBrand,
 	if b.Fonts == nil {
 		b.Fonts = []string{}
 	}
-	if b.Logos == nil {
-		b.Logos = []string{}
+	// A logo whose file went to Deleted (or is gone) drops out: it can't be put on a design, and keeping it would
+	// make every later change of the kit fail its check.
+	logos := []string{}
+	for _, id := range b.Logos {
+		if m, err := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id}); err == nil && !m.DeletedAt.Valid {
+			logos = append(logos, id)
+		}
 	}
+	b.Logos = logos
 	return b, nil
 }
 
@@ -68,7 +74,7 @@ func (s *Service) SetDesignBrand(ctx context.Context, p Principal, in DesignBran
 	}
 	for _, id := range in.Logos {
 		m, err := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
-		if err != nil || !strings.HasPrefix(m.MimeType, "image/") {
+		if err != nil || m.DeletedAt.Valid || !strings.HasPrefix(m.MimeType, "image/") {
 			return DesignBrand{}, invalid("logos", "each must be a picture in this workspace's media library")
 		}
 	}

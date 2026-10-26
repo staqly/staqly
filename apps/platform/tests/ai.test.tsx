@@ -90,9 +90,10 @@ describe('the AI panel', () => {
     renderWithProviders(<AiPanel ctx={ctx} />)
 
     // Removing an object and upscaling still work, on this device, once a photo is selected.
-    expect(await screen.findByRole('radio', { name: /Remove an object · this device/ })).toBeDisabled()
-    expect(screen.getByRole('radio', { name: /Upscale · this device/ })).toBeDisabled()
-    expect(screen.queryByRole('radio', { name: 'New picture' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('radio', { name: /Remove an object.*this device/ })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: /Upscale.*this device/ })).toBeDisabled()
+    // A server tool stays listed, saying why it can't run.
+    expect(screen.getByRole('radio', { name: /New picture.*Not offered on this server/ })).toBeDisabled()
   })
 
   it('says when the allowance is used up and keeps only the on-device tools', async () => {
@@ -104,12 +105,12 @@ describe('the AI panel', () => {
     renderWithProviders(<AiPanel ctx={ctx} />)
 
     expect(await screen.findByText(/AI allowance is used up; it starts again on/)).toBeInTheDocument()
-    expect(screen.queryByRole('radio', { name: 'New picture' })).not.toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /Remove an object · this device/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /New picture.*Back on/ })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: /Remove an object.*this device/ })).toBeChecked()
     expect(screen.getByRole('button', { name: 'Paint the area' })).toBeInTheDocument()
   })
 
-  it('offers only what the server offers, the photo tools only with a photo selected', async () => {
+  it('lists every tool, the photo tools usable with a photo selected', async () => {
     mockApi({ 'GET /v1/ai': status([op('generate'), op('edit'), op('erase', { prompt: 'none' }), op('upscale')]) })
     const d = newDesign(1080, 1350)
     const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
@@ -119,8 +120,10 @@ describe('the AI panel', () => {
     const first = renderWithProviders(<AiPanel ctx={ctx} />)
 
     expect(await screen.findByRole('radio', { name: 'New picture' })).toBeChecked()
-    expect(screen.queryByRole('radio', { name: 'Remove an object' })).not.toBeInTheDocument()
-    expect(screen.getByText('Select a photo on the page to change it with AI.')).toBeInTheDocument()
+    // The photo tools are listed but wait for a photo; a tool the server lacks says so.
+    expect(screen.getByRole('radio', { name: 'Remove an object' })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: /Edit an area.*Not offered on this server/ })).toBeDisabled()
+    expect(screen.getByText('Select a photo on the page to change it.')).toBeInTheDocument()
     first.unmount()
 
     const { ctx: withPhoto } = ctxWith(page, [pic.id])

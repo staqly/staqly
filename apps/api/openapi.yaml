@@ -3629,6 +3629,48 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/ai/write:
+    post:
+      operationId: writeWithAI
+      tags: [posts]
+      summary: Write a post or a thread with AI (posts:write)
+      description: >
+        A language model on the server's AI provider writes a post or a thread from a description; the answer
+        comes back in the response (a few seconds). Nothing is saved as a post: the dashboard puts it in the
+        composer. It counts towards the workspace's monthly AI allowance (402 ai_limit_reached when used up);
+        409 not_available without an AI provider for text.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [prompt, format, voice]
+              properties:
+                prompt: { type: string, maxLength: 4000, description: What the post is about }
+                format: { type: string, enum: [short, long, thread_short, thread_long] }
+                voice: { type: string, enum: [personal, company] }
+                picture: { type: boolean, description: Also suggest a description of a picture to go with it }
+      responses:
+        "200":
+          description: The post, or a thread's posts in order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [posts]
+                properties:
+                  posts: { type: array, items: { type: string } }
+                  picture_prompt: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
   /v1/stock/photos:
     get:
       operationId: listStockPhotos
@@ -4880,8 +4922,8 @@ components:
       description: An AI operation this server offers, what it takes and who runs it
       required: [id, kind, prompt, image, mask, provider, model, fallback]
       properties:
-        id: { type: string, enum: [generate, edit, inpaint, erase, expand, remove_background, replace_background, upscale, enhance, text_to_video, image_to_video] }
-        kind: { type: string, enum: [image, video], description: What it makes }
+        id: { type: string, enum: [generate, edit, inpaint, erase, expand, remove_background, replace_background, upscale, enhance, text_to_video, image_to_video, write] }
+        kind: { type: string, enum: [image, video, text], description: "What it makes (write, the only text one, runs with POST /v1/ai/write)" }
         prompt: { type: string, enum: [required, optional, none] }
         image: { type: boolean, description: Needs a picture }
         mask: { type: boolean, description: "Needs a mask (white: the area to change)" }

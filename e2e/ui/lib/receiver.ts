@@ -46,6 +46,11 @@ function fakeFal(base: string, method: string, path: string): { status: number; 
     return json({ status: 'OK' })
   }
 
+  // The language model (Write with AI) answers text: a thread of two posts and a picture's description.
+  if (parts[1] === 'openrouter') {
+    return json({ output: 'We opened a second cafe.\n---\nFirst coffee is on us.\nIMAGE: a cosy cafe', partial: false })
+  }
+
   return json({ images: [{ url: `${base}/fal/files/out.png`, width: 4, height: 3 }], has_nsfw_concepts: [false] })
 }
 
