@@ -177,7 +177,7 @@ func (s *Service) telegramConnectChat(ctx context.Context, token string, c provi
 	if err == nil {
 		var creds providers.Credentials
 		var profile providers.Profile
-		creds, profile, err = e.Connect(providers.WithHTTPClient(ctx, s.safeClient()),
+		creds, profile, err = e.Connect(s.providerCtx(ctx),
 			map[string]string{"bot": "shared", "chat": strconv.FormatInt(c.ChatID, 10)})
 		if err == nil {
 			p := Principal{WorkspaceID: r.WorkspaceID, Kind: PrincipalSystem, ID: "telegram-bot", Name: r.ActorName}

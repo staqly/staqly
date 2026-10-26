@@ -27,7 +27,7 @@
       "idempotentHint": false,
       "readOnlyHint": false
     },
-    "description": "Connect your own automation (provider custom, no fields) or a channel on Bluesky, Dev.to, Discord, Hashnode, Lemmy, ListMonk, Mastodon, Medium, Moltbook, Nostr, Telegram, Whop or WordPress (see list_providers credential_fields). Dribbble, Facebook Page, Google Business Profile, Instagram, Instagram Business, Kick, LinkedIn, LinkedIn Page, MeWe, Pinterest, Reddit, Slack, Threads, TikTok, Tumblr, Twitch, X or YouTube (OAuth) is connected in the dashboard. Platforms with status soon in list_providers can't be connected yet. Requires channels:manage.",
+    "description": "Connect your own automation (provider custom, no fields) or a channel on Bluesky, Dev.to, Discord webhook, Hashnode, Lemmy, ListMonk, Mastodon, Medium, Moltbook, Nostr, Telegram, Whop or WordPress (see list_providers credential_fields). Discord, Dribbble, Facebook Page, Google Business Profile, Instagram, Instagram Business, Kick, LinkedIn, LinkedIn Page, MeWe, Pinterest, Reddit, Slack, Threads, TikTok, Tumblr, Twitch, X or YouTube (OAuth) is connected in the dashboard. Platforms with status soon in list_providers can't be connected yet. Requires channels:manage.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {

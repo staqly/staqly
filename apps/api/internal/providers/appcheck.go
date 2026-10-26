@@ -19,6 +19,9 @@ type AppChecker interface {
 type Needs struct {
 	HTTPS       bool // the return address registered with the platform must be https
 	PublicMedia bool // the platform downloads a post's media from a link
+	// BotToken: beside the OAuth keys, the server's own bot token (PROVIDER_<ID>_BOT_TOKEN) does the posting, so the
+	// app is the server's alone (a workspace can't bring its own) and the platform waits for both.
+	BotToken bool
 }
 
 // Needer is implemented by platforms with Needs.

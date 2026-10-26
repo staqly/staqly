@@ -280,7 +280,7 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 		}
 	}
 	content := providers.PostContent{PostID: postID, ChannelID: channelID, Text: text, Media: files}
-	result, err := replier.Reply(providers.WithHTTPClient(ctx, s.safeClient()), creds, parentID, content, settings)
+	result, err := replier.Reply(s.providerCtx(ctx), creds, parentID, content, settings)
 	// As for the post: what the platform answered is recorded even if the budget ran out meanwhile.
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jobWriteTimeout)
 	defer cancel()

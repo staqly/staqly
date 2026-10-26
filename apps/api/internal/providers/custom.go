@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -114,6 +115,22 @@ func httpClient(ctx context.Context) *http.Client {
 		return c
 	}
 	return http.DefaultClient
+}
+
+type getenvKey struct{}
+
+// WithGetenv hands providers the server's settings (the app's Env, so a test sets them per service): a platform
+// posting with the server's own bot reads its token at use time instead of keeping it per channel.
+func WithGetenv(ctx context.Context, get func(key string) string) context.Context {
+	return context.WithValue(ctx, getenvKey{}, get)
+}
+
+// getenv reads a server setting: through WithGetenv, else the process environment.
+func getenv(ctx context.Context, key string) string {
+	if get, ok := ctx.Value(getenvKey{}).(func(string) string); ok && get != nil {
+		return get(key)
+	}
+	return os.Getenv(key)
 }
 
 func (Custom) Publish(ctx context.Context, c Credentials, p PostContent, s Settings) (Result, error) {

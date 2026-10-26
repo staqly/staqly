@@ -89,6 +89,7 @@ const LOOKS: Record<string, Look> = {
   pinterest: { icon: siPinterest, color: '#BD081C' },
   dribbble: { icon: siDribbble, color: '#EA4C89' },
   discord: { icon: siDiscord, color: '#5865F2' },
+  discord_webhook: { icon: siDiscord, color: '#5865F2' },
   slack: { parts: SLACK, color: '#4A154B' },
   kick: { icon: siKick, color: '#53FC19' },
   twitch: { icon: siTwitch, color: '#9146FF' },

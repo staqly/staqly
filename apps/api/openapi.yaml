@@ -4621,7 +4621,7 @@ components:
             type: object
             required: [key, label, ok, detail]
             properties:
-              key: { type: string, enum: [keys, platform, return_address, media] }
+              key: { type: string, enum: [keys, bot_token, platform, return_address, media] }
               label: { type: string, examples: [App keys] }
               ok: { type: boolean }
               detail: { type: string, description: "What was found; for return_address, the address to register with the platform" }

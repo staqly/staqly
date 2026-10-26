@@ -40,7 +40,7 @@ func (s *Service) connectSignIn(ctx context.Context, p Principal, e providers.En
 		ch, err := s.saveOrReconnect(ctx, p, e, creds, profile, groupID)
 		return OAuthResult{Channel: &ch}, err
 	}
-	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
+	cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
 	defer cancel()
 	accounts, err := lister.Accounts(cctx, creds)
 	if err != nil {
@@ -93,7 +93,7 @@ func (s *Service) saveOrReconnect(ctx context.Context, p Principal, e providers.
 // useAccount narrows a sign-in to one of its accounts and saves that as a channel.
 func (s *Service) useAccount(ctx context.Context, p Principal, e providers.Entry, lister providers.AccountLister,
 	creds providers.Credentials, accountID, groupID string) (Channel, error) {
-	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
+	cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
 	defer cancel()
 	c, profile, err := lister.UseAccount(cctx, creds, accountID)
 	if err != nil {
