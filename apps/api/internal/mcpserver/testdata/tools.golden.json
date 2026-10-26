@@ -2154,6 +2154,37 @@
             "integer"
           ]
         },
+        "reactions": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "emoji": {
+                "type": "string"
+              },
+              "people": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              }
+            },
+            "required": [
+              "emoji",
+              "count"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
         "replies": {
           "type": [
             "null",

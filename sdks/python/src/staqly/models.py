@@ -785,6 +785,14 @@ class PostPreview(StaqlyModel):
     targets: list[PostPreviewTarget] = Field(default_factory=list)
 
 
+class PostReaction(StaqlyModel):
+    """One emoji under a post: how many reacted with it and, when the platform says, who."""
+
+    emoji: str
+    count: int = 0
+    people: list[str] = Field(default_factory=list)
+
+
 class PostMetrics(StaqlyModel):
     """A post's numbers on one platform; None is a number the platform does not give."""
 
@@ -795,6 +803,8 @@ class PostMetrics(StaqlyModel):
     quotes: int | None = None
     bookmarks: int | None = None
     link_clicks: int | None = None
+    #: Reactions by emoji (Slack).
+    reactions: list[PostReaction] = Field(default_factory=list)
 
 
 class TargetMetrics(StaqlyModel):

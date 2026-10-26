@@ -3014,6 +3014,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ai/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rewrite a short text with AI (media:write)
+         * @description The design editor's text tools. The assistant's model (no tools) follows the instruction and answers with the new text only. Counts as AI usage.
+         */
+        post: operations["aiText"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/assistant/chats": {
         parameters: {
             query?: never;
@@ -4323,6 +4343,12 @@ export interface components {
                 arguments: string;
             }[];
             tool_call_id?: string;
+            /** @description Files of the media library added to a user message: pictures reach the model as pictures, text files as their text, the rest by name and media id */
+            attachments?: {
+                media_id: string;
+                name?: string;
+                mime_type?: string;
+            }[];
         };
         /** @description A conversation with the assistant, kept for the person who had it; lists leave out messages and pending */
         AssistantChat: {
@@ -4643,6 +4669,13 @@ export interface components {
             quotes?: number;
             bookmarks?: number;
             link_clicks?: number;
+            /** @description Reactions by emoji (Slack), with the names of who reacted when the platform gives them (at most 20 per emoji) */
+            reactions?: {
+                /** @description The platform's name for it, e.g. thumbsup */
+                emoji: string;
+                count: number;
+                people?: string[];
+            }[];
         };
         TargetMetrics: {
             channel_id: string;
@@ -11969,6 +12002,42 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+        };
+    };
+    aiText: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    text: string;
+                    /** @description What to do, e.g. Make it shorter, or Translate to German */
+                    instruction: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        text: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            502: components["responses"]["BadGateway"];
         };
     };
     listAssistantChats: {

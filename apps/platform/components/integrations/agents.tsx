@@ -6,6 +6,7 @@ import { Bot, Plug, X } from 'lucide-react'
 import { ErrorState } from '@/components/common/error-state'
 import { LIVE_INTERVAL_MS } from '@/components/shell/live-updates'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { api, type Agent } from '@/lib/api'
 import { formatDateTime, parseDate, timeAgo } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
@@ -145,7 +146,7 @@ export function ConnectedAgents({
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         {agents.isLoading ? (
-          <div className="h-16 animate-pulse rounded-xl bg-muted/40" />
+          <Skeleton className="h-16 rounded-xl bg-muted/40" />
         ) : agents.error && !agents.data ? (
           // Once, in the first section: the second would only repeat it.
           kind === 'mcp' && (

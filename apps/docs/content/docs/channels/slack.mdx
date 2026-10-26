@@ -68,6 +68,8 @@ another workspace, connect again and pick that one on slack.com. Staqly asks for
 | `files:write` | Upload files |
 | `files:read` | Find the message an upload made, to link to it and reply under it |
 | `team:read` | Show the workspace's icon (without one, its first letter, as Slack does) |
+| `reactions:read` | Count the reactions under a post and the replies in its thread (**Statistics**) |
+| `users:read` | Name who reacted |
 
 And these user scopes, so a post can go out as the person who connects (**Post as**):
 
@@ -107,6 +109,12 @@ Slack thread, one after another with their delays.
 When a post has files, Slack answers with the files, not the message; staqly asks Slack where they
 were shared for a few seconds. When Slack does not say in time, the target links to the channel and
 its comments are skipped; the post is out.
+
+## Statistics
+
+A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show, summed over every channel it went to: its
+**Reactions** (each emoji with its count and who reacted) and the **Replies** in its threads. Slack has no views or
+reach for a message. A workspace connected before these numbers needs reconnecting once.
 
 ## Tokens
 

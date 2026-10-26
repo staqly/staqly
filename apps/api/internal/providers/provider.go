@@ -318,6 +318,15 @@ type Metrics struct {
 	Quotes      *int64 `json:"quotes,omitempty"`
 	Bookmarks   *int64 `json:"bookmarks,omitempty"`
 	LinkClicks  *int64 `json:"link_clicks,omitempty"`
+	// Reactions by emoji, with who reacted where the platform says (Slack).
+	Reactions []Reaction `json:"reactions,omitempty"`
+}
+
+// Reaction is one emoji under a post: how many reacted with it and, when known, their names.
+type Reaction struct {
+	Emoji  string   `json:"emoji"` // the platform's name for it (Slack: "thumbsup", "tada")
+	Count  int64    `json:"count"`
+	People []string `json:"people,omitempty"`
 }
 
 // MetricsReader is implemented by platforms that report numbers for a post they published; the app reads them

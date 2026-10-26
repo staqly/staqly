@@ -999,3 +999,71 @@ func TestAssistantChats(t *testing.T) {
 	e.do(nil, "GET", "/v1/assistant/chats?cursor=nope!", e.key, nil, 422, nil)
 	e.do(nil, "POST", "/v1/assistant/chat", e.key, map[string]any{"chat_id": "../x", "messages": []map[string]string{{"role": "user", "content": "hi"}}}, 422, nil)
 }
+
+// A screenshot added to a message reaches the model as a picture, named with its media id (so it can go on a
+// post); a file that is not there is named as missing; the saved chat keeps the attachments.
+func TestAssistantAttachments(t *testing.T) {
+	e := newEnv(t)
+	e.paid()
+	var pic app.Media
+	e.upload("/v1/media", e.key, nil, "screen.png", pngBytes, 201, &pic)
+
+	var sent []map[string]any
+	own := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var body struct{ Messages []map[string]any }
+		_ = json.Unmarshal(b, &body)
+		sent = body.Messages
+		r.Body = io.NopCloser(bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}]}`)))
+		fakeAssistant(w, r)
+	}))
+	defer own.Close()
+	e.svc.Cfg.AI = app.AIConfig{Assistant: app.AIEndpoint{BaseURL: own.URL + "/v1", Model: "m", Prices: &[2]float64{0, 0}}}
+	e.assistantRequest(app.AssistantRequest{ChatID: "ach_attach0001", Messages: []app.AssistantMessage{{Role: "user", Content: "What is on it?",
+		Attachments: []app.AssistantAttachment{{MediaID: pic.ID}, {MediaID: "med_nope"}}}}})
+
+	parts, _ := sent[len(sent)-1]["content"].([]any)
+	if len(parts) != 2 {
+		t.Fatalf("parts %v", sent[len(sent)-1])
+	}
+	text, _ := parts[0].(map[string]any)["text"].(string)
+	img, _ := parts[1].(map[string]any)["image_url"].(map[string]any)
+	if !strings.Contains(text, pic.ID) || !strings.Contains(text, "could not be opened") ||
+		!strings.HasPrefix(img["url"].(string), "data:image/png;base64,") {
+		t.Fatalf("text %q img %v", text, img)
+	}
+	var chat app.AssistantChat
+	e.do(nil, "GET", "/v1/assistant/chats/ach_attach0001", e.key, nil, 200, &chat)
+	if len(chat.Messages) == 0 || len(chat.Messages[0].Attachments) != 2 {
+		t.Fatalf("saved %+v", chat.Messages)
+	}
+}
+
+// The design editor's text tools: the text rewritten by the assistant's model, without tools, as plain text.
+func TestAIText(t *testing.T) {
+	e := newEnv(t)
+	e.paid()
+	var hadTools bool
+	var asked string
+	own := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Tools    any
+			Messages []struct{ Content any }
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		hadTools, asked = body.Tools != nil, fmt.Sprint(body.Messages[len(body.Messages)-1].Content)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"\\\"Less is more.\\\"\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer own.Close()
+
+	e.do(nil, "POST", "/v1/ai/text", e.key, map[string]any{"text": "Simplicity", "instruction": "Shorter"}, 409, nil)
+	e.svc.Cfg.AI = app.AIConfig{Assistant: app.AIEndpoint{BaseURL: own.URL + "/v1", Model: "m", Prices: &[2]float64{0, 0}}}
+	var out app.AIText
+	e.do(nil, "POST", "/v1/ai/text", e.key, map[string]any{"text": "Simplicity is the ultimate sophistication.", "instruction": "Shorter"}, 200, &out)
+	if out.Text != "Less is more." || hadTools || !strings.Contains(asked, "Shorter") || !strings.Contains(asked, "Simplicity") {
+		t.Fatalf("%+v tools=%v asked=%q", out, hadTools, asked)
+	}
+	e.do(nil, "POST", "/v1/ai/text", e.key, map[string]any{"text": "", "instruction": "Shorter"}, 422, nil)
+	e.do(nil, "POST", "/v1/ai/text", e.key, map[string]any{"text": "x", "instruction": ""}, 422, nil)
+}

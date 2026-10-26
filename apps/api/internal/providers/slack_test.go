@@ -101,6 +101,19 @@ func (f *fakeSlack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(b)
 	case "team.info":
 		_, _ = w.Write([]byte(`{"ok":true,"team":{"id":"T1","name":"Acme","icon":{"image_132":"https://avatars.slack-edge.com/acme_132.png","image_default":false}}}`))
+	case "reactions.get":
+		if r.Form.Get("full") != "true" {
+			_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_arguments"}`))
+			return
+		}
+		if r.Form.Get("channel") == "C2" {
+			_, _ = w.Write([]byte(`{"ok":true,"type":"message","message":{"reply_count":1,"reactions":[{"name":"tada","count":1,"users":["U2"]}]}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"type":"message","message":{"reply_count":2,"reactions":[{"name":"thumbsup","count":2,"users":["U1","U2"]},{"name":"tada","count":1,"users":["U1"]}]}}`))
+	case "users.info":
+		names := map[string]string{"U1": `{"name":"jane","profile":{"display_name":"Jane","real_name":"Jane Doe"}}`, "U2": `{"name":"john","profile":{"display_name":"","real_name":"John Roe"}}`}
+		_, _ = w.Write([]byte(`{"ok":true,"user":` + names[r.Form.Get("user")] + `}`))
 	case "users.profile.get":
 		_, _ = w.Write([]byte(`{"ok":true,"profile":{"real_name":"Jane Doe","image_48":"https://avatars.slack-edge.com/jane_48.png"}}`))
 	case "conversations.join":
@@ -434,5 +447,37 @@ func TestSlackValidate(t *testing.T) {
 	}
 	if err := s.Validate(PostContent{Text: strings.Repeat("a", 40000)}, Settings{"channel": "C1"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSlackMetrics(t *testing.T) {
+	f := useFakeSlack(t)
+	ctx := context.Background()
+	c := slackCreds()
+	delete(c, "channel_id")
+
+	// A post in two channels: reactions summed by emoji with who reacted, replies of both threads.
+	m, err := Slack{}.Metrics(ctx, c, "C1:1700000000.000200,C2:1700000000.000300/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *m.Likes != 4 || *m.Replies != 3 || len(m.Reactions) != 2 {
+		t.Fatalf("%+v", m)
+	}
+	if r := m.Reactions[0]; r.Emoji != "thumbsup" || r.Count != 2 || strings.Join(r.People, ",") != "Jane,John Roe" {
+		t.Fatalf("thumbsup %+v", r)
+	}
+	if r := m.Reactions[1]; r.Emoji != "tada" || r.Count != 2 || strings.Join(r.People, ",") != "Jane,John Roe" {
+		t.Fatalf("tada %+v", r)
+	}
+	// A post from before several channels reads its connected channel; without users:read only counts.
+	f.errFor["users.info"] = "missing_scope"
+	m, err = Slack{}.Metrics(ctx, slackCreds(), "1700000000.000200")
+	if err != nil || *m.Likes != 3 || m.Reactions[0].People != nil {
+		t.Fatalf("legacy %+v %v", m, err)
+	}
+	f.errFor["reactions.get"] = "message_not_found"
+	if _, err := (Slack{}).Metrics(ctx, slackCreds(), "1700000000.000200"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("gone: %v", err)
 	}
 }

@@ -102,10 +102,18 @@ whom to credit when you save.
 
 ## AI tools
 
-The **AI** tool lists every tool; one the server can't run now stays in the list, greyed, saying why (no AI on
-the server, or the month's allowance is used up and when it starts again). **New picture** makes a picture from
-a description ("an avatar, a smiling woman on a beach"), in the page's shape, with or without a photo selected.
-With a photo selected:
+The **AI** tool starts by saying what is selected, and shows what AI can do with it: tools the server can't run
+now aren't listed (the panel says why when nothing is left: no AI on the server, or the month's allowance is used
+up and when it starts again). With nothing selected it opens on **New picture**, which makes a picture from a
+description ("an avatar, a smiling woman on a beach") in the page's shape; it stays at hand under **Make something
+new** whatever is selected.
+
+With a text selected, AI rewrites it: **Shorter**, **Longer**, **Friendlier**, **More professional**, **Fix
+spelling**, **Catchier**, **Translate** to a language you pick, or your own instruction ("add an emoji at the end").
+The new text shows first; **Use it** puts it on the page (Undo takes it back). It runs on the
+[assistant's model](/dashboard/assistant#where-it-runs).
+
+With a photo selected, its tools show as tiles:
 
 | Tool | What it does |
 |---|---|
@@ -124,7 +132,7 @@ takes back), **Try again** or **Discard**. A result you use goes to your library
 picture: move it, crop it or change it again. The result says which AI service made it. Leaving the editor
 cancels a request that is still running.
 
-Crop, resize, text, layers and the other tools never call AI.
+Crop, resize, text editing, layers and the other tools never call AI.
 
 ### On this device
 

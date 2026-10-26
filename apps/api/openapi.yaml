@@ -3691,6 +3691,30 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+  /v1/ai/text:
+    post:
+      operationId: aiText
+      tags: [media]
+      summary: Rewrite a short text with AI (media:write)
+      description: The design editor's text tools. The assistant's model (no tools) follows the instruction and answers with the new text only. Counts as AI usage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, instruction]
+              properties:
+                text: { type: string, maxLength: 4000 }
+                instruction: { type: string, maxLength: 500, description: "What to do, e.g. Make it shorter, or Translate to German" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [text], properties: { text: { type: string } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "502": { $ref: "#/components/responses/BadGateway" }
   /v1/assistant/chats:
     get:
       operationId: listAssistantChats
@@ -4999,6 +5023,17 @@ components:
               name: { type: string }
               arguments: { type: string, description: JSON text }
         tool_call_id: { type: string }
+        attachments:
+          type: array
+          maxItems: 10
+          description: "Files of the media library added to a user message: pictures reach the model as pictures, text files as their text, the rest by name and media id"
+          items:
+            type: object
+            required: [media_id]
+            properties:
+              media_id: { type: string }
+              name: { type: string }
+              mime_type: { type: string }
     AssistantChat:
       type: object
       description: "A conversation with the assistant, kept for the person who had it; lists leave out messages and pending"
@@ -5288,6 +5323,16 @@ components:
         quotes: { type: integer, minimum: 0 }
         bookmarks: { type: integer, minimum: 0 }
         link_clicks: { type: integer, minimum: 0 }
+        reactions:
+          type: array
+          description: Reactions by emoji (Slack), with the names of who reacted when the platform gives them (at most 20 per emoji)
+          items:
+            type: object
+            required: [emoji, count]
+            properties:
+              emoji: { type: string, description: "The platform's name for it, e.g. thumbsup" }
+              count: { type: integer, minimum: 0 }
+              people: { type: array, items: { type: string } }
     TargetMetrics:
       type: object
       required: [channel_id, channel_name, provider, status, external_url, available, metrics, updated_at]
