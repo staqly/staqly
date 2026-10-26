@@ -64,7 +64,7 @@ func (s *Service) StartTelegramConnect(ctx context.Context, p Principal, groupID
 		err := s.W.CreateTelegramCode(ctx, db.CreateTelegramCodeParams{Code: code, WorkspaceID: p.WorkspaceID, CreatedBy: p.actor(),
 			ActorName: p.Name, GroupID: groupID, CreatedAt: formatTime(now), ExpiresAt: formatTime(now.Add(telegramCodeTTL))})
 		if err == nil {
-			return TelegramConnect{Code: code, Command: "/connect " + code, Bot: "@" + bot,
+			return TelegramConnect{Code: code, Command: telegramCommand(bot, code), Bot: "@" + bot,
 				ExpiresAt: formatTime(now.Add(telegramCodeTTL)), Status: "waiting"}, nil
 		}
 	}
@@ -84,7 +84,7 @@ func (s *Service) GetTelegramConnect(ctx context.Context, p Principal, code stri
 		return TelegramConnect{}, err
 	}
 	_, bot := s.telegramBot()
-	out := TelegramConnect{Code: r.Code, Command: "/connect " + r.Code, Bot: "@" + bot, ExpiresAt: r.ExpiresAt,
+	out := TelegramConnect{Code: r.Code, Command: telegramCommand(bot, r.Code), Bot: "@" + bot, ExpiresAt: r.ExpiresAt,
 		Status: "waiting", ChannelID: r.ChannelID, Error: r.Error}
 	switch {
 	case r.ChannelID != "":
@@ -93,6 +93,15 @@ func (s *Service) GetTelegramConnect(ctx context.Context, p Principal, code stri
 		out.Status = "expired"
 	}
 	return out, nil
+}
+
+// telegramCommand is addressed to the server's bot (/connect@bot CODE): other bots in a group that know /connect
+// (moderation bots do) leave it alone.
+func telegramCommand(bot, code string) string {
+	if bot == "" {
+		return "/connect " + code
+	}
+	return "/connect@" + bot + " " + code
 }
 
 // telegramCode: 6 letters and digits that read unambiguously (no 0/O, 1/I/L).
@@ -117,9 +126,10 @@ func (s *Service) runTelegramBot(ctx context.Context) {
 	log := s.logger(ctx)
 	var username string
 	for username == "" {
-		u, err := providers.TelegramMe(cctx, token)
+		u, name, err := providers.TelegramMe(cctx, token)
 		if err == nil {
 			username = u
+			providers.SetTelegramBotName(name)
 			break
 		}
 		log.Warn("telegram bot not reachable", "err", err)

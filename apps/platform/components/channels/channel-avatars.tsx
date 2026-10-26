@@ -1,7 +1,7 @@
 'use client'
 
 import { ProviderIcon, ProviderTile } from '@/lib/providers'
-import { safeHttpUrl } from '@/lib/safe'
+import { safeImageSrc } from '@/lib/safe'
 import { cn } from '@/lib/utils'
 
 export interface ChannelLike {
@@ -13,7 +13,8 @@ export interface ChannelLike {
 
 /** One channel's picture: its profile picture from the platform, or the provider tile when there is none. */
 export function ChannelAvatar({ channel, className }: { channel: ChannelLike; className?: string }) {
-  const avatar = safeHttpUrl(channel.avatar_url)
+  // A link, or a small picture kept inline (a Telegram chat's: its file address would carry the bot's token).
+  const avatar = safeImageSrc(channel.avatar_url)
 
   if (avatar) {
     return (
@@ -51,7 +52,7 @@ export function ChannelAvatar({ channel, className }: { channel: ChannelLike; cl
 }
 
 /** Platforms whose channel is a named place (a workspace), shown by its first letter until it has an icon. */
-const LETTER_AVATARS = new Set(['slack'])
+const LETTER_AVATARS = new Set(['slack', 'telegram'])
 
 /**
  * Several channels as a stack of small avatars (calendar chips, post rows): the first few overlap, the rest

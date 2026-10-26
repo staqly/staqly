@@ -5070,7 +5070,7 @@ components:
       required: [code, command, bot, expires_at, status]
       properties:
         code: { type: string }
-        command: { type: string, description: "What to send in the chat: /connect CODE" }
+        command: { type: string, description: "What to send in the chat: /connect@bot CODE (addressed to the server's bot, so other bots leave it alone)" }
         bot: { type: string, description: "The bot to add (@username)" }
         expires_at: { type: string, format: date-time }
         status: { type: string, enum: [waiting, connected, expired], description: "waiting: no /connect yet, or the last one failed (error says why)" }
@@ -5701,6 +5701,7 @@ components:
         app_configured: { type: boolean, description: "OAuth platforms: a developer app is set (the workspace's or the server's)" }
         docs_url: { type: string, format: uri }
         bot: { type: string, description: "Telegram: the server's own bot (@username). Present when a chat connects by adding it and sending /connect CODE there (POST /v1/channels/telegram/connect) instead of with credential_fields" }
+        bot_name: { type: string, description: "Telegram: the server's bot's display name, shown beside its @username" }
         needs_https: { type: boolean, description: "The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise)" }
 
     ScheduleRule:

@@ -42,9 +42,13 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  closeOnOutsideClick = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  /** Like sheets, dialogs close with Esc or the X only, so a stray click never drops what is in them. The command
+   * palette opts in. */
+  closeOnOutsideClick?: boolean
 }) {
   const returnFocus = useReturnFocus(props)
 
@@ -64,7 +68,7 @@ function DialogContent({
         {...props}
         {...returnFocus}
         onInteractOutside={(e) => {
-          if (inToast(e.target)) {
+          if (!closeOnOutsideClick || inToast(e.target)) {
             e.preventDefault()
           }
 
