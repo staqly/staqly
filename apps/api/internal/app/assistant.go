@@ -42,6 +42,10 @@ type AssistantMessage struct {
 	Content    string              `json:"content"`
 	ToolCalls  []AssistantToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string              `json:"tool_call_id,omitempty"`
+	// Attachments: files of the media library the person added to the message (a screenshot, a document).
+	Attachments []AssistantAttachment `json:"attachments,omitempty"`
+	// parts: the message as the model gets it when it has attachments (assistant_attachments.go), made per turn.
+	parts []map[string]any
 }
 
 // AssistantToolCall is a tool the model asked for, with its arguments as JSON text.
@@ -138,6 +142,9 @@ func (s *Service) CheckAssistant(req AssistantRequest) error {
 		default:
 			return invalid("messages", "a role must be user, assistant or tool")
 		}
+		if len(m.Attachments) > assistantMaxAttachments {
+			return invalid("messages", fmt.Sprintf("a message takes at most %d attachments", assistantMaxAttachments))
+		}
 		if m.Role == "user" && utf8.RuneCountInString(m.Content) > assistantMaxUserRunes {
 			return invalid("messages", fmt.Sprintf("a message must be at most %d characters", assistantMaxUserRunes))
 		}
@@ -148,7 +155,7 @@ func (s *Service) CheckAssistant(req AssistantRequest) error {
 // Assistant runs one turn: the decided tool (if any), then the model and the tools it calls, until it answers,
 // a tool waits for the person, or the step limit. Events go to emit as they happen.
 func (s *Service) Assistant(ctx context.Context, p Principal, req AssistantRequest, tools AssistantTools, emit func(AssistantEvent)) error {
-	msgs := req.Messages
+	msgs := s.withAttachments(ctx, p, req.Messages)
 	sys := s.assistantSystem(ctx, p, req.Page) // once per turn: the workspace as it is now
 	readOnly := map[string]bool{}
 	for _, t := range tools.List {
@@ -384,6 +391,9 @@ func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []Assist
 	wire := []map[string]any{{"role": "system", "content": sys}}
 	for _, m := range msgs {
 		w := map[string]any{"role": m.Role, "content": m.Content}
+		if m.parts != nil {
+			w["content"] = m.parts
+		}
 		if m.Role == "tool" {
 			w["tool_call_id"] = m.ToolCallID
 		}
@@ -396,8 +406,11 @@ func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []Assist
 		}
 		wire = append(wire, w)
 	}
-	payload := map[string]any{"model": e.Model, "messages": wire, "tools": defs, "stream": true,
+	payload := map[string]any{"model": e.Model, "messages": wire, "stream": true,
 		"stream_options": map[string]any{"include_usage": true}}
+	if len(defs) > 0 { // a text request has none, and some APIs refuse an empty list
+		payload["tools"] = defs
+	}
 	if e.BaseURL == "" || strings.Contains(e.BaseURL, "openrouter.ai") {
 		// OpenRouter's own field for the call's cost; OpenAI and others refuse fields they don't know.
 		payload["usage"] = map[string]any{"include": true}

@@ -130,7 +130,8 @@ test.describe('the design editor', () => {
     const layers = page.getByRole('complementary', { name: 'Layers' })
 
     await tools.getByRole('button', { name: 'AI' }).click()
-    await expect(page.getByRole('radio', { name: 'New picture' })).toBeChecked()
+    // Nothing selected: the panel says so and opens on a new picture.
+    await expect(page.getByTestId('ai-context')).toContainText('Nothing selected')
     await page.getByRole('textbox', { name: 'What should AI do?' }).fill('A lighthouse at dawn')
     await page.getByRole('button', { name: 'Make the picture' }).click()
     await expect(page.getByRole('img', { name: 'What AI made' })).toBeVisible({ timeout: 30_000 })

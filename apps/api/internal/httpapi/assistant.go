@@ -15,10 +15,21 @@ import (
 func init() {
 	RegisterAuthedRoutes(func(s *Server, r chi.Router) {
 		r.Post("/assistant/chat", s.assistantChat)
+		r.Post("/ai/text", s.aiText)
 		r.Get("/assistant/chats", s.listAssistantChats)
 		r.Get("/assistant/chats/{id}", s.getAssistantChat)
 		r.Delete("/assistant/chats/{id}", s.deleteAssistantChat)
 	})
+}
+
+// aiText: POST /v1/ai/text, a text rewritten by the assistant's model (the design editor's text tools).
+func (s *Server) aiText(w http.ResponseWriter, r *http.Request) {
+	var in app.AITextRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	out, err := s.svc.AIText(r.Context(), principal(r), in)
+	respond(w, r, 200, out, err)
 }
 
 func (s *Server) listAssistantChats(w http.ResponseWriter, r *http.Request) {

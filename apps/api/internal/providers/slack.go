@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -35,8 +36,8 @@ var (
 // slackScopes are bot scopes: post (chat:write), join public channels to post files there (channels:join), upload
 // files and find the message they made (files:write, files:read), list the channels to pick from (channels:read,
 // groups:read).
-// team:read gives the workspace's icon.
-const slackScopes = "chat:write,channels:join,channels:read,groups:read,files:write,files:read,team:read"
+// team:read gives the workspace's icon; reactions:read and users:read the reactions under a post and who reacted.
+const slackScopes = "chat:write,channels:join,channels:read,groups:read,files:write,files:read,team:read,reactions:read,users:read"
 
 // slackUserScopes let a post go out as the person who connected: post, upload files and find their message.
 // users.profile:read shows the person's photo next to "As myself".
@@ -520,6 +521,118 @@ func (s Slack) send(ctx context.Context, c Credentials, token, channel string, a
 	}
 	// The answer names the files, not the message: find the message the share made.
 	return s.sharedTS(ctx, token, files[0]["id"], channel), nil
+}
+
+// Slack reports reactions (who and which) and the replies in the thread of every message a post made.
+var _ MetricsReader = Slack{}
+
+func (s Slack) Metrics(ctx context.Context, c Credentials, externalID string) (Metrics, error) {
+	token := c["access_token"]
+	var likes, replies int64
+	byEmoji := map[string]*Reaction{}
+	var order []string
+	seen := map[string]map[string]bool{} // emoji -> user ids already counted
+	var userIDs []string
+	for _, part := range slackRoots(c, externalID) {
+		var res struct {
+			Message struct {
+				ReplyCount int64 `json:"reply_count"`
+				Reactions  []struct {
+					Name  string   `json:"name"`
+					Count int64    `json:"count"`
+					Users []string `json:"users"`
+				} `json:"reactions"`
+			} `json:"message"`
+		}
+		q := url.Values{"channel": {part.channel}, "timestamp": {part.ts}, "full": {"true"}}
+		req, err := slackRequest(ctx, token, "reactions.get?"+q.Encode(), nil)
+		if err != nil {
+			return Metrics{}, err
+		}
+		if err := slackDo(ctx, req, &res); err != nil {
+			return Metrics{}, err
+		}
+		replies += res.Message.ReplyCount
+		for _, r := range res.Message.Reactions {
+			likes += r.Count
+			if byEmoji[r.Name] == nil {
+				byEmoji[r.Name], seen[r.Name] = &Reaction{Emoji: r.Name}, map[string]bool{}
+				order = append(order, r.Name)
+			}
+			byEmoji[r.Name].Count += r.Count
+			for _, u := range r.Users {
+				if !seen[r.Name][u] {
+					seen[r.Name][u] = true
+					userIDs = append(userIDs, u)
+				}
+			}
+		}
+	}
+	names := s.userNames(ctx, token, userIDs)
+	out := Metrics{Likes: &likes, Replies: &replies}
+	for _, e := range order {
+		r := byEmoji[e]
+		for u := range seen[e] {
+			if n := names[u]; n != "" && len(r.People) < 20 {
+				r.People = append(r.People, n)
+			}
+		}
+		slices.Sort(r.People)
+		out.Reactions = append(out.Reactions, *r)
+	}
+	return out, nil
+}
+
+// slackRoots are the messages a post made: "<channel>:<ts>" per channel, or the bare ts of a post from before
+// several channels, in the channel it was connected to.
+func slackRoots(c Credentials, externalID string) []slackPart {
+	var out []slackPart
+	if !strings.Contains(externalID, ":") {
+		if root, _, _ := strings.Cut(externalID, "/"); root != "" && c["channel_id"] != "" {
+			out = append(out, slackPart{channel: c["channel_id"], ts: root})
+		}
+		return out
+	}
+	for _, e := range strings.Split(externalID, ",") {
+		ch, rest, _ := strings.Cut(e, ":")
+		if root, _, _ := strings.Cut(rest, "/"); ch != "" && root != "" {
+			out = append(out, slackPart{channel: ch, ts: root})
+		}
+	}
+	return out
+}
+
+// userNames looks up the people who reacted (users:read; a workspace connected before it gives no names, only
+// counts). ponytail: one users.info per person, up to 50 a read; users.list when posts get big audiences.
+func (Slack) userNames(ctx context.Context, token string, ids []string) map[string]string {
+	out := map[string]string{}
+	for _, id := range ids {
+		if _, done := out[id]; done || len(out) >= 50 {
+			continue
+		}
+		var res struct {
+			User struct {
+				Name    string `json:"name"`
+				Profile struct {
+					DisplayName string `json:"display_name"`
+					RealName    string `json:"real_name"`
+				} `json:"profile"`
+			} `json:"user"`
+		}
+		req, err := slackRequest(ctx, token, "users.info?"+url.Values{"user": {id}}.Encode(), nil)
+		if err != nil || slackDo(ctx, req, &res) != nil {
+			out[id] = ""
+			continue
+		}
+		p := res.User.Profile
+		out[id] = p.DisplayName
+		for _, n := range []string{p.RealName, res.User.Name} {
+			if out[id] == "" {
+				out[id] = n
+			}
+		}
+	}
+	return out
 }
 
 const slackGone = "Slack: the app can no longer post in this channel"

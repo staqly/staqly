@@ -291,3 +291,27 @@
     animation-duration: 1ms;
   }
 }
+
+/*
+ * Every loading placeholder (components/ui/skeleton.tsx) waits like appear-when-slow, then pulses: a page that
+ * loads in under 400 ms shows its content straight away, with no grey rows flashing (or fewer rows than were
+ * guessed). Reduced motion keeps the wait and skips the pulse.
+ */
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+[data-slot='skeleton'] {
+  opacity: 0;
+  animation:
+    appear 150ms ease-out 400ms forwards,
+    skeleton-pulse 2s ease-in-out 550ms infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='skeleton'] {
+    animation: appear 1ms 400ms forwards;
+  }
+}

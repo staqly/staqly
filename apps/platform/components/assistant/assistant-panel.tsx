@@ -6,11 +6,13 @@ import {
   ArrowUp,
   CalendarDays,
   Check,
+  FileText,
   FolderPlus,
   History,
   Loader2,
   Maximize2,
   Minimize2,
+  Paperclip,
   PenLine,
   Plus,
   RotateCcw,
@@ -28,7 +30,15 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useAiStatus } from '@/lib/ai-status'
-import { api, ApiError, assistantChat, errorMessage, type AssistantEvent, type AssistantMessage } from '@/lib/api'
+import {
+  api,
+  ApiError,
+  assistantChat,
+  errorMessage,
+  mediaUrl,
+  type AssistantEvent,
+  type AssistantMessage,
+} from '@/lib/api'
 import { timeAgo } from '@/lib/format'
 import { useSession } from '@/lib/queries'
 import { cn } from '@/lib/utils'
@@ -235,11 +245,24 @@ function Conversation({
       {messages.map((m, i) => {
         if (m.role === 'user') {
           return (
-            <div
-              key={i}
-              className="ml-10 max-w-[85%] self-end rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm whitespace-pre-wrap text-primary-foreground"
-            >
-              {m.content}
+            <div key={i} className="ml-10 grid max-w-[85%] justify-items-end gap-1.5 self-end">
+              {(m.attachments?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {m.attachments!.map((a) => (
+                    <AttachmentThumb
+                      key={a.media_id}
+                      name={a.name ?? ''}
+                      mime={a.mime_type ?? ''}
+                      src={mediaUrl(a.media_id)}
+                    />
+                  ))}
+                </div>
+              )}
+              {m.content && (
+                <div className="rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm whitespace-pre-wrap text-primary-foreground">
+                  {m.content}
+                </div>
+              )}
             </div>
           )
         }
@@ -291,6 +314,63 @@ function Conversation({
     </>
   )
 }
+
+/** A file added to a message: a picture's thumbnail, else its name. */
+function AttachmentThumb({
+  name,
+  mime,
+  src,
+  onRemove,
+  busy,
+}: {
+  name: string
+  mime: string
+  src?: string
+  onRemove?: () => void
+  busy?: boolean
+}) {
+  return (
+    <span className="relative inline-flex">
+      {mime.startsWith('image/') && src ? (
+        <img src={src} alt={name} className="size-14 rounded-lg border object-cover" />
+      ) : (
+        <span className="flex h-14 max-w-40 items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 text-xs">
+          <FileText className="size-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{name}</span>
+        </span>
+      )}
+      {busy && (
+        <span className="absolute inset-0 grid place-items-center rounded-lg bg-background/60">
+          <Loader2 className="size-4 animate-spin" />
+        </span>
+      )}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${name}`}
+          className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full border bg-background text-muted-foreground shadow-xs hover:text-foreground"
+        >
+          <X className="size-3" />
+        </button>
+      )}
+    </span>
+  )
+}
+
+/** A file waiting in the composer: uploading to the media library, uploaded, or (text) read here. */
+interface Draft {
+  key: string
+  name: string
+  mime: string
+  preview?: string
+  mediaId?: string
+  text?: string
+  error?: string
+}
+
+const TEXT_FILE = /\.(txt|md|markdown|csv|tsv|json|xml|html?|ya?ml)$/i
+const MAX_TEXT = 100_000
 
 /** The assistant's mark beside its words. */
 function AssistantAvatar() {
@@ -441,6 +521,52 @@ function Chat({
   const fresh = useRef(false) // a new chat: nothing on the server to load yet
   const [draft, setDraft] = useState('')
   const [input, setInput] = useState('')
+  const [files, setFiles] = useState<Draft[]>([])
+  const [dragging, setDragging] = useState(false)
+  const picker = useRef<HTMLInputElement>(null)
+  const uploading = files.some((f) => !f.mediaId && f.text === undefined && !f.error)
+
+  // Pictures, videos and sounds go to the media library (the assistant can put them on a post); text files are
+  // read here and go in the message itself.
+  const addFiles = (list: FileList | File[]) => {
+    for (const file of Array.from(list).slice(0, 10)) {
+      const key = `${file.name}:${file.size}:${Math.random()}`
+      const mime = file.type || 'application/octet-stream'
+      const pending: Draft = { key, name: file.name || 'Pasted picture', mime }
+
+      if (TEXT_FILE.test(file.name) || mime.startsWith('text/')) {
+        setFiles((f) => [...f, pending])
+        void file.text().then(
+          (t) =>
+            setFiles((f) =>
+              f.map((d) =>
+                d.key === key
+                  ? t.length > MAX_TEXT
+                    ? { ...d, text: t.slice(0, MAX_TEXT), error: undefined }
+                    : { ...d, text: t }
+                  : d,
+              ),
+            ),
+          () => setFiles((f) => f.map((d) => (d.key === key ? { ...d, error: 'Could not be read' } : d))),
+        )
+        continue
+      }
+
+      if (!/^(image|video|audio)\//.test(mime)) {
+        setFiles((f) => [...f, { ...pending, error: 'Only pictures, videos, sounds and text files' }])
+        continue
+      }
+
+      setFiles((f) => [
+        ...f,
+        { ...pending, preview: mime.startsWith('image/') ? URL.createObjectURL(file) : undefined },
+      ])
+      api.uploadMedia(file, pending.name).then(
+        (m) => setFiles((f) => f.map((d) => (d.key === key ? { ...d, mediaId: m.id } : d))),
+        (e: unknown) => setFiles((f) => f.map((d) => (d.key === key ? { ...d, error: errorMessage(e) } : d))),
+      )
+    }
+  }
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // The server couldn't answer and a model for this device is there: offer it; onDevice once the person took it.
@@ -577,15 +703,30 @@ function Chat({
   }
 
   const send = (text: string) => {
-    const t = text.trim()
+    const ready = files.filter((f) => !f.error)
+    const texts = ready.filter((f) => f.text !== undefined)
+    const media = ready.filter((f) => f.mediaId)
+    const t = [text.trim(), ...texts.map((f) => `File ${f.name}:\n\`\`\`\n${f.text}\n\`\`\``)]
+      .filter(Boolean)
+      .join('\n\n')
 
-    if (!t || busy) {
+    if ((!t && media.length === 0) || busy || uploading) {
       return
     }
 
     setInput('')
+    setFiles([])
 
-    const next: AssistantMessage[] = [...state.messages, { role: 'user', content: t }]
+    const next: AssistantMessage[] = [
+      ...state.messages,
+      {
+        role: 'user',
+        content: t,
+        ...(media.length > 0 && {
+          attachments: media.map((f) => ({ media_id: f.mediaId!, name: f.name, mime_type: f.mime })),
+        }),
+      },
+    ]
 
     if (onDevice) {
       runOnDevice(next)
@@ -760,8 +901,62 @@ function Chat({
           send(input)
         }}
       >
-        <div className="rounded-2xl border bg-background shadow-xs transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+        <div
+          className={cn(
+            'rounded-2xl border bg-background shadow-xs transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30',
+            dragging && 'border-ring ring-3 ring-ring/30',
+          )}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes('Files')) {
+              e.preventDefault()
+              setDragging(true)
+            }
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragging(false)
+            addFiles(e.dataTransfer.files)
+          }}
+        >
+          {files.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-3 pt-3" aria-label="Files to send">
+              {files.map((f) => (
+                <span key={f.key} className="grid gap-0.5" title={f.error}>
+                  <AttachmentThumb
+                    name={f.name}
+                    mime={f.mime}
+                    src={f.preview}
+                    busy={!f.mediaId && f.text === undefined && !f.error}
+                    onRemove={() => setFiles((all) => all.filter((d) => d.key !== f.key))}
+                  />
+                  {f.error && <span className="max-w-24 truncate text-[10px] text-destructive">{f.error}</span>}
+                </span>
+              ))}
+            </div>
+          )}
+          <input
+            ref={picker}
+            type="file"
+            multiple
+            hidden
+            accept="image/*,video/*,audio/*,.txt,.md,.csv,.json,.xml,.html,.yaml,.yml"
+            onChange={(e) => {
+              if (e.target.files) {
+                addFiles(e.target.files)
+              }
+
+              e.target.value = ''
+            }}
+          />
           <textarea
+            onPaste={(e) => {
+              // A screenshot pasted from the clipboard comes as a file.
+              if (e.clipboardData.files.length > 0) {
+                e.preventDefault()
+                addFiles(e.clipboardData.files)
+              }
+            }}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -778,7 +973,19 @@ function Chat({
             className="block max-h-48 min-h-11 w-full resize-none bg-transparent px-3.5 pt-3 text-sm outline-none [field-sizing:content] placeholder:text-muted-foreground"
           />
           <div className="flex items-center gap-2 px-2 pb-2">
-            <span className="ml-1.5 flex-1 truncate text-xs text-muted-foreground max-sm:hidden">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="rounded-full"
+              aria-label="Add files"
+              tooltip="Add pictures or files (or paste a screenshot)"
+              onClick={() => picker.current?.click()}
+              disabled={!!state.pending}
+            >
+              <Paperclip />
+            </Button>
+            <span className="flex-1 truncate text-xs text-muted-foreground max-sm:hidden">
               Enter to send, Shift+Enter for a new line
             </span>
             {busy ? (
@@ -797,7 +1004,11 @@ function Chat({
                 type="submit"
                 size="icon-sm"
                 className="ml-auto rounded-full"
-                disabled={!input.trim() || !!state.pending}
+                disabled={
+                  (!input.trim() && !files.some((f) => f.mediaId || f.text !== undefined)) ||
+                  uploading ||
+                  !!state.pending
+                }
                 aria-label="Send"
               >
                 <ArrowUp />

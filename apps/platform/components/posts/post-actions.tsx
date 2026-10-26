@@ -41,6 +41,35 @@ const METRIC_LABELS: [keyof NonNullable<TargetMetrics['metrics']>, string][] = [
   ['link_clicks', 'Link clicks'],
 ]
 
+/** What a platform calls a number when it isn't the usual word (Slack has reactions, not likes). */
+function metricLabel(provider: string, key: string, label: string) {
+  return provider === 'slack' && key === 'likes' ? 'Reactions' : label
+}
+
+// Slack names its emoji; the common ones as themselves, the rest (custom ones too) by name.
+const EMOJI: Record<string, string> = {
+  '+1': '👍',
+  thumbsup: '👍',
+  '-1': '👎',
+  thumbsdown: '👎',
+  heart: '❤️',
+  tada: '🎉',
+  joy: '😂',
+  fire: '🔥',
+  eyes: '👀',
+  rocket: '🚀',
+  clap: '👏',
+  raised_hands: '🙌',
+  pray: '🙏',
+  white_check_mark: '✅',
+  heavy_check_mark: '✔️',
+  '100': '💯',
+  smile: '😄',
+  slightly_smiling_face: '🙂',
+  thinking_face: '🤔',
+  star: '⭐',
+}
+
 // Not under ['posts']: those keys hold post lists, which the post cache helpers rewrite.
 const commentsKey = (id: string) => ['post-feedback', id] as const
 const NO_COMMENTS: PostComment[] = []
@@ -133,10 +162,29 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
                 <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {METRIC_LABELS.filter(([k]) => t.metrics?.[k] != null).map(([k, label]) => (
                     <div key={k} className="flex flex-col-reverse rounded-lg bg-muted/50 px-2.5 py-2">
-                      <dt className="text-xs text-muted-foreground">{label}</dt>
+                      <dt className="text-xs text-muted-foreground">{metricLabel(t.provider, k, label)}</dt>
                       <dd className="text-lg font-semibold tabular-nums">{t.metrics![k]!.toLocaleString('en-US')}</dd>
                     </div>
                   ))}
+                  {(t.metrics.reactions?.length ?? 0) > 0 && (
+                    <div className="col-span-full flex flex-wrap gap-1.5" aria-label="Reactions">
+                      {t.metrics.reactions!.map((r) => (
+                        <span
+                          key={r.emoji}
+                          className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-sm"
+                          title={r.people?.length ? r.people.join(', ') : undefined}
+                        >
+                          <span aria-label={r.emoji}>{EMOJI[r.emoji] ?? `:${r.emoji}:`}</span>
+                          <span className="tabular-nums">{r.count}</span>
+                          {r.people && r.people.length > 0 && (
+                            <span className="max-w-48 truncate text-xs text-muted-foreground">
+                              {r.people.join(', ')}
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </dl>
               ) : (
                 <p className="mt-2 text-sm text-muted-foreground">

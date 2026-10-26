@@ -1060,6 +1060,9 @@ export const api = {
   /** Asks the platform who the account is: `ok` false with `error` when the sign-in no longer works. */
   testChannel: (id: string) =>
     request<ChannelTestResult>(`/v1/channels/${encodeURIComponent(id)}/test`, { method: 'POST' }),
+  /** A short text rewritten by AI (the design editor's text tools). */
+  aiText: (text: string, instruction: string) =>
+    request<{ text: string }>('/v1/ai/text', { method: 'POST', json: { text, instruction } }),
   /** The person's assistant chats, newest first, a page at a time; q finds words in titles. */
   assistantChats: (q: string, cursor?: string) =>
     request<{ data: AssistantChat[]; next_cursor?: string }>(

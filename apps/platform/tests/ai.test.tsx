@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AiPanel, discardAiRun, expandPlacement } from '@/components/design/ai-panel'
-import { newDesign, newImage, type Page } from '@/components/design/doc'
+import { newDesign, newImage, newText, type Page } from '@/components/design/doc'
 import type { PanelCtx } from '@/components/design/panels'
 import type { DesignStore } from '@/components/design/store'
 import { allowanceNote, madeBy } from '@/lib/ai'
@@ -83,17 +83,24 @@ afterEach(() => {
 })
 
 describe('the AI panel', () => {
-  it('offers the on-device tools when the server offers no picture tools', async () => {
+  it('says what is selected and offers the on-device photo tools when the server offers no picture tools', async () => {
     mockApi({ 'GET /v1/ai': status([op('text_to_video')]) })
-    const { ctx } = ctxWith(newDesign().pages[0]!)
+    const d = newDesign()
+    const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
+    const page = { ...d.pages[0]!, elements: [pic] }
+    const first = renderWithProviders(<AiPanel ctx={ctxWith(page).ctx} />)
 
-    renderWithProviders(<AiPanel ctx={ctx} />)
+    expect(await screen.findByText('Nothing selected')).toBeInTheDocument()
+    expect(screen.getByText('Making pictures is not offered on this server.')).toBeInTheDocument()
+    first.unmount()
 
-    // Removing an object and upscaling still work, on this device, once a photo is selected.
-    expect(await screen.findByRole('radio', { name: /Remove an object.*this device/ })).toBeDisabled()
-    expect(screen.getByRole('radio', { name: /Upscale.*this device/ })).toBeDisabled()
-    // A server tool stays listed, saying why it can't run.
-    expect(screen.getByRole('radio', { name: /New picture.*Not offered on this server/ })).toBeDisabled()
+    renderWithProviders(<AiPanel ctx={ctxWith(page, [pic.id]).ctx} />)
+
+    expect(await screen.findByText('Photo selected')).toBeInTheDocument()
+    // Removing an object and upscaling still work, on this device; server tools it lacks are not listed.
+    expect(screen.getByRole('radio', { name: /Remove an object.*On this device/ })).toBeEnabled()
+    expect(screen.getByRole('radio', { name: /Upscale.*On this device/ })).toBeEnabled()
+    expect(screen.queryByRole('radio', { name: /Change it/ })).not.toBeInTheDocument()
   })
 
   it('says when the allowance is used up and keeps only the on-device tools', async () => {
@@ -105,37 +112,58 @@ describe('the AI panel', () => {
     renderWithProviders(<AiPanel ctx={ctx} />)
 
     expect(await screen.findByText(/AI allowance is used up; it starts again on/)).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: /New picture.*Back on/ })).toBeDisabled()
-    expect(screen.getByRole('radio', { name: /Remove an object.*this device/ })).toBeChecked()
+    expect(screen.queryByRole('radio', { name: /New picture/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: /Remove an object.*On this device/ }))
     expect(screen.getByRole('button', { name: 'Paint the area' })).toBeInTheDocument()
   })
 
-  it('lists every tool, the photo tools usable with a photo selected', async () => {
+  it('shows the tools for what is selected: a new picture with nothing, the photo tools with a photo', async () => {
     mockApi({ 'GET /v1/ai': status([op('generate'), op('edit'), op('erase', { prompt: 'none' }), op('upscale')]) })
     const d = newDesign(1080, 1350)
     const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
     const page = { ...d.pages[0]!, elements: [pic] }
 
-    const { ctx } = ctxWith(page)
-    const first = renderWithProviders(<AiPanel ctx={ctx} />)
+    const first = renderWithProviders(<AiPanel ctx={ctxWith(page).ctx} />)
 
-    expect(await screen.findByRole('radio', { name: 'New picture' })).toBeChecked()
-    // The photo tools are listed but wait for a photo; a tool the server lacks says so.
-    expect(screen.getByRole('radio', { name: 'Remove an object' })).toBeDisabled()
-    expect(screen.getByRole('radio', { name: /Edit an area.*Not offered on this server/ })).toBeDisabled()
-    expect(screen.getByText('Select a photo on the page to change it.')).toBeInTheDocument()
+    // Nothing selected: the new picture form is open, no photo tools.
+    expect(await screen.findByRole('button', { name: 'Make the picture' })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Remove an object/ })).not.toBeInTheDocument()
     first.unmount()
 
-    const { ctx: withPhoto } = ctxWith(page, [pic.id])
+    renderWithProviders(<AiPanel ctx={ctxWith(page, [pic.id]).ctx} />)
 
-    renderWithProviders(<AiPanel ctx={withPhoto} />)
-
-    expect(await screen.findByRole('radio', { name: 'Change it' })).toBeChecked()
+    expect(await screen.findByRole('radio', { name: 'Change it' })).not.toBeChecked()
+    // Edit an area is not offered here, so it is not listed; making a new picture stays at hand below.
+    expect(screen.queryByRole('radio', { name: /Edit an area/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'New picture' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('radio', { name: 'Remove an object' }))
     // Painting comes first; it has no prompt.
     expect(screen.getByRole('button', { name: 'Paint the area' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove it' })).toBeDisabled()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('rewrites a selected text, and changes the page only when the new text is used', async () => {
+    const api = mockApi({
+      'GET /v1/ai': status([op('assistant', { kind: 'text' })]),
+      'POST /v1/ai/text': { text: 'Less is more.' },
+    })
+    const d = newDesign()
+    const text = { ...newText(d, 'heading'), text: 'Simplicity is the ultimate sophistication.' }
+    const { ctx, updatePage } = ctxWith({ ...d.pages[0]!, elements: [text] }, [text.id])
+
+    renderWithProviders(<AiPanel ctx={ctx} />)
+
+    expect(await screen.findByText('Text selected')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Shorter' }))
+    expect(await screen.findByText('Less is more.')).toBeInTheDocument()
+    expect(api.find('POST', '/v1/ai/text')[0]!.body).toMatchObject({
+      text: 'Simplicity is the ultimate sophistication.',
+    })
+    expect(updatePage).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use it' }))
+    expect(updatePage).toHaveBeenCalledTimes(1)
   })
 
   it('runs a request, previews the result and changes the page only when it is kept', async () => {
