@@ -11826,6 +11826,7 @@ export interface operations {
             402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
             502: components["responses"]["BadGateway"];
         };
