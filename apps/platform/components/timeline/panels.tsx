@@ -266,7 +266,8 @@ function SpeechButton({ ctx }: { ctx: Ctx }) {
             .finally(() => setBusy(null))
         }}
       >
-        {busy ? <Loader2 className="animate-spin" /> : <Captions />} Captions from speech
+        {/* No spinner while it listens: an animation redrawn on a slow or software graphics card starves the model. */}
+        <Captions className={busy ? 'text-brand' : undefined} /> Captions from speech
       </Button>
       <p className="text-xs text-muted-foreground">
         {busy ??

@@ -135,10 +135,12 @@ func (q *Queries) GetWorkspaceDesignBrand(ctx context.Context, id string) (strin
 }
 
 const listMediaProjects = `-- name: ListMediaProjects :many
-SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at, page_ids FROM media_projects
-WHERE workspace_id = ?1
-  AND (CAST(?2 AS TEXT) = '' OR output_id = ?2 OR instr(source_ids, '"' || ?2 || '"') > 0)
-ORDER BY updated_at DESC LIMIT 100
+SELECT p.id, p.workspace_id, p.name, p.source_ids, p.output_id, p.storage_name, p.size_bytes, p.created_by, p.created_at, p.updated_at, p.page_ids FROM media_projects p
+WHERE p.workspace_id = ?1
+  AND (CAST(?2 AS TEXT) = '' OR p.output_id = ?2 OR instr(p.source_ids, '"' || ?2 || '"') > 0)
+  AND (p.output_id = '' OR EXISTS (
+    SELECT 1 FROM media m WHERE m.workspace_id = p.workspace_id AND m.id = p.output_id AND m.deleted_at IS NULL))
+ORDER BY p.updated_at DESC LIMIT 100
 `
 
 type ListMediaProjectsParams struct {
@@ -146,7 +148,8 @@ type ListMediaProjectsParams struct {
 	Media       string `json:"media"`
 }
 
-// A workspace's projects, newest first; with a media id, the ones made from it or saved as it.
+// A workspace's projects, newest first; with a media id, the ones made from it or saved as it. A project whose
+// saved file is in Deleted (or gone) is left out with it: restoring the file brings the project back.
 func (q *Queries) ListMediaProjects(ctx context.Context, arg ListMediaProjectsParams) ([]MediaProject, error) {
 	rows, err := q.db.QueryContext(ctx, listMediaProjects, arg.WorkspaceID, arg.Media)
 	if err != nil {

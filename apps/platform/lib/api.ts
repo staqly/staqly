@@ -795,6 +795,17 @@ export const api = {
 
     return request<Media>(`/v1/media/${encodeURIComponent(id)}/replace`, { method: 'POST', form })
   },
+  /** Saves an editor's file in place of the one it saved before, or as a new file when that one is gone (Deleted). */
+  saveEdited: (before: string | undefined, file: Blob, fileName: string) =>
+    before
+      ? api.replaceMedia(before, file, fileName).catch((e: unknown) => {
+          if (e instanceof ApiError && e.status === 404) {
+            return api.uploadMedia(file, fileName)
+          }
+
+          throw e
+        })
+      : api.uploadMedia(file, fileName),
   mediaProject: (id: string) => request<MediaProject>(`/v1/media-projects/${encodeURIComponent(id)}`),
   mediaProjectFile: (id: string) => request<Blob>(`/v1/media-projects/${encodeURIComponent(id)}/file`, { blob: true }),
   mediaProjects: (media?: string) =>

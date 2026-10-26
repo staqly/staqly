@@ -22,11 +22,14 @@ WHERE workspace_id = @workspace_id AND id = @id;
 SELECT * FROM media_projects WHERE workspace_id = ? AND id = ?;
 
 -- name: ListMediaProjects :many
--- A workspace's projects, newest first; with a media id, the ones made from it or saved as it.
-SELECT * FROM media_projects
-WHERE workspace_id = @workspace_id
-  AND (CAST(@media AS TEXT) = '' OR output_id = @media OR instr(source_ids, '"' || @media || '"') > 0)
-ORDER BY updated_at DESC LIMIT 100;
+-- A workspace's projects, newest first; with a media id, the ones made from it or saved as it. A project whose
+-- saved file is in Deleted (or gone) is left out with it: restoring the file brings the project back.
+SELECT p.* FROM media_projects p
+WHERE p.workspace_id = @workspace_id
+  AND (CAST(@media AS TEXT) = '' OR p.output_id = @media OR instr(p.source_ids, '"' || @media || '"') > 0)
+  AND (p.output_id = '' OR EXISTS (
+    SELECT 1 FROM media m WHERE m.workspace_id = p.workspace_id AND m.id = p.output_id AND m.deleted_at IS NULL))
+ORDER BY p.updated_at DESC LIMIT 100;
 
 -- name: DeleteMediaProject :execrows
 DELETE FROM media_projects WHERE workspace_id = ? AND id = ?;

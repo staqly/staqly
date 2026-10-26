@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronDown } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -83,6 +83,10 @@ export function MultiSelect({
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  // The highlighted item, and what was typed to find it in a list without a search box (type-ahead).
+  const [active, setActive] = useState('')
+  const typing = useRef({ text: '', at: 0 })
+  const list = useRef<HTMLDivElement>(null)
 
   // Values added by typing are options too, so they show ticked and can be removed.
   const options: MultiOption[] = creatable
@@ -94,6 +98,28 @@ export function MultiSelect({
   const typed = creatable ? (creatable.normalize ?? ((v: string) => v.trim()))(search) : ''
   const canAdd = !!typed && !options.some((o) => o.value === typed)
   const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v])
+  const searchable = !!creatable || given.length > 8
+  const itemValue = (o: MultiOption) => `${o.label} ${o.value} ${o.hint ?? ''}`
+
+  /** Short lists have no search box: typed letters move to the first item whose name starts with them. */
+  const typeAhead = (e: React.KeyboardEvent) => {
+    if (searchable || e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey) {
+      return
+    }
+
+    const now = Date.now()
+    const t = typing.current
+
+    t.text = (now - t.at < 800 ? t.text : '') + e.key.toLowerCase()
+    t.at = now
+
+    const hit = options.find((o) => !o.disabled && !o.implied && o.label.toLowerCase().startsWith(t.text))
+
+    if (hit) {
+      e.preventDefault()
+      setActive(itemValue(hit))
+    }
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -130,10 +156,21 @@ export function MultiSelect({
           <ChevronDown className="shrink-0 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-56 p-0">
-        <Command>
-          {/* Long lists (collections) get a search box. */}
-          {(creatable || options.length > 8) && (
+      <PopoverContent
+        align="start"
+        className="w-(--radix-popover-trigger-width) min-w-56 p-0"
+        onKeyDown={typeAhead}
+        // Without a search box the list takes the focus, so the arrows and Enter work in it.
+        onOpenAutoFocus={(e) => {
+          if (!searchable) {
+            e.preventDefault()
+            list.current?.focus()
+          }
+        }}
+      >
+        <Command ref={list} tabIndex={-1} value={active} onValueChange={setActive} className="outline-none">
+          {/* Long lists (collections) get a search box; short ones find an item by typing its name. */}
+          {searchable && (
             <CommandInput
               placeholder={creatable ? 'Search or add...' : 'Search...'}
               value={search}
@@ -179,7 +216,7 @@ export function MultiSelect({
                 {opts.map((o) => (
                   <CommandItem
                     key={o.value}
-                    value={`${o.label} ${o.value} ${o.hint ?? ''}`}
+                    value={itemValue(o)}
                     data-checked={o.implied || value.includes(o.value)}
                     disabled={o.implied || o.disabled}
                     data-testid={o.testId}

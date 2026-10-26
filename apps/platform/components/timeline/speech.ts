@@ -1,9 +1,9 @@
-// Captions from speech, on the device: Whisper (base, many languages; Xenova/whisper-base, Apache-2.0) runs in the
-// browser with the same pinned transformers.js as the design editor's background removal. Nothing is uploaded; the
-// first use downloads the model (about 80 MB), which the browser keeps for next time.
+// Captions from speech, on the device: Whisper (base, many languages; onnx-community/whisper-base, OpenAI's MIT
+// weights) runs in the browser with the same pinned transformers.js as the design editor's background removal.
+// Nothing is uploaded; the first use downloads the model (about 80 MB), which the browser keeps for next time.
 import { TRANSFORMERS_CDN } from '@/components/design/background'
 
-const MODEL = 'Xenova/whisper-base'
+const MODEL = 'onnx-community/whisper-base'
 
 // oxlint-disable-next-line typescript/no-explicit-any -- transformers.js loads from the CDN, without types
 type Tf = any
@@ -20,6 +20,8 @@ function load(onProgress?: (share: number) => void) {
     return tf.pipeline('automatic-speech-recognition', MODEL, {
       device: 'wasm',
       dtype: 'q8',
+      // The full graph optimizer trips over the quantized decoder's weights (ONNX Runtime 1.27).
+      session_options: { graphOptimizationLevel: 'basic' },
       progress_callback: (p: { status: string; loaded?: number; total?: number }) => {
         if (p.status === 'progress' && p.total) {
           onProgress?.((p.loaded ?? 0) / p.total)

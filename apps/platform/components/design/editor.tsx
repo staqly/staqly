@@ -206,7 +206,7 @@ async function saveAll({ design, saved, project, render }: SaveArgs) {
     const name = `${base}${n > 1 ? ` (${i + 1} of ${n})` : ''}.${type === 'image/jpeg' ? 'jpg' : 'png'}`
     const blob = await render(i, type)
     const before = saved[page.id]
-    const after = before ? await api.replaceMedia(before, blob, name) : await api.uploadMedia(blob, name)
+    const after = await api.saveEdited(before, blob, name)
 
     media.push({ page: page.id, before, after })
   }

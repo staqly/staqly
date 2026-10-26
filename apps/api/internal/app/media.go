@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -292,12 +293,25 @@ func (s *Service) DiscardUpload(ctx context.Context, p Principal, id string) err
 
 // DeleteMedia removes the record (posts referencing it lose that file) and the file.
 func (s *Service) DeleteMedia(ctx context.Context, p Principal, id string) error {
-	if err := p.require(ScopePostsDelete); err != nil {
+	storage, err := s.deleteMediaRow(ctx, p, id)
+	if err != nil {
 		return err
+	}
+	if err := s.removeMediaFiles(ctx, p.WorkspaceID, storage); err != nil {
+		s.logger(ctx).Warn("media file not removed", "media_id", id, "err", err)
+	}
+	return nil
+}
+
+// deleteMediaRow deletes a file's row and takes it out of posts; it answers where its file is stored, which the
+// caller removes (after the transaction: never storage calls inside one).
+func (s *Service) deleteMediaRow(ctx context.Context, p Principal, id string) (string, error) {
+	if err := p.require(ScopePostsDelete); err != nil {
+		return "", err
 	}
 	m, err := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
 	if err != nil {
-		return notFound("media")
+		return "", notFound("media")
 	}
 	err = s.tx(ctx, func(q *db.Queries) error {
 		// As for the trash: a scheduled or publishing post keeps its files, or it would go out without them.
@@ -313,12 +327,9 @@ func (s *Service) DeleteMedia(ctx context.Context, p Principal, id string) error
 		return s.stripMediaFromPosts(ctx, q, p.WorkspaceID, id)
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
-	if err := s.removeMediaFiles(ctx, m.WorkspaceID, m.StorageName); err != nil {
-		s.logger(ctx).Warn("media file not removed", "media_id", id, "err", err)
-	}
-	return nil
+	return m.StorageName, nil
 }
 
 // stripMediaFromPosts takes a deleted file out of every post: its files and the parts of its thread (a part
@@ -575,6 +586,44 @@ func mediaUseTitle(content string) string {
 	return line
 }
 
+// deleteMediaForGood deletes the rows one by one (each its own transaction), then the stored files together, a
+// few at a time: with an object store each file is several round trips, and one by one 20 files took 30 seconds.
+func (s *Service) deleteMediaForGood(ctx context.Context, p Principal, ids []string) (deleted, missing []string, err error) {
+	deleted, missing = []string{}, []string{}
+	var stored []string
+	for _, id := range ids {
+		storage, err := s.deleteMediaRow(ctx, p, id)
+		switch {
+		case err == nil:
+			deleted = append(deleted, id)
+			stored = append(stored, storage)
+		case isNotFound(err):
+			missing = append(missing, id)
+		default:
+			s.removeStored(ctx, p.WorkspaceID, stored)
+			return deleted, missing, err
+		}
+	}
+	s.removeStored(ctx, p.WorkspaceID, stored)
+	return deleted, missing, nil
+}
+
+// removeStored removes stored files, eight at a time; a failure is logged (the row is already gone).
+func (s *Service) removeStored(ctx context.Context, workspaceID string, stored []string) {
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, 8)
+	for _, storage := range stored {
+		slots <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			if err := s.removeMediaFiles(ctx, workspaceID, storage); err != nil {
+				s.logger(ctx).Warn("media file not removed", "storage", storage, "err", err)
+			}
+		})
+	}
+	wg.Wait()
+}
+
 // DeleteMediaMany moves several files to Deleted, or with permanent deletes them for good (posts:delete, like
 // one); unknown ids are reported, not fatal. Moving to Deleted checks every file first: one used by a scheduled
 // post refuses the whole request (409) before anything moves.
@@ -587,25 +636,23 @@ func (s *Service) DeleteMediaMany(ctx context.Context, p Principal, ids []string
 		return nil, nil, invalid("ids", "1 to 200 media ids")
 	}
 	deleted, missing = []string{}, []string{}
-	del := s.TrashMedia
 	if permanent {
-		del = s.DeleteMedia
-	} else {
-		for _, id := range ids {
-			m, err := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
-			if err != nil || m.DeletedAt.Valid {
-				continue
-			}
-			if n, err := upcomingUses(ctx, s.Q, p.WorkspaceID, id); err != nil {
-				return nil, nil, err
-			} else if n > 0 {
-				return nil, nil, conflict(fmt.Sprintf("%s is used by %d scheduled %s; remove it from %s first",
-					m.OriginalName, n, plural(n, "post", "posts"), plural(n, "that post", "those posts")))
-			}
+		return s.deleteMediaForGood(ctx, p, ids)
+	}
+	for _, id := range ids {
+		m, err := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if err != nil || m.DeletedAt.Valid {
+			continue
+		}
+		if n, err := upcomingUses(ctx, s.Q, p.WorkspaceID, id); err != nil {
+			return nil, nil, err
+		} else if n > 0 {
+			return nil, nil, conflict(fmt.Sprintf("%s is used by %d scheduled %s; remove it from %s first",
+				m.OriginalName, n, plural(n, "post", "posts"), plural(n, "that post", "those posts")))
 		}
 	}
 	for _, id := range ids {
-		switch err := del(ctx, p, id); {
+		switch err := s.TrashMedia(ctx, p, id); {
 		case err == nil:
 			deleted = append(deleted, id)
 		case isNotFound(err):

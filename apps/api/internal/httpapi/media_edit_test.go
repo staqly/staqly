@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -122,6 +123,17 @@ func TestMediaProjects(t *testing.T) {
 	e.sendFile("PUT", "/v1/media-projects/"+p.ID, e.key, map[string]string{"name": "Poster 2", "source_ids": a.ID, "output_id": a.ID, "page_ids": a.ID + ", " + a.ID}, designFile("v2"), 200, &p)
 	if p.Name != "Poster 2" || p.OutputID != a.ID || len(p.PageIDs) != 2 {
 		t.Fatalf("saved again: %+v", p)
+	}
+	// Its saved file in Deleted: the project is left out with it until the file comes back.
+	e.do(nil, "DELETE", "/v1/media/"+a.ID, e.admin, nil, 204, nil)
+	e.do(nil, "GET", "/v1/media-projects", e.key, nil, 200, &list)
+	if slices.ContainsFunc(list.Data, func(x app.MediaProject) bool { return x.ID == p.ID }) {
+		t.Fatalf("listed with its file deleted: %+v", list)
+	}
+	e.do(nil, "POST", "/v1/media/"+a.ID+"/restore", e.admin, nil, 200, nil)
+	e.do(nil, "GET", "/v1/media-projects", e.key, nil, 200, &list)
+	if !slices.ContainsFunc(list.Data, func(x app.MediaProject) bool { return x.ID == p.ID }) {
+		t.Fatalf("not listed after the restore: %+v", list)
 	}
 	req, _ := http.NewRequest("GET", e.srv.URL+"/v1/media-projects/"+p.ID+"/file", nil)
 	req.Header.Set("Authorization", "Bearer "+e.key)

@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"sync"
 
 	"golang.org/x/image/draw"
 	"golang.org/x/image/webp"
@@ -89,12 +90,16 @@ func thumbKey(workspaceID, storage string, w int, ext string) string {
 // removeMediaFiles deletes an upload and its cached thumbnails. The error is
 // the original's (missing files are not an error).
 func (s *Service) removeMediaFiles(ctx context.Context, workspaceID, storage string) error {
+	// The thumbnails all at once: with an object store each delete is a round trip.
+	var wg sync.WaitGroup
 	for _, w := range ThumbWidths {
 		for _, ext := range []string{".jpg", ".png"} {
-			_ = s.Cfg.Blob.Delete(ctx, thumbKey(workspaceID, storage, w, ext))
+			wg.Go(func() { _ = s.Cfg.Blob.Delete(ctx, thumbKey(workspaceID, storage, w, ext)) })
 		}
 	}
-	return s.Cfg.Blob.Delete(ctx, mediaKey(workspaceID, storage))
+	err := s.Cfg.Blob.Delete(ctx, mediaKey(workspaceID, storage))
+	wg.Wait()
+	return err
 }
 
 // MediaThumb returns an image scaled down to width w (one of ThumbWidths),
