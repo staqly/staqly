@@ -289,3 +289,12 @@ func TestDiscordFailures(t *testing.T) {
 		t.Fatalf("lost answer: %v", err)
 	}
 }
+
+// Permissions come as strings (API v10) or, in older answers, numbers: both read the same.
+func TestDiscordPermsDecode(t *testing.T) {
+	var g discordGuild
+	err := json.Unmarshal([]byte(`{"id":"1","roles":[{"id":"1","permissions":"309237763072"},{"id":"2","permissions":2048}]}`), &g)
+	if err != nil || g.Roles[0].Permissions != 309237763072 || g.Roles[1].Permissions != 2048 {
+		t.Fatalf("%+v %v", g, err)
+	}
+}
