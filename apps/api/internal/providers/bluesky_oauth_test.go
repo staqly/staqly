@@ -48,7 +48,7 @@ func TestBlueskyOAuth(t *testing.T) {
 	clientKey := blueskyDPoPKey("client")
 	raw, _ := clientKey.Bytes()
 	var srv *httptest.Server
-	app := App{ClientID: "https://staqly.example.com/v1/oauth/bluesky/client-metadata.json", ClientSecret: hex.EncodeToString(raw)}
+	app := App{ClientID: "https://staqly.example.com/api/v1/oauth/bluesky/client-metadata.json", ClientSecret: hex.EncodeToString(raw)}
 	var dpopJKT string
 	refreshes, posts := 0, 0
 	mux := http.NewServeMux()

@@ -192,12 +192,12 @@ func providerEnv(providerID string) string {
 // platform that posts with the server's own bot (Needs.BotToken) also needs PROVIDER_<ID>_BOT_TOKEN.
 func (s *Service) serverApp(providerID string) (providers.App, bool) {
 	if ownClient(providerID) {
-		// The server is the client: its client id is its metadata's address, its key derived from the server's key.
+		// The server is the client: its client id is its metadata's address (through the dashboard: /api), its key derived from the server's key.
 		// The platform fetches that address, so it must be https.
 		mac := hmac.New(sha256.New, s.Cfg.SecretKey)
 		mac.Write([]byte("oauth-client-key:" + providerID))
 		web := s.webURL()
-		return providers.App{ClientID: web + "/v1/oauth/" + providerID + "/client-metadata.json",
+		return providers.App{ClientID: web + "/api/v1/oauth/" + providerID + "/client-metadata.json",
 			ClientSecret: hex.EncodeToString(mac.Sum(nil))}, strings.HasPrefix(web, "https://") && len(s.Cfg.SecretKey) > 0
 	}
 	key := providerEnv(providerID) + "CLIENT_"

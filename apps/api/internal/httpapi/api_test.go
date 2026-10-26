@@ -1533,7 +1533,7 @@ func TestBlueskyClientMetadata(t *testing.T) {
 	}
 	svc.Cfg.PublicDashboardURL = "https://staqly.example.com"
 	code, m := get()
-	if code != 200 || m["client_id"] != "https://staqly.example.com/v1/oauth/bluesky/client-metadata.json" ||
+	if code != 200 || m["client_id"] != "https://staqly.example.com/api/v1/oauth/bluesky/client-metadata.json" ||
 		m["redirect_uris"].([]any)[0] != "https://staqly.example.com/channels/callback/bluesky" {
 		t.Fatalf("metadata: %d %v", code, m)
 	}

@@ -16,7 +16,7 @@ ways to connect, and nothing for whoever runs staqly to register:
 staqly. You come back with the account connected: its display name, `@handle` and picture.
 
 Staqly is its own OAuth client here (AT Protocol OAuth has no app to register): its client id is the address
-of a document the dashboard serves, `https://<your dashboard>/v1/oauth/bluesky/client-metadata.json`, which
+of a document the dashboard serves, `https://<your dashboard>/api/v1/oauth/bluesky/client-metadata.json`, which
 Bluesky fetches. So signing in needs the dashboard on a public **https** address (`PUBLIC_DASHBOARD_URL`);
 without one, Bluesky connects with an app password only. The sign-in asks for `atproto transition:generic`:
 posting, pictures and the account's profile, not direct messages.
