@@ -1046,6 +1046,45 @@
   },
   {
     "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Make a picture or a short video clip with AI from a prompt (kind image or video; for a video, media_id brings that library picture to life). It runs in the background, a picture in about a minute, a video in a few: follow it with get_generated_media, then keep_generated_media puts it in the library. Counts towards the workspace's monthly AI allowance. Requires media:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "aspect_ratio": {
+          "description": "1:1 (default for an image), 16:9 (default for a video), 9:16 or, for an image, 4:5",
+          "type": "string"
+        },
+        "duration": {
+          "description": "a video's length: 5 (default) or 10 seconds",
+          "type": "integer"
+        },
+        "kind": {
+          "description": "image or video",
+          "type": "string"
+        },
+        "media_id": {
+          "description": "for a video: a library picture (med_...) to bring to life",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "what to make, in detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "prompt"
+      ],
+      "type": "object"
+    },
+    "name": "generate_media"
+  },
+  {
+    "annotations": {
       "idempotentHint": false,
       "readOnlyHint": true
     },
@@ -1118,6 +1157,31 @@
       "type": "object"
     },
     "name": "get_collection"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "How a generate_media request is going (status queued, running, succeeded, failed or canceled; error when it failed). wait_seconds (up to 60) waits for it to finish first. A result is kept for a day unless keep_generated_media keeps it. Requires media:read.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "description": "the id generate_media returned (aij_...)",
+          "type": "string"
+        },
+        "wait_seconds": {
+          "description": "wait up to this many seconds (at most 60) for it to finish",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_generated_media"
   },
   {
     "annotations": {
@@ -1300,6 +1364,32 @@
   },
   {
     "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Put a finished generate_media result in the media library; returns the media file (its id goes in a post's media list). Requires media:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "description": "the id generate_media returned (aij_...)",
+          "type": "string"
+        },
+        "wait_seconds": {
+          "description": "wait up to this many seconds (at most 60) for it to finish",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "type": "object"
+    },
+    "name": "keep_generated_media"
+  },
+  {
+    "annotations": {
       "destructiveHint": true,
       "idempotentHint": false,
       "readOnlyHint": false
@@ -1392,6 +1482,32 @@
       "type": "object"
     },
     "name": "list_channel_links"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The choices of a channel's remote setting (a settings_fields entry of kind remote), from its platform right now: for Slack, key channel lists the workspace's channels a post can go to. Requires channels:read.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "channel ID (ch_...)",
+          "type": "string"
+        },
+        "key": {
+          "description": "the setting's key (channel for Slack)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel_id",
+        "key"
+      ],
+      "type": "object"
+    },
+    "name": "list_channel_options"
   },
   {
     "annotations": {

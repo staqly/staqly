@@ -62,7 +62,7 @@ export interface TextEl extends Base {
 export interface ImageEl extends Base {
   type: 'image'
   src: string
-  /** The library file it came from, or the Unsplash photo (credited on export). */
+  /** The library file it came from, or the Unsplash photo of a design made before Pixabay (credited on export). */
   mediaId?: string
   stock?: { id: string; author: string; url: string }
   flipX?: boolean

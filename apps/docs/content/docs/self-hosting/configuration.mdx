@@ -86,7 +86,7 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `API_PORT` | `3333` | Compose only: host port for the API (bound to `127.0.0.1`). With `docker run` change the `-p` mapping and `PUBLIC_API_URL`; with the binary use `--port`. |
 | `DASHBOARD_PORT` | `8080` | Dashboard port. Docker: the published host port (set it when you map the dashboard to another host port). Binary: follows `--dashboard-port`. Also part of sign-in links, such as the `#token=` link printed at start. |
 | `PUBLIC_API_URL` | `http://localhost:3333` | Base of absolute media URLs in API responses and webhook payloads. Set it to what receivers can reach (e.g. `http://api:3333` for n8n on the Docker network, or your public URL). The dashboard reads it from the API at runtime, so changing it needs only a restart. With the binary it defaults to `http://localhost:<--port>`. |
-| `PUBLIC_DASHBOARD_URL` | — | Dashboard URL used in *Connect a device* QR codes, sign-in links and notification links — your LAN IP (`http://192.168.1.23:8080`) or domain. Without it, QR codes use the address you opened the dashboard at; an exposed `staqly serve` opened as `localhost` uses this computer's Wi-Fi address instead, and in Docker the dialog asks for that address once (kept in the browser). `connect-link` and notification links fall back to `localhost`. |
+| `PUBLIC_DASHBOARD_URL` | — | Dashboard URL used in *Connect a device* QR codes, sign-in links and notification links — your LAN IP (`http://192.168.1.23:8080`) or domain. Without it, QR codes use the address you opened the dashboard at; an exposed `staqly serve` opened as `localhost` uses this computer's Wi-Fi address instead, and in Docker the dialog asks for that address once (kept in the browser). `connect-link` and notification links fall back to `localhost`. Platforms send the browser back to `<this address>/channels/callback/<platform>` after you connect them; an `https://` address here is what Facebook, Instagram Business, Threads, TikTok and Slack need ([Platforms that need https](/channels#platforms-that-need-https)). |
 | `ADDR` | `127.0.0.1:3333` | Listen address of the API. The Docker image sets `ADDR=:3333` (publish the port on `127.0.0.1` only); `staqly serve` sets `127.0.0.1:<--port>`. |
 
 ## Storage and limits
@@ -122,15 +122,23 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 
 The [design editor's AI tools](/dashboard/design-editor#ai-tools) and the media library's AI videos run on the
 server's own provider accounts. Keys are read on the server only: no browser, workspace or API response ever sees
-them. With both keys fal.ai is the primary and Higgsfield the fallback (for what it does the same way); with one,
-that one runs alone; with none, the AI tools are hidden. A provider that is down is not the same as one that is not
-set up: its requests fail (or fall back) and the tools stay. A key of the wrong shape refuses to start.
+them. With both keys they are tried in `AI_MEDIA_PROVIDERS`' order (fal.ai first by default), the second as the
+fallback for what it does the same way; with one, that one runs alone; with none, the AI tools are hidden. A provider
+that is down is not the same as one that is not set up: its requests fail (or fall back) and the tools stay. A key of
+the wrong shape refuses to start.
 
 | Variable | Default | Description |
 |---|---|---|
 | `AI_FAL_KEY` | — | A [fal.ai](https://fal.ai/dashboard/keys) API key. Turns on every AI tool. |
-| `AI_HIGGSFIELD_API_KEY` | — | A [Higgsfield](https://console.higgsfield.ai) API key as `<key id>:<key secret>`. Alone: new pictures and videos; with `AI_FAL_KEY`: their fallback. |
-| `AI_ASSISTANT_MODEL` | `google/gemini-2.5-flash` | The language model of the dashboard's [assistant](/dashboard/assistant), an OpenRouter model id run through fal.ai's router (needs `AI_FAL_KEY`). Pick one that calls tools well. |
+| `AI_HIGGSFIELD_API_KEY` | — | A [Higgsfield](https://console.higgsfield.ai) API key as `<key id>:<key secret>`. New pictures and videos. |
+| `AI_MEDIA_PROVIDERS` | `fal,higgsfield` | The order the picture and video tools try the providers in: `higgsfield,fal` makes Higgsfield the first for new pictures and videos, with fal.ai as their fallback (and the only one for edits). A provider left out is not used for media, though the assistant may still use fal.ai's router. |
+| `AI_ASSISTANT_MODEL` | `google/gemini-2.5-flash` | The language model of the dashboard's [assistant](/dashboard/assistant): an OpenRouter model id run through fal.ai's router (needs `AI_FAL_KEY`; `anthropic/claude-sonnet-4.5` and `openai/gpt-5` work too), or the model id of `AI_ASSISTANT_BASE_URL` (required with it). Pick one that calls tools well. |
+| `AI_ASSISTANT_BASE_URL` | — | The assistant on any OpenAI-compatible API instead of fal.ai: its base, before `/chat/completions` (OpenAI `https://api.openai.com/v1`, OpenRouter `https://openrouter.ai/api/v1`, DigitalOcean `https://inference.do-ai.run/v1`, Ollama `http://localhost:11434/v1`, or your own LiteLLM). Needs no `AI_FAL_KEY`; the design editor's AI tools still do. |
+| `AI_ASSISTANT_API_KEY` | — | Its key, sent as `Authorization: Bearer`. Empty for a local server that takes none. |
+| `AI_ASSISTANT_PRICES` | from the price list | USD per million input and output tokens of this one endpoint, over the price list below. `0,0` for a model that costs nothing. |
+| `AI_PRICES_FILE` | — | A JSON price list of language models, merged over the built-in one (GPT-6 models and the default Gemini): `{"models": {"my-model": {"input": 0.5, "cached_input": 0.05, "output": 2}}}`, USD per million tokens. The assistant's tokens count as the workspace's AI usage at these prices when the endpoint reports no cost (OpenAI doesn't; OpenRouter and fal.ai do); a model not listed counts at the default model's prices. |
+| `AI_ASSISTANT_FALLBACK_MODEL`, `_BASE_URL`, `_API_KEY`, `_PRICES` | — | A second, usually cheaper model, set like the four above (without a base URL it runs on fal.ai's router and needs `AI_FAL_KEY`). It answers when the workspace's monthly AI allowance has run out, and when the first model refuses a request before answering (its own quota, an outage). Past the allowance it is only rate-limited. |
+| `AI_ASSISTANT_BROWSER_MODEL` | — | A [WebLLM](https://webllm.mlc.ai) model id, such as `Qwen2.5-3B-Instruct-q4f16_1-MLC`. When neither model can answer, the assistant offers to go on in the person's browser (WebGPU): free, text only, without the workspace's tools. The first time downloads the model from Hugging Face (a few GB). Setting it lets the dashboard's pages run WebAssembly and fetch from Hugging Face and MLC's model library on GitHub. |
 | `AI_OPERATIONS` | every one | The tools offered, comma-separated: `generate`, `edit`, `inpaint`, `erase`, `expand`, `remove_background`, `replace_background`, `upscale`, `enhance`, `text_to_video`, `image_to_video` (e.g. `generate,edit,erase` keeps videos off). |
 | `AI_PRICES` | built in | Overrides the estimate of a model, `model=price` per its unit (image, megapixel or video second), comma-separated: `fal-ai/flux/schnell=0.004,fal-ai/flux-pro/kontext=0.05`. |
 | `AI_FAL_BASE_URL` | `https://queue.fal.run` | fal.ai's queue API (a proxy or tests). |
@@ -154,7 +162,7 @@ appears in the editor. Every request is billed by the provider, so test with a f
 
 | Variable | Default | Description |
 |---|---|---|
-| `UNSPLASH_ACCESS_KEY` | — | An [Unsplash](https://unsplash.com/developers) app's access key: the [design editor](/dashboard/design-editor) gets an **Unsplash** tab with stock photos. The key stays on the server; searches go through staqly, the pictures load from Unsplash. Unset, the tab is not shown. |
+| `PIXABAY_API_KEY` | — | A [Pixabay](https://pixabay.com/api/docs/) API key (shown there once you sign in; free, no review): the [design editor](/dashboard/design-editor) gets a **Pixabay** tab with stock photos (safe search on). The key stays on the server; searches go through staqly and are kept for a day, as Pixabay asks. A photo put on a design is copied into the media library (at most 1280 px), since Pixabay allows no hotlinking. Unset, the tab is not shown. `UNSPLASH_ACCESS_KEY` is no longer read. |
 
 ## Webhooks and schedule endpoints
 

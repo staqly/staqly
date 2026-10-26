@@ -66,7 +66,7 @@ func TestPreviewLinksAndComments(t *testing.T) {
 	e.upload("/v1/media", e.key, nil, "unrelated.png", pngBytes, 201, &unrelated)
 	var post app.Post
 	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "v1.4 is out", "media": []string{pic.ID},
-		"targets": []map[string]any{{"channel_id": ch.ID, "content": "v1.4!"}}}, 201, &post)
+		"tags": []string{"launch"}, "targets": []map[string]any{{"channel_id": ch.ID, "content": "v1.4!"}}}, 201, &post)
 
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/previews", e.key, map[string]any{"expires_in_days": 400}, 422, nil)
 	var link app.PreviewLink
@@ -85,7 +85,7 @@ func TestPreviewLinksAndComments(t *testing.T) {
 	var pv app.PublicPreview
 	e.do(nil, "GET", "/v1/previews/"+token, "", nil, 200, &pv)
 	if pv.Content != "v1.4 is out" || len(pv.Targets) != 1 || pv.Targets[0].Content != "v1.4!" || pv.Targets[0].Handle != "@fake" ||
-		pv.Targets[0].ProviderName != "Fake Token" || pv.Workspace == "" {
+		pv.Targets[0].ProviderName != "Fake Token" || pv.Workspace == "" || pv.Targets[0].Hashtags != "#launch" {
 		t.Fatalf("preview: %+v", pv)
 	}
 	e.do(nil, "GET", "/v1/previews/not-a-token", "", nil, 404, nil)

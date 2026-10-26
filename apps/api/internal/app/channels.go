@@ -114,6 +114,8 @@ type ProviderInfo struct {
 	SettingsFields   []providers.Field `json:"settings_fields"`
 	AppConfigured    bool              `json:"app_configured"`
 	DocsURL          string            `json:"docs_url"`
+	// NeedsHTTPS: the platform calls back over https only, so connecting needs the dashboard on an https address.
+	NeedsHTTPS bool `json:"needs_https"`
 }
 
 func providerInfo(e providers.Entry, appConfigured bool) ProviderInfo {
@@ -127,6 +129,9 @@ func providerInfo(e providers.Entry, appConfigured bool) ProviderInfo {
 	}
 	if e.Auth() != providers.AuthOAuth2 {
 		info.AppConfigured = true // nothing to register
+	}
+	if n, ok := e.Provider.(providers.Needer); ok {
+		info.NeedsHTTPS = n.Needs().HTTPS
 	}
 	return info
 }
@@ -854,6 +859,40 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		s.markChannel(ctx, row.ID, "connected", "")
 	}
 	return map[string]any{"ok": true, "profile": profile}, nil
+}
+
+// ChannelOptions lists the choices of a remote setting the platform gives for the channel (Slack's channels).
+func (s *Service) ChannelOptions(ctx context.Context, p Principal, id, key string) ([]providers.Option, error) {
+	if err := p.require(ScopeChannelsRead); err != nil {
+		return nil, err
+	}
+	row, err := s.channelRow(ctx, p, id)
+	if err != nil {
+		return nil, err
+	}
+	e, ok := providers.Get(row.Provider)
+	if !ok {
+		return nil, conflict("this channel's provider is not part of this build")
+	}
+	lister, ok := e.Provider.(providers.OptionLister)
+	remote := false
+	for _, f := range e.SettingsFields() {
+		remote = remote || (f.Key == key && f.Kind == "remote")
+	}
+	if !ok || !remote {
+		return nil, notFound("setting")
+	}
+	_, creds, err := s.storedCredentials(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	cctx, cancel := context.WithTimeout(providers.WithHTTPClient(ctx, s.safeClient()), connectTimeout)
+	defer cancel()
+	out, err := lister.Options(cctx, creds, key)
+	if err != nil {
+		return nil, connectError(err)
+	}
+	return out, nil
 }
 
 func (s *Service) markChannel(ctx context.Context, id, status, lastError string) {

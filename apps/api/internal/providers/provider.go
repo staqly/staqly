@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,7 +40,8 @@ type Field struct {
 	Label string `json:"label"`
 	Help  string `json:"help,omitempty"`
 	// text, secret, url, select, textarea, boolean, number; list (comma-separated free values, e.g. tags or
-	// usernames); channels (comma-separated ids of other connected channels of the same platform).
+	// usernames); channels (comma-separated ids of other connected channels of the same platform); remote (values
+	// from the list the platform gives for the channel, see OptionLister; several, comma-separated, when MaxItems > 1).
 	Kind        string   `json:"kind"`
 	Options     []Option `json:"options,omitempty"`
 	Required    bool     `json:"required"`
@@ -50,6 +52,9 @@ type Field struct {
 	// MaxLength caps text, textarea and url values (characters); MaxItems caps list and channels values.
 	MaxLength int `json:"max_length,omitempty"`
 	MaxItems  int `json:"max_items,omitempty"`
+	// Prefer: for a remote field, the option labels a client picks while it is empty, the first the list has
+	// (Slack: #random, else #general); none there, the person picks.
+	Prefer []string `json:"prefer,omitempty"`
 }
 
 // ListValues splits a list or channels value: comma-separated, trimmed, empty items dropped.
@@ -99,9 +104,15 @@ func CheckFields(fields []Field, s Settings) error {
 			if u, err := url.Parse(v); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 				return invalid(f.Key, f.Label+" must be a link starting with https://")
 			}
-		case "list", "channels":
+		case "list", "channels", "remote":
 			if n := len(ListValues(v)); f.MaxItems > 0 && n > f.MaxItems {
 				return invalid(f.Key, fmt.Sprintf("at most %d for %s", f.MaxItems, f.Label))
+			}
+			// A remote field with a fixed list (the platform only adds pictures to it) takes only those values.
+			for _, item := range ListValues(v) {
+				if f.Kind == "remote" && len(f.Options) > 0 && !slices.ContainsFunc(f.Options, func(o Option) bool { return o.Value == item }) {
+					return invalid(f.Key, "choose one of the options for "+f.Label)
+				}
 			}
 		}
 		if f.MaxLength > 0 && utf8.RuneCountInString(v) > f.MaxLength {
@@ -126,6 +137,8 @@ func (f Field) Applies(values map[string]string) bool {
 type Option struct {
 	Value string `json:"value"`
 	Label string `json:"label"`
+	// Icon shown with the option: a picture's URL, or "staqly" for staqly's mark.
+	Icon string `json:"icon,omitempty"`
 }
 
 // Limits the composer and the validation apply before publishing.
@@ -281,6 +294,12 @@ type AccountLister interface {
 	// UseAccount narrows the sign-in to one listed account: the channel's credentials and profile. The profile's
 	// Handle identifies the account (an existing channel with the same handle is reconnected, not duplicated).
 	UseAccount(ctx context.Context, c Credentials, accountID string) (Credentials, Profile, error)
+}
+
+// OptionLister fills a remote field: the choices the platform has for a connected channel right now (Slack's
+// channels). The value stays free-form for clients that can't ask; the platform refuses a wrong one at publish.
+type OptionLister interface {
+	Options(ctx context.Context, c Credentials, key string) ([]Option, error)
 }
 
 // Reposter is implemented by platforms where another connected account can repost a published post (the

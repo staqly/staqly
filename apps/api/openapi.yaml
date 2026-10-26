@@ -2943,6 +2943,25 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/channels/{id}/options/{key}:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+      - { name: key, in: path, required: true, description: "A settings field of kind remote", schema: { type: string } }
+    get:
+      operationId: listChannelOptions
+      tags: [channels]
+      summary: The choices of a channel's remote setting, from its platform (channels:read)
+      description: For Slack, `channel` lists the workspace's channels a post can go to (every public one and the private ones the app was invited to).
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { type: object, required: [value, label], properties: { value: { type: string }, label: { type: string }, icon: { type: string } } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /v1/schedules:
     get:
@@ -3660,6 +3679,7 @@ paths:
                     tool_call_id: { type: string }
                     allow: { type: boolean }
                 page: { type: string, description: The dashboard page the person is on }
+                chat_id: { type: string, pattern: "^ach_[a-z0-9]{8,32}$", description: "The chat to keep the conversation in, named by the client (GET /v1/assistant/chats lists them); the server saves it once the turn ends" }
       responses:
         "200":
           description: "Events: text (streamed text), tool (a tool ran), confirm (a tool waits for the person), message (add it to the conversation), done, error"
@@ -3671,18 +3691,59 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+  /v1/assistant/chats:
+    get:
+      operationId: listAssistantChats
+      tags: [workspace]
+      summary: The caller's assistant chats in this workspace, newest first
+      parameters:
+        - { name: q, in: query, description: Words found in the title, schema: { type: string } }
+        - { name: cursor, in: query, description: next_cursor of the page before, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AssistantChat" } }
+                  next_cursor: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /v1/assistant/chats/{id}:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getAssistantChat
+      tags: [workspace]
+      summary: One of the caller's assistant chats, with its messages and the change waiting for a decision
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AssistantChat" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteAssistantChat
+      tags: [workspace]
+      summary: Remove one of the caller's assistant chats
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /v1/stock/photos:
     get:
       operationId: listStockPhotos
       tags: [media]
-      summary: Stock photos from Unsplash for the design editor (media:read)
+      summary: Stock photos from Pixabay for the design editor (media:read)
       description: >
-        Searches Unsplash on the server's key (UNSPLASH_ACCESS_KEY); without a query, its editorial feed. Without
-        a key, configured is false and data is empty. Pictures load straight from Unsplash's CDN; credit the
-        author with author_url and page_url.
+        Searches Pixabay's photos on the server's key (PIXABAY_API_KEY), safe search on; without a query, its
+        editors' choice. Answers are kept for a day, as Pixabay asks. Without a key, configured is false and data
+        is empty. Thumbnails load straight from Pixabay's CDN; a photo for a design goes through
+        POST /v1/stock/photos/{id}/use, which copies it into the library (Pixabay allows no permanent hotlinking).
       parameters:
         - { name: query, in: query, schema: { type: string, maxLength: 100 } }
-        - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 16 } }
       responses:
         "200": { description: "Photos, 30 a page", content: { application/json: { schema: { $ref: "#/components/schemas/StockPage" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -3695,9 +3756,10 @@ paths:
     post:
       operationId: useStockPhoto
       tags: [media]
-      summary: Tell Unsplash a photo went into a design (media:write)
+      summary: Copy a Pixabay photo into the media library, for a design (media:write)
+      description: The photo at most 1280 px wide or tall, as a new library file (pixabay-<id>.jpg).
       responses:
-        "204": { description: Told }
+        "201": { description: The library file, content: { application/json: { schema: { $ref: "#/components/schemas/Media" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -4892,9 +4954,9 @@ components:
         id: { type: string }
         width: { type: integer }
         height: { type: integer }
-        alt: { type: string }
-        thumb: { type: string, description: About 400 px wide }
-        url: { type: string, description: About 2000 px wide }
+        alt: { type: string, description: "Pixabay's tags, comma-separated" }
+        thumb: { type: string, description: At most 640 px wide or tall }
+        url: { type: string, description: "At most 1280 px; temporary (use POST /v1/stock/photos/{id}/use to keep it)" }
         author: { type: string }
         author_url: { type: string }
         page_url: { type: string }
@@ -4902,14 +4964,14 @@ components:
       type: object
       required: [configured, data]
       properties:
-        configured: { type: boolean, description: Whether this server has an Unsplash key }
+        configured: { type: boolean, description: Whether this server has a Pixabay key }
         data: { type: array, items: { $ref: "#/components/schemas/StockPhoto" } }
     AIStatus:
       type: object
       required: [configured, providers, operations, usage]
       properties:
         configured: { type: boolean, description: At least one AI operation works; false hides the AI tools }
-        providers: { type: array, items: { type: string, enum: [fal, higgsfield] }, description: "The configured providers, the primary first" }
+        providers: { type: array, items: { type: string, enum: [fal, higgsfield] }, description: "The configured media providers, in the order they are tried (AI_MEDIA_PROVIDERS)" }
         operations: { type: array, items: { $ref: "#/components/schemas/AIOperation" } }
         usage:
           type: object
@@ -4918,6 +4980,9 @@ components:
             period: { type: string, description: "The month (UTC), YYYY-MM" }
             used_usd: { type: number, description: "The workspace's estimated AI spending this month (running requests count with their estimate)" }
             limit_usd: { type: [number, "null"], description: "The monthly limit of the workspace's plan (ai_monthly_cents); null: none" }
+        assistant_browser_model:
+          type: string
+          description: "A WebLLM model the dashboard may run on the device, text only, when the assistant can't answer on the server (AI_ASSISTANT_BROWSER_MODEL); absent: none"
     AssistantMessage:
       type: object
       required: [role, content]
@@ -4934,6 +4999,24 @@ components:
               name: { type: string }
               arguments: { type: string, description: JSON text }
         tool_call_id: { type: string }
+    AssistantChat:
+      type: object
+      description: "A conversation with the assistant, kept for the person who had it; lists leave out messages and pending"
+      required: [id, title, created_at, updated_at]
+      properties:
+        id: { type: string }
+        title: { type: string, description: The first thing the person asked }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        messages: { type: array, items: { $ref: "#/components/schemas/AssistantMessage" } }
+        pending:
+          type: object
+          description: The tool call waiting for Allow or Deny
+          required: [id, name, arguments]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            arguments: { type: string }
     AIOperation:
       type: object
       description: An AI operation this server offers, what it takes and who runs it
@@ -4944,7 +5027,7 @@ components:
         prompt: { type: string, enum: [required, optional, none] }
         image: { type: boolean, description: Needs a picture }
         mask: { type: boolean, description: "Needs a mask (white: the area to change)" }
-        provider: { type: string, enum: [fal, higgsfield] }
+        provider: { type: string, enum: [fal, higgsfield, openai_compatible], description: "openai_compatible: the assistant on the server's own OpenAI-compatible endpoint (AI_ASSISTANT_BASE_URL)" }
         model: { type: string, description: The provider's model id }
         fallback: { type: string, description: "The provider that takes over when the first does not take a request; empty: none" }
     AIJob:
@@ -5328,7 +5411,7 @@ components:
           type: array
           items:
             type: object
-            required: [channel_id, channel_name, handle, avatar_url, provider, provider_name, content, status, external_url, published_at]
+            required: [channel_id, channel_name, handle, avatar_url, provider, provider_name, content, hashtags, status, external_url, published_at]
             properties:
               channel_id: { type: string }
               channel_name: { type: string }
@@ -5337,6 +5420,7 @@ components:
               provider: { type: string }
               provider_name: { type: string }
               content: { type: string, description: The text this channel gets }
+              hashtags: { type: string, description: "The post's tags as the platform gets them after the text (#launch #news); empty for none and for your own automation" }
               status: { type: string }
               external_url: { type: string }
               published_at: { type: [string, "null"], format: date-time }
@@ -5470,10 +5554,11 @@ components:
         help: { type: string }
         kind:
           type: string
-          enum: [text, secret, url, select, textarea, boolean, number, list, channels]
-          description: "list: comma-separated free values (tags, usernames). channels: comma-separated ids of other connected channels of the same platform (for example the accounts that repost a post). Booleans are \"true\" / \"false\"."
+          enum: [text, secret, url, select, textarea, boolean, number, list, channels, remote]
+          description: "list: comma-separated free values (tags, usernames). channels: comma-separated ids of other connected channels of the same platform (for example the accounts that repost a post). remote: values from the list the platform gives for the channel (GET /v1/channels/{id}/options/{key}), for example Slack channels; several, comma-separated, when max_items is above 1; options, when set, are the fixed choices (the list adds pictures). Booleans are \"true\" / \"false\"."
         max_length: { type: integer, description: "At most this many characters (text, textarea, url)" }
-        max_items: { type: integer, description: "At most this many values (list, channels)" }
+        max_items: { type: integer, description: "At most this many values (list, channels, remote)" }
+        prefer: { type: array, items: { type: string }, description: "remote: the option labels to pick while the field is empty, the first the list has (Slack: #random, then #general)" }
         options:
           type: array
           items:
@@ -5482,6 +5567,7 @@ components:
             properties:
               value: { type: string }
               label: { type: string }
+              icon: { type: string, description: "Shown with the option: a picture's URL, or staqly for staqly's mark" }
         required: { type: boolean }
         default: { type: string }
         placeholder: { type: string }
@@ -5516,7 +5602,7 @@ components:
     Provider:
       type: object
       description: A platform staqly can publish to
-      required: [id, name, auth, status, limits, credential_fields, settings_fields, app_configured, docs_url]
+      required: [id, name, auth, status, limits, credential_fields, settings_fields, app_configured, docs_url, needs_https]
       properties:
         id: { type: string, examples: [custom, telegram, bluesky, mastodon] }
         name: { type: string }
@@ -5527,6 +5613,7 @@ components:
         settings_fields: { type: array, items: { $ref: "#/components/schemas/ProviderField" }, description: Per-target settings a post may set }
         app_configured: { type: boolean, description: "OAuth platforms: a developer app is set (the workspace's or the server's)" }
         docs_url: { type: string, format: uri }
+        needs_https: { type: boolean, description: "The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise)" }
 
     ScheduleRule:
       type: object

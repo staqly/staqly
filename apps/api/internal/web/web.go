@@ -60,7 +60,8 @@ var securityHeaders = map[string]string{
 // The design editor (/media/edit) removes backgrounds on the device, and the video and sound editor (/media/video,
 // /media/audio) turns speech into captions there: transformers.js and ONNX Runtime (pinned
 // versions, jsDelivr) and the model weights from Hugging Face, fetched when someone uses it. Its pictures may come
-// from Unsplash's CDN (stock photos), which the AI tools read back to change them. Nothing else leaves the page.
+// from Unsplash's CDN (stock photos in designs made before Pixabay, whose photos are copied into the library), which
+// the AI tools read back to change them. Nothing else leaves the page.
 //
 // jsDelivr is allowed per package version only: a CSP source path without a trailing "/" matches that exact
 // path, and with one only what lies under it, so scripts and wasm from any other npm package stay blocked.
@@ -88,7 +89,7 @@ var editorHeaders = map[string]string{
 		"frame-ancestors 'none'",
 	}, "; "),
 	// Cross-origin isolated, so ONNX Runtime runs WebAssembly on every core (one thread otherwise: minutes per
-	// picture on a device without a usable GPU). credentialless, not require-corp: pictures from Unsplash and the
+	// picture on a device without a usable GPU). credentialless, not require-corp: stock pictures and the
 	// model files still load (without cookies), and browsers without it (Safari) just stay unisolated.
 	"Cross-Origin-Opener-Policy":   "same-origin",
 	"Cross-Origin-Embedder-Policy": "credentialless",
@@ -122,7 +123,8 @@ const RelayHeader = "X-Staqly-Relay"
 // your own reverse proxy instead of the TCP peer. relayToken ("" = none) is a
 // secret shared with an API in the same process, sent as RelayHeader. analyticsHost (POSTHOG_HOST when
 // POSTHOG_KEY is set) is the one other origin the dashboard's pages may send to.
-func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken string, analyticsHost ...string) http.Handler {
+// webLLM opens the pages to the assistant's model on the device (AI_ASSISTANT_BROWSER_MODEL set).
+func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken string, webLLM bool, analyticsHost ...string) http.Handler {
 	mux := http.NewServeMux()
 	api := apiProxy(upstream, log, trustProxy, relayToken)
 	mux.Handle("/api/", api)
@@ -131,7 +133,11 @@ func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, r
 	// platform's answer is on it (a code, or an error, both with the state the sign-in started with), hand it
 	// to the API, which finishes the connection and sends the browser back here to land, without a state.
 	// An error without a state is that landing (the API's own ?error=...): forwarding it sent it round again.
-	page := files(site, withConnect(securityHeaders, analyticsHost), withConnect(editorHeaders, analyticsHost))
+	headers, editor := withConnect(securityHeaders, analyticsHost), withConnect(editorHeaders, analyticsHost)
+	if webLLM {
+		headers, editor = withWebLLM(headers), withWebLLM(editor)
+	}
+	page := files(site, headers, editor)
 	mux.HandleFunc("/channels/callback/", func(rw http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		provider := strings.TrimPrefix(r.URL.Path, "/channels/callback/")
@@ -272,6 +278,25 @@ func withConnect(headers map[string]string, hosts []string) map[string]string {
 				"connect-src 'self' https://"+u.Host, 1)
 		}
 	}
+	return h
+}
+
+// webLLMLib: WebLLM itself, pinned (WEBLLM_CDN in apps/platform/components/assistant/on-device.ts).
+const webLLMLib = "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.86/lib/index.js"
+
+// withWebLLM: headers that let the assistant's model run on the device (WebLLM, apps/platform/components/assistant/
+// on-device.ts): the library, WebAssembly, the weights from Hugging Face and the compiled model from MLC's library on
+// GitHub.
+func withWebLLM(headers map[string]string) map[string]string {
+	h := maps.Clone(headers)
+	csp := h["Content-Security-Policy"]
+	script := webLLMLib
+	if !strings.Contains(csp, "'wasm-unsafe-eval'") {
+		script = "'wasm-unsafe-eval' " + script
+	}
+	csp = strings.Replace(csp, "script-src 'self' 'unsafe-inline'", "script-src 'self' 'unsafe-inline' "+script, 1)
+	h["Content-Security-Policy"] = strings.Replace(csp, "connect-src 'self'", "connect-src 'self' https://huggingface.co "+
+		"https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/", 1)
 	return h
 }
 

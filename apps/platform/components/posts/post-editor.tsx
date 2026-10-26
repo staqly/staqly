@@ -64,7 +64,7 @@ export function PostEditor({
   below?: React.ReactNode
   /** In the bottom bar before the formatting buttons (Insert media). */
   start?: React.ReactNode
-  /** At the bar's right end (the counter). */
+  /** In the text's bottom right corner (the counter), clear of the bar's tools on any width. */
   end?: React.ReactNode
 }) {
   const last = useRef(value)
@@ -114,7 +114,11 @@ export function PostEditor({
 
   return (
     <RichTextEditorRoot editor={editor} editable={editable} variant="subtle" className={cn('post-editor', className)}>
-      <Content />
+      {/* The text keeps room at its foot so the corner never covers the last line. */}
+      <div className={cn('relative', end && '[&_.ProseMirror]:pb-10')}>
+        <Content />
+        {end && <div className="absolute right-2 bottom-2">{end}</div>}
+      </div>
       {below}
       {/* The tools sit in a bar under the text, not in a toolbar above it. */}
       <div
@@ -140,7 +144,6 @@ export function PostEditor({
           <UndoControl />
           <RedoControl />
         </ControlsGroup>
-        <span className="ml-auto">{end}</span>
       </div>
     </RichTextEditorRoot>
   )

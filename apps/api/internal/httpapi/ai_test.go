@@ -527,6 +527,31 @@ func TestAIFallback(t *testing.T) {
 	if job = e.runAI(job.ID); job.Error == nil || job.Error.Code != "ai_refused" || !strings.Contains(job.Error.Message, "flagged") || hf.count() != hfBefore {
 		t.Fatalf("refused: %+v", job)
 	}
+
+	// AI_MEDIA_PROVIDERS=higgsfield,fal: Higgsfield first, fal.ai only where Higgsfield has no model.
+	fal.set(func(f *fakeAI) { f.submit = 0 })
+	e.svc.Cfg.AI.MediaProviders = []string{"higgsfield", "fal"}
+	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
+	if st.Providers[0] != "higgsfield" {
+		t.Fatalf("order: %v", st.Providers)
+	}
+	falBefore = fal.count()
+	_, job, _ = e.aiJob(e.key, map[string]string{"operation": "generate", "prompt": "six"}, nil, nil)
+	if job = e.runAI(job.ID); job.Provider != "higgsfield" || job.FallbackFrom != "" || fal.count() != falBefore {
+		t.Fatalf("higgsfield first: %+v", job)
+	}
+	_, job, _ = e.aiJob(e.key, map[string]string{"operation": "edit", "prompt": "blue"}, realPNG(t, 32, 32), nil)
+	if job = e.runAI(job.ID); job.Provider != "fal" {
+		t.Fatalf("an edit stays on fal.ai: %+v", job)
+	}
+	// Only Higgsfield: fal.ai's media models are not offered at all (the assistant still talks to its router).
+	e.svc.Cfg.AI.MediaProviders = []string{"higgsfield"}
+	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
+	for _, o := range st.Operations {
+		if o.ID != "assistant" && (o.Provider != "higgsfield" || o.Fallback != "") {
+			t.Fatalf("higgsfield only: %+v", o)
+		}
+	}
 }
 
 // Input checks, scopes and workspaces, duplicates, cancelling, the per-workspace limits.
@@ -725,7 +750,12 @@ func fakeAssistant(w http.ResponseWriter, r *http.Request) {
 // assistantTurn posts a turn and reads its events.
 func (e *env) assistantTurn(msgs []app.AssistantMessage, decision *app.AssistantDecision) []app.AssistantEvent {
 	e.t.Helper()
-	raw, _ := json.Marshal(app.AssistantRequest{Messages: msgs, Decision: decision})
+	return e.assistantRequest(app.AssistantRequest{Messages: msgs, Decision: decision})
+}
+
+func (e *env) assistantRequest(body app.AssistantRequest) []app.AssistantEvent {
+	e.t.Helper()
+	raw, _ := json.Marshal(body)
 	req, _ := http.NewRequest("POST", e.srv.URL+"/v1/assistant/chat", strings.NewReader(string(raw)))
 	req.Header.Set("Authorization", "Bearer "+e.key)
 	req.Header.Set("Content-Type", "application/json")
@@ -814,4 +844,158 @@ func TestAssistant(t *testing.T) {
 	// Without AI on the server there is no assistant.
 	e.aiSetup(nil, nil)
 	e.do(nil, "POST", "/v1/assistant/chat", e.key, map[string]any{"messages": msgs}, 409, nil)
+
+	// Its own OpenAI-compatible endpoint (OpenAI, DigitalOcean, a local model) needs no fal.ai: a Bearer key and
+	// the model it names.
+	var auth, model, path string
+	own := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var body struct{ Model string }
+		_ = json.Unmarshal(b, &body)
+		auth, model, path = r.Header.Get("Authorization"), body.Model, r.URL.Path
+		r.Body = io.NopCloser(bytes.NewReader(b))
+		fakeAssistant(w, r)
+	}))
+	defer own.Close()
+	e.svc.Cfg.AI = app.AIConfig{Assistant: app.AIEndpoint{BaseURL: own.URL + "/v1", APIKey: "sk-test", Model: "gpt-test",
+		Prices: &[2]float64{0, 0}}}
+	for _, ev := range e.assistantTurn([]app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}, nil) {
+		if ev.Type == "error" {
+			t.Fatalf("own endpoint: %+v", ev.Error)
+		}
+	}
+	if auth != "Bearer sk-test" || model != "gpt-test" || path != "/v1/chat/completions" {
+		t.Fatalf("own endpoint got %q %q %q", auth, model, path)
+	}
+	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
+	if len(st.Operations) != 1 || st.Operations[0].ID != "assistant" || st.Operations[0].Provider != "openai_compatible" {
+		t.Fatalf("status with its own endpoint: %+v", st.Operations)
+	}
+
+	// The model refuses before answering (its own quota): the fallback answers the same call.
+	asked := 0
+	empty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked++
+		w.WriteHeader(429)
+		_, _ = w.Write([]byte(`{"error":{"message":"You exceeded your current quota","code":"insufficient_quota"}}`))
+	}))
+	defer empty.Close()
+	e.svc.Cfg.AI = app.AIConfig{Assistant: app.AIEndpoint{BaseURL: empty.URL + "/v1", Model: "gpt-big"},
+		AssistantFallback:     app.AIEndpoint{BaseURL: own.URL + "/v1", APIKey: "sk-cheap", Model: "gpt-cheap"},
+		AssistantBrowserModel: "Qwen2.5-3B-Instruct-q4f16_1-MLC"}
+	for _, ev := range e.assistantTurn([]app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}, nil) {
+		if ev.Type == "error" {
+			t.Fatalf("fallback: %+v", ev.Error)
+		}
+	}
+	if auth != "Bearer sk-cheap" || model != "gpt-cheap" {
+		t.Fatalf("fallback got %q %q", auth, model)
+	}
+	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
+	if op := st.Operations[0]; op.Model != "gpt-big" || op.Fallback != "openai_compatible" || st.AssistantBrowserModel != "Qwen2.5-3B-Instruct-q4f16_1-MLC" {
+		t.Fatalf("status with a fallback: %+v %q", op, st.AssistantBrowserModel)
+	}
+
+	// The month's allowance ran out: the model isn't asked, the fallback answers; without one it is a 402.
+	saved := append([]app.Plan(nil), app.Plans...)
+	for i := range app.Plans {
+		app.Plans[i].Limits.AIMonthlyCents = 0
+	}
+	t.Cleanup(func() { copy(app.Plans, saved) })
+	asked, model = 0, ""
+	for _, ev := range e.assistantTurn([]app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}, nil) {
+		if ev.Type == "error" {
+			t.Fatalf("over the allowance: %+v", ev.Error)
+		}
+	}
+	if model != "gpt-cheap" || asked != 0 {
+		t.Fatalf("over the allowance got %q, the model asked %d times", model, asked)
+	}
+	e.svc.Cfg.AI.AssistantFallback = app.AIEndpoint{}
+	evs = e.assistantTurn([]app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}, nil)
+	if last := evs[len(evs)-1]; last.Type != "error" || last.Error.Code != "ai_limit_reached" {
+		t.Fatalf("over the allowance without a fallback: %+v", evs)
+	}
+}
+
+// An agent (and the assistant) makes pictures and videos over MCP: generate_media, get_generated_media,
+// keep_generated_media.
+func TestMCPGenerateMedia(t *testing.T) {
+	e := newEnv(t)
+	e.paid()
+	e.aiSetup(newFakeFal(t), newFakeHiggsfield(t))
+
+	job := mcpResult(e, e.key, "generate_media", map[string]any{"kind": "image", "prompt": "a lighthouse at dusk", "aspect_ratio": "16:9"})
+	if job["operation"] != "generate" || job["status"] != "queued" {
+		t.Fatalf("image: %v", job)
+	}
+	e.runAI(job["id"].(string))
+	got := mcpResult(e, e.key, "get_generated_media", map[string]any{"job_id": job["id"], "wait_seconds": 5})
+	if got["status"] != "succeeded" {
+		t.Fatalf("status: %v", got)
+	}
+	m := mcpResult(e, e.key, "keep_generated_media", map[string]any{"job_id": job["id"]})
+	if id, _ := m["id"].(string); !strings.HasPrefix(id, "med_") {
+		t.Fatalf("kept: %v", m)
+	}
+
+	// A video from that picture, and one from a prompt alone.
+	v := mcpResult(e, e.key, "generate_media", map[string]any{"kind": "video", "prompt": "waves move", "media_id": m["id"]})
+	if v["operation"] != "image_to_video" {
+		t.Fatalf("video from a picture: %v", v)
+	}
+	if v = mcpResult(e, e.key, "generate_media", map[string]any{"kind": "video", "prompt": "a timelapse", "aspect_ratio": "9:16"}); v["operation"] != "text_to_video" {
+		t.Fatalf("video: %v", v)
+	}
+	mcpErr(e, e.key, "generate_media", map[string]any{"kind": "song", "prompt": "x"}, "kind must be image or video")
+	mcpErr(e, e.key, "generate_media", map[string]any{"kind": "image", "prompt": "x", "aspect_ratio": "3:1"}, "aspect_ratio")
+}
+
+// Chats are kept on the server per person: saved after each turn, listed newest first a page at a time, found by
+// title, opened with their messages and the change still waiting, removed; nobody else sees them.
+func TestAssistantChats(t *testing.T) {
+	e := newEnv(t)
+	e.paid()
+	e.aiSetup(newFakeFal(t), nil)
+	e.do(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "Launch"}, 201, nil)
+
+	e.assistantRequest(app.AssistantRequest{ChatID: "ach_first0001", Messages: []app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}})
+	for i := range 3 {
+		e.assistantRequest(app.AssistantRequest{ChatID: fmt.Sprintf("ach_other%04d", i), Messages: []app.AssistantMessage{{Role: "user", Content: fmt.Sprintf("hello %d", i)}}})
+	}
+	var page app.AssistantChatPage
+	e.do(nil, "GET", "/v1/assistant/chats?limit=2", e.key, nil, 200, &page)
+	if len(page.Data) != 2 || page.NextCursor == "" || page.Data[0].Messages != nil {
+		t.Fatalf("first page %+v", page)
+	}
+	var rest app.AssistantChatPage
+	e.do(nil, "GET", "/v1/assistant/chats?limit=2&cursor="+page.NextCursor, e.key, nil, 200, &rest)
+	if len(rest.Data) != 2 || rest.NextCursor != "" || rest.Data[1].ID == page.Data[1].ID {
+		t.Fatalf("second page %+v", rest)
+	}
+	var found app.AssistantChatPage
+	e.do(nil, "GET", "/v1/assistant/chats?q=LAUNCH", e.key, nil, 200, &found)
+	if len(found.Data) != 1 || found.Data[0].ID != "ach_first0001" || found.Data[0].Title != "Write a draft about our launch" {
+		t.Fatalf("search %+v", found)
+	}
+	// The draft waits for Allow: the saved chat has it.
+	var chat app.AssistantChat
+	e.do(nil, "GET", "/v1/assistant/chats/ach_first0001", e.key, nil, 200, &chat)
+	if len(chat.Messages) < 2 || chat.Pending == nil || chat.Pending.Name != "create_post" {
+		t.Fatalf("chat %+v", chat)
+	}
+
+	// Another key is someone else: no list, no chat, and its id can't overwrite the first's.
+	var theirs app.AssistantChatPage
+	e.do(nil, "GET", "/v1/assistant/chats", e.admin, nil, 200, &theirs)
+	if len(theirs.Data) != 0 {
+		t.Fatalf("other principal sees %+v", theirs)
+	}
+	e.do(nil, "GET", "/v1/assistant/chats/ach_first0001", e.admin, nil, 404, nil)
+	e.do(nil, "DELETE", "/v1/assistant/chats/ach_first0001", e.admin, nil, 404, nil)
+
+	e.do(nil, "DELETE", "/v1/assistant/chats/ach_first0001", e.key, nil, 204, nil)
+	e.do(nil, "GET", "/v1/assistant/chats/ach_first0001", e.key, nil, 404, nil)
+	e.do(nil, "GET", "/v1/assistant/chats?cursor=nope!", e.key, nil, 422, nil)
+	e.do(nil, "POST", "/v1/assistant/chat", e.key, map[string]any{"chat_id": "../x", "messages": []map[string]string{{"role": "user", "content": "hi"}}}, 422, nil)
 }

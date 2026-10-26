@@ -38,6 +38,8 @@ const (
 const (
 	AIProviderFal        = "fal"
 	AIProviderHiggsfield = "higgsfield"
+	// AIProviderOpenAI: the assistant on an OpenAI-compatible endpoint of the server's choosing (AI_ASSISTANT_BASE_URL).
+	AIProviderOpenAI = "openai_compatible"
 )
 
 // aiOpSpec is what an operation takes.

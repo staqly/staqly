@@ -53,9 +53,9 @@ type Config struct {
 // obsoleteVars: the keyless local mode's guard (peer, Host and Origin checks), gone since local mode
 // requires its access token for every request.
 // The AI_OPENAI_* settings went with the OpenAI provider (AI runs on fal.ai and Higgsfield: AI_FAL_KEY,
-// AI_HIGGSFIELD_API_KEY).
+// AI_HIGGSFIELD_API_KEY). Stock photos moved from Unsplash to Pixabay (PIXABAY_API_KEY).
 var obsoleteVars = []string{"LOCAL_TRUSTED_PEERS", "LOCAL_ALLOWED_HOSTS", "LOCAL_ALLOWED_ORIGINS",
-	"AI_OPENAI_API_KEY", "AI_OPENAI_FALLBACK_API_KEY", "AI_OPENAI_MODEL", "AI_OPENAI_BASE_URL"}
+	"AI_OPENAI_API_KEY", "AI_OPENAI_FALLBACK_API_KEY", "AI_OPENAI_MODEL", "AI_OPENAI_BASE_URL", "UNSPLASH_ACCESS_KEY"}
 
 // aiConfig checks the AI keys' shape and reads the operations, the monthly limit and price overrides. A key is
 // never printed in an error.
@@ -69,19 +69,73 @@ func aiConfig(ai *app.AIConfig) error {
 			return errors.New("AI_HIGGSFIELD_API_KEY must be <key id>:<key secret> (from console.higgsfield.ai)")
 		}
 	}
+	var err error
+	if ai.Assistant, err = aiEndpoint("AI_ASSISTANT"); err != nil {
+		return err
+	}
+	if ai.AssistantFallback, err = aiEndpoint("AI_ASSISTANT_FALLBACK"); err != nil {
+		return err
+	}
+	if f := ai.AssistantFallback; f.Model != "" && f.BaseURL == "" && ai.FalKey == "" {
+		return errors.New("AI_ASSISTANT_FALLBACK_MODEL without AI_ASSISTANT_FALLBACK_BASE_URL runs on fal.ai's router: set AI_FAL_KEY")
+	}
+	ai.AssistantBrowserModel = strings.TrimSpace(os.Getenv("AI_ASSISTANT_BROWSER_MODEL"))
+	if strings.ContainsAny(ai.AssistantBrowserModel, " \t/\\") {
+		return errors.New("AI_ASSISTANT_BROWSER_MODEL must be a WebLLM model id (Qwen2.5-3B-Instruct-q4f16_1-MLC)")
+	}
+	if v := strings.TrimSpace(os.Getenv("AI_MEDIA_PROVIDERS")); v != "" {
+		ai.MediaProviders = []string{}
+		for _, name := range strings.Split(v, ",") {
+			name = strings.TrimSpace(name)
+			if (name != app.AIProviderFal && name != app.AIProviderHiggsfield) || slices.Contains(ai.MediaProviders, name) {
+				return errors.New("AI_MEDIA_PROVIDERS must list fal and/or higgsfield, each once, in the order to try them (higgsfield,fal)")
+			}
+			ai.MediaProviders = append(ai.MediaProviders, name)
+		}
+	}
 	for name, u := range map[string]string{"AI_FAL_BASE_URL": ai.FalBaseURL, "AI_HIGGSFIELD_BASE_URL": ai.HiggsfieldBaseURL} {
 		if p, err := url.Parse(u); err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" {
 			return fmt.Errorf("%s must be an http(s) URL", name)
 		}
 	}
-	var err error
 	if ai.Operations, err = app.ParseAIOperations(os.Getenv("AI_OPERATIONS")); err != nil {
+		return err
+	}
+	if ai.TokenPrices, err = app.LoadTokenPrices(strings.TrimSpace(os.Getenv("AI_PRICES_FILE"))); err != nil {
 		return err
 	}
 	if ai.Prices, err = app.ParseAIPrices(os.Getenv("AI_PRICES")); err != nil {
 		return err
 	}
 	return nil
+}
+
+// aiEndpoint reads an OpenAI-compatible model: <prefix>_MODEL, _BASE_URL, _API_KEY and _PRICES.
+func aiEndpoint(prefix string) (app.AIEndpoint, error) {
+	e := app.AIEndpoint{Model: strings.TrimSpace(os.Getenv(prefix + "_MODEL")),
+		BaseURL: strings.TrimRight(strings.TrimSpace(os.Getenv(prefix+"_BASE_URL")), "/"),
+		APIKey:  strings.TrimSpace(os.Getenv(prefix + "_API_KEY"))}
+	if e.BaseURL != "" {
+		if p, err := url.Parse(e.BaseURL); err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" {
+			return e, fmt.Errorf("%s_BASE_URL must be an http(s) URL, the base of an OpenAI-compatible API (https://api.openai.com/v1)", prefix)
+		}
+		if e.Model == "" {
+			return e, fmt.Errorf("%s_MODEL is required with %s_BASE_URL: the model id that endpoint knows", prefix, prefix)
+		}
+	}
+	if strings.ContainsAny(e.APIKey, " \t\r\n") {
+		return e, fmt.Errorf("%s_API_KEY has spaces or line breaks", prefix)
+	}
+	if v := strings.TrimSpace(os.Getenv(prefix + "_PRICES")); v != "" {
+		in, out, ok := strings.Cut(v, ",")
+		pin, err1 := strconv.ParseFloat(strings.TrimSpace(in), 64)
+		pout, err2 := strconv.ParseFloat(strings.TrimSpace(out), 64)
+		if !ok || err1 != nil || err2 != nil || pin < 0 || pout < 0 {
+			return e, fmt.Errorf("%s_PRICES must be <input>,<output> in USD per million tokens (0.30,2.50)", prefix)
+		}
+		e.Prices = &[2]float64{pin, pout}
+	}
+	return e, nil
 }
 
 func env(k, def string) string {
@@ -249,15 +303,14 @@ func Load() (Config, error) {
 			Mode: mode,
 			PostHog: app.PostHogConfig{Key: os.Getenv("POSTHOG_KEY"), Host: strings.TrimRight(env("POSTHOG_HOST", "https://eu.i.posthog.com"), "/"),
 				Environment: env("POSTHOG_ENVIRONMENT", "production")},
-			// AI tools on the server's own provider accounts: fal.ai first, Higgsfield as the fallback (ai.go).
+			// AI tools on the server's own provider accounts (ai.go); aiConfig reads the rest.
 			AI: app.AIConfig{
 				FalKey:            strings.TrimSpace(os.Getenv("AI_FAL_KEY")),
 				FalBaseURL:        strings.TrimRight(env("AI_FAL_BASE_URL", "https://queue.fal.run"), "/"),
 				HiggsfieldKey:     strings.TrimSpace(os.Getenv("AI_HIGGSFIELD_API_KEY")),
 				HiggsfieldBaseURL: strings.TrimRight(env("AI_HIGGSFIELD_BASE_URL", "https://api.higgsfield.ai"), "/"),
-				AssistantModel:    strings.TrimSpace(os.Getenv("AI_ASSISTANT_MODEL")),
 			},
-			Stock:              app.StockConfig{UnsplashKey: os.Getenv("UNSPLASH_ACCESS_KEY")},
+			Stock:              app.StockConfig{PixabayKey: strings.TrimSpace(os.Getenv("PIXABAY_API_KEY"))},
 			LocalTokenPath:     filepath.Join(dataDir, app.LocalTokenFile),
 			UploadDir:          env("UPLOAD_DIR", filepath.Join(dataDir, "uploads")),
 			SetupToken:         os.Getenv("SETUP_TOKEN"),

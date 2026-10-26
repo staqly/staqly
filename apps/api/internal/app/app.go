@@ -197,7 +197,7 @@ type Config struct {
 	Analytics posthog.EnqueueClient
 	// AI: the design editor's AI tools, called with each workspace's own provider key (see ai.go).
 	AI AIConfig
-	// Stock: the design editor's stock photos (UNSPLASH_ACCESS_KEY; see stock.go).
+	// Stock: the design editor's stock photos (PIXABAY_API_KEY; see stock.go).
 	Stock StockConfig
 	// TrialPlan: the plan a new cloud workspace tries for TrialDays (TRIAL_PLAN). Empty = Starter, the only plan
 	// sold with a trial; test and demo servers may give a bigger one.

@@ -942,6 +942,8 @@ class ChannelTestResult(StaqlyModel):
 class ProviderFieldOption(StaqlyModel):
     value: str
     label: str
+    #: Shown with the option: a picture's URL, or ``staqly`` for staqly's mark.
+    icon: str = ""
 
 
 class ProviderFieldCondition(StaqlyModel):
@@ -969,6 +971,8 @@ class ProviderField(StaqlyModel):
     max_length: int | None = None
     #: At most this many values (list, channels).
     max_items: int | None = None
+    #: remote: the option labels to pick while the field is empty, the first the list has.
+    prefer: list[str] = Field(default_factory=list)
 
 
 class ImageRules(StaqlyModel):
@@ -1021,6 +1025,8 @@ class Provider(StaqlyModel):
     #: OAuth platforms: a developer app is set (the workspace's or the server's).
     app_configured: bool = False
     docs_url: str = ""
+    #: The platform calls back over https only: connecting needs the dashboard on an https address.
+    needs_https: bool = False
 
 
 # ---- schedules & jobs -------------------------------------------------------

@@ -174,6 +174,7 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 			r.Patch("/channels/{id}", s.updateChannel)
 			r.Delete("/channels/{id}", s.deleteChannel)
 			r.Post("/channels/{id}/test", s.testChannel)
+			r.Get("/channels/{id}/options/{key}", s.channelOptions)
 			r.Get("/channel-groups", s.listChannelGroups)
 			r.Post("/channel-groups", s.createChannelGroup)
 			r.Patch("/channel-groups/{id}", s.updateChannelGroup)

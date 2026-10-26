@@ -1,6 +1,7 @@
 'use client'
 
 import { Check } from 'lucide-react'
+import { useSyncExternalStore } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { ProviderTile } from '@/lib/providers'
@@ -13,6 +14,19 @@ export interface ProviderCard {
   status: 'available' | 'soon'
   /** oauth2 | token | none: shown as a hint under the name. */
   auth?: string
+  /** The platform calls back over https only: it can't be connected from a dashboard on plain http. */
+  needs_https?: boolean
+}
+
+const noSubscribe = () => () => {}
+
+/** Whether this page is on plain http (localhost, a LAN address): https-only platforms can't come back to it. */
+function useInsecurePage() {
+  return useSyncExternalStore(
+    noSubscribe,
+    () => window.location.protocol !== 'https:',
+    () => false,
+  )
 }
 
 /**
@@ -48,7 +62,7 @@ const GROUPS: { title: string; ids: string[] }[] = [
   { title: 'Business and portfolio', ids: ['google_business', 'dribbble'] },
 ]
 
-function groupProviders<T extends { id: string; status: string }>(providers: T[]) {
+function groupProviders<T extends { id: string; status: string; usable: boolean }>(providers: T[]) {
   const known = new Set(GROUPS.flatMap((g) => g.ids))
   const out = GROUPS.map((g) => ({
     title: g.title,
@@ -59,7 +73,7 @@ function groupProviders<T extends { id: string; status: string }>(providers: T[]
 
   // Available platforms lead each group; the sort is stable, so the catalog order holds within each half.
   for (const g of out) {
-    g.items.sort((a, b) => +(a.status !== 'available') - +(b.status !== 'available'))
+    g.items.sort((a, b) => +!a.usable - +!b.usable)
   }
 
   return out.filter((g) => g.items.length)
@@ -77,9 +91,22 @@ export function ProviderGrid({
   selected?: ReadonlySet<string>
   className?: string
 }) {
+  const insecure = useInsecurePage()
+  const cards = providers.map((p) => {
+    const blocked = p.status === 'available' && !!p.needs_https && insecure
+
+    return { ...p, blocked, usable: p.status === 'available' && !blocked }
+  })
+
   return (
     <div className={cn('grid gap-5', className)}>
-      {groupProviders(providers).map((g) => (
+      {cards.some((p) => p.blocked) && (
+        <p className="text-xs text-muted-foreground">
+          Platforms marked Not available only connect over a secure (https) address. Open staqly at its https address to
+          connect them.
+        </p>
+      )}
+      {groupProviders(cards).map((g) => (
         <section
           key={g.title}
           aria-labelledby={`platforms-${g.title.toLowerCase().replaceAll(' ', '-')}`}
@@ -91,20 +118,22 @@ export function ProviderGrid({
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4" aria-label={g.title}>
             {g.items.map((p) => {
               const soon = p.status !== 'available'
+              const label = soon ? 'Soon' : p.blocked ? 'Not available' : ''
 
               return (
                 <li key={p.id}>
                   <button
                     type="button"
                     onClick={() => onPick(p)}
-                    disabled={soon}
+                    disabled={!p.usable}
                     aria-pressed={selected ? selected.has(p.id) : undefined}
                     // Contains the visible text in its order (the name, then the Soon badge): speech input can name it.
-                    aria-label={soon ? `${p.name}, soon` : p.name}
+                    aria-label={label ? `${p.name}, ${label.toLowerCase()}` : p.name}
+                    title={p.blocked ? `${p.name} only connects over a secure (https) address` : undefined}
                     data-testid={`provider-${p.id}`}
                     className={cn(
                       'relative flex h-28 w-full flex-col items-center justify-center gap-1.5 rounded-xl border bg-card px-2 pt-4 pb-2 text-center text-xs font-medium transition-colors outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                      soon && 'cursor-default text-muted-foreground hover:bg-card',
+                      !p.usable && 'cursor-default text-muted-foreground hover:bg-card',
                       selected?.has(p.id) && 'border-2 border-brand bg-brand-soft hover:bg-brand-soft',
                     )}
                   >
@@ -120,9 +149,9 @@ export function ProviderGrid({
                     </span>{' '}
                     {/* The badge sits in the card's corner, clear of the mark (pt-5 leaves it room); after the name
                         in reading order. */}
-                    {soon && (
+                    {label && (
                       <Badge variant="outline" className="absolute top-1 right-1 h-4 px-1 text-[10px] font-medium">
-                        Soon
+                        {label}
                       </Badge>
                     )}
                   </button>

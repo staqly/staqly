@@ -128,16 +128,19 @@ type PreviewPart struct {
 }
 
 type PreviewTarget struct {
-	ChannelID    string  `json:"channel_id"`
-	ChannelName  string  `json:"channel_name"`
-	Handle       string  `json:"handle"`
-	AvatarURL    string  `json:"avatar_url"`
-	Provider     string  `json:"provider"`
-	ProviderName string  `json:"provider_name"`
-	Content      string  `json:"content"` // the text this channel gets, links handled as the channel does
-	Status       string  `json:"status"`
-	ExternalURL  string  `json:"external_url"`
-	PublishedAt  *string `json:"published_at"`
+	ChannelID    string `json:"channel_id"`
+	ChannelName  string `json:"channel_name"`
+	Handle       string `json:"handle"`
+	AvatarURL    string `json:"avatar_url"`
+	Provider     string `json:"provider"`
+	ProviderName string `json:"provider_name"`
+	Content      string `json:"content"` // the text this channel gets, links handled as the channel does
+	// Hashtags: the post's tags as the platform gets them after the text ("#launch #news"); "" for none and for
+	// your own automation, which gets them apart. Apart from Content so comments anchored in the text stay put.
+	Hashtags    string  `json:"hashtags"`
+	Status      string  `json:"status"`
+	ExternalURL string  `json:"external_url"`
+	PublishedAt *string `json:"published_at"`
 }
 
 func (s *Service) toPreviewLink(l db.PreviewLink) PreviewLink {
@@ -561,6 +564,11 @@ func (s *Service) OpenPreview(ctx context.Context, token string) (PublicPreview,
 		if ch, err := s.Q.GetChannelByID(ctx, t.ChannelID); err == nil && ch.WorkspaceID == l.WorkspaceID {
 			pt.Handle = ch.Handle
 			pt.Content, _ = providers.ApplyLinks(channelLinks(ch), text)
+		}
+		if t.Provider != "custom" { // as publishing adds them (publishTarget)
+			if full := providers.AppendHashtags(pt.Content, post.Tags); full != pt.Content {
+				pt.Hashtags = strings.TrimSpace(strings.TrimPrefix(full, strings.TrimRight(pt.Content, " \t\n")))
+			}
 		}
 		out.Targets = append(out.Targets, pt)
 	}

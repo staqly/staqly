@@ -448,6 +448,14 @@ Check a channel's stored credentials against its platform. Rate-limited. · `cha
 |---|---|---|---|
 | `channel_id` | string | <Required /> | Channel ID (ch_...) |
 
+### `list_channel_options`
+The choices of a channel's remote setting (a `settings_fields` entry of kind `remote`), from its platform right now: for Slack, key `channel` lists the workspace's channels a post can go to. *Read-only* · `channels:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | <Required /> | Channel ID (ch_...) |
+| `key` | string | <Required /> | The setting's key (`channel` for Slack) |
+
 
 ## Schedules
 
@@ -665,6 +673,32 @@ Keep this media file of a set of identical ones (list_media with duplicates=true
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `media_id` | string | <Required /> | Media ID (med_...) |
+
+### `generate_media`
+Make a picture or a short video clip with AI from a prompt (kind image or video; for a video, media_id brings that library picture to life). It runs in the background, a picture in about a minute, a video in a few: follow it with get_generated_media, then keep_generated_media puts it in the library. Counts towards the workspace's monthly AI allowance. Runs on the server's AI providers (`AI_MEDIA_PROVIDERS`); without them it answers `not_available`. · `media:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `kind` | string | <Required /> | image or video |
+| `prompt` | string | <Required /> | What to make, in detail |
+| `aspect_ratio` | string | No | 1:1 (default for an image), 16:9 (default for a video), 9:16 or, for an image, 4:5 |
+| `duration` | integer | No | A video's length: 5 (default) or 10 seconds |
+| `media_id` | string | No | For a video: a library picture (med_...) to bring to life |
+
+### `get_generated_media`
+How a generate_media request is going (status queued, running, succeeded, failed or canceled; error when it failed). wait_seconds (up to 60) waits for it to finish first. A result is kept for a day unless keep_generated_media keeps it. *Read-only* · `media:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | string | <Required /> | The id generate_media returned (aij_...) |
+| `wait_seconds` | integer | No | Wait up to this many seconds (at most 60) for it to finish |
+
+### `keep_generated_media`
+Put a finished generate_media result in the media library; returns the media file (its id goes in a post's media list). · `media:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | string | <Required /> | The id generate_media returned (aij_...) |
 
 
 ## Activity log

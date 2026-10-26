@@ -2,12 +2,14 @@ package mcpserver
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/staqly/staqly/apps/api/internal/app"
@@ -56,6 +58,12 @@ func (t *tools) addContentTools(s *mcp.Server) {
 		Annotations: wr()}, t.restoreMedia)
 	add(s, t, &mcp.Tool{Name: "keep_media", Description: "Keep this media file of a set of identical ones (list_media with duplicates=true): posts that use a copy use this file instead, and the copies move to Deleted. Requires posts:delete and posts:write.",
 		Annotations: destructive()}, t.keepMedia)
+	add(s, t, &mcp.Tool{Name: "generate_media", Description: "Make a picture or a short video clip with AI from a prompt (kind image or video; for a video, media_id brings that library picture to life). It runs in the background, a picture in about a minute, a video in a few: follow it with get_generated_media, then keep_generated_media puts it in the library. Counts towards the workspace's monthly AI allowance. Requires media:write.",
+		Annotations: wr()}, t.generateMedia)
+	add(s, t, &mcp.Tool{Name: "get_generated_media", Description: "How a generate_media request is going (status queued, running, succeeded, failed or canceled; error when it failed). wait_seconds (up to 60) waits for it to finish first. A result is kept for a day unless keep_generated_media keeps it. Requires media:read.",
+		Annotations: ro()}, t.getGeneratedMedia)
+	add(s, t, &mcp.Tool{Name: "keep_generated_media", Description: "Put a finished generate_media result in the media library; returns the media file (its id goes in a post's media list). Requires media:write.",
+		Annotations: wr()}, t.keepGeneratedMedia)
 
 	add(s, t, &mcp.Tool{Name: "list_events", Description: "List the activity log (posts created, scheduled, published or failed, channels connected, schedules run, settings changes), newest first, with optional filters.",
 		Annotations: ro()}, t.listEvents)
@@ -131,6 +139,74 @@ func (t *tools) uploadMedia(ctx context.Context, _ *mcp.CallToolRequest, in uplo
 		name = "upload"
 	}
 	return nil0(t.svc.UploadMedia(ctx, t.principal(ctx), name, bytes.NewReader(raw)))
+}
+
+type generateMediaIn struct {
+	Kind        string `json:"kind" jsonschema:"image or video"`
+	Prompt      string `json:"prompt" jsonschema:"what to make, in detail"`
+	AspectRatio string `json:"aspect_ratio,omitempty" jsonschema:"1:1 (default for an image), 16:9 (default for a video), 9:16 or, for an image, 4:5"`
+	Duration    int    `json:"duration,omitempty" jsonschema:"a video's length: 5 (default) or 10 seconds"`
+	MediaID     string `json:"media_id,omitempty" jsonschema:"for a video: a library picture (med_...) to bring to life"`
+}
+
+// imageSizes: a picture's size for each aspect ratio generate_media takes.
+var imageSizes = map[string][2]int{"1:1": {1024, 1024}, "16:9": {1344, 768}, "9:16": {768, 1344}, "4:5": {1024, 1280}}
+
+func (t *tools) generateMedia(ctx context.Context, _ *mcp.CallToolRequest, in generateMediaIn) (*mcp.CallToolResult, any, error) {
+	p := t.principal(ctx)
+	job := app.AIJobInput{Prompt: in.Prompt, AspectRatio: in.AspectRatio, Duration: in.Duration}
+	switch in.Kind {
+	case "image":
+		size, ok := imageSizes[cmp.Or(in.AspectRatio, "1:1")]
+		if !ok {
+			return nil, nil, &app.Error{Code: "validation_failed", Status: 422, Message: "aspect_ratio for an image must be 1:1, 16:9, 9:16 or 4:5"}
+		}
+		job.Operation, job.Width, job.Height, job.AspectRatio = app.AIGenerate, size[0], size[1], ""
+	case "video":
+		job.Operation = app.AITextToVideo
+		if in.MediaID != "" {
+			f, m, err := t.svc.OpenMedia(ctx, p, in.MediaID)
+			if err != nil {
+				return nil, nil, err
+			}
+			defer f.Close()
+			if !strings.HasPrefix(m.MimeType, "image/") {
+				return nil, nil, &app.Error{Code: "validation_failed", Status: 422, Message: "media_id must be a picture"}
+			}
+			if job.Image, err = io.ReadAll(io.LimitReader(f, app.MaxAIImageBytes+1)); err != nil {
+				return nil, nil, err
+			}
+			job.Operation, job.AspectRatio = app.AIImageToVideo, ""
+		}
+	default:
+		return nil, nil, &app.Error{Code: "validation_failed", Status: 422, Message: "kind must be image or video"}
+	}
+	j, _, err := t.svc.CreateAIJob(ctx, p, job)
+	return nil0(j, err)
+}
+
+type generatedMediaIn struct {
+	JobID       string `json:"job_id" jsonschema:"the id generate_media returned (aij_...)"`
+	WaitSeconds int    `json:"wait_seconds,omitempty" jsonschema:"wait up to this many seconds (at most 60) for it to finish"`
+}
+
+func (t *tools) getGeneratedMedia(ctx context.Context, _ *mcp.CallToolRequest, in generatedMediaIn) (*mcp.CallToolResult, any, error) {
+	until := time.Now().Add(time.Duration(min(max(in.WaitSeconds, 0), 60)) * time.Second)
+	for {
+		j, err := t.svc.GetAIJob(ctx, t.principal(ctx), in.JobID)
+		if err != nil || (j.Status != "queued" && j.Status != "running") || time.Now().After(until) {
+			return nil0(j, err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
+func (t *tools) keepGeneratedMedia(ctx context.Context, _ *mcp.CallToolRequest, in generatedMediaIn) (*mcp.CallToolResult, any, error) {
+	return nil0(t.svc.AcceptAIJob(ctx, t.principal(ctx), in.JobID))
 }
 
 type getMediaIn struct {

@@ -3,10 +3,12 @@ title: Slack
 description: Publish to Slack channels through a Slack app, with text, files and replies in the message's thread. What to register at api.slack.com.
 ---
 
-Staqly publishes to **Slack** through a Slack app installed in the workspace: the person signs in
-with OAuth v2, picks the channels, and each becomes a staqly channel. Messages go out with
-`chat.postMessage`, files with `files.getUploadURLExternal` + `files.completeUploadExternal` (the
-text becomes the files' message). A published target links to the message.
+Staqly publishes to **Slack** through a Slack app installed in a workspace: the person signs in
+with OAuth v2 and the **workspace** becomes a staqly channel. Connect as many workspaces as you like;
+each post picks the Slack channel it goes to, and goes out as the app or as the person who connected.
+Messages go out with `chat.postMessage`, files with `files.getUploadURLExternal` +
+`files.completeUploadExternal` (the text becomes the files' message). A published target links to
+the message.
 
 ## What you need
 
@@ -52,22 +54,29 @@ Until both are set, Slack shows as **soon** in **Channels → Add channel**.
 </Step>
 <Step>
 
-### Connect channels
+### Connect a workspace
 
 **Connect with Slack** opens slack.com, where the person picks the workspace and allows the app.
-Staqly asks for these bot scopes:
+The workspace shows as its address (`acme.slack.com`); connecting it again reconnects it. For
+another workspace, connect again and pick that one on slack.com. Staqly asks for these bot scopes:
 
 | Scope | Why |
 |---|---|
 | `chat:write` | Post messages as the app |
 | `channels:read`, `groups:read` | List the public channels, and the private ones the app was invited to, to pick from |
-| `channels:join` | Join a public channel when it is picked, so files can be shared there |
+| `channels:join` | Join a public channel a post goes to, so it can post and share files there |
 | `files:write` | Upload files |
 | `files:read` | Find the message an upload made, to link to it and reply under it |
+| `team:read` | Show the workspace's icon (without one, its first letter, as Slack does) |
 
-Then staqly lists the channels: every public channel, and the private ones where the app was
-invited (`/invite @YourApp` in the channel). Pick one or more; each becomes its own channel, shown
-as `#name`. Connecting the same Slack channel again reconnects the existing staqly channel.
+And these user scopes, so a post can go out as the person who connects (**Post as**):
+
+| Scope | Why |
+|---|---|
+| `chat:write` | Post messages as that person |
+| `files:write`, `files:read` | Upload files as that person and find their message |
+| `users.profile:read` | Show that person's photo next to **As myself** |
+
 
 </Step>
 </Steps>
@@ -87,6 +96,8 @@ as written.
 | Setting | What it does |
 |---|---|
 | **Show link previews** (`link_preview`) | On by default: Slack unfurls links into previews |
+| **Post as** (`post_as`) | `app` (default): the app's name and icon. `me`: the person who connected Slack, with their name and photo; they must be in the channel. A channel connected before this setting existed needs reconnecting once |
+| **Slack channels** (`channel`, required) | Up to 10 channels of the workspace, ids or `#names`, comma-separated: one message in each, its comments in each message's thread. The dashboard picks **#random** (else **#general**) for a new post; pick others from the list (`GET /v1/channels/{id}/options/channel`, MCP `list_channel_options`): every public channel, and the private ones after `/invite @YourApp` in them. The app joins a public channel before posting. When one channel refuses after others took the post, the target fails naming where it went, and is not retried (it would post twice) |
 
 ## Comments
 
@@ -107,7 +118,8 @@ connection asks Slack whether the token still works.
 
 | Slack says | Staqly does |
 |---|---|
-| The token is revoked, the app was removed, the app was removed from the channel or the channel archived | Marks the channel **Needs reconnect** and fails the target: invite the app back (or unarchive the channel) and reconnect from the row's menu |
+| The token is revoked or the app was removed from the workspace | Marks the channel **Needs reconnect** and fails the target: reconnect from the row's menu |
+| Slack refuses the post's channel (archived, private without the app, or the person is not in it) | Fails the target only: the workspace stays connected. Invite the app, join the channel yourself, or pick another one |
 | Rate limit (429) or Slack unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
 | A refused message: too long, posting restricted in the channel, files not allowed | Fails the target with Slack's reason; retrying would not help, so it does not |
 | The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: Slack has no idempotency key, and sending again could post twice. Check the channel before you retry |

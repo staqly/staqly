@@ -31,8 +31,27 @@ export function ChannelAvatar({ channel, className }: { channel: ChannelLike; cl
     )
   }
 
+  // A Slack workspace without an icon of its own: its first letter, as Slack itself shows it.
+  const letter = LETTER_AVATARS.has(channel.provider) ? channel.name.match(/[\p{L}\p{N}]/u)?.[0] : undefined
+
+  if (letter) {
+    return (
+      <span className={cn('relative inline-flex size-9 shrink-0', className)}>
+        <span className="grid size-full place-items-center rounded-full bg-muted text-[0.9em] font-semibold text-foreground uppercase [container-type:size]">
+          <span className="text-[45cqh] leading-none">{letter}</span>
+        </span>
+        <span className="absolute -right-[6%] -bottom-[6%] grid aspect-square w-[44%] place-items-center rounded-full bg-background ring-1 ring-border">
+          <ProviderIcon id={channel.provider} className="size-[62%]" />
+        </span>
+      </span>
+    )
+  }
+
   return <ProviderTile id={channel.provider} name={channel.name} className={className} />
 }
+
+/** Platforms whose channel is a named place (a workspace), shown by its first letter until it has an icon. */
+const LETTER_AVATARS = new Set(['slack'])
 
 /**
  * Several channels as a stack of small avatars (calendar chips, post rows): the first few overlap, the rest
