@@ -2943,6 +2943,35 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/channels/telegram/connect:
+    post:
+      operationId: startTelegramConnect
+      tags: [channels]
+      summary: A code to connect a Telegram chat through the server's bot (channels:manage)
+      description: |
+        Add the server's bot (`bot` in GET /v1/providers) to the channel or group, as an administrator allowed to
+        post in a channel, then send the `command` (`/connect CODE`) there. The server's bot finds it, checks the
+        chat and connects it as a channel of this workspace (in `group_id`, else Default); GET the code to see it.
+        A code lasts 10 minutes. 409 `not_available` when the server has no bot of its own (connect with
+        `credential_fields` then).
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { group_id: { type: string } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/TelegramConnect" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /v1/channels/telegram/connect/{code}:
+    parameters:
+      - { name: code, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getTelegramConnect
+      tags: [channels]
+      summary: Whether the chat for a Telegram connect code is connected yet (channels:read)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TelegramConnect" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /v1/channels/{id}/options/{key}:
     parameters:
       - { $ref: "#/components/parameters/id" }
@@ -5035,6 +5064,18 @@ components:
               media_id: { type: string }
               name: { type: string }
               mime_type: { type: string }
+    TelegramConnect:
+      type: object
+      description: A code to connect a Telegram chat through the server's bot, and what became of it
+      required: [code, command, bot, expires_at, status]
+      properties:
+        code: { type: string }
+        command: { type: string, description: "What to send in the chat: /connect CODE" }
+        bot: { type: string, description: "The bot to add (@username)" }
+        expires_at: { type: string, format: date-time }
+        status: { type: string, enum: [waiting, connected, expired], description: "waiting: no /connect yet, or the last one failed (error says why)" }
+        channel_id: { type: string }
+        error: { type: string }
     AssistantChat:
       type: object
       description: "A conversation with the assistant, kept for the person who had it; lists leave out messages and pending"
@@ -5659,6 +5700,7 @@ components:
         settings_fields: { type: array, items: { $ref: "#/components/schemas/ProviderField" }, description: Per-target settings a post may set }
         app_configured: { type: boolean, description: "OAuth platforms: a developer app is set (the workspace's or the server's)" }
         docs_url: { type: string, format: uri }
+        bot: { type: string, description: "Telegram: the server's own bot (@username). Present when a chat connects by adding it and sending /connect CODE there (POST /v1/channels/telegram/connect) instead of with credential_fields" }
         needs_https: { type: boolean, description: "The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise)" }
 
     ScheduleRule:

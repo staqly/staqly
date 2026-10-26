@@ -171,6 +171,19 @@ func TestTelegramPublish(t *testing.T) {
 		t.Fatalf("sendMessage %v", p)
 	}
 
+	// A chat connected through the server's bot publishes with the server's token; without one it can't.
+	shared := telegramCreds()
+	delete(shared, "bot_token")
+	shared["bot"] = "shared"
+	if _, err := tg.Publish(ctx, shared, PostContent{Text: "Hi"}, Settings{}); !errors.Is(err, ErrReauth) {
+		t.Fatalf("no server bot: %v", err)
+	}
+	SetTelegramBot("123:abc", "janedoe_bot")
+	t.Cleanup(func() { SetTelegramBot("", "") })
+	if res, err := tg.Publish(ctx, shared, PostContent{Text: "Hi"}, Settings{}); err != nil || res.ExternalID != "55" {
+		t.Fatalf("server bot: %+v %v", res, err)
+	}
+
 	if _, err := tg.Publish(ctx, telegramCreds(), PostContent{Text: "A picture", Media: []MediaFile{chatMedia("a.jpg", "image/jpeg", "jpg")}}, Settings{}); err != nil {
 		t.Fatal(err)
 	}

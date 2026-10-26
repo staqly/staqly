@@ -80,6 +80,7 @@ export type AIOperation = Schemas['AIOperation']
 export type AIJob = Schemas['AIJob']
 export type AIOperationId = AIOperation['id']
 export type AssistantMessage = Schemas['AssistantMessage']
+export type TelegramConnect = Schemas['TelegramConnect']
 /** A kept conversation with the assistant (the list leaves out messages and pending). */
 export type AssistantChat = Schemas['AssistantChat']
 export type AssistantRequest = operations['assistantChat']['requestBody']['content']['application/json']
@@ -1071,6 +1072,10 @@ export const api = {
   assistantChatById: (id: string) => request<AssistantChat>(`/v1/assistant/chats/${encodeURIComponent(id)}`),
   deleteAssistantChat: (id: string) =>
     request<void>(`/v1/assistant/chats/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** A /connect code for the server's Telegram bot, and whether its chat is connected yet. */
+  startTelegramConnect: () => request<TelegramConnect>('/v1/channels/telegram/connect', { method: 'POST' }),
+  telegramConnect: (code: string) =>
+    request<TelegramConnect>(`/v1/channels/telegram/connect/${encodeURIComponent(code)}`),
   /** The choices of a channel's remote setting, from its platform (Slack's channels). */
   channelOptions: (id: string, key: string) =>
     request<{ data: { value: string; label: string }[] }>(

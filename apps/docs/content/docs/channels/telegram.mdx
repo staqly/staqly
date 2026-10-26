@@ -9,9 +9,31 @@ GIF with `sendPhoto` / `sendVideo` / `sendAnimation`, several files as an album 
 `sendMediaGroup`. Files are uploaded by staqly, so no public media storage is needed. A published
 target links to the message on t.me.
 
-## What you need
+## Connect with the server's bot
 
-No developer app and nothing on the server: each channel uses its own bot.
+When the server has a bot of its own (`PROVIDER_TELEGRAM_BOT_TOKEN`, staqly cloud does), connecting takes no
+token:
+
+1. **Channels → Add channel → Telegram** shows the bot (`@yourserver_bot`) and a command, `/connect K7M2QX`.
+2. Add the bot to your channel (**Add to a channel**: as an administrator allowed to post and delete
+   messages) or group (**Add to a group**).
+3. Send the command in that chat. The bot checks it may post there, the chat becomes a channel, and the bot
+   deletes the command (or, when it may not delete, asks you to). The dashboard sees it within a few seconds.
+
+A code lasts 10 minutes; a wrong or old one gets an answer in the chat. API: `POST /v1/channels/telegram/connect`
+gives the code, `GET /v1/channels/telegram/connect/{code}` says when it is connected. **Use a bot of your own
+instead** under the steps connects the way below.
+
+### Set up the server's bot
+
+Make a bot with [@BotFather](https://t.me/BotFather) (`/newbot`), put its token in the server's environment and
+restart: `PROVIDER_TELEGRAM_BOT_TOKEN=123456789:AAH...`. The server reads the bot's messages by polling Telegram
+(`getUpdates`), so it needs no public address; one server per bot (Telegram refuses a second one polling the same
+token). Channels connected through it never store the token: a new token for the same bot keeps them working.
+
+## Connect with your own bot
+
+Without a server bot, or by choice, each channel uses a bot of its own.
 
 <Steps>
 <Step>

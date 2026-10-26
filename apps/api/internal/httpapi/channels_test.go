@@ -136,6 +136,9 @@ func TestChannelsTokenProvider(t *testing.T) {
 	}
 	// Options exist only for a remote setting of a platform that lists them (Slack's channels).
 	e.do(nil, "GET", "/v1/channels/"+ch.ID+"/options/channel", e.key, nil, 404, nil)
+	// Telegram through the server's bot needs a bot on the server; an unknown code is not there.
+	e.do(nil, "POST", "/v1/channels/telegram/connect", e.admin, nil, 409, nil)
+	e.do(nil, "GET", "/v1/channels/telegram/connect/ABC234", e.key, nil, 404, nil)
 
 	// The provider's limit is applied per target when the post is written.
 	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "this text is far longer than twenty characters",

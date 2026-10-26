@@ -2406,6 +2406,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/channels/telegram/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A code to connect a Telegram chat through the server's bot (channels:manage)
+         * @description Add the server's bot (`bot` in GET /v1/providers) to the channel or group, as an administrator allowed to
+         *     post in a channel, then send the `command` (`/connect CODE`) there. The server's bot finds it, checks the
+         *     chat and connects it as a channel of this workspace (in `group_id`, else Default); GET the code to see it.
+         *     A code lasts 10 minutes. 409 `not_available` when the server has no bot of its own (connect with
+         *     `credential_fields` then).
+         */
+        post: operations["startTelegramConnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/channels/telegram/connect/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        /** Whether the chat for a Telegram connect code is connected yet (channels:read) */
+        get: operations["getTelegramConnect"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/channels/{id}/options/{key}": {
         parameters: {
             query?: never;
@@ -4350,6 +4393,23 @@ export interface components {
                 mime_type?: string;
             }[];
         };
+        /** @description A code to connect a Telegram chat through the server's bot, and what became of it */
+        TelegramConnect: {
+            code: string;
+            /** @description What to send in the chat: /connect CODE */
+            command: string;
+            /** @description The bot to add (@username) */
+            bot: string;
+            /** Format: date-time */
+            expires_at: string;
+            /**
+             * @description waiting: no /connect yet, or the last one failed (error says why)
+             * @enum {string}
+             */
+            status: "waiting" | "connected" | "expired";
+            channel_id?: string;
+            error?: string;
+        };
         /** @description A conversation with the assistant, kept for the person who had it; lists leave out messages and pending */
         AssistantChat: {
             id: string;
@@ -5048,6 +5108,8 @@ export interface components {
             app_configured: boolean;
             /** Format: uri */
             docs_url: string;
+            /** @description Telegram: the server's own bot (@username). Present when a chat connects by adding it and sending /connect CODE there (POST /v1/channels/telegram/connect) instead of with credential_fields */
+            bot?: string;
             /** @description The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise) */
             needs_https: boolean;
         };
@@ -10691,6 +10753,59 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    startTelegramConnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    group_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramConnect"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getTelegramConnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramConnect"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     listChannelOptions: {

@@ -1037,6 +1037,8 @@ class Provider(StaqlyModel):
     docs_url: str = ""
     #: The platform calls back over https only: connecting needs the dashboard on an https address.
     needs_https: bool = False
+    #: Telegram: the server's own bot (@username) that connects a chat with /connect CODE.
+    bot: str = ""
 
 
 # ---- schedules & jobs -------------------------------------------------------
