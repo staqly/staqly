@@ -71,9 +71,18 @@ type discordGuild struct {
 	Name  string `json:"name"`
 	Icon  string `json:"icon"`
 	Roles []struct {
-		ID          string `json:"id"`
-		Permissions string `json:"permissions"`
+		ID          string       `json:"id"`
+		Permissions discordPerms `json:"permissions"`
 	} `json:"roles"`
+}
+
+// discordPerms is a permission bit set, which Discord sends as a string (v10) or, in older answers, a number.
+type discordPerms uint64
+
+func (p *discordPerms) UnmarshalJSON(b []byte) error {
+	v, err := strconv.ParseUint(strings.Trim(string(b), `"`), 10, 64)
+	*p = discordPerms(v)
+	return err
 }
 
 // Exchange trades the code for the guild the bot was added to. The person's own token (scope bot) can do nothing
@@ -138,10 +147,10 @@ type discordChannel struct {
 	Position   int    `json:"position"`
 	ParentID   string `json:"parent_id"`
 	Overwrites []struct {
-		ID    string `json:"id"`
-		Type  int    `json:"type"` // 0 role, 1 member
-		Allow string `json:"allow"`
-		Deny  string `json:"deny"`
+		ID    string       `json:"id"`
+		Type  int          `json:"type"` // 0 role, 1 member
+		Allow discordPerms `json:"allow"`
+		Deny  discordPerms `json:"deny"`
 	} `json:"permission_overwrites"`
 }
 
@@ -212,10 +221,9 @@ func (d Discord) postable(ctx context.Context, guildID string, chans []discordCh
 	if err != nil {
 		return chans
 	}
-	bits := func(s string) uint64 { v, _ := strconv.ParseUint(s, 10, 64); return v }
 	roles := map[string]uint64{}
 	for _, r := range g.Roles {
-		roles[r.ID] = bits(r.Permissions)
+		roles[r.ID] = uint64(r.Permissions)
 	}
 	base := roles[guildID] // @everyone has the guild's id
 	for _, r := range member.Roles {
@@ -234,18 +242,18 @@ func (d Discord) postable(ctx context.Context, guildID string, chans []discordCh
 		var allow, deny uint64
 		for _, o := range ch.Overwrites {
 			if o.Type == 0 && o.ID == guildID {
-				p = p&^bits(o.Deny) | bits(o.Allow)
+				p = p&^uint64(o.Deny) | uint64(o.Allow)
 			}
 		}
 		for _, o := range ch.Overwrites {
 			if o.Type == 0 && mine[o.ID] {
-				allow, deny = allow|bits(o.Allow), deny|bits(o.Deny)
+				allow, deny = allow|uint64(o.Allow), deny|uint64(o.Deny)
 			}
 		}
 		p = p&^deny | allow
 		for _, o := range ch.Overwrites {
 			if o.Type == 1 && o.ID == me.ID {
-				p = p&^bits(o.Deny) | bits(o.Allow)
+				p = p&^uint64(o.Deny) | uint64(o.Allow)
 			}
 		}
 		if p&discordViewChannel != 0 && p&discordSendMessages != 0 {

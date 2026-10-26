@@ -25,7 +25,8 @@ import (
 type DiscordWebhook struct{ Base }
 
 // discordAPI is Discord's API (webhook URLs point there too), a variable so tests point it at httptest.
-var discordAPI = "https://discord.com/api"
+// v10: without a version Discord answers in an old one (permissions as numbers, not the strings v10 sends).
+var discordAPI = "https://discord.com/api/v10"
 
 func init() {
 	b := NewBase("discord_webhook", "Discord webhook", AuthToken,
