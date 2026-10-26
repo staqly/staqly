@@ -3900,6 +3900,7 @@ paths:
         - { name: actor_id, in: query, description: "One actor, e.g. an API key id (key_...) or a session id", schema: { type: string } }
         - { name: agent, in: query, description: "Agent name as listed by /v1/agents (e.g. claude-code, n8n); repeat for any of several", schema: { type: array, items: { type: string } }, style: form, explode: true }
         - { name: type_prefix, in: query, description: "Literal type prefix, e.g. `post.` or `webhook.`", schema: { type: string } }
+        - { name: types, in: query, description: "Any of these event types (repeat it, at most 50), e.g. the dashboard's notifications", schema: { type: array, maxItems: 50, items: { type: string } }, style: form, explode: true }
         - { name: from, in: query, description: "created_at >= (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
         - { name: to, in: query, description: "created_at < (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
         - { name: since, in: query, description: Alias of from, schema: { type: string } }

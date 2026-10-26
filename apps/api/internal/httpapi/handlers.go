@@ -510,7 +510,7 @@ func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	out, err := s.svc.ListEvents(r.Context(), principal(r), app.EventFilter{PostID: q.Get("post_id"),
 		CollectionID: q.Get("collection_id"), ChannelID: q.Get("channel_id"), ScheduleID: q.Get("schedule_id"),
 		Type: q.Get("type"), ActorType: q.Get("actor_type"),
-		ActorID: q.Get("actor_id"), Agents: q["agent"], TypePrefix: q.Get("type_prefix"),
+		ActorID: q.Get("actor_id"), Agents: q["agent"], Types: q["types"], TypePrefix: q.Get("type_prefix"),
 		From: firstOf(q, "since", "from"), To: firstOf(q, "until", "to"),
 		Before: q.Get("cursor"), Limit: qInt(r, "limit")})
 	respond(w, r, 200, out, err)

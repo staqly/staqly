@@ -34,11 +34,13 @@ test.describe('notification bell', () => {
     await page.reload()
     await ready(page, 'Schedule')
     await expect(bell).not.toHaveAttribute('aria-label', /unread/)
-    // The row leads to the post.
+    // Read, it leaves the bell; All notifications lists it, and its row leads to the post.
     await openNotifications(page)
+    await page.getByTestId('notifications-all').click()
+    await expect(page).toHaveURL(/\/notifications/)
     await page
-      .getByTestId('notifications-list')
-      .getByRole('button', { name: `“${title}” was published` })
+      .getByTestId('notifications-page-list')
+      .getByRole('link', { name: `“${title}” was published` })
       .click()
     await expect(page).toHaveURL(new RegExp(`/posts/${post.id}`))
     await expect(page.getByRole('dialog').getByRole('heading', { name: title })).toBeVisible()

@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { NotificationsPage } from '@/components/notifications/notifications-page'
 import { NotificationsBell } from '@/components/shell/notifications-bell'
 import type { StashEvent } from '@/lib/api'
 import { notificationFor } from '@/lib/notifications'
@@ -77,6 +78,10 @@ describe('notifications', () => {
     expect(key && localStorage.getItem(key)).toBe('12')
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByTestId('notifications-list')).not.toBeInTheDocument())
+    // Read ones leave the bell; All notifications leads to the rest.
+    await user.click(screen.getByRole('button', { name: 'Notifications' }))
+    expect(await screen.findByText(/You're all caught up/)).toBeInTheDocument()
+    expect(screen.getByTestId('notifications-all')).toHaveTextContent('All notifications')
   })
 
   it('says when there is nothing to show', async () => {
@@ -86,7 +91,34 @@ describe('notifications', () => {
     renderWithProviders(<NotificationsBell />, { mode: 'local' })
     await user.click(await screen.findByRole('button', { name: 'Notifications' }))
     expect(
-      await screen.findByText('Nothing new. Published, failed and scheduled runs show up here.'),
+      await screen.findByText("You're all caught up. Published, failed and scheduled runs show up here."),
     ).toBeInTheDocument()
+  })
+
+  it('the page lists every notification with its details and where to go from it', async () => {
+    const api = mockApi({ 'GET /v1/events': { data: [published, failed, reconnect] } })
+
+    renderWithProviders(<NotificationsPage />, { mode: 'local' })
+    const list = await screen.findByTestId('notifications-page-list')
+    const rows = within(list).getAllByRole('listitem')
+
+    expect(rows).toHaveLength(3)
+    // Asked only for the events that make notifications.
+    expect(api.find('GET', '/v1/events').some((c) => c.query.getAll('types').includes('post.published'))).toBe(true)
+    const first = within(rows[0]!)
+
+    expect(first.getByRole('link', { name: '“Spring sale post” is out on Brand on Mastodon' })).toHaveAttribute(
+      'href',
+      '/posts/pst_1',
+    )
+    expect(first.getByText('evt_12')).toBeInTheDocument()
+    expect(first.getByText('Brand on Mastodon')).toBeInTheDocument()
+    expect(first.getByRole('link', { name: /Open on the platform/ })).toHaveAttribute('href', 'https://x.test/p/1')
+    expect(first.getByRole('link', { name: /In Activity/ })).toHaveAttribute('href', '/activity?post=pst_1')
+    // A channel event has no post: Activity by its type.
+    expect(within(rows[2]!).getByRole('link', { name: /In Activity/ })).toHaveAttribute(
+      'href',
+      '/activity?type=channel.needs_reconnect',
+    )
   })
 })

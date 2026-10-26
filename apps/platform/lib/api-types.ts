@@ -12350,6 +12350,8 @@ export interface operations {
                 agent?: string[];
                 /** @description Literal type prefix, e.g. `post.` or `webhook.` */
                 type_prefix?: string;
+                /** @description Any of these event types (repeat it, at most 50), e.g. the dashboard's notifications */
+                types?: string[];
                 /** @description created_at >= (RFC3339 or YYYY-MM-DD) */
                 from?: string;
                 /** @description created_at < (RFC3339 or YYYY-MM-DD) */

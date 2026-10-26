@@ -11,6 +11,8 @@ WHERE workspace_id = @workspace_id
   AND (sqlc.narg(channel_id) IS NULL OR channel_id = sqlc.narg(channel_id))
   AND (sqlc.narg(schedule_id) IS NULL OR schedule_id = sqlc.narg(schedule_id))
   AND (sqlc.narg(type) IS NULL OR type = sqlc.narg(type))
+  -- types: a JSON array of event types (any of them).
+  AND (sqlc.narg(types) IS NULL OR type IN (SELECT value FROM json_each(sqlc.narg(types))))
   AND (sqlc.narg(actor_type) IS NULL OR actor_type = sqlc.narg(actor_type))
   AND (sqlc.narg(actor_id) IS NULL OR actor_id = sqlc.narg(actor_id))
   -- agents: a JSON array of agent names (any of them).

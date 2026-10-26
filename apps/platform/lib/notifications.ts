@@ -126,6 +126,21 @@ export function notificationFor(e: StashEvent): Notification | null {
   }
 }
 
+/** Every event type that makes a notification (notificationFor): the bell and the page ask the API for these. */
+export const NOTIFICATION_TYPES = [
+  'post.published',
+  'post.failed',
+  'post.target_published',
+  'post.target_failed',
+  'post.feedback_added',
+  'post.publish_requested',
+  'schedule.posts_requested',
+  'schedule.failed',
+  'channel.needs_reconnect',
+  'channel.connected',
+  'workspace.plan_changed',
+]
+
 /** `muted`: event types the person turned off for the bell (Settings, Account, Notifications). */
 export function notificationsFor(events: StashEvent[] | undefined, muted?: ReadonlySet<string>): Notification[] {
   return (events ?? [])

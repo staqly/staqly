@@ -1,7 +1,7 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Bell, CheckCircle2, ExternalLink, Info, XCircle } from 'lucide-react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { AlertTriangle, ArrowRight, Bell, CheckCircle2, ExternalLink, Info, XCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState, type ReactNode } from 'react'
 
@@ -9,13 +9,16 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { api } from '@/lib/api'
 import { timeAgo } from '@/lib/format'
-import { notificationsFor, readSeenSeq, writeSeenSeq, type Notification } from '@/lib/notifications'
+import { NOTIFICATION_TYPES, notificationsFor, readSeenSeq, writeSeenSeq, type Notification } from '@/lib/notifications'
 import { qk, useRecentEvents, useRole, useSession } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 import { TONES, type Tone } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
-const ICONS: Record<Tone, typeof Bell> = {
+/** The events request behind the bell and the Notifications page (they share its first page). */
+export const NOTIFICATIONS_QUERY = { types: NOTIFICATION_TYPES, limit: 30 }
+
+export const ICONS: Record<Tone, typeof Bell> = {
   success: CheckCircle2,
   danger: XCircle,
   warning: AlertTriangle,
@@ -33,7 +36,14 @@ const ICONS: Record<Tone, typeof Bell> = {
  */
 /** The bell's state: the list, the unread count and the seen mark of this workspace. */
 export function useNotifications() {
-  const events = useRecentEvents()
+  // Only the events that make a notification; refreshed with every new event (the live list's newest).
+  const live = useRecentEvents().data?.[0]?.seq
+  const events = useQuery({
+    queryKey: ['notifications', live ?? 0],
+    queryFn: async () => (await api.events(NOTIFICATIONS_QUERY)).data,
+    placeholderData: keepPreviousData,
+  })
+  const recent = events.data
   const session = useSession()
   const workspace = session.data?.workspace?.id ?? 'local'
   // The seen mark: read from storage once per workspace (not per render), then kept here so the badge reacts at once.
@@ -47,11 +57,11 @@ export function useNotifications() {
     () => new Set((prefs.data?.events ?? []).filter((c) => !c.in_app).map((c) => c.event)),
     [prefs.data],
   )
-  const list = useMemo(() => notificationsFor(events.data, muted), [events.data, muted])
+  const list = useMemo(() => notificationsFor(recent, muted), [recent, muted])
   const unread = list.filter((n) => n.seq > seenSeq).length
 
   function markRead() {
-    const top = list[0]?.seq ?? events.data?.[0]?.seq ?? seenSeq
+    const top = list[0]?.seq ?? recent?.[0]?.seq ?? seenSeq
 
     if (top > seenSeq) {
       writeSeenSeq(workspace, top)
@@ -89,8 +99,16 @@ export function NotificationsPopover({
 }) {
   const router = useRouter()
   const { list, unread, seenSeq, markRead } = notes
+  // The bell holds what is new; everything else is on the Notifications page. What was new when it opened stays
+  // while it is open (Mark all as read takes the dots off), and goes once it closes.
+  const [since, setSince] = useState(seenSeq)
+  const fresh = list.filter((n) => n.seq > (open ? since : seenSeq))
 
   function change(o: boolean) {
+    if (o) {
+      setSince(seenSeq)
+    }
+
     onOpenChange(o)
 
     // Seen once the list closes: the count and the dots go, the rows stay.
@@ -125,13 +143,13 @@ export function NotificationsPopover({
             Mark all as read
           </Button>
         </div>
-        {list.length === 0 ? (
+        {fresh.length === 0 ? (
           <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-            Nothing new. Published, failed and scheduled runs show up here.
+            You&apos;re all caught up. Published, failed and scheduled runs show up here.
           </p>
         ) : (
           <ul className="max-h-[60svh] overflow-y-auto overscroll-contain py-1" data-testid="notifications-list">
-            {list.map((n) => {
+            {fresh.map((n) => {
               const Icon = ICONS[n.tone]
               const link = n.link ? safeHttpUrl(n.link) : undefined
               const isNew = n.seq > seenSeq
@@ -175,6 +193,21 @@ export function NotificationsPopover({
             })}
           </ul>
         )}
+        <div className="border-t p-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full justify-center"
+            data-testid="notifications-all"
+            onClick={() => {
+              change(false)
+              router.push('/notifications')
+            }}
+          >
+            All notifications <ArrowRight />
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   )
