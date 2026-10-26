@@ -315,9 +315,9 @@ function Conversation({
   )
 }
 
-/** A thumbnail's address: a file picked here (blob:) or one of the library's (the media id comes from a saved chat). */
+/** A thumbnail's address: only one of the library's (the media id may come from a saved chat). */
 function thumbSrc(src?: string) {
-  return src && (src.startsWith('blob:') || /^\/api\/v1\/media\/[\w%-]+$/.test(src)) ? src : undefined
+  return src && /^\/api\/v1\/media\/[\w%-]+$/.test(src) ? src : undefined
 }
 
 /** A file added to a message: a picture's thumbnail, else its name. */
@@ -370,7 +370,6 @@ interface Draft {
   key: string
   name: string
   mime: string
-  preview?: string
   mediaId?: string
   text?: string
   error?: string
@@ -564,10 +563,7 @@ function Chat({
         continue
       }
 
-      setFiles((f) => [
-        ...f,
-        { ...pending, preview: mime.startsWith('image/') ? URL.createObjectURL(file) : undefined },
-      ])
+      setFiles((f) => [...f, pending]) // its thumbnail shows once it is in the library
       api.uploadMedia(file, pending.name).then(
         (m) => setFiles((f) => f.map((d) => (d.key === key ? { ...d, mediaId: m.id } : d))),
         (e: unknown) => setFiles((f) => f.map((d) => (d.key === key ? { ...d, error: errorMessage(e) } : d))),
@@ -933,7 +929,7 @@ function Chat({
                   <AttachmentThumb
                     name={f.name}
                     mime={f.mime}
-                    src={f.preview}
+                    src={f.mediaId ? mediaUrl(f.mediaId) : undefined}
                     busy={!f.mediaId && f.text === undefined && !f.error}
                     onRemove={() => setFiles((all) => all.filter((d) => d.key !== f.key))}
                   />
