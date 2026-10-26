@@ -34,7 +34,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useAiStatus } from '@/lib/ai-status'
 import { api, mediaUrl, type Media, type Provider } from '@/lib/api'
 import { downloadBlob } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
@@ -253,9 +252,8 @@ export default function DesignEditor({ search }: { search: string }) {
   const [rendering, setRendering] = useState<Page | null>(null)
   const view = useRef<Konva.Stage | null>(null)
   const page = design.pages.find((p) => p.id === pageId) ?? design.pages[0]!
-  // AI shows only when the server offers an AI tool for pictures (a provider key and an operation).
-  const ai = useAiStatus()
-  const tools = PANELS.filter((p) => p.id !== 'ai' || ai.data?.operations.some((o) => o.kind === 'image'))
+  // AI always shows: removing an object and upscaling run on this device even without AI on the server.
+  const tools = PANELS
   // Platforms with picture rules, for downloads made to fit them.
   const providers = useQuery({ queryKey: qk.providers, queryFn: async () => (await api.providers()).data ?? [] })
   const channels = (providers.data ?? []).filter((p) => p.status === 'available' && p.limits.image?.max_bytes)

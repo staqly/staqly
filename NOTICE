@@ -30,7 +30,9 @@ The design editor (apps/platform/components/design) bundles fonts from Fontsourc
 Display, Bebas Neue, Anton, Lobster, Pacifico and Caveat under the SIL Open Font License 1.1, Roboto Slab
 under the Apache License 2.0; their licenses ship in the @fontsource packages. It draws with Konva and
 react-konva (MIT). Its background removal downloads, on use, the InSPyReNet model (MIT) and runs it with
-transformers.js (Apache-2.0) and ONNX Runtime Web (MIT).
+transformers.js (Apache-2.0) and ONNX Runtime Web (MIT). Its AI tools on the device download, on use, LaMa
+(Carve/LaMa-ONNX, a port of big-lama, Apache-2.0) and Real-ESRGAN general x4v3 (BSD-3-Clause) and run them with
+ONNX Runtime Web.
 
 The video and sound editor (apps/platform/components/timeline) writes MP4 and M4A files with Mediabunny
 (https://mediabunny.dev) by the Mediabunny authors, under the Mozilla Public License 2.0, used unmodified

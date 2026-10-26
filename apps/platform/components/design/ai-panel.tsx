@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2, Paintbrush, RotateCcw, Sparkles, X } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useEffect, useState, useSyncExternalStore } from 'react'
@@ -8,9 +9,19 @@ import { toast } from 'sonner'
 import { Callout } from '@/components/common/callout'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { AI_OPS, allowanceNote, madeBy, requestKey } from '@/lib/ai'
+import { AI_OPS, allowanceNote, allowanceUsedUp, madeBy, requestKey } from '@/lib/ai'
 import { isLive, useAiJob, useAiStatus } from '@/lib/ai-status'
-import { aiResultUrl, api, errorMessage, mediaUrl, type AIOperation, type AIOperationId, type Media } from '@/lib/api'
+import {
+  aiResultUrl,
+  ApiError,
+  api,
+  errorMessage,
+  mediaUrl,
+  type AIOperation,
+  type AIOperationId,
+  type Media,
+} from '@/lib/api'
+import { qk } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
 import { newImage, type Design, type ImageEl } from './doc'
@@ -49,6 +60,8 @@ interface AiRun {
   place?: Placement
   /** Starting failed (the request did not arrive): a retry sends the same key. */
   error?: string
+  /** It failed on this month's allowance: the panel then offers the tools that run on this device. */
+  limited?: boolean
 }
 
 // One run per editor, outside React state so switching panels keeps it.
@@ -88,7 +101,11 @@ function send(r: AiRun) {
   void api
     .startAiJob({ operation: r.op, prompt: r.prompt, fields: r.fields, image: r.image, mask: r.mask }, r.key)
     .then((job) => current?.key === r.key && setRun({ ...current, jobId: job.id }))
-    .catch((e: unknown) => current?.key === r.key && setRun({ ...current, error: errorMessage(e) }))
+    .catch(
+      (e: unknown) =>
+        current?.key === r.key &&
+        setRun({ ...current, error: errorMessage(e), limited: e instanceof ApiError && e.code === 'ai_limit_reached' }),
+    )
 }
 
 /** The picture as the AI service gets it: a PNG, at most `edge` pixels on its long side. */
@@ -180,30 +197,54 @@ export function AiPanel({ ctx }: { ctx: PanelCtx }) {
   const run = useRun()
   const sel = ctx.selected.length === 1 ? ctx.page.elements.find((e) => e.id === ctx.selected[0]) : undefined
   const picture = sel?.type === 'image' ? sel : undefined
-  const ops = (status.data?.operations ?? NONE).filter((o) => o.kind === 'image')
+  const usedUp = allowanceUsedUp(status.data)
+  // With the allowance used up the server's tools wait for next month; without AI on the server there are none.
+  const ops = usedUp ? NONE : (status.data?.operations ?? NONE).filter((o) => o.kind === 'image')
   const usable = ops.filter((o) => !o.image || picture)
-  const [chosen, setChosen] = useState<AIOperationId | null>(null)
+  // Removing an object and upscaling also run on this device: offered when the server doesn't do them now.
+  const local = LOCAL_OPS.filter((id) => !ops.some((o) => o.id === id))
+  const [chosen, setChosen] = useState<string | null>(null)
   const op =
-    usable.find((o) => o.id === chosen) ?? usable.find((o) => o.id === (picture ? 'edit' : 'generate')) ?? usable[0]
+    usable.find((o) => o.id === chosen) ??
+    (local.includes(chosen as LocalOp) ? undefined : usable.find((o) => o.id === (picture ? 'edit' : 'generate'))) ??
+    (local.includes(chosen as LocalOp) ? undefined : usable[0])
+  const localOp = !op && picture ? (local.find((id) => id === chosen) ?? local[0]) : undefined
 
   if (status.isPending) {
-    return <Loader2 className="mx-auto animate-spin text-muted-foreground" />
+    return <p className="text-sm text-muted-foreground">Loading the AI tools...</p>
   }
 
-  // The tools button hides without AI on the server (see the editor); this guards a stale status.
-  if (!status.data?.configured || ops.length === 0) {
-    return <p className="text-sm text-muted-foreground">AI tools are not available on this server.</p>
-  }
-
-  const note = allowanceNote(status.data)
+  const note = usedUp ? '' : allowanceNote(status.data)
 
   return (
     <div className="flex flex-col gap-4 text-sm">
+      {usedUp && (
+        <Callout tone="info">
+          This month&apos;s AI allowance is used up; it starts again on {usedUp.renews}. Removing an object and
+          upscaling still work, on this device.
+        </Callout>
+      )}
       {run ? (
         <RunView ctx={ctx} run={run} />
       ) : (
         <>
           <div role="radiogroup" aria-label="AI tool" className="flex flex-wrap gap-1.5">
+            {local.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={localOp === id}
+                disabled={!picture}
+                onClick={() => setChosen(id)}
+                className={cn(
+                  'rounded-full border px-2.5 py-1 text-xs hover:bg-muted disabled:opacity-50 pointer-coarse:py-2',
+                  localOp === id && 'border-brand bg-brand-soft text-brand',
+                )}
+              >
+                {AI_OPS[id].label} <span className="text-muted-foreground">· this device</span>
+              </button>
+            ))}
             {usable.map((o) => (
               <button
                 key={o.id}
@@ -221,7 +262,10 @@ export function AiPanel({ ctx }: { ctx: PanelCtx }) {
             ))}
           </div>
           {op && <AiForm key={`${op.id}:${picture?.id ?? ''}`} ctx={ctx} op={op} picture={picture} />}
-          {!picture && ops.some((o) => o.image) && (
+          {localOp && picture && (
+            <LocalForm key={`${localOp}:${picture.id}`} ctx={ctx} op={localOp} picture={picture} />
+          )}
+          {!picture && (ops.some((o) => o.image) || local.length > 0) && (
             <p className="text-xs text-muted-foreground">Select a photo on the page to change it with AI.</p>
           )}
         </>
@@ -345,9 +389,102 @@ function AiForm({ ctx, op, picture }: { ctx: PanelCtx; op: AIOperation; picture?
   )
 }
 
+const LOCAL_OPS = ['erase', 'upscale'] as const
+
+type LocalOp = (typeof LOCAL_OPS)[number]
+
+/** Removing an object or upscaling on this device (components/design/local-ai.ts): free, nothing uploaded. */
+function LocalForm({ ctx, op, picture }: { ctx: PanelCtx; op: LocalOp; picture: ImageEl }) {
+  const [source, setSource] = useState<{ url: string; width: number; height: number; blob: Blob } | null>(null)
+  const [painting, setPainting] = useState(false)
+  const [mask, setMask] = useState<Blob | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  useEffect(() => () => void (source && URL.revokeObjectURL(source.url)), [source])
+
+  const paint = () => {
+    if (source) {
+      setPainting(true)
+
+      return
+    }
+
+    setBusy('Opening the photo')
+    void pictureOf(picture, 2048)
+      .then((p) => {
+        setSource({ ...p, url: URL.createObjectURL(p.blob) })
+        setPainting(true)
+      })
+      .catch((e: unknown) => toast.error('Could not open the photo', { description: errorMessage(e) }))
+      .finally(() => setBusy(null))
+  }
+
+  const run = () => {
+    setBusy('Getting the model ready')
+
+    const progress = (share: number) =>
+      setBusy(share < 1 ? `Downloading the model ${Math.round(share * 100)}%` : 'Working on it')
+
+    void import('./local-ai')
+      .then(async (m) => {
+        const blob =
+          op === 'erase'
+            ? await m.eraseOnDevice(source!.blob, mask!, progress)
+            : await m.upscaleOnDevice((await pictureOf(picture, m.UPSCALE_FROM)).blob, progress)
+        const name = `${op === 'erase' ? 'Object removed' : 'Upscaled'}.png`
+
+        return api.uploadMedia(blob, name)
+      })
+      .then((media) => {
+        swapPicture(ctx, picture.id, media)
+        toast.success(op === 'erase' ? 'Object removed' : 'Upscaled four times', {
+          description: 'Made on this device and saved in your library. Undo brings the photo back.',
+        })
+        setMask(null)
+      })
+      .catch((e: unknown) => toast.error('It did not work', { description: errorMessage(e) }))
+      .finally(() => setBusy(null))
+  }
+
+  const ready = op === 'upscale' || (!!mask && !!source)
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-muted-foreground">
+        {op === 'erase'
+          ? 'Paint over what should go; the rest of the photo stays as it is.'
+          : 'Four times the pixels, sharper than stretching (up to about 3000 pixels across).'}{' '}
+        Runs on this device: free, nothing is uploaded. The first time downloads the model (
+        {op === 'erase' ? 'about 200 MB' : 'about 5 MB'}).
+      </p>
+      {op === 'erase' && (
+        <Button type="button" variant="outline" onClick={paint} disabled={!!busy}>
+          <Paintbrush /> {mask ? 'Paint the area again' : 'Paint the area'}
+        </Button>
+      )}
+      {op === 'erase' && mask && <p className="text-xs text-muted-foreground">Area painted.</p>}
+      {/* No spinner while it works: an animation redrawn on a slow graphics card starves the model. */}
+      <Button type="button" onClick={run} disabled={!ready || !!busy}>
+        <Sparkles /> {busy ?? (op === 'erase' ? 'Remove it' : 'Upscale')}
+      </Button>
+      {source && painting && (
+        <MaskDialog open onOpenChange={setPainting} picture={source} title={AI_OPS[op].label} onDone={setMask} />
+      )}
+    </div>
+  )
+}
+
 function RunView({ ctx, run }: { ctx: PanelCtx; run: AiRun }) {
   const job = useAiJob(run.jobId)
   const j = job.data
+  const qc = useQueryClient()
+
+  // The allowance ran out with this request: the status says so, and the on-device tools show.
+  useEffect(() => {
+    if (run.limited) {
+      void qc.invalidateQueries({ queryKey: qk.ai })
+    }
+  }, [run.limited, qc])
   const [keeping, setKeeping] = useState(false)
   const copy = AI_OPS[run.op]
 

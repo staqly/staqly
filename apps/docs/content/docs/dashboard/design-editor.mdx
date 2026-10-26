@@ -50,7 +50,7 @@ The left bar holds the tools:
 - **Background**: a colour or a gradient (two or three colours, along an angle or out from the centre), or the
   selected photo stretched over the page.
 - **AI**: make a new picture from a description, or select a photo and change it with AI (see
-  [AI tools](#ai-tools)). Shown only when the server has an AI provider set up.
+  [AI tools](#ai-tools)). Removing an object and upscaling also run on your device, so the tool is always there.
 - **Layers**: the order of everything on the page, top first: drag a layer up or down (or focus its handle and
   use the arrow keys), show/hide and lock. A layer's **...** menu (or a right-click on it) moves it to another
   page or a new one; **Move to page** above the page does the same for the selection.
@@ -122,13 +122,23 @@ cancels a request that is still running.
 
 Crop, resize, text, layers and the other tools never call AI.
 
+### On this device
+
+**Remove an object** and **Upscale** also run in your browser, free, with nothing uploaded: when the server has no
+AI provider, when it doesn't offer them, or when this month's AI allowance is used up. They show with **this
+device** next to their names. Removing an object uses LaMa (the first use downloads about 200 MB; the fill is
+made at 512 pixels and put back only where you painted, so the rest of the photo keeps every pixel); upscaling
+uses Real-ESRGAN and makes the photo four times bigger, up to about 3000 pixels across (about 5 MB to download).
+The browser keeps the models for next time. When the allowance is used up, the AI tool says so and when it
+starts again; new pictures and the other server tools come back then.
+
 ### Where AI runs
 
 The AI tools run on the server's own provider accounts, never on keys of a workspace: staqly cloud includes them;
 on your own server the operator sets `AI_FAL_KEY` ([fal.ai](https://fal.ai)) and/or `AI_HIGGSFIELD_API_KEY`
 ([Higgsfield](https://higgsfield.ai)) ([configuration](/self-hosting/configuration#ai-tools)). Keys stay on the
-server; the browser only learns which tools exist. Without a key the **AI** tool is not shown and everything else
-works.
+server; the browser only learns which tools exist. Without a key the **AI** tool offers only the
+[tools that run on your device](#on-this-device), and everything else works.
 
 fal.ai runs every tool; Higgsfield's public API has new pictures (Soul) and videos (Kling 2.5 Turbo), so with
 both keys fal.ai goes first and Higgsfield takes over **New picture** and the videos when fal.ai is down, busy or

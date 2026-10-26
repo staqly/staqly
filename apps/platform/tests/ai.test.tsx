@@ -83,13 +83,30 @@ afterEach(() => {
 })
 
 describe('the AI panel', () => {
-  it('says AI is off when the server offers no picture tools', async () => {
+  it('offers the on-device tools when the server offers no picture tools', async () => {
     mockApi({ 'GET /v1/ai': status([op('text_to_video')]) })
     const { ctx } = ctxWith(newDesign().pages[0]!)
 
     renderWithProviders(<AiPanel ctx={ctx} />)
 
-    expect(await screen.findByText('AI tools are not available on this server.')).toBeInTheDocument()
+    // Removing an object and upscaling still work, on this device, once a photo is selected.
+    expect(await screen.findByRole('radio', { name: /Remove an object · this device/ })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: /Upscale · this device/ })).toBeDisabled()
+    expect(screen.queryByRole('radio', { name: 'New picture' })).not.toBeInTheDocument()
+  })
+
+  it('says when the allowance is used up and keeps only the on-device tools', async () => {
+    mockApi({ 'GET /v1/ai': status([op('generate'), op('erase', { prompt: 'none' }), op('upscale')], 10) })
+    const d = newDesign()
+    const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
+    const { ctx } = ctxWith({ ...d.pages[0]!, elements: [pic] }, [pic.id])
+
+    renderWithProviders(<AiPanel ctx={ctx} />)
+
+    expect(await screen.findByText(/AI allowance is used up; it starts again on/)).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'New picture' })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Remove an object · this device/ })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Paint the area' })).toBeInTheDocument()
   })
 
   it('offers only what the server offers, the photo tools only with a photo selected', async () => {
