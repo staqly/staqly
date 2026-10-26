@@ -817,7 +817,7 @@ function Chat({
                     key={text}
                     type="button"
                     onClick={() => send(text)}
-                    className="flex items-start gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-sm transition-colors outline-none hover:border-brand/40 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:py-3"
+                    className="flex items-start gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-left text-sm transition-colors outline-none hover:border-brand/40 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:py-3"
                   >
                     <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                     {text}
