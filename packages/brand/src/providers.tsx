@@ -46,7 +46,14 @@ interface Look {
   letters?: string
   /** A line icon instead of letters (stays readable at 16 px, where letters like </> don't). */
   glyph?: LucideIcon
+  /** The mark on the round tile when the icon is itself a filled circle (Facebook's): just its letter, centred. */
+  tile?: string
 }
+
+// Facebook's "f" alone, centred in a 24 x 24 box: its logo is a circle with the f cut out and resting on the
+// bottom edge, which on a round tile reads as a ring around an off-centre letter.
+const FACEBOOK_F =
+  'M13.5 20.8v-8h2.7l.4-3.2h-3.1V7.6c0-.9.3-1.6 1.6-1.6h1.7V3.2c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3v2.2H7.4v3.2h2.7v8z'
 
 // ponytail: simple-icons dropped LinkedIn and Slack at the companies' request; their official marks are kept
 // here as paths (the same 24 x 24 box), the only brand marks not taken from simple-icons.
@@ -81,7 +88,7 @@ const LOOKS: Record<string, Look> = {
   reddit: { icon: siReddit, color: '#FF4500' },
   instagram: { icon: siInstagram, color: '#FF0069' },
   instagram_business: { icon: siInstagram, color: '#FF0069' },
-  facebook: { icon: siFacebook, color: '#0866FF' },
+  facebook: { icon: siFacebook, color: '#0866FF', tile: FACEBOOK_F },
   threads: { icon: siThreads, color: '#000000' },
   youtube: { icon: siYoutube, color: '#FF0000' },
   google_business: { icon: siGoogle, color: '#4285F4' },
@@ -241,7 +248,7 @@ export function ProviderTile({ id, name, className }: { id: string; name?: strin
   } else if (look.icon) {
     mark = (
       <svg viewBox="0 0 24 24" className="size-[56%]" fill="currentColor">
-        <path d={look.icon.path} />
+        <path d={look.tile ?? look.icon.path} />
       </svg>
     )
   } else {
