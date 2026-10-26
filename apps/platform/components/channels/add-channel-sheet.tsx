@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, PlugZap } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { useState } from 'react'
 
 import { ErrorState } from '@/components/common/error-state'
@@ -20,6 +21,9 @@ import { clearOAuthReturn, setOAuthReturn } from '@/lib/welcome'
 import { fieldValues, ProviderFields } from './provider-fields'
 import { ProviderGrid } from './provider-grid'
 
+// Only for Telegram through the server's bot: loaded when that panel opens.
+const TelegramConnect = dynamic(() => import('./telegram-connect').then((m) => m.TelegramConnect), { ssr: false })
+
 /** Connect one account of a chosen provider: OAuth sends the browser to the platform; token providers take their fields here. */
 export function ConnectForm({
   provider,
@@ -37,6 +41,8 @@ export function ConnectForm({
   const [values, setValues] = useState<Record<string, string>>({})
   const [name, setName] = useState(reconnect?.name ?? '')
   const [errors, setErrors] = useState<Record<string, string | undefined>>({})
+  // Telegram through the server's bot (/connect CODE in the chat), unless the person picks a bot of their own.
+  const [ownBot, setOwnBot] = useState(false)
   // Nothing on the other side names your own automation, so the person does.
   const nameRequired = provider.auth === 'none'
   // A working channel opened from Edit connection (not a broken one being reconnected).
@@ -89,6 +95,10 @@ export function ConnectForm({
       }
     },
   })
+
+  if (provider.bot && !ownBot) {
+    return <TelegramConnect bot={provider.bot} onDone={onDone} onOwnBot={() => setOwnBot(true)} />
+  }
 
   if (provider.auth === 'oauth2') {
     // Busy from the click until the platform's page loads: after success the browser is still navigating away.

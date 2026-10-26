@@ -129,6 +129,7 @@ the wrong shape refuses to start.
 
 | Variable | Default | Description |
 |---|---|---|
+| `PROVIDER_TELEGRAM_BOT_TOKEN` | — | The server's own [Telegram bot](/channels/telegram#connect-with-the-servers-bot): people add it to a chat and send `/connect CODE` instead of making a bot. Read by polling, no public address needed. |
 | `AI_FAL_KEY` | — | A [fal.ai](https://fal.ai/dashboard/keys) API key. Turns on every AI tool. |
 | `AI_HIGGSFIELD_API_KEY` | — | A [Higgsfield](https://console.higgsfield.ai) API key as `<key id>:<key secret>`. New pictures and videos. |
 | `AI_MEDIA_PROVIDERS` | `fal,higgsfield` | The order the picture and video tools try the providers in: `higgsfield,fal` makes Higgsfield the first for new pictures and videos, with fal.ai as their fallback (and the only one for edits). A provider left out is not used for media, though the assistant may still use fal.ai's router. |

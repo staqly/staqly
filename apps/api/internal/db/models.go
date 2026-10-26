@@ -466,6 +466,18 @@ type StripeEvent struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type TelegramConnectCode struct {
+	Code        string `json:"code"`
+	WorkspaceID string `json:"workspace_id"`
+	CreatedBy   string `json:"created_by"`
+	ActorName   string `json:"actor_name"`
+	GroupID     string `json:"group_id"`
+	CreatedAt   string `json:"created_at"`
+	ExpiresAt   string `json:"expires_at"`
+	ChannelID   string `json:"channel_id"`
+	Error       string `json:"error"`
+}
+
 type UsageCounter struct {
 	WorkspaceID string `json:"workspace_id"`
 	Period      string `json:"period"`

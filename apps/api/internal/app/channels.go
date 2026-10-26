@@ -116,6 +116,9 @@ type ProviderInfo struct {
 	DocsURL          string            `json:"docs_url"`
 	// NeedsHTTPS: the platform calls back over https only, so connecting needs the dashboard on an https address.
 	NeedsHTTPS bool `json:"needs_https"`
+	// Bot: the server's own bot (@username) that connects a chat with /connect CODE (Telegram); "" = connect with
+	// the credential fields.
+	Bot string `json:"bot,omitempty"`
 }
 
 func providerInfo(e providers.Entry, appConfigured bool) ProviderInfo {
@@ -163,6 +166,9 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 		info := providerInfo(e, configured[e.ID()] || app.ClientID != "")
 		if !info.AppConfigured {
 			info.Status = providers.StatusSoon // an OAuth platform waits for its app's keys in the environment
+		}
+		if _, bot := providers.TelegramBot(); e.ID() == "telegram" && bot != "" {
+			info.Bot = "@" + bot
 		}
 		out = append(out, info)
 	}

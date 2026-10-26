@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -97,6 +98,12 @@ type telegramChat struct {
 func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Credentials, Profile, error) {
 	token := strings.TrimSpace(fields["bot_token"])
 	chat := strings.TrimSpace(fields["chat"])
+	shared := fields["bot"] == "shared" // connected through the server's bot (/connect CODE in the chat)
+	if shared {
+		if token = telegramShared.token; token == "" {
+			return nil, Profile{}, &Failure{Kind: ErrReauth, Msg: "Telegram: this server has no bot of its own any more; connect the chat with your own bot"}
+		}
+	}
 	if token == "" {
 		return nil, Profile{}, invalid("bot_token", "paste the bot token from @BotFather")
 	}
@@ -145,6 +152,10 @@ func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Creden
 
 	id := strconv.FormatInt(c.ID, 10)
 	creds := Credentials{"bot_token": token, "chat": chat, "chat_id": id, "chat_type": c.Type, "chat_username": c.Username}
+	if shared { // the server's token is read when it is used, never stored with the channel
+		delete(creds, "bot_token")
+		creds["bot"] = "shared"
+	}
 	name := c.Title
 	if name == "" {
 		name = strings.TrimSpace(c.First + " " + c.Last)
@@ -155,6 +166,97 @@ func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Creden
 		profile.ProfileURL = "https://t.me/" + c.Username
 	}
 	return creds, profile, nil
+}
+
+// The server's own bot (PROVIDER_TELEGRAM_BOT_TOKEN), set by the app at start. A chat connected through it (the
+// person adds the bot and sends /connect CODE there) holds "bot": "shared" instead of a token, so a new token for
+// the same bot keeps every such channel working.
+var telegramShared struct{ token, username string }
+
+// SetTelegramBot records the server's bot: its token and its @username (without the @).
+func SetTelegramBot(token, username string) {
+	telegramShared.token, telegramShared.username = token, username
+}
+
+// TelegramBot is the server's bot, "" when it has none.
+func TelegramBot() (token, username string) { return telegramShared.token, telegramShared.username }
+
+func telegramToken(c Credentials) string {
+	if c["bot"] == "shared" {
+		return telegramShared.token
+	}
+	return c["bot_token"]
+}
+
+// TelegramMe asks Telegram whose token this is: the bot's @username (without the @).
+func TelegramMe(ctx context.Context, token string) (string, error) {
+	var bot struct {
+		Username string `json:"username"`
+	}
+	if err := telegramCall(ctx, token, "getMe", map[string]any{}, &bot); err != nil {
+		return "", err
+	}
+	return bot.Username, nil
+}
+
+// TelegramCommand is a /connect CODE someone sent in a chat the server's bot is in.
+type TelegramCommand struct {
+	ChatID    int64
+	MessageID int64
+	Code      string
+}
+
+// /connect CODE, or /connect@thebot CODE as Telegram writes it in groups with several bots.
+var telegramConnect = regexp.MustCompile(`(?i)^/connect(?:@\w+)?\s+([a-z0-9]{4,12})\s*$`)
+
+// TelegramCommands waits up to `wait` seconds for the bot's new messages (getUpdates, long polling) and returns
+// the /connect commands among them, with the offset that confirms them all.
+func TelegramCommands(ctx context.Context, token string, offset int64, wait int) ([]TelegramCommand, int64, error) {
+	type msg struct {
+		MessageID int64  `json:"message_id"`
+		Text      string `json:"text"`
+		Chat      struct {
+			ID int64 `json:"id"`
+		} `json:"chat"`
+	}
+	var updates []struct {
+		UpdateID    int64 `json:"update_id"`
+		Message     *msg  `json:"message"`
+		ChannelPost *msg  `json:"channel_post"`
+	}
+	err := telegramCall(ctx, token, "getUpdates", map[string]any{"offset": offset, "timeout": wait,
+		"allowed_updates": []string{"message", "channel_post"}}, &updates)
+	if err != nil {
+		return nil, offset, err
+	}
+	var out []TelegramCommand
+	for _, u := range updates {
+		offset = max(offset, u.UpdateID+1)
+		m := u.Message
+		if m == nil {
+			m = u.ChannelPost
+		}
+		if m == nil {
+			continue
+		}
+		if g := telegramConnect.FindStringSubmatch(strings.TrimSpace(m.Text)); g != nil {
+			out = append(out, TelegramCommand{ChatID: m.Chat.ID, MessageID: m.MessageID, Code: strings.ToUpper(g[1])})
+		}
+	}
+	return out, offset, nil
+}
+
+// TelegramDelete removes a message (the /connect command, once it worked); an error when the bot may not.
+func TelegramDelete(ctx context.Context, token string, chatID, messageID int64) error {
+	return telegramCall(ctx, token, "deleteMessage", map[string]any{"chat_id": chatID, "message_id": messageID}, nil)
+}
+
+// SetTelegramAPI points the Bot API somewhere else: a local Bot API server, or a test's.
+func SetTelegramAPI(base string) { telegramAPI = base }
+
+// TelegramSay sends a short note into a chat (why a /connect did not work).
+func TelegramSay(ctx context.Context, token string, chatID int64, text string) {
+	_ = telegramCall(ctx, token, "sendMessage", map[string]any{"chat_id": chatID, "text": text}, nil)
 }
 
 // telegramChatRef accepts @name, a bare name, a t.me link or a numeric id.
@@ -191,7 +293,7 @@ type telegramMessage struct {
 }
 
 func (t Telegram) send(ctx context.Context, c Credentials, p PostContent, s Settings, replyTo string) (Result, error) {
-	token, chat := c["bot_token"], c["chat_id"]
+	token, chat := telegramToken(c), c["chat_id"]
 	if token == "" || chat == "" {
 		return Result{}, &Failure{Kind: ErrReauth, Msg: "Telegram: no bot token stored; reconnect the channel"}
 	}
