@@ -57,6 +57,7 @@ import {
   type El,
   type Page,
 } from './doc'
+import { draftKey, dropDraft, offerDraft, writeDraft } from './drafts'
 import { announceEdited } from './edited-media'
 import { NameField } from './name-field'
 import { addFile, Panel, PANELS, type PanelCtx, type PanelId } from './panels'
@@ -174,53 +175,7 @@ async function open(params: Params): Promise<Opened | null> {
 const shape = (r?: number) =>
   !r ? 'any' : r < 1 ? `1:${Math.round((1 / r) * 100) / 100}` : `${Math.round(r * 100) / 100}:1`
 
-// Unsaved work survives a closed tab or a crash: the editor keeps a draft in this browser (per design) and offers
-// it back when the same design opens again. ponytail: this browser only; a server-side draft if people ask.
 const DRAFT = 'staqly-design-draft:'
-
-const draftKey = (p: Params) => DRAFT + (p.project || p.ids.join(',') || 'new')
-
-function readDraft(key: string): { at: number; design: Design } | null {
-  try {
-    const v = JSON.parse(localStorage.getItem(key) ?? 'null') as { at: number; design: unknown } | null
-    const design = v && parseDesign(JSON.stringify(v.design))
-
-    return v && design ? { at: v.at, design } : null
-  } catch {
-    return null
-  }
-}
-
-function writeDraft(key: string, design: Design) {
-  try {
-    localStorage.setItem(key, JSON.stringify({ at: Date.now(), design }))
-  } catch {
-    // Full or blocked storage: no draft, the editor works on.
-  }
-}
-
-function dropDraft(key: string) {
-  try {
-    localStorage.removeItem(key)
-  } catch {
-    // Nothing to drop.
-  }
-}
-
-function offerDraft(key: string, restore: (d: Design) => void) {
-  const d = readDraft(key)
-
-  if (!d) {
-    return
-  }
-
-  toast(`Unsaved changes from ${new Date(d.at).toLocaleString()}`, {
-    description: 'The editor kept them when it was closed.',
-    duration: 30_000,
-    action: { label: 'Restore', onClick: () => restore(d.design) },
-    cancel: { label: 'Discard', onClick: () => dropDraft(key) },
-  })
-}
 
 // The off-screen copy is small; the file is drawn at full size from it (Konva redraws at the pixel ratio).
 const RENDER_SCALE = 0.25
@@ -307,7 +262,7 @@ export default function DesignEditor({ search }: { search: string }) {
   // Any change since it opened or saved (a new design: anything at all, even only its name).
   const dirty = baseline ? baseline !== design : store.canUndo
   const [leaving, setLeaving] = useState(false)
-  const [draft, setDraft] = useState(() => draftKey(params))
+  const [draft, setDraft] = useState(() => draftKey(DRAFT, params))
   const left = useRef(false)
 
   const showPage = useCallback((id: string) => {
@@ -339,7 +294,7 @@ export default function DesignEditor({ search }: { search: string }) {
       .catch((e: unknown) => toastApiError(e, 'Could not open it'))
       .finally(() => {
         setPhase('ready')
-        offerDraft(draftKey(params), replace)
+        offerDraft(draftKey(DRAFT, params), parseDesign, replace)
       })
   }, [params, replace])
 
@@ -760,7 +715,7 @@ export default function DesignEditor({ search }: { search: string }) {
           <span className="mx-1 h-5 w-px bg-border max-sm:hidden" aria-hidden />
           <button
             type="button"
-            className="px-1 text-xs text-muted-foreground tabular-nums hover:text-foreground max-sm:hidden"
+            className="px-1 text-xs text-muted-foreground tabular-nums hover:text-foreground max-sm:hidden pointer-coarse:h-11"
             title="Change the size"
             onClick={() => setPanel('size')}
           >

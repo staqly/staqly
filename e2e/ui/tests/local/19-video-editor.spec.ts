@@ -67,11 +67,17 @@ test.describe('the video and sound editor', () => {
     await expect(timeline.getByRole('option', { name: new RegExp(`clip-[ab]-${stamp}`) })).toHaveCount(2)
     await expect(timeline.getByRole('option', { name: new RegExp(`tone-${stamp}`) })).toHaveCount(1)
     await expect(page.getByTestId('timeline-time')).toContainText('/ 0:06.0')
+    await expect(page.getByRole('navigation', { name: 'Video tools' })).toBeVisible()
 
     // It plays: the clock moves.
     await page.getByTestId('timeline-play').click()
     await expect(page.getByTestId('timeline-time')).not.toHaveText(/^0:00\.0 /, { timeout: 5_000 })
     await page.getByTestId('timeline-play').click()
+
+    // The pictures follow the music's beat.
+    await timeline.getByRole('option', { name: new RegExp(`tone-${stamp}`) }).click()
+    await page.getByRole('button', { name: 'Fit pictures to the beat' }).click()
+    await expect(page.getByText('Pictures fitted to the beat')).toBeVisible({ timeout: 20_000 })
 
     // A caption at the playhead.
     await page.getByRole('navigation', { name: 'Video tools' }).getByRole('button', { name: 'Text' }).click()

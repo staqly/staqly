@@ -11,6 +11,7 @@ import {
   Clock3,
   ChevronUp,
   ExternalLink,
+  Film,
   Repeat2,
   Globe,
   ImagePlus,
@@ -400,6 +401,11 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
       <Button type="button" variant="outline" size="sm" asChild>
         <a href={`/media/edit?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="design-new">
           <Palette /> Design
+        </a>
+      </Button>
+      <Button type="button" variant="outline" size="sm" asChild>
+        <a href={`/media/video?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="video-new">
+          <Film /> Video
         </a>
       </Button>
     </>
