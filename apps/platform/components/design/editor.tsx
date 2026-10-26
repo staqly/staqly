@@ -13,7 +13,6 @@ import {
   Loader2,
   Maximize,
   Minus,
-  Pencil,
   Plus,
   Redo2,
   Save,
@@ -59,6 +58,7 @@ import {
   type Page,
 } from './doc'
 import { announceEdited } from './edited-media'
+import { NameField } from './name-field'
 import { addFile, Panel, PANELS, type PanelCtx, type PanelId } from './panels'
 import { jpegsToPdf } from './pdf'
 import { SaveDialog } from './save-dialog'
@@ -892,7 +892,7 @@ export default function DesignEditor({ search }: { search: string }) {
               </Button>
               <button
                 type="button"
-                className="w-12 text-xs tabular-nums"
+                className="w-12 text-xs tabular-nums pointer-coarse:h-11"
                 title="Fit to screen"
                 onClick={() => setZoom('fit')}
               >
@@ -915,47 +915,6 @@ export default function DesignEditor({ search }: { search: string }) {
         </main>
       </div>
     </div>
-  )
-}
-
-/** The design's name: a label with a pencil that opens into a field (Enter or leaving it keeps the name). */
-function NameField({ value, onChange }: { value: string; onChange: (name: string) => void }) {
-  const [editing, setEditing] = useState(false)
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        aria-label={`Rename ${value || 'the design'}`}
-        onClick={() => setEditing(true)}
-        className="group flex h-8 max-w-40 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium hover:bg-muted sm:max-w-64"
-      >
-        <span className="truncate">{value || 'Untitled design'}</span>
-        <Pencil
-          className="size-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
-          aria-hidden
-        />
-      </button>
-    )
-  }
-
-  return (
-    <input
-      aria-label="Design name"
-      // oxlint-disable-next-line jsx-a11y/no-autofocus -- the person just clicked to rename it
-      autoFocus
-      value={value}
-      maxLength={150}
-      onFocus={(e) => e.currentTarget.select()}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={() => setEditing(false)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === 'Escape') {
-          e.currentTarget.blur()
-        }
-      }}
-      className="h-8 w-40 min-w-0 origin-left animate-in rounded-md border border-ring bg-transparent px-2 text-sm font-medium duration-200 fade-in-0 zoom-in-95 slide-in-from-left-1 focus:outline-none sm:w-64"
-    />
   )
 }
 

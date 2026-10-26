@@ -4186,7 +4186,7 @@ export interface components {
             page_ids?: string;
             /**
              * Format: binary
-             * @description The design: JSON with version 1, width, height and pages
+             * @description The editor file: a design (JSON, version 1, width, height and pages) or a timeline of the video and sound editor (version 1, kind video or audio, with clips or sounds)
              */
             file: string;
         };

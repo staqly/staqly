@@ -2,11 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AudioLines,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
   Download,
   FileText,
+  Film,
   Folder,
   Maximize2,
   Music,
@@ -322,6 +324,17 @@ function DetailForm({
                 <a href={`/media/edit?ids=${item.id}`}>
                   <Palette />
                 </a>
+              </Button>
+            )}
+            {editable && (kind === 'video' || kind === 'audio') && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Edit"
+                tooltip={kind === 'video' ? 'Edit in the video editor' : 'Edit in the sound editor'}
+                asChild
+              >
+                <a href={`/media/${kind}?ids=${item.id}`}>{kind === 'video' ? <Film /> : <AudioLines />}</a>
               </Button>
             )}
             <Button variant="ghost" size="icon-sm" aria-label="Download" tooltip="Download" asChild>

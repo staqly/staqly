@@ -59,10 +59,10 @@ const all = walk(join(out, '_next/static'))
   .filter((p) => p.endsWith('.js'))
   .map((p) => relative(out, p))
 
-// The design editor (/media/edit: Konva, its fonts' CSS, templates) and what only it loads have a budget of
-// their own. A chunk is the editor's when its page or lazy-load manifest reaches it (directly, or through chunks
+// The editors (/media/edit: the design editor with Konva, its fonts' CSS, templates; /media/video and /media/audio:
+// the timeline with Mediabunny) and what only they load have a budget of their own. A chunk is the editor's when its page or lazy-load manifest reaches it (directly, or through chunks
 // that name it, like dynamic imports do) and no other page does.
-const EDITORS = ['/media/edit']
+const EDITORS = ['/media/edit', '/media/video', '/media/audio']
 const isEditor = (route) => EDITORS.includes(route)
 const lazy = (editor) =>
   walk(join(root, '.next/server/app'))
@@ -115,7 +115,7 @@ if (args.has('--json')) {
   console.table(rows.map(({ files: _f, ...r }) => r))
   console.table(largest)
   console.log(`all JS chunks: ${all.length - editorOnly.length} files, ${kb(totalGz)} KB gzipped`)
-  console.log(`design editor only: ${editorOnly.length} files, ${kb(editorGz)} KB gzipped`)
+  console.log(`editors only: ${editorOnly.length} files, ${kb(editorGz)} KB gzipped`)
 }
 
 if (args.has('--check')) {
@@ -140,7 +140,7 @@ if (args.has('--check')) {
   }
 
   if (kb(editorGz) > budget.editorJsGzKB) {
-    failures.push(`design editor JS ${kb(editorGz)} KB gz > budget ${budget.editorJsGzKB} KB`)
+    failures.push(`editors JS ${kb(editorGz)} KB gz > budget ${budget.editorJsGzKB} KB`)
   }
 
   if (rows.length === 0) {

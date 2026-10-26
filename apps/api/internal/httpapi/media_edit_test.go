@@ -97,6 +97,11 @@ func TestMediaProjects(t *testing.T) {
 
 	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Poster"}, []byte("not a project"), 415, nil)
 	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Old"}, []byte("GPEX\x01\x00\x14\x00x"), 415, nil)
+	// The video and sound editor's timelines are projects too; an empty one is not.
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Reel"}, []byte(`{"version":1,"kind":"video","width":1080,"height":1920,"clips":[{"id":"c1"}],"captions":[],"sounds":[]}`), 201, nil)
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Jingle"}, []byte(`{"version":1,"kind":"audio","width":0,"height":0,"clips":[],"sounds":[{"id":"s1"}]}`), 201, nil)
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Silence"}, []byte(`{"version":1,"kind":"audio","sounds":[]}`), 415, nil)
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Odd"}, []byte(`{"version":1,"kind":"poster","width":1,"height":1,"pages":[{}]}`), 415, nil)
 	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"source_ids": "med_nope"}, designFile("x"), 422, nil)
 
 	var p app.MediaProject

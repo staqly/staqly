@@ -65,6 +65,10 @@ export function routes({
     { name: 'channels', path: '/channels' },
     { name: 'media', path: '/media' },
     { name: 'media file', path: '/media', open: (p) => click(p, '[data-testid=media-tile]:visible') },
+    // The full-screen editors.
+    { name: 'design editor', path: '/media/edit' },
+    { name: 'video editor', path: '/media/video' },
+    { name: 'sound editor', path: '/media/audio' },
     { name: 'activity', path: '/activity' },
     { name: 'activity filtered', path: `/activity?post=${ids.published}` },
     { name: 'alerts', path: '/alerts' },

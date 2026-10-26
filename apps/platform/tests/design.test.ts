@@ -15,6 +15,7 @@ import {
   resize,
   SIZES,
   withGroups,
+  type Design,
 } from '@/components/design/doc'
 import { jpegSize, jpegsToPdf } from '@/components/design/pdf'
 import { snap } from '@/components/design/snap'
@@ -69,7 +70,7 @@ describe('the design editor', () => {
   })
 
   it('makes one undo step of a run of changes from the same control', () => {
-    let h: Parameters<typeof step>[0] = { past: [], present: newDesign(), future: [], key: '', at: 0 }
+    let h: Parameters<typeof step<Design>>[0] = { past: [], present: newDesign(), future: [], key: '', at: 0 }
 
     h = step(h, (d) => void (d.name = 'a'), 'name', 1000)
     h = step(h, (d) => void (d.name = 'ab'), 'name', 1300)
