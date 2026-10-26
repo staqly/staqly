@@ -218,6 +218,7 @@ type MediaProject struct {
 	CreatedBy   string `json:"created_by"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+	PageIds     string `json:"page_ids"`
 }
 
 type Medium struct {
@@ -511,6 +512,7 @@ type Workspace struct {
 	Entitlements             string         `json:"entitlements"`
 	Timezone                 string         `json:"timezone"`
 	Logo                     string         `json:"logo"`
+	DesignBrand              string         `json:"design_brand"`
 }
 
 type WorkspaceExport struct {

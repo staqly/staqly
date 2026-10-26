@@ -2865,6 +2865,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/design/brand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The workspace's brand kit for the design editor (media:read) */
+        get: operations["getDesignBrand"];
+        /** Replace the workspace's brand kit (media:write) */
+        put: operations["setDesignBrand"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ai/images/{op}": {
         parameters: {
             query?: never;
@@ -4085,6 +4103,8 @@ export interface components {
             source_ids: string[];
             /** @description The file it last saved; empty until saved */
             output_id: string;
+            /** @description The files its pages saved as, in page order (a carousel); output_id is the first */
+            page_ids: string[];
             size_bytes: number;
             /** Format: date-time */
             created_at: string;
@@ -4097,6 +4117,8 @@ export interface components {
             /** @description Comma-separated media ids */
             source_ids?: string;
             output_id?: string;
+            /** @description Comma-separated media ids of the saved pages, in order */
+            page_ids?: string;
             /**
              * Format: binary
              * @description The design: JSON with version 1, width, height and pages
@@ -4134,6 +4156,14 @@ export interface components {
                 /** @description Fill new space around a picture */
                 expand: boolean;
             };
+        };
+        /** @description The design editor's brand kit, shared by the workspace */
+        DesignBrand: {
+            colors: string[];
+            /** @description Names from the editor's font list */
+            fonts: string[];
+            /** @description Media ids of pictures in the library */
+            logos: string[];
         };
         /** @description What a platform refuses in a picture (its API's documented limits); recommended shapes are not rules */
         ImageRules: {
@@ -11372,6 +11402,58 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getDesignBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brand kit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignBrand"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    setDesignBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesignBrand"];
+            };
+        };
+        responses: {
+            /** @description Brand kit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignBrand"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
         };
     };

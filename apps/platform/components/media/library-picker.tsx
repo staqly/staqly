@@ -5,6 +5,7 @@ import { LibraryBig, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { EmptyState, ErrorState } from '@/components/common/error-state'
+import { stackCarousels, useCarousels } from '@/components/media/carousels'
 import { mediaKeys } from '@/components/media/media-cache'
 import { MediaGrid } from '@/components/media/media-grid'
 import { Button } from '@/components/ui/button'
@@ -36,7 +37,9 @@ export function LibraryPickerButton({ onAdd, exclude = NONE }: { onAdd: (m: Medi
           onClose={() => setOpen(false)}
           exclude={exclude}
           onPick={(items) => {
-            items.forEach(onAdd)
+            void Promise.all(items.map((m) => api.media(m.id)))
+              .then((all) => all.forEach(onAdd))
+              .catch(() => items.forEach(onAdd))
             setOpen(false)
           }}
         />
@@ -79,17 +82,25 @@ function LibraryPicker({
   const imageData = images.data?.data
   const videoData = videos.data?.data
   // Kept across renders, so the memoised tiles only re-render for their own change (a pick).
+  const carousels = useCarousels()
   const items = useMemo(
     () =>
-      [...(imageData ?? NO_MEDIA), ...(videoData ?? NO_MEDIA)]
-        .filter((m) => !exclude.includes(m.id))
-        .toSorted((a, b) => b.created_at.localeCompare(a.created_at)),
-    [imageData, videoData, exclude],
+      stackCarousels(
+        [...(imageData ?? NO_MEDIA), ...(videoData ?? NO_MEDIA)]
+          .filter((m) => !exclude.includes(m.id))
+          .toSorted((a, b) => b.created_at.localeCompare(a.created_at)),
+        carousels,
+      ),
+    [imageData, videoData, exclude, carousels],
   )
+  // A carousel picked: every page, in order.
+  const expand = (list: MediaLibraryItem[]) =>
+    list.flatMap((m) => (carousels.pages.get(m.id) ?? [m.id]).map((id) => ({ ...m, id })))
   const selected = useMemo(() => new Set(picked.map((m) => m.id)), [picked])
   const toggle = (m: MediaLibraryItem) =>
     setPicked((xs) => (xs.some((x) => x.id === m.id) ? xs.filter((x) => x.id !== m.id) : [...xs, m]))
   const error = images.error ?? videos.error
+  const n = expand(picked).length
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -127,6 +138,7 @@ function LibraryPicker({
               selected={selected}
               onOpen={toggle}
               onToggle={toggle}
+              stacks={carousels.pages}
               className="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-4"
             />
           )}
@@ -135,8 +147,13 @@ function LibraryPicker({
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" disabled={!picked.length} onClick={() => onPick(picked)} data-testid="media-picker-add">
-            {picked.length ? `Add ${picked.length} ${picked.length === 1 ? 'file' : 'files'}` : 'Add'}
+          <Button
+            type="button"
+            disabled={!picked.length}
+            onClick={() => onPick(expand(picked))}
+            data-testid="media-picker-add"
+          >
+            {n ? `Add ${n} ${n === 1 ? 'file' : 'files'}` : 'Add'}
           </Button>
         </DialogFooter>
       </DialogContent>

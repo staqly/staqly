@@ -10,11 +10,11 @@ SELECT COUNT(*) FROM posts
 WHERE workspace_id = @workspace_id AND status <> 'draft' AND (instr(media, @quoted) > 0 OR instr(thread, @quoted) > 0);
 
 -- name: CreateMediaProject :exec
-INSERT INTO media_projects (id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO media_projects (id, workspace_id, name, source_ids, output_id, page_ids, storage_name, size_bytes, created_by, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateMediaProject :execrows
-UPDATE media_projects SET name = @name, source_ids = @source_ids, output_id = @output_id, storage_name = @storage_name,
+UPDATE media_projects SET name = @name, source_ids = @source_ids, output_id = @output_id, page_ids = @page_ids, storage_name = @storage_name,
   size_bytes = @size_bytes, updated_at = @updated_at
 WHERE workspace_id = @workspace_id AND id = @id;
 
@@ -35,3 +35,9 @@ DELETE FROM media_projects WHERE workspace_id = ? AND id = ?;
 -- name: AllMediaProjectFiles :many
 -- Every project file of every workspace, for moving files to the workspace folders once (MoveLegacyFiles).
 SELECT workspace_id, storage_name FROM media_projects;
+
+-- name: GetWorkspaceDesignBrand :one
+SELECT design_brand FROM workspaces WHERE id = ?;
+
+-- name: UpdateWorkspaceDesignBrand :exec
+UPDATE workspaces SET design_brand = ?, updated_at = ? WHERE id = ?;

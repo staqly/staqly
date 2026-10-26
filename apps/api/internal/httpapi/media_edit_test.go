@@ -115,8 +115,8 @@ func TestMediaProjects(t *testing.T) {
 		t.Fatalf("other media: %+v", list)
 	}
 
-	e.sendFile("PUT", "/v1/media-projects/"+p.ID, e.key, map[string]string{"name": "Poster 2", "source_ids": a.ID, "output_id": a.ID}, designFile("v2"), 200, &p)
-	if p.Name != "Poster 2" || p.OutputID != a.ID {
+	e.sendFile("PUT", "/v1/media-projects/"+p.ID, e.key, map[string]string{"name": "Poster 2", "source_ids": a.ID, "output_id": a.ID, "page_ids": a.ID + ", " + a.ID}, designFile("v2"), 200, &p)
+	if p.Name != "Poster 2" || p.OutputID != a.ID || len(p.PageIDs) != 2 {
 		t.Fatalf("saved again: %+v", p)
 	}
 	req, _ := http.NewRequest("GET", e.srv.URL+"/v1/media-projects/"+p.ID+"/file", nil)
@@ -316,6 +316,29 @@ func TestAIImages(t *testing.T) {
 		t.Fatal("no rate limit")
 	}
 
+}
+
+// The brand kit: empty at first, shared by the workspace, colours and logos checked, read with media:read and
+// written with media:write.
+func TestDesignBrand(t *testing.T) {
+	e := newEnv(t)
+	var b app.DesignBrand
+	e.do(nil, "GET", "/v1/design/brand", e.key, nil, 200, &b)
+	if len(b.Colors)+len(b.Fonts)+len(b.Logos) != 0 || b.Colors == nil {
+		t.Fatalf("empty kit: %+v", b)
+	}
+	var m app.Media
+	e.upload("/v1/media", e.key, nil, "logo.png", realPNG(t, 8, 8), 201, &m)
+	pic := m.ID
+	e.do(nil, "PUT", "/v1/design/brand", e.key, map[string]any{"colors": []string{"#1F8A4C"}, "fonts": []string{"Montserrat"}, "logos": []string{pic}}, 200, &b)
+	if b.Colors[0] != "#1f8a4c" || b.Fonts[0] != "Montserrat" || b.Logos[0] != pic {
+		t.Fatalf("kit: %+v", b)
+	}
+	e.do(nil, "PUT", "/v1/design/brand", e.key, map[string]any{"colors": []string{"red"}, "fonts": []string{}, "logos": []string{}}, 422, nil)
+	e.do(nil, "PUT", "/v1/design/brand", e.key, map[string]any{"colors": []string{}, "fonts": []string{}, "logos": []string{"med_nope"}}, 422, nil)
+	viewer := e.keyWith(app.ScopeMediaRead)
+	e.do(nil, "GET", "/v1/design/brand", viewer, nil, 200, &b)
+	e.do(nil, "PUT", "/v1/design/brand", viewer, map[string]any{"colors": []string{}, "fonts": []string{}, "logos": []string{}}, 403, nil)
 }
 
 func TestStockPhotos(t *testing.T) {

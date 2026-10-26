@@ -171,6 +171,55 @@ export function templates(): Design[] {
       s('line', 390, 720, 300, 20, '#a8a29e', { strokeWidth: 4 }),
       t('Start small. Start today.', 140, 780, 800, 'DM Serif Display', 48, '#57534e'),
     ]),
+    d('Launch', 1080, 1350, { kind: 'gradient', from: '#0f172a', via: '#4c1d95', to: '#db2777', angle: 120 }, [
+      s('ellipse', 640, -120, 560, 560, '#f472b6', { opacity: 0.35 }),
+      t('NEW', 100, 260, 300, 'Space Grotesk', 44, '#0f172a', {
+        bold: true,
+        letterSpacing: 6,
+        box: { color: '#f9a8d4', padding: 18, radius: 40 },
+      }),
+      t('Meet the\nnew app', 100, 420, 880, 'Space Grotesk', 150, '#ffffff', {
+        bold: true,
+        align: 'left',
+        lineHeight: 1,
+      }),
+      t('Faster, simpler, and free to try.', 100, 780, 880, 'Inter', 52, '#e9d5ff', { align: 'left' }),
+      s('rect', 100, 1100, 420, 110, '#ffffff', { radius: 55 }),
+      t('Try it today', 100, 1128, 420, 'Inter', 46, '#4c1d95', { bold: true }),
+    ]),
+    d('Big number', 1080, 1080, color('#f0fdf4'), [
+      t('3x', 60, 180, 960, 'Anton', 420, '#16a34a'),
+      t('more replies after we\nstarted posting daily', 120, 690, 840, 'Inter', 60, '#14532d', {
+        bold: true,
+        lineHeight: 1.3,
+      }),
+      t('Our 2026 numbers', 120, 930, 840, 'Inter', 34, '#4d7c0f', { letterSpacing: 2 }),
+    ]),
+    d('We are hiring', 1080, 1080, color('#111827'), [
+      s('rect', 70, 70, 940, 940, '#111827', { stroke: '#facc15', strokeWidth: 6, radius: 40 }),
+      t('WE ARE', 100, 230, 880, 'Bebas Neue', 150, '#ffffff', { letterSpacing: 8 }),
+      t('HIRING', 100, 370, 880, 'Bebas Neue', 260, '#facc15', { letterSpacing: 8 }),
+      t('Product designer · Remote', 100, 690, 880, 'Inter', 50, '#e5e7eb'),
+      t('Apply at example.com/jobs', 100, 840, 880, 'Inter', 38, '#9ca3af'),
+    ]),
+    d('LinkedIn post', 1200, 627, grad('#0c4a6e', '#0369a1', 90), [
+      t('How we cut our\nrelease time in half', 80, 150, 760, 'Montserrat', 66, '#ffffff', {
+        bold: true,
+        align: 'left',
+        lineHeight: 1.15,
+      }),
+      t('A short case study', 80, 440, 760, 'Inter', 34, '#bae6fd', { align: 'left' }),
+      s('ellipse', 880, 160, 300, 300, '#38bdf8', { fade: { side: 'left', size: 0.8 } }),
+    ]),
+    d('Story question', 1080, 1920, grad('#fde68a', '#fb7185', 160), [
+      t('Quick question', 90, 560, 900, 'Poppins', 64, '#7c2d12', { bold: true }),
+      s('rect', 90, 700, 900, 420, '#ffffff', {
+        radius: 48,
+        shadow: { color: '#000000', blur: 40, x: 0, y: 16, opacity: 0.15 },
+      }),
+      t('Coffee or tea\nto start the day?', 140, 820, 800, 'Poppins', 76, '#111827', { bold: true, lineHeight: 1.2 }),
+      t('Answer in the comments', 90, 1220, 900, 'Inter', 44, '#7c2d12'),
+    ]),
     carousel('Carousel', 1080, 1350, [
       [
         grad('#111827', '#1f2937', 90),

@@ -77,6 +77,7 @@ export type Media = Schemas['Media']
 export type MediaProject = Schemas['MediaProject']
 export type AIStatus = Schemas['AIStatus']
 export type StockPhoto = Schemas['StockPhoto']
+export type DesignBrand = Schemas['DesignBrand']
 export type StockPage = Schemas['StockPage']
 export type ImageRules = Schemas['ImageRules']
 export type MediaLibraryItem = Schemas['MediaLibraryItem']
@@ -788,13 +789,17 @@ export const api = {
   mediaProjectFile: (id: string) => request<Blob>(`/v1/media-projects/${encodeURIComponent(id)}/file`, { blob: true }),
   mediaProjects: (media?: string) =>
     request<{ data: MediaProject[] }>('/v1/media-projects', { query: { media: media || undefined } }),
-  saveMediaProject: (body: { id?: string; name: string; source_ids: string[]; output_id?: string }, file: Blob) => {
+  saveMediaProject: (
+    body: { id?: string; name: string; source_ids: string[]; output_id?: string; page_ids?: string[] },
+    file: Blob,
+  ) => {
     // Fields before the file: the server reads them first.
     const form = new FormData()
 
     form.append('name', body.name)
     form.append('source_ids', body.source_ids.join(','))
     form.append('output_id', body.output_id ?? '')
+    form.append('page_ids', (body.page_ids ?? []).join(','))
     form.append('file', file, 'design.json')
 
     return body.id
@@ -804,6 +809,8 @@ export const api = {
   stockPhotos: (query: string, page = 1, signal?: AbortSignal) =>
     request<StockPage>('/v1/stock/photos', { query: { query: query || undefined, page }, signal }),
   stockPhotoUsed: (id: string) => request<void>(`/v1/stock/photos/${encodeURIComponent(id)}/use`, { method: 'POST' }),
+  designBrand: () => request<DesignBrand>('/v1/design/brand'),
+  setDesignBrand: (b: DesignBrand) => request<DesignBrand>('/v1/design/brand', { method: 'PUT', json: b }),
   ai: () => request<AIStatus>('/v1/ai'),
   aiImage: (
     op: 'generate' | 'edit',

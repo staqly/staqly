@@ -29,6 +29,9 @@ func init() {
 		r.Get("/ai", s.getAI)
 		r.Post("/ai/images/{op}", s.aiImage)
 
+		r.Get("/design/brand", s.getDesignBrand)
+		r.Put("/design/brand", s.setDesignBrand)
+
 		r.Get("/stock/photos", s.stockPhotos)
 		r.Post("/stock/photos/{id}/use", s.useStockPhoto)
 	})
@@ -83,15 +86,18 @@ func (s *Server) saveMediaProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var out app.MediaProject
 	err := multipartFields(w, r, s.svc.Cfg.MaxUploadBytes+(1<<20), func(fields map[string]string, _ string, f io.Reader) error {
-		var sources []string
-		for _, v := range strings.Split(fields["source_ids"], ",") {
-			if v = strings.TrimSpace(v); v != "" {
-				sources = append(sources, v)
+		ids := func(field string) []string {
+			var out []string
+			for _, v := range strings.Split(fields[field], ",") {
+				if v = strings.TrimSpace(v); v != "" {
+					out = append(out, v)
+				}
 			}
+			return out
 		}
 		var err error
-		out, err = s.svc.SaveMediaProject(r.Context(), principal(r), id,
-			app.MediaProjectInput{Name: fields["name"], SourceIDs: sources, OutputID: strings.TrimSpace(fields["output_id"])}, f)
+		out, err = s.svc.SaveMediaProject(r.Context(), principal(r), id, app.MediaProjectInput{Name: fields["name"],
+			SourceIDs: ids("source_ids"), OutputID: strings.TrimSpace(fields["output_id"]), PageIDs: ids("page_ids")}, f)
 		return err
 	})
 	status := 201
@@ -119,6 +125,20 @@ func (s *Server) getMediaProjectFile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteMediaProject(w http.ResponseWriter, r *http.Request) {
 	respondEmpty(w, r, s.svc.DeleteMediaProject(r.Context(), principal(r), chi.URLParam(r, "id")))
+}
+
+func (s *Server) getDesignBrand(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.GetDesignBrand(r.Context(), principal(r))
+	respond(w, r, 200, out, err)
+}
+
+func (s *Server) setDesignBrand(w http.ResponseWriter, r *http.Request) {
+	var in app.DesignBrand
+	if !decode(w, r, &in) {
+		return
+	}
+	out, err := s.svc.SetDesignBrand(r.Context(), principal(r), in)
+	respond(w, r, 200, out, err)
 }
 
 func (s *Server) getAI(w http.ResponseWriter, r *http.Request) {

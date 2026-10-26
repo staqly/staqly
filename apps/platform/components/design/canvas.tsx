@@ -14,11 +14,13 @@ import {
   Stage,
   Tag,
   Text,
+  TextPath,
   Transformer,
 } from 'react-konva'
 
 import {
   cropRect,
+  curvePath,
   type Design,
   type El,
   type Fade,
@@ -386,6 +388,32 @@ function ShapeDraw({ el }: { el: ShapeEl }) {
 }
 
 function TextNode({ el }: { el: TextEl }) {
+  const paint = el.gradient ? fillProps(el.gradient, el.width, el.fontSize * el.lineHeight) : { fill: el.fill }
+
+  if (el.curve) {
+    return (
+      <>
+        {/* The box the transformer and clicks use: the letters alone are hard to grab. */}
+        <Rect width={el.width} height={el.height} fill="transparent" />
+        <TextPath
+          text={el.text.replaceAll('\n', ' ')}
+          data={curvePath(el.width, el.curve, el.fontSize)}
+          fontFamily={`"${el.fontFamily}"`}
+          fontSize={el.fontSize}
+          fontStyle={`${el.italic ? 'italic ' : ''}${el.bold ? 'bold' : 'normal'}`}
+          textDecoration={el.underline ? 'underline' : ''}
+          align="center"
+          letterSpacing={el.letterSpacing}
+          stroke={el.stroke?.width ? el.stroke.color : undefined}
+          strokeWidth={el.stroke?.width ?? 0}
+          fillAfterStrokeEnabled
+          {...paint}
+          {...shadowProps(el)}
+        />
+      </>
+    )
+  }
+
   const text = (
     <Text
       text={el.text}
@@ -395,7 +423,7 @@ function TextNode({ el }: { el: TextEl }) {
       fontSize={el.fontSize}
       fontStyle={`${el.italic ? 'italic ' : ''}${el.bold ? 'bold' : 'normal'}`}
       textDecoration={el.underline ? 'underline' : ''}
-      fill={el.fill}
+      {...paint}
       align={el.align}
       lineHeight={el.lineHeight}
       letterSpacing={el.letterSpacing}
@@ -469,7 +497,7 @@ interface Props {
 }
 
 /** What the side panel is dragging onto the page: a native drag carries strings, not elements. */
-export const dragged: { make: (() => El) | null } = { make: null }
+export const dragged: { make: (() => El | El[]) | null } = { make: null }
 
 export function DesignCanvas({
   design,
@@ -682,10 +710,16 @@ export function DesignCanvas({
         st.setPointersPositions(e.nativeEvent)
 
         const at = st.getPointerPosition()!
-        const el = make()
+        const els = [make()].flat()
+        // Centred where it was dropped (several, a sticker: their box is).
+        const left = Math.min(...els.map((x) => x.x))
+        const top = Math.min(...els.map((x) => x.y))
+        const w = Math.max(...els.map((x) => x.x + x.width)) - left
+        const h = Math.max(...els.map((x) => x.y + x.height)) - top
+        const dx = (at.x - ox) / scale - w / 2 - left
+        const dy = (at.y - oy) / scale - h / 2 - top
 
-        // Centred where it was dropped.
-        onDropEls([{ ...el, x: (at.x - ox) / scale - el.width / 2, y: (at.y - oy) / scale - el.height / 2 }])
+        onDropEls(els.map((x) => ({ ...x, x: x.x + dx, y: x.y + dy })))
       }}
       onWheel={(e) => {
         // In crop mode the wheel zooms the picture inside its frame.

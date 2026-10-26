@@ -3496,6 +3496,30 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/design/brand:
+    get:
+      operationId: getDesignBrand
+      tags: [media]
+      summary: The workspace's brand kit for the design editor (media:read)
+      responses:
+        "200": { description: Brand kit, content: { application/json: { schema: { $ref: "#/components/schemas/DesignBrand" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    put:
+      operationId: setDesignBrand
+      tags: [media]
+      summary: Replace the workspace's brand kit (media:write)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DesignBrand" } } }
+      responses:
+        "200": { description: Brand kit, content: { application/json: { schema: { $ref: "#/components/schemas/DesignBrand" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /v1/ai/images/{op}:
     parameters:
       - { name: op, in: path, required: true, schema: { type: string, enum: [generate, edit] } }
@@ -4723,12 +4747,13 @@ components:
     MediaProject:
       type: object
       description: An editable picture of the design editor (its design is at /v1/media-projects/{id}/file)
-      required: [id, name, source_ids, output_id, size_bytes, created_at, updated_at]
+      required: [id, name, source_ids, output_id, page_ids, size_bytes, created_at, updated_at]
       properties:
         id: { type: string }
         name: { type: string }
         source_ids: { type: array, items: { type: string }, description: The library files it was made from }
         output_id: { type: string, description: "The file it last saved; empty until saved" }
+        page_ids: { type: array, items: { type: string }, description: "The files its pages saved as, in page order (a carousel); output_id is the first" }
         size_bytes: { type: integer }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -4740,6 +4765,7 @@ components:
         name: { type: string, maxLength: 200 }
         source_ids: { type: string, description: Comma-separated media ids }
         output_id: { type: string }
+        page_ids: { type: string, description: "Comma-separated media ids of the saved pages, in order" }
         file: { type: string, format: binary, description: "The design: JSON with version 1, width, height and pages" }
     StockPhoto:
       type: object
@@ -4774,6 +4800,14 @@ components:
             edit: { type: boolean }
             inpaint: { type: boolean, description: Change only a marked area }
             expand: { type: boolean, description: Fill new space around a picture }
+    DesignBrand:
+      type: object
+      description: The design editor's brand kit, shared by the workspace
+      required: [colors, fonts, logos]
+      properties:
+        colors: { type: array, maxItems: 24, items: { type: string, pattern: "^#[0-9a-fA-F]{6}$" } }
+        fonts: { type: array, maxItems: 6, items: { type: string, maxLength: 60 }, description: Names from the editor's font list }
+        logos: { type: array, maxItems: 12, items: { type: string }, description: Media ids of pictures in the library }
     ImageRules:
       type: object
       description: "What a platform refuses in a picture (its API's documented limits); recommended shapes are not rules"

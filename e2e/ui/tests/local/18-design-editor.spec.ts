@@ -76,7 +76,15 @@ test.describe('the design editor', () => {
     await tools.getByRole('button', { name: 'Layers' }).click()
     await expect(page.getByRole('complementary', { name: 'Layers' }).getByText('Add a heading')).toBeVisible()
 
+    // In Media the two pages are one tile: the carousel.
     await page.goto('/media')
     await ready(page, 'All files')
+    await expect(
+      page
+        .getByRole('listitem')
+        .filter({ hasText: `${stamp} (1 of 2)` })
+        .getByText('2 pages'),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: new RegExp(`\\(2 of 2\\)\\.png$`), exact: false })).toHaveCount(0)
   })
 })

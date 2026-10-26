@@ -22,23 +22,30 @@ shapes, and save to **Media**. It runs in your browser.
 The left bar holds the tools:
 
 - **Templates**: ready-made designs (quote, announcement, sale, event story, tips, testimonial, YouTube
-  thumbnail) and your saved designs. A template replaces the page; **Undo** brings your page back.
+  thumbnail, launch, big number, hiring, LinkedIn post, story question, a 4-page carousel) and your saved designs.
+  A template replaces the design; **Undo** brings yours back.
+- **Brand**: the workspace's brand kit, shared by everyone who edits media: colours (a click paints the selection,
+  or the page's background when nothing is selected; they also head every colour picker), fonts (a click adds a
+  heading in it) and logos from the library (upload one, or add the selected picture).
 - **Text**: a heading, subheading or body text, or a styled one: click it to add it in the middle, or drag it
   onto the page where you want it. Double-click a text to type in it. The bar above
   the page sets the font (13 fonts, served by staqly itself), size, colour, bold, italic, underline, alignment,
-  letter spacing, line height, an outline, and **Box**: a coloured box behind the text with padding and round
-  corners.
+  letter spacing, line height, an outline, **Box** (a coloured box behind the text with padding and round
+  corners) and **Effects**: bend the line into an arch or a smile, or paint the letters with a gradient.
 - **Photos**: upload pictures (or drop or paste them onto the editor), pick them from your library, or, when the
-  server has an Unsplash key, search Unsplash. Uploaded pictures go to your library too. With a photo selected,
+  server has an Unsplash key, search Unsplash; click a photo or drag it onto the page. Uploaded pictures go to your library too. With a photo selected,
   the bar above the page offers:
   - **Crop** (or double-click the photo): drag the photo inside its frame, zoom with the slider or the mouse
     wheel. Dragging a side handle of the frame crops too; the photo always fills its frame.
   - **Shape**: cut the photo to a circle, arch, hexagon, triangle, star or heart.
-  - **Remove background**: done on your device, nothing is uploaded. The first use downloads the model (about
-    200 MB) from Hugging Face; your browser keeps it for next time. The cut-out goes to your library too.
-  - **Adjust** (brightness, contrast, saturation, blur, black and white), **Corners** and flips.
-- **Elements**: squares, rounded squares, circles, triangles, stars, lines and arrows; click or drag them onto the
-  page. A shape is filled with a colour or a gradient, like the background.
+  - **Remove background**: done on your device, nothing is uploaded. The first use downloads the model from
+    Hugging Face (about 200 MB with a graphics card, 400 MB without); your browser keeps it for next time. With a
+    graphics card it takes seconds, without one about a minute. The cut-out goes to your library too.
+  - **Adjust**: one-click looks (vivid, bright, dramatic, mono, muted) or brightness, contrast, saturation, blur
+    and black and white by hand; **Corners** and flips.
+- **Elements**: squares, rounded squares, circles, triangles, stars, lines and arrows; stickers (NEW, SALE,
+  -20%, FREE, LIMITED, Swipe); and icons you can recolour. Click them, or drag them onto the page. A shape is filled
+  with a colour or a gradient, like the background.
 - **Background**: a colour or a gradient (two or three colours, along an angle or out from the centre), or the
   selected photo stretched over the page.
 - **AI**: describe a picture and AI makes it, or select a photo and tell AI how to change it ("put this product on
@@ -49,19 +56,23 @@ The left bar holds the tools:
   Threads, Pinterest, Open Graph) or your own. With **Fit the content to the new size**, the design scales and
   stays centred.
 
-The bar under the page holds the **pages**: add one, duplicate it, move it left or right, delete it. Several pages
+The bar under the page holds the **pages**: add one, duplicate it, drag it (or use the arrows) to reorder, delete
+it. Several pages
 make a carousel (a post people swipe through on Instagram, LinkedIn, Threads, X or TikTok); every page has its
 own background and elements, and they share the size.
 
 Every element can be made see-through, given a shadow, brought to the front or sent to the back, locked,
 duplicated and deleted. Under **Look**, a photo or a shape can also fade to see-through towards one side, over
-the length you choose. Elements snap to the page's edges and centre and to each other; pink lines show where.
+the length you choose. **Arrange** lines up the selection (or one element on the page) left, centre, right, top,
+middle or bottom, and spaces three or more evenly. **Group** keeps several elements together: a click on one picks
+them all. Elements snap to the page's edges and centre and to each other; pink lines show where.
 
 | Keys | |
 |---|---|
 | Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z | Undo, redo |
 | Ctrl/Cmd+D | Duplicate |
 | Ctrl/Cmd+A | Select everything not locked |
+| Ctrl/Cmd+G, Ctrl/Cmd+Shift+G | Group, ungroup |
 | Arrows (Shift: 10 px) | Move the selection |
 | Delete, Backspace | Delete the selection |
 | Esc | Select nothing |
@@ -71,8 +82,16 @@ the length you choose. Elements snap to the page's edges and centre and to each 
 **Save to Media** saves every page as a picture (JPG when it has photos, PNG otherwise; "Name (2 of 3)" for a
 carousel) and keeps the design itself, so it opens again editable. Saving again replaces the pictures; posts that
 use them follow. Opened from a post's **Design** button, a new design's pages are added to that post.
-**Download** saves the page on screen, or every page, as PNG or JPG without touching the library. The Save
-button shows a dot while there are unsaved changes; going back to Media then asks first.
+In Media, a carousel's pages show as one tile ("3 pages"); picking it for a post adds every page, in order, and a
+post with several pictures goes out as a carousel where the platform has one.
+
+**Download** saves the page on screen, or every page, as PNG or JPG without touching the library; **PDF** puts
+every page in one PDF (LinkedIn posts a PDF as a document people swipe through); **For a channel** makes every page
+fit that platform: its format, its largest size and its file size limit, with a warning when the page's shape is
+outside what it accepts.
+
+The Save button shows a dot while there are unsaved changes; going back to Media then asks first. Unsaved changes
+are also kept in this browser: after a closed tab or a crash, the same design offers **Restore** when it opens.
 
 A design with Unsplash photos reminds you whom to credit when you save.
 

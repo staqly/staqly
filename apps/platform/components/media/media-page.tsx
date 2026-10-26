@@ -28,6 +28,7 @@ import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState, LoadMore } from '@/components/common/error-state'
 import { FilterButton } from '@/components/common/filter-button'
 import { SkeletonList } from '@/components/common/skeleton-list'
+import { stackCarousels, useCarousels } from '@/components/media/carousels'
 import {
   folderGoneInCache,
   invalidateLists,
@@ -319,6 +320,7 @@ export function MediaPage() {
       structuralSharing: shareMediaPages,
     })
   const pages = data?.pages
+  const carousels = useCarousels()
   const items = useMemo(() => {
     if (!pages) {
       return NO_ITEMS
@@ -328,8 +330,8 @@ export function MediaPage() {
     const seen = new Set<string>()
     const loaded = pages.flatMap((p) => p.data).filter((m) => !seen.has(m.id) && !!seen.add(m.id))
 
-    return recent ? loaded.filter((m) => Date.parse(m.created_at) >= since) : loaded
-  }, [pages, recent, since])
+    return stackCarousels(recent ? loaded.filter((m) => Date.parse(m.created_at) >= since) : loaded, carousels)
+  }, [pages, recent, since, carousels])
   const searching = !!q || !!tag
   const picked = useMemo(() => items.filter((m) => selected.has(m.id)), [items, selected])
 
@@ -847,6 +849,7 @@ export function MediaPage() {
       <MediaGrid
         items={items}
         highlight={fresh}
+        stacks={trash ? undefined : carousels.pages}
         caption={trash ? (m) => `Deletes ${timeAgo(m.purge_at)}` : undefined}
         selected={selected}
         onOpen={setOpen}

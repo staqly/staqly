@@ -16,6 +16,7 @@ import {
   Search,
   Shapes,
   Sparkles,
+  Stamp,
   Type,
   Unlock,
   Upload,
@@ -34,6 +35,7 @@ import { api, errorMessage, mediaThumbUrl, mediaUrl, type Media, type StockPhoto
 import { qk } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
+import { BrandPanel, useBrand } from './brand'
 import { DesignView, dragged } from './canvas'
 import {
   newImage,
@@ -51,13 +53,15 @@ import {
 } from './doc'
 import { loadFont } from './fonts'
 import { aiSize, downscale } from './raster'
+import { IconsAndStickers } from './stickers'
 import type { DesignStore } from './store'
 import { templates } from './templates'
 
-export type PanelId = 'templates' | 'text' | 'photos' | 'elements' | 'background' | 'ai' | 'layers' | 'size'
+export type PanelId = 'templates' | 'brand' | 'text' | 'photos' | 'elements' | 'background' | 'ai' | 'layers' | 'size'
 
 export const PANELS: { id: PanelId; label: string; icon: ReactNode }[] = [
   { id: 'templates', label: 'Templates', icon: <LayoutTemplate /> },
+  { id: 'brand', label: 'Brand', icon: <Stamp /> },
   { id: 'text', label: 'Text', icon: <Type /> },
   { id: 'photos', label: 'Photos', icon: <ImageIcon /> },
   { id: 'elements', label: 'Elements', icon: <Shapes /> },
@@ -78,8 +82,21 @@ export interface PanelCtx {
   add: (...els: El[]) => void
 }
 
+/** Seconds since it was shown, ticking: something slow is still running. */
+export function Elapsed() {
+  const [seconds, setSeconds] = useState(0)
+
+  useEffect(() => {
+    const t = window.setInterval(() => setSeconds((n) => n + 1), 1000)
+
+    return () => window.clearInterval(t)
+  }, [])
+
+  return <span className="tabular-nums">{seconds} s</span>
+}
+
 /** A side panel tool that can also be dragged onto the page (dropped there instead of in the middle). */
-function dragProps(make: () => El) {
+export function dragProps(make: () => El | El[]) {
   return {
     draggable: true,
     onDragStart: (e: DragEvent) => {
@@ -93,7 +110,7 @@ function dragProps(make: () => El) {
   }
 }
 
-function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+export function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
@@ -106,7 +123,7 @@ function Section({ title, children, action }: { title: string; children: ReactNo
 }
 
 /** The size of a picture file, without drawing it. */
-function measure(src: string): Promise<{ w: number; h: number }> {
+export function measure(src: string): Promise<{ w: number; h: number }> {
   return new Promise((resolve, reject) => {
     const i = new window.Image()
 
@@ -143,6 +160,8 @@ export function Panel({ id, ctx }: { id: PanelId; ctx: PanelCtx }) {
       return <LayersPanel ctx={ctx} />
     case 'size':
       return <SizePanel ctx={ctx} />
+    case 'brand':
+      return <BrandPanel ctx={ctx} />
   }
 }
 
@@ -435,11 +454,15 @@ function LibraryGrid({ ctx, query }: { ctx: PanelCtx; query: string }) {
             type="button"
             aria-label={`Add ${m.original_name}`}
             className="block w-full overflow-hidden rounded-md border hover:ring-2 hover:ring-brand"
+            {...dragProps(() =>
+              newImage(ctx.store.design, mediaUrl(m.id), m.width || 1000, m.height || 1000, { mediaId: m.id }),
+            )}
             onClick={() =>
               ctx.add(newImage(ctx.store.design, mediaUrl(m.id), m.width || 1000, m.height || 1000, { mediaId: m.id }))
             }
           >
             <img
+              draggable={false}
               src={mediaThumbUrl(m.id, 320)}
               alt={m.alt_text || m.original_name}
               loading="lazy"
@@ -467,15 +490,15 @@ function StockGrid({ ctx, query }: { ctx: PanelCtx; query: string }) {
   })
   const items = stock.data?.pages.flatMap((p) => p.data) ?? []
 
-  const use = (p: StockPhoto) => {
+  // Unsplash counts a photo as used when it lands on a design (clicked or dropped).
+  const place = (p: StockPhoto) => {
     const k = Math.min(1, 2000 / p.width)
 
-    ctx.add(
-      newImage(ctx.store.design, p.url, p.width * k, p.height * k, {
-        stock: { id: p.id, author: p.author, url: p.author_url },
-      }),
-    )
     void api.stockPhotoUsed(p.id).catch(() => undefined)
+
+    return newImage(ctx.store.design, p.url, p.width * k, p.height * k, {
+      stock: { id: p.id, author: p.author, url: p.author_url },
+    })
   }
 
   if (stock.isError) {
@@ -491,9 +514,11 @@ function StockGrid({ ctx, query }: { ctx: PanelCtx; query: string }) {
               type="button"
               aria-label={`Add ${p.alt || 'photo'} by ${p.author}`}
               className="block w-full overflow-hidden rounded-md hover:ring-2 hover:ring-brand"
-              onClick={() => use(p)}
+              onClick={() => ctx.add(place(p))}
+              {...dragProps(() => place(p))}
             >
               <img
+                draggable={false}
                 src={p.thumb}
                 alt={p.alt}
                 loading="lazy"
@@ -560,25 +585,28 @@ function ElementsPanel({ ctx }: { ctx: PanelCtx }) {
   }
 
   return (
-    <Section title="Shapes">
-      <div className="grid grid-cols-3 gap-2">
-        {SHAPES.map((s) => (
-          <button
-            key={s.label}
-            type="button"
-            aria-label={s.label}
-            title={s.label}
-            className="flex aspect-square items-center justify-center rounded-lg border bg-background text-brand hover:ring-2 hover:ring-brand"
-            onClick={() => ctx.add(make(s))}
-            {...dragProps(() => make(s))}
-          >
-            <svg viewBox="0 0 40 40" className="size-10 fill-current" aria-hidden>
-              {s.icon}
-            </svg>
-          </button>
-        ))}
-      </div>
-    </Section>
+    <div className="flex flex-col gap-5">
+      <Section title="Shapes">
+        <div className="grid grid-cols-3 gap-2">
+          {SHAPES.map((s) => (
+            <button
+              key={s.label}
+              type="button"
+              aria-label={s.label}
+              title={s.label}
+              className="flex aspect-square items-center justify-center rounded-lg border bg-background text-brand hover:ring-2 hover:ring-brand"
+              onClick={() => ctx.add(make(s))}
+              {...dragProps(() => make(s))}
+            >
+              <svg viewBox="0 0 40 40" className="size-10 fill-current" aria-hidden>
+                {s.icon}
+              </svg>
+            </button>
+          ))}
+        </div>
+      </Section>
+      <IconsAndStickers ctx={ctx} />
+    </div>
   )
 }
 
@@ -640,8 +668,29 @@ export const css = (f: Fill) => {
 
 /** A colour or a gradient (two or three colours, along an angle or out from the centre). */
 export function FillPicker({ value, onChange }: { value: Fill; onChange: (f: Fill, key?: string) => void }) {
+  const brand = useBrand().data?.colors ?? []
+
   return (
     <div className="flex flex-col gap-5">
+      {brand.length > 0 && (
+        <Section title="Brand colours">
+          <div className="grid grid-cols-7 gap-1.5">
+            {brand.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-label={c}
+                onClick={() => onChange({ kind: 'color', color: c })}
+                className={cn(
+                  'aspect-square rounded-md border',
+                  value.kind === 'color' && value.color === c && 'ring-2 ring-brand ring-offset-1',
+                )}
+                style={{ background: c }}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
       <Section title="Colour">
         <div className="grid grid-cols-7 gap-1.5">
           {SWATCHES.map((c) => (
@@ -948,7 +997,7 @@ function AiPanel({ ctx }: { ctx: PanelCtx }) {
       </div>
       {busy ? (
         <div className="flex items-center gap-2">
-          <Loader2 className="animate-spin" /> Working, this takes up to a minute...
+          <Loader2 className="animate-spin" /> Working, up to a minute: <Elapsed />
           <Button variant="ghost" size="sm" className="ml-auto" onClick={() => abort.current?.abort()}>
             Cancel
           </Button>

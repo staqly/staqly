@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, FileText, Film, Music } from 'lucide-react'
+import { Check, FileText, Film, GalleryHorizontalEnd, Music } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 
 import { MEDIA_DRAG, setMediaDragImage } from '@/components/media/media-folders'
@@ -161,6 +161,7 @@ const MediaTile = memo(function MediaTile({
   selectable,
   draggable,
   caption,
+  pages = 1,
   on,
 }: {
   item: MediaLibraryItem
@@ -170,6 +171,8 @@ const MediaTile = memo(function MediaTile({
   selectable: boolean
   draggable: boolean
   caption?: React.ReactNode
+  /** A carousel's first page stands for all of them: drawn as a stack. */
+  pages?: number
   on: Tile
 }) {
   const kind = mediaKind(item.mime_type)
@@ -193,6 +196,8 @@ const MediaTile = memo(function MediaTile({
         onClick={(e) => on.activate(item, e.shiftKey)}
         className={cn(
           'relative aspect-square cursor-pointer overflow-hidden rounded-xl border bg-muted transition group-has-[[data-tile]:focus-visible]:ring-3 group-has-[[data-tile]:focus-visible]:ring-ring/50',
+          pages > 1 &&
+            'shadow-[5px_-5px_0_-1px_var(--muted),5px_-5px_0_0_var(--border),10px_-10px_0_-2px_var(--muted),10px_-10px_0_-1px_var(--border)]',
           isSelected && 'border-brand ring-2 ring-brand/60',
           isHighlighted && !isSelected && 'ring-4 ring-brand/40',
         )}
@@ -200,6 +205,12 @@ const MediaTile = memo(function MediaTile({
         <MediaPreview item={item} />
         {/* One row of badges: on narrow tiles the use count shortens instead of covering the length. */}
         <span className="absolute inset-x-1.5 bottom-1.5 flex items-end justify-between gap-1">
+          {pages > 1 && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">
+              <GalleryHorizontalEnd className="size-3" aria-hidden />
+              {pages} pages
+            </span>
+          )}
           {kind === 'video' && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">
               <Film className="size-3" aria-hidden />
@@ -272,6 +283,7 @@ export function MediaGrid({
   dragIds,
   caption,
   highlight = NO_IDS,
+  stacks,
   className,
 }: {
   items: MediaLibraryItem[]
@@ -286,6 +298,8 @@ export function MediaGrid({
   caption?: (item: MediaLibraryItem) => React.ReactNode
   /** Tiles to ring for a moment (just uploaded). */
   highlight?: Set<string>
+  /** Carousels: a first page's id and all its pages (useCarousels). */
+  stacks?: Map<string, string[]>
   className?: string
 }) {
   const grid = useRef<HTMLUListElement>(null)
@@ -372,6 +386,7 @@ export function MediaGrid({
           selectable={!!onToggle}
           draggable={!!dragIds}
           caption={caption?.(item)}
+          pages={stacks?.get(item.id)?.length}
           on={on}
         />
       ))}

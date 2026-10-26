@@ -218,7 +218,12 @@ func TestDialURL(t *testing.T) {
 // exact path, so "onnxruntime-web@" blocked every ONNX Runtime file, and a bare host would allow any package.
 func TestEditorCSPPinsCDN(t *testing.T) {
 	h := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "")
-	csp := do(h, "GET", "/media/edit", nil, nil).Header().Get("Content-Security-Policy")
+	editor := do(h, "GET", "/media/edit", nil, nil).Header()
+	csp := editor.Get("Content-Security-Policy")
+	// Isolated, for ONNX Runtime's threads; credentialless keeps cross-origin pictures loading.
+	if editor.Get("Cross-Origin-Embedder-Policy") != "credentialless" || editor.Get("Cross-Origin-Opener-Policy") != "same-origin" {
+		t.Errorf("editor isolation: %v", editor)
+	}
 	for _, want := range []string{
 		"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/",
 		"https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0",

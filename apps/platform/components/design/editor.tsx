@@ -26,8 +26,16 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { api, mediaUrl, type Media } from '@/lib/api'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { api, mediaUrl, type Media, type Provider } from '@/lib/api'
 import { downloadBlob } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
 import { qk } from '@/lib/queries'
@@ -42,6 +50,7 @@ import {
   newImage,
   newPage,
   parseDesign,
+  withGroups,
   uid,
   type Design,
   type El,
@@ -49,6 +58,7 @@ import {
 } from './doc'
 import { announceEdited } from './edited-media'
 import { addFile, Panel, PANELS, type PanelCtx, type PanelId } from './panels'
+import { jpegsToPdf } from './pdf'
 import { useDesignStore } from './store'
 import { Toolbar } from './toolbar'
 
@@ -140,6 +150,58 @@ async function open(params: Params): Promise<Opened | null> {
   return media.length ? { design: designFor(media) } : null
 }
 
+/** A width-to-height ratio as people say it: 0.8 = 4:5, 1.91 = 1.91:1. */
+const shape = (r?: number) =>
+  !r ? 'any' : r < 1 ? `1:${Math.round((1 / r) * 100) / 100}` : `${Math.round(r * 100) / 100}:1`
+
+// Unsaved work survives a closed tab or a crash: the editor keeps a draft in this browser (per design) and offers
+// it back when the same design opens again. ponytail: this browser only; a server-side draft if people ask.
+const DRAFT = 'staqly-design-draft:'
+
+const draftKey = (p: Params) => DRAFT + (p.project || p.ids.join(',') || 'new')
+
+function readDraft(key: string): { at: number; design: Design } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? 'null') as { at: number; design: unknown } | null
+    const design = v && parseDesign(JSON.stringify(v.design))
+
+    return v && design ? { at: v.at, design } : null
+  } catch {
+    return null
+  }
+}
+
+function writeDraft(key: string, design: Design) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ at: Date.now(), design }))
+  } catch {
+    // Full or blocked storage: no draft, the editor works on.
+  }
+}
+
+function dropDraft(key: string) {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Nothing to drop.
+  }
+}
+
+function offerDraft(key: string, restore: (d: Design) => void) {
+  const d = readDraft(key)
+
+  if (!d) {
+    return
+  }
+
+  toast(`Unsaved changes from ${new Date(d.at).toLocaleString()}`, {
+    description: 'The editor kept them when it was closed.',
+    duration: 30_000,
+    action: { label: 'Restore', onClick: () => restore(d.design) },
+    cancel: { label: 'Discard', onClick: () => dropDraft(key) },
+  })
+}
+
 // The off-screen copy is small; the file is drawn at full size from it (Konva redraws at the pixel ratio).
 const RENDER_SCALE = 0.25
 
@@ -184,7 +246,13 @@ async function saveAll({ design, saved, project, render }: SaveArgs) {
     ]),
   ].slice(0, 20)
   const p = await api.saveMediaProject(
-    { id: project || undefined, name: base, source_ids: sources, output_id: media[0]!.after.id },
+    {
+      id: project || undefined,
+      name: base,
+      source_ids: sources,
+      output_id: media[0]!.after.id,
+      page_ids: media.map((m) => m.after.id),
+    },
     new Blob([JSON.stringify(file)], { type: 'application/json' }),
   )
 
@@ -213,9 +281,13 @@ export default function DesignEditor({ search }: { search: string }) {
   // AI shows only when the server has an AI key.
   const ai = useQuery({ queryKey: qk.ai, queryFn: api.ai, staleTime: 5 * 60_000 })
   const tools = PANELS.filter((p) => p.id !== 'ai' || ai.data?.configured)
+  // Platforms with picture rules, for downloads made to fit them.
+  const providers = useQuery({ queryKey: qk.providers, queryFn: async () => (await api.providers()).data ?? [] })
+  const channels = (providers.data ?? []).filter((p) => p.status === 'available' && p.limits.image?.max_bytes)
   // Any change since it opened or saved (a new design: anything at all, even only its name).
   const dirty = baseline ? baseline !== design : store.canUndo
   const [leaving, setLeaving] = useState(false)
+  const [draft, setDraft] = useState(() => draftKey(params))
   const left = useRef(false)
 
   const showPage = useCallback((id: string) => {
@@ -242,8 +314,22 @@ export default function DesignEditor({ search }: { search: string }) {
         }
       })
       .catch((e: unknown) => toastApiError(e, 'Could not open it'))
-      .finally(() => setPhase('ready'))
+      .finally(() => {
+        setPhase('ready')
+        offerDraft(draftKey(params), replace)
+      })
   }, [params, replace])
+
+  // The draft follows every change, a second after the last one.
+  useEffect(() => {
+    if (!dirty || phase !== 'ready') {
+      return
+    }
+
+    const t = window.setTimeout(() => writeDraft(draft, design), 1000)
+
+    return () => window.clearTimeout(t)
+  }, [dirty, phase, draft, design])
 
   useEffect(() => {
     if (!dirty) {
@@ -279,7 +365,9 @@ export default function DesignEditor({ search }: { search: string }) {
     },
     [updatePage],
   )
-  const ctx: PanelCtx = { store, page, updatePage, selected, onSelect: setSelected, add }
+  // Picking one member of a group picks the whole group.
+  const select = useCallback((ids: string[]) => setSelected(withGroups(page.elements, ids)), [page])
+  const ctx: PanelCtx = { store, page, updatePage, selected, onSelect: select, add }
 
   // Shortcuts, unless a field has the keyboard.
   useEffect(() => {
@@ -312,6 +400,19 @@ export default function DesignEditor({ search }: { search: string }) {
           .map((x) => ({ ...structuredClone(x), id: uid(), x: x.x + 24, y: x.y + 24, locked: false }))
 
         add(...copies)
+      } else if (mod && key === 'g' && selected.length) {
+        e.preventDefault()
+
+        const id = uid()
+        const ungroup = e.shiftKey
+
+        updatePage((p) => {
+          for (const x of p.elements) {
+            if (selected.includes(x.id)) {
+              x.group = ungroup ? undefined : id
+            }
+          }
+        })
       } else if (mod && key === 'a') {
         e.preventDefault()
         setSelected(page.elements.filter((x) => !x.locked && !x.hidden).map((x) => x.id))
@@ -377,7 +478,7 @@ export default function DesignEditor({ search }: { search: string }) {
   }, [])
 
   /** Draws page i off screen once its pictures and fonts are in, and answers it as a file at full size. */
-  const render = async (i: number, type: 'image/png' | 'image/jpeg') => {
+  const render = async (i: number, type: 'image/png' | 'image/jpeg', quality = 0.92, k = 1) => {
     const p = design.pages[i]!
 
     await preloadPage(p)
@@ -386,8 +487,62 @@ export default function DesignEditor({ search }: { search: string }) {
 
     const stage = view.current!
 
-    return (await stage.toBlob({ pixelRatio: 1 / RENDER_SCALE, mimeType: type, quality: 0.92 })) as Blob
+    return (await stage.toBlob({ pixelRatio: k / RENDER_SCALE, mimeType: type, quality })) as Blob
   }
+
+  /**
+   * Every page as the platform takes it: its format, at most its pixels, under its file size (JPEG quality down to
+   * 0.6 first, then smaller), and a word when the page's shape is outside what it accepts.
+   */
+  const forChannel = (p: Provider) =>
+    run('download', async () => {
+      const rules = p.limits.image ?? {}
+      const type = !rules.formats?.length || rules.formats.includes('image/jpeg') ? 'image/jpeg' : 'image/png'
+      const base = design.name.trim() || 'Design'
+      const n = design.pages.length
+      const ratio = design.width / design.height
+
+      for (const i of design.pages.keys()) {
+        let k = rules.max_pixels ? Math.min(1, Math.sqrt(rules.max_pixels / (design.width * design.height))) : 1
+        let q = 0.92
+        let blob = await render(i, type, q, k)
+
+        while (rules.max_bytes && blob.size > rules.max_bytes && k > 0.2) {
+          if (type === 'image/jpeg' && q > 0.65) {
+            q -= 0.1
+          } else {
+            k *= 0.85
+          }
+
+          blob = await render(i, type, q, k)
+        }
+
+        downloadBlob(
+          `${base}${n > 1 ? ` (${i + 1} of ${n})` : ''} (${p.name}).${type === 'image/jpeg' ? 'jpg' : 'png'}`,
+          blob,
+        )
+      }
+
+      if ((rules.min_ratio && ratio < rules.min_ratio - 0.01) || (rules.max_ratio && ratio > rules.max_ratio + 0.01)) {
+        toast.warning(`${p.name} may crop or refuse this shape`, {
+          description: `It takes pictures from ${shape(rules.min_ratio)} to ${shape(rules.max_ratio)}: pick a ${p.name} size under Size.`,
+        })
+      } else if (rules.min_width && design.width < rules.min_width) {
+        toast.warning(`${p.name} wants pictures at least ${rules.min_width} pixels wide`)
+      }
+    })
+
+  /** Every page in one PDF (LinkedIn posts a PDF as a document people swipe through). */
+  const pdf = () =>
+    run('download', async () => {
+      const pages: Uint8Array[] = []
+
+      for (const i of design.pages.keys()) {
+        pages.push(new Uint8Array(await (await render(i, 'image/jpeg', 0.9)).arrayBuffer()))
+      }
+
+      downloadBlob(`${design.name.trim() || 'Design'}.pdf`, jpegsToPdf(pages))
+    })
 
   const run = (label: string, fn: () => Promise<void>) => {
     setBusy(label)
@@ -410,6 +565,8 @@ export default function DesignEditor({ search }: { search: string }) {
       setProject(out.project)
       setFiles(out.saved)
       setBaseline(design)
+      dropDraft(draft)
+      setDraft(DRAFT + out.project)
       window.history.replaceState(
         null,
         '',
@@ -485,6 +642,14 @@ export default function DesignEditor({ search }: { search: string }) {
 
         d.pages.splice(Math.max(0, Math.min(d.pages.length, index + by)), 0, p!)
       }),
+    /** Puts a page before the one at `before` (the number of pages: at the end). */
+    moveTo: (id: string, before: number) =>
+      update((d) => {
+        const from = d.pages.findIndex((p) => p.id === id)
+        const [p] = d.pages.splice(from, 1)
+
+        d.pages.splice(before > from ? before - 1 : before, 0, p!)
+      }),
   }
 
   return (
@@ -505,6 +670,7 @@ export default function DesignEditor({ search }: { search: string }) {
         variant="destructive"
         onConfirm={() => {
           left.current = true
+          dropDraft(draft)
           window.location.href = params.back
         }}
       />
@@ -570,6 +736,21 @@ export default function DesignEditor({ search }: { search: string }) {
                   <DropdownMenuItem onSelect={() => download('image/png', true)}>Every page, PNG</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => download('image/jpeg', true)}>Every page, JPG</DropdownMenuItem>
                 </>
+              )}
+              <DropdownMenuItem onSelect={pdf}>
+                {design.pages.length > 1 ? 'Every page in one PDF (LinkedIn document)' : 'PDF'}
+              </DropdownMenuItem>
+              {channels.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>For a channel</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {channels.map((p) => (
+                      <DropdownMenuItem key={p.id} onSelect={() => forChannel(p)}>
+                        {p.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -646,7 +827,7 @@ export default function DesignEditor({ search }: { search: string }) {
                 page={page}
                 updatePage={updatePage}
                 selected={selected}
-                onSelect={setSelected}
+                onSelect={select}
                 cropping={cropping}
                 onCropping={(id) => {
                   setCropping(id)
@@ -743,10 +924,19 @@ function PagesBar({
   design: Design
   current: string
   onShow: (id: string) => void
-  actions: { add: () => void; duplicate: () => void; remove: () => void; move: (by: number) => void }
+  actions: {
+    add: () => void
+    duplicate: () => void
+    remove: () => void
+    move: (by: number) => void
+    moveTo: (id: string, before: number) => void
+  }
 }) {
   const h = 52
   const index = design.pages.findIndex((p) => p.id === current)
+  const [dragging, setDragging] = useState<string | null>(null)
+  const [over, setOver] = useState<number | null>(null)
+  const n = design.pages.length
 
   return (
     <div className="flex h-[76px] shrink-0 items-center gap-2 border-t px-2" aria-label="Pages" role="group">
@@ -758,9 +948,46 @@ function PagesBar({
             aria-label={`Page ${i + 1}`}
             aria-current={p.id === current ? 'page' : undefined}
             onClick={() => onShow(p.id)}
+            // Dragged sideways to reorder (the arrows on the right do the same from the keyboard).
+            draggable={n > 1}
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('text/plain', p.id)
+              setDragging(p.id)
+            }}
+            onDragOver={(e) => {
+              if (!dragging) {
+                return
+              }
+
+              e.preventDefault()
+              e.stopPropagation()
+
+              const r = e.currentTarget.getBoundingClientRect()
+
+              setOver(e.clientX < r.left + r.width / 2 ? i : i + 1)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+
+              if (dragging && over !== null) {
+                actions.moveTo(dragging, over)
+              }
+
+              setDragging(null)
+              setOver(null)
+            }}
+            onDragEnd={() => {
+              setDragging(null)
+              setOver(null)
+            }}
             className={cn(
-              'relative shrink-0 overflow-hidden rounded-md border bg-background',
+              'relative shrink-0 overflow-hidden rounded-md border bg-background transition-[opacity,box-shadow]',
               p.id === current ? 'ring-2 ring-brand' : 'hover:ring-2 hover:ring-border',
+              dragging === p.id && 'opacity-40',
+              dragging && over === i && 'shadow-[-4px_0_0_0_var(--brand)]',
+              dragging && over === n && i === n - 1 && 'shadow-[4px_0_0_0_var(--brand)]',
             )}
           >
             <DesignView design={design} page={p} scale={h / design.height} />

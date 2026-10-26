@@ -86,6 +86,11 @@ var editorHeaders = map[string]string{
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 	}, "; "),
+	// Cross-origin isolated, so ONNX Runtime runs WebAssembly on every core (one thread otherwise: minutes per
+	// picture on a device without a usable GPU). credentialless, not require-corp: pictures from Unsplash and the
+	// model files still load (without cookies), and browsers without it (Safari) just stay unisolated.
+	"Cross-Origin-Opener-Policy":   "same-origin",
+	"Cross-Origin-Embedder-Policy": "credentialless",
 }
 
 // editorPath: the design editor's page (see editorHeaders).

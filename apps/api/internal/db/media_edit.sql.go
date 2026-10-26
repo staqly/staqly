@@ -43,8 +43,8 @@ func (q *Queries) AllMediaProjectFiles(ctx context.Context) ([]AllMediaProjectFi
 }
 
 const createMediaProject = `-- name: CreateMediaProject :exec
-INSERT INTO media_projects (id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO media_projects (id, workspace_id, name, source_ids, output_id, page_ids, storage_name, size_bytes, created_by, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateMediaProjectParams struct {
@@ -53,6 +53,7 @@ type CreateMediaProjectParams struct {
 	Name        string `json:"name"`
 	SourceIds   string `json:"source_ids"`
 	OutputID    string `json:"output_id"`
+	PageIds     string `json:"page_ids"`
 	StorageName string `json:"storage_name"`
 	SizeBytes   int64  `json:"size_bytes"`
 	CreatedBy   string `json:"created_by"`
@@ -67,6 +68,7 @@ func (q *Queries) CreateMediaProject(ctx context.Context, arg CreateMediaProject
 		arg.Name,
 		arg.SourceIds,
 		arg.OutputID,
+		arg.PageIds,
 		arg.StorageName,
 		arg.SizeBytes,
 		arg.CreatedBy,
@@ -94,7 +96,7 @@ func (q *Queries) DeleteMediaProject(ctx context.Context, arg DeleteMediaProject
 }
 
 const getMediaProject = `-- name: GetMediaProject :one
-SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at FROM media_projects WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at, page_ids FROM media_projects WHERE workspace_id = ? AND id = ?
 `
 
 type GetMediaProjectParams struct {
@@ -116,12 +118,24 @@ func (q *Queries) GetMediaProject(ctx context.Context, arg GetMediaProjectParams
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PageIds,
 	)
 	return i, err
 }
 
+const getWorkspaceDesignBrand = `-- name: GetWorkspaceDesignBrand :one
+SELECT design_brand FROM workspaces WHERE id = ?
+`
+
+func (q *Queries) GetWorkspaceDesignBrand(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getWorkspaceDesignBrand, id)
+	var design_brand string
+	err := row.Scan(&design_brand)
+	return design_brand, err
+}
+
 const listMediaProjects = `-- name: ListMediaProjects :many
-SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at FROM media_projects
+SELECT id, workspace_id, name, source_ids, output_id, storage_name, size_bytes, created_by, created_at, updated_at, page_ids FROM media_projects
 WHERE workspace_id = ?1
   AND (CAST(?2 AS TEXT) = '' OR output_id = ?2 OR instr(source_ids, '"' || ?2 || '"') > 0)
 ORDER BY updated_at DESC LIMIT 100
@@ -153,6 +167,7 @@ func (q *Queries) ListMediaProjects(ctx context.Context, arg ListMediaProjectsPa
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PageIds,
 		); err != nil {
 			return nil, err
 		}
@@ -210,15 +225,16 @@ func (q *Queries) RepointDraftMedia(ctx context.Context, arg RepointDraftMediaPa
 }
 
 const updateMediaProject = `-- name: UpdateMediaProject :execrows
-UPDATE media_projects SET name = ?1, source_ids = ?2, output_id = ?3, storage_name = ?4,
-  size_bytes = ?5, updated_at = ?6
-WHERE workspace_id = ?7 AND id = ?8
+UPDATE media_projects SET name = ?1, source_ids = ?2, output_id = ?3, page_ids = ?4, storage_name = ?5,
+  size_bytes = ?6, updated_at = ?7
+WHERE workspace_id = ?8 AND id = ?9
 `
 
 type UpdateMediaProjectParams struct {
 	Name        string `json:"name"`
 	SourceIds   string `json:"source_ids"`
 	OutputID    string `json:"output_id"`
+	PageIds     string `json:"page_ids"`
 	StorageName string `json:"storage_name"`
 	SizeBytes   int64  `json:"size_bytes"`
 	UpdatedAt   string `json:"updated_at"`
@@ -231,6 +247,7 @@ func (q *Queries) UpdateMediaProject(ctx context.Context, arg UpdateMediaProject
 		arg.Name,
 		arg.SourceIds,
 		arg.OutputID,
+		arg.PageIds,
 		arg.StorageName,
 		arg.SizeBytes,
 		arg.UpdatedAt,
@@ -241,4 +258,19 @@ func (q *Queries) UpdateMediaProject(ctx context.Context, arg UpdateMediaProject
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateWorkspaceDesignBrand = `-- name: UpdateWorkspaceDesignBrand :exec
+UPDATE workspaces SET design_brand = ?, updated_at = ? WHERE id = ?
+`
+
+type UpdateWorkspaceDesignBrandParams struct {
+	DesignBrand string `json:"design_brand"`
+	UpdatedAt   string `json:"updated_at"`
+	ID          string `json:"id"`
+}
+
+func (q *Queries) UpdateWorkspaceDesignBrand(ctx context.Context, arg UpdateWorkspaceDesignBrandParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkspaceDesignBrand, arg.DesignBrand, arg.UpdatedAt, arg.ID)
+	return err
 }
