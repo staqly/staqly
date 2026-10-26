@@ -754,7 +754,7 @@ export function MediaPage() {
                     <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand [&_svg]:size-4">
                       {c.icon}
                     </span>
-                    <span className="flex flex-col">
+                    <span className="flex min-w-0 flex-col whitespace-normal">
                       <span className="font-medium">{c.label}</span>
                       <span className="text-xs text-muted-foreground">{c.hint}</span>
                     </span>
@@ -776,11 +776,9 @@ export function MediaPage() {
                     <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-violet-500/15 text-violet-600 dark:text-violet-400 [&_svg]:size-4">
                       <Clapperboard />
                     </span>
-                    <span className="flex flex-col">
+                    <span className="flex min-w-0 flex-col whitespace-normal">
                       <span className="font-medium">AI video</span>
-                      <span className="text-xs text-muted-foreground">
-                        A short clip from a description or a picture
-                      </span>
+                      <span className="text-xs text-muted-foreground">A clip from words or a picture</span>
                     </span>
                   </DropdownMenuItem>
                 </>
