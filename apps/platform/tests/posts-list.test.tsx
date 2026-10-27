@@ -121,6 +121,33 @@ describe('posts list', () => {
     expect(api.find('POST', '/v1/posts/pst_2/cancel')).toHaveLength(0)
   })
 
+  it('a scheduled post has nothing to open yet, though a channel took it earlier; a published one does', async () => {
+    const went = target({ channel_id: 'ch_1', status: 'published', external_url: 'https://bsky.app/p/1' })
+
+    setup({
+      'GET /v1/posts': {
+        data: [
+          post({ id: 'pst_1', content: 'Again later', status: 'scheduled', targets: [went] }),
+          post({ id: 'pst_2', content: 'Out now', status: 'published', targets: [went] }),
+        ],
+        next_cursor: null,
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<PostsWorkspace />, { mode: 'local' })
+    const rows = await screen.findAllByTestId('post-row')
+
+    await user.click(within(rows[0]!).getByRole('button', { name: /More actions for Again later/ }))
+    expect(await screen.findByRole('menuitem', { name: 'Cancel schedule' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Open on/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Statistics' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(within(rows[1]!).getByRole('button', { name: /More actions for Out now/ }))
+    expect(await screen.findByRole('menuitem', { name: /Open on/ })).toBeInTheDocument()
+    expect(screen.getByText('Published on')).toBeInTheDocument()
+  })
+
   it('each row has its actions: delete one after a confirmation, the menu offers Cancel schedule', async () => {
     const api = setup({ 'DELETE /v1/posts/pst_3': { status: 204 } })
     const user = userEvent.setup()
