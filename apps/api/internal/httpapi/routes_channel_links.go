@@ -196,3 +196,17 @@ func (s *Server) finishPendingViaLink(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 201, map[string]any{"data": out})
 }
+
+func init() {
+	// The client metadata of a platform the server is its own OAuth client for (Bluesky): the platform fetches it.
+	RegisterPublicRoutes(func(s *Server, r chi.Router) {
+		r.Get("/oauth/{provider}/client-metadata.json", func(w http.ResponseWriter, r *http.Request) {
+			m, err := s.svc.ClientMetadata(chi.URLParam(r, "provider"))
+			if err != nil {
+				writeErr(w, r, err)
+				return
+			}
+			writeJSON(w, 200, m)
+		})
+	})
+}

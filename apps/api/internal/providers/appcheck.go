@@ -22,6 +22,13 @@ type Needs struct {
 	// BotToken: beside the OAuth keys, the server's own bot token (PROVIDER_<ID>_BOT_TOKEN) does the posting, so the
 	// app is the server's alone (a workspace can't bring its own) and the platform waits for both.
 	BotToken bool
+	// OwnClient: the server is its own OAuth client (Bluesky): no keys to register, its address is the client id.
+	OwnClient bool
+}
+
+// AuthURLContexter is implemented by platforms whose sign-in URL needs the network (Bluesky pushes the request first).
+type AuthURLContexter interface {
+	AuthURLContext(ctx context.Context, app App, redirect, state string, extra map[string]string) (string, error)
 }
 
 // Needer is implemented by platforms with Needs.

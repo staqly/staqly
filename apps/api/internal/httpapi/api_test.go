@@ -1512,3 +1512,32 @@ func TestSetupStatusAnalytics(t *testing.T) {
 		t.Fatalf("setup status: %s", body)
 	}
 }
+
+// Bluesky's client metadata is public and lives at its own address, which is the client id; without an https
+// dashboard there is none (Bluesky then connects with an app password).
+func TestBlueskyClientMetadata(t *testing.T) {
+	svc, srv := newLocal(t)
+	get := func() (int, map[string]any) {
+		resp, err := http.Get(srv.URL + "/v1/oauth/bluesky/client-metadata.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var m map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&m)
+		return resp.StatusCode, m
+	}
+	svc.Cfg.PublicDashboardURL = "http://localhost:8080"
+	if code, _ := get(); code != 404 {
+		t.Fatalf("without https: %d", code)
+	}
+	svc.Cfg.PublicDashboardURL = "https://staqly.example.com"
+	code, m := get()
+	if code != 200 || m["client_id"] != "https://staqly.example.com/api/v1/oauth/bluesky/client-metadata.json" ||
+		m["redirect_uris"].([]any)[0] != "https://staqly.example.com/channels/callback/bluesky" {
+		t.Fatalf("metadata: %d %v", code, m)
+	}
+	if resp, _ := http.Get(srv.URL + "/v1/oauth/x/client-metadata.json"); resp.StatusCode != 404 {
+		t.Fatalf("another platform: %d", resp.StatusCode)
+	}
+}

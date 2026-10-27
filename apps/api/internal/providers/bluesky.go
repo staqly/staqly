@@ -3,6 +3,7 @@ package providers
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -22,8 +23,9 @@ import (
 	_ "golang.org/x/image/webp" // ... and WebP pictures
 )
 
-// Bluesky (or any AT Protocol server) with an app password: staqly keeps the handle and the app password sealed and
-// opens a session for every publish (createSession), so there is no token to renew. Posts get rich-text facets for
+// Bluesky (or any AT Protocol server), registered twice: "bluesky" signs in with OAuth (bluesky_oauth.go), and
+// "bluesky_app_password" with an app password, which staqly keeps sealed and opens a session with for every publish
+// (createSession), so there is no token to renew. Both publish the same way. Posts get rich-text facets for
 // links, mentions and hashtags, up to 4 pictures, and the post's thread as replies.
 //
 // createRecord has no idempotency key, but the record key is ours to choose: every post (and reply) gets a record
@@ -40,11 +42,22 @@ var (
 const blueskyPost = "app.bsky.feed.post"
 
 func init() {
-	Register(Bluesky{NewBase("bluesky", "Bluesky", AuthToken,
-		Limits{MaxChars: 300, MaxMedia: 4, MediaKinds: []string{"image"}})}, StatusAvailable)
+	limits := Limits{MaxChars: 300, MaxMedia: 4, MediaKinds: []string{"image"}, Image: imageRules["bluesky"]}
+	Register(Bluesky{NewBase("bluesky", "Bluesky", AuthOAuth2, limits)}, StatusAvailable)
+	pw := NewBase("bluesky_app_password", "Bluesky (app password)", AuthToken, limits)
+	pw.docs = "https://docs.staqly.ai/channels/bluesky#with-an-app-password"
+	Register(Bluesky{pw}, StatusAvailable)
 }
 
-func (Bluesky) CredentialFields() []Field {
+// Needs: the server is its own OAuth client, so it needs an https address and no keys.
+func (b Bluesky) Needs() Needs {
+	return Needs{HTTPS: b.Auth() == AuthOAuth2, OwnClient: b.Auth() == AuthOAuth2}
+}
+
+func (b Bluesky) CredentialFields() []Field {
+	if b.Auth() == AuthOAuth2 {
+		return nil
+	}
 	return []Field{
 		{Key: "identifier", Label: "Handle", Kind: "text", Required: true, Placeholder: "janedoe.bsky.social",
 			Help: "Your handle without the @, or your DID."},
@@ -74,6 +87,31 @@ func (b Bluesky) Validate(p PostContent, s Settings) error {
 // blueskySession is an open session on the account's server.
 type blueskySession struct {
 	service, did, handle, access string
+	// dpop: an OAuth sign-in's key; every request then carries a DPoP proof (with the server's latest nonce).
+	dpop  *ecdsa.PrivateKey
+	nonce string
+}
+
+// blueskyOpen opens a session with what the channel stores: an OAuth sign-in or an app password.
+func blueskyOpen(ctx context.Context, c Credentials) (*blueskySession, error) {
+	if c["access_token"] != "" {
+		return blueskyOAuthSession(c)
+	}
+	return blueskyLogin(ctx, c)
+}
+
+// profile is the account as Bluesky shows it, from the app view (the server proxies it); without it the handle is
+// enough.
+func (s *blueskySession) profile(ctx context.Context) Profile {
+	var prof struct {
+		Handle      string `json:"handle"`
+		DisplayName string `json:"displayName"`
+		Avatar      string `json:"avatar"`
+	}
+	_ = s.call(ctx, http.MethodGet, "app.bsky.actor.getProfile?actor="+url.QueryEscape(s.did), nil, "", &prof)
+	handle := fediFirst(prof.Handle, s.handle, s.did)
+	return Profile{Handle: "@" + handle, Name: fediFirst(prof.DisplayName, handle), AvatarURL: prof.Avatar,
+		ProfileURL: blueskyApp + "/profile/" + handle}
 }
 
 func (Bluesky) Connect(ctx context.Context, f map[string]string) (Credentials, Profile, error) {
@@ -95,18 +133,7 @@ func (Bluesky) Connect(ctx context.Context, f map[string]string) (Credentials, P
 		return nil, Profile{}, err
 	}
 	creds["did"] = sess.did
-	var prof struct {
-		Handle      string `json:"handle"`
-		DisplayName string `json:"displayName"`
-		Avatar      string `json:"avatar"`
-	}
-	// The profile comes from the app view (the server proxies it); without it the handle is enough.
-	_ = sess.call(ctx, http.MethodGet, "app.bsky.actor.getProfile?actor="+url.QueryEscape(sess.did), nil, "", &prof)
-	handle := fediFirst(prof.Handle, sess.handle, sess.did)
-	return creds, Profile{
-		Handle: "@" + handle, Name: fediFirst(prof.DisplayName, handle), AvatarURL: prof.Avatar,
-		ProfileURL: blueskyApp + "/profile/" + handle,
-	}, nil
+	return creds, sess.profile(ctx), nil
 }
 
 func fediFirst(v ...string) string {
@@ -218,7 +245,7 @@ func (Bluesky) post(ctx context.Context, c Credentials, parentID string, p PostC
 			return Result{}, &Failure{Kind: ErrRejected, Msg: "Bluesky: the post replied to has an id staqly can't read (" + parentID + ")"}
 		}
 	}
-	sess, err := blueskyLogin(ctx, c)
+	sess, err := blueskyOpen(ctx, c)
 	if err != nil {
 		return Result{}, err
 	}
@@ -387,35 +414,65 @@ func blueskyFacets(ctx context.Context, s *blueskySession, text string) []map[st
 
 // call sends one XRPC request (method "nsid?query") and decodes a 2xx reply into out.
 func (s *blueskySession) call(ctx context.Context, method, nsid string, body io.Reader, contentType string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, method, s.service+"/xrpc/"+nsid, body)
-	if err != nil {
-		return err
+	var payload []byte
+	if body != nil {
+		payload, _ = io.ReadAll(body) // sent twice when the server asks for a DPoP nonce
 	}
-	if s.access != "" {
-		req.Header.Set("Authorization", "Bearer "+s.access)
+	resp, err := s.send(ctx, method, nsid, payload, contentType)
+	if err == nil && s.dpop != nil {
+		if n, again := dpopRetry(resp); again {
+			resp.Body.Close()
+			s.nonce = n
+			resp, err = s.send(ctx, method, nsid, payload, contentType)
+		} else if n != "" {
+			s.nonce = n
+		}
 	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-	resp, err := httpClient(ctx).Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		// Retrying is safe: the record key makes the next attempt find a post this one may have made.
-		return &Failure{Msg: "Bluesky server " + req.URL.Host + " could not be reached; staqly tries again in a few minutes"}
+		return &Failure{Msg: "Bluesky server " + strings.TrimPrefix(s.service, "https://") + " could not be reached; staqly tries again in a few minutes"}
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if out != nil && len(raw) > 0 {
 			if err := json.Unmarshal(raw, out); err != nil {
-				return &Failure{Kind: ErrRejected, Msg: "Bluesky server " + req.URL.Host + " did not answer like Bluesky; check the server's address"}
+				return &Failure{Kind: ErrRejected, Msg: "Bluesky server " + resp.Request.URL.Host + " did not answer like Bluesky; check the server's address"}
 			}
 		}
 		return nil
 	}
 	return blueskyError(resp.StatusCode, raw)
+}
+
+// send makes one XRPC request: with the app password's session token, or the OAuth token and a DPoP proof.
+func (s *blueskySession) send(ctx context.Context, method, nsid string, payload []byte, contentType string) (*http.Response, error) {
+	var body io.Reader
+	if payload != nil {
+		body = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, s.service+"/xrpc/"+nsid, body)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case s.dpop != nil:
+		proof, err := blueskyProof(s.dpop, method, req.URL.String(), s.nonce, s.access)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "DPoP "+s.access)
+		req.Header.Set("DPoP", proof)
+	case s.access != "":
+		req.Header.Set("Authorization", "Bearer "+s.access)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	return httpClient(ctx).Do(req)
 }
 
 // blueskyFailure keeps the XRPC error name, so callers can tell "no such record" from a refusal.
@@ -450,7 +507,7 @@ func blueskyError(status int, raw []byte) error {
 	case e.Error == "AccountTakedown", e.Error == "AccountDeactivated":
 		return fail(ErrReauth, "Bluesky has suspended or deactivated this account ("+detail+")")
 	case status == http.StatusUnauthorized, e.Error == "AuthenticationRequired", e.Error == "InvalidToken", e.Error == "ExpiredToken":
-		return fail(ErrReauth, "Bluesky no longer accepts this handle and app password ("+detail+"); make a new app password and reconnect")
+		return fail(ErrReauth, "Bluesky no longer accepts this sign-in ("+detail+"); reconnect the account (with an app password: make a new one)")
 	case status == http.StatusTooManyRequests, e.Error == "RateLimitExceeded":
 		return fail(nil, "Bluesky rate limit reached; staqly tries again in a few minutes")
 	case status >= 500:

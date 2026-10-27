@@ -2314,6 +2314,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/oauth/{provider}/client-metadata.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The server's OAuth client metadata for a platform it is its own client on (Bluesky)
+         * @description AT Protocol OAuth has no app to register: the client id is this document's address, which the
+         *     platform fetches. It names the dashboard's callback and the server's public signing key. 404 for other
+         *     platforms, and while the dashboard has no https address.
+         */
+        get: operations["getOAuthClientMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/channels/{id}": {
         parameters: {
             query?: never;
@@ -10479,6 +10503,31 @@ export interface operations {
                 };
             };
             429: components["responses"]["RateLimited"];
+        };
+    };
+    getOAuthClientMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Client metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     getChannel: {

@@ -2819,6 +2819,22 @@ paths:
           headers: { Location: { schema: { type: string } } }
           content: { text/html: { schema: { type: string } } }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/oauth/{provider}/client-metadata.json:
+    parameters: [{ name: provider, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getOAuthClientMetadata
+      tags: [channels]
+      security: []
+      summary: The server's OAuth client metadata for a platform it is its own client on (Bluesky)
+      description: |
+        AT Protocol OAuth has no app to register: the client id is this document's address, which the
+        platform fetches. It names the dashboard's callback and the server's public signing key. 404 for other
+        platforms, and while the dashboard has no https address.
+      responses:
+        "200":
+          description: Client metadata
+          content: { application/json: { schema: { type: object, additionalProperties: true } } }
+        "404": { $ref: "#/components/responses/NotFound" }
   /v1/channels/{id}:
     parameters: [{ $ref: "#/components/parameters/id" }]
     get:
