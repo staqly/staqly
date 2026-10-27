@@ -161,17 +161,21 @@ func TestReauthOnPublishMarksTheChannel(t *testing.T) {
 }
 
 // Was a bug: every post failing on a revoked sign-in marked the channel again, one channel.needs_reconnect event
-// (and alert) each, and a channel the person had turned off was switched to needs_reconnect.
+// (and alert) each, also when they fail at the same moment, and a channel the person had turned off was switched to needs_reconnect.
 func TestChannelNeedsReconnectOnce(t *testing.T) {
 	s, p, post := publishTest(t)
 	ctx := context.Background()
 	chID := post.Targets[0].ChannelID
 	row, _ := s.Q.GetChannelByID(ctx, chID)
+	var wg sync.WaitGroup
 	for range 3 {
-		if err := s.channelNeedsReconnect(ctx, row, errors.New("token revoked")); err != nil {
-			t.Fatal(err)
-		}
+		wg.Go(func() {
+			if err := s.channelNeedsReconnect(ctx, row, errors.New("token revoked")); err != nil {
+				t.Error(err)
+			}
+		})
 	}
+	wg.Wait()
 	evs, err := s.ListEvents(ctx, p, EventFilter{ChannelID: chID, Type: "channel.needs_reconnect"})
 	if err != nil || len(evs.Data) != 1 {
 		t.Fatalf("channel.needs_reconnect events: %d %v", len(evs.Data), err)

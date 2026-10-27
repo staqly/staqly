@@ -406,6 +406,24 @@ func (q *Queries) ListProviderApps(ctx context.Context, workspaceID string) ([]s
 	return items, nil
 }
 
+const markChannelNeedsReconnect = `-- name: MarkChannelNeedsReconnect :execrows
+UPDATE channels SET status = 'needs_reconnect', last_error = ?, updated_at = ? WHERE id = ? AND status NOT IN ('needs_reconnect', 'disabled')
+`
+
+type MarkChannelNeedsReconnectParams struct {
+	LastError string `json:"last_error"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+}
+
+func (q *Queries) MarkChannelNeedsReconnect(ctx context.Context, arg MarkChannelNeedsReconnectParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markChannelNeedsReconnect, arg.LastError, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setChannelComments = `-- name: SetChannelComments :exec
 UPDATE channels SET comments = ? WHERE id = ?
 `

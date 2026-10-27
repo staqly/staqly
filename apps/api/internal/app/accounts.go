@@ -497,9 +497,7 @@ func (s *Service) createCloudWorkspace(ctx context.Context, q *db.Queries, name,
 func (s *Service) createUserSession(ctx context.Context, q *db.Queries, workspaceID, userID, userAgent string) (NewSession, string, error) {
 	now := s.Now().UTC()
 	ns := NewSession{Token: randomString(32), CSRFToken: randomString(20), ExpiresAt: now.Add(s.Cfg.SessionTTL)}
-	if len(userAgent) > 300 {
-		userAgent = userAgent[:300]
-	}
+	userAgent = truncateRunes(userAgent, 300)
 	id := newID("ses")
 	err := q.CreateUserSession(ctx, db.CreateUserSessionParams{ID: id, WorkspaceID: workspaceID, TokenHash: hashSecret(ns.Token),
 		CsrfToken: ns.CSRFToken, UserAgent: userAgent, CreatedAt: formatTime(now), LastSeenAt: formatTime(now),
