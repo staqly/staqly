@@ -206,8 +206,9 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
       aria-label={triggerLabel}
       data-testid="workspace-menu-trigger"
     >
-      <WorkspaceLogo src={ws?.logo} className="size-8" />
-      <div className="grid min-w-0 flex-1 text-left leading-tight">
+      {/* Collapsed, only the logo shows: it keeps its size and the name and plan step aside. */}
+      <WorkspaceLogo src={ws?.logo} className="size-8 shrink-0" />
+      <div className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
         <span className="truncate text-sm font-semibold" data-testid="workspace-name">
           {name}
         </span>{' '}
@@ -910,8 +911,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       return false
     }
   })
+  const [assistantUsed, setAssistantUsed] = useState(assistantOpen)
   const openAssistant = (open: boolean) => {
     setAssistantOpen(open)
+    setAssistantUsed(true)
 
     try {
       localStorage.setItem('staqly.assistant.open', open ? '1' : '0')
@@ -988,7 +991,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           {isMobile && <MobileHeader />}
           <PlanGate>{children}</PlanGate>
         </SidebarInset>
-        {hasAssistant && assistantOpen && <AssistantPanel open onOpenChange={openAssistant} />}
+        {/* Mounted once opened (its code loads then), so it can slide out when it closes. */}
+        {hasAssistant && (assistantOpen || assistantUsed) && (
+          <AssistantPanel open={assistantOpen} onOpenChange={openAssistant} />
+        )}
         {isMobile && <MobileTabBar />}
       </SidebarProvider>
       {command.used && <CommandPalette open={command.open} onOpenChange={setCommandOpen} />}
