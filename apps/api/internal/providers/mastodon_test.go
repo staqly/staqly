@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +25,9 @@ type fakeMastodon struct {
 	statusBody string // its body then
 	drop       bool   // close the connection on the first POST /api/v1/statuses
 	byKey      map[string]string
+	apps       []url.Values // POST /api/v1/apps
+	tokens     []url.Values // POST /oauth/token
+	forgot     bool         // the server deleted the app it registered
 	srv        *httptest.Server
 }
 
@@ -31,6 +35,31 @@ func (f *fakeMastodon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
+	_ = r.ParseForm()
+	switch r.URL.Path {
+	case "/api/v1/apps": // registration, no token
+		f.apps = append(f.apps, r.PostForm)
+		_, _ = w.Write([]byte(`{"client_id":"cid","client_secret":"csecret"}`))
+		return
+	case "/oauth/token":
+		if r.PostForm.Get("grant_type") == "client_credentials" { // is the app still known?
+			if f.forgot || r.PostForm.Get("client_secret") != "csecret" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":"invalid_client"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"access_token":"app","token_type":"Bearer"}`))
+			return
+		}
+		f.tokens = append(f.tokens, r.PostForm)
+		if r.PostForm.Get("code") != "the-code" || r.PostForm.Get("client_secret") != "csecret" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"access_token":"tok","token_type":"Bearer"}`))
+		return
+	}
 	if r.Header.Get("Authorization") != "Bearer tok" {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":"The access token is invalid"}`))
@@ -115,7 +144,7 @@ func mastodonFile(name, mime string) MediaFile {
 
 func TestMastodonConnect(t *testing.T) {
 	f := useFakeMastodon(t)
-	e, _ := Get("mastodon")
+	e, _ := Get("mastodon_token")
 	if e.Status != StatusAvailable || e.Auth() != AuthToken {
 		t.Fatalf("mastodon is %q %q", e.Status, e.Auth())
 	}
@@ -142,7 +171,7 @@ func TestMastodonConnect(t *testing.T) {
 
 func TestMastodonPublish(t *testing.T) {
 	f := useFakeMastodon(t)
-	e, _ := Get("mastodon")
+	e, _ := Get("mastodon_token")
 	creds := Credentials{"instance": f.srv.URL, "access_token": "tok"}
 	post := PostContent{PostID: "p1", ChannelID: "c1", Text: "Hello", Media: []MediaFile{mastodonFile("a.png", "image/png"), mastodonFile("b.png", "image/png")}}
 	res, err := e.Publish(context.Background(), creds, post, Settings{"visibility": "unlisted", "spoiler_text": "Spoilers"})
@@ -175,7 +204,7 @@ func TestMastodonPublish(t *testing.T) {
 
 func TestMastodonLostAnswerIsRetriedSafely(t *testing.T) {
 	f := useFakeMastodon(t)
-	e, _ := Get("mastodon")
+	e, _ := Get("mastodon_token")
 	creds := Credentials{"instance": f.srv.URL, "access_token": "tok"}
 	post := PostContent{PostID: "p1", ChannelID: "c1", Text: "Hello"}
 	f.drop = true
@@ -191,7 +220,7 @@ func TestMastodonLostAnswerIsRetriedSafely(t *testing.T) {
 
 func TestMastodonErrors(t *testing.T) {
 	f := useFakeMastodon(t)
-	e, _ := Get("mastodon")
+	e, _ := Get("mastodon_token")
 	creds := Credentials{"instance": f.srv.URL, "access_token": "tok"}
 	post := PostContent{PostID: "p1", ChannelID: "c1", Text: "Hello"}
 	for _, c := range []struct {
@@ -217,7 +246,7 @@ func TestMastodonErrors(t *testing.T) {
 }
 
 func TestMastodonValidate(t *testing.T) {
-	e, _ := Get("mastodon")
+	e, _ := Get("mastodon_token")
 	img := MediaFile{Name: "a.png", MimeType: "image/png"}
 	vid := MediaFile{Name: "v.mp4", MimeType: "video/mp4"}
 	for _, c := range []struct {
@@ -237,5 +266,68 @@ func TestMastodonValidate(t *testing.T) {
 		if err := e.Validate(c.p, c.s); (err == nil) != c.ok {
 			t.Errorf("%d files %v: %v", len(c.p.Media), c.s, err)
 		}
+	}
+}
+
+// Sign in with Mastodon: staqly registers itself on the person's server, sends the browser to its authorize page
+// with PKCE, and trades the code for a token with the registered app.
+func TestMastodonOAuth(t *testing.T) {
+	f := useFakeMastodon(t)
+	e, _ := Get("mastodon")
+	if e.Status != StatusAvailable || e.Auth() != AuthOAuth2 || len(e.CredentialFields()) != 1 {
+		t.Fatalf("mastodon is %q %q, fields %v", e.Status, e.Auth(), e.CredentialFields())
+	}
+	ctx := context.Background()
+	redirect := "https://staqly.example.com/channels/callback/mastodon"
+	prep := e.Provider.(OAuthPreparer)
+	server, err := prep.OAuthServer(map[string]string{"instance": f.srv.URL + "/"})
+	if err != nil || server != f.srv.URL {
+		t.Fatalf("server %q %v", server, err)
+	}
+	carry, err := prep.RegisterClient(ctx, server, redirect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	carry["instance"] = server
+	if len(f.apps) != 1 || f.apps[0].Get("redirect_uris") != redirect || f.apps[0].Get("scopes") != mastodonScopes {
+		t.Fatalf("registered %v", f.apps)
+	}
+	if carry["client_id"] != "cid" || carry["client_secret"] != "csecret" {
+		t.Fatalf("carry %v", carry)
+	}
+	if !prep.ClientWorks(ctx, server, carry) {
+		t.Fatal("a known app reported gone")
+	}
+	f.forgot = true
+	if prep.ClientWorks(ctx, server, carry) {
+		t.Fatal("a deleted app reported known")
+	}
+	f.forgot = false
+	extra := map[string]string{"code_verifier": "verifier"}
+	for k, v := range carry {
+		extra[k] = v
+	}
+	u, err := e.AuthURL(App{}, redirect, "st", extra)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pu, _ := url.Parse(u)
+	if !strings.HasPrefix(u, f.srv.URL+"/oauth/authorize?") || pu.Query().Get("client_id") != "cid" ||
+		pu.Query().Get("state") != "st" || pu.Query().Get("force_login") != "true" || pu.Query().Get("code_challenge_method") != "S256" || strings.Contains(u, "csecret") {
+		t.Fatalf("auth URL %s", u)
+	}
+	creds, prof, err := e.Exchange(ctx, App{}, redirect, "the-code", extra)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds["instance"] != f.srv.URL || creds["access_token"] != "tok" || prof.Name != "Jane Doe" ||
+		f.tokens[0].Get("code_verifier") != "verifier" || f.tokens[0].Get("redirect_uri") != redirect {
+		t.Fatalf("creds %v profile %+v token request %v", creds, prof, f.tokens)
+	}
+	if _, _, err := e.Exchange(ctx, App{}, redirect, "stolen", extra); err == nil {
+		t.Fatal("a wrong code connected")
+	}
+	if _, err := prep.OAuthServer(map[string]string{"instance": "not a server"}); err == nil {
+		t.Fatal("a made-up server was registered on")
 	}
 }

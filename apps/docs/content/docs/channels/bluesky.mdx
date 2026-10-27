@@ -26,6 +26,9 @@ The client signs its requests with a key derived from the server's secret key (`
 sign-in by itself. Removing staqly in Bluesky (**Settings → Privacy and security → Apps**) disconnects it; the
 channel then shows **Needs reconnect**.
 
+Every **Connect with Bluesky** asks Bluesky which account to use, so another account becomes another channel;
+picking an account already connected reconnects its channel.
+
 ## With an app password
 
 <Steps>
@@ -42,7 +45,8 @@ direct messages** off. Never use your account password: staqly refuses it.
 
 ### Connect the account
 
-In **Channels → Add channel → Bluesky**, pick **Use an app password instead** and enter:
+In **Channels → Add channel → Bluesky**, pick **Account on a server of your own? Use an app password** (on a staqly
+without an https address, Bluesky asks for an app password straight away) and enter:
 
 | Field | What |
 |---|---|

@@ -40,7 +40,8 @@ func googleAuthURL(app App, redirect, state, scopes string, extra map[string]str
 		"scope":         {scopes},
 		"state":         {state},
 		"access_type":   {"offline"}, // a refresh token
-		"prompt":        {"consent"}, // every time, or a second sign-in gets no refresh token
+		// consent every time, or a second sign-in gets no refresh token; the account picker, so another account connects
+		"prompt": {"consent select_account"},
 	}
 	if v := extra["code_verifier"]; v != "" {
 		sum := sha256.Sum256([]byte(v))

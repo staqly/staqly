@@ -318,6 +318,14 @@ type NotificationOutbox struct {
 	CreatedAt     string         `json:"created_at"`
 }
 
+type OauthClient struct {
+	Provider    string `json:"provider"`
+	Server      string `json:"server"`
+	RedirectUri string `json:"redirect_uri"`
+	Credentials string `json:"credentials"`
+	CreatedAt   string `json:"created_at"`
+}
+
 type Passkey struct {
 	ID           string         `json:"id"`
 	UserID       string         `json:"user_id"`

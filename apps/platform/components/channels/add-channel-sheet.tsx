@@ -24,9 +24,12 @@ import { ProviderGrid } from './provider-grid'
 // Only for Telegram through the server's bot: loaded when that panel opens.
 const TelegramConnect = dynamic(() => import('./telegram-connect').then((m) => m.TelegramConnect), { ssr: false })
 
-/** The other way into the same platform, offered under its form: Bluesky signs in, or takes an app password. */
+/**
+ * Bluesky's sign-in goes through bluesky.social, so an account on a server of its own connects with an app
+ * password: the one other way in, offered under the form. Elsewhere sign-in is the only way.
+ */
 const ALTERNATIVES: Record<string, { id: string; label: string }> = {
-  bluesky: { id: 'bluesky_app_password', label: 'Use an app password instead (an account on a server of its own)' },
+  bluesky: { id: 'bluesky_app_password', label: 'Account on a server of your own? Use an app password' },
   bluesky_app_password: { id: 'bluesky', label: 'Sign in with Bluesky instead (no app password)' },
 }
 
@@ -57,7 +60,8 @@ export function ConnectForm({
   // A working channel opened from Edit connection (not a broken one being reconnected).
   const editing = !!reconnect && reconnect.status !== 'needs_reconnect'
   const start = useMutation({
-    mutationFn: () => api.oauthStart(provider.id),
+    // A platform with many servers (Mastodon) asks which one first: its fields go along.
+    mutationFn: () => api.oauthStart(provider.id, fieldValues(provider.credential_fields ?? [], values)),
     onSuccess: ({ url }) => {
       // A connection started elsewhere (the welcome wizard) and abandoned on the platform's page must not send this
       // one back there.
@@ -121,18 +125,32 @@ export function ConnectForm({
     const opening = start.isPending || start.isSuccess
 
     return (
-      <div className="grid gap-4">
+      <form
+        className="grid gap-4"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault()
+          start.mutate()
+        }}
+      >
+        <ProviderFields
+          idPrefix={`connect-${provider.id}`}
+          fields={provider.credential_fields ?? []}
+          values={values}
+          onChange={(k, v) => setValues((vs) => ({ ...vs, [k]: v }))}
+          errors={errors}
+        />
         <p className="text-sm text-muted-foreground">
           {provider.name} opens in this tab to ask which account to connect. You come back here when it is done.
         </p>
         <div>
-          <Button onClick={() => start.mutate()} disabled={opening} aria-busy={opening} data-testid="oauth-start">
+          <Button type="submit" disabled={opening} aria-busy={opening} data-testid="oauth-start">
             {opening ? <Loader2 className="animate-spin" aria-hidden /> : <PlugZap />}{' '}
             {opening ? `Opening ${provider.name}...` : `Connect with ${provider.name}`}
           </Button>
         </div>
         {alternative && <AlternativeLink {...alternative} />}
-      </div>
+      </form>
     )
   }
 
@@ -185,7 +203,6 @@ export function ConnectForm({
           Connect with {provider.bot_name || provider.bot} instead (no token needed)
         </button>
       )}
-      {alternative && !reconnect && <AlternativeLink {...alternative} />}
       <ProviderFields
         idPrefix={`connect-${provider.id}`}
         fields={provider.credential_fields ?? []}
@@ -198,6 +215,7 @@ export function ConnectForm({
           <PlugZap /> {connect.isPending ? 'Saving...' : editing ? 'Save' : reconnect ? 'Reconnect' : 'Connect'}
         </Button>
       </div>
+      {alternative && !reconnect && <AlternativeLink {...alternative} />}
     </form>
   )
 }

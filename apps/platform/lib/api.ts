@@ -1032,13 +1032,14 @@ export const api = {
       `/v1/connect-links/${encodeURIComponent(token)}/channels`,
       { method: 'POST', json: body, public: true },
     ),
-  connectLinkOAuthStart: (token: string, provider: string) =>
+  /** fields: what the platform asks before its sign-in (Mastodon: the server), sent as query parameters. */
+  connectLinkOAuthStart: (token: string, provider: string, fields?: Record<string, string>) =>
     request<{ url: string }>(
-      `/v1/connect-links/${encodeURIComponent(token)}/oauth/${encodeURIComponent(provider)}/start`,
+      `/v1/connect-links/${encodeURIComponent(token)}/oauth/${encodeURIComponent(provider)}/start${startQuery(fields)}`,
       { public: true },
     ),
-  oauthStart: (provider: string) =>
-    request<{ url: string }>(`/v1/channels/oauth/${encodeURIComponent(provider)}/start`),
+  oauthStart: (provider: string, fields?: Record<string, string>) =>
+    request<{ url: string }>(`/v1/channels/oauth/${encodeURIComponent(provider)}/start${startQuery(fields)}`),
   /** A sign-in that may publish as several accounts, waiting for the person to pick them. */
   pendingConnection: (id: string) => request<PendingConnection>(`/v1/pending-connections/${encodeURIComponent(id)}`),
   finishPendingConnection: (id: string, accountIds: string[]) =>
@@ -1182,4 +1183,10 @@ export const api = {
 /** Same-origin URL of a finished workspace export (download_url is relative to the API). */
 export function exportDownloadUrl(x: Pick<WorkspaceExport, 'id' | 'download_url'>) {
   return `${API_PREFIX}${x.download_url || `/v1/workspace/exports/${encodeURIComponent(x.id)}/download`}`
+}
+
+function startQuery(fields?: Record<string, string>) {
+  const q = new URLSearchParams(fields).toString()
+
+  return q ? `?${q}` : ''
 }

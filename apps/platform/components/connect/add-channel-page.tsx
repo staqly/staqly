@@ -68,7 +68,10 @@ function Unavailable({ message }: { message: string }) {
   )
 }
 
-/** A platform that signs in with a token (Telegram, Bluesky...): its fields, on this page. */
+/**
+ * A platform's fields, on this page: a token platform connects with them; one that signs in with many servers
+ * (Mastodon) sends them along to its sign-in.
+ */
 function TokenForm({
   token,
   provider,
@@ -84,12 +87,24 @@ function TokenForm({
   const [errors, setErrors] = useState<Record<string, string | undefined>>({})
   const [failed, setFailed] = useState('')
   const connect = useMutation({
-    mutationFn: () =>
-      api.connectViaLink(token, {
-        provider: provider.id,
-        fields: fieldValues(provider.credential_fields ?? [], values),
-      }),
-    onSuccess: (r) => onDone(r.handle || r.name),
+    mutationFn: async () => {
+      const fields = fieldValues(provider.credential_fields ?? [], values)
+
+      if (provider.auth === 'oauth2') {
+        const { url } = await api.connectLinkOAuthStart(token, provider.id, fields)
+
+        window.location.assign(url)
+
+        return null
+      }
+
+      return api.connectViaLink(token, { provider: provider.id, fields })
+    },
+    onSuccess: (r) => {
+      if (r) {
+        onDone(r.handle || r.name)
+      }
+    },
     onError: (e) => {
       const { errors: fields, complete } = apiFieldErrors(e, (f) => (f.startsWith('fields.') ? f.slice(7) : null))
 
@@ -176,7 +191,7 @@ export function AddChannelPage() {
   const start = async (p: Provider) => {
     setStartError('')
 
-    if (p.auth !== 'oauth2') {
+    if (p.auth !== 'oauth2' || p.credential_fields?.length) {
       setPicked(p)
 
       return
