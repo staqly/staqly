@@ -266,7 +266,7 @@ describe('composer', () => {
     const tab = screen.getByTestId('tab-channel-ch_2')
 
     expect(tab).toHaveAttribute('aria-selected', 'true')
-    expect(within(tab).getByTestId('tab-channel-ring')).toHaveClass('ring-primary', 'rounded-full')
+    expect(within(tab).getByTestId('tab-channel-ring')).toHaveClass('ring-brand', 'rounded-full')
     expect(within(screen.getByTestId('tab-channel-ch_1')).getByTestId('tab-channel-ring')).toHaveClass(
       'ring-transparent',
     )
@@ -410,6 +410,29 @@ describe('composer', () => {
     await user.type(screen.getByTestId('post-content'), 'x')
     await user.click(screen.getByTestId('publish-now'))
     expect(await screen.findByText('Too long for Bluesky')).toHaveAttribute('data-slot', 'field-error')
+  })
+
+  it("opens the channel whose text or media was refused, so the error isn't hidden under All channels", async () => {
+    mockApi({
+      ...routes,
+      'POST /v1/posts': {
+        status: 422,
+        body: {
+          error: {
+            code: 'validation_failed',
+            message: 'validation failed',
+            fields: { 'targets.ch_2.content': 'the picture is larger than Bluesky takes' },
+          },
+        },
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1', 'ch_2')
+    await user.type(screen.getByTestId('post-content'), 'x')
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(await screen.findByText('The picture is larger than Bluesky takes')).toBeVisible()
   })
 
   it('a comment keeps every file uploaded at once, and text typed while they upload', async () => {

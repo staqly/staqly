@@ -317,9 +317,13 @@ function MediaStrip({
   }
 
   return (
-    <div className="flex flex-wrap gap-2 px-3 pb-2">
+    <div className="flex flex-wrap gap-2 px-3 pt-1 pb-3">
       {media.map((m) => (
-        <span key={m.id} className="relative size-16 overflow-hidden rounded-lg border bg-muted">
+        // The tools show on hover or focus (always on touch), on solid chips in the corners.
+        <span
+          key={m.id}
+          className="group/media relative size-20 overflow-hidden rounded-lg bg-muted ring-1 ring-border pointer-coarse:size-24"
+        >
           {m.mime_type.startsWith('image/') ? (
             <img
               src={mediaThumbUrl(m.id, 160)}
@@ -339,7 +343,7 @@ function MediaStrip({
               rel="noopener"
               aria-label={`Edit ${m.original_name}`}
               data-testid="edit-attachment"
-              className="absolute bottom-0.5 left-0.5 flex size-5 items-center justify-center rounded-full bg-background/90 text-foreground shadow-xs hover:bg-background pointer-coarse:size-10"
+              className="absolute bottom-1 left-1 flex size-6 items-center justify-center rounded-full border bg-background text-foreground opacity-0 shadow-sm transition-opacity group-focus-within/media:opacity-100 group-hover/media:opacity-100 hover:bg-muted pointer-coarse:size-8 pointer-coarse:opacity-100"
             >
               <Pencil className="size-3" />
             </a>
@@ -349,7 +353,7 @@ function MediaStrip({
               type="button"
               aria-label={`Remove ${m.original_name}`}
               onClick={() => onRemove(m.id)}
-              className="absolute top-0.5 right-0.5 flex size-5 items-center justify-center rounded-full bg-background/90 text-foreground shadow-xs hover:bg-background pointer-coarse:size-10"
+              className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full border bg-background text-foreground opacity-0 shadow-sm transition-opacity group-focus-within/media:opacity-100 group-hover/media:opacity-100 hover:bg-muted pointer-coarse:size-8 pointer-coarse:opacity-100"
             >
               <X className="size-3" />
             </button>
@@ -1068,8 +1072,9 @@ const ChannelTab = memo(function ChannelTab({
           aria-hidden
           data-testid="tab-channel-ring"
           className={cn(
-            'pointer-events-none absolute -inset-0.5 rounded-full ring-2 group-focus-visible/tab:ring-ring',
-            selected ? 'ring-primary' : 'ring-transparent group-hover/tab:ring-border',
+            // Solid colours: the theme's border and focus colours are see-through and blur against the avatar.
+            'pointer-events-none absolute -inset-0.5 rounded-full ring-2 group-focus-visible/tab:ring-brand',
+            selected ? 'ring-brand' : 'ring-transparent group-hover/tab:ring-muted-foreground',
           )}
         />
         <ChannelAvatar channel={channel} className="size-7" />
@@ -1172,10 +1177,11 @@ const SettingsCard = memo(function SettingsCard({
     <Collapsible open={open} onOpenChange={(o) => onOpenChange(channel.id, o)} asChild>
       <section
         aria-label={`${channel.name} settings`}
-        className="rounded-xl border"
+        className="overflow-hidden rounded-xl border bg-card"
         data-testid={`settings-${channel.id}`}
       >
-        <CollapsibleTrigger className="flex w-full min-w-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring">
+        {/* A tinted header, set off from the page and from the open fields under it. */}
+        <CollapsibleTrigger className="flex w-full min-w-0 items-center gap-2 bg-muted/60 px-3 py-2.5 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
           <ProviderIcon id={channel.provider} className="size-4 shrink-0" />
           <span className="shrink-0 font-medium">
             {platformLabel(channel.provider, provider?.name)} advanced settings
@@ -1577,6 +1583,24 @@ export function ComposerForm({
       // Only a platform setting is wrong: show it where it lives.
       if (keys.length && keys.every((k) => /^targets\.[^.]+\.settings\./.test(k))) {
         setSection('settings')
+      }
+
+      // A channel's own objection (its text or media) shows under that channel's text, not under All channels:
+      // open it there, or the click looks like it did nothing. One about the channel itself has no place: a toast.
+      const channelError = keys.find((k) => /^targets\.[^.]+(\.content)?$/.test(k))
+
+      if (channelError && !keys.some((k) => /^targets\.[^.]+\.settings\./.test(k))) {
+        const id = channelError.split('.')[1]!
+
+        setSection('post')
+
+        if (picked.length > 1) {
+          setTab(id)
+        }
+
+        if (!channelError.endsWith('.content')) {
+          toastApiError(e)
+        }
       }
 
       if (!complete) {
