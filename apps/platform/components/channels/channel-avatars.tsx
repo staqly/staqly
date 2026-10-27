@@ -25,7 +25,7 @@ export function ChannelAvatar({ channel, className }: { channel: ChannelLike; cl
           <img src={avatar} alt="" className="size-full scale-[1.12] object-cover" referrerPolicy="no-referrer" />
         </span>
         {/* The platform badge scales with the avatar (16 px on a 36 px one), its mark centred inside. */}
-        <span className="absolute -right-[6%] -bottom-[6%] grid aspect-square w-[44%] place-items-center rounded-full bg-background ring-1 ring-border">
+        <span className="absolute -right-[6%] -bottom-[6%] grid aspect-square w-[44%] place-items-center rounded-full bg-background ring-1 ring-background">
           <ProviderIcon id={channel.provider} className="size-[62%]" />
         </span>
       </span>
@@ -41,7 +41,7 @@ export function ChannelAvatar({ channel, className }: { channel: ChannelLike; cl
         <span className="grid size-full place-items-center rounded-full bg-muted text-[0.9em] font-semibold text-foreground uppercase [container-type:size]">
           <span className="text-[45cqh] leading-none">{letter}</span>
         </span>
-        <span className="absolute -right-[6%] -bottom-[6%] grid aspect-square w-[44%] place-items-center rounded-full bg-background ring-1 ring-border">
+        <span className="absolute -right-[6%] -bottom-[6%] grid aspect-square w-[44%] place-items-center rounded-full bg-background ring-1 ring-background">
           <ProviderIcon id={channel.provider} className="size-[62%]" />
         </span>
       </span>

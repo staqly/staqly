@@ -266,7 +266,7 @@ describe('composer', () => {
     const tab = screen.getByTestId('tab-channel-ch_2')
 
     expect(tab).toHaveAttribute('aria-selected', 'true')
-    expect(within(tab).getByTestId('tab-channel-ring')).toHaveClass('ring-primary', 'rounded-full')
+    expect(within(tab).getByTestId('tab-channel-ring')).toHaveClass('ring-brand', 'rounded-full')
     expect(within(screen.getByTestId('tab-channel-ch_1')).getByTestId('tab-channel-ring')).toHaveClass(
       'ring-transparent',
     )

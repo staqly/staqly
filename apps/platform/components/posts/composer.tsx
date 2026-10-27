@@ -1068,8 +1068,9 @@ const ChannelTab = memo(function ChannelTab({
           aria-hidden
           data-testid="tab-channel-ring"
           className={cn(
-            'pointer-events-none absolute -inset-0.5 rounded-full ring-2 group-focus-visible/tab:ring-ring',
-            selected ? 'ring-primary' : 'ring-transparent group-hover/tab:ring-border',
+            // Solid colours: the theme's border and focus colours are see-through and blur against the avatar.
+            'pointer-events-none absolute -inset-0.5 rounded-full ring-2 group-focus-visible/tab:ring-brand',
+            selected ? 'ring-brand' : 'ring-transparent group-hover/tab:ring-muted-foreground',
           )}
         />
         <ChannelAvatar channel={channel} className="size-7" />
