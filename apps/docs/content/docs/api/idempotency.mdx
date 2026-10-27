@@ -44,7 +44,7 @@ If the first attempt went through, the retry gets the stored response with the h
 | Same key, same JSON body formatted differently (spaces, key order, `é` vs `é`) | Replayed: JSON bodies are compared by content, not bytes |
 | Same key, **different** request | `422 idempotency_mismatch` |
 | Same key while the first is still running | `409 idempotency_in_progress` — retry shortly. A first request that never finished (its server stopped) gives its key up after 10 minutes |
-| First attempt failed with a `5xx`, a `429` or a `402`, two edits raced (`409` *modified concurrently*), or the client hung up | The key is released, so a retry runs again |
+| First attempt failed with a `5xx`, a `429`, a `402`, a `401`, a `403` or a `404`, two edits raced (`409` *modified concurrently*), or the client hung up | The key is released, so a retry runs again |
 | The response carried a **secret**, or was larger than 1 MiB | Never stored: the key is released, so a retry **runs again** |
 | Key longer than 200 characters | `422 validation_failed` |
 

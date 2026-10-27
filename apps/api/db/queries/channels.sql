@@ -35,6 +35,9 @@ WHERE c.workspace_id = @workspace_id;
 -- name: SetChannelHealth :exec
 UPDATE channels SET status = ?, last_error = ?, updated_at = ? WHERE id = ?;
 
+-- name: MarkChannelNeedsReconnect :execrows
+UPDATE channels SET status = 'needs_reconnect', last_error = ?, updated_at = ? WHERE id = ? AND status NOT IN ('needs_reconnect', 'disabled');
+
 -- name: SetChannelCredentials :exec
 UPDATE channels SET credentials = ?, updated_at = ? WHERE id = ?;
 

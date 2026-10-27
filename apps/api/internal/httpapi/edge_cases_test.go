@@ -111,6 +111,18 @@ func TestIdempotencyDoesNotReplay429(t *testing.T) {
 	}
 }
 
+// 401, 403 and 404 change once the key, the role or the thing named does: a retry with the same key runs again.
+func TestIdempotencyDoesNotReplay404(t *testing.T) {
+	e := newEnv(t)
+	path := "/v1/channels/ch_missing/test"
+	for i := range 2 {
+		st, h, b := e.raw(nil, "POST", path, e.admin, nil, "Idempotency-Key", "K404")
+		if st != 404 || h.Get("Idempotent-Replayed") != "" {
+			t.Fatalf("try %d: %d replayed=%q %s", i, st, h.Get("Idempotent-Replayed"), b)
+		}
+	}
+}
+
 func TestUploadCutsLongNamesOnACharacter(t *testing.T) {
 	e := newEnv(t)
 	name := strings.Repeat("a", 199) + "é.png"

@@ -464,9 +464,7 @@ func (s *Service) createSession(ctx context.Context, q *db.Queries, workspaceID,
 func (s *Service) createSessionID(ctx context.Context, q *db.Queries, workspaceID, userAgent string) (NewSession, string, error) {
 	now := s.Now().UTC()
 	ns := NewSession{Token: randomString(32), CSRFToken: randomString(20), ExpiresAt: now.Add(s.Cfg.SessionTTL)}
-	if len(userAgent) > 300 {
-		userAgent = userAgent[:300]
-	}
+	userAgent = truncateRunes(userAgent, 300)
 	id := newID("ses")
 	err := q.CreateSession(ctx, db.CreateSessionParams{
 		ID: id, WorkspaceID: workspaceID, TokenHash: hashSecret(ns.Token), CsrfToken: ns.CSRFToken,
