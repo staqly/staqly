@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { MobileMenu } from '@/components/mobile-menu'
+import { NavLinks } from '@/components/nav-links'
 import { DOCS, SIGNUP, btnPrimary, btnSecondary, wrap, wrapWide, SELF_HOST } from '@/lib/site'
 
 export function Eyebrow({ children }: { children: ReactNode }) {
@@ -32,13 +33,7 @@ export function Nav() {
         <Link href="/" aria-label="Staqly home" className="flex min-h-10 items-center">
           <Logo colorway="dark" wordmarkClassName="text-[18px]" />
         </Link>
-        <nav className="ml-auto hidden gap-6 text-sm whitespace-nowrap text-muted-foreground lg:flex">
-          {navLinks.map(([label, href]) => (
-            <Link key={label} href={href} className="py-0.5 hover:text-foreground pointer-coarse:py-2.5">
-              {label}
-            </Link>
-          ))}
-        </nav>
+        <NavLinks links={navLinks} />
         <a href={SIGNUP} className={`${btnPrimary} ml-auto h-9 px-4 lg:ml-0 pointer-coarse:h-10`}>
           Get started
         </a>

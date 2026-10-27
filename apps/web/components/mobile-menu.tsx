@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
+import { isActive } from '@/components/nav-links'
+
 /** Hamburger menu below `lg`; closes on navigation and on Escape.
  * Absolute, not fixed: the header's backdrop-filter makes it the containing block. */
 export function MobileMenu({ links, signup }: { links: [string, string][]; signup: string }) {
@@ -52,7 +54,8 @@ export function MobileMenu({ links, signup }: { links: [string, string][]; signu
               key={label}
               href={href}
               onClick={() => setOpen(false)}
-              className="rounded-xl px-3 py-3.5 text-lg font-medium hover:bg-accent"
+              aria-current={isActive(pathname, href) ? 'page' : undefined}
+              className="rounded-xl px-3 py-3.5 text-lg font-medium hover:bg-accent aria-[current=page]:bg-accent"
             >
               {label}
             </Link>
