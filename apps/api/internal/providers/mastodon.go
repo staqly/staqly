@@ -305,7 +305,7 @@ func mastodonError(status int, raw []byte) error {
 	lower := strings.ToLower(detail)
 	switch {
 	case status == http.StatusUnauthorized:
-		return &Failure{Kind: ErrReauth, Msg: "Mastodon no longer accepts this access token (" + detail + "); make a new one and reconnect"}
+		return &Failure{Kind: ErrReauth, Msg: "Mastodon no longer accepts this sign-in (" + detail + "); connect the account again"}
 	case status == http.StatusForbidden && strings.Contains(lower, "scope"):
 		return &Failure{Kind: ErrReauth, Msg: "the access token lacks a scope (" + detail + "); make one with write:statuses, write:media and read:accounts and reconnect"}
 	case status == http.StatusForbidden && (strings.Contains(lower, "suspended") || strings.Contains(lower, "disabled") || strings.Contains(lower, "login")):

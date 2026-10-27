@@ -27,6 +27,7 @@ type fakeMastodon struct {
 	byKey      map[string]string
 	apps       []url.Values // POST /api/v1/apps
 	tokens     []url.Values // POST /oauth/token
+	forgot     bool         // the server deleted the app it registered
 	srv        *httptest.Server
 }
 
@@ -41,6 +42,15 @@ func (f *fakeMastodon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"client_id":"cid","client_secret":"csecret"}`))
 		return
 	case "/oauth/token":
+		if r.PostForm.Get("grant_type") == "client_credentials" { // is the app still known?
+			if f.forgot || r.PostForm.Get("client_secret") != "csecret" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":"invalid_client"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"access_token":"app","token_type":"Bearer"}`))
+			return
+		}
 		f.tokens = append(f.tokens, r.PostForm)
 		if r.PostForm.Get("code") != "the-code" || r.PostForm.Get("client_secret") != "csecret" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -269,16 +279,30 @@ func TestMastodonOAuth(t *testing.T) {
 	}
 	ctx := context.Background()
 	redirect := "https://staqly.example.com/channels/callback/mastodon"
-	carry, err := e.Provider.(OAuthPreparer).PrepareOAuth(ctx, redirect, map[string]string{"instance": f.srv.URL + "/"})
+	prep := e.Provider.(OAuthPreparer)
+	server, err := prep.OAuthServer(map[string]string{"instance": f.srv.URL + "/"})
+	if err != nil || server != f.srv.URL {
+		t.Fatalf("server %q %v", server, err)
+	}
+	carry, err := prep.RegisterClient(ctx, server, redirect)
 	if err != nil {
 		t.Fatal(err)
 	}
+	carry["instance"] = server
 	if len(f.apps) != 1 || f.apps[0].Get("redirect_uris") != redirect || f.apps[0].Get("scopes") != mastodonScopes {
 		t.Fatalf("registered %v", f.apps)
 	}
-	if carry["instance"] != f.srv.URL || carry["client_id"] != "cid" || carry["client_secret"] != "csecret" {
+	if carry["client_id"] != "cid" || carry["client_secret"] != "csecret" {
 		t.Fatalf("carry %v", carry)
 	}
+	if !prep.ClientWorks(ctx, server, carry) {
+		t.Fatal("a known app reported gone")
+	}
+	f.forgot = true
+	if prep.ClientWorks(ctx, server, carry) {
+		t.Fatal("a deleted app reported known")
+	}
+	f.forgot = false
 	extra := map[string]string{"code_verifier": "verifier"}
 	for k, v := range carry {
 		extra[k] = v
@@ -303,7 +327,7 @@ func TestMastodonOAuth(t *testing.T) {
 	if _, _, err := e.Exchange(ctx, App{}, redirect, "stolen", extra); err == nil {
 		t.Fatal("a wrong code connected")
 	}
-	if _, err := e.Provider.(OAuthPreparer).PrepareOAuth(ctx, redirect, map[string]string{"instance": "not a server"}); err == nil {
+	if _, err := prep.OAuthServer(map[string]string{"instance": "not a server"}); err == nil {
 		t.Fatal("a made-up server was registered on")
 	}
 }

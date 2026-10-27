@@ -74,14 +74,35 @@ func (fakeOAuth) Exchange(_ context.Context, app providers.App, _, code string, 
 		providers.Profile{Handle: "@oauth", Name: "OAuth Account"}, nil
 }
 
-// fakePrep signs in like Mastodon: a step before the sign-in registers on the person's server, and what it returns
-// reaches the exchange sealed in the state.
+// fakePrep signs in like Mastodon: staqly's client is registered on each server, kept, and reaches the exchange
+// sealed in the state.
 type fakePrep struct{ providers.Base }
+
+// fakePrepServer counts registrations and can forget the clients it registered.
+var fakePrepServer struct {
+	sync.Mutex
+	registered int
+	forgot     bool
+}
 
 func (fakePrep) Needs() providers.Needs { return providers.Needs{OwnClient: true} }
 
-func (fakePrep) PrepareOAuth(_ context.Context, _ string, extra map[string]string) (map[string]string, error) {
-	return map[string]string{"instance": "https://" + extra["instance"], "client_secret": "per-server"}, nil
+func (fakePrep) OAuthServer(extra map[string]string) (string, error) {
+	return "https://" + extra["instance"], nil
+}
+
+func (fakePrep) RegisterClient(context.Context, string, string) (map[string]string, error) {
+	fakePrepServer.Lock()
+	defer fakePrepServer.Unlock()
+	fakePrepServer.registered++
+	fakePrepServer.forgot = false
+	return map[string]string{"client_secret": "per-server"}, nil
+}
+
+func (fakePrep) ClientWorks(context.Context, string, map[string]string) bool {
+	fakePrepServer.Lock()
+	defer fakePrepServer.Unlock()
+	return !fakePrepServer.forgot
 }
 
 func (fakePrep) AuthURL(_ providers.App, _, state string, extra map[string]string) (string, error) {
@@ -668,19 +689,40 @@ func TestDiscordServerBot(t *testing.T) {
 	}
 }
 
-// A platform registering on the person's server first (Mastodon): what it registered travels sealed in the state to
-// the exchange.
-func TestOAuthCarriesWhatTheSignInPrepared(t *testing.T) {
+// A platform with a client per server (Mastodon): staqly registers once per server and reuses the client while the
+// server knows it, registers again when the server forgot it, and the client reaches the exchange sealed in the state.
+func TestOAuthReusesTheServersClient(t *testing.T) {
 	e := newEnv(t)
 	noRedirect := &http.Client{Jar: e.browser.Jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	registered := func() int {
+		fakePrepServer.Lock()
+		defer fakePrepServer.Unlock()
+		return fakePrepServer.registered
+	}
+	before := registered()
 	var start struct{ URL string }
-	e.do(e.browser, "GET", "/v1/channels/oauth/fakeprep/start?instance=social.example", "", nil, 200, &start)
+	for range 2 {
+		e.do(e.browser, "GET", "/v1/channels/oauth/fakeprep/start?instance=social.example", "", nil, 200, &start)
+	}
 	if !strings.HasPrefix(start.URL, "https://social.example/oauth/authorize?") || strings.Contains(start.URL, "per-server") {
 		t.Fatalf("start url: %s", start.URL)
 	}
+	if n := registered() - before; n != 1 {
+		t.Fatalf("two sign-ins to one server registered %d clients", n)
+	}
+	var sealed string
+	if err := e.svc.DB.QueryRow(`SELECT credentials FROM oauth_clients WHERE provider = 'fakeprep'`).Scan(&sealed); err != nil || strings.Contains(sealed, "per-server") {
+		t.Fatalf("client at rest: %q %v", sealed, err)
+	}
+	fakePrepServer.Lock()
+	fakePrepServer.forgot = true
+	fakePrepServer.Unlock()
+	e.do(e.browser, "GET", "/v1/channels/oauth/fakeprep/start?instance=social.example", "", nil, 200, &start)
+	if n := registered() - before; n != 2 {
+		t.Fatalf("a client the server forgot was reused (%d registrations)", n)
+	}
 	u, _ := url.Parse(start.URL)
-	state := u.Query().Get("state")
-	resp := e.do(noRedirect, "GET", "/v1/channels/oauth/fakeprep/callback?code=ok&state="+url.QueryEscape(state), "", nil, 302, nil)
+	resp := e.do(noRedirect, "GET", "/v1/channels/oauth/fakeprep/callback?code=ok&state="+url.QueryEscape(u.Query().Get("state")), "", nil, 302, nil)
 	loc, _ := url.Parse(resp.Header.Get("Location"))
 	if loc.Query().Get("channel") == "" || loc.Query().Get("error") != "" {
 		t.Fatalf("landed on %s", resp.Header.Get("Location"))

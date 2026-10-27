@@ -585,14 +585,14 @@ func (s *Service) StartOAuth(ctx context.Context, p Principal, providerID, redir
 	return s.beginOAuth(ctx, e, app, redirect, st, extra)
 }
 
-// beginOAuth runs a platform's step before the sign-in (OAuthPreparer), seals what it returns in the state, signs
-// the state and answers the platform's sign-in URL.
+// beginOAuth signs the state and answers the platform's sign-in URL. A platform with a client per server
+// (OAuthPreparer: Mastodon) gets the client staqly registered there, sealed in the state for the exchange.
 func (s *Service) beginOAuth(ctx context.Context, e providers.Entry, app providers.App, redirect string, st oauthState, extra map[string]string) (string, error) {
 	extra = withVerifier(extra, s.pkceVerifier(st))
 	if p, ok := e.Provider.(providers.OAuthPreparer); ok {
 		cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
 		defer cancel()
-		carry, err := p.PrepareOAuth(cctx, redirect, extra)
+		carry, err := s.serverClient(cctx, e.ID(), p, redirect, extra)
 		if err != nil {
 			return "", connectError(err)
 		}
@@ -608,6 +608,39 @@ func (s *Service) beginOAuth(ctx context.Context, e providers.Entry, app provide
 		return "", err
 	}
 	return s.authURL(ctx, e, app, redirect, state, extra)
+}
+
+// serverClient is the client staqly keeps on the server a sign-in goes to: the saved one while the server still
+// knows it, else a new registration, saved for the next sign-in. It answers the client's values and "instance".
+func (s *Service) serverClient(ctx context.Context, providerID string, p providers.OAuthPreparer, redirect string, extra map[string]string) (map[string]string, error) {
+	server, err := p.OAuthServer(extra)
+	if err != nil {
+		return nil, err
+	}
+	key := db.GetOAuthClientParams{Provider: providerID, Server: server, RedirectUri: redirect}
+	var client map[string]string
+	if sealed, err := s.Q.GetOAuthClient(ctx, key); err == nil {
+		if s.unseal(sealed, &client) != nil || !p.ClientWorks(ctx, server, client) {
+			client = nil
+		}
+	} else if !isNoRows(err) {
+		return nil, err
+	}
+	if client == nil {
+		if client, err = p.RegisterClient(ctx, server, redirect); err != nil {
+			return nil, err
+		}
+		sealed, err := s.seal(client)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.W.SaveOAuthClient(context.WithoutCancel(ctx), db.SaveOAuthClientParams{Provider: providerID, Server: server,
+			RedirectUri: redirect, Credentials: sealed, CreatedAt: s.now()}); err != nil {
+			return nil, err
+		}
+	}
+	client["instance"] = server
+	return client, nil
 }
 
 // CompleteOAuth exchanges the code the platform sent back and saves the account as a channel. An existing
