@@ -45,8 +45,8 @@ func (t *tools) addPostTools(s *mcp.Server) {
 	add(s, t, &mcp.Tool{Name: "publish_post", Description: "Publish a draft, scheduled or failed post now. Requires posts:publish.", Annotations: wr()}, t.publishPost)
 	add(s, t, &mcp.Tool{Name: "cancel_post", Description: "Take a scheduled post off the schedule; it becomes a draft again. Requires posts:publish.", Annotations: wr()}, t.cancelPost)
 	add(s, t, &mcp.Tool{Name: "duplicate_post", Description: "Copy a post (content, media, tags, metadata, targets) into a new draft. Requires posts:write.", Annotations: wr()}, t.duplicatePost)
-	add(s, t, &mcp.Tool{Name: "delete_post", Description: "Delete a post (its event history is kept). Requires posts:delete (posts:write alone is not enough).", Annotations: destructive()}, t.deletePost)
-	add(s, t, &mcp.Tool{Name: "delete_posts", Description: "Delete several posts at once (up to 200; their event history is kept). Returns the deleted ids and the ids not found. What already went out stays on the platforms. Requires posts:delete.", Annotations: destructive()}, t.deletePosts)
+	add(s, t, &mcp.Tool{Name: "delete_post", Description: "Delete a draft, scheduled or failed post (its event history is kept). A post that went out (published, publishing, or published on any channel) is history and cannot be deleted (conflict). Requires posts:delete (posts:write alone is not enough).", Annotations: destructive()}, t.deletePost)
+	add(s, t, &mcp.Tool{Name: "delete_posts", Description: "Delete several posts at once (up to 200; their event history is kept). Returns the deleted ids, the ids not found, and the ids kept because they went out (published, publishing, or published on any channel: history, never deleted). Requires posts:delete.", Annotations: destructive()}, t.deletePosts)
 	add(s, t, &mcp.Tool{Name: "get_post_history", Description: "The events of a post, newest first: created, edited, scheduled, published or failed per channel.", Annotations: ro()}, t.postHistory)
 	add(s, t, &mcp.Tool{Name: "preview_post", Description: "How each target will carry the post: the text per channel (with the channel's links mode applied), the links it removes or defangs (links_found, with a warning naming the channel) and what its provider objects to (too long, missing title...).", Annotations: ro()}, t.previewPost)
 	add(s, t, &mcp.Tool{Name: "get_post_metrics", Description: "A post's numbers per channel (views, likes, reposts, replies, quotes, bookmarks, link clicks where the platform gives them), read from the platform when older than ten minutes or with refresh true. available false: the platform reports none.", Annotations: ro()}, t.postMetrics)
@@ -353,8 +353,8 @@ type postIDs struct {
 }
 
 func (t *tools) deletePosts(ctx context.Context, _ *mcp.CallToolRequest, in postIDs) (*mcp.CallToolResult, any, error) {
-	deleted, missing, err := t.svc.DeletePosts(ctx, t.principal(ctx), in.IDs)
-	return done(map[string]any{"deleted": deleted, "missing": missing}, err)
+	out, err := t.svc.DeletePosts(ctx, t.principal(ctx), in.IDs)
+	return done(out, err)
 }
 
 func (t *tools) postHistory(ctx context.Context, _ *mcp.CallToolRequest, in postRef) (*mcp.CallToolResult, any, error) {

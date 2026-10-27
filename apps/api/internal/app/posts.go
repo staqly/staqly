@@ -1088,6 +1088,19 @@ func (s *Service) DuplicatePost(ctx context.Context, p Principal, id string) (Po
 	return s.CreatePost(ctx, p, in)
 }
 
+// ErrPostWentOut: a post that went out (published, being published, or published on some of its channels) is
+// history and stays; purge (admin), retention and deleting the collection or the workspace still remove it.
+var ErrPostWentOut = conflict("this post went out and is kept as history; it cannot be deleted")
+
+// deletable refuses a post that went out, in full or on any of its channels, or is going out right now.
+func deletable(status string, targets []db.ListTargetsRow) error {
+	if status == "published" || status == "publishing" ||
+		slices.ContainsFunc(targets, func(t db.ListTargetsRow) bool { return t.Status == "published" }) {
+		return ErrPostWentOut
+	}
+	return nil
+}
+
 func (s *Service) DeletePost(ctx context.Context, p Principal, id string) error {
 	if err := p.require(ScopePostsDelete); err != nil {
 		return err
@@ -1100,8 +1113,14 @@ func (s *Service) DeletePost(ctx context.Context, p Principal, id string) error 
 		if err != nil {
 			return err
 		}
+		targets, err := q.ListTargets(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := deletable(row.Status, targets); err != nil {
+			return err
+		}
 		data := s.postEventData(ctx, q, p.WorkspaceID, id, nil)
-		targets, _ := q.ListTargets(ctx, id)
 		for _, t := range targets {
 			for _, k := range []string{"publish_target:", "target_timeout:"} {
 				if err := s.cancelJobs(ctx, q, k+id+":"+t.ChannelID); err != nil {
@@ -1120,28 +1139,37 @@ func (s *Service) DeletePost(ctx context.Context, p Principal, id string) error 
 	})
 }
 
+// DeletedPosts is what DeletePosts did with each id.
+type DeletedPosts struct {
+	Deleted []string `json:"deleted"`
+	Missing []string `json:"missing"` // unknown ids, or ids of another workspace
+	Kept    []string `json:"kept"`    // posts that went out (or are going out): history, not deleted
+}
+
 // DeletePosts deletes several posts (posts:delete, like one); unknown ids, or ids of another workspace, are
-// reported as missing, not fatal. What already went out stays on the platforms.
-func (s *Service) DeletePosts(ctx context.Context, p Principal, ids []string) (deleted, missing []string, err error) {
+// reported as missing, and posts that went out as kept, not fatal.
+func (s *Service) DeletePosts(ctx context.Context, p Principal, ids []string) (DeletedPosts, error) {
 	if err := p.require(ScopePostsDelete); err != nil {
-		return nil, nil, err
+		return DeletedPosts{}, err
 	}
 	if len(ids) == 0 || len(ids) > 200 {
-		return nil, nil, invalid("ids", "1 to 200 post ids")
+		return DeletedPosts{}, invalid("ids", "1 to 200 post ids")
 	}
 	ids = uniqueIDs(ids) // an id listed twice is deleted once, not reported as missing the second time
-	deleted, missing = []string{}, []string{}
+	out := DeletedPosts{Deleted: []string{}, Missing: []string{}, Kept: []string{}}
 	for _, id := range ids {
 		switch err := s.DeletePost(ctx, p, id); {
 		case err == nil:
-			deleted = append(deleted, id)
+			out.Deleted = append(out.Deleted, id)
 		case isNotFound(err):
-			missing = append(missing, id)
+			out.Missing = append(out.Missing, id)
+		case errors.Is(err, ErrPostWentOut):
+			out.Kept = append(out.Kept, id)
 		default:
-			return deleted, missing, err
+			return out, err
 		}
 	}
-	return deleted, missing, nil
+	return out, nil
 }
 
 // ---- publishing ----

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { Composer } from '@/components/posts/composer'
 
-import { channel, collection, post, provider } from './fixtures'
+import { channel, collection, post, provider, target } from './fixtures'
 import { mockApi, renderWithProviders } from './utils'
 
 // ProseMirror does not type in jsdom: the editor is a plain textarea here (the text conversion has its own
@@ -197,6 +197,79 @@ describe('composer', () => {
     expect(await screen.findByTestId('counters')).toHaveTextContent('31/500')
     expect(screen.getByTestId('counters')).toHaveTextContent('9')
     expect(screen.getByRole('button', { name: /characters per channel$/ })).toHaveClass('border-destructive')
+  })
+
+  it('a past time says so next to its chip and holds Publish now back until it is cleared', async () => {
+    const draft = post({
+      id: 'pst_9',
+      status: 'draft',
+      content: 'Late',
+      publish_at: '2020-01-05T09:00:00Z',
+      targets: [target()],
+    })
+    const api = mockApi({
+      ...routes,
+      'PATCH /v1/posts/pst_9': { ...draft, publish_at: null },
+      'POST /v1/posts/pst_9/schedule': { ...draft, status: 'scheduled' },
+      'POST /v1/posts/pst_9/cancel': draft,
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} post={draft} />, { mode: 'local' })
+    // The notice sits with the time, the chip points at it.
+    const notice = await screen.findByTestId('publish-at-error')
+    const chip = screen.getByTestId('publish-at-chip')
+
+    expect(notice).toHaveAttribute('role', 'alert')
+    expect(notice).toHaveTextContent('This time is in the past. Pick a future time or clear it.')
+    expect(chip).toHaveClass('border-destructive')
+    expect(chip).toHaveAttribute('aria-describedby', notice.id)
+    // Publish now stays focusable, says why on focus, and does nothing.
+    const now = screen.getByTestId('publish-now')
+
+    expect(now).toHaveAttribute('aria-disabled', 'true')
+    expect(now).toHaveAttribute('aria-describedby', notice.id)
+    await user.click(now)
+    expect(api.find('PATCH', '/v1/posts/pst_9')).toHaveLength(0)
+    expect(api.find('POST', '/v1/posts/pst_9/schedule')).toHaveLength(0)
+    now.blur()
+    now.focus()
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'The date is in the past: pick a future time or clear the date to publish now',
+    )
+    // Cleared, it publishes now with the usual Undo.
+    await user.click(screen.getByRole('button', { name: 'Clear schedule' }))
+    expect(screen.queryByTestId('publish-at-error')).not.toBeInTheDocument()
+    expect(screen.getByTestId('publish-now')).not.toHaveAttribute('aria-disabled')
+    await user.click(screen.getByTestId('publish-now'))
+    await waitFor(() => expect(api.find('POST', '/v1/posts/pst_9/schedule')).toHaveLength(1))
+    expect(api.find('PATCH', '/v1/posts/pst_9')[0].body).toMatchObject({ publish_at: null })
+    expect(await screen.findByText(/Publishing in \d s/)).toBeInTheDocument()
+  })
+
+  it('the picked channel stands out in the heading over its text, and its tab ring circles the avatar', async () => {
+    mockApi(routes)
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1', 'ch_2')
+    await user.click(screen.getByTestId('tab-channel-ch_2'))
+    const heading = screen.getByRole('heading', { name: 'Text for Brand on Bluesky' })
+    const name = within(heading).getByTestId('text-for-channel')
+
+    expect(name).toHaveAttribute('title', 'Brand on Bluesky')
+    expect(name).toHaveClass('bg-muted')
+    expect(
+      screen.getByText('Brand on Bluesky', { selector: '.font-medium.text-foreground' }).parentElement,
+    ).toHaveTextContent('Brand on Bluesky uses the text for all channels. Change it here to give it its own.')
+    // The selection ring is its own circle around the avatar, not the button around avatar and badge.
+    const tab = screen.getByTestId('tab-channel-ch_2')
+
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(within(tab).getByTestId('tab-channel-ring')).toHaveClass('ring-primary', 'rounded-full')
+    expect(within(screen.getByTestId('tab-channel-ch_1')).getByTestId('tab-channel-ring')).toHaveClass(
+      'ring-transparent',
+    )
   })
 
   it('a per-channel text override and a platform setting travel with that target', async () => {

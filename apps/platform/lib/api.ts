@@ -956,7 +956,10 @@ export const api = {
     request<Post>(`/v1/posts/${encodeURIComponent(id)}`, { method: 'PATCH', json: body }),
   deletePost: (id: string) => request<void>(`/v1/posts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   deletePosts: (ids: string[]) =>
-    request<{ deleted: string[]; missing: string[] }>('/v1/posts/delete', { method: 'POST', json: { ids } }),
+    request<{ deleted: string[]; missing: string[]; kept: string[] }>('/v1/posts/delete', {
+      method: 'POST',
+      json: { ids },
+    }),
   schedulePost: (id: string, publish_at: string) =>
     request<Post>(`/v1/posts/${encodeURIComponent(id)}/schedule`, { method: 'POST', json: { publish_at } }),
   cancelPost: (id: string) => request<Post>(`/v1/posts/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),

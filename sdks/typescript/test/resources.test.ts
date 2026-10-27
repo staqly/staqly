@@ -415,11 +415,11 @@ const cases: Case[] = [
   {
     name: 'posts.deleteMany',
     call: (c) => c.posts.deleteMany(['pst_1', 'pst_2']),
-    reply: json({ deleted: ['pst_1'], missing: ['pst_2'] }),
+    reply: json({ deleted: ['pst_1'], missing: ['pst_2'], kept: [] }),
     method: 'POST',
     path: '/v1/posts/delete',
     body: { ids: ['pst_1', 'pst_2'] },
-    result: { deleted: ['pst_1'], missing: ['pst_2'] },
+    result: { deleted: ['pst_1'], missing: ['pst_2'], kept: [] },
   },
   {
     name: 'media.deleteMany',

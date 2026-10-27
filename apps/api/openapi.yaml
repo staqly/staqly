@@ -1849,7 +1849,7 @@ paths:
       operationId: deletePosts
       tags: [posts]
       summary: Delete several posts (posts:delete)
-      description: "Unknown ids, and ids of another workspace, are listed in `missing`. What already went out stays on the platforms."
+      description: "Unknown ids, and ids of another workspace, are listed in `missing`. Posts that went out (published, publishing, or published on any of their channels) are history: they are listed in `kept` and not deleted."
       requestBody:
         required: true
         content:
@@ -1861,15 +1861,16 @@ paths:
                 ids: { type: array, minItems: 1, maxItems: 200, items: { type: string } }
       responses:
         "200":
-          description: What was deleted and which ids were not found
+          description: What was deleted, which ids were not found and which posts were kept because they went out
           content:
             application/json:
               schema:
                 type: object
-                required: [deleted, missing]
+                required: [deleted, missing, kept]
                 properties:
                   deleted: { type: array, items: { type: string } }
                   missing: { type: array, items: { type: string } }
+                  kept: { type: array, items: { type: string }, description: "Posts that went out: history, never deleted" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -1912,8 +1913,11 @@ paths:
     delete:
       operationId: deletePost
       tags: [posts]
-      summary: Delete a post; its events stay as history (posts:delete)
-      description: Requires `posts:delete`; `posts:write` alone answers 403. A publishing post cannot be deleted (409).
+      summary: Delete a draft, scheduled or failed post; its events stay as history (posts:delete)
+      description: |
+        Requires `posts:delete`; `posts:write` alone answers 403. A post that went out (published, publishing, or
+        published on any of its channels) is history and cannot be deleted (409 `conflict`); purging it (`admin`),
+        retention and deleting its collection or the workspace still remove it.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       responses:

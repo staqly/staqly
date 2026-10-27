@@ -77,16 +77,23 @@ export class Posts extends APIResource {
     return this.http.request({ method: 'PATCH', path: `/v1/posts/${enc(id)}`, body: input, options })
   }
 
-  /** Deletes the post (its events stay as history). Needs `posts:delete` (`posts:write` is not enough). */
+  /**
+   * Deletes a draft, scheduled or failed post (its events stay as history). A post that went out (published,
+   * publishing, or published on any channel) is history: 409 `ConflictError`. Needs `posts:delete`
+   * (`posts:write` is not enough).
+   */
   async delete(id: string, options?: RequestOptions): Promise<void> {
     await this.http.request({ method: 'DELETE', path: `/v1/posts/${enc(id)}`, options })
   }
 
   /**
    * Deletes several posts at once (up to 200). Unknown ids, and ids of another workspace, come back in
-   * `missing`. Needs `posts:delete`.
+   * `missing`; posts that went out are history and come back in `kept`. Needs `posts:delete`.
    */
-  deleteMany(ids: string[], options?: RequestOptions): Promise<{ deleted: string[]; missing: string[] }> {
+  deleteMany(
+    ids: string[],
+    options?: RequestOptions,
+  ): Promise<{ deleted: string[]; missing: string[]; kept: string[] }> {
     return this.http.request({ method: 'POST', path: '/v1/posts/delete', body: { ids }, options })
   }
 

@@ -46,13 +46,13 @@ test.describe('the post', () => {
     await expect(targets.filter({ hasText: 'Published' })).toHaveCount(2)
     await expect(targets.first().getByRole('link')).toHaveAttribute('href', 'https://instagram.example/p/abc')
     await expect(targets.first().getByRole('link')).toHaveAttribute('rel', /noopener/)
-    // Nothing to publish any more: the icon row opens it, shows its numbers, shares, duplicates, deletes.
+    // Nothing to publish any more: the icon row opens it, shows its numbers, shares, duplicates; it stays as history.
     await expect(actions(page).getByRole('button', { name: 'Publish now' })).toHaveCount(0)
     await expect(actions(page).getByRole('button', { name: 'Open post' })).toBeVisible()
     await expect(sheet(page).getByRole('tab', { name: 'Statistics' })).toBeVisible()
     await expect(actions(page).getByRole('button', { name: /Preview and feedback/ })).toBeVisible()
     await expect(actions(page).getByRole('button', { name: 'Duplicate' })).toBeVisible()
-    await expect(actions(page).getByRole('button', { name: 'Delete' })).toBeVisible()
+    await expect(actions(page).getByRole('button', { name: 'Delete' })).toHaveCount(0)
   })
 
   test('a failed post: the error on its channel, Retry asks the automation again, the result publishes it', async ({

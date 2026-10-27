@@ -25,7 +25,7 @@ import { threadsOf } from '@/lib/annotations'
 import { api, type Post, type PostComment, type PreviewLink, type TargetMetrics } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { postTitle } from '@/lib/posts'
+import { postTitle, wentOut } from '@/lib/posts'
 import { invalidateAfterPostChange, qk, refetchPostListsFromStart, removePostFromLists } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 
@@ -403,6 +403,8 @@ export function PostActions({ post, onDeleted }: { post: Post; onDeleted: () => 
   const params = useSearchParams()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  // A post that went out is history: it stays (the API refuses to delete it), so there is no Delete.
+  const deletable = !wentOut(post)
   const comments = useQuery({ queryKey: commentsKey(post.id), queryFn: () => api.postComments(post.id) })
   // Open threads (a thread's first comment, not resolved): the badge counts what still needs an answer.
   const feedbackCount = (comments.data?.data ?? NO_COMMENTS).filter((c) => !c.parent_id && !c.resolved_at).length
@@ -472,27 +474,26 @@ export function PostActions({ post, onDeleted }: { post: Post; onDeleted: () => 
         >
           <Copy />
         </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="destructive"
-          aria-label="Delete"
-          onClick={() => setDeleteOpen(true)}
-          data-testid="post-delete"
-        >
-          <Trash2 />
-        </Button>
+        {deletable && (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="destructive"
+            aria-label="Delete"
+            onClick={() => setDeleteOpen(true)}
+            data-testid="post-delete"
+          >
+            <Trash2 />
+          </Button>
+        )}
       </div>
       {shareOpen && <ShareDialog post={post} open={shareOpen} onOpenChange={setShareOpen} />}
       <ConfirmDialog
-        open={deleteOpen}
+        open={deleteOpen && deletable}
         onOpenChange={setDeleteOpen}
         title="Delete this post?"
-        description={
-          (post.targets ?? []).some((t) => t.status === 'published')
-            ? 'It is removed from Staqly only: what was published stays on the platforms.'
-            : 'It will not be published.'
-        }
+        description="It will not be published."
+
         confirmLabel={del.isPending ? 'Deleting...' : 'Delete'}
         variant="destructive"
         onConfirm={() => del.mutate()}

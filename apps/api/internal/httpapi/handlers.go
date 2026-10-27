@@ -487,8 +487,8 @@ func (s *Server) deletePosts(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	deleted, missing, err := s.svc.DeletePosts(r.Context(), principal(r), in.IDs)
-	respond(w, r, 200, map[string]any{"deleted": deleted, "missing": missing}, err)
+	out, err := s.svc.DeletePosts(r.Context(), principal(r), in.IDs)
+	respond(w, r, 200, out, err)
 }
 
 func (s *Server) deleteMediaMany(w http.ResponseWriter, r *http.Request) {

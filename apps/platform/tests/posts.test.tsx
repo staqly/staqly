@@ -151,7 +151,10 @@ describe('post sheet', () => {
         id: 'pst_1',
         status: 'scheduled',
         publish_at: '2099-01-05T09:00:00Z',
-        targets: [target(), target({ channel_id: 'ch_2', channel_name: 'Brand on Bluesky', provider: 'bluesky' })],
+        targets: [
+          target(),
+          target({ channel_id: 'ch_2', channel_name: 'Brand on Bluesky', provider: 'bluesky', status: 'failed' }),
+        ],
       }),
       'GET /v1/collections': { data: [collection()] },
       'GET /v1/channels': channels,
@@ -160,24 +163,28 @@ describe('post sheet', () => {
     })
 
     renderWithProviders(<PostSheet id="pst_1" channel="ch_2" onClose={() => {}} />, { mode: 'local' })
-    expect(await screen.findByRole('tab', { name: 'Text for Brand on Bluesky' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    const tab = await screen.findByRole('tab', { name: 'Text for Brand on Bluesky' })
+
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: 'Text for Brand on Bluesky' })).toBeInTheDocument()
+    // The delivery dot sits at the top left, clear of the platform badge at the bottom right.
+    expect(within(tab).getByTestId('tab-channel-status')).toHaveClass('-top-0.5', '-left-0.5', 'bg-destructive')
+    expect(
+      within(screen.getByRole('tab', { name: 'Text for Brand on Mastodon' })).queryByTestId('tab-channel-status'),
+    ).toBeNull()
     // A scheduled post: the main action saves it (keeping its time), Publish now is the other one.
     expect(screen.getByTestId('save-post')).toHaveTextContent('Save changes')
     expect(screen.getByTestId('publish-now')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Update' })).not.toBeInTheDocument()
   })
 
-  it('a published post is read only and can be duplicated and deleted', async () => {
+  it('a published post is read only, can be duplicated and cannot be deleted', async () => {
     const api = mockApi({
       'GET /v1/posts/pst_1': post({ id: 'pst_1', status: 'published', targets: [target({ status: 'published' })] }),
       'GET /v1/collections': { data: [collection()] },
       'GET /v1/channels': channels,
       'GET /v1/providers': { data: [] },
       'POST /v1/posts/pst_1/duplicate': post({ id: 'pst_2' }),
-      'DELETE /v1/posts/pst_1': { status: 204 },
       'GET /v1/events': { data: [] },
       'GET /v1/posts/pst_1/comments': { data: [] },
     })
@@ -190,10 +197,40 @@ describe('post sheet', () => {
     const actions = screen.getByTestId('post-actions-row')
 
     expect(within(actions).queryByRole('button', { name: 'Publish now' })).not.toBeInTheDocument()
+    // It went out: history stays, so there is no Delete.
+    expect(within(actions).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     await user.click(within(actions).getByRole('button', { name: 'Duplicate' }))
     await waitFor(() => expect(api.find('POST', '/v1/posts/pst_1/duplicate')).toHaveLength(1))
-    await user.click(within(actions).getByRole('button', { name: 'Delete' }))
+  })
+
+  it('a post published on some of its channels has no Delete either; a failed one keeps it', async () => {
+    const partial = post({
+      id: 'pst_1',
+      status: 'failed',
+      targets: [target({ status: 'published' }), target({ channel_id: 'ch_2', status: 'failed' })],
+    })
+    const api = mockApi({
+      'GET /v1/posts/pst_1': partial,
+      'GET /v1/posts/pst_2': post({ id: 'pst_2', status: 'failed', targets: [target({ status: 'failed' })] }),
+      'DELETE /v1/posts/pst_2': { status: 204 },
+      'GET /v1/collections': { data: [collection()] },
+      'GET /v1/channels': channels,
+      'GET /v1/providers': { data: [] },
+      'GET /v1/events': { data: [] },
+      'GET /v1/posts/pst_1/comments': { data: [] },
+      'GET /v1/posts/pst_2/comments': { data: [] },
+    })
+    const user = userEvent.setup()
+    const view = renderWithProviders(<PostSheet id="pst_1" onClose={() => {}} />, { mode: 'local' })
+    const actions = await screen.findByTestId('post-actions-row')
+
+    expect(within(actions).getByRole('button', { name: 'Duplicate' })).toBeInTheDocument()
+    expect(within(actions).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+
+    view.unmount()
+    renderWithProviders(<PostSheet id="pst_2" onClose={() => {}} />, { mode: 'local' })
+    await user.click(within(await screen.findByTestId('post-actions-row')).getByRole('button', { name: 'Delete' }))
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
-    await waitFor(() => expect(api.find('DELETE', '/v1/posts/pst_1')).toHaveLength(1))
+    await waitFor(() => expect(api.find('DELETE', '/v1/posts/pst_2')).toHaveLength(1))
   })
 })

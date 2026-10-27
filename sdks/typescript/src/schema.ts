@@ -1416,7 +1416,7 @@ export interface paths {
         put?: never;
         /**
          * Delete several posts (posts:delete)
-         * @description Unknown ids, and ids of another workspace, are listed in `missing`. What already went out stays on the platforms.
+         * @description Unknown ids, and ids of another workspace, are listed in `missing`. Posts that went out (published, publishing, or published on any of their channels) are history: they are listed in `kept` and not deleted.
          */
         post: operations["deletePosts"];
         delete?: never;
@@ -1439,8 +1439,10 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Delete a post; its events stay as history (posts:delete)
-         * @description Requires `posts:delete`; `posts:write` alone answers 403. A publishing post cannot be deleted (409).
+         * Delete a draft, scheduled or failed post; its events stay as history (posts:delete)
+         * @description Requires `posts:delete`; `posts:write` alone answers 403. A post that went out (published, publishing, or
+         *     published on any of its channels) is history and cannot be deleted (409 `conflict`); purging it (`admin`),
+         *     retention and deleting its collection or the workspace still remove it.
          */
         delete: operations["deletePost"];
         options?: never;
@@ -8717,7 +8719,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description What was deleted and which ids were not found */
+            /** @description What was deleted, which ids were not found and which posts were kept because they went out */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8726,6 +8728,8 @@ export interface operations {
                     "application/json": {
                         deleted: string[];
                         missing: string[];
+                        /** @description Posts that went out: history, never deleted */
+                        kept: string[];
                     };
                 };
             };

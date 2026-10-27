@@ -673,7 +673,7 @@ CASES = [
         lambda c: c.posts.delete_many(["pst_1", "pst_2"]),
         "POST",
         "/v1/posts/delete",
-        {"deleted": ["pst_1"], "missing": ["pst_2"]},
+        {"deleted": ["pst_1"], "missing": ["pst_2"], "kept": []},
         body={"ids": ["pst_1", "pst_2"]},
         check=lambda r: r["deleted"] == ["pst_1"],
     ),

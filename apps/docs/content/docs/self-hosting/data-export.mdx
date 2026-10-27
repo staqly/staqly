@@ -115,9 +115,11 @@ variables](/self-hosting/configuration#how-to-change-a-setting). A daily worker 
 
 ## Purge a post
 
-`DELETE /v1/posts/{id}` removes the post, but its events, which hold snapshots of it, stay.
-`POST /v1/posts/{id}/purge` (scope `admin`; **Delete post → Also erase its history** in the
-dashboard) removes the history too:
+`DELETE /v1/posts/{id}` removes a post that never went out, but its events, which hold snapshots
+of it, stay. A post that went out (published, publishing, or published on any of its channels) is
+history: `DELETE` answers `409` and the dashboard has no **Delete** for it.
+`POST /v1/posts/{id}/purge` (scope `admin`, API and MCP only) removes any post, one that went out
+included, with its history:
 
 - the post and its targets;
 - every event about it and their webhook deliveries, **even pending ones**;

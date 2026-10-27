@@ -48,8 +48,9 @@ Or ask the [assistant](/dashboard/assistant) to write it for you.
 ### Save, schedule or publish
 
 **Save draft** keeps it; **Schedule** (with a time) or **Publish now** (without) sends it out.
-A scheduled post needs at least one channel; the composer says *Pick a time in the future*
-when the time has passed.
+A scheduled post needs at least one channel. When the picked time has passed, a red notice above
+the buttons says so and **Publish now** waits: pick a future time, or clear the time (**×** on its
+chip) to publish now.
 
 Closing the composer with changes you haven't saved (Esc or **×**) asks **Discard your
 changes?** first.
@@ -86,10 +87,9 @@ seconds-long Undo as in the post), **Cancel schedule**, **Open on** a platform, 
 Tick a row's checkbox (it appears on hover, or replaces the channel avatars on a narrow screen);
 **Shift**+click ticks the range up to it, **Cmd/Ctrl+A** ticks every loaded post and **Esc**
 clears. A bar at the bottom acts on all of them: **Duplicate**, **Move** to another collection,
-**Tags** (add or remove), **Cancel schedule** and **Delete** (after a confirmation; published posts
-are removed from Staqly only, what went out stays on the platforms). Posts an action doesn't apply
-to (a published post can't move or change tags; only scheduled ones come off the schedule) are
-skipped, and the message says how many. The API does the same with
+**Tags** (add or remove), **Cancel schedule** and **Delete** (after a confirmation). Posts an
+action doesn't apply to (a published post can't move or change tags; only scheduled ones come off
+the schedule; posts that went out are never deleted) are skipped, and the message says how many. The API does the same with
 [`POST /v1/posts/delete`](/api/reference), MCP with `delete_posts`.
 
 | Status | Meaning |
@@ -112,7 +112,7 @@ header, a row of icons next to them (hover for their names), and the sections **
 | Globe, **Open post** | Opens the published post on its platform; with several channels, a menu picks one. Shown once something is published |
 | Eye, **Preview and feedback** | A link to a read-only preview anyone can comment on, and the comments people left (the badge counts them). See [Share a preview](/dashboard/share-a-preview) |
 | Copy, **Duplicate** | A new draft with the same content, media, per-channel texts and settings, tags and comments, without its time; it opens straight away |
-| Trash, **Delete** | Asks first. A published post is removed from Staqly only: what went out stays on the platforms |
+| Trash, **Delete** | Asks first. Only for a post that hasn't gone out: once it is published, publishing or published on any of its channels, it stays as history (rows and the bar at the bottom leave it out too). **Duplicate** it to post it again |
 
 A direct link such as `/posts/post_oalirbz67y4m4cqxq5dw` opens the same view.
 
