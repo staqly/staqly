@@ -127,7 +127,7 @@ func collectionsCommand() *Command {
 				}
 			}, "staqly collections archive \"Old campaign\"", "staqly collections archive \"Old campaign\" --undo"),
 
-			leaf("delete", "<id|name>", "Permanently delete a collection and all its posts (API keys: collections:delete)", 1, 1, func(fs *flag.FlagSet) runFunc {
+			leaf("delete", "<id|name>", "Permanently delete a collection and its schedules; its posts move to Default (API keys: collections:delete)", 1, 1, func(fs *flag.FlagSet) runFunc {
 				yes := fs.Bool("yes", false, "do not ask for confirmation")
 				return func(c *Ctx, args []string) error {
 					cl, err := c.Client()
@@ -142,7 +142,7 @@ func collectionsCommand() *Command {
 						if !c.Env.StdinTTY {
 							return usageErrf("refusing to delete %q without --yes (stdin is not a terminal)", col.Name)
 						}
-						fmt.Fprintf(c.Stderr, "This permanently deletes %q and its %d posts.\nType the collection name to confirm: ", col.Name, col.PostCount)
+						fmt.Fprintf(c.Stderr, "This permanently deletes %q and its schedules. Its %d posts move to Default.\nType the collection name to confirm: ", col.Name, col.PostCount)
 						line, _ := bufio.NewReader(c.Env.Stdin).ReadString('\n')
 						if strings.TrimSpace(line) != col.Name {
 							return &exitErr{code: ExitError, msg: "confirmation did not match; nothing was deleted"}

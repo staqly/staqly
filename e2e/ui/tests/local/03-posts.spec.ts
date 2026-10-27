@@ -22,6 +22,10 @@ test.describe('posts', () => {
     await expect(pane.getByRole('link', { name: /Old campaigns/ })).toHaveCount(0)
     const list = rows(page)
 
+    // Posts that went out are hidden until the switch shows them (remembered in this browser).
+    await expect(list.filter({ hasText: 'Beach day' })).toContainText('Scheduled')
+    await expect(list.filter({ hasText: 'Posted yesterday' })).toHaveCount(0)
+    await page.getByRole('switch', { name: 'Show past posts' }).click()
     await expect(list.filter({ hasText: 'Posted yesterday' })).toContainText('Published')
     await expect(list.filter({ hasText: 'Upload failed' })).toContainText('Failed')
     await expect(list.filter({ hasText: 'Beach day' })).toContainText('Scheduled')
@@ -75,6 +79,8 @@ test.describe('posts', () => {
     srv,
   }) => {
     await page.goto(`/posts?collection=${srv.seed.collections.instagram}`)
+    // A published post: past posts show once the switch is on.
+    await page.getByRole('switch', { name: 'Show past posts' }).click()
     await rows(page).filter({ hasText: 'Posted yesterday' }).click()
     await expect(page).toHaveURL(new RegExp(`/posts/${srv.seed.posts.published}`))
     const sheet = page.getByRole('dialog')

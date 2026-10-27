@@ -110,6 +110,7 @@ type PostPatch struct {
 type PostFilter struct {
 	CollectionID, Status, ChannelID, Q, Tag string
 	PublishAfter, PublishBefore             string
+	HidePast                                bool // leave out posts that went out (published, or failed after their time)
 	Sort                                    string
 	Limit                                   int
 	Cursor                                  string
@@ -683,6 +684,9 @@ func (s *Service) ListPosts(ctx context.Context, p Principal, f PostFilter) (Pos
 	}
 	search := db.PostSearch{WorkspaceID: p.WorkspaceID, CollectionID: f.CollectionID, Status: f.Status, ChannelID: f.ChannelID,
 		Tag: f.Tag, Query: f.Q, Sort: f.Sort, Cursor: f.Cursor, Limit: clampLimit(f.Limit, 50, 200)}
+	if f.HidePast {
+		search.HidePast = s.now()
+	}
 	for _, t := range []struct {
 		field, v string
 		dst      *string

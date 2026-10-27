@@ -136,6 +136,32 @@ func (q *Queries) GetCollectionByID(ctx context.Context, id string) (Collection,
 	return i, err
 }
 
+const getDefaultCollection = `-- name: GetDefaultCollection :one
+SELECT id, workspace_id, name, description, icon, color, default_view, actions, archived_at, created_at, updated_at, is_default, expires_in, processing_timeout_seconds FROM collections WHERE workspace_id = ? AND is_default = 1
+`
+
+func (q *Queries) GetDefaultCollection(ctx context.Context, workspaceID string) (Collection, error) {
+	row := q.db.QueryRowContext(ctx, getDefaultCollection, workspaceID)
+	var i Collection
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
+		&i.Icon,
+		&i.Color,
+		&i.DefaultView,
+		&i.Actions,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsDefault,
+		&i.ExpiresIn,
+		&i.ProcessingTimeoutSeconds,
+	)
+	return i, err
+}
+
 const listCollections = `-- name: ListCollections :many
 SELECT id, workspace_id, name, description, icon, color, default_view, actions, archived_at, created_at, updated_at, is_default, expires_in, processing_timeout_seconds FROM collections
 WHERE workspace_id = ?1 AND (CAST(?2 AS INTEGER) = 1 OR archived_at IS NULL)

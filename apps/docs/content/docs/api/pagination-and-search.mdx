@@ -78,6 +78,7 @@ Both post list endpoints need `posts:read`.
 | `channel_id` | Posts with a target on this channel |
 | `tag` | Posts carrying this tag |
 | `publish_after`, `publish_before` | `publish_at` range (RFC 3339 or `YYYY-MM-DD`; `after` inclusive, `before` exclusive). Posts without a time never match: this is the calendar |
+| `hide_past` | `true` leaves out past posts: published ones, and failed ones whose time has passed or that had none. Drafts, scheduled and publishing posts always stay |
 | `q` | Words of the content |
 | `sort` | `publish_asc` (default: soonest first, posts without a time last), `publish_desc`, `created_desc`, `created_asc`, `updated_desc` |
 | `limit`, `cursor` | Paging |
