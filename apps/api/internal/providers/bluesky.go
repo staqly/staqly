@@ -420,6 +420,12 @@ func (s *blueskySession) call(ctx context.Context, method, nsid string, body io.
 	}
 	resp, err := s.send(ctx, method, nsid, payload, contentType)
 	if err == nil && s.dpop != nil {
+		if blueskyLearnClock(resp) && resp.StatusCode == http.StatusUnauthorized {
+			resp.Body.Close() // the proof's time was off: sign again on the server's time
+			resp, err = s.send(ctx, method, nsid, payload, contentType)
+		}
+	}
+	if err == nil && s.dpop != nil {
 		if n, again := dpopRetry(resp); again {
 			resp.Body.Close()
 			s.nonce = n
@@ -444,6 +450,9 @@ func (s *blueskySession) call(ctx context.Context, method, nsid string, body io.
 			}
 		}
 		return nil
+	}
+	if s.dpop != nil && blueskyDPoPRefused(raw) {
+		return &Failure{Msg: "Bluesky did not accept staqly's request signature (" + fediSnippet(raw) + "); staqly tries again in a few minutes"}
 	}
 	return blueskyError(resp.StatusCode, raw)
 }

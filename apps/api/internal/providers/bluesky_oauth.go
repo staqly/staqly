@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -192,7 +194,7 @@ func blueskyTokenCall(ctx context.Context, app App, srv blueskyServer, endpoint 
 	if err != nil {
 		return err
 	}
-	now := time.Now().Unix()
+	now := blueskyNow().Unix()
 	assertion, err := blueskyJWT(ck, map[string]any{"alg": "ES256", "kid": blueskyKID(ck)},
 		map[string]any{"iss": app.ClientID, "sub": app.ClientID, "aud": srv.Issuer, "jti": randomID(), "iat": now, "exp": now + 60})
 	if err != nil {
@@ -219,6 +221,7 @@ func blueskyTokenCall(ctx context.Context, app App, srv blueskyServer, endpoint 
 		}
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
+		clockOff := blueskyLearnClock(resp)
 		var e struct {
 			Error string `json:"error"`
 			Desc  string `json:"error_description"`
@@ -228,6 +231,9 @@ func blueskyTokenCall(ctx context.Context, app App, srv blueskyServer, endpoint 
 			nonce = resp.Header.Get("DPoP-Nonce")
 			continue
 		}
+		if e.Error == "invalid_dpop_proof" && clockOff && attempt < 2 {
+			continue // signed again on the server's time
+		}
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			return json.Unmarshal(raw, out)
 		}
@@ -236,6 +242,10 @@ func blueskyTokenCall(ctx context.Context, app App, srv blueskyServer, endpoint 
 		}
 		if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests {
 			return &Failure{Msg: fmt.Sprintf("Bluesky's sign-in server is unavailable (%d); try again", resp.StatusCode)}
+		}
+		if e.Error == "invalid_dpop_proof" {
+			// Our signature, not the account: a clock off (a machine waking from sleep) passes, so try again later.
+			return &Failure{Msg: "Bluesky did not accept staqly's request signature (" + fediFirst(e.Desc, e.Error) + "); staqly tries again in a few minutes"}
 		}
 		return &Failure{Kind: ErrRejected, Msg: "Bluesky refused the sign-in (" + fediFirst(e.Desc, e.Error, fediSnippet(raw)) + ")"}
 	}
@@ -346,7 +356,7 @@ func blueskyProof(key *ecdsa.PrivateKey, method, target, nonce, access string) (
 		return "", err
 	}
 	u.RawQuery, u.Fragment = "", ""
-	claims := map[string]any{"jti": randomID(), "htm": method, "htu": u.String(), "iat": time.Now().Unix()}
+	claims := map[string]any{"jti": randomID(), "htm": method, "htu": u.String(), "iat": blueskyNow().Unix()}
 	if nonce != "" {
 		claims["nonce"] = nonce
 	}
@@ -390,6 +400,32 @@ func blueskyOAuthSession(c Credentials) (*blueskySession, error) {
 		return nil, err
 	}
 	return &blueskySession{service: service, did: c["did"], access: c["access_token"], dpop: key}, nil
+}
+
+// blueskySkew is how far Bluesky's clock is from ours, in seconds, learnt from its Date header: proofs signed on a
+// clock that is off (a laptop's Docker VM after sleep) are refused as too old or too new.
+// ponytail: one offset for every Bluesky server, per-server if one ever runs on a clock of its own.
+var blueskySkew atomic.Int64
+
+func blueskyNow() time.Time { return time.Now().Add(time.Duration(blueskySkew.Load()) * time.Second) }
+
+// blueskyLearnClock keeps the server's time from its Date header; it reports whether the offset changed by more
+// than a few seconds (a proof refused for its time is then worth signing again).
+func blueskyLearnClock(resp *http.Response) bool {
+	d, err := http.ParseTime(resp.Header.Get("Date"))
+	if err != nil {
+		return false
+	}
+	off := int64(time.Until(d).Round(time.Second) / time.Second)
+	if off > -3 && off < 3 {
+		off = 0
+	}
+	return blueskySkew.Swap(off) != off
+}
+
+// blueskyDPoPRefused: the server refused the DPoP proof itself (its time, its signature), not the token.
+func blueskyDPoPRefused(raw []byte) bool {
+	return bytes.Contains(bytes.ToLower(raw), []byte("dpop proof"))
 }
 
 // dpopRetry: a server that answers 401 with use_dpop_nonce wants the request again with its nonce.

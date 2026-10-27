@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // blueskyVerify checks a compact ES256 JWT against a public key and returns its header and claims.
@@ -168,5 +169,33 @@ func TestBlueskyOAuth(t *testing.T) {
 	m, err := BlueskyClientMetadata(app, "https://staqly.example.com", "https://staqly.example.com/channels/callback/bluesky")
 	if err != nil || m["client_id"] != app.ClientID || m["token_endpoint_auth_method"] != "private_key_jwt" {
 		t.Fatalf("metadata %v %v", m, err)
+	}
+}
+
+// Was a bug: a laptop's Docker clock, minutes behind after sleep, signed proofs Bluesky refused as too old, and the
+// refusal marked the channel needs_reconnect. Proofs follow the server's Date now, and a refused proof is retried.
+func TestBlueskyProofFollowsServerClock(t *testing.T) {
+	t.Cleanup(func() { blueskySkew.Store(0) })
+	serverNow := time.Now().Add(10 * time.Minute)
+	refuse := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, claims := blueskyVerify(t, r.Header.Get("DPoP"), nil)
+		w.Header().Set("Date", serverNow.UTC().Format(http.TimeFormat))
+		if iat := int64(claims["iat"].(float64)); refuse || iat < serverNow.Unix()-5 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"InvalidToken","message":"Failed to verify DPoP proof: \"iat\" claim timestamp check failed (too far in the past)"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	s := &blueskySession{service: srv.URL, did: "did:plc:test", access: "tok", dpop: blueskyDPoPKey("clock")}
+	if err := s.call(context.Background(), http.MethodGet, "app.bsky.actor.getProfile", nil, "", nil); err != nil {
+		t.Fatalf("a proof on a clock 10 minutes behind is signed again on the server's time: %v", err)
+	}
+	refuse = true
+	err := s.call(context.Background(), http.MethodGet, "app.bsky.actor.getProfile", nil, "", nil)
+	if err == nil || errors.Is(err, ErrReauth) || errors.Is(err, ErrRejected) {
+		t.Fatalf("a refused proof is worth another try later, not a reconnect: %v", err)
 	}
 }
