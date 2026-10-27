@@ -3,7 +3,7 @@ title: Developer apps
 description: Register your own OAuth app with a platform so Staqly Community Edition can connect accounts on it.
 ---
 
-Platforms with `auth: oauth2` (X, LinkedIn, Mastodon, Threads and the others) let an
+Platforms with `auth: oauth2` (X, LinkedIn, Threads, YouTube and the others) let an
 application act for an account only after the person signs in at the platform and allows it.
 The application is a **developer app** registered with the platform: a client id and a client
 secret. Someone has to provide one before a channel on that platform can be connected. On
@@ -39,6 +39,10 @@ already target its channels still publish as planned. Enabled but without its ap
 platform is listed as `soon`.
 `.env.example` has a block for every platform.
 
+[Discord](/channels/discord) posts through the server's own bot, so it also needs
+`PROVIDER_DISCORD_BOT_TOKEN` beside its two keys, and only the server's app works for it: a
+workspace can't save its own.
+
 `GET /v1/providers` reports `app_configured` per provider (status `soon` while it is false). Starting an OAuth flow without an app
 answers `409 app_not_configured`; starting it for a `soon` provider answers `409 provider_soon`.
 `PUT /v1/providers/{id}/app` can still save a workspace's own app over the API (stored sealed,
@@ -50,8 +54,8 @@ The steps on the platform's developer portal differ, but every one asks for the 
 
 1. **The redirect (callback) URL.** Staqly's is the dashboard's
    `<origin>/channels/callback/<provider>`, for example
-   `http://localhost:8080/channels/callback/mastodon`, or
-   `https://staqly.example.com/channels/callback/mastodon` when you open the dashboard at your own
+   `http://localhost:8080/channels/callback/linkedin`, or
+   `https://staqly.example.com/channels/callback/linkedin` when you open the dashboard at your own
    domain. Register both when one app serves several installs (most portals take several). The platform sends the browser back here with a code; the page
    hands it to the API, which creates the channel. [Connect links](/channels/connect-links) use
    the same URL, so nothing needs registering for them.
@@ -64,14 +68,17 @@ Then put the client id and secret in the server's environment as above.
 
 1. **Connect with ...** calls `GET /v1/channels/oauth/{provider}/start` (scope
    `channels:manage`). The API answers the platform's authorization URL; the state in it is
-   signed and bound to this browser with a short-lived cookie. Extra query parameters are passed
-   to the provider: a Mastodon-style platform takes `instance`, the server to sign in at.
+   signed and bound to this browser with a short-lived cookie.
 2. The browser goes to the platform, the person allows access, and the platform redirects to the
    dashboard's `/channels/callback/{provider}` page.
 3. That page hands `code` and `state` to `GET /v1/channels/oauth/{provider}/callback`, which
    exchanges the code, reads the account's profile, seals the tokens and creates the channel,
    or **reconnects** the existing channel of the same account. It redirects back with
-   `?channel=<id>`, or `?error=<message>` when the platform refused.
+   `?channel=<id>`, or `?error=<message>` when the platform refused. When the sign-in can publish
+   as more than one account (Facebook Pages, LinkedIn Pages, Google Business Profile locations),
+   it redirects with `?pending=<id>` instead: the page lists them
+   (`GET /v1/pending-connections/{id}`, open for ten minutes) and each one the person picks
+   becomes its own channel.
 4. A `refresh_channel` job refreshes the tokens before they expire; a failed refresh marks the
    channel **Needs reconnect**, which repeats this flow.
 

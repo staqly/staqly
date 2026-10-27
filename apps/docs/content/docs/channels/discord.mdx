@@ -92,7 +92,7 @@ give the bot's role access to it in the channel's **Permissions**.
 
 | Setting | What it does |
 |---|---|
-| **Discord channels** (`channel`, required) | Up to 10 text or announcement channels of the Discord server, ids or `#names`, comma-separated: one message in each. The dashboard picks **#general** for a new post when the server has one; pick others from the list (`GET /v1/channels/{id}/options/channel`, MCP `list_channel_options`), which shows the channels the bot may post in. When one channel refuses after others took the post, the target fails naming where it went, and is not retried (it would post twice) |
+| **Discord channels** (`channel`, required) | Up to 10 text or announcement channels of the Discord server, ids or `#names`, comma-separated: one message in each. As soon as a post picks the Discord server, the dashboard fills in **#general** when the bot may post there, even with the settings folded; pick others from the list (`GET /v1/channels/{id}/options/channel`, MCP `list_channel_options`), which shows the channels the bot may post in. When one channel refuses after others took the post, the target fails naming where it went, and is not retried (it would post twice) |
 
 ## Comments
 
@@ -156,8 +156,9 @@ post itself stays up.
 | Discord says | Staqly does |
 |---|---|
 | Unknown webhook (deleted, or its URL was reset) | Marks the channel **Needs reconnect** and fails the target: make a new webhook and reconnect the channel with its URL |
-| Rate limit (429) or Discord unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
-| A forum channel without a forum post title, a file too large, a refused message | Fails the target with the reason; retrying would not help, so it does not |
+| Rate limit (429) | Retries after the time Discord asks for, through the job queue |
+| Discord unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A forum channel without a forum post title, a forum post title on a text channel's webhook, a file too large, a refused message | Fails the target with the reason; retrying would not help, so it does not |
 | The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: webhooks take no idempotency key, and sending again could post twice. Check the channel before you retry |
 
 The webhook's token is part of its URL, so staqly never puts the URL in error messages or logs.

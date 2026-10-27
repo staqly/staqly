@@ -37,6 +37,7 @@ How you connect depends on the platform's `auth`:
 |---|---|
 | `token` | The form asks for the platform's credentials (for example a bot token and chat, or a handle and app password). Staqly checks them against the platform, reads the account's name and picture, and stores them sealed. |
 | `oauth2` | **Connect with ...** sends your browser to the platform; after you allow access it comes back to `/channels/callback/<provider>` and the channel is created. The platform needs a [developer app](/channels/developer-apps) whose keys are in the server's environment; without them it is listed as **Soon**. |
+| `none` | **Your own automation**: nothing to connect. Staqly asks your script or workflow to publish and waits for its result. See [Your own automation](/channels/your-own-automation). |
 
 ### Pick the accounts
 
@@ -51,7 +52,6 @@ ticked for you. The list waits ten minutes; after that, connect again. The same 
 Over the API the platform's answer lands on the dashboard's callback page with `?pending=<id>`;
 `GET /v1/pending-connections/{id}` lists the accounts and `POST /v1/pending-connections/{id}` with
 `{"account_ids": [...]}` connects them (`channels:manage`).
-| `none` | **Your own automation**: nothing to connect. Staqly asks your script or workflow to publish and waits for its result. See [Your own automation](/channels/your-own-automation). |
 
 Give the channel a **Name** (it defaults to the account's name) and, where the provider offers
 them, default **settings** for new targets (who can reply on X, say).
@@ -127,7 +127,7 @@ has their app keys; token platforms right away.
 | [Dribbble](/channels/dribbble) (**available**) | `dribbble` | OAuth | 1,000 | 1 picture (400x300 or 800x600) | a title and the picture |
 | [Discord](/channels/discord) (**available**) | `discord` | OAuth, adds the server's bot to a Discord server; each post picks its channels | 2,000 | 10 | the Discord channels |
 | [Discord webhook](/channels/discord#through-a-webhook) (**available**) | `discord_webhook` | token (a channel webhook), when the server has no Discord bot | 2,000 | 10 | — |
-| [Slack](/channels/slack) (**available**) | `slack` | OAuth, a workspace; each post picks its channel | 40,000 | 10 | — |
+| [Slack](/channels/slack) (**available**) | `slack` | OAuth, a workspace; each post picks its channels | 40,000 | 10 | the Slack channels |
 | [Kick](/channels/kick) (**available**) | `kick` | OAuth | 500 | — | — |
 | [Twitch](/channels/twitch) (**available**) | `twitch` | OAuth | 500 | — | — |
 | [Mastodon](/channels/mastodon) (**available**) | `mastodon` | token | 500 | 4 pictures or 1 video | — |
@@ -135,7 +135,7 @@ has their app keys; token platforms right away.
 | [Bluesky with an app password](/channels/bluesky#with-an-app-password) (**available**) | `bluesky_app_password` | token | 300 | 4 pictures | — |
 | [Lemmy](/channels/lemmy) (**available**) | `lemmy` | token | 10,000 | 1 picture | a title and a community |
 | Farcaster (soon) | `farcaster` | token | 320 | 2 images | — |
-| [Telegram](/channels/telegram) (**available**) | `telegram` | token | 4,096 (1,024 with media) | 10 | — |
+| [Telegram](/channels/telegram) (**available**) | `telegram` | token: `/connect CODE` to the server's bot in a chat, or your own bot's token | 4,096 (1,024 with media) | 10 | — |
 | [Nostr](/channels/nostr) (**available**) | `nostr` | token | none | — | — |
 | [Medium](/channels/medium) (**available**) | `medium` | token | none | 1 picture | a title |
 | [Dev.to](/channels/devto) (**available**) | `devto` | token | none | 1 picture (cover) | a title |
@@ -167,7 +167,7 @@ PROVIDER_X_CLIENT_SECRET=...
 ### Platforms that need https
 
 Some platforms send the browser back to staqly only at a secure (`https://`) address after you
-allow the app: Facebook, Instagram Business, Threads, TikTok and Slack (`needs_https` in
+allow the app: Facebook, Instagram, Instagram Business, Threads, TikTok and Slack (`needs_https` in
 `GET /v1/providers`). On a dashboard opened at a plain `http://` address, such as
 `http://localhost:8080`, they show **Not available** in **Add channel** and can't be connected.
 

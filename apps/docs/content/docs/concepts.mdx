@@ -164,7 +164,7 @@ A provider is a platform staqly can publish to. `GET /v1/providers` is the catal
 |---|---|
 | `auth` | `oauth2` (the person is sent to the platform and comes back), `token` (a bot token, an app password, pasted in), `none` (your own automation). |
 | `status` | `available` in this build, or `soon`. |
-| `limits` | `max_chars`, `max_media`, `media_kinds`, `needs_title`, `needs_media`, `needs_link`. The composer counts characters per channel against them; a target over them is a `422`. |
+| `limits` | `max_chars`, `max_media`, `media_kinds`, `needs_title`, `needs_media`, `needs_link`, `links` and `link_modes` (what a channel does with links, and the modes it may choose), `image` (what the platform refuses in a picture). The composer counts characters per channel against them; a target over them is a `422`. |
 | `credential_fields` | What `POST /v1/channels` needs in `fields` for a token platform. |
 | `settings_fields` | The per-post settings a target may set. |
 | `app_configured` | OAuth platforms: whether a developer app is set (the workspace's or the server's). |
@@ -235,6 +235,9 @@ still running when its server stopped is picked up again after 15 minutes.
 | `repeat_post` | Creates the next occurrence of a repeating post once it is published. |
 | `publish_reply` | Publishes one comment of a post's thread, after its delay. |
 | `repost` | Reposts a published post from another channel of the workspace (X). |
+| `notify_people`, `notify_person` | Cloud: emails the people who [get notified](/dashboard/notifications) about an event, one job per person. |
+| `sync_seats`, `sync_entitlements` | Cloud with billing: brings the subscription's seats in line with the members, and reads what Stripe grants the workspace. |
+| `ai_run` | Runs one AI request (the [design editor](/dashboard/design-editor), MCP `generate_media`) and keeps its result. |
 
 Statuses are `queued`, `running`, `done`, `failed` and `cancelled`. One live job exists per
 subject (`publish_post:<post id>`): queueing the same key again replaces a queued job; a running

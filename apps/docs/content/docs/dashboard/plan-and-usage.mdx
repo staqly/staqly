@@ -6,7 +6,7 @@ description: Check your plan, its trial or renewal, this month's usage, add-ons,
 **Plan & usage** shows which plan your workspace is on, how close you are to its limits and, on
 [Staqly Cloud](/local-vs-cloud#staqly-cloud), its billing. Check it when something stops working with a "limit reached" error
 (HTTP `402`), or before adding more channels, webhooks or API keys. In Staqly Community Edition there are
-no limits and no billing: the plan is always *Unlocked*.
+no limits and no billing: the plan is always *Community Edition*.
 
 Open **Settings → Plan & usage**, **Plan & usage** in the user menu, or search for *Plan & usage* in the
 command palette (<Kbd>⌘</Kbd> <Kbd>K</Kbd>). Everyone in the workspace sees the plan and the usage;
@@ -93,7 +93,7 @@ curl -s -H "Authorization: Bearer $STAQLY_API_KEY" http://localhost:3333/v1/work
 
 ```json
 {
-  "plan": { "id": "unlocked", "name": "Unlocked", "limits": { "posts_per_month": -1, "channels": -1, "alerts": -1, "webhooks": -1, "api_keys": -1, "storage_bytes": -1, "max_upload_bytes": -1, "data_export": true, "x_posts_per_period": -1, "linkedin_posts_per_period": -1, "linkedin_videos_per_period": -1 } },
+  "plan": { "id": "unlocked", "name": "Community Edition", "limits": { "posts_per_month": -1, "channels": -1, "alerts": -1, "webhooks": -1, "api_keys": -1, "storage_bytes": -1, "max_upload_bytes": -1, "data_export": true, "x_posts_per_period": -1, "linkedin_posts_per_period": -1, "linkedin_videos_per_period": -1, "ai_monthly_cents": -1 } },
   "period": "2026-10",
   "plan_expires_at": null,
   "trial_ends_at": null,

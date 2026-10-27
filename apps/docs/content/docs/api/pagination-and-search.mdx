@@ -97,20 +97,21 @@ admins only ([Event types](/api/events#audit-events)).
 | `schedule_id` | string | No | Only events about this schedule |
 | `collection_id` | string | No | Only events of this collection |
 | `type` | string | No | Exact event type, e.g. `post.published` |
+| `types` | string | No | Any of these event types; repeatable, at most 50 |
 | `type_prefix` | string | No | Literal type prefix, e.g. `post.` or `webhook.` |
 | `actor_type` | string | No | `local`, `session`, `api_key` or `system` |
 | `actor_id` | string | No | One actor, e.g. an API key ID (`key_r7zq2m4xk3pw6ta5ned2`) or a session ID |
 | `agent` | string | No | Events caused by this [agent](/dashboard/agents), by name (`claude-code`); repeatable |
 | `from`, `to` | string | No | Created at or after `from`, before `to` (RFC 3339 or `YYYY-MM-DD`) |
-| `since`, `until` | integer | No | By sequence number: `seq` greater than `since`, at most `until` |
+| `since`, `until` | string | No | Other names for `from` and `to` |
 | `limit`, `cursor` | | No | Paging |
 
 `GET /v1/posts/{id}/events` is the one post's history (the same shape, that post only).
 
 ## Listing webhook deliveries
 
-`GET /v1/webhook-deliveries` returns the latest deliveries (filter by `webhook_id`, `post_id`
-and `status`; `limit` up to 200). See [Webhooks](/automation/webhooks#delivery-history-and-testing).
+`GET /v1/webhook-deliveries` returns the latest deliveries, newest first (filter by `webhook_id`,
+`post_id` and `status`; `limit` defaults to 50, capped at 200; `next_cursor` for older ones). See [Webhooks](/automation/webhooks#delivery-history-and-testing).
 
 ## Next steps
 

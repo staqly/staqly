@@ -14,13 +14,15 @@ platform allows, see [Channels](/channels).
 
 ### Pick the platform
 
-Click **Add channel**. The drawer shows the platforms in groups: **Your own**, **Social
+Click **Add channel**. The drawer always opens at the platforms and shows the platforms in groups: **Your own**, **Social
 networks**, **Video and streaming**, **Communities and chat**, **Blogs and newsletters** and
 **Business and portfolio**: *Pick the platform. Greyed ones are on the way.* Platforms that are
 not ready on this server carry a **Soon** badge and cannot be picked: not built yet, or an OAuth
 platform whose app keys the server doesn't have. Platforms turned off on the server
 (`PROVIDER_<ID>_ENABLED=false`) are not shown at all. **Your own automation** is always available
-unless it is turned off the same way.
+unless it is turned off the same way. Platforms that only connect over https (Facebook, Instagram, Instagram Business, Threads,
+TikTok, Slack) carry **Not available** when the dashboard is open at an `http://` address; see
+[Platforms that need https](/channels#platforms-that-need-https).
 
 </Step>
 <Step>
@@ -37,6 +39,13 @@ unless it is turned off the same way.
   sign-in can post as several accounts (Facebook Pages, YouTube channels, Google Business
   locations...), you come back to a list and pick the ones to connect; see
   [Pick the accounts](/channels#pick-the-accounts).
+- **Slack** and **Discord** connect a whole Slack workspace or Discord server as one channel (for Discord, you add
+  the server's bot to your Discord server). Each post then picks the Slack or Discord channels it goes to, in its
+  **Settings** tab; see [Posts](/dashboard/posts). Details: [Slack](/channels/slack), [Discord](/channels/discord).
+- **Telegram**, when the server has its own bot, shows two steps: add the bot to your channel or group (**Add to a
+  channel**, **Add to a group**), then send the `/connect` command shown (with **Copy the command**) in that chat.
+  The channel appears as soon as the command arrives; a code that ran out offers **New code**. **Use a bot of your own
+  instead** takes your own bot's token. See [Telegram](/channels/telegram).
 - **Your own automation** takes a **Name** and **How posts reach your automation**: *Send to my
   endpoint* (the default, with the **Endpoint URL**, **Method** and **Headers** Staqly calls) or
   *Let my agents and webhooks pick it up*. See [Your own automation](/channels/your-own-automation).
@@ -81,7 +90,8 @@ Each row's menu has:
 
 ## Where channels show up
 
-- In the composer's **Channels** list, with a character counter and, from two channels on, a tab per picked channel.
+- In the composer's **Channels** list, with a character counter and, from two channels on, a tab per picked channel;
+  Slack and Discord channels pick their Slack or Discord channels in the post's **Settings** tab.
 - In a schedule's **Channels**.
 - On calendar chips and post rows as a stack of avatars; in a post's **Delivery** section with a status per channel.
 - Plan limits (cloud): **5 channels on Starter**, 15 on Plus, 40 on Pro, unlimited on Business. **Settings → Plan & usage** counts

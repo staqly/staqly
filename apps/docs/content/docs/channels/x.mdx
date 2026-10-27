@@ -76,7 +76,7 @@ reconnects the existing channel.
 | | |
 |---|---|
 | Text | 280, counted the way X counts: most letters 1, CJK characters and emoji 2 (a whole emoji sequence like a family or a flag 2), every link 23 (longer posts need an X Premium account; staqly checks the standard limit) |
-| Media | up to **4 pictures** (PNG, JPEG, WebP, GIF) **or one video** per post |
+| Media | up to **4 pictures** (PNG, JPEG, WebP, GIF; up to 5 MB each) **or one video** per post |
 | Video | uploaded in 1 MiB chunks; staqly waits until X has processed it before posting |
 
 ## Posts to X on a cloud plan
@@ -114,7 +114,7 @@ avatar and name, and a summary of what you changed):
 
 | Setting | What it does |
 |---|---|
-| **Who can reply** (`reply_settings`) | Everyone (default), accounts you follow, only accounts you mention, your subscribers, or verified accounts |
+| **Who can reply** (`reply_settings`) | `everyone` (default), `following` (accounts you follow), `mentionedUsers` (only accounts you mention), `subscribers` (your subscribers) or `verified` (verified accounts) |
 | **Community** (`community`) | A community link such as `https://x.com/i/communities/1493446837214187523`: the post goes into that X Community instead of your timeline. You must be a member. |
 | **Made with AI** (`made_with_ai`) | X labels the post as containing AI-generated media |
 | **Paid partnership** (`paid_partnership`) | X labels the post as a paid partnership |
@@ -139,6 +139,11 @@ A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies: 
 reply under the tweet before it, after its delay; the channel's **Last comment** comes last. Replies
 take the conversation's **Who can reply**, community and labels, so they set none of them. A reply X refuses ends the thread there (the parts after it are
 skipped); the post stays up.
+
+## Statistics
+
+A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show X's public numbers: views (impressions),
+likes, reposts, replies, quotes and bookmarks. They need no extra scope.
 
 ## When publishing fails
 

@@ -103,7 +103,7 @@ Token platforms take their credentials in `fields` (a bot token, an app password
 one needs is in `GET /v1/providers`. OAuth platforms are connected in the dashboard with
 **Connect with ...** once the server has the platform's developer app: for X, put
 `PROVIDER_X_CLIENT_ID` and `PROVIDER_X_CLIENT_SECRET` in the server's environment and restart
-([X](/channels/x)). Some platforms (Facebook, Instagram Business, Threads, TikTok, Slack) connect
+([X](/channels/x)). Some platforms (Facebook, Instagram, Instagram Business, Threads, TikTok, Slack) connect
 only from a dashboard at an `https://` address and show **Not available** on
 `http://localhost:8080`: see [Platforms that need https](/channels#platforms-that-need-https).
 See [Channels](/channels).
@@ -117,9 +117,10 @@ A **post** is one piece of content with one **target** per channel. Posts live i
 **collections**, which group related posts and own the schedules. Every workspace starts with a
 **Default** collection.
 
-In the dashboard, open **Posts** and click **New post**: click the channel avatars, type the
+In the dashboard, open **Posts** and click **New post**: pick the channels, type the
 text (a counter per channel shows how many characters that platform allows), insert media, and
-click **Publish now**, or set a **Publish time** and click **Schedule**.
+click **Publish now**, or **Schedule** to pick a day and time. Or open the **Assistant** (<Kbd>⌘</Kbd> <Kbd>J</Kbd>,
+when the server has AI set up) and ask it to write the post: see [Assistant](/dashboard/assistant).
 
 Scripts and agents send the access token:
 

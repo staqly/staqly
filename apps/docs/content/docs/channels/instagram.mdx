@@ -70,7 +70,8 @@ Staqly asks for these scopes:
 | `instagram_business_content_publish` | Publish posts, carousels, reels and stories |
 | `instagram_business_manage_comments` | Post the comments of a post's thread |
 
-The channel shows the account's name, `@username` and picture.
+The channel shows the account's name, `@username` and picture. Without
+`instagram_business_manage_comments` the channel connects, but a post's comments are not sent on it.
 
 If Instagram signs the account in but the connection then fails with "won't let the app use it", the
 account is personal, or (while the app is in testing) not one of its testers: check which account
@@ -98,10 +99,9 @@ removes the app or changes their password, the channel turns **Needs reconnect**
 
 | | |
 |---|---|
-| Text | 2,200 characters; up to 30 hashtags |
+| Text | 2,200 characters |
 | Media | at least one file: up to **10** pictures and videos (a carousel), **one video** for a reel, **one file** for a story |
-| Pictures | **JPEG only**, up to 8 MB; feed pictures 4:5 to 1.91:1 (the composer flags a picture that doesn't fit) |
-| Posts | Instagram takes up to **100 posts a day** per account through its API |
+| Pictures | **JPEG only**, up to 8 MB, at least 320 pixels wide; feed pictures 4:5 to 1.91:1 (the composer flags a picture that doesn't fit) |
 
 ## Settings per post
 

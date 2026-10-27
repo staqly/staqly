@@ -3,8 +3,9 @@ title: LinkedIn Page
 description: Publish to LinkedIn company pages you administer, with up to 9 pictures or one video and comments. What to register in the LinkedIn developer portal and what LinkedIn reviews.
 ---
 
-Staqly publishes to **LinkedIn company pages** (and showcase pages) through LinkedIn's REST API:
-a page admin signs in, picks the pages, and each becomes its own channel that posts as the page.
+Staqly publishes to **LinkedIn company pages** through LinkedIn's REST API: a page admin signs in,
+picks the pages, and each becomes its own channel that posts as the page. Showcase and school pages
+are not listed.
 A published target links to the post on linkedin.com. To post on your own profile, use
 [LinkedIn](/channels/linkedin).
 
@@ -85,7 +86,7 @@ from the row's menu. A member who loses the page's admin role can't post as it a
 | | |
 |---|---|
 | Text | 3,000 characters |
-| Media | up to **9 pictures** (PNG, JPEG, GIF) **or one video** per post |
+| Media | up to **9 pictures** (PNG, JPEG, GIF, up to 36,152,320 pixels each) **or one video** per post |
 | Video | uploaded in the parts LinkedIn asks for; staqly waits until LinkedIn has processed it before posting |
 
 Posts as a page are always public. Hashtags (`#launch`) stay hashtags, and characters LinkedIn
@@ -102,7 +103,8 @@ written as the page, in order and after their delays. Comments take text only.
 | LinkedIn says | Staqly does |
 |---|---|
 | The sign-in expired or was revoked (401) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
-| Rate limit (429) or LinkedIn unavailable (5xx), media still processing | Retries through the job queue (after 1, 5, then 15 minutes) |
+| Daily quota reached (429) | Keeps the target **publishing** with the reason and tries again just after midnight UTC, without using up its retries |
+| LinkedIn unavailable (5xx), media still processing | Retries through the job queue (after 1, 5, then 15 minutes) |
 | Text too long, a refused picture, a missing permission or page role (403) | Fails the target with LinkedIn's reason; retrying would not help, so it does not |
 
 When an answer is lost and staqly tries again, LinkedIn refuses the copy as a duplicate and names

@@ -82,8 +82,8 @@ they finish; afterwards the download returns `410`.
 | `workspace.json` | Workspace, export format version, export time, record counts, `includes_media` |
 | `collections.ndjson` | All collections, including archived ones |
 | `posts.ndjson` | All posts with their targets (status, link and error per channel) and `media_files` (paths in the archive) |
-| `channels.ndjson` | Connected channels: provider, name, handle, status, settings. Credentials are never exported |
-| `schedules.ndjson` | Schedules; endpoint secrets replaced by `[redacted]` |
+| `channels.json` | Connected channels: provider, name, handle, status, settings. Credentials are never exported |
+| `schedules.json` | Schedules; endpoint secrets replaced by `[redacted]` |
 | `events.ndjson` | The activity log, oldest first |
 | `media.ndjson` | Every upload: id, `original_name`, `mime_type`, size, SHA-256 and `file` (empty in a data-only export) |
 | `media/` | The uploaded files under their original names (not in a data-only export) |

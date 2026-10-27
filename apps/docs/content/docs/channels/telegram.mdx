@@ -16,13 +16,14 @@ token:
 
 1. **Channels → Add channel → Telegram** shows the bot (`@yourserver_bot`) and a command,
    `/connect@yourserver_bot K7M2QX` (addressed to that bot, so other bots in a group that know `/connect` leave it
-   alone).
+   alone; a plain `/connect K7M2QX` works too).
 2. Add the bot to your channel (**Add to a channel**: as an administrator allowed to post and delete
    messages) or group (**Add to a group**).
-3. Send the command in that chat. The bot checks it may post there, the chat becomes a channel, and the bot
-   deletes the command (or, when it may not delete, asks you to). The dashboard sees it within a few seconds.
+3. Send the command in that chat. The bot checks it may post there, the chat becomes a channel (with the chat's title and
+   picture), and the bot deletes the command (or, when it may not delete, asks you to). The dashboard sees it within a few seconds.
 
-A code lasts 10 minutes; a wrong or old one gets an answer in the chat. API: `POST /v1/channels/telegram/connect`
+A code lasts 10 minutes; a wrong or old one gets an answer in the chat, and once it runs out the dashboard offers
+**New code**. API: `POST /v1/channels/telegram/connect`
 gives the code, `GET /v1/channels/telegram/connect/{code}` says when it is connected. **Use a bot of your own
 instead** under the steps connects the way below.
 
@@ -31,7 +32,8 @@ instead** under the steps connects the way below.
 Make a bot with [@BotFather](https://t.me/BotFather) (`/newbot`), put its token in the server's environment and
 restart: `PROVIDER_TELEGRAM_BOT_TOKEN=123456789:AAH...`. The server reads the bot's messages by polling Telegram
 (`getUpdates`), so it needs no public address; one server per bot (Telegram refuses a second one polling the same
-token). Channels connected through it never store the token: a new token for the same bot keeps them working.
+token). Channels connected through it never store the token: a new token for the same bot keeps them working. Without
+the token, they turn **Needs reconnect**: connect those chats with a bot of your own.
 
 ## Connect with your own bot
 
@@ -73,7 +75,7 @@ supergroups).
 
 Staqly checks the token (`getMe`), finds the chat (`getChat`) and checks that the bot may post
 there (`getChatMember`): in a channel it must be an administrator allowed to post messages. The
-channel shows the chat's title and `@username` (or its id when it has none). The token is stored
+channel shows the chat's title, picture and `@username` (or its id when it has none). The token is stored
 sealed and never shown again; connecting the same chat again reconnects the existing channel.
 
 </Step>
@@ -111,7 +113,7 @@ to `https://t.me/c/<id>/<message>` (members only). A private basic group has no 
 | Telegram says | Staqly does |
 |---|---|
 | The token is revoked, the bot was removed from the chat or lost its right to post, the group became a supergroup | Marks the channel **Needs reconnect** and fails the target: add the bot back (or paste the new token) and reconnect from the row's menu |
-| Too many requests (429), Telegram unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
+| Too many requests (429), Telegram unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes; after a 429 that says how long to wait, once that time is up) |
 | A refused message: too long, a file too large, a format Telegram does not take | Fails the target with Telegram's reason; retrying would not help, so it does not |
 | The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: the Bot API cannot tell, and sending again could post twice. Check the chat before you retry |
 

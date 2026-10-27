@@ -27,9 +27,9 @@ the server to allow that. Staqly in the cloud reaches public addresses only.
 
 | | |
 |---|---|
-| Text | no limit; Markdown, which listmonk renders into the campaign's template |
+| Text | required, no limit; Markdown, which listmonk renders into the campaign's template |
 | Media | none: link pictures from listmonk's media library or the web in the Markdown |
-| Subject | required |
+| Subject | required, up to 500 characters |
 
 ## Settings per post
 
@@ -48,9 +48,10 @@ the target's `settings`.
 | listmonk says | Staqly does |
 |---|---|
 | The API user or token is wrong or was deleted | Marks the channel **Needs reconnect**; reconnect with a valid token |
-| listmonk is down or answers with an error | Retries through the job queue (after 1, 5, then 15 minutes) |
+| listmonk is down, answers with a server error (5xx) or a rate limit | Retries through the job queue (after 1, 5, then 15 minutes) |
 | A list that doesn't exist (staqly lists the ones the user may use), a missing permission, a wrong template | Fails the target with listmonk's reason |
 
 Each campaign is named after its post (`October news [staqly pst_...]`), so an attempt after one
 whose answer was lost finds the campaign it made instead of making a second one, and starts it only
-if it isn't sending yet. A campaign you paused or cancelled in listmonk is left alone.
+if it isn't sending yet. A campaign you paused or cancelled in listmonk is left alone: the target fails and asks you to
+resume it there.

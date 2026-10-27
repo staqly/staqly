@@ -99,7 +99,7 @@ as written.
 |---|---|
 | **Show link previews** (`link_preview`) | On by default: Slack unfurls links into previews |
 | **Post as** (`post_as`) | `app` (default): the app's name and icon. `me`: the person who connected Slack, with their name and photo; they must be in the channel. A channel connected before this setting existed needs reconnecting once |
-| **Slack channels** (`channel`, required) | Up to 10 channels of the workspace, ids or `#names`, comma-separated: one message in each, its comments in each message's thread. The dashboard picks **#random** (else **#general**) for a new post; pick others from the list (`GET /v1/channels/{id}/options/channel`, MCP `list_channel_options`): every public channel, and the private ones after `/invite @YourApp` in them. The app joins a public channel before posting. When one channel refuses after others took the post, the target fails naming where it went, and is not retried (it would post twice) |
+| **Slack channels** (`channel`, required) | Up to 10 channels of the workspace, ids or `#names`, comma-separated: one message in each, its comments in each message's thread. As soon as you pick the Slack workspace for a post, the dashboard fills in **#random** (else **#general**; with neither, you pick) while the setting is empty, whether or not its settings card is open; pick others from the list (`GET /v1/channels/{id}/options/channel`, MCP `list_channel_options`): every public channel, and the private ones after `/invite @YourApp` in them. The app joins a public channel before posting. When one channel refuses after others took the post, the target fails naming where it went, and is not retried (it would post twice) |
 
 ## Comments
 
@@ -126,8 +126,8 @@ connection asks Slack whether the token still works.
 
 | Slack says | Staqly does |
 |---|---|
-| The token is revoked or the app was removed from the workspace | Marks the channel **Needs reconnect** and fails the target: reconnect from the row's menu |
+| The token is revoked, the app was removed from the workspace, or it lacks a permission | Marks the channel **Needs reconnect** and fails the target: reconnect from the row's menu |
 | Slack refuses the post's channel (archived, private without the app, or the person is not in it) | Fails the target only: the workspace stays connected. Invite the app, join the channel yourself, or pick another one |
-| Rate limit (429) or Slack unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
+| Rate limit (429) or Slack unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
 | A refused message: too long, posting restricted in the channel, files not allowed | Fails the target with Slack's reason; retrying would not help, so it does not |
 | The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: Slack has no idempotency key, and sending again could post twice. Check the channel before you retry |

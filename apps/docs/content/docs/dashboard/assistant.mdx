@@ -4,7 +4,7 @@ description: "A chat on the right of the dashboard that works on your workspace:
 ---
 
 The **Assistant** (in the sidebar, or <kbd>⌘</kbd> <kbd>J</kbd>; the sparkles on a phone) opens a chat on the right
-of the dashboard. Ask in your own words:
+of the dashboard. A new chat offers a few suggestions to start with one click, or ask in your own words:
 
 - "Write a LinkedIn post about our new pricing and schedule it for Monday 9:00"
 - "What is scheduled this week?" or "Which posts failed, and why?"
@@ -39,7 +39,8 @@ cloud includes it. On your own server, either:
   OpenRouter, DigitalOcean's serverless inference, a local Ollama or your own LiteLLM.
 
 See [configuration](/self-hosting/configuration#ai-tools). Without either the Assistant is not shown. Each answer
-counts as AI usage of the workspace (`AI_ASSISTANT_PRICES` when the endpoint reports no cost).
+counts as AI usage of the workspace: what the endpoint reports it cost, or else its tokens at the model's price
+(`AI_ASSISTANT_PRICES` for that endpoint, else the built-in price list, which `AI_PRICES_FILE` extends).
 
 ### When it can't answer
 

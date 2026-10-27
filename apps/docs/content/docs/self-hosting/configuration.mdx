@@ -55,9 +55,8 @@ docker run -d --name staqly ... --env-file staqly.env ghcr.io/staqly/staqly:late
 See [Run with Docker](/self-hosting/docker#settings).
 
 Developing from a checkout with [Docker Compose](/self-hosting/docker-compose)? Put the variables in
-`.env` in the repository root and run `docker compose up -d`. `compose.yml` passes most of them
-through; the ones marked "not passed through by `compose.yml`" below need a line in the
-`staqly` service's `environment:` first.
+`.env` in the repository root and run `docker compose up -d`. Every line of `.env` reaches the
+server (`compose.yml` reads it with `env_file`).
 
 </Tab>
 </Tabs>
@@ -86,7 +85,7 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `API_PORT` | `3333` | Compose only: host port for the API (bound to `127.0.0.1`). With `docker run` change the `-p` mapping and `PUBLIC_API_URL`; with the binary use `--port`. |
 | `DASHBOARD_PORT` | `8080` | Dashboard port. Docker: the published host port (set it when you map the dashboard to another host port). Binary: follows `--dashboard-port`. Also part of sign-in links, such as the `#token=` link printed at start. |
 | `PUBLIC_API_URL` | `http://localhost:3333` | Base of absolute media URLs in API responses and webhook payloads. Set it to what receivers can reach (e.g. `http://api:3333` for n8n on the Docker network, or your public URL). The dashboard reads it from the API at runtime, so changing it needs only a restart. With the binary it defaults to `http://localhost:<--port>`. |
-| `PUBLIC_DASHBOARD_URL` | — | Dashboard URL used in *Connect a device* QR codes, sign-in links and notification links — your LAN IP (`http://192.168.1.23:8080`) or domain. Without it, QR codes use the address you opened the dashboard at; an exposed `staqly serve` opened as `localhost` uses this computer's Wi-Fi address instead, and in Docker the dialog asks for that address once (kept in the browser). `connect-link` and notification links fall back to `localhost`. Platforms send the browser back to `<this address>/channels/callback/<platform>` after you connect them; an `https://` address here is what Facebook, Instagram Business, Threads, TikTok and Slack need ([Platforms that need https](/channels#platforms-that-need-https)). |
+| `PUBLIC_DASHBOARD_URL` | — | Dashboard URL used in *Connect a device* QR codes, sign-in links and notification links — your LAN IP (`http://192.168.1.23:8080`) or domain. Without it, QR codes use the address you opened the dashboard at; an exposed `staqly serve` opened as `localhost` uses this computer's Wi-Fi address instead, and in Docker the dialog asks for that address once (kept in the browser). `connect-link` and notification links fall back to `localhost`. Platforms send the browser back to `<this address>/channels/callback/<platform>` after you connect them; an `https://` address here is what Facebook, Instagram, Instagram Business, Threads, TikTok and Slack need ([Platforms that need https](/channels#platforms-that-need-https)). |
 | `ADDR` | `127.0.0.1:3333` | Listen address of the API. The Docker image sets `ADDR=:3333` (publish the port on `127.0.0.1` only); `staqly serve` sets `127.0.0.1:<--port>`. |
 
 ## Storage and limits
@@ -116,6 +115,7 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `PROVIDER_<ID>_ENABLED` | `true` | `false` turns one platform off on this server: no tile, no connecting, no publishing (e.g. `PROVIDER_TIKTOK_ENABLED=false`). See [Developer apps](/channels/developer-apps). |
 | `PROVIDER_<ID>_CLIENT_ID`, `PROVIDER_<ID>_CLIENT_SECRET` | — | The OAuth developer app of one platform, e.g. `PROVIDER_X_CLIENT_ID` / `PROVIDER_X_CLIENT_SECRET`. See [Developer apps](/channels/developer-apps). |
 | `PROVIDER_DISCORD_BOT_TOKEN` | — | The token of the server's own [Discord bot](/channels/discord#what-whoever-runs-the-server-sets-up) (the application's **Bot** page). With it and `PROVIDER_DISCORD_CLIENT_ID` / `_SECRET`, people add the bot to a Discord server; without all three, Discord connects through a channel webhook. |
+| `PROVIDER_TELEGRAM_BOT_TOKEN` | — | The server's own [Telegram bot](/channels/telegram#connect-with-the-servers-bot): people add it to a chat and send `/connect CODE` instead of making a bot. Read by polling, no public address needed. |
 
 ## Editors: AI and stock photos
 
@@ -126,11 +126,12 @@ server's own provider accounts. Keys are read on the server only: no browser, wo
 them. With both keys they are tried in `AI_MEDIA_PROVIDERS`' order (fal.ai first by default), the second as the
 fallback for what it does the same way; with one, that one runs alone; with none, the AI tools are hidden. A provider
 that is down is not the same as one that is not set up: its requests fail (or fall back) and the tools stay. A key of
-the wrong shape refuses to start.
+the wrong shape refuses to start. `AI_OPENAI_API_KEY`, `AI_OPENAI_MODEL`, `AI_OPENAI_BASE_URL` and
+`AI_OPENAI_FALLBACK_API_KEY` are no longer read (staqly warns at start when one is set): run the assistant on OpenAI
+with `AI_ASSISTANT_BASE_URL` below.
 
 | Variable | Default | Description |
 |---|---|---|
-| `PROVIDER_TELEGRAM_BOT_TOKEN` | — | The server's own [Telegram bot](/channels/telegram#connect-with-the-servers-bot): people add it to a chat and send `/connect CODE` instead of making a bot. Read by polling, no public address needed. |
 | `AI_FAL_KEY` | — | A [fal.ai](https://fal.ai/dashboard/keys) API key. Turns on every AI tool. |
 | `AI_HIGGSFIELD_API_KEY` | — | A [Higgsfield](https://console.higgsfield.ai) API key as `<key id>:<key secret>`. New pictures and videos. |
 | `AI_MEDIA_PROVIDERS` | `fal,higgsfield` | The order the picture and video tools try the providers in: `higgsfield,fal` makes Higgsfield the first for new pictures and videos, with fal.ai as their fallback (and the only one for edits). A provider left out is not used for media, though the assistant may still use fal.ai's router. |
@@ -189,13 +190,11 @@ appears in the editor. Every request is billed by the provider, so test with a f
 | `NOTIFY_MAX_FAILS` | `10` | Consecutive failures after which an alert is disabled automatically. |
 | `NOTIFY_CONCURRENCY` | `8` | Alerts sent to in parallel. |
 | `NOTIFY_POLL_INTERVAL` | `2s` | How often the alert worker checks for due messages. |
-| `TELEGRAM_API_BASE` | `https://api.telegram.org` | Base URL of the Telegram Bot API. Change it only for a self-hosted Bot API server or tests. |
-| `SLACK_API_BASE` | `https://slack.com/api` | Base URL of the Slack Web API. Change it only for tests. |
-| `DISCORD_API_BASE` | `https://discord.com/api/v10` | Base URL of the Discord API. Change it only for tests. |
+| `TELEGRAM_API_BASE` | `https://api.telegram.org` | Base URL of the Telegram Bot API for Telegram alerts. Change it only for a self-hosted Bot API server or tests. Telegram channels always use `api.telegram.org`. |
+| `SLACK_API_BASE` | `https://slack.com/api` | Base URL of the Slack Web API for Slack alerts. Change it only for tests. |
+| `DISCORD_API_BASE` | `https://discord.com/api/v10` | Base URL of the Discord API for Discord alerts. Change it only for tests. |
 
-`compose.yml` passes the `NOTIFY_*` settings through except `NOTIFY_ALLOW_LOOPBACK` and
-`NOTIFY_POLL_INTERVAL`; add those and the `TELEGRAM_*`, `SLACK_*` and `DISCORD_*` ones to the
-`staqly` service's `environment:` first. More in [Alerts → Configuration](/automation/alerts#configuration).
+More in [Alerts → Configuration](/automation/alerts#configuration).
 
 ## Observability
 

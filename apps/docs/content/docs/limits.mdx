@@ -121,6 +121,7 @@ See [Webhooks](/automation/webhooks) and [Alerts](/automation/alerts).
 | Email codes | one per address every 30 seconds; per address and client IP 5 an hour and 15 a day; 60 per address a day; 20 per client IP per hour | fixed |
 | Passkey sign-ins | 30 per client IP per 10 minutes | fixed |
 | New workspaces <Badge>cloud</Badge> | 5 per client IP per hour | fixed |
+| AI requests (design editor AI, the assistant, text rewrites) | 30 per workspace per 10 minutes; at most 4 AI jobs queued or running at once | fixed |
 
 Over a limit: `429 rate_limited` (or `code_cooldown` for a code asked too soon) with a
 `Retry-After` header. The Community Edition tunes its per-IP limit with `RATE_LIMIT_*`; see
