@@ -148,7 +148,7 @@
           "type": "string"
         },
         "scopes": {
-          "description": "scopes to grant, e.g. [\"collections:read\", \"items:read\", \"items:write\"]",
+          "description": "scopes to grant, e.g. [\"collections:read\", \"posts:read\", \"posts:write\"]",
           "items": {
             "type": "string"
           },
@@ -641,7 +641,7 @@
           ]
         },
         "events": {
-          "description": "event types to send, e.g. [\"item.approved\"]; [\"*\"] (default) sends all",
+          "description": "event types to send, e.g. [\"post.published\"]; [\"*\"] (default) sends all",
           "items": {
             "type": "string"
           },
@@ -997,11 +997,11 @@
           "type": "string"
         },
         "type": {
-          "description": "exact event type, e.g. item.approved",
+          "description": "exact event type, e.g. post.published",
           "type": "string"
         },
         "type_prefix": {
-          "description": "event type prefix, e.g. item.",
+          "description": "event type prefix, e.g. post.",
           "type": "string"
         }
       },
@@ -3361,7 +3361,7 @@
           ]
         },
         "events": {
-          "description": "event types to send, e.g. [\"item.approved\"]; [\"*\"] (default) sends all",
+          "description": "event types to send, e.g. [\"post.published\"]; [\"*\"] (default) sends all",
           "items": {
             "type": "string"
           },

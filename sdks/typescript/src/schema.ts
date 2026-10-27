@@ -1449,7 +1449,7 @@ export interface paths {
          * Edit a draft, scheduled or failed post (posts:write)
          * @description Fields left out stay as they are; `targets` replaces the whole list; `publish_at: null` clears
          *     the time (a scheduled post becomes a draft). A published or publishing post is not editable
-         *     (409 `not_editable`). `expected_version` makes the edit conditional (409 `post_changed`).
+         *     (409 `conflict`). `expected_version` makes the edit conditional (409 `post_changed`).
          */
         patch: operations["updatePost"];
         trace?: never;
@@ -1551,7 +1551,7 @@ export interface paths {
         };
         /**
          * The post's numbers per channel, read from each platform that reports them (posts:read)
-         * @description Published targets on platforms that report numbers (X) are read again when the cached numbers are older
+         * @description Published targets on platforms that report numbers (X, YouTube, Slack) are read again when the cached numbers are older
          *     than ten minutes, or now with `refresh=true`. A failed read keeps the last numbers and sets `error`.
          *     Targets on your own automation show what it reported (PUT .../metrics). `available: false` means the
          *     platform gives no numbers.
@@ -1579,7 +1579,7 @@ export interface paths {
         get?: never;
         /**
          * Your own automation sends the numbers of a post it published (posts:publish)
-         * @description Only targets on a channel of provider `custom` (422 otherwise). Replaces the stored numbers.
+         * @description Only targets on a channel of provider `custom` (409 `conflict` otherwise, as for a reported result). Negative numbers are 422. Replaces the stored numbers.
          */
         put: operations["reportTargetMetrics"];
         post?: never;
@@ -3977,27 +3977,24 @@ export interface components {
              * @example not_available
              * @example idempotency_in_progress
              * @example post_changed
-             * @example already_free
              * @example sign_in_with_account
              * @example gone
              * @example link_used
              * @example link_expired
              * @example plan_limit_exceeded
              * @example plan_expired
-             * @example payment_required
+             * @example payment_failed
              * @example x_posts_exhausted
              * @example linkedin_posts_exhausted
              * @example linkedin_videos_exhausted
              * @example too_large
              * @example unsupported_media_type
              * @example validation_failed
-             * @example not_editable
              * @example idempotency_mismatch
              * @example rate_limited
              * @example payment_provider_error
-             * @example ai_provider_error
-             * @example ai_key_rejected
-             * @example timeout
+             * @example ai_failed
+             * @example unavailable
              * @example busy
              * @example internal
              * @example default_group
@@ -5530,7 +5527,7 @@ export interface components {
         };
         /**
          * @description `plan_limit_exceeded` (a plan limit; `details` has limit, max, used, plan),
-         *     `plan_expired` (the workspace is suspended and read-only), `payment_required`, `payment_failed` (a plan
+         *     `plan_expired` (the workspace is suspended and read-only), `payment_failed` (a plan
          *     change that charges at once, such as leaving the trial, wasn't paid: nothing changed; `details` has
          *     `reason`, and `pay_url`, `decline_code`, `plan`, `expires_at` when known, as in `PendingPayment`), or `x_posts_exhausted` (this
          *     period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end), or

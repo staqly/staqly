@@ -23,6 +23,8 @@ var knownEventTypes = map[string]bool{
 	"alert.created": true, "alert.updated": true, "alert.deleted": true,
 	"workspace.created": true, "workspace.updated": true, "workspace.plan_changed": true, "workspace.credits_added": true, "workspace.account_attached": true,
 	"workspace.export_requested": true, "workspace.exported": true,
+	"member.updated": true, "member.removed": true,
+	"invitation.created": true, "invitation.resent": true, "invitation.revoked": true, "invitation.accepted": true,
 	"retention.events_pruned": true,
 	"api_key.created":         true, "api_key.rotated": true, "api_key.revoked": true,
 	"session.signed_in": true, "session.recovered": true, "session.revoked": true,

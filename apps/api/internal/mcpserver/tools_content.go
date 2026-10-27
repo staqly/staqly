@@ -374,8 +374,8 @@ type exportEventsIn struct {
 	Format     string `json:"format,omitempty" jsonschema:"ndjson (default) or csv"`
 	From       string `json:"from,omitempty" jsonschema:"YYYY-MM-DD or RFC3339 (inclusive)"`
 	To         string `json:"to,omitempty" jsonschema:"YYYY-MM-DD or RFC3339 (exclusive)"`
-	Type       string `json:"type,omitempty" jsonschema:"exact event type, e.g. item.approved"`
-	TypePrefix string `json:"type_prefix,omitempty" jsonschema:"event type prefix, e.g. item."`
+	Type       string `json:"type,omitempty" jsonschema:"exact event type, e.g. post.published"`
+	TypePrefix string `json:"type_prefix,omitempty" jsonschema:"event type prefix, e.g. post."`
 	ActorType  string `json:"actor_type,omitempty" jsonschema:"session, api_key, local or system"`
 	ActorID    string `json:"actor_id,omitempty" jsonschema:"actor ID, e.g. an API key ID"`
 	Collection string `json:"collection,omitempty" jsonschema:"collection ID or exact name"`

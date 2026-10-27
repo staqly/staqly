@@ -68,6 +68,17 @@ func ListValues(v string) []string {
 	return out
 }
 
+// uniqueValues keeps the first of each value, in order.
+func uniqueValues(vs []string) []string {
+	out := make([]string, 0, len(vs))
+	for _, v := range vs {
+		if !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // CheckFields validates settings against their field definitions: required fields, select options,
 // booleans, numbers, links, lengths and item counts. Keys the provider does not define are left alone
 // (older clients may send them); channels values are checked by the app, which knows the workspace.

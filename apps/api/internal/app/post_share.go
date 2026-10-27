@@ -763,7 +763,8 @@ func (s *Service) ReportTargetMetrics(ctx context.Context, p Principal, postID, 
 		return TargetMetrics{}, notFound("target")
 	}
 	if ch.Provider != "custom" {
-		return TargetMetrics{}, invalid("channel", "only channels on your own automation report their numbers; Staqly reads the others from the platform")
+		// 409 like a reported result for such a target: the request is fine, the target is not one that takes it.
+		return TargetMetrics{}, conflict("only channels on your own automation report their numbers; Staqly reads the others from the platform")
 	}
 	for _, v := range []*int64{m.Impressions, m.Likes, m.Reposts, m.Replies, m.Quotes, m.Bookmarks, m.LinkClicks} {
 		if v != nil && *v < 0 {

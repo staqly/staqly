@@ -3,12 +3,15 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/providers"
 )
 
@@ -89,6 +92,50 @@ func TestTelegramSharedBotConnects(t *testing.T) {
 	// A used or unknown code is turned down in the chat.
 	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 10, Code: code.Code})
 	if len(fake.said) != 2 || !strings.Contains(fake.said[1], "not valid any more") {
+		t.Fatalf("said %v", fake.said)
+	}
+}
+
+// A code past its 10 minutes connects nothing and reads as expired; another workspace can't read a code at all.
+func TestTelegramConnectCodeExpiresAndStaysInItsWorkspace(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	fake := &fakeTelegramBot{}
+	srv := httptest.NewServer(fake)
+	t.Cleanup(srv.Close)
+	providers.SetTelegramAPI(srv.URL)
+	t.Cleanup(func() { providers.SetTelegramAPI("https://api.telegram.org"); providers.SetTelegramBot("", "") })
+	s.Cfg.Webhook.AllowLoopback = true
+	providers.SetTelegramBot("T0KEN", "staqly_test_bot")
+	code, err := s.StartTelegramConnect(ctx, p, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.W.CreateWorkspace(ctx, db.CreateWorkspaceParams{ID: "ws_other", Name: "Other", RecoveryVerifier: "x",
+		RecoveryRotatedAt: "t", CreatedAt: "t", UpdatedAt: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	other := Principal{WorkspaceID: "ws_other", Kind: PrincipalAPIKey, ID: "key_other", Name: "other", Scopes: AllScopes}
+	var appErr *Error
+	if _, err := s.GetTelegramConnect(ctx, other, code.Code); !errors.As(err, &appErr) || appErr.Status != 404 {
+		t.Fatalf("another workspace's code: %v, want 404", err)
+	}
+
+	later := time.Now().Add(telegramCodeTTL + time.Minute)
+	s.Now = func() time.Time { return later }
+	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 7, Code: code.Code})
+	got, err := s.GetTelegramConnect(ctx, p, code.Code)
+	if err != nil || got.Status != "expired" || got.ChannelID != "" {
+		t.Fatalf("expired code: %+v %v", got, err)
+	}
+	chans, _ := s.Q.ListChannels(ctx, p.WorkspaceID)
+	for _, c := range chans {
+		if c.Provider == "telegram" {
+			t.Fatalf("an expired code connected %+v", c)
+		}
+	}
+	if len(fake.said) != 1 || !strings.Contains(fake.said[0], "not valid any more") {
 		t.Fatalf("said %v", fake.said)
 	}
 }
