@@ -75,7 +75,8 @@ export function ConnectErrorDialog({
           <Button variant="outline" onClick={onClose}>
             Back to Channels
           </Button>
-          {p?.auth === 'oauth2' && (
+          {/* A platform asking for its server first (Mastodon) starts again from Channels, where it asks. */}
+          {p?.auth === 'oauth2' && !p.credential_fields?.length && (
             // Busy until the browser has left for the platform, not only until the API answered.
             <Button onClick={() => retry.mutate()} disabled={leaving} aria-busy={leaving}>
               {leaving ? 'Opening...' : 'Try again'}

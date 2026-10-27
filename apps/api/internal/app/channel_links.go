@@ -344,11 +344,7 @@ func (s *Service) StartOAuthViaLink(ctx context.Context, token, providerID, redi
 	}
 	st := oauthState{Provider: providerID, Workspace: l.WorkspaceID, Nonce: randomString(12),
 		Expires: s.Now().Add(10 * time.Minute).Unix(), Link: l.ID}
-	state, err := s.signState(st)
-	if err != nil {
-		return "", err
-	}
-	return s.authURL(ctx, e, app, redirect, state, withVerifier(extra, s.pkceVerifier(st)))
+	return s.beginOAuth(ctx, e, app, redirect, st, extra)
 }
 
 // IsLinkState tells the callback which flow a platform's answer belongs to (the signature is checked later).

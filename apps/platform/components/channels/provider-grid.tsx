@@ -49,6 +49,7 @@ const GROUPS: { title: string; ids: string[] }[] = [
       'bluesky',
       'bluesky_app_password',
       'mastodon',
+      'mastodon_token',
       'pinterest',
       'tumblr',
       'mewe',
@@ -77,10 +78,14 @@ const GROUPS: { title: string; ids: string[] }[] = [
 
 /**
  * A fallback way in, by the platform it stands in for (Discord through a channel webhook, Bluesky with an app
- * password) shows only while this server cannot connect the platform the main way; then it takes the place of the
+ * password, Mastodon with an access token) shows only while this server cannot connect the platform the main way; then it takes the place of the
  * greyed tile.
  */
-const FALLBACKS: Record<string, string> = { discord_webhook: 'discord', bluesky_app_password: 'bluesky' }
+const FALLBACKS: Record<string, string> = {
+  discord_webhook: 'discord',
+  bluesky_app_password: 'bluesky',
+  mastodon_token: 'mastodon',
+}
 
 /** The catalog without the tiles a fallback settles: the fallback when its platform is available, else the platform. */
 function withoutSettledFallbacks<T extends { id: string; status: string }>(providers: T[]) {

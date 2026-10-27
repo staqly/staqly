@@ -101,6 +101,7 @@ const LOOKS: Record<string, Look> = {
   kick: { icon: siKick, color: '#53FC19' },
   twitch: { icon: siTwitch, color: '#9146FF' },
   mastodon: { icon: siMastodon, color: '#6364FF' },
+  mastodon_token: { icon: siMastodon, color: '#6364FF' },
   bluesky: { icon: siBluesky, color: '#1185FE' },
   bluesky_app_password: { icon: siBluesky, color: '#1185FE' },
   lemmy: { icon: siLemmy, color: '#000000' },

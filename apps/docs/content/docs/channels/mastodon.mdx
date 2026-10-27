@@ -1,12 +1,28 @@
 ---
 title: Mastodon
-description: Publish posts with pictures or a video, content warnings and replies to any Mastodon server, with an access token made on your own server.
+description: Publish posts with pictures or a video, content warnings and replies to any Mastodon server. Sign in with Mastodon, or connect with an access token.
 ---
 
-Staqly publishes to a **Mastodon** account (or any server that speaks Mastodon's API, such as
-GoToSocial or Akkoma) with an **access token** you make on your own server. Mastodon apps belong to
-one server each, so there is nothing for whoever runs staqly to register: every person brings their
-server's address and a token. A published target links to the post on your server.
+Staqly publishes to a **Mastodon** account, or to one on any server that speaks Mastodon's API, such as
+GoToSocial or Akkoma. A published target links to the post on your server. There are two ways to connect, and
+nothing for whoever runs staqly to register:
+
+- **Sign in with Mastodon** (OAuth): the usual way.
+- **An access token** you make on your server: when your server's sign-in doesn't work with staqly.
+
+## Sign in with Mastodon
+
+In **Channels → Add channel → Mastodon**, enter your **Server** (for example `mastodon.social`, the default)
+and choose **Connect with Mastodon**. Your server's sign-in page opens; sign in and choose **Authorize**. You
+come back with the account connected: its display name, `@username@server` and picture.
+
+Mastodon apps belong to one server each, so staqly registers itself on your server as the sign-in starts
+(an application named **staqly**, with the scopes `write:statuses`, `write:media` and `read:accounts`). It
+returns to `<your dashboard>/channels/callback/mastodon`, so the sign-in works on a local install too. Staqly
+keeps the account's token sealed; Mastodon's tokens don't expire. Removing staqly in **Preferences →
+Account → Authorized apps** disconnects it; the channel then shows **Needs reconnect**.
+
+## With an access token
 
 <Steps>
 <Step>
@@ -18,6 +34,7 @@ On your Mastodon server, open **Preferences → Development → New application*
 | Field | What |
 |---|---|
 | **Application name** | anything, for example `staqly` |
+| **Redirect URI** | leave the default, `urn:ietf:wg:oauth:2.0:oob` (staqly doesn't use it) |
 | **Scopes** | untick everything, then tick `write:statuses`, `write:media` and `read:accounts` |
 
 Save, open the application and copy **Your access token**.
@@ -27,7 +44,7 @@ Save, open the application and copy **Your access token**.
 
 ### Connect the account
 
-In **Channels → Add channel → Mastodon**, enter:
+In **Channels → Add channel → Mastodon**, choose **Use an access token instead** and enter:
 
 | Field | What |
 |---|---|
@@ -38,6 +55,9 @@ The channel shows your display name, `@username@server` and picture. Staqly keep
 
 </Step>
 </Steps>
+
+Over the API, this is the provider `mastodon_token` (`POST /v1/channels` with the fields `instance` and
+`access_token`); `mastodon` signs in from the dashboard.
 
 ## Limits
 
@@ -66,7 +86,7 @@ before, with the post's visibility and content warning.
 
 | Mastodon says | Staqly does |
 |---|---|
-| The token is invalid, revoked or lacks a scope | Marks the channel **Needs reconnect** and fails the target; make a new token and reconnect |
+| The token is invalid, revoked or lacks a scope | Marks the channel **Needs reconnect** and fails the target; sign in again (or make a new token) and reconnect |
 | Rate limit, the server is down or can't be reached | Retries through the job queue (after 1, 5, then 15 minutes) |
 | A refused post (too long, a file the server doesn't take, a deleted post replied to) | Fails the target with Mastodon's reason |
 

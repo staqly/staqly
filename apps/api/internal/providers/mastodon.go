@@ -16,10 +16,10 @@ import (
 	"time"
 )
 
-// Mastodon (and other servers speaking its API: GoToSocial, Akkoma...) with an access token the person makes on
-// their own server (Preferences > Development > New application). Mastodon apps are registered per server, and one
-// OAuth app per staqly server can't sign in to every instance, so this is a token platform: the person names the
-// instance and pastes the token. Statuses carry an Idempotency-Key, so a retry after a lost answer never posts twice.
+// Mastodon (and other servers speaking its API: GoToSocial, Akkoma...). "mastodon" signs in with OAuth: Mastodon
+// apps belong to one server, so staqly registers itself on the person's server at every sign-in (mastodon_oauth.go).
+// "mastodon_token" takes an access token the person makes on their server (Preferences > Development > New
+// application). Statuses carry an Idempotency-Key, so a retry after a lost answer never posts twice.
 type Mastodon struct{ Base }
 
 var (
@@ -30,22 +30,32 @@ var (
 )
 
 func init() {
-	Register(Mastodon{NewBase("mastodon", "Mastodon", AuthToken,
-		Limits{MaxChars: 500, MaxMedia: 4, MediaKinds: []string{"image", "video"}}).WithSettings(
-		Field{Key: "visibility", Label: "Who can see it", Kind: "select", Default: "public", Options: []Option{
+	settings := []Field{
+		{Key: "visibility", Label: "Who can see it", Kind: "select", Default: "public", Options: []Option{
 			{Value: "public", Label: "Public"},
 			{Value: "unlisted", Label: "Quiet public (not in public timelines)"},
 			{Value: "private", Label: "Followers only"},
 		}},
-		Field{Key: "spoiler_text", Label: "Content warning", Kind: "text", MaxLength: 500, Placeholder: "Spoilers for episode 3",
+		{Key: "spoiler_text", Label: "Content warning", Kind: "text", MaxLength: 500, Placeholder: "Spoilers for episode 3",
 			Help: "Hides the post behind this warning until a reader opens it."},
-	)}, StatusAvailable)
+	}
+	limits := Limits{MaxChars: 500, MaxMedia: 4, MediaKinds: []string{"image", "video"}}
+	Register(Mastodon{NewBase("mastodon", "Mastodon", AuthOAuth2, limits).WithSettings(settings...)}, StatusAvailable)
+	tok := NewBase("mastodon_token", "Mastodon (access token)", AuthToken, limits).WithSettings(settings...)
+	tok.docs = "https://docs.staqly.ai/channels/mastodon#with-an-access-token"
+	Register(Mastodon{tok}, StatusAvailable)
 }
 
-func (Mastodon) CredentialFields() []Field {
-	return []Field{
-		{Key: "instance", Label: "Server", Kind: "url", Default: mastodonDefault, Placeholder: mastodonDefault,
-			Help: "The address of your Mastodon server."},
+// Needs: no keys to register (staqly registers itself on each server), so OAuth works on any install.
+func (m Mastodon) Needs() Needs { return Needs{OwnClient: m.Auth() == AuthOAuth2} }
+
+func (m Mastodon) CredentialFields() []Field {
+	server := Field{Key: "instance", Label: "Server", Kind: "url", Default: mastodonDefault, Placeholder: mastodonDefault,
+		Help: "The address of your Mastodon server."}
+	if m.Auth() == AuthOAuth2 {
+		return []Field{server} // asked before the sign-in: it says which server to sign in to
+	}
+	return []Field{server,
 		{Key: "access_token", Label: "Access token", Kind: "secret", Required: true,
 			Help: "Preferences > Development > New application, with the scopes write:statuses, write:media and read:accounts; copy \"Your access token\"."},
 	}
@@ -112,6 +122,11 @@ func (Mastodon) Connect(ctx context.Context, f map[string]string) (Credentials, 
 	if token == "" {
 		return nil, Profile{}, invalid("access_token", "paste the access token")
 	}
+	return mastodonSignedIn(ctx, instance, token)
+}
+
+// mastodonSignedIn reads the account behind a token: the channel's credentials and profile.
+func mastodonSignedIn(ctx context.Context, instance, token string) (Credentials, Profile, error) {
 	var me mastodonAccount
 	if err := mastodonCall(ctx, http.MethodGet, instance, token, "/api/v1/accounts/verify_credentials", nil, "", "", &me); err != nil {
 		return nil, Profile{}, err

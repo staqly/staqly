@@ -197,8 +197,10 @@ func (s *Service) serverApp(providerID string) (providers.App, bool) {
 		mac := hmac.New(sha256.New, s.Cfg.SecretKey)
 		mac.Write([]byte("oauth-client-key:" + providerID))
 		web := s.webURL()
+		e, _ := providers.Get(providerID)
+		https := !e.Provider.(providers.Needer).Needs().HTTPS || strings.HasPrefix(web, "https://")
 		return providers.App{ClientID: web + "/api/v1/oauth/" + providerID + "/client-metadata.json",
-			ClientSecret: hex.EncodeToString(mac.Sum(nil))}, strings.HasPrefix(web, "https://") && len(s.Cfg.SecretKey) > 0
+			ClientSecret: hex.EncodeToString(mac.Sum(nil))}, https && len(s.Cfg.SecretKey) > 0
 	}
 	key := providerEnv(providerID) + "CLIENT_"
 	app := providers.App{ClientID: s.Env(key+"ID", ""), ClientSecret: s.Env(key+"SECRET", "")}
@@ -218,7 +220,7 @@ func needsBotToken(providerID string) bool {
 	return ok && n.Needs().BotToken
 }
 
-// ownClient: the server is its own OAuth client for this platform (Bluesky), so only the server's app works for it.
+// ownClient: the server is its own OAuth client for this platform (Bluesky, Mastodon), so only the server's app works for it.
 func ownClient(providerID string) bool {
 	e, ok := providers.Get(providerID)
 	if !ok {
@@ -231,7 +233,7 @@ func ownClient(providerID string) bool {
 // ClientMetadata is the document behind an own-client platform's client id (public: the platform fetches it).
 func (s *Service) ClientMetadata(providerID string) (map[string]any, error) {
 	app, ok := s.serverApp(providerID)
-	if !ownClient(providerID) || !ok {
+	if providerID != "bluesky" || !ok { // Mastodon registers itself on each server instead
 		return nil, notFound("client")
 	}
 	return providers.BlueskyClientMetadata(app, s.webURL(), s.webURL()+"/channels/callback/"+providerID)
@@ -492,6 +494,9 @@ type oauthState struct {
 	// Link: the connect link (channel_links.id) a customer started from; "" for the team's own sign-ins. A state
 	// carries one or the other, so neither flow can finish the other's sign-in.
 	Link string `json:"l,omitempty"`
+	// Carry: what a platform's step before the sign-in returned (Mastodon: the app registered on the person's
+	// server), sealed; it comes back to the exchange as extras.
+	Carry string `json:"c,omitempty"`
 }
 
 func (s *Service) signState(st oauthState) (string, error) {
@@ -577,11 +582,32 @@ func (s *Service) StartOAuth(ctx context.Context, p Principal, providerID, redir
 		return "", err
 	}
 	st := oauthState{Provider: providerID, Workspace: p.WorkspaceID, Nonce: randomString(12), Expires: s.Now().Add(10 * time.Minute).Unix()}
+	return s.beginOAuth(ctx, e, app, redirect, st, extra)
+}
+
+// beginOAuth runs a platform's step before the sign-in (OAuthPreparer), seals what it returns in the state, signs
+// the state and answers the platform's sign-in URL.
+func (s *Service) beginOAuth(ctx context.Context, e providers.Entry, app providers.App, redirect string, st oauthState, extra map[string]string) (string, error) {
+	extra = withVerifier(extra, s.pkceVerifier(st))
+	if p, ok := e.Provider.(providers.OAuthPreparer); ok {
+		cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
+		defer cancel()
+		carry, err := p.PrepareOAuth(cctx, redirect, extra)
+		if err != nil {
+			return "", connectError(err)
+		}
+		if st.Carry, err = s.seal(carry); err != nil {
+			return "", err
+		}
+		for k, v := range carry {
+			extra[k] = v
+		}
+	}
 	state, err := s.signState(st)
 	if err != nil {
 		return "", err
 	}
-	return s.authURL(ctx, e, app, redirect, state, withVerifier(extra, s.pkceVerifier(st)))
+	return s.authURL(ctx, e, app, redirect, state, extra)
 }
 
 // CompleteOAuth exchanges the code the platform sent back and saves the account as a channel. An existing
@@ -619,7 +645,17 @@ func (s *Service) completeOAuth(ctx context.Context, p Principal, e providers.En
 	}
 	cctx, cancel := context.WithTimeout(s.providerCtx(ctx), connectTimeout)
 	defer cancel()
-	creds, profile, err := e.Exchange(cctx, app, redirect, code, withVerifier(extra, s.pkceVerifier(st)))
+	extra = withVerifier(extra, s.pkceVerifier(st))
+	if st.Carry != "" {
+		var carry map[string]string
+		if err := s.unseal(st.Carry, &carry); err != nil {
+			return OAuthResult{}, invalid("state", "is invalid")
+		}
+		for k, v := range carry { // the sealed values win over the callback's query
+			extra[k] = v
+		}
+	}
+	creds, profile, err := e.Exchange(cctx, app, redirect, code, extra)
 	if err != nil {
 		return OAuthResult{}, connectError(err)
 	}
