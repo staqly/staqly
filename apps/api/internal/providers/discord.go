@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Discord through the server's own bot: the person adds the server's Discord application to a Discord server
@@ -361,7 +362,8 @@ func (d Discord) targets(ctx context.Context, c Credentials, set Settings) ([]st
 		}
 		out = append(out, id)
 	}
-	return out, nil
+	// A channel named twice (by id and by #name, say) gets the post once.
+	return uniqueValues(out), nil
 }
 
 // send posts one message in one channel (a reply to replyTo when set) and answers its id.
@@ -466,11 +468,17 @@ func discordBotError(status int, retryAfter string, raw []byte, guildLevel bool)
 	return &Failure{Msg: fmt.Sprintf("Discord answered %d: %s", status, detail)}
 }
 
+// truncateDetail keeps a platform's answer short for an error message. It cuts between characters, never inside
+// one: the message is stored, and PostgreSQL refuses text that is not valid UTF-8.
 func truncateDetail(s string) string {
-	if len(s) > 200 {
-		return s[:200] + "..."
+	if len(s) <= 200 {
+		return s
 	}
-	return s
+	n := 200
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n] + "..."
 }
 
 // discordOAuthDo posts to the token endpoint, whose errors are OAuth's ({"error","error_description"}).

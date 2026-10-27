@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // fakeDiscordBot answers like Discord's API for the bot "bot1" in the server 800.
@@ -296,5 +297,77 @@ func TestDiscordPermsDecode(t *testing.T) {
 	err := json.Unmarshal([]byte(`{"id":"1","roles":[{"id":"1","permissions":"309237763072"},{"id":"2","permissions":2048}]}`), &g)
 	if err != nil || g.Roles[0].Permissions != 309237763072 || g.Roles[1].Permissions != 2048 {
 		t.Fatalf("%+v %v", g, err)
+	}
+	// The largest permission set Discord can send (every bit) fits; a value that is not a number is an error.
+	if err := json.Unmarshal([]byte(`{"roles":[{"id":"1","permissions":"18446744073709551615"}]}`), &g); err != nil || g.Roles[0].Permissions != 1<<64-1 {
+		t.Fatalf("all bits: %+v %v", g, err)
+	}
+	if err := json.Unmarshal([]byte(`{"roles":[{"id":"1","permissions":"admin"}]}`), &g); err == nil {
+		t.Fatal("a permission set that is not a number was read")
+	}
+}
+
+// A channel named twice in the settings (by id and by #name, or the same id again) gets the post once.
+func TestDiscordPostsOnceToAChannelNamedTwice(t *testing.T) {
+	f, ctx := useFakeDiscordBot(t)
+	res, err := Discord{}.Publish(ctx, Credentials{"guild_id": "800"}, PostContent{Text: "Hello"}, Settings{"channel": "901, #general,901,902"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.posts) != 2 || f.posts[0].channel != "901" || f.posts[1].channel != "902" || res.ExternalID != "901:m1,902:m2" {
+		t.Fatalf("posts %+v, result %+v", f.posts, res)
+	}
+}
+
+// Was a bug: a long answer was cut inside a character, and PostgreSQL refuses a stored error that is not UTF-8.
+func TestDiscordErrorDetailStaysUTF8(t *testing.T) {
+	body := strings.Repeat("a", 199) + strings.Repeat("ż", 50) // ż is two bytes: byte 200 is inside one
+	for name, err := range map[string]error{
+		"bot":     discordBotError(418, "", []byte(body), false),
+		"webhook": discordError(418, []byte(body)),
+		"errors":  discordError(400, []byte(`{"message":"Invalid Form Body","errors":"`+body+`"}`)),
+	} {
+		if !utf8.ValidString(err.Error()) || !strings.HasSuffix(err.Error(), "...") {
+			t.Errorf("%s: %q", name, err)
+		}
+	}
+}
+
+// A rate limit with the wait only in the Retry-After header (no retry_after in the body) still waits that long.
+func TestDiscordRateLimitReadsRetryAfterHeader(t *testing.T) {
+	err := discordBotError(429, "30", []byte(`{"message":"You are being rate limited."}`), false)
+	if errors.Is(err, ErrRejected) || errors.Is(err, ErrReauth) || RetryAt(err).Before(time.Now().Add(25*time.Second)) {
+		t.Fatalf("rate limit: %v (retry at %v)", err, RetryAt(err))
+	}
+	// An unreadable header is no particular wait, not a crash or a time in the past.
+	if err := discordBotError(429, "soon", nil, false); !RetryAt(err).IsZero() {
+		t.Fatalf("unreadable Retry-After: %v", RetryAt(err))
+	}
+}
+
+// The token endpoint's answers: an outage or a rate limit is tried again, anything else it refuses is final.
+func TestDiscordOAuthErrors(t *testing.T) {
+	for _, c := range []struct {
+		status    int
+		body      string
+		temporary bool
+		says      string
+	}{
+		{503, `upstream`, true, "unavailable"},
+		{429, `{"retry_after":2}`, true, "rate limit"},
+		{400, `{"error":"invalid_grant","error_description":"Invalid \"redirect_uri\" in request."}`, false, "return address"},
+		{400, `{"error":"unsupported_grant_type"}`, false, "unsupported_grant_type"},
+		{400, `not json`, false, "not json"},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(c.status)
+			_, _ = w.Write([]byte(c.body))
+		}))
+		req, _ := http.NewRequest(http.MethodPost, srv.URL, nil)
+		err := discordOAuthDo(context.Background(), req, &struct{}{})
+		srv.Close()
+		if err == nil || errors.Is(err, ErrRejected) == c.temporary || !strings.Contains(err.Error(), c.says) {
+			t.Errorf("%d %s: %v", c.status, c.body, err)
+		}
 	}
 }

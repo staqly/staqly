@@ -411,6 +411,92 @@ func TestSlackFailures(t *testing.T) {
 	}
 }
 
+// A channel named twice in the settings (by id and by #name, or the same id again) gets the post once.
+func TestSlackPostsOnceToAChannelNamedTwice(t *testing.T) {
+	f := useFakeSlack(t)
+	if _, err := (Slack{}).Publish(context.Background(), slackCreds(), PostContent{Text: "Hello"}, Settings{"channel": "C1,#general, C1"}); err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, c := range f.calls {
+		if c == "chat.postMessage" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("chat.postMessage %d times: %v", n, f.calls)
+	}
+}
+
+// Slack's error codes decide what happens next: reconnect, try again later, or fail the post for good.
+func TestSlackErrorCodes(t *testing.T) {
+	for code, want := range map[string]error{
+		"token_revoked":       ErrReauth,
+		"missing_scope":       ErrReauth,
+		"is_archived":         ErrReauth,
+		"msg_too_long":        ErrRejected,
+		"restricted_action":   ErrRejected,
+		"something_brand_new": ErrRejected,
+		"ratelimited":         nil,
+		"internal_error":      nil,
+		"service_unavailable": nil,
+	} {
+		err := slackError(code)
+		got := error(nil)
+		for _, k := range []error{ErrReauth, ErrRejected} {
+			if errors.Is(err, k) {
+				got = k
+			}
+		}
+		if got != want || !strings.Contains(err.Error(), "Slack") {
+			t.Errorf("%s: %v, want kind %v", code, err, want)
+		}
+	}
+}
+
+// What Slack answers outside its {"ok":...} envelope: an outage or a rate limit is tried again; a reply that
+// can't be read is an error, never a success.
+func TestSlackUnreadableAnswers(t *testing.T) {
+	for _, c := range []struct {
+		status int
+		body   string
+		retry  bool
+	}{
+		{502, `<html>Bad Gateway</html>`, true},
+		{429, ``, true},
+		{200, `<html>maintenance</html>`, false},
+		{200, ``, false},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(c.status)
+			_, _ = w.Write([]byte(c.body))
+		}))
+		req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+		var out struct{ TS string }
+		err := slackDo(context.Background(), req, &out)
+		srv.Close()
+		var f *Failure
+		if err == nil || errors.As(err, &f) != c.retry || errors.Is(err, ErrRejected) || errors.Is(err, ErrReauth) {
+			t.Errorf("%d %q: %v", c.status, c.body, err)
+		}
+	}
+}
+
+// Was a gap: a 429's Retry-After was dropped, so a rate-limited post spent its attempts (1 and 5 minutes later)
+// and failed; with the wait the job snoozes until then without spending one.
+func TestSlackRateLimitWaitsRetryAfter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "30")
+		w.WriteHeader(429)
+	}))
+	defer srv.Close()
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+	err := slackDo(context.Background(), req, nil)
+	if errors.Is(err, ErrRejected) || RetryAt(err).Before(time.Now().Add(25*time.Second)) {
+		t.Fatalf("rate limit: %v (retry at %v)", err, RetryAt(err))
+	}
+}
+
 func TestSlackCheckApp(t *testing.T) {
 	useFakeSlack(t)
 	ctx := context.Background()

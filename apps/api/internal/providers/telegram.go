@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -132,7 +133,7 @@ func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Creden
 	chat := strings.TrimSpace(fields["chat"])
 	shared := fields["bot"] == "shared" // connected through the server's bot (/connect CODE in the chat)
 	if shared {
-		if token = telegramShared.token; token == "" {
+		if token, _ = TelegramBot(); token == "" {
 			return nil, Profile{}, &Failure{Kind: ErrReauth, Msg: "Telegram: this server has no bot of its own any more; connect the chat with your own bot"}
 		}
 	}
@@ -203,25 +204,44 @@ func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Creden
 // The server's own bot (PROVIDER_TELEGRAM_BOT_TOKEN), set by the app at start. A chat connected through it (the
 // person adds the bot and sends /connect CODE there) holds "bot": "shared" instead of a token, so a new token for
 // the same bot keeps every such channel working.
-var telegramShared struct{ token, username, name string }
+// The bot's poller sets it while publish jobs read it, hence the lock.
+var telegramShared struct {
+	mu                    sync.RWMutex
+	token, username, name string
+}
 
 // SetTelegramBot records the server's bot: its token and its @username (without the @).
 func SetTelegramBot(token, username string) {
+	telegramShared.mu.Lock()
+	defer telegramShared.mu.Unlock()
 	telegramShared.token, telegramShared.username = token, username
 }
 
 // SetTelegramBotName records the bot's display name ("Staqly"), shown beside its @username.
-func SetTelegramBotName(name string) { telegramShared.name = name }
+func SetTelegramBotName(name string) {
+	telegramShared.mu.Lock()
+	defer telegramShared.mu.Unlock()
+	telegramShared.name = name
+}
 
 // TelegramBotName is the server's bot's display name, "" when unknown.
-func TelegramBotName() string { return telegramShared.name }
+func TelegramBotName() string {
+	telegramShared.mu.RLock()
+	defer telegramShared.mu.RUnlock()
+	return telegramShared.name
+}
 
 // TelegramBot is the server's bot, "" when it has none.
-func TelegramBot() (token, username string) { return telegramShared.token, telegramShared.username }
+func TelegramBot() (token, username string) {
+	telegramShared.mu.RLock()
+	defer telegramShared.mu.RUnlock()
+	return telegramShared.token, telegramShared.username
+}
 
 func telegramToken(c Credentials) string {
 	if c["bot"] == "shared" {
-		return telegramShared.token
+		token, _ := TelegramBot()
+		return token
 	}
 	return c["bot_token"]
 }
@@ -333,6 +353,11 @@ type telegramMessage struct {
 
 func (t Telegram) send(ctx context.Context, c Credentials, p PostContent, s Settings, replyTo string) (Result, error) {
 	token, chat := telegramToken(c), c["chat_id"]
+	if token == "" && c["bot"] == "shared" && chat != "" && strings.TrimSpace(getenv(ctx, "PROVIDER_TELEGRAM_BOT_TOKEN")) != "" {
+		// The server has a bot, but it is ready only once Telegram answered at start: nothing is wrong with the
+		// channel, so it is not marked for reconnecting; the post is tried again.
+		return Result{}, &Failure{Msg: "Telegram: this server's bot is not ready yet; staqly tries again in a few minutes"}
+	}
 	if token == "" || chat == "" {
 		return Result{}, &Failure{Kind: ErrReauth, Msg: "Telegram: no bot token stored; reconnect the channel"}
 	}

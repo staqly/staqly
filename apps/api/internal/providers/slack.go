@@ -454,7 +454,8 @@ func (s Slack) targets(ctx context.Context, c Credentials, set Settings) ([]stri
 		}
 		out = append(out, id)
 	}
-	return out, nil
+	// A channel named twice (by id and by #name, say) gets the post once.
+	return uniqueValues(out), nil
 }
 
 // slackEscape escapes what Slack's message format reserves.
@@ -786,7 +787,12 @@ func slackDo(ctx context.Context, req *http.Request, out any) error {
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return &Failure{Msg: "Slack rate limit reached; staqly tries again in a few minutes"}
+		f := &Failure{Msg: "Slack rate limit reached; staqly tries again in a few minutes"}
+		// Waiting as long as Slack says spends no attempt (the job snoozes), so a busy workspace can't fail a post.
+		if secs, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil && secs > 0 {
+			f.RetryAt = time.Now().Add(time.Duration(secs) * time.Second)
+		}
+		return f
 	}
 	if resp.StatusCode >= 500 {
 		return &Failure{Msg: fmt.Sprintf("Slack is unavailable (%d); staqly tries again in a few minutes", resp.StatusCode)}

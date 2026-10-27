@@ -401,7 +401,10 @@ func notifyFirst(v ...string) string {
 	return ""
 }
 
+// truncateRunes keeps the first n characters of s. What it returns is valid UTF-8 (bytes that are not become
+// U+FFFD): it is stored, and PostgreSQL refuses text that is not, which would leave the row unwritten.
 func truncateRunes(s string, n int) string {
+	s = strings.ToValidUTF8(s, "�")
 	if utf8.RuneCountInString(s) <= n {
 		return s
 	}

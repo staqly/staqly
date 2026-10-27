@@ -1132,14 +1132,26 @@ func (s *Service) shareRefresh(ctx context.Context, row db.Channel, old, fresh p
 	}
 }
 
+// channelNeedsReconnect marks a channel whose sign-in the platform refused. One already marked stays as it is, so
+// several posts failing on it at once alert once; one turned off meanwhile stays off.
 func (s *Service) channelNeedsReconnect(ctx context.Context, row db.Channel, cause error) error {
 	sys := Principal{WorkspaceID: row.WorkspaceID, Kind: PrincipalSystem, ID: "channels", Name: "Channels"}
 	return s.tx(ctx, func(q *db.Queries) error {
+		cur, err := q.GetChannelByID(ctx, row.ID)
+		if isNoRows(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if cur.Status == "needs_reconnect" || cur.Status == "disabled" {
+			return nil
+		}
 		if err := q.SetChannelHealth(ctx, db.SetChannelHealthParams{Status: "needs_reconnect", LastError: truncateRunes(cause.Error(), 500), UpdatedAt: s.now(), ID: row.ID}); err != nil {
 			return err
 		}
 		row.Status = "needs_reconnect"
-		_, err := s.emitRef(ctx, q, sys, "channel.needs_reconnect", Ref{Channel: row.ID}, map[string]any{"channel": toChannelOut(row), "error": cause.Error()})
+		_, err = s.emitRef(ctx, q, sys, "channel.needs_reconnect", Ref{Channel: row.ID}, map[string]any{"channel": toChannelOut(row), "error": cause.Error()})
 		return err
 	})
 }

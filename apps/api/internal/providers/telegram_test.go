@@ -283,6 +283,106 @@ func TestTelegramFailures(t *testing.T) {
 	}
 }
 
+// Was a bug: the server's bot is set only once Telegram answered at start, and a post due before that marked every
+// chat connected through it as needing a reconnect (which could not help). It is tried again instead; without the
+// setting at all, the chat does need connecting with a bot of its own.
+func TestTelegramSharedBotNotReadyYetIsTriedAgain(t *testing.T) {
+	f := useFakeTelegram(t)
+	shared := Credentials{"bot": "shared", "chat_id": "-1001234567890", "chat_username": "janedoe_news"}
+	configured := WithGetenv(context.Background(), func(k string) string {
+		if k == "PROVIDER_TELEGRAM_BOT_TOKEN" {
+			return "123:abc"
+		}
+		return ""
+	})
+	SetTelegramBot("", "")
+	_, err := Telegram{}.Publish(configured, shared, PostContent{Text: "Hi"}, Settings{})
+	if err == nil || errors.Is(err, ErrReauth) || errors.Is(err, ErrRejected) || len(f.calls) != 0 {
+		t.Fatalf("bot not ready: %v (calls %v)", err, f.calls)
+	}
+	unset := WithGetenv(context.Background(), func(string) string { return "" })
+	if _, err := (Telegram{}).Publish(unset, shared, PostContent{Text: "Hi"}, Settings{}); !errors.Is(err, ErrReauth) {
+		t.Fatalf("no bot on the server: %v", err)
+	}
+}
+
+// Was a race: the bot's poller records the server's bot while publish jobs read it (go test -race).
+func TestTelegramSharedBotSetWhilePublishing(t *testing.T) {
+	useFakeTelegram(t)
+	t.Cleanup(func() { SetTelegramBot("", "") })
+	shared := Credentials{"bot": "shared", "chat_id": "-1001234567890"}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for range 20 {
+			SetTelegramBot("123:abc", "janedoe_bot")
+			SetTelegramBotName("Jane")
+		}
+	}()
+	for range 20 {
+		_, _ = Telegram{}.Publish(context.Background(), shared, PostContent{Text: "Hi"}, Settings{})
+		_, _ = TelegramBot()
+	}
+	wg.Wait()
+}
+
+// What the Bot API answers outside the usual: a group that became a supergroup needs reconnecting (new id), an
+// outage page that is not JSON is tried again, a 2xx that can't be read is an error.
+func TestTelegramUnusualAnswers(t *testing.T) {
+	if err := telegramError(400, "Bad Request: group chat was upgraded to a supergroup chat", 0); !errors.Is(err, ErrReauth) {
+		t.Fatalf("upgraded group: %v", err)
+	}
+	if err := telegramError(429, "Too Many Requests", 0); err == nil || errors.Is(err, ErrRejected) || !RetryAt(err).IsZero() {
+		t.Fatalf("rate limit without a wait: %v", err)
+	}
+	for _, c := range []struct {
+		status int
+		body   string
+		retry  bool
+	}{
+		{502, `<html>Bad Gateway</html>`, true},
+		{429, ``, true},
+		{200, `<html>?</html>`, false},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(c.status)
+			_, _ = w.Write([]byte(c.body))
+		}))
+		req, _ := http.NewRequest(http.MethodPost, srv.URL, nil)
+		err := telegramDo(context.Background(), req, nil)
+		srv.Close()
+		var f *Failure
+		if err == nil || errors.As(err, &f) != c.retry || errors.Is(err, ErrRejected) || errors.Is(err, ErrReauth) {
+			t.Errorf("%d %q: %v", c.status, c.body, err)
+		}
+	}
+}
+
+// /connect CODE as people type it: any case, addressed to a bot, spaces around; anything else is not a command.
+func TestTelegramConnectCommandParsing(t *testing.T) {
+	for text, want := range map[string]string{
+		"/connect ABC234":                "ABC234",
+		"/connect abc234":                "abc234",
+		"/connect@staqly_bot   ABC234  ": "ABC234",
+		"/CONNECT ABC234":                "ABC234",
+		"/connect":                       "",
+		"/connect ABC234 please":         "",
+		"please /connect ABC234":         "",
+		"/connect AB":                    "",
+		"/connect ABC-234":               "",
+		"/connectABC234":                 "",
+	} {
+		got := ""
+		if g := telegramConnect.FindStringSubmatch(strings.TrimSpace(text)); g != nil {
+			got = g[1]
+		}
+		if got != want {
+			t.Errorf("%q: %q, want %q", text, got, want)
+		}
+	}
+}
+
 func TestTelegramValidate(t *testing.T) {
 	tg, _ := Get("telegram")
 	if tg.Status != StatusAvailable {

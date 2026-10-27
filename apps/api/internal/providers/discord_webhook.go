@@ -256,10 +256,7 @@ func discordError(status int, raw []byte) error {
 	_ = json.Unmarshal(raw, &e)
 	detail := e.Message
 	if detail == "" {
-		detail = string(raw)
-		if len(detail) > 200 {
-			detail = detail[:200] + "..."
-		}
+		detail = truncateDetail(string(raw))
 	}
 	rejected := func(msg string) error { return &Failure{Kind: ErrRejected, Msg: "Discord: " + msg} }
 	switch {
@@ -286,11 +283,7 @@ func discordError(status int, raw []byte) error {
 		return rejected("Discord refused the message (" + detail + ")")
 	case status == http.StatusBadRequest:
 		if len(e.Errors) > 0 {
-			d := string(e.Errors)
-			if len(d) > 200 {
-				d = d[:200] + "..."
-			}
-			return rejected(detail + ": " + d)
+			return rejected(detail + ": " + truncateDetail(string(e.Errors)))
 		}
 		return rejected(detail)
 	}
