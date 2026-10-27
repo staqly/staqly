@@ -38,7 +38,9 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -347,7 +349,12 @@ function RowMenu({
     )
   }
 
-  const links = publishedTargets(post).flatMap((t) => {
+  // While the post still waits to go out (scheduled, publishing), it has nothing to open yet: a channel it went
+  // out on earlier shows again once the post is done.
+  const waiting = post.status === 'scheduled' || post.status === 'publishing'
+  const canPublish = canReschedule(post) && (post.targets?.length ?? 0) > 0
+  const canUnschedule = post.status === 'scheduled'
+  const links = (waiting ? [] : publishedTargets(post)).flatMap((t) => {
     const url = safeHttpUrl(t.external_url)
 
     return url ? [{ ...t, url }] : []
@@ -361,48 +368,65 @@ function RowMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent ref={content} align="end">
-        <DropdownMenuItem asChild>
-          <Link href={href} prefetch={false} scroll={false}>
-            <PenSquare /> {isLocked(post) ? 'Open' : 'Edit'}
-          </Link>
-        </DropdownMenuItem>
-        {/* Narrow lists have no icon row: the same actions live here. */}
-        <DropdownMenuItem className="@3xl:hidden" onSelect={() => onAction('preview', post)}>
-          <Eye /> Preview and feedback
-        </DropdownMenuItem>
-        {canWrite && (
-          <DropdownMenuItem className="@3xl:hidden" onSelect={() => onAction('duplicate', post)}>
-            <Copy /> Duplicate
+        {/* Grouped: the post itself, when it goes out, where it went, sharing, and Delete apart. */}
+        <DropdownMenuGroup>
+          <DropdownMenuItem asChild>
+            <Link href={href} prefetch={false} scroll={false}>
+              <PenSquare /> {isLocked(post) ? 'Open' : 'Edit'}
+            </Link>
           </DropdownMenuItem>
+          {/* Narrow lists have no icon row: the same actions live here. */}
+          <DropdownMenuItem className="@3xl:hidden" onSelect={() => onAction('preview', post)}>
+            <Eye /> Preview and feedback
+          </DropdownMenuItem>
+          {canWrite && (
+            <DropdownMenuItem className="@3xl:hidden" onSelect={() => onAction('duplicate', post)}>
+              <Copy /> Duplicate
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuGroup>
+        {canWrite && (canPublish || canUnschedule) && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              {canPublish && (
+                <DropdownMenuItem onSelect={() => onAction('publish', post)}>
+                  <Send /> Publish now
+                </DropdownMenuItem>
+              )}
+              {canUnschedule && (
+                <DropdownMenuItem onSelect={() => onAction('unschedule', post)}>
+                  <CalendarX2 /> Cancel schedule
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuGroup>
+          </>
         )}
-        {canWrite && canReschedule(post) && (post.targets?.length ?? 0) > 0 && (
-          <DropdownMenuItem onSelect={() => onAction('publish', post)}>
-            <Send /> Publish now
-          </DropdownMenuItem>
-        )}
-        {canWrite && post.status === 'scheduled' && (
-          <DropdownMenuItem onSelect={() => onAction('unschedule', post)}>
-            <CalendarX2 /> Cancel schedule
-          </DropdownMenuItem>
-        )}
-        {links.map((t) => (
-          <DropdownMenuItem key={t.channel_id} asChild>
-            <a href={t.url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink /> Open on {t.channel_name}
-            </a>
-          </DropdownMenuItem>
-        ))}
         {links.length > 0 && (
-          <DropdownMenuItem onSelect={() => onAction('stats', post)}>
-            <BarChart3 /> Statistics
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Published on</DropdownMenuLabel>
+              {links.map((t) => (
+                <DropdownMenuItem key={t.channel_id} asChild>
+                  <a href={t.url} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink /> Open on {t.channel_name}
+                  </a>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuItem onSelect={() => onAction('stats', post)}>
+                <BarChart3 /> Statistics
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
         )}
+        <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => onAction('copy-link', post)}>
           <Link2 /> Copy link
         </DropdownMenuItem>
         {canWrite && !wentOut(post) && (
           <>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="@3xl:hidden" />
             <DropdownMenuItem variant="destructive" className="@3xl:hidden" onSelect={() => onAction('delete', post)}>
               <Trash2 /> Delete
             </DropdownMenuItem>
