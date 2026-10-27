@@ -182,29 +182,32 @@ function Counter({ counts }: { counts: Count[] }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-auto min-w-64 p-2" data-testid="counters">
-        <ul className="grid gap-1 text-sm">
+        {/* One column of counts for every channel (subgrid), right-aligned and well clear of the names. */}
+        <ul className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-1 text-sm">
           {counts.map(({ channel, n, max, links }) => (
             <li
               key={channel.id}
               className={cn(
-                'grid gap-1 px-1 py-0.5',
+                'col-span-full grid grid-cols-subgrid items-center gap-y-1 px-1 py-0.5',
                 links.length > 0 && 'rounded-md border border-destructive px-2 py-1.5 text-destructive',
               )}
             >
-              <span className="flex items-center gap-2">
+              <span className="flex min-w-0 items-center gap-2">
                 <ChannelAvatar channel={channel} className="size-5" />
-                <span className="min-w-0 flex-1 truncate">{channel.name}</span>
-                <span
-                  className={cn(
-                    'tabular-nums',
-                    (max > 0 && n > max) || links.length ? 'text-destructive' : 'text-muted-foreground',
-                  )}
-                >
-                  {max > 0 ? `${n}/${max}` : n}
-                </span>
+                <span className="min-w-0 truncate">{channel.name}</span>
+              </span>
+              <span
+                className={cn(
+                  'text-right tabular-nums',
+                  (max > 0 && n > max) || links.length ? 'text-destructive' : 'text-muted-foreground',
+                )}
+              >
+                {max > 0 ? `${n}/${max}` : n}
               </span>
               {links.length > 0 && (
-                <span className="max-w-72 text-xs wrap-anywhere">{linksNotice(channel.links, channel.name)}</span>
+                <span className="col-span-full max-w-72 text-xs wrap-anywhere">
+                  {linksNotice(channel.links, channel.name)}
+                </span>
               )}
             </li>
           ))}
