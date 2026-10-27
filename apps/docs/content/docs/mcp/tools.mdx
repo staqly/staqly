@@ -1,6 +1,6 @@
 ---
 title: Tools reference
-description: Look up each of the 104 MCP tools, its inputs and the scope it needs in cloud mode.
+description: Look up each of the 105 MCP tools, its inputs and the scope it needs in cloud mode.
 ---
 
 These are the tools an agent sees once staqly is [connected over MCP](/mcp). You rarely call
@@ -252,6 +252,18 @@ How each target will carry the post: the text per channel (with the channel's li
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `get_analytics`
+The workspace's publishing analytics for a range of days: totals with the previous period of the same length (posts published, channels published and failed, success rate, retries, average and p90 delay after the publish time), what waits now, published and failed per day, per channel (with the most common failure and the platform numbers already cached: views, engagements, link clicks), per source (dashboard, each agent over MCP or the API, schedules, repeats), posting times by weekday and hour with average engagements (`low_confidence` under `min_samples`), top posts and failure reasons. Never calls a platform. See [Analytics](/dashboard/analytics). *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `from` | string | | First day, YYYY-MM-DD in the workspace's time zone |
+| `to` | string | | Last day (included), YYYY-MM-DD; default today |
+| `days` | integer | | Instead of `from`: the last n days up to `to` (1 to 366) |
+| `channel` | string | | Only this channel (channel ID) |
+| `collection` | string | | Only posts of this collection (collection ID) |
+| `source` | string | | Only posts from this source, as `sources[].source` names it |
 
 ### `get_post_metrics`
 A post's numbers per channel (views, likes, reposts, replies, quotes, bookmarks, link clicks where the platform gives them), read from the platform when older than ten minutes or with `refresh` true. `available` false: the platform reports none. *Read-only* · `posts:read`

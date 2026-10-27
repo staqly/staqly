@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 import httpx
@@ -152,6 +153,110 @@ SESSION = {
     "last_seen_at": TS,
     "expires_at": TS,
     "current": True,
+}
+
+
+TOTALS = {
+    "posts_created": 4,
+    "posts_published": 3,
+    "targets_published": 5,
+    "targets_failed": 1,
+    "success_rate": 0.8333,
+    "retried": 1,
+    "delay_avg_seconds": 12.5,
+    "delay_p90_seconds": None,
+    "metrics": {
+        "impressions": 1200,
+        "engagements": 42,
+        "likes": 30,
+        "replies": 4,
+        "reposts": 8,
+        "quotes": None,
+        "bookmarks": None,
+        "link_clicks": None,
+    },
+}
+ANALYTICS = {
+    "range": {
+        "from": "2026-10-01",
+        "to": "2026-10-28",
+        "days": 28,
+        "timezone": "Europe/Warsaw",
+        "start": "2026-09-30T22:00:00Z",
+        "end": "2026-10-28T23:00:00Z",
+        "previous_from": "2026-09-03",
+        "previous_to": "2026-09-30",
+    },
+    "totals": TOTALS,
+    "previous": {**TOTALS, "metrics": None, "success_rate": None},
+    "queue": {"scheduled": 2, "drafts": 1, "next_publish_at": TS},
+    "daily": [{"date": "2026-10-01", "published": 1, "failed": 0}],
+    "channels": [
+        {
+            "channel_id": "ch_1",
+            "name": "Brand",
+            "provider": "mastodon",
+            "handle": "@brand",
+            "avatar_url": "",
+            "status": "connected",
+            "published": 5,
+            "failed": 1,
+            "success_rate": 0.8333,
+            "last_published_at": TS,
+            "top_failure": "rate limited",
+            "metrics": None,
+            "avg_engagements": None,
+            "metrics_coverage": {"support": "platform", "published": 5, "with_data": 0, "updated_at": None},
+        }
+    ],
+    "sources": [
+        {
+            "source": "claude-code",
+            "kind": "mcp",
+            "label": "claude-code",
+            "posts_created": 4,
+            "posts_published": 3,
+            "targets_published": 5,
+            "targets_failed": 1,
+            "success_rate": 0.8333,
+        }
+    ],
+    "posting_times": {
+        "cells": [
+            {
+                "weekday": 0,
+                "hour": 9,
+                "published": 3,
+                "samples": 2,
+                "avg_engagements": 10.5,
+                "low_confidence": True,
+            }
+        ],
+        "best": [],
+        "min_samples": 3,
+    },
+    "top_posts": {
+        "by": "engagements",
+        "posts": [
+            {
+                "post_id": "pst_1",
+                "excerpt": "Hello",
+                "published_at": TS,
+                "channels": [{"channel_id": "ch_1", "provider": "mastodon", "external_url": "https://m/1"}],
+                "metrics": TOTALS["metrics"],
+            }
+        ],
+    },
+    "failures": [
+        {
+            "reason": "rate limited",
+            "count": 1,
+            "channels": ["ch_1"],
+            "last_at": TS,
+            "sample_post_id": "pst_2",
+        }
+    ],
+    "feedback": {"opened": 1, "resolved": 0, "open": 1},
 }
 
 
@@ -764,6 +869,54 @@ CASES = [
         },
         query={"type": "post.published", "post_id": "pst_1", "channel_id": "ch_1", "agent": "claude-code"},
         check=lambda r: r.data[0].seq == 1 and r.data[0].post_id == "pst_1",
+    ),
+    # analytics
+    Case(
+        "analytics.get",
+        lambda c: c.analytics.get(),
+        "GET",
+        "/v1/analytics",
+        ANALYTICS,
+        check=lambda r: (
+            isinstance(r, models.Analytics)
+            and r.range.from_ == "2026-10-01"
+            and r.totals.metrics is not None
+            and r.totals.metrics.engagements == 42
+            and r.previous.metrics is None
+            and r.channels[0].metrics_coverage.support == "platform"
+            and r.posting_times.cells[0].low_confidence
+            and r.top_posts.posts[0].channels[0].external_url == "https://m/1"
+            and r.failures[0].channels == ["ch_1"]
+            and r.feedback.open == 1
+        ),
+    ),
+    Case(
+        "analytics.get filtered",
+        lambda c: c.analytics.get(
+            from_=date(2026, 10, 1),
+            to="2026-10-28",
+            channel="ch_1",
+            collection="col_1",
+            source="claude-code",
+        ),
+        "GET",
+        "/v1/analytics",
+        ANALYTICS,
+        query={
+            "from": "2026-10-01",
+            "to": "2026-10-28",
+            "channel": "ch_1",
+            "collection": "col_1",
+            "source": "claude-code",
+        },
+    ),
+    Case(
+        "analytics.get last n days",
+        lambda c: c.analytics.get(days=7),
+        "GET",
+        "/v1/analytics",
+        ANALYTICS,
+        query={"days": "7"},
     ),
     # channels and providers
     Case(

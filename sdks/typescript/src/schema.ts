@@ -1542,6 +1542,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The workspace's publishing analytics for a range of days (posts:read)
+         * @description Aggregated from the workspace's own posts and targets; platform numbers (views, likes...) are the ones already
+         *     cached on published targets (GET /v1/posts/{id}/metrics reads them, your automation reports its own), so this
+         *     never calls a platform. `from` and `to` are days in the workspace's time zone, both included (default: the last
+         *     30 days up to today; at most 366 days). `previous` holds the same totals for the period of the same length right
+         *     before, for comparisons. `queue` is what waits now. `sources` ignores the `source` filter so sources can be
+         *     compared; `feedback` ignores `channel`. A target's outcome time is when it was published, or for a failed one
+         *     when it failed.
+         */
+        get: operations["getAnalytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/posts/{id}/metrics": {
         parameters: {
             query?: never;
@@ -4759,6 +4785,199 @@ export interface components {
                 count: number;
                 people?: string[];
             }[];
+        };
+        Analytics: {
+            range: {
+                /** Format: date */
+                from: string;
+                /**
+                 * Format: date
+                 * @description Included
+                 */
+                to: string;
+                days: number;
+                /** @description The workspace's IANA time zone the days are in */
+                timezone: string;
+                /**
+                 * Format: date-time
+                 * @description The first instant of the range
+                 */
+                start: string;
+                /**
+                 * Format: date-time
+                 * @description The instant right after the range
+                 */
+                end: string;
+                /** Format: date */
+                previous_from: string;
+                /** Format: date */
+                previous_to: string;
+            };
+            totals: components["schemas"]["AnalyticsTotals"];
+            previous: components["schemas"]["AnalyticsTotals"];
+            /** @description What waits now (not a period figure) */
+            queue: {
+                scheduled: number;
+                drafts: number;
+                /** Format: date-time */
+                next_publish_at: string | null;
+            };
+            /** @description Every day of the range, in the workspace's time zone */
+            daily: {
+                /** Format: date */
+                date: string;
+                /** @description Targets published that day */
+                published: number;
+                /** @description Targets that failed that day */
+                failed: number;
+            }[];
+            /** @description Every channel of the workspace (or the filtered one), busiest first */
+            channels: components["schemas"]["ChannelAnalytics"][];
+            /** @description Where posts come from, most active first; ignores the source filter */
+            sources: {
+                /** @description The posts' source as stored (pass it as the source filter) */
+                source: string;
+                /**
+                 * @description dashboard; an agent over the API or MCP (as the workspace's agents list knows it; a source another client sent counts as api); schedule: a schedule that fetches posts from an endpoint; repeat: copies of repeating posts; other: none recorded
+                 * @enum {string}
+                 */
+                kind: "dashboard" | "api" | "mcp" | "schedule" | "repeat" | "other";
+                label: string;
+                posts_created: number;
+                posts_published: number;
+                targets_published: number;
+                targets_failed: number;
+                success_rate: number | null;
+            }[];
+            posting_times: {
+                /** @description Weekday and hour slots with published targets, in the workspace's time zone */
+                cells: components["schemas"]["AnalyticsTimeSlot"][];
+                /** @description Up to three slots with the highest average engagements, confident ones first */
+                best: components["schemas"]["AnalyticsTimeSlot"][];
+                /** @description Below this many published targets with numbers a slot is low confidence */
+                min_samples: number;
+            };
+            top_posts: {
+                /**
+                 * @description engagements when platform numbers exist in the range, else the most recent posts
+                 * @enum {string}
+                 */
+                by: "engagements" | "recent";
+                posts: {
+                    post_id: string;
+                    excerpt: string;
+                    /**
+                     * Format: date-time
+                     * @description The first channel it went out on in the range
+                     */
+                    published_at: string;
+                    channels: {
+                        channel_id: string;
+                        provider: string;
+                        external_url: string;
+                    }[];
+                    metrics: components["schemas"]["AnalyticsMetrics"] | null;
+                }[];
+            };
+            /** @description The most common failure reasons; errors that differ only by numbers, ids or links count as one */
+            failures: {
+                reason: string;
+                count: number;
+                /** @description Channel ids */
+                channels: string[];
+                /** Format: date-time */
+                last_at: string;
+                /** @description A post that failed this way */
+                sample_post_id: string;
+            }[];
+            /** @description Preview comment threads (ignores the channel filter) */
+            feedback: {
+                /** @description Threads started in the range */
+                opened: number;
+                /** @description Threads resolved in the range */
+                resolved: number;
+                /** @description Threads open now */
+                open: number;
+            };
+        };
+        AnalyticsTotals: {
+            posts_created: number;
+            /** @description Posts with at least one channel published in the period */
+            posts_published: number;
+            targets_published: number;
+            targets_failed: number;
+            /** @description published / (published + failed); null when nothing finished */
+            success_rate: number | null;
+            /** @description Targets that needed more than one attempt */
+            retried: number;
+            /** @description How long after its publish time a target went out, on average (null: nothing to measure) */
+            delay_avg_seconds: number | null;
+            /** @description 90th percentile of the same delay */
+            delay_p90_seconds: number | null;
+            /** @description Platform numbers summed over the published targets that have them; null when none has */
+            metrics: components["schemas"]["AnalyticsMetrics"] | null;
+        };
+        /** @description Platform numbers in one vocabulary. engagements = likes + replies + reposts + quotes + bookmarks. A null field: no target in the sum reported it. */
+        AnalyticsMetrics: {
+            /** @description Views or impressions */
+            impressions: number | null;
+            engagements: number;
+            likes: number | null;
+            replies: number | null;
+            reposts: number | null;
+            quotes: number | null;
+            bookmarks: number | null;
+            link_clicks: number | null;
+        };
+        ChannelAnalytics: {
+            channel_id: string;
+            name: string;
+            provider: string;
+            handle: string;
+            avatar_url: string;
+            /** @enum {string} */
+            status: "connected" | "needs_reconnect" | "disabled";
+            published: number;
+            failed: number;
+            success_rate: number | null;
+            /**
+             * Format: date-time
+             * @description The last target published in the range
+             */
+            last_published_at: string | null;
+            /** @description The most common failure reason in the range */
+            top_failure: string | null;
+            metrics: components["schemas"]["AnalyticsMetrics"] | null;
+            /** @description Per published target with numbers */
+            avg_engagements: number | null;
+            /** @description How complete the channel's numbers are; room for periodic snapshots later */
+            metrics_coverage: {
+                /**
+                 * @description platform: staqly reads the numbers when a post's numbers are opened; automation: your automation reports them; none: the platform doesn't report numbers to staqly yet
+                 * @enum {string}
+                 */
+                support: "platform" | "automation" | "none";
+                /** @description Published targets in the range */
+                published: number;
+                /** @description Of those, how many have numbers */
+                with_data: number;
+                /**
+                 * Format: date-time
+                 * @description When the newest numbers in the range were read
+                 */
+                updated_at: string | null;
+            };
+        };
+        AnalyticsTimeSlot: {
+            /** @description 0 is Monday */
+            weekday: number;
+            hour: number;
+            published: number;
+            /** @description Published targets with numbers */
+            samples: number;
+            avg_engagements: number | null;
+            /** @description Fewer samples than min_samples */
+            low_confidence: boolean;
         };
         TargetMetrics: {
             channel_id: string;
@@ -8997,6 +9216,43 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getAnalytics: {
+        parameters: {
+            query?: {
+                /** @description First day, YYYY-MM-DD in the workspace's time zone */
+                from?: string;
+                /** @description Last day (included), YYYY-MM-DD; default today */
+                to?: string;
+                /** @description Instead of from: the last n days up to to (7, 30, 90...) */
+                days?: number;
+                /** @description Only this channel's targets */
+                channel?: string;
+                /** @description Only posts of this collection */
+                collection?: string;
+                /** @description Only posts from this source, as `sources[].source` names it (dashboard, an agent's name, schedule:<name>, repeat) */
+                source?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Analytics"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
         };
