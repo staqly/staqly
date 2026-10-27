@@ -112,12 +112,12 @@ describe('channels', () => {
     expect(await screen.findByRole('dialog', { name: /Connect Telegram/ })).toBeInTheDocument()
     await user.type(screen.getByLabelText(/Bot token/), '123:abc')
     await user.type(screen.getByLabelText(/Chat or channel/), '@newsbot')
-    await user.type(screen.getByLabelText(/^Name/), 'News bot')
+    // The platform names the account: no Name field.
+    expect(screen.queryByLabelText(/^Name/)).not.toBeInTheDocument()
     await user.click(screen.getByTestId('connect-channel'))
     await waitFor(() => expect(api.find('POST', '/v1/channels')).toHaveLength(1))
     expect(api.find('POST', '/v1/channels')[0].body).toEqual({
       provider: 'telegram',
-      name: 'News bot',
       fields: { bot_token: '123:abc', chat_id: '@newsbot' },
     })
     expect(await screen.findAllByText(/is connected/)).not.toHaveLength(0)

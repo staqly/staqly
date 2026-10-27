@@ -143,7 +143,9 @@ export function ConnectForm({
         connect.mutate()
       }}
     >
-      {!reconnect && (
+      {/* Only your own automation needs a name here: every platform names its account, and a channel is renamed later
+          in its settings. */}
+      {!reconnect && nameRequired && (
         <Field data-invalid={!!errors.name}>
           <FieldLabel htmlFor="connect-name" required={nameRequired}>
             Name {!nameRequired && <span className="font-normal text-muted-foreground">(optional)</span>}
