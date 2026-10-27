@@ -322,9 +322,10 @@ func (s *Service) UpdateCollection(ctx context.Context, p Principal, id string, 
 	return s.GetCollection(ctx, p, id)
 }
 
-// DeleteCollection permanently removes a collection with its posts and
-// schedules. confirm must equal the collection name, so a stray call cannot
-// wipe data.
+// DeleteCollection permanently removes a collection and its schedules. Its posts are kept: every one moves to the
+// workspace's Default collection as it is (drafts stay drafts, a scheduled post still goes out at its time, posts
+// that went out keep their status and history), each with a post.updated event. confirm must equal the collection
+// name, so a stray call cannot remove it.
 func (s *Service) DeleteCollection(ctx context.Context, p Principal, id, confirm string) error {
 	if err := p.require(ScopeCollectionsDelete); err != nil {
 		return err
@@ -343,10 +344,47 @@ func (s *Service) DeleteCollection(ctx context.Context, p Principal, id, confirm
 		if confirm != c.Name {
 			return invalid("confirm", "must equal the collection name to delete it")
 		}
+		def, err := q.GetDefaultCollection(ctx, p.WorkspaceID)
+		if err != nil {
+			return err
+		}
+		// The posts first: the collection's foreign key would otherwise take them with it.
+		postIDs, err := q.CollectionPostIDs(ctx, db.CollectionPostIDsParams{WorkspaceID: p.WorkspaceID, CollectionID: id})
+		if err != nil {
+			return err
+		}
+		if _, err := q.MoveCollectionPosts(ctx, db.MoveCollectionPostsParams{ToCollectionID: def.ID, UpdatedAt: s.now(),
+			WorkspaceID: p.WorkspaceID, FromCollectionID: id}); err != nil {
+			return err
+		}
+		// Its schedules go with it (foreign key): their queued runs are dropped too.
+		schedules, err := q.ListSchedules(ctx, db.ListSchedulesParams{WorkspaceID: p.WorkspaceID, CollectionID: id})
+		if err != nil {
+			return err
+		}
+		for _, r := range schedules {
+			if err := s.cancelJobs(ctx, q, "run_schedule:"+r.ID); err != nil {
+				return err
+			}
+		}
 		if _, err := q.DeleteCollection(ctx, db.DeleteCollectionParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 			return err
 		}
-		_, err = s.emit(ctx, q, p, "collection.deleted", id, "", map[string]any{"collection": toCollection(c)})
+		for _, r := range schedules {
+			if _, err := s.emitRef(ctx, q, p, "schedule.deleted", Ref{Collection: id, Schedule: r.ID},
+				map[string]any{"schedule": s.toSchedule(ctx, r)}); err != nil {
+				return err
+			}
+		}
+		moved := map[string]any{"id": c.ID, "name": c.Name}
+		for _, postID := range postIDs {
+			if _, err := s.emit(ctx, q, p, "post.updated", def.ID, postID,
+				s.postEventData(ctx, q, p.WorkspaceID, postID, map[string]any{"moved_from": moved})); err != nil {
+				return err
+			}
+		}
+		_, err = s.emit(ctx, q, p, "collection.deleted", id, "", map[string]any{"collection": toCollection(c),
+			"moved_posts": len(postIDs), "moved_to": map[string]any{"id": def.ID, "name": def.Name}})
 		return err
 	})
 }

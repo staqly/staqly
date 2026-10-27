@@ -27,7 +27,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { api, ApiError, type Collection } from '@/lib/api'
 import { fieldsOf, focusFirstInvalid, formApiError, setFormApiError } from '@/lib/form-errors'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { qk, refetchPostListsFromStart, useSession } from '@/lib/queries'
+import { qk, refetchPostListsFromStart, useCollections, useSession } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 import { zodResolver } from '@/lib/zod'
@@ -146,6 +146,20 @@ export function CollectionSettingsSheet({
   )
 }
 
+/** The Default collection's current name (it can be renamed): where a deleted collection's posts go. */
+const defaultNameOf = (cols: Collection[]) => cols.find((c) => c.is_default)?.name ?? 'Default'
+
+/** What happens to the posts of a deleted collection, in the confirmation. */
+function deleteMoveText(n: number, defaultName: string) {
+  if (n === 0) {
+    return ''
+  }
+
+  return n === 1
+    ? `Its post moves to ${defaultName} unchanged.`
+    : `Its ${n} posts move to ${defaultName} unchanged, published ones included.`
+}
+
 function SettingsBody({ collection, onClose }: { collection: Collection; onClose: () => void }) {
   'use no memo' // React Hook Form register()/reset() must not be memoised by the React Compiler
 
@@ -167,6 +181,7 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
         : '',
     },
   })
+  const defaultName = useCollections(true, defaultNameOf).data ?? 'Default'
   const serverTimeout = useSession().data?.defaults?.processing_timeout_seconds ?? 3600
   const { register, handleSubmit, formState, reset, control, setError } = form
 
@@ -230,7 +245,7 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
       void qc.invalidateQueries({ queryKey: qk.collectionsAll })
       // Every list from its first page: invalidating would reload each loaded page one by one.
       refetchPostListsFromStart(qc)
-      namedToast(collection.name, 'was deleted', 'The collection and its posts are gone.')
+      namedToast(collection.name, 'was deleted', `Its posts are in ${defaultName} now.`)
       setDeleteOpen(false)
       onClose()
       router.push('/collections')
@@ -359,7 +374,7 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
               <Section
                 danger
                 title="Delete collection"
-                description="Permanently delete this collection and every item in it."
+                description={`Permanently delete this collection and its schedules. Its posts move to ${defaultName}.`}
               >
                 <div>
                   <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
@@ -392,8 +407,8 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
                 <DialogHeader>
                   <DialogTitle>Delete “{collection.name}”?</DialogTitle>
                   <DialogDescription>
-                    This permanently deletes the collection and its {collection.post_count} item
-                    {collection.post_count === 1 ? '' : 's'}. This cannot be undone.
+                    This permanently deletes the collection and its schedules.{' '}
+                    {deleteMoveText(collection.post_count, defaultName)} This cannot be undone.
                   </DialogDescription>
                 </DialogHeader>
                 <ConfirmNameField

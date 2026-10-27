@@ -29,7 +29,7 @@ var MaxEventExport = 32 << 10
 func (t *tools) addContentTools(s *mcp.Server) {
 	add(s, t, &mcp.Tool{Name: "update_collection", Description: "Update a collection: name, description, icon, colour, the wait for your own automation's result (processing_timeout_seconds), or archive/unarchive it (archiving an archived collection, or unarchiving an active one, is a conflict). Requires collections:write.",
 		Annotations: wr()}, t.updateCollection)
-	add(s, t, &mcp.Tool{Name: "delete_collection", Description: "Permanently delete a collection with its posts and schedules. confirm must equal the collection name. Requires collections:delete (collections:write alone is not enough).",
+	add(s, t, &mcp.Tool{Name: "delete_collection", Description: "Permanently delete a collection and its schedules. Its posts move to the Default collection unchanged (drafts, scheduled posts and posts that went out alike); the Default collection itself cannot be deleted. confirm must equal the collection name. Requires collections:delete (collections:write alone is not enough).",
 		Annotations: destructive()}, t.deleteCollection)
 
 	add(s, t, &mcp.Tool{Name: "upload_media", Description: "Upload a file (base64); returns a media ID to put in a post's media list. Requires media:write.",
