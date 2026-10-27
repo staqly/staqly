@@ -15,6 +15,7 @@ export type Scenario = {
   image?: string // a file under the app's public/ (both apps serve /demo/*.svg)
 }
 
+// Every scenario goes to three channels, so the card keeps one height as it loops.
 // Use cases of the landing page (apps/web/lib/use-cases.ts), as an agent would send them. staqly publishes to the
 // platforms in its catalog itself (apps/api/internal/providers); `via` marks a channel on your own automation
 // (`custom`), and says which one ("via script").
@@ -43,6 +44,7 @@ export const scenarios: Scenario[] = [
     targets: [
       { id: 'instagram', channel: 'Instagram', chars: '58 / 2,200', link: 'instagram.com/p/C9x...' },
       { id: 'threads', channel: 'Threads', chars: '58 / 500', link: 'threads.net/@.../post/C9...' },
+      { id: 'facebook', channel: 'Facebook', chars: '58 / 63,206', link: 'facebook.com/.../posts/pf...' },
     ],
     image: '/demo/golden-hour.svg',
   },
@@ -74,6 +76,7 @@ export const scenarios: Scenario[] = [
         chars: '78 / 1,500',
         link: 'g.page/.../posts/...',
       },
+      { id: 'instagram', channel: 'Instagram', chars: '78 / 2,200', link: 'instagram.com/p/C9b...' },
     ],
     image: '/demo/bakery.svg',
   },

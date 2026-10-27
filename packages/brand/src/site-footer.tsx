@@ -1,4 +1,4 @@
-import { Heart } from 'lucide-react'
+import { ArrowRight, Heart } from 'lucide-react'
 import type { ComponentType, ReactNode } from 'react'
 
 import { Logo, LogoMark } from './logo'
@@ -23,7 +23,11 @@ export type SiteFooterProps = {
   link?: ComponentType<LinkProps>
 }
 
-type Column = { title: string; links: [string, string][] }
+// more: a last link under the column, to everything it shortens.
+type Column = { title: string; links: [string, string][]; more?: [string, string] }
+
+// The free tools the footer names; the rest are one click away under All free tools.
+const FOOTER_TOOLS = 5
 
 function columns(web: string, docs: string): Column[] {
   return [
@@ -40,10 +44,8 @@ function columns(web: string, docs: string): Column[] {
     },
     {
       title: 'Free tools',
-      links: [
-        ['All free tools', `${web}/tools`],
-        ...TOOLS.map((t): [string, string] => [t.short, `${web}/tools/${t.slug}`]),
-      ],
+      links: TOOLS.slice(0, FOOTER_TOOLS).map((t): [string, string] => [t.short, `${web}/tools/${t.slug}`]),
+      more: ['All free tools', `${web}/tools`],
     },
     {
       title: 'Developers',
@@ -120,6 +122,16 @@ export function SiteFooter({ web, docs, basePath, link: Link = A }: SiteFooterPr
                   </Link>
                 </li>
               ))}
+              {c.more && (
+                <li>
+                  <Link
+                    href={c.more[1]}
+                    className="inline-flex min-h-6 items-center gap-1.5 font-medium text-foreground/90 transition-colors hover:text-brand-strong pointer-coarse:min-h-10"
+                  >
+                    {c.more[0]} <ArrowRight className="size-3.5" aria-hidden />
+                  </Link>
+                </li>
+              )}
             </ul>
           </nav>
         ))}
