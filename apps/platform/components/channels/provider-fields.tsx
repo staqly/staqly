@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import type { ProviderField } from '@/lib/api'
+import { safeImageSrc } from '@/lib/safe'
 
 /**
  * The form a provider describes (its credential fields when connecting, its per-post settings in the
@@ -59,7 +60,14 @@ function OptionIcon({ icon }: { icon?: string }) {
     return <LogoMark className="size-4" />
   }
 
-  return <img src={icon} alt="" width={16} height={16} className="size-4 shrink-0 rounded-full object-cover" />
+  // A platform's picture (a person's or a channel's photo) from the API: only an http(s) or uploaded picture.
+  const src = safeImageSrc(icon)
+
+  if (!src) {
+    return null
+  }
+
+  return <img src={src} alt="" width={16} height={16} className="size-4 shrink-0 rounded-full object-cover" />
 }
 
 /**

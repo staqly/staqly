@@ -42,6 +42,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api, errorMessage, mediaThumbUrl, mediaUrl, type Media, type StockPhoto } from '@/lib/api'
+import { safeHttpUrl } from '@/lib/safe'
 import { cn } from '@/lib/utils'
 
 import { AiPanel } from './ai-panel'
@@ -581,7 +582,7 @@ function StockGrid({ ctx, query }: { ctx: PanelCtx; query: string }) {
               )}
               <img
                 draggable={false}
-                src={p.thumb}
+                src={safeHttpUrl(p.thumb) ?? undefined}
                 alt={p.alt}
                 loading="lazy"
                 className="w-full"
@@ -589,7 +590,7 @@ function StockGrid({ ctx, query }: { ctx: PanelCtx; query: string }) {
               />
             </button>
             <a
-              href={p.author_url}
+              href={safeHttpUrl(p.author_url) ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
               className="absolute inset-x-0 bottom-0 truncate rounded-b-md bg-black/50 px-1.5 py-0.5 text-[11px] text-white opacity-0 transition group-hover:opacity-100 focus:opacity-100"
