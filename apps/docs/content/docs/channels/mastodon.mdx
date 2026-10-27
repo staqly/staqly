@@ -19,6 +19,9 @@ returns to `<your dashboard>/channels/callback/mastodon`, so the sign-in works o
 keeps the account's token sealed; Mastodon's tokens don't expire. Removing staqly in **Preferences →
 Account → Authorized apps** disconnects it; the channel then shows **Needs reconnect**.
 
+Every **Connect with Mastodon** asks your server to sign in afresh, so another account (on the same server or
+another) becomes another channel; signing in with an account already connected reconnects its channel.
+
 ## Channels connected with an access token
 
 Channels connected before sign-in came to staqly used an access token. They keep working as they are (over the

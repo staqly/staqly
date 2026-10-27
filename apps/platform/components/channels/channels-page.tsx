@@ -757,7 +757,7 @@ export function ChannelsPage() {
       <PageHeader
         title="Channels"
         icon={<Share2 className="size-4" />}
-        description="The accounts your posts go to. Connect a platform once; every post picks its channels."
+        description="The accounts your posts go to: connect as many per platform as you need; every post picks its channels."
         actions={
           <>
             <Button variant="outline" onClick={() => setNaming({})} data-testid="new-group">

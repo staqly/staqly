@@ -79,6 +79,8 @@ func (b Bluesky) AuthURLContext(ctx context.Context, app App, redirect, state st
 		"code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "code_challenge_method": {"S256"}}
 	if h := strings.TrimPrefix(strings.TrimSpace(extra["handle"]), "@"); h != "" {
 		form.Set("login_hint", h)
+	} else {
+		form.Set("prompt", "select_account") // the account picker, not the browser's account: one more account is one more channel
 	}
 	var out struct {
 		RequestURI string `json:"request_uri"`

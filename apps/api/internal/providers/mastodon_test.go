@@ -313,7 +313,7 @@ func TestMastodonOAuth(t *testing.T) {
 	}
 	pu, _ := url.Parse(u)
 	if !strings.HasPrefix(u, f.srv.URL+"/oauth/authorize?") || pu.Query().Get("client_id") != "cid" ||
-		pu.Query().Get("state") != "st" || pu.Query().Get("code_challenge_method") != "S256" || strings.Contains(u, "csecret") {
+		pu.Query().Get("state") != "st" || pu.Query().Get("force_login") != "true" || pu.Query().Get("code_challenge_method") != "S256" || strings.Contains(u, "csecret") {
 		t.Fatalf("auth URL %s", u)
 	}
 	creds, prof, err := e.Exchange(ctx, App{}, redirect, "the-code", extra)

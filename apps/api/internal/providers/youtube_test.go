@@ -250,7 +250,7 @@ func TestYouTubeConnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	q, _ := url.Parse(u)
-	if q.Query().Get("access_type") != "offline" || q.Query().Get("prompt") != "consent" || q.Query().Get("code_challenge") == "" ||
+	if q.Query().Get("access_type") != "offline" || q.Query().Get("prompt") != "consent select_account" || q.Query().Get("code_challenge") == "" ||
 		!strings.Contains(q.Query().Get("scope"), "youtube.upload") || q.Query().Get("state") != "st" {
 		t.Fatalf("auth url %s", u)
 	}

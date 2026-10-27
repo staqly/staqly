@@ -72,7 +72,8 @@ func (Mastodon) AuthURL(_ App, redirect, state string, extra map[string]string) 
 		return "", invalid("instance", "enter your Mastodon server")
 	}
 	q := url.Values{"response_type": {"code"}, "client_id": {extra["client_id"]}, "redirect_uri": {redirect},
-		"scope": {mastodonScopes}, "state": {state}}
+		"scope": {mastodonScopes}, "state": {state},
+		"force_login": {"true"}} // the sign-in form, not the browser's account: one more account is one more channel
 	if v := extra["code_verifier"]; v != "" { // servers without PKCE ignore it
 		sum := sha256.Sum256([]byte(v))
 		q.Set("code_challenge", base64.RawURLEncoding.EncodeToString(sum[:]))
