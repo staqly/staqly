@@ -5,9 +5,9 @@ import { useSyncExternalStore } from 'react'
 import type { PostStatus } from '@/lib/api'
 
 /**
- * "Show past posts": one switch for the post lists and the calendar, remembered in this browser. Past posts (the
- * server's `hide_past`) went out: published, or failed after their time. Off by default; storage that is blocked
- * or throws (private windows, previews) keeps the choice in memory for this page instead.
+ * "Show past posts": one switch for the post lists, remembered in this browser (the calendar always shows them).
+ * Past posts (the server's `hide_past`) went out: published; failed ones stay in view. Off by default; storage
+ * that is blocked or throws (private windows, previews) keeps the choice in memory for this page instead.
  */
 const KEY = 'staqly.posts.showPast'
 

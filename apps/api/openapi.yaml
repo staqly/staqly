@@ -4413,7 +4413,7 @@ components:
     q: { name: q, in: query, description: "Words of the content (case-insensitive substring match)", schema: { type: string } }
     publishAfter: { name: publish_after, in: query, description: "publish_at >= (RFC3339 or YYYY-MM-DD); posts without a time never match", schema: { type: string } }
     publishBefore: { name: publish_before, in: query, description: "publish_at < (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
-    hidePast: { name: hide_past, in: query, description: "true leaves out past posts: published ones, and failed ones whose publish_at has passed or that had none (published right away). Drafts, scheduled and publishing posts always stay.", schema: { type: boolean, default: false } }
+    hidePast: { name: hide_past, in: query, description: "true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay.", schema: { type: boolean, default: false } }
     postSort: { name: sort, in: query, description: "Default publish_asc (soonest first, posts without a time last). created_* and updated_desc order by those times.", schema: { type: string, enum: [publish_asc, publish_desc, created_desc, created_asc, updated_desc] } }
     idempotencyKey:
       name: Idempotency-Key

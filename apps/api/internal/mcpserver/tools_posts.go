@@ -251,7 +251,7 @@ type listPostsIn struct {
 	Tag           string `json:"tag,omitempty"`
 	PublishAfter  string `json:"publish_after,omitempty" jsonschema:"RFC3339 or YYYY-MM-DD, inclusive"`
 	PublishBefore string `json:"publish_before,omitempty" jsonschema:"RFC3339 or YYYY-MM-DD, exclusive"`
-	HidePast      bool   `json:"hide_past,omitempty" jsonschema:"leave out posts that went out: published, or failed after their time"`
+	HidePast      bool   `json:"hide_past,omitempty" jsonschema:"leave out posts that went out (published); failed ones stay"`
 	Sort          string `json:"sort,omitempty" jsonschema:"publish_asc (default), publish_desc, created_desc, created_asc"`
 	Cursor        string `json:"cursor,omitempty" jsonschema:"next_cursor of the previous page"`
 	Limit         int    `json:"limit,omitempty" jsonschema:"page size (default 50, max 200)"`

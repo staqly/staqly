@@ -130,7 +130,7 @@ List posts, optionally by collection, status, channel or tag. Default order is b
 | `channel_id` | string | No | Posts with a target on this channel |
 | `collection` | string | No | Collection ID or name |
 | `cursor` | string | No | Next_cursor of the previous page |
-| `hide_past` | boolean | No | Leave out posts that went out: published, or failed after their time |
+| `hide_past` | boolean | No | Leave out posts that went out (published); failed ones stay |
 | `limit` | integer | No | Page size (default 50, max 200) |
 | `publish_after` | string | No | RFC3339 or YYYY-MM-DD, inclusive |
 | `publish_before` | string | No | RFC3339 or YYYY-MM-DD, exclusive |
@@ -146,7 +146,7 @@ Find posts whose content contains a text, with the same filters as list_posts. *
 | `channel_id` | string | No | Posts with a target on this channel |
 | `collection` | string | No | Collection ID or name |
 | `cursor` | string | No | Next_cursor of the previous page |
-| `hide_past` | boolean | No | Leave out posts that went out: published, or failed after their time |
+| `hide_past` | boolean | No | Leave out posts that went out (published); failed ones stay |
 | `limit` | integer | No | Page size (default 50, max 200) |
 | `publish_after` | string | No | RFC3339 or YYYY-MM-DD, inclusive |
 | `publish_before` | string | No | RFC3339 or YYYY-MM-DD, exclusive |

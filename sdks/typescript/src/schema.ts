@@ -5671,7 +5671,7 @@ export interface components {
         publishAfter: string;
         /** @description publish_at < (RFC3339 or YYYY-MM-DD) */
         publishBefore: string;
-        /** @description true leaves out past posts: published ones, and failed ones whose publish_at has passed or that had none (published right away). Drafts, scheduled and publishing posts always stay. */
+        /** @description true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay. */
         hidePast: boolean;
         /** @description Default publish_asc (soonest first, posts without a time last). created_* and updated_desc order by those times. */
         postSort: "publish_asc" | "publish_desc" | "created_desc" | "created_asc" | "updated_desc";
@@ -8591,7 +8591,7 @@ export interface operations {
                 publish_after?: components["parameters"]["publishAfter"];
                 /** @description publish_at < (RFC3339 or YYYY-MM-DD) */
                 publish_before?: components["parameters"]["publishBefore"];
-                /** @description true leaves out past posts: published ones, and failed ones whose publish_at has passed or that had none (published right away). Drafts, scheduled and publishing posts always stay. */
+                /** @description true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay. */
                 hide_past?: components["parameters"]["hidePast"];
                 /** @description Words of the content (case-insensitive substring match) */
                 q?: components["parameters"]["q"];
@@ -8640,7 +8640,7 @@ export interface operations {
                 publish_after?: components["parameters"]["publishAfter"];
                 /** @description publish_at < (RFC3339 or YYYY-MM-DD) */
                 publish_before?: components["parameters"]["publishBefore"];
-                /** @description true leaves out past posts: published ones, and failed ones whose publish_at has passed or that had none (published right away). Drafts, scheduled and publishing posts always stay. */
+                /** @description true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay. */
                 hide_past?: components["parameters"]["hidePast"];
                 /** @description Words of the content (case-insensitive substring match) */
                 q?: components["parameters"]["q"];

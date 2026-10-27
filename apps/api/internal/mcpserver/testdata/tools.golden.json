@@ -1752,7 +1752,7 @@
           "type": "string"
         },
         "hide_past": {
-          "description": "leave out posts that went out: published, or failed after their time",
+          "description": "leave out posts that went out (published); failed ones stay",
           "type": "boolean"
         },
         "limit": {
@@ -2589,7 +2589,7 @@
           "type": "string"
         },
         "hide_past": {
-          "description": "leave out posts that went out: published, or failed after their time",
+          "description": "leave out posts that went out (published); failed ones stay",
           "type": "boolean"
         },
         "limit": {

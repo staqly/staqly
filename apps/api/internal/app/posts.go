@@ -110,7 +110,7 @@ type PostPatch struct {
 type PostFilter struct {
 	CollectionID, Status, ChannelID, Q, Tag string
 	PublishAfter, PublishBefore             string
-	HidePast                                bool // leave out posts that went out (published, or failed after their time)
+	HidePast                                bool // leave out posts that went out (published); failed ones stay
 	Sort                                    string
 	Limit                                   int
 	Cursor                                  string
