@@ -1057,24 +1057,36 @@ const ChannelTab = memo(function ChannelTab({
       title={`Text for ${channel.name}`}
       onClick={() => onSelect(channel.id)}
       data-testid={`tab-channel-${channel.id}`}
-      className={cn(
-        'relative rounded-full p-0.5 ring-2 outline-none focus-visible:ring-ring pointer-coarse:p-1.5',
-        selected ? 'ring-primary' : 'ring-transparent hover:ring-border',
-      )}
+      className="group/tab inline-grid place-items-center rounded-full p-0.5 outline-none pointer-coarse:p-1.5"
     >
-      <ChannelAvatar channel={channel} className="size-7" />
-      {own && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-primary ring-2 ring-background" />}
-      {status && status !== 'pending' && (
+      <span className="relative inline-flex size-7">
+        {/* The ring circles the avatar alone (the platform badge sits on top of it): drawn first, under the avatar. */}
         <span
           aria-hidden
+          data-testid="tab-channel-ring"
           className={cn(
-            'absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2 ring-background',
-            status === 'published' && 'bg-emerald-500',
-            status === 'failed' && 'bg-destructive',
-            status === 'publishing' && 'bg-sky-500',
+            'pointer-events-none absolute -inset-0.5 rounded-full ring-2 group-focus-visible/tab:ring-ring',
+            selected ? 'ring-primary' : 'ring-transparent group-hover/tab:ring-border',
           )}
         />
-      )}
+        <ChannelAvatar channel={channel} className="size-7" />
+        {own && (
+          <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-primary ring-2 ring-background" />
+        )}
+        {/* Delivery state at the top left, clear of the platform badge at the bottom right. */}
+        {status && status !== 'pending' && (
+          <span
+            aria-hidden
+            data-testid="tab-channel-status"
+            className={cn(
+              'absolute -top-0.5 -left-0.5 size-2.5 rounded-full ring-2 ring-background',
+              status === 'published' && 'bg-emerald-500',
+              status === 'failed' && 'bg-destructive',
+              status === 'publishing' && 'bg-sky-500',
+            )}
+          />
+        )}
+      </span>
     </button>
   )
 })
@@ -1222,9 +1234,37 @@ function ComposerFooter({
   onApplySchedule: (at: Date, repeat: string) => void
 }) {
   const inPast = useIsPast(publishAt)
+  // The time's problem, said next to its chip: the picked time went by, or the API refused it.
+  const timeError = locked
+    ? undefined
+    : (error ?? (inPast ? 'This time is in the past. Pick a future time or clear it.' : undefined))
+  // Publish now with a past time would be refused: the button stays focusable and says why (a disabled button
+  // gets no hover or focus, so no tooltip).
+  const nowBlocked = !locked && inPast
+  const nowReason = nowBlocked
+    ? 'The date is in the past: pick a future time or clear the date to publish now'
+    : undefined
+  const publishNow = () => {
+    if (!nowBlocked) {
+      onSave('now')
+    }
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      {/* Above the buttons, so they stay where they are when it appears. */}
+      {timeError && (
+        <Callout
+          tone="danger"
+          size="xs"
+          role="alert"
+          id="publish-at-error"
+          className="basis-full"
+          data-testid="publish-at-error"
+        >
+          {timeError}
+        </Callout>
+      )}
       {locked ? (
         <p className="ml-auto text-sm text-muted-foreground">
           {post?.status === 'publishing'
@@ -1235,9 +1275,14 @@ function ComposerFooter({
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {publishAt && (
             <span
+              // A group names the time and points at its problem (a group takes no aria-invalid: the red border
+              // and the notice say it).
+              role="group"
+              aria-label={`Publish time: ${formatShort(publishAt)}`}
+              aria-describedby={timeError ? 'publish-at-error' : undefined}
               className={cn(
                 'inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border pr-1 pl-3 text-sm tabular-nums',
-                inPast && 'border-destructive text-destructive',
+                timeError && 'border-destructive text-destructive',
               )}
               data-testid="publish-at-chip"
               title={formatShort(publishAt)}
@@ -1266,8 +1311,11 @@ function ComposerFooter({
             <Button
               type="button"
               variant="outline"
-              onClick={() => onSave('now')}
+              onClick={publishNow}
               disabled={busy || !canSend}
+              aria-disabled={nowBlocked || undefined}
+              aria-describedby={nowBlocked ? 'publish-at-error' : undefined}
+              tooltip={nowReason}
               data-testid="publish-now"
             >
               <Send /> Publish now
@@ -1280,16 +1328,21 @@ function ComposerFooter({
                 {busy ? 'Saving...' : 'Save changes'}
               </Button>
             ) : (
-              <Button type="button" onClick={() => onSave('now')} disabled={busy || !canSend} data-testid="publish-now">
+              <Button
+                type="button"
+                onClick={publishNow}
+                disabled={busy || !canSend}
+                aria-disabled={nowBlocked || undefined}
+                aria-describedby={nowBlocked ? 'publish-at-error' : undefined}
+                tooltip={nowReason}
+                data-testid="publish-now"
+              >
                 <Send /> {busy ? 'Saving...' : 'Publish now'}
               </Button>
             )}
             <ScheduleMenu value={publishAt} repeat={repeatEvery} disabled={busy} onApply={onApplySchedule} />
           </ButtonGroup>
         </div>
-      )}
-      {(error || (inPast && !locked)) && (
-        <FieldError className="basis-full text-right">{error ?? 'Pick a time in the future'}</FieldError>
       )}
     </div>
   )
@@ -1758,21 +1811,36 @@ export function ComposerForm({
               )}
 
               <div className="grid gap-1.5">
-                <span id="post-content-label" className="flex items-center gap-2 text-sm font-medium">
+                <h3 id="post-content-label" className="flex min-w-0 items-center gap-2 text-sm font-medium">
                   {active ? (
-                    `Text for ${active.name}`
+                    <>
+                      <span className="shrink-0 font-normal text-muted-foreground">Text for</span>{' '}
+                      <span
+                        className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-muted py-0.5 pr-2.5 pl-0.5"
+                        title={active.name}
+                        data-testid="text-for-channel"
+                      >
+                        <span aria-hidden className="inline-flex">
+                          <ChannelAvatar channel={active} className="size-5" />
+                        </span>
+                        <span className="truncate">{active.name}</span>
+                      </span>
+                    </>
                   ) : (
                     <>
                       Post <RequiredMark />
                     </>
                   )}
-                </span>
+                </h3>
                 {active && post && targetOf(active.id) && <TargetStatus post={post} target={targetOf(active.id)!} />}
                 {active && !locked && (
                   <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    {ownText != null
-                      ? `${active.name} gets its own text.`
-                      : `${active.name} uses the text for all channels. Change it here to give it its own.`}
+                    <span className="min-w-0 wrap-anywhere">
+                      <span className="font-medium text-foreground">{active.name}</span>
+                      {ownText != null
+                        ? ' gets its own text.'
+                        : ' uses the text for all channels. Change it here to give it its own.'}
+                    </span>
                     {ownText != null && (
                       <Button
                         type="button"

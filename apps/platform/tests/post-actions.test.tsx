@@ -24,30 +24,45 @@ const published = post({
 })
 
 describe('post actions', () => {
-  it('opens the post on its platform, duplicates into a new draft and explains what deleting does', async () => {
+  it('opens the post on its platform and duplicates it into a new draft; what went out has no Delete', async () => {
     const api = mockApi({
       'GET /v1/posts/pst_1/comments': { data: [] },
       'POST /v1/posts/pst_1/duplicate': post({ id: 'pst_2', status: 'draft' }),
-      'DELETE /v1/posts/pst_1': { status: 204 },
     })
-    const onDeleted = vi.fn<() => void>()
     const user = userEvent.setup()
 
-    renderWithProviders(<PostActions post={published} onDeleted={onDeleted} />)
+    renderWithProviders(<PostActions post={published} onDeleted={() => {}} />)
     expect(screen.getByRole('link', { name: 'Open post on JumpTheBear' })).toHaveAttribute(
       'href',
       'https://x.com/a/status/1',
     )
+    // History stays: a published post cannot be deleted (the API refuses it too).
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Duplicate' }))
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/posts/pst_2', { scroll: false }))
     expect(api.find('POST', '/v1/posts/pst_1/duplicate')).toHaveLength(1)
+  })
 
+  it('deletes a post that never went out, after asking', async () => {
+    const api = mockApi({
+      'GET /v1/posts/pst_3/comments': { data: [] },
+      'DELETE /v1/posts/pst_3': { status: 204 },
+    })
+    const onDeleted = vi.fn<() => void>()
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <PostActions
+        post={post({ id: 'pst_3', status: 'failed', targets: [target({ status: 'failed' })] })}
+        onDeleted={onDeleted}
+      />,
+    )
     await user.click(screen.getByRole('button', { name: 'Delete' }))
     const dialog = await screen.findByRole('alertdialog')
 
-    expect(dialog).toHaveTextContent('removed from Staqly only')
+    expect(dialog).toHaveTextContent('It will not be published.')
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
-    await waitFor(() => expect(api.find('DELETE', '/v1/posts/pst_1')).toHaveLength(1))
+    await waitFor(() => expect(api.find('DELETE', '/v1/posts/pst_3')).toHaveLength(1))
     await waitFor(() => expect(onDeleted).toHaveBeenCalled())
   })
 

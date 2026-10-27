@@ -823,7 +823,7 @@
       "idempotentHint": false,
       "readOnlyHint": false
     },
-    "description": "Delete a post (its event history is kept). Requires posts:delete (posts:write alone is not enough).",
+    "description": "Delete a draft, scheduled or failed post (its event history is kept). A post that went out (published, publishing, or published on any channel) is history and cannot be deleted (conflict). Requires posts:delete (posts:write alone is not enough).",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -845,7 +845,7 @@
       "idempotentHint": false,
       "readOnlyHint": false
     },
-    "description": "Delete several posts at once (up to 200; their event history is kept). Returns the deleted ids and the ids not found. What already went out stays on the platforms. Requires posts:delete.",
+    "description": "Delete several posts at once (up to 200; their event history is kept). Returns the deleted ids, the ids not found, and the ids kept because they went out (published, publishing, or published on any channel: history, never deleted). Requires posts:delete.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {

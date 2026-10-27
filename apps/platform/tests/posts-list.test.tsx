@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { PostsWorkspace } from '@/components/posts/posts-workspace'
 
-import { channel, collection, post } from './fixtures'
+import { channel, collection, post, target } from './fixtures'
 import { nav } from './navigation'
 import { mockApi, renderWithProviders } from './utils'
 
@@ -32,7 +32,7 @@ function setup(extra: Record<string, unknown> = {}) {
 
 describe('posts list', () => {
   it('selects posts (Shift+click for a range) and deletes them from the bar after a confirmation', async () => {
-    const api = setup({ 'POST /v1/posts/delete': { deleted: ['pst_1', 'pst_2', 'pst_3'], missing: [] } })
+    const api = setup({ 'POST /v1/posts/delete': { deleted: ['pst_1', 'pst_2', 'pst_3'], missing: [], kept: [] } })
     const user = userEvent.setup()
 
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
@@ -56,6 +56,51 @@ describe('posts list', () => {
     await waitFor(() => expect(api.find('POST', '/v1/posts/delete')).toHaveLength(1))
     expect(api.find('POST', '/v1/posts/delete')[0]!.body).toEqual({ ids: ['pst_1', 'pst_2', 'pst_3'] })
     await waitFor(() => expect(screen.queryByRole('toolbar', { name: 'Selected posts' })).not.toBeInTheDocument())
+  })
+
+  it('posts that went out have no row Delete, and the bar deletes only the others', async () => {
+    const out = [
+      post({ id: 'pst_1', content: 'Out everywhere', status: 'published', targets: [target({ status: 'published' })] }),
+      post({
+        id: 'pst_2',
+        content: 'Out on one channel',
+        status: 'failed',
+        targets: [target({ status: 'published' }), target({ channel_id: 'ch_2', status: 'failed' })],
+      }),
+      post({ id: 'pst_3', content: 'Never out' }),
+    ]
+    const api = setup({
+      'GET /v1/posts': { data: out, next_cursor: null },
+      'POST /v1/posts/delete': { deleted: ['pst_3'], missing: [], kept: [] },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<PostsWorkspace />, { mode: 'local' })
+    const rows = await screen.findAllByTestId('post-row')
+
+    expect(within(rows[0]!).queryByTestId('post-row-delete')).not.toBeInTheDocument()
+    expect(within(rows[1]!).queryByTestId('post-row-delete')).not.toBeInTheDocument()
+    expect(within(rows[2]!).getByTestId('post-row-delete')).toBeInTheDocument()
+
+    // Only what went out is selected: Delete says why it does nothing.
+    await user.click(screen.getByRole('checkbox', { name: 'Select Out everywhere' }))
+    const bar = screen.getByRole('toolbar', { name: 'Selected posts' })
+    const del = within(bar).getByRole('button', { name: 'Delete' })
+
+    expect(del).toHaveAttribute('aria-disabled', 'true')
+    await user.click(del)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select Out on one channel' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Select Never out' }))
+    await user.click(within(bar).getByRole('button', { name: 'Delete' }))
+    const confirm = await screen.findByRole('alertdialog')
+
+    expect(confirm).toHaveTextContent('Delete 1 post?')
+    expect(confirm).toHaveTextContent('2 posts that went out stay as history.')
+    await user.click(within(confirm).getByRole('button', { name: 'Delete 1 post' }))
+    await waitFor(() => expect(api.find('POST', '/v1/posts/delete')).toHaveLength(1))
+    expect(api.find('POST', '/v1/posts/delete')[0]!.body).toEqual({ ids: ['pst_3'] })
   })
 
   it('Escape clears the selection; Cancel schedule only takes scheduled posts off', async () => {

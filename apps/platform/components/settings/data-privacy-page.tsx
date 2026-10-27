@@ -350,8 +350,9 @@ export function DataPrivacyPage() {
         <SettingsCard title="Retention & single posts" icon={<Eraser />}>
           <div className="grid gap-2 text-sm text-muted-foreground">
             <p>
-              To erase one post, open it and choose <strong>Delete</strong> (the bin icon at the top of the post). What
-              was published stays on the platform.
+              To remove a post that hasn&apos;t gone out, open it and choose <strong>Delete</strong> (the bin icon at
+              the top of the post). Posts that went out stay as history; an admin can still erase one with its history
+              through the API.
             </p>
             <p>
               The server can prune old events, deliveries and finished jobs automatically: see{' '}

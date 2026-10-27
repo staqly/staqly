@@ -48,7 +48,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { api, type Post, type PostQuery, type PostPage } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { canReschedule, isLocked, postTitle, publishedTargets } from '@/lib/posts'
+import { canReschedule, isLocked, postTitle, publishedTargets, wentOut } from '@/lib/posts'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
 import {
   invalidateAfterPostChange,
@@ -400,7 +400,7 @@ function RowMenu({
         <DropdownMenuItem onSelect={() => onAction('copy-link', post)}>
           <Link2 /> Copy link
         </DropdownMenuItem>
-        {canWrite && (
+        {canWrite && !wentOut(post) && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" className="@3xl:hidden" onSelect={() => onAction('delete', post)}>
@@ -452,17 +452,20 @@ function RowActions({
           >
             <Copy />
           </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className={cn(quick, 'text-destructive hover:text-destructive')}
-            aria-label="Delete"
-            onClick={() => onAction('delete', post)}
-            data-testid="post-row-delete"
-          >
-            <Trash2 />
-          </Button>
+          {/* A post that went out is history: no Delete (the API refuses it too). */}
+          {!wentOut(post) && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className={cn(quick, 'text-destructive hover:text-destructive')}
+              aria-label="Delete"
+              onClick={() => onAction('delete', post)}
+              data-testid="post-row-delete"
+            >
+              <Trash2 />
+            </Button>
+          )}
         </>
       )}
       <RowMenu post={post} href={href} canWrite={canWrite} onAction={onAction} />
@@ -604,11 +607,7 @@ export function usePostRowActions(query = '') {
         open={open?.action === 'delete'}
         onOpenChange={close}
         title="Delete this post?"
-        description={
-          open && publishedTargets(open.post).length > 0
-            ? 'It is removed from Staqly only: what was published stays on the platforms.'
-            : 'It will not be published.'
-        }
+        description="It will not be published."
         confirmLabel={del.isPending ? 'Deleting...' : 'Delete'}
         variant="destructive"
         onConfirm={() => open && del.mutate(open.post)}
@@ -656,7 +655,8 @@ export function PostSelectionBar({
   const [dialog, setDialog] = useState<'delete' | 'move' | 'tags' | null>(null)
   const editable = selected.filter((p) => !isLocked(p))
   const scheduled = selected.filter((p) => p.status === 'scheduled')
-  const anyPublished = selected.some((p) => publishedTargets(p).length > 0)
+  // Posts that went out are history: Delete leaves them out (the API keeps them too).
+  const deletable = selected.filter((p) => !wentOut(p))
   const skipped = (n: number) => (n > 0 ? `${posts(n)} skipped` : undefined)
   const finish = (verb: string, total: number, ok: number, failed: number) => {
     invalidateAfterPostChange(qc, undefined, { usage: true })
@@ -667,7 +667,7 @@ export function PostSelectionBar({
     onClear()
   }
   const remove = useMutation({
-    mutationFn: () => api.deletePosts(selected.map((p) => p.id)),
+    mutationFn: () => api.deletePosts(deletable.map((p) => p.id)),
     onSuccess: (res) => {
       for (const id of res.deleted) {
         removePostFromLists(qc, id)
@@ -759,7 +759,9 @@ export function PostSelectionBar({
               variant="destructive"
               aria-label="Delete"
               disabled={busy}
-              onClick={() => setDialog('delete')}
+              aria-disabled={deletable.length === 0 || undefined}
+              tooltip={deletable.length === 0 && 'Posts that went out stay as history and cannot be deleted'}
+              onClick={() => deletable.length > 0 && setDialog('delete')}
               data-testid="posts-bulk-delete"
             >
               <Trash2 /> {label('Delete')}
@@ -770,13 +772,13 @@ export function PostSelectionBar({
       <ConfirmDialog
         open={dialog === 'delete'}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={`Delete ${posts(selected.length)}?`}
+        title={`Delete ${posts(deletable.length)}?`}
         description={
-          anyPublished
-            ? 'Published posts are removed from Staqly only: what went out stays on the platforms. The rest will not be published.'
-            : 'They will not be published.'
+          deletable.length < selected.length
+            ? `${deletable.length === 1 ? 'It' : 'They'} will not be published. ${posts(selected.length - deletable.length)} that went out ${selected.length - deletable.length === 1 ? 'stays' : 'stay'} as history.`
+            : `${deletable.length === 1 ? 'It' : 'They'} will not be published.`
         }
-        confirmLabel={remove.isPending ? 'Deleting...' : `Delete ${posts(selected.length)}`}
+        confirmLabel={remove.isPending ? 'Deleting...' : `Delete ${posts(deletable.length)}`}
         variant="destructive"
         onConfirm={() => remove.mutate()}
       />

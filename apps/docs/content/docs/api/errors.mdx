@@ -218,6 +218,7 @@ token"*: the token was rotated, print the current one with `staqly serve token` 
 |---|---|
 | *this post is published; duplicate it to post it again* | Published posts are read-only |
 | *this post is being published right now* | Wait for the publish to settle |
+| *this post went out and is kept as history; it cannot be deleted* | `DELETE` of a post that is published, publishing or published on any channel. `POST /v1/posts/delete` lists such posts in `kept` instead; purge (`admin`) still removes one |
 | *only a scheduled post can be taken off the schedule* | Cancel applies to `scheduled` posts |
 | *only a failed target can be retried* | The target is pending, publishing or published |
 | *this target is not waiting for a result (it is published)* | `POST .../targets/{channel}/result` for a target that is not `publishing` |

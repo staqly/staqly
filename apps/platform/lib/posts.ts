@@ -23,6 +23,14 @@ export function isLocked(post: Pick<Post, 'status'>) {
   return post.status === 'published' || post.status === 'publishing'
 }
 
+/**
+ * A post that went out, in full or on any of its channels, or is going out right now: it is history, and the
+ * API refuses to delete it (409). Only purge, retention and deleting its collection or the workspace remove it.
+ */
+export function wentOut(post: Pick<Post, 'status' | 'targets'>) {
+  return isLocked(post) || (post.targets ?? []).some((t) => t.status === 'published')
+}
+
 /** Published targets, for the links under a published post. */
 export function publishedTargets(post: Pick<Post, 'targets'>): PostTarget[] {
   return (post.targets ?? []).filter((t) => t.status === 'published')

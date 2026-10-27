@@ -533,7 +533,9 @@ class AsyncPosts(_Resource):
         return _model(Post, r)
 
     async def delete(self, post_id: str, *, request_options: RequestOptions | None = None) -> None:
-        """Deletes the post (its events stay as history). Needs ``posts:delete``."""
+        """Deletes a draft, scheduled or failed post (its events stay as history). A post that went out
+        (published, publishing, or published on any channel) is history: ``ConflictError``. Needs
+        ``posts:delete``."""
         await self._http.request(
             RequestSpec("DELETE", f"/v1/posts/{_q(post_id)}", options=_opts(request_options))
         )
@@ -541,8 +543,9 @@ class AsyncPosts(_Resource):
     async def delete_many(
         self, post_ids: Sequence[str], *, request_options: RequestOptions | None = None
     ) -> dict[str, builtins.list[str]]:
-        """Deletes several posts (up to 200); returns ``{"deleted": [...], "missing": [...]}``. Unknown ids,
-        and ids of another workspace, are listed in ``missing``. Needs ``posts:delete``."""
+        """Deletes several posts (up to 200); returns ``{"deleted": [...], "missing": [...], "kept": [...]}``.
+        Unknown ids, and ids of another workspace, are listed in ``missing``; posts that went out are history
+        and listed in ``kept``. Needs ``posts:delete``."""
         r = await self._http.request(
             RequestSpec(
                 "POST", "/v1/posts/delete", json={"ids": list(post_ids)}, options=_opts(request_options)

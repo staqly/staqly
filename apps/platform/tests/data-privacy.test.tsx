@@ -12,7 +12,7 @@ describe('data and privacy', () => {
     mockApi({ 'GET /v1/posts/pst_1/comments': { data: [] } })
 
     renderWithProviders(<DataPrivacyPage />, { mode: 'local' })
-    const hint = await screen.findByText(/To erase one post/)
+    const hint = await screen.findByText(/To remove a post that hasn.t gone out/)
 
     expect(hint.textContent).not.toMatch(/More menu/)
     expect(hint.textContent).toMatch(/choose Delete \(the bin icon at the top of the post\)/)
