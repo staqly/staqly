@@ -280,7 +280,8 @@ func TestBlueskyValidate(t *testing.T) {
 		{PostContent{Text: strings.Repeat("a", 301)}, false},
 		{PostContent{Text: "hi", Media: []MediaFile{img, img, img, img}}, true},
 		{PostContent{Text: "hi", Media: []MediaFile{img, img, img, img, img}}, false},
-		{PostContent{Text: "hi", Media: []MediaFile{{Name: "big.jpg", MimeType: "image/jpeg", Size: 2_000_000}}}, false},
+		{PostContent{Text: "hi", Media: []MediaFile{{Name: "big.jpg", MimeType: "image/jpeg", Size: 2_000_000}}}, true}, // made smaller on send
+		{PostContent{Text: "hi", Media: []MediaFile{{Name: "big.gif", MimeType: "image/gif", Size: 2_000_000}}}, false},
 		{PostContent{Text: "hi", Media: []MediaFile{{Name: "v.mp4", MimeType: "video/mp4"}}}, false},
 	} {
 		if err := e.Validate(c.p, nil); (err == nil) != c.ok {

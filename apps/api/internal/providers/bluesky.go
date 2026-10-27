@@ -77,8 +77,9 @@ func (b Bluesky) Validate(p PostContent, s Settings) error {
 		if !strings.HasPrefix(m.MimeType, "image/") {
 			return invalid("media", "Bluesky takes pictures only")
 		}
-		if rules != nil && m.Size > rules.MaxBytes {
-			return invalid("media", m.Name+" is larger than Bluesky's 1 MB for a picture; make it smaller")
+		// A larger JPEG, PNG or WebP is made smaller when it is sent (shrinkJPEG); a GIF can't be.
+		if rules != nil && m.Size > rules.MaxBytes && m.MimeType == "image/gif" {
+			return invalid("media", m.Name+" is larger than Bluesky's 1 MB for a GIF; make it smaller")
 		}
 	}
 	return CheckFields(b.SettingsFields(), s)
@@ -330,17 +331,22 @@ func (s *blueskySession) upload(ctx context.Context, m MediaFile) (map[string]an
 		return nil, fmt.Errorf("reading %s: %w", m.Name, err)
 	}
 	defer r.Close()
-	raw, err := io.ReadAll(io.LimitReader(r, 1_000_001))
+	raw, err := io.ReadAll(io.LimitReader(r, 64<<20))
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", m.Name, err)
 	}
-	if len(raw) > 1_000_000 {
-		return nil, &Failure{Kind: ErrRejected, Msg: m.Name + " is larger than Bluesky's 1 MB for a picture; make it smaller"}
+	mime := m.MimeType
+	if len(raw) > 1_000_000 { // Bluesky takes 1 MB a picture: a larger one goes as a smaller JPEG
+		small, ok := shrinkJPEG(raw, 1_000_000)
+		if !ok {
+			return nil, &Failure{Kind: ErrRejected, Msg: m.Name + " is larger than Bluesky's 1 MB for a picture; make it smaller"}
+		}
+		raw, mime = small, "image/jpeg"
 	}
 	var out struct {
 		Blob json.RawMessage `json:"blob"`
 	}
-	if err := s.call(ctx, http.MethodPost, "com.atproto.repo.uploadBlob", bytes.NewReader(raw), m.MimeType, &out); err != nil {
+	if err := s.call(ctx, http.MethodPost, "com.atproto.repo.uploadBlob", bytes.NewReader(raw), mime, &out); err != nil {
 		return nil, err
 	}
 	img := map[string]any{"alt": "", "image": out.Blob}
