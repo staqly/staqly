@@ -112,7 +112,7 @@ Update a collection: name, description, icon, colour, the wait for your own auto
 | `processing_timeout_seconds` | object | No | How long a post on your own automation waits for a reported result before it fails, 60-86400 seconds, or an empty string for the server default |
 
 ### `delete_collection`
-Permanently delete a collection with its posts and schedules. confirm must equal the collection name. *Destructive* · `collections:delete` (the `:write` scope alone is not enough)
+Permanently delete a collection and its schedules. Its posts move to the Default collection unchanged (drafts, scheduled posts and posts that went out alike); the Default collection itself cannot be deleted. confirm must equal the collection name. *Destructive* · `collections:delete` (the `:write` scope alone is not enough)
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -123,13 +123,14 @@ Permanently delete a collection with its posts and schedules. confirm must equal
 ## Posts
 
 ### `list_posts`
-List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; sort created_desc lists the newest first. *Read-only* · `posts:read`
+List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; hide_past leaves out posts that went out; sort created_desc lists the newest first. *Read-only* · `posts:read`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `channel_id` | string | No | Posts with a target on this channel |
 | `collection` | string | No | Collection ID or name |
 | `cursor` | string | No | Next_cursor of the previous page |
+| `hide_past` | boolean | No | Leave out posts that went out (published); failed ones stay |
 | `limit` | integer | No | Page size (default 50, max 200) |
 | `publish_after` | string | No | RFC3339 or YYYY-MM-DD, inclusive |
 | `publish_before` | string | No | RFC3339 or YYYY-MM-DD, exclusive |
@@ -145,6 +146,7 @@ Find posts whose content contains a text, with the same filters as list_posts. *
 | `channel_id` | string | No | Posts with a target on this channel |
 | `collection` | string | No | Collection ID or name |
 | `cursor` | string | No | Next_cursor of the previous page |
+| `hide_past` | boolean | No | Leave out posts that went out (published); failed ones stay |
 | `limit` | integer | No | Page size (default 50, max 200) |
 | `publish_after` | string | No | RFC3339 or YYYY-MM-DD, inclusive |
 | `publish_before` | string | No | RFC3339 or YYYY-MM-DD, exclusive |

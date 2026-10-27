@@ -65,7 +65,7 @@ const SlotScheduleDialog = dynamic(() => import('./slot-schedule-dialog').then((
 type Layout = 'grid' | 'list'
 
 const STATE_TONE: Record<ScheduleState, Tone> = {
-  scheduled: 'success',
+  scheduled: 'info',
   publishing: 'info',
   published: 'neutral',
   failed: 'danger',
@@ -164,8 +164,11 @@ const Entry = memo(function Entry({
   variant?: 'cell' | 'row'
   onOpen: (id: string, channel?: string) => void
 }) {
+  // A post scheduled again (a channel took it on an earlier try) is upcoming on every card until it goes out.
   const state: ScheduleState =
-    target && target.status !== 'pending' ? target.status : (scheduleState(post) ?? 'scheduled')
+    target && target.status !== 'pending' && post.status !== 'scheduled'
+      ? target.status
+      : (scheduleState(post) ?? 'scheduled')
   const tone = TONES[STATE_TONE[state]]
   const StateIcon = STATE_ICON[state]
   const draggable = variant === 'cell' && canReschedule(post)
@@ -441,6 +444,7 @@ export function SchedulePage() {
     return dayFromKey(at && /^\d{4}-\d{2}-\d{2}$/.test(at) ? at : today)
   }, [params, today])
   const range = useMemo(() => rangeOf(view, anchor), [view, anchor])
+  // The calendar always shows what went out: past days are its record (the posts list hides them instead).
   const query = useMemo(
     () => ({
       publish_after: range.publish_after,

@@ -43,6 +43,39 @@ func (q *Queries) CollectionPostCounts(ctx context.Context, workspaceID string) 
 	return items, nil
 }
 
+const collectionPostIDs = `-- name: CollectionPostIDs :many
+SELECT id FROM posts WHERE workspace_id = ? AND collection_id = ? ORDER BY created_at, id
+`
+
+type CollectionPostIDsParams struct {
+	WorkspaceID  string `json:"workspace_id"`
+	CollectionID string `json:"collection_id"`
+}
+
+// The posts of one collection, oldest first (moved to Default when the collection is deleted).
+func (q *Queries) CollectionPostIDs(ctx context.Context, arg CollectionPostIDsParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, collectionPostIDs, arg.WorkspaceID, arg.CollectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countTargetsByStatus = `-- name: CountTargetsByStatus :many
 SELECT status, COUNT(*) AS n FROM post_targets WHERE post_id = ? GROUP BY status
 `
@@ -436,6 +469,32 @@ func (q *Queries) ListTargetsForPosts(ctx context.Context, ids interface{}) ([]L
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveCollectionPosts = `-- name: MoveCollectionPosts :execrows
+UPDATE posts SET collection_id = ?1, version = posts.version + 1, updated_at = ?2
+WHERE workspace_id = ?3 AND collection_id = ?4
+`
+
+type MoveCollectionPostsParams struct {
+	ToCollectionID   string `json:"to_collection_id"`
+	UpdatedAt        string `json:"updated_at"`
+	WorkspaceID      string `json:"workspace_id"`
+	FromCollectionID string `json:"from_collection_id"`
+}
+
+// Every post of a collection into another one, whatever its status: a move, so a new version.
+func (q *Queries) MoveCollectionPosts(ctx context.Context, arg MoveCollectionPostsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, moveCollectionPosts,
+		arg.ToCollectionID,
+		arg.UpdatedAt,
+		arg.WorkspaceID,
+		arg.FromCollectionID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const postStatusCountsSince = `-- name: PostStatusCountsSince :many

@@ -24,6 +24,15 @@ UPDATE posts SET status = ?, published_at = COALESCE(?, published_at), updated_a
 -- The repeat_of <> '' term lets the partial index posts_repeat_of answer it (a bound value alone can't).
 SELECT id FROM posts WHERE repeat_of = ? AND repeat_of <> '' LIMIT 1;
 
+-- name: CollectionPostIDs :many
+-- The posts of one collection, oldest first (moved to Default when the collection is deleted).
+SELECT id FROM posts WHERE workspace_id = ? AND collection_id = ? ORDER BY created_at, id;
+
+-- name: MoveCollectionPosts :execrows
+-- Every post of a collection into another one, whatever its status: a move, so a new version.
+UPDATE posts SET collection_id = @to_collection_id, version = posts.version + 1, updated_at = @updated_at
+WHERE workspace_id = @workspace_id AND collection_id = @from_collection_id;
+
 -- name: DeletePost :execrows
 DELETE FROM posts WHERE workspace_id = ? AND id = ?;
 
