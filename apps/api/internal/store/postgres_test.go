@@ -60,7 +60,7 @@ func TestBaselineSquash(t *testing.T) {
 		_, err = raw.Exec(`CREATE TABLE goose_db_version (id INTEGER PRIMARY KEY AUTOINCREMENT, version_id INTEGER NOT NULL,
 			is_applied INTEGER NOT NULL, tstamp TIMESTAMP DEFAULT (datetime('now')));
 			INSERT INTO goose_db_version (version_id, is_applied) VALUES (0, 1), (?, 1);
-			CREATE TABLE workspaces (id TEXT PRIMARY KEY);
+			CREATE TABLE workspaces (id TEXT PRIMARY KEY, subscription_status TEXT, updated_at TEXT);
 			CREATE TABLE webhook_deliveries (workspace_id TEXT, status TEXT, next_attempt_at TEXT);
 			CREATE TABLE posts (id TEXT PRIMARY KEY, workspace_id TEXT, publish_at TEXT);
 			CREATE TABLE post_targets (channel_id TEXT, status TEXT, published_at TEXT);

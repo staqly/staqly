@@ -21,7 +21,7 @@ var knownEventTypes = map[string]bool{
 	"collection.created": true, "collection.updated": true, "collection.deleted": true, "collection.archived": true,
 	"webhook.created": true, "webhook.updated": true, "webhook.deleted": true, "webhook.test": true,
 	"alert.created": true, "alert.updated": true, "alert.deleted": true,
-	"workspace.created": true, "workspace.updated": true, "workspace.plan_changed": true, "workspace.credits_added": true, "workspace.account_attached": true,
+	"workspace.created": true, "workspace.updated": true, "workspace.plan_changed": true, "workspace.credits_added": true, "workspace.account_attached": true, "workspace.trial_review": true,
 	"workspace.export_requested": true, "workspace.exported": true,
 	"member.updated": true, "member.removed": true,
 	"invitation.created": true, "invitation.resent": true, "invitation.revoked": true, "invitation.accepted": true,

@@ -185,9 +185,10 @@ func (s *Service) runPublishPost(ctx context.Context, workspaceID, postID string
 	if row.Status != "scheduled" {
 		return nil // unscheduled or published by hand meanwhile
 	}
-	if s.suspended(ctx, workspaceID) {
-		// A read-only workspace publishes nothing: the post fails with why (post.failed alerts).
-		s.scheduledPublishFailed(ctx, workspaceID, postID, ErrSuspended)
+	if blocked := s.publishBlocked(ctx, workspaceID); blocked != nil {
+		// A read-only workspace, or one whose trial is paused, publishes nothing: the post fails with why
+		// (post.failed alerts).
+		s.scheduledPublishFailed(ctx, workspaceID, postID, blocked)
 		return nil
 	}
 	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}

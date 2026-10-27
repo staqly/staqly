@@ -318,6 +318,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/billing/start-paid-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End the free trial now and pay for the plan (a workspace owner)
+         * @description Ends the workspace's Stripe trial now: the card on file is charged at once for the plan. The way out of a
+         *     trial paused for review (`trial_review`); any owner in a trial may use it. Answers like `GET /v1/billing`;
+         *     402 `payment_failed` when the charge didn't go through (update the card in the billing portal), 409 when
+         *     the workspace is not in a trial.
+         */
+        post: operations["startPaidPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/billing/sync": {
         parameters: {
             query?: never;
@@ -2068,7 +2091,11 @@ export interface paths {
          * @description `fields` carries the provider's `credential_fields` (a bot token, an instance URL...); the
          *     platform is asked for the account's profile before the channel is saved, and the credentials
          *     are stored sealed. Provider `custom` (your own automation) takes no fields. OAuth platforms
-         *     connect through GET /v1/channels/oauth/{provider}/start instead (422 here).
+         *     connect through GET /v1/channels/oauth/{provider}/start instead (422 here). In cloud with billing, a
+         *     workspace in its free trial that connects (or reconnects) an account another workspace used in a free
+         *     trial that ended unpaid (one personal account, or two people behind shared spaces such as Slack
+         *     workspaces) gets 402 `trial_already_used`: its trial is paused for review, nothing is charged, and
+         *     channels connect again once it starts the paid plan.
          */
         post: operations["connectChannel"];
         delete?: never;
@@ -2116,7 +2143,8 @@ export interface paths {
          * @description Receives the platform's `code` and `state` (or `error`), creates the channel (or reconnects the
          *     existing one for the same account) and redirects the browser to the dashboard's
          *     `/channels/callback/{provider}` page with `?channel=<id>`, `?pending=<id>` when the sign-in may
-         *     publish as several accounts (see getPendingConnection), or `?error=<message>`.
+         *     publish as several accounts (see getPendingConnection), or `?error=<message>` (plus `&code=trial_already_used`
+         *     when the account was used in an earlier free trial that ended unpaid; see PaymentRequired).
          */
         get: operations["finishChannelOAuth"];
         put?: never;
@@ -3741,10 +3769,20 @@ export interface components {
              */
             seats: number;
             /**
-             * @description Whether choosing Starter now starts its 7-day trial (card required): available; used (this workspace had a subscription before); other_workspace (another workspace of the account is in its trial, so this one is charged today); none (billing off, or the workspace already pays). Each workspace gets the trial once, one workspace of an account at a time
+             * @description Whether choosing Starter now starts its 7-day trial (card required): available; used (this workspace had a subscription before); card_used (its card on file was used in an earlier free trial that wasn't paid for, so it is charged today); other_workspace (another workspace of the account is in its trial, so this one is charged today); none (billing off, or the workspace already pays). Each workspace gets the trial once, one workspace of an account at a time
              * @enum {string}
              */
-            trial: "available" | "used" | "other_workspace" | "none";
+            trial: "available" | "used" | "card_used" | "other_workspace" | "none";
+            /**
+             * @description card when the free trial was ended at once because the workspace's card was used in an earlier free trial that ended unpaid (in the last 180 days; known only once Checkout completed): Stripe charged the card then. Shown while unpaid and for two weeks after; null otherwise
+             * @enum {string|null}
+             */
+            trial_revoked: "card" | null;
+            /**
+             * @description channels while the free trial is paused for review: the workspace connected a personal account (or two people behind shared spaces) of an earlier free trial that ended unpaid. Nothing is charged; publishing and new channels wait (402 trial_already_used) until it starts the paid plan (POST /v1/billing/start-paid-plan) or the operator clears it; drafts and settings stay. null otherwise
+             * @enum {string|null}
+             */
+            trial_review: "channels" | null;
         };
         XPosts: {
             /**
@@ -3986,6 +4024,7 @@ export interface components {
              * @example plan_limit_exceeded
              * @example plan_expired
              * @example payment_failed
+             * @example trial_already_used
              * @example x_posts_exhausted
              * @example linkedin_posts_exhausted
              * @example linkedin_videos_exhausted
@@ -4006,7 +4045,7 @@ export interface components {
             fields?: {
                 [key: string]: string;
             };
-            /** @description plan_limit_exceeded: limit, max, used, plan; payment_failed: reason, pay_url, decline_code, plan, expires_at (see PendingPayment) */
+            /** @description plan_limit_exceeded: limit, max, used, plan; payment_failed: reason, pay_url, decline_code, plan, expires_at (see PendingPayment); trial_already_used: reason (channels) */
             details?: {
                 [key: string]: unknown;
             };
@@ -5534,7 +5573,10 @@ export interface components {
          *     `reason`, and `pay_url`, `decline_code`, `plan`, `expires_at` when known, as in `PendingPayment`), or `x_posts_exhausted` (this
          *     period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end), or
          *     `linkedin_posts_exhausted` / `linkedin_videos_exhausted` (this period's posts to LinkedIn, or those with a video,
-         *     can't cover the post; `details` has limit, needed, left, period_end).
+         *     can't cover the post; `details` has limit, needed, left, period_end), or `trial_already_used` (cloud with
+         *     billing: the workspace's free trial is paused for review because it connected accounts of an earlier free
+         *     trial that ended unpaid; connecting channels and publishing wait until it starts the paid plan
+         *     (`POST /v1/billing/start-paid-plan`); `details.reason` is `channels`, as in `Billing.trial_review`).
          */
         PaymentRequired: {
             headers: {
@@ -6280,6 +6322,32 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    startPaidPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Billing status, the plan paid */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Billing"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
             502: components["responses"]["BadGateway"];
         };

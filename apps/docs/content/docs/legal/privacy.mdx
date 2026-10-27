@@ -35,6 +35,7 @@ Contact for privacy questions and requests: [support@staqly.ai](mailto:support@s
 | Data | Why | Legal basis |
 |---|---|---|
 | Workspace name, plan, trial and billing period, usage counters | Run your workspace, enforce plan limits, the Starter trial | Contract |
+| Keyed hashes (HMAC) of the platform ids of the personal accounts a workspace connected, of the person who connected a shared space (a Slack workspace, a Page), and of the payment card's fingerprint from Stripe, with whether its free trial ended unpaid. An unpaid trial counts for 180 days. Kept after a workspace is deleted when its trial ended unpaid; removed with the workspace otherwise | Give each person and each card one free trial | Legitimate interest (preventing abuse of the free trial) |
 | Your account: name, email address and picture from Google or the address you sign in with, your passkeys' public keys, the members and roles of your workspaces | Sign you in, invite people, show who did what | Contract |
 | Hashed API keys, email codes, invitation links and session tokens (never stored in plain text) | Sign you in and keep the workspace secure | Contract |
 | Browser sessions: user agent, sign-in time, last use | Show your signed-in devices so you can revoke them | Contract, security |

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { ApiError, errorMessage, type PlanLimitDetails, sentence } from './api'
 import { formatBytes } from './format'
+import { openTrialUsed, TRIAL_USED } from './trial-used'
 
 const PLANS_HREF = '/settings/plan'
 
@@ -79,6 +80,13 @@ export function describePlanLimit(d: PlanLimitDetails | undefined, fallback: str
  * a "View plans" action; rate limits (429) a calm retry hint.
  */
 export function toastApiError(err: unknown, fallbackTitle?: string) {
+  // Accounts (or a card) an earlier unpaid free trial used: a dialog explains it and offers to pay.
+  if (err instanceof ApiError && err.code === TRIAL_USED) {
+    openTrialUsed()
+
+    return
+  }
+
   if (err instanceof ApiError && err.code === 'plan_expired') {
     toast.warning('This workspace is read-only', {
       id: 'plan-expired',

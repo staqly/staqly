@@ -486,6 +486,15 @@ type TelegramConnectCode struct {
 	Error       string `json:"error"`
 }
 
+type TrialFingerprint struct {
+	Kind          string         `json:"kind"`
+	Fingerprint   string         `json:"fingerprint"`
+	WorkspaceID   string         `json:"workspace_id"`
+	UnpaidTrialAt sql.NullString `json:"unpaid_trial_at"`
+	CreatedAt     string         `json:"created_at"`
+	UpdatedAt     string         `json:"updated_at"`
+}
+
 type UsageCounter struct {
 	WorkspaceID string `json:"workspace_id"`
 	Period      string `json:"period"`
@@ -615,4 +624,16 @@ type WorkspaceMember struct {
 	Role        string `json:"role"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+}
+
+type WorkspaceTrial struct {
+	WorkspaceID   string         `json:"workspace_id"`
+	PaidAt        sql.NullString `json:"paid_at"`
+	UnpaidTrialAt sql.NullString `json:"unpaid_trial_at"`
+	RevokedAt     sql.NullString `json:"revoked_at"`
+	RevokedReason sql.NullString `json:"revoked_reason"`
+	ReviewAt      sql.NullString `json:"review_at"`
+	ReviewReason  sql.NullString `json:"review_reason"`
+	ClearedAt     sql.NullString `json:"cleared_at"`
+	UpdatedAt     string         `json:"updated_at"`
 }

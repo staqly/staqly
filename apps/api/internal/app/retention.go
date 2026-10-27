@@ -251,6 +251,9 @@ func (s *Service) DeleteWorkspace(ctx context.Context, p Principal, confirm stri
 		if err := s.deleteWorkspaceJobs(ctx, q, p.WorkspaceID); err != nil {
 			return err
 		}
+		if err := s.settleTrialOnDelete(ctx, q, p.WorkspaceID); err != nil {
+			return err
+		}
 		_, err = q.DeleteWorkspaceRow(ctx, p.WorkspaceID)
 		return err
 	})

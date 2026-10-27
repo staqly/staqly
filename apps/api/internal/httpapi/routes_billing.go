@@ -17,6 +17,7 @@ import (
 //	POST /v1/billing/portal    Stripe customer portal URL (admin)
 //	POST /v1/billing/promotion-code  check a promotion code: its discount and the plans it applies to (admin)
 //	POST /v1/billing/sync      read the subscription from Stripe now, then the status (admin; back from Checkout)
+//	POST /v1/billing/start-paid-plan  end the free trial now and pay for the plan (a workspace owner)
 //	GET  /v1/billing/pending-payment  a plan change waiting for its payment and why it isn't paid, read from Stripe (account owner)
 //	GET  /v1/billing/x-posts   posts to X this period: included, used, bought credits left (posts:read)
 //	POST /v1/billing/credits/checkout  Stripe Checkout URL for a bundle of extra X posts (a workspace owner)
@@ -32,6 +33,7 @@ func init() {
 		r.Post("/billing/portal", s.billingURL(s.svc.PortalSession))
 		r.Post("/billing/promotion-code", s.checkPromotionCode)
 		r.Post("/billing/sync", s.syncBilling)
+		r.Post("/billing/start-paid-plan", s.startPaidPlan)
 		r.Get("/billing/pending-payment", s.getPendingPayment)
 		r.Get("/billing/x-posts", s.getXPosts)
 		r.Post("/billing/credits/checkout", s.creditsCheckout)
@@ -60,6 +62,11 @@ func (s *Server) syncBilling(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, b)
+}
+
+func (s *Server) startPaidPlan(w http.ResponseWriter, r *http.Request) {
+	b, err := s.svc.StartPaidPlan(r.Context(), principal(r))
+	respond(w, r, 200, b, err)
 }
 
 func (s *Server) getPendingPayment(w http.ResponseWriter, r *http.Request) {

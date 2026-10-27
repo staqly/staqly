@@ -57,7 +57,35 @@ The compare page on staqly.ai lists the same limits side by side.
    `available`, `used`, `other_workspace` or `none`.
 3. A workspace you add (**New workspace**) opens on the welcome steps, the plan last; cancelling Stripe's
    checkout brings you back to that step.
-4. Choose a plan any time: **Settings → Plan & usage → Choose a plan**, the user menu, or
+4. **One free trial per card and per person.** A trial that ends without ever being paid for
+   (cancelled, or the first charge never went through) is remembered for 180 days by the card it was
+   started with and by who its channels belong to.
+   - **The card.** A card that such a trial used gets no new trial: when it is already on file, the
+     plan picker says *No free trial: this card was already used for one* before Stripe opens, and
+     Checkout charges the plan at once. When the card only shows up in Checkout, the trial ends as soon
+     as Stripe reports it and the card is charged then; the dashboard says why (*No free trial for
+     this card*), and `GET /v1/billing` reports `trial_revoked: "card"`.
+   - **The accounts.** Connecting channels never charges anyone. A personal account (an X or Bluesky
+     account, a LinkedIn member, a YouTube channel...) counts as itself. A space many people share
+     (a Slack workspace, a Facebook or LinkedIn Page, a Google Business location) counts as the person
+     who connected it, never the space, so colleagues are never taken for one another; a space connected
+     with no person behind it (a Discord or Telegram bot, a webhook) doesn't count. When a workspace in
+     its trial connects (or reconnects) one personal account of such a trial, or the people behind two of
+     its shared spaces, its trial is **paused**: posts aren't published and new channels can't be
+     connected (**402 `trial_already_used`**), while drafts and settings stay. The dashboard explains it
+     with **Start paid plan now** (the trial ends and the card is charged:
+     `POST /v1/billing/start-paid-plan`) and **This isn't right? Contact us**; `GET /v1/billing` reports
+     `trial_review: "channels"`.
+   - Removing and adding an account again in the same workspace, brand-new accounts, a workspace
+     that paid, and a trial still running in another workspace are never affected. Once a workspace
+     has paid, its accounts and card no longer count against anyone. Staqly support can lift a pause
+     that was a mistake.
+   - What is kept: a keyed hash (HMAC with the server's secret key) of each personal account's platform
+     id (or its handle where the platform gives no id), of the platform id of the person who connected
+     a shared space, and of Stripe's card fingerprint, each with its kind, the workspace and when its
+     trial ended unpaid. Never the ids, the handles or anything about the card itself. Installs without
+     billing, and local mode, keep none of it.
+5. Choose a plan any time: **Settings → Plan & usage → Choose a plan**, the user menu, or
    `POST /v1/billing/checkout` with the plan and interval.
    - Leaving the trial for another plan ends the trial at once: the new plan is charged right away and
      starts when the payment goes through. If it doesn't, nothing changes (the trial keeps running) and
@@ -80,8 +108,8 @@ The compare page on staqly.ai lists the same limits side by side.
      unknown, used up or made for other plans is refused with the reason. One discount at a time: while
      the subscription has one, the plan page shows it with its end date instead of **Have a promotion code?**,
      and another code (or the same one again) is refused until it ends.
-5. Until a plan starts, and after one ends (a trial cancelled for want of a card, an unpaid renewal,
-   a cancellation), the workspace is **locked**:
+6. Until a plan starts, and after one ends (a trial cancelled for want of a card, an unpaid renewal,
+   a cancellation, a trial ended for its card whose charge didn't go through), the workspace is **locked**:
    - the dashboard shows only that, with **Go to billing** (Settings → Plan & usage) for owners and
      admins; paying there opens it again as soon as Stripe confirms;
    - the API still answers reads (`GET` requests, read-only MCP tools, the workspace export);

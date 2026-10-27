@@ -507,6 +507,29 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/BadGateway" }
 
+  /v1/billing/start-paid-plan:
+    post:
+      operationId: startPaidPlan
+      tags: [billing]
+      summary: End the free trial now and pay for the plan (a workspace owner)
+      description: |
+        Ends the workspace's Stripe trial now: the card on file is charged at once for the plan. The way out of a
+        trial paused for review (`trial_review`); any owner in a trial may use it. Answers like `GET /v1/billing`;
+        402 `payment_failed` when the charge didn't go through (update the card in the billing portal), 409 when
+        the workspace is not in a trial.
+      responses:
+        "200":
+          description: Billing status, the plan paid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Billing" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
   /v1/billing/sync:
     post:
       operationId: syncBilling
@@ -2521,7 +2544,11 @@ paths:
         `fields` carries the provider's `credential_fields` (a bot token, an instance URL...); the
         platform is asked for the account's profile before the channel is saved, and the credentials
         are stored sealed. Provider `custom` (your own automation) takes no fields. OAuth platforms
-        connect through GET /v1/channels/oauth/{provider}/start instead (422 here).
+        connect through GET /v1/channels/oauth/{provider}/start instead (422 here). In cloud with billing, a
+        workspace in its free trial that connects (or reconnects) an account another workspace used in a free
+        trial that ended unpaid (one personal account, or two people behind shared spaces such as Slack
+        workspaces) gets 402 `trial_already_used`: its trial is paused for review, nothing is charged, and
+        channels connect again once it starts the paid plan.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody: { required: true, content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/ChannelInput" }, { required: [provider] }] } } } }
@@ -2567,7 +2594,8 @@ paths:
         Receives the platform's `code` and `state` (or `error`), creates the channel (or reconnects the
         existing one for the same account) and redirects the browser to the dashboard's
         `/channels/callback/{provider}` page with `?channel=<id>`, `?pending=<id>` when the sign-in may
-        publish as several accounts (see getPendingConnection), or `?error=<message>`.
+        publish as several accounts (see getPendingConnection), or `?error=<message>` (plus `&code=trial_already_used`
+        when the account was used in an earlier free trial that ended unpaid; see PaymentRequired).
       parameters:
         - { name: code, in: query, schema: { type: string } }
         - { name: state, in: query, schema: { type: string } }
@@ -4437,7 +4465,10 @@ components:
         `reason`, and `pay_url`, `decline_code`, `plan`, `expires_at` when known, as in `PendingPayment`), or `x_posts_exhausted` (this
         period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end), or
         `linkedin_posts_exhausted` / `linkedin_videos_exhausted` (this period's posts to LinkedIn, or those with a video,
-        can't cover the post; `details` has limit, needed, left, period_end).
+        can't cover the post; `details` has limit, needed, left, period_end), or `trial_already_used` (cloud with
+        billing: the workspace's free trial is paused for review because it connected accounts of an earlier free
+        trial that ended unpaid; connecting channels and publishing wait until it starts the paid plan
+        (`POST /v1/billing/start-paid-plan`); `details.reason` is `channels`, as in `Billing.trial_review`).
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
     Forbidden:
       description: |
@@ -4552,7 +4583,7 @@ components:
             failed: { type: integer, description: Gave up after every retry }
     Billing:
       type: object
-      required: [enabled, plan, subscription_status, plan_expires_at, trial_ends_at, suspended, has_customer, seats, trial]
+      required: [enabled, plan, subscription_status, plan_expires_at, trial_ends_at, suspended, has_customer, seats, trial, trial_revoked, trial_review]
       properties:
         enabled: { type: boolean, description: Billing is configured on this instance }
         plan: { type: string, description: "starter, plus, pro or business (cloud; an operator may also set a plan of their own), unlocked (Community Edition)", examples: [plus] }
@@ -4567,8 +4598,16 @@ components:
         seats: { type: integer, description: "People billed: every workspace member, whatever the role (plans are priced per user). Open invitations are billed once accepted; the subscription's quantity follows the members", examples: [3] }
         trial:
           type: string
-          enum: [available, used, other_workspace, none]
-          description: "Whether choosing Starter now starts its 7-day trial (card required): available; used (this workspace had a subscription before); other_workspace (another workspace of the account is in its trial, so this one is charged today); none (billing off, or the workspace already pays). Each workspace gets the trial once, one workspace of an account at a time"
+          enum: [available, used, card_used, other_workspace, none]
+          description: "Whether choosing Starter now starts its 7-day trial (card required): available; used (this workspace had a subscription before); card_used (its card on file was used in an earlier free trial that wasn't paid for, so it is charged today); other_workspace (another workspace of the account is in its trial, so this one is charged today); none (billing off, or the workspace already pays). Each workspace gets the trial once, one workspace of an account at a time"
+        trial_revoked:
+          type: [string, "null"]
+          enum: [card, null]
+          description: "card when the free trial was ended at once because the workspace's card was used in an earlier free trial that ended unpaid (in the last 180 days; known only once Checkout completed): Stripe charged the card then. Shown while unpaid and for two weeks after; null otherwise"
+        trial_review:
+          type: [string, "null"]
+          enum: [channels, null]
+          description: "channels while the free trial is paused for review: the workspace connected a personal account (or two people behind shared spaces) of an earlier free trial that ended unpaid. Nothing is charged; publishing and new channels wait (402 trial_already_used) until it starts the paid plan (POST /v1/billing/start-paid-plan) or the operator clears it; drafts and settings stay. null otherwise"
     XPosts:
       type: object
       required: [period, period_end, unlimited, included, used, included_left, credits_left, credits_expire_at, left, bundles, currency, link_post_weight]
@@ -4725,10 +4764,10 @@ components:
         code:
           type: string
           description: Stable machine-readable code; new codes may be added.
-          examples: [bad_request, unauthorized, invalid_link, forbidden, csrf_failed, not_found, conflict, not_available, idempotency_in_progress, post_changed, sign_in_with_account, gone, link_used, link_expired, plan_limit_exceeded, plan_expired, payment_failed, x_posts_exhausted, linkedin_posts_exhausted, linkedin_videos_exhausted, too_large, unsupported_media_type, validation_failed, idempotency_mismatch, rate_limited, payment_provider_error, ai_failed, unavailable, busy, internal, default_group]
+          examples: [bad_request, unauthorized, invalid_link, forbidden, csrf_failed, not_found, conflict, not_available, idempotency_in_progress, post_changed, sign_in_with_account, gone, link_used, link_expired, plan_limit_exceeded, plan_expired, payment_failed, trial_already_used, x_posts_exhausted, linkedin_posts_exhausted, linkedin_videos_exhausted, too_large, unsupported_media_type, validation_failed, idempotency_mismatch, rate_limited, payment_provider_error, ai_failed, unavailable, busy, internal, default_group]
         message: { type: string }
         fields: { type: object, additionalProperties: { type: string } }
-        details: { type: object, additionalProperties: true, description: "plan_limit_exceeded: limit, max, used, plan; payment_failed: reason, pay_url, decline_code, plan, expires_at (see PendingPayment)" }
+        details: { type: object, additionalProperties: true, description: "plan_limit_exceeded: limit, max, used, plan; payment_failed: reason, pay_url, decline_code, plan, expires_at (see PendingPayment); trial_already_used: reason (channels)" }
 
     Scope:
       type: string

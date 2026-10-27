@@ -271,6 +271,16 @@ describe('per user pricing', () => {
     )
   })
 
+  it('a card already used for an unpaid trial: no trial, said before Stripe opens', async () => {
+    render(false, 'card_used')
+
+    const starter = await screen.findByTestId('plan-starter')
+
+    expect(within(starter).getByTestId('plan-charge-starter')).toHaveTextContent(
+      'No free trial: this card was already used for one. Charged today.',
+    )
+  })
+
   it('the promotion code modal refuses a code Stripe does not know, and keeps it out of the checkout', async () => {
     const api = render(false)
     const user = userEvent.setup()

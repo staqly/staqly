@@ -897,7 +897,11 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		s.log.WarnContext(r.Context(), "channel connection failed", "provider", provider, "err", err)
 		var ae *app.Error
 		if errors.As(err, &ae) {
-			land(url.Values{"error": {ae.Message}})
+			v := url.Values{"error": {ae.Message}}
+			if ae.Code == "trial_already_used" { // the dashboard explains it and offers to pay
+				v.Set("code", ae.Code)
+			}
+			land(v)
 			return
 		}
 		land(url.Values{"error": {"The connection failed; try again"}})

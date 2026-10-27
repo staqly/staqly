@@ -361,7 +361,9 @@ export function PlansPage() {
               ? 'Charged today: another workspace of yours is in its free trial.'
               : p.id === 'starter' && trial === 'used'
                 ? 'Charged today: this workspace already had its free trial.'
-                : 'Charged today.'}
+                : p.id === 'starter' && trial === 'card_used'
+                  ? 'No free trial: this card was already used for one. Charged today.'
+                  : 'Charged today.'}
         </p>
       </div>
     )
