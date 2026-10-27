@@ -135,14 +135,20 @@ function Channels() {
           through your own n8n workflow or script.
         </p>
       </div>
-      <ul className="mt-8 grid grid-cols-2 gap-3 sm:mt-12 sm:grid-cols-3 lg:grid-cols-4">
+      {/* Icons only; hovering one grows it into a card with the name, over its neighbours so the row never reflows.
+          Touch screens can't hover: there every card shows its name. */}
+      <ul className="mt-8 flex flex-wrap gap-3 sm:mt-12">
         {channels.map(([id, name]) => (
-          <li
-            key={id}
-            className="flex h-14 min-w-0 items-center gap-3 rounded-2xl border border-[color-mix(in_oklch,var(--brand)_40%,transparent)] bg-card px-4 font-semibold tracking-tight"
-          >
-            <ProviderTile id={id} name={name} className="size-8 shrink-0 rounded-lg" />
-            <span className="truncate">{name}</span>
+          <li key={id} className="relative size-14 hover:z-10 pointer-coarse:size-auto">
+            <div className="group absolute top-0 left-0 flex h-14 items-center rounded-2xl border border-[color-mix(in_oklch,var(--brand)_40%,transparent)] bg-card px-3 font-semibold tracking-tight transition-shadow hover:shadow-lg pointer-coarse:static">
+              <ProviderTile id={id} name={name} className="size-8 shrink-0 rounded-lg" />
+              <span
+                aria-hidden
+                className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:ml-3 group-hover:max-w-48 group-hover:opacity-100 motion-reduce:transition-none pointer-coarse:ml-3 pointer-coarse:max-w-48 pointer-coarse:opacity-100"
+              >
+                {name}
+              </span>
+            </div>
           </li>
         ))}
       </ul>

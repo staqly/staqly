@@ -1,4 +1,5 @@
 import { ArrowRight, Heart } from 'lucide-react'
+import { Fragment } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 
 import { Logo, LogoMark } from './logo'
@@ -23,8 +24,9 @@ export type SiteFooterProps = {
   link?: ComponentType<LinkProps>
 }
 
-// more: a last link under the column, to everything it shortens.
-type Column = { title: string; links: [string, string][]; more?: [string, string] }
+// A link is [label, href], or [label, links] for a label followed by several links on one line ("SDKs: TypeScript &
+// Python"). more: a last link under the column, to everything it shortens.
+type Column = { title: string; links: [string, string | [string, string][]][]; more?: [string, string] }
 
 // The free tools the footer names; the rest are one click away under All free tools.
 const FOOTER_TOOLS = 5
@@ -54,8 +56,13 @@ function columns(web: string, docs: string): Column[] {
         ['API reference', `${docs}/api/reference`],
         ['MCP', `${docs}/mcp`],
         ['CLI', `${docs}/cli`],
-        ['TypeScript SDK', `${docs}/sdk/typescript`],
-        ['Python SDK', `${docs}/sdk/python`],
+        [
+          'SDKs',
+          [
+            ['TypeScript', `${docs}/sdk/typescript`],
+            ['Python', `${docs}/sdk/python`],
+          ],
+        ],
         ['Self-hosting', `${docs}/quickstart`],
       ],
     },
@@ -87,6 +94,9 @@ function GitHubIcon({ className }: { className?: string }) {
   )
 }
 
+const linkClass =
+  'inline-flex min-h-6 items-center text-muted-foreground transition-colors hover:text-brand-strong pointer-coarse:min-h-10'
+
 const wrap = 'mx-auto w-full max-w-6xl px-5 sm:px-8'
 
 export function SiteFooter({ web, docs, basePath, link: Link = A }: SiteFooterProps) {
@@ -113,13 +123,24 @@ export function SiteFooter({ web, docs, basePath, link: Link = A }: SiteFooterPr
             <h2 className="text-xs font-semibold tracking-wider text-foreground/80 uppercase">{c.title}</h2>
             <ul className="mt-4 grid gap-2.5 text-sm">
               {c.links.map(([label, href]) => (
-                <li key={label}>
-                  <Link
-                    href={href}
-                    className="inline-flex min-h-6 items-center text-muted-foreground transition-colors hover:text-brand-strong pointer-coarse:min-h-10"
-                  >
-                    {label}
-                  </Link>
+                <li key={label} className={typeof href === 'string' ? undefined : 'text-muted-foreground'}>
+                  {typeof href === 'string' ? (
+                    <Link href={href} className={linkClass}>
+                      {label}
+                    </Link>
+                  ) : (
+                    <>
+                      {label}:{' '}
+                      {href.map(([name, url], i) => (
+                        <Fragment key={name}>
+                          {i > 0 && ' & '}
+                          <Link href={url} className={linkClass}>
+                            {name}
+                          </Link>
+                        </Fragment>
+                      ))}
+                    </>
+                  )}
                 </li>
               ))}
               {c.more && (
