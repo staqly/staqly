@@ -149,15 +149,20 @@ export function CollectionSettingsSheet({
 /** The Default collection's current name (it can be renamed): where a deleted collection's posts go. */
 const defaultNameOf = (cols: Collection[]) => cols.find((c) => c.is_default)?.name ?? 'Default'
 
-/** What happens to the posts of a deleted collection, in the confirmation. */
-function deleteMoveText(n: number, defaultName: string) {
-  if (n === 0) {
-    return ''
-  }
+/** What deleting a collection does, point by point, in the confirmation. */
+function deleteConsequences(n: number, defaultName: string) {
+  const posts = n === 1 ? 'Its post moves' : `Its ${n} posts move`
 
-  return n === 1
-    ? `Its post moves to ${defaultName} unchanged.`
-    : `Its ${n} posts move to ${defaultName} unchanged, published ones included.`
+  return [
+    'The collection and its schedules are deleted; runs they had planned are cancelled.',
+    ...(n === 0
+      ? []
+      : [
+          `${posts} to ${defaultName} unchanged: published posts stay as history, scheduled ones still go out at their time.`,
+          `Drafts join ${defaultName}'s drafts, so one of its schedules may publish them.`,
+        ]),
+    'The collection itself cannot be brought back.',
+  ]
 }
 
 function SettingsBody({ collection, onClose }: { collection: Collection; onClose: () => void }) {
@@ -406,11 +411,16 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
               >
                 <DialogHeader>
                   <DialogTitle>Delete “{collection.name}”?</DialogTitle>
-                  <DialogDescription>
-                    This permanently deletes the collection and its schedules.{' '}
-                    {deleteMoveText(collection.post_count, defaultName)} This cannot be undone.
-                  </DialogDescription>
+                  <DialogDescription>What happens:</DialogDescription>
                 </DialogHeader>
+                <ul
+                  className="grid list-disc gap-1 pl-5 text-sm text-muted-foreground"
+                  data-testid="delete-consequences"
+                >
+                  {deleteConsequences(collection.post_count, defaultName).map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
                 <ConfirmNameField
                   id="confirm-delete"
                   label="Type the collection name to confirm"

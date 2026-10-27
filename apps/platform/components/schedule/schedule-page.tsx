@@ -18,14 +18,12 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 
 import { ErrorState } from '@/components/common/error-state'
 import { PageIcon } from '@/components/common/page-header'
-import { PastPostsSwitch } from '@/components/common/past-posts-switch'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useClock } from '@/hooks/use-clock'
 import { useIsCoarsePointer, useIsMobile } from '@/hooks/use-mobile'
-import { hidePastParam, setShowPast, useShowPast } from '@/hooks/use-show-past'
 import type { Collection, Post, PostTarget } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { postTitle } from '@/lib/posts'
@@ -443,17 +441,15 @@ export function SchedulePage() {
     return dayFromKey(at && /^\d{4}-\d{2}-\d{2}$/.test(at) ? at : today)
   }, [params, today])
   const range = useMemo(() => rangeOf(view, anchor), [view, anchor])
-  const showPast = useShowPast()
-  const hidePast = hidePastParam(showPast)
+  // The calendar always shows what went out: past days are its record (the posts list hides them instead).
   const query = useMemo(
     () => ({
       publish_after: range.publish_after,
       publish_before: range.publish_before,
-      hide_past: hidePast,
       sort: 'publish_asc' as const,
       limit: 200,
     }),
-    [range.publish_after, range.publish_before, hidePast],
+    [range.publish_after, range.publish_before],
   )
   // No polling: the recent events tell when someone else changed a post.
   const { data, error, isLoading, refetch, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } =
@@ -731,7 +727,6 @@ export function SchedulePage() {
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <PastPostsSwitch />
     </div>
   )
 
@@ -771,18 +766,6 @@ export function SchedulePage() {
         Click + on a future slot to schedule a draft or write a post for that time, or give a collection a schedule that
         publishes its drafts for you. Staqly sends every post at its time.
       </span>
-      {hidePast && (
-        <span className="text-muted-foreground">
-          Past posts are hidden.{' '}
-          <button
-            type="button"
-            className="font-medium text-foreground underline underline-offset-4 pointer-coarse:-my-3 pointer-coarse:py-3"
-            onClick={() => setShowPast(true)}
-          >
-            Show past posts
-          </button>
-        </span>
-      )}
     </div>
   )
 

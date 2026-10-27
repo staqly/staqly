@@ -109,7 +109,7 @@ func TestListPostsHidePast(t *testing.T) {
 	e.do(nil, "POST", "/v1/posts/"+scheduled.ID+"/schedule", e.key, map[string]any{"publish_at": future(time.Hour)}, 200, nil)
 	publishing := goOut("")
 	goOut("published")
-	goOut("failed")
+	failed := goOut("failed")
 
 	ids := func(path string) map[string]bool {
 		t.Helper()
@@ -136,14 +136,15 @@ func TestListPostsHidePast(t *testing.T) {
 	}
 	for _, path := range []string{"/v1/posts?hide_past=true&collection_id=" + c.ID, "/v1/collections/" + c.ID + "/posts?hide_past=true"} {
 		got := ids(path)
-		if len(got) != 3 || !got[draft.ID] || !got[scheduled.ID] || !got[publishing.ID] {
+		// Only published posts are past: a failed one stays in view.
+		if len(got) != 4 || !got[draft.ID] || !got[scheduled.ID] || !got[publishing.ID] || !got[failed.ID] {
 			t.Fatalf("%s: %v", path, got)
 		}
 	}
 
 	// MCP takes the same filter.
 	sc := mcpResult(e, e.admin, "list_posts", map[string]any{"collection": c.ID, "hide_past": true})
-	if data, _ := sc["data"].([]any); len(data) != 3 {
+	if data, _ := sc["data"].([]any); len(data) != 4 {
 		t.Fatalf("list_posts hide_past over MCP: %v", sc)
 	}
 }

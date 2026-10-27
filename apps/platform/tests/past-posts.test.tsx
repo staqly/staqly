@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -92,37 +92,20 @@ describe('past posts in the posts list', () => {
 })
 
 describe('past posts on the calendar', () => {
-  it('are hidden by default; the empty range says so and shows them on request', async () => {
+  it('always shows them, whatever the posts list hides', async () => {
+    localStorage.removeItem('staqly.posts.showPast')
     const api = mockApi({
       'GET /v1/posts': { data: [] },
       'GET /v1/collections': { data: [] },
       'GET /v1/events': { data: [] },
     })
-    const user = userEvent.setup()
 
     renderWithProviders(<SchedulePage />, { mode: 'local' })
     const empty = await screen.findByTestId('schedule-empty')
 
-    expect(empty).toHaveTextContent('Past posts are hidden.')
-    expect(hidePastOf(api.find('GET', '/v1/posts'))).toEqual(['true'])
-
-    await user.click(within(empty).getByRole('button', { name: 'Show past posts' }))
-    await waitFor(() => expect(hidePastOf(api.find('GET', '/v1/posts')).at(-1)).toBeNull())
-    expect(screen.getByRole('switch', { name: 'Show past posts' })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByTestId('schedule-empty')).not.toHaveTextContent('Past posts are hidden.')
-  })
-
-  it('follows the choice made in the posts list', async () => {
-    localStorage.setItem('staqly.posts.showPast', '1')
-    const api = mockApi({
-      'GET /v1/posts': { data: [] },
-      'GET /v1/collections': { data: [] },
-      'GET /v1/events': { data: [] },
-    })
-
-    renderWithProviders(<SchedulePage />, { mode: 'local' })
-    await screen.findByTestId('schedule-empty')
     expect(hidePastOf(api.find('GET', '/v1/posts'))).toEqual([null])
+    expect(empty).not.toHaveTextContent('Past posts are hidden.')
+    expect(screen.queryByRole('switch', { name: 'Show past posts' })).not.toBeInTheDocument()
   })
 })
 
@@ -144,9 +127,9 @@ describe('deleting a collection', () => {
     await user.click(screen.getByRole('button', { name: 'Delete collection' }))
     const dialog = await screen.findByRole('dialog', { name: /Delete/ })
 
-    expect(dialog).toHaveTextContent(
-      'This permanently deletes the collection and its schedules. Its 3 posts move to Inbox unchanged, published ones included. This cannot be undone.',
-    )
+    expect(dialog).toHaveTextContent('The collection and its schedules are deleted')
+    expect(dialog).toHaveTextContent('Its 3 posts move to Inbox unchanged')
+    expect(dialog).toHaveTextContent("Drafts join Inbox's drafts, so one of its schedules may publish them.")
     expect(dialog).not.toHaveTextContent('items')
   })
 })
