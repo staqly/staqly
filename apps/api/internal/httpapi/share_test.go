@@ -319,8 +319,8 @@ func TestPostMetrics(t *testing.T) {
 		t.Fatalf("a failed refresh keeps the last numbers and says why: %+v", m)
 	}
 
-	// Your own automation reports its numbers; other platforms can't be written.
-	e.do(nil, "PUT", "/v1/posts/"+post.ID+"/targets/"+tok.ID+"/metrics", e.key, map[string]any{"likes": 3}, 422, nil)
+	// Your own automation reports its numbers; other platforms can't be written (409, as for a reported result).
+	e.do(nil, "PUT", "/v1/posts/"+post.ID+"/targets/"+tok.ID+"/metrics", e.key, map[string]any{"likes": 3}, 409, nil)
 	e.do(nil, "PUT", "/v1/posts/"+post.ID+"/targets/"+own.ID+"/metrics", e.key, map[string]any{"likes": -1}, 422, nil)
 	var rep app.TargetMetrics
 	e.do(nil, "PUT", "/v1/posts/"+post.ID+"/targets/"+own.ID+"/metrics", e.key, map[string]any{"impressions": 50, "link_clicks": 4}, 200, &rep)

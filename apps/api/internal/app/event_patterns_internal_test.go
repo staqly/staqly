@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 // Audit events reach a subscription only when it names their family.
 func TestEventMatches(t *testing.T) {
@@ -23,5 +26,21 @@ func TestEventMatches(t *testing.T) {
 		if got := eventMatches(c.pat, c.typ); got != c.want {
 			t.Errorf("eventMatches(%q, %q) = %v, want %v", c.pat, c.typ, got, c.want)
 		}
+	}
+}
+
+// Was a gap: member and invitation events were emitted but not known, so a subscription got them only through
+// "*": "member.*" or "invitation.accepted" was refused as an unknown pattern.
+func TestTeamEventsCanBeSubscribed(t *testing.T) {
+	s := &Service{}
+	p := Principal{Scopes: AllScopes}
+	for _, pats := range [][]string{{"member.*"}, {"member.updated", "member.removed"}, {"invitation.*"},
+		{"invitation.created", "invitation.resent", "invitation.revoked", "invitation.accepted"}} {
+		if err := s.validateEventPatterns(context.Background(), p, pats); err != nil {
+			t.Errorf("%v: %v", pats, err)
+		}
+	}
+	if err := s.validateEventPatterns(context.Background(), p, []string{"member.joined"}); err == nil {
+		t.Error("an unknown member event was accepted")
 	}
 }

@@ -64,7 +64,7 @@ type webhookRef struct {
 
 type webhookFields struct {
 	Description   *string   `json:"description,omitempty" jsonschema:"what the receiver does, shown in the dashboard"`
-	Events        *[]string `json:"events,omitempty" jsonschema:"event types to send, e.g. [\"item.approved\"]; [\"*\"] (default) sends all"`
+	Events        *[]string `json:"events,omitempty" jsonschema:"event types to send, e.g. [\"post.published\"]; [\"*\"] (default) sends all"`
 	CollectionIDs *[]string `json:"collection_ids,omitempty" jsonschema:"only events from these collections (col_...); empty sends all"`
 	Active        *bool     `json:"active,omitempty" jsonschema:"false pauses deliveries"`
 	TimeoutMS     *int64    `json:"timeout_ms,omitempty" jsonschema:"per-attempt timeout in milliseconds"`

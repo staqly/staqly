@@ -1894,7 +1894,7 @@ paths:
       description: |
         Fields left out stay as they are; `targets` replaces the whole list; `publish_at: null` clears
         the time (a scheduled post becomes a draft). A published or publishing post is not editable
-        (409 `not_editable`). `expected_version` makes the edit conditional (409 `post_changed`).
+        (409 `conflict`). `expected_version` makes the edit conditional (409 `post_changed`).
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PostPatch" } } } }
@@ -2010,7 +2010,7 @@ paths:
       tags: [posts]
       summary: The post's numbers per channel, read from each platform that reports them (posts:read)
       description: |
-        Published targets on platforms that report numbers (X) are read again when the cached numbers are older
+        Published targets on platforms that report numbers (X, YouTube, Slack) are read again when the cached numbers are older
         than ten minutes, or now with `refresh=true`. A failed read keeps the last numbers and sets `error`.
         Targets on your own automation show what it reported (PUT .../metrics). `available: false` means the
         platform gives no numbers.
@@ -2030,7 +2030,7 @@ paths:
       operationId: reportTargetMetrics
       tags: [posts]
       summary: Your own automation sends the numbers of a post it published (posts:publish)
-      description: Only targets on a channel of provider `custom` (422 otherwise). Replaces the stored numbers.
+      description: Only targets on a channel of provider `custom` (409 `conflict` otherwise, as for a reported result). Negative numbers are 422. Replaces the stored numbers.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Metrics" } } } }
@@ -4412,7 +4412,7 @@ components:
     PaymentRequired:
       description: |
         `plan_limit_exceeded` (a plan limit; `details` has limit, max, used, plan),
-        `plan_expired` (the workspace is suspended and read-only), `payment_required`, `payment_failed` (a plan
+        `plan_expired` (the workspace is suspended and read-only), `payment_failed` (a plan
         change that charges at once, such as leaving the trial, wasn't paid: nothing changed; `details` has
         `reason`, and `pay_url`, `decline_code`, `plan`, `expires_at` when known, as in `PendingPayment`), or `x_posts_exhausted` (this
         period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end), or
@@ -4705,7 +4705,7 @@ components:
         code:
           type: string
           description: Stable machine-readable code; new codes may be added.
-          examples: [bad_request, unauthorized, invalid_link, forbidden, csrf_failed, not_found, conflict, not_available, idempotency_in_progress, post_changed, already_free, sign_in_with_account, gone, link_used, link_expired, plan_limit_exceeded, plan_expired, payment_required, x_posts_exhausted, linkedin_posts_exhausted, linkedin_videos_exhausted, too_large, unsupported_media_type, validation_failed, not_editable, idempotency_mismatch, rate_limited, payment_provider_error, ai_provider_error, ai_key_rejected, timeout, busy, internal, default_group]
+          examples: [bad_request, unauthorized, invalid_link, forbidden, csrf_failed, not_found, conflict, not_available, idempotency_in_progress, post_changed, sign_in_with_account, gone, link_used, link_expired, plan_limit_exceeded, plan_expired, payment_failed, x_posts_exhausted, linkedin_posts_exhausted, linkedin_videos_exhausted, too_large, unsupported_media_type, validation_failed, idempotency_mismatch, rate_limited, payment_provider_error, ai_failed, unavailable, busy, internal, default_group]
         message: { type: string }
         fields: { type: object, additionalProperties: { type: string } }
         details: { type: object, additionalProperties: true, description: "plan_limit_exceeded: limit, max, used, plan; payment_failed: reason, pay_url, decline_code, plan, expires_at (see PendingPayment)" }

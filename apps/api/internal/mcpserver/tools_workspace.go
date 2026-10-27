@@ -64,7 +64,7 @@ func (t *tools) listKeys(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}
 
 type createKeyIn struct {
 	Name      string   `json:"name" jsonschema:"key name, e.g. the agent that uses it"`
-	Scopes    []string `json:"scopes" jsonschema:"scopes to grant, e.g. [\"collections:read\", \"items:read\", \"items:write\"]"`
+	Scopes    []string `json:"scopes" jsonschema:"scopes to grant, e.g. [\"collections:read\", \"posts:read\", \"posts:write\"]"`
 	ExpiresAt string   `json:"expires_at,omitempty" jsonschema:"RFC3339 expiry; omit for a key that does not expire"`
 }
 
