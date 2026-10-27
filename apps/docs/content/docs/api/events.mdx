@@ -151,6 +151,10 @@ publishing history.
 | `workspace.plan_changed` | The [plan](/plans) changed: a Stripe subscription, or set by the operator | `from`, `to`, `expires_at`, `reason` (`stripe:<status>`, `operator`, `operator_comp`) |
 | `workspace.credits_added` | A bought bundle of extra posts to X was paid for (Stripe Checkout) | `provider` (`x`), `posts`, `expires_at` (the end of the billing period) |
 | `workspace.account_attached` | A workspace without people got its first owner: they accepted an owner invitation (e.g. one the operator handed over) | `account_id`, `owner_user_id`, `sessions_revoked`, `api_keys_adopted`, `connect_links_expired` |
+| `member.updated` | A member's role changed (cloud) | `user_id`, `role`, `previous_role` |
+| `member.removed` | A member was removed, or left (cloud) | `user_id`, `role`, `left` |
+| `invitation.created`, `invitation.resent`, `invitation.revoked` | An [invitation](/accounts#invitations) was sent, sent again or revoked (cloud) | `invitation_id`, `email`; `role` on create |
+| `invitation.accepted` | Someone accepted an invitation (cloud) | `invitation_id`, `user_id`, `email`, `role` |
 | `workspace.export_requested` | A [workspace export](/self-hosting/data-export) was requested | `export_id` |
 | `workspace.exported` | A workspace export finished | `export_id`, `size_bytes` |
 | `retention.events_pruned` | The [retention](/self-hosting/data-export#retention) worker deleted old events | `count`, `older_than_days`, `before` |
@@ -193,7 +197,8 @@ Patterns are checked when you save a webhook or alert (1 to 50 of them): an exac
 one of the types on this page (custom events such as `post.shipped` are rejected), and a glob
 must stay inside a known family (`post.`, `channel.`, `schedule.`, `collection.`, `webhook.`,
 `alert.`...). A typo such as `post.publised` or `posts.*` is rejected with `422` instead of
-silently never matching.
+silently never matching. The `member.*` and `invitation.*` events can't be named in a pattern:
+a webhook or alert gets them only through `"*"`.
 
 ## Actors
 
@@ -220,6 +225,7 @@ System actors:
 | `cli` | `Server CLI` | `server recovery-key` on the server |
 | `operator` | `Operator` | A plan set on the server by the operator |
 | `stripe` | `Stripe` | A Stripe subscription change |
+| `invitation` | The person's name | Someone accepted an invitation (cloud) |
 
 ## Next steps
 

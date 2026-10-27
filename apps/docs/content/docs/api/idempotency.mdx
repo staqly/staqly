@@ -5,7 +5,7 @@ description: Retry a failed or timed-out request without creating the same post 
 
 Networks fail and automations retry. If a workflow times out after sending "create this
 post", a plain retry may create a duplicate. Send an **`Idempotency-Key`** header on unsafe
-requests (POST, PATCH, DELETE) and a retry with the same key returns the **original response**
+requests (POST, PUT, PATCH, DELETE) and a retry with the same key returns the **original response**
 instead of doing the work twice.
 
 ## Make a request safe to retry
@@ -43,8 +43,8 @@ If the first attempt went through, the retry gets the stored response with the h
 | Same key, same method + path + query string + body | The stored response is replayed, with header `Idempotent-Replayed: true` |
 | Same key, same JSON body formatted differently (spaces, key order, `é` vs `é`) | Replayed: JSON bodies are compared by content, not bytes |
 | Same key, **different** request | `422 idempotency_mismatch` |
-| Same key while the first is still running | `409 idempotency_in_progress` — retry shortly |
-| First attempt failed with a `5xx` | The key is released, so a retry runs again |
+| Same key while the first is still running | `409 idempotency_in_progress` — retry shortly. A first request that never finished (its server stopped) gives its key up after 10 minutes |
+| First attempt failed with a `5xx`, a `429` or a `402`, two edits raced (`409` *modified concurrently*), or the client hung up | The key is released, so a retry runs again |
 | The response carried a **secret**, or was larger than 1 MiB | Never stored: the key is released, so a retry **runs again** |
 | Key longer than 200 characters | `422 validation_failed` |
 
@@ -62,8 +62,9 @@ If the first attempt went through, the retry gets the stored response with the h
   for the same request. Array order and every value still count, and **numbers are compared as
   written**: `1` and `1.0` are different requests (an integer field such as `expected_version`
   accepts `1` and rejects `1.0`), so `{"n": 1}` then `{"n": 1.0}` is `422 idempotency_mismatch`.
-- Only **JSON** requests are covered. Multipart uploads ignore the header — deduplicate them
-  yourself, e.g. by `external_ref`.
+- Only **JSON** requests are covered (bodies up to 4 MiB). Multipart uploads ignore the header —
+  deduplicate them yourself, e.g. by `external_ref`. The exception is an AI job
+  (`POST /v1/ai/jobs`): a repeated key answers `200` with the job the first request queued.
 - Webhook *deliveries* to you are at-least-once and can arrive out of order; deduplicate them
   on `X-Staqly-Event-Id` and order them by the event's `created_at`
   ([Delivery guarantees](/automation/webhooks#delivery-guarantees)).

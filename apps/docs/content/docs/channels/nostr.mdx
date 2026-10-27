@@ -14,7 +14,7 @@ In **Channels → Add channel → Nostr**, enter:
 | Field | What |
 |---|---|
 | **Private key** | your `nsec1...` key (or its 64-character hex form), from your Nostr app's key or account settings |
-| **Relays** | the relays your Nostr app writes to, comma-separated `wss://` addresses (default `wss://relay.damus.io, wss://nos.lol, wss://relay.primal.net`) |
+| **Relays** | the relays your Nostr app writes to, up to 20 comma-separated `wss://` addresses (`ws://` only for a relay on your own network; default `wss://relay.damus.io, wss://nos.lol, wss://relay.primal.net`) |
 
 The private key is your account: anyone who has it can post as you. Staqly keeps it sealed and uses
 it only to sign notes. If you'd rather not hand over your main key, make a separate Nostr account

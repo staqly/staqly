@@ -20,8 +20,8 @@ import (
 // The assistant: a chat in the dashboard that works on the workspace for the person signed in. A language model
 // (AI_ASSISTANT_*: an OpenAI-compatible endpoint, or fal.ai's router; AI_ASSISTANT_FALLBACK_* when it can't) calls staqly's MCP tools, which run as that person,
 // through the same services and scope checks as REST. Tools that only read run at once; any other tool waits for
-// the person to allow it in the chat. The conversation lives in the browser: every request carries it, so the
-// server keeps nothing between turns. Every model call is recorded as an AI job and counts towards the
+// the person to allow it in the chat. Every request carries the conversation, and the server saves it after each
+// turn for the person who had it (assistant_chats.go: the history, search, delete). Every model call is recorded as an AI job and counts towards the
 // workspace's monthly AI allowance.
 
 // DefaultAssistantModel: the model behind the router unless AI_ASSISTANT_MODEL names another.

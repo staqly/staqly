@@ -415,9 +415,12 @@ Methods that return a list return a Python `list`; `list()` on paginated endpoin
 | Method | Endpoint |
 |---|---|
 | `media.upload(file, *, filename=None, content_type=None)` | `POST /v1/media` (a file object, `bytes` or a path) |
-| `media.list(**filters)`, `media.info(media_id)`, `media.update(media_id, ...)`, `media.usage(media_id)` | `GET /v1/media`, `GET` / `PATCH /v1/media/{id}/info`, `.../usage` |
+| `media.list(**filters)`, `media.info(media_id)`, `media.update(media_id, ...)`, `media.usage(media_id)` | `GET /v1/media`, `GET /v1/media/{id}/info`, `PATCH /v1/media/{id}`, `.../usage` |
 | `media.download(media_id)`, `media.url(media_id)` | `GET /v1/media/{id}` (bytes, or the URL) |
 | `media.delete(media_id, permanent=False)`, `media.restore(media_id)` | `DELETE /v1/media/{id}` (to Deleted for 30 days, or for good), restore it |
+| `media.keep(media_id)` | `POST /v1/media/{id}/keep` (keep this one of identical files) |
+| `media.organize(media_ids, folder_id=None, add_tags=None, remove_tags=None)` | `POST /v1/media/bulk` (move or tag up to 200 files) |
+| `media.folders()`, `media.create_folder(name, parent_id=None)`, `media.update_folder(folder_id, name=None, parent_id=None)`, `media.delete_folder(folder_id)` | `/v1/media-folders` |
 
 ### Events
 

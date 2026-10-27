@@ -425,9 +425,12 @@ Every method takes `RequestOptions` (`timeout`, `maxRetries`, `idempotencyKey`, 
 | Method | Endpoint |
 |---|---|
 | `upload(file, { filename? })` | `POST /v1/media` (a `Blob`, `File` or `fileFromPath()` from `@staqly/sdk/node`) |
-| `list(params?)`, `info(id)`, `update(id, patch)`, `usage(id)` | `GET /v1/media`, `GET` / `PATCH /v1/media/{id}/info`, `.../usage` |
+| `list(params?)`, `info(id)`, `update(id, patch)`, `usage(id)` | `GET /v1/media`, `GET /v1/media/{id}/info`, `PATCH /v1/media/{id}`, `.../usage` |
 | `download(id)`, `downloadResponse(id)`, `url(id)` | `GET /v1/media/{id}` (bytes, the raw `Response`, or the URL) |
 | `delete(id, { permanent? })`, `restore(id)` | `DELETE /v1/media/{id}` (to Deleted for 30 days, or for good), restore it |
+| `keep(id)` | `POST /v1/media/{id}/keep` (keep this one of identical files) |
+| `organize({ ids, folder_id?, add_tags?, remove_tags? })` | `POST /v1/media/bulk` (move or tag up to 200 files) |
+| `folders()`, `createFolder({ name, parent_id? })`, `updateFolder(id, { name?, parent_id? })`, `deleteFolder(id)` | `/v1/media-folders` |
 
 ### `events`
 
@@ -474,7 +477,7 @@ Every method takes `RequestOptions` (`timeout`, `maxRetries`, `idempotencyKey`, 
 | `workspace.usage()` | `GET /v1/workspace/usage` |
 | `workspace.members()` | `GET /v1/members` (cloud) |
 | `workspace.agents()`, `workspace.forgetAgent(id)` | `GET /v1/agents`, `DELETE /v1/agents/{id}` |
-| `workspace.delete(confirmName)` | `DELETE /v1/workspace` (dashboard session only) |
+| `workspace.delete(confirmName)`, `workspace.rotateRecoveryKey()` | `DELETE /v1/workspace`, `POST /v1/recovery-key/rotate` (dashboard session only) |
 | `workspace.accessToken()`, `workspace.rotateAccessToken()` | Community Edition: `GET /v1/access-token`, `POST /v1/access-token/rotate` |
 | `workspaces.create({ name, setup_token? })` | `POST /v1/workspaces` (cloud signup) |
 | `plans.list()` | `GET /v1/plans` |

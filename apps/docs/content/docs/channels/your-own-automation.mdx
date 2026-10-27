@@ -147,12 +147,29 @@ curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST http://localhost:3333
 ```
 
 Only targets on a `custom` channel take reported results, and only while they are
-`publishing` (`409` otherwise, also when the result was already reported). The result needs the
-`posts:publish` scope. MCP: `report_publish_result`; CLI: `staqly posts result`; SDKs:
+`publishing` (`409` otherwise, also when the result was already reported or the timeout settled
+it). A `url` must be an absolute `http://` or `https://` address (up to 2,048 characters);
+`external_id` takes up to 500. The result needs the `posts:publish` scope. MCP: `report_publish_result`; CLI: `staqly posts result`; SDKs:
 `reportResult` / `report_result`.
 
 </Step>
 </Steps>
+
+## Report numbers
+
+Staqly can't read numbers from a platform it doesn't reach, so your automation sends them. Each
+report replaces the last one, and the post's **Statistics** show it:
+
+```bash
+curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X PUT http://localhost:3333/v1/posts/post_oalirbz67y4m4cqxq5dw/targets/ch_7h2kq9xw3nbvd5yhzm6a/metrics \
+  -H 'Content-Type: application/json' \
+  -d '{"impressions": 1520, "likes": 48, "replies": 6, "link_clicks": 31}'
+```
+
+The fields are `impressions`, `likes`, `reposts`, `replies`, `quotes`, `bookmarks` and
+`link_clicks` (none negative); leave out the ones you don't know. Only targets on a `custom`
+channel take numbers (`422` otherwise), with the `posts:publish` scope. MCP:
+`report_post_metrics`; SDKs: `reportMetrics` / `report_metrics`.
 
 ## What the person sees
 

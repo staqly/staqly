@@ -37,9 +37,9 @@ Or ask the [assistant](/dashboard/assistant) to write it for you.
 | **Tags** | Optional, to find and filter posts later. |
 | **Collection** | New posts only; the open collection is preselected. |
 | **Text for** | With two channels or more: **All channels** holds the text every channel shares; one more tab per picked channel gives that channel a text of its own (**Use the shared text** goes back). |
-| **Editor** | A rich text editor: bold and italic become Unicode letters, lists become lines with a bullet, so the post stays plain text that every platform shows the same. **Insert media** uploads pictures and videos; **From library** picks files already in [Media](/dashboard/media) (files in Deleted can't be added: restore them first). **Design** opens the [design editor](/dashboard/design-editor) in a new tab for a new graphic; what you save there is added to the post, and the pencil on an attached picture edits it there. Under the text, one character counter per picked channel shows the platform's limit and turns red when the text is too long. A channel that removes links or shows them as plain text (X) gets a red line naming it and the links it found, and its count is of the text it will receive. |
+| **Editor** | A rich text editor: bold and italic become Unicode letters, lists become lines with a bullet, so the post stays plain text that every platform shows the same. **Insert media** uploads pictures and videos; **From library** picks files already in [Media](/dashboard/media) (files in Deleted can't be added: restore them first). **Design** opens the [design editor](/dashboard/design-editor) in a new tab for a new graphic, and **Video** the [video editor](/dashboard/video-editor) for a new video; what you save there is added to the post, and the pencil on an attached picture edits it in the design editor. Under the text, one character counter per picked channel shows the platform's limit and turns red when the text is too long. A channel that removes links or shows them as plain text (X) gets a red line naming it and the links it found, and its count is of the text it will receive. |
 | **Add comment** | Under the text: each comment is a reply published under the post after it (a thread), with its own text, media and a wait after the one before (up to 25 comments, each up to a day later). Platforms that take replies (X) publish them; your own automation receives them with the post. |
-| **Settings** tab | Next to **Post** when a picked channel's platform has options: one folded card per channel with the platform's settings, such as who can reply or a community on X. |
+| **Settings** tab | Next to **Post** when a picked channel's platform has options: one folded card per channel with the platform's settings, such as who can reply or a community on X. A Slack workspace or a Discord server is one channel, so each post picks the Slack or Discord channels it goes to here (up to 10; Slack also has **Post as**: the app or yourself). As soon as you pick such a channel the post gets **#random** or **#general** when there is one, folded card or not; with neither, pick them yourself before saving. |
 | **Footer** | The time chip (with **×** to clear it), **Save draft**, **Publish now** and **Schedule**. **Schedule** opens a calendar to pick the day and time (presets such as **Tomorrow 09:00**; times are in the browser's time zone; a post started from a calendar slot has that time picked already) and **Repeat** (every day to every month: once published, the post is scheduled again that much later); its own **Schedule** sends the post for that time. On a scheduled post, **Save changes** keeps the time and the calendar button next to it (**Schedule for later**) moves it. Leave the time empty for a draft, or for a post a schedule will pick. |
 
 </Step>
@@ -68,7 +68,7 @@ Agents and scripts create posts the same way: MCP `create_post`, `POST /v1/posts
 
 Posts are listed newest first. On a wide screen each row has columns: the post (its first line
 and the start of the rest), the status, when it goes out or went out (a dash for a draft), its
-channels, when and by whom it was created (a person, or the API key of an agent or automation),
+channels (hover or focus them for every channel's name), when and by whom it was created (a person, or the API key of an agent or automation),
 and the open comments from a [preview](/dashboard/share-a-preview). Narrow screens keep the title,
 the time under it and the status. **Load more** at the end loads the next page.
 
@@ -136,6 +136,7 @@ numbers were read.
 |---|---|
 | X | Views, likes, reposts, replies, quotes and bookmarks of the post (public metrics; no reconnecting needed) |
 | YouTube | Views, likes and comments of the video (counts the channel hides stay empty) |
+| Slack | Reactions (per emoji, with who reacted) and the replies in the message's thread, added up over every Slack channel the post went to |
 | [Your own automation](/channels/your-own-automation) | What your automation sends with `PUT /v1/posts/{id}/targets/{channel}/metrics` (or the MCP tool `report_post_metrics`) |
 | Others | *Not available for this platform* for now |
 

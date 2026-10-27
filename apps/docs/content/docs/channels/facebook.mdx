@@ -106,7 +106,7 @@ app, changes their password, or loses their role on the Page.
 | Text | 63,206 characters |
 | Media | up to **10 pictures**, or **one video**: not both in one post |
 | Pictures | JPEG, PNG, GIF, BMP, TIFF or WebP, up to 10 MB |
-| Reels | one video, 3 to 90 seconds, 9:16 |
+| Reels | one video |
 | Stories | one picture or one video; no text |
 
 ## Settings per post
@@ -129,7 +129,7 @@ take no comments.
 |---|---|
 | The sign-in expired or was revoked, the person lost their role on the Page | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
 | Rate limit, posting too fast, Facebook unavailable | Retries through the job queue (after 1, 5, then 15 minutes) |
-| A duplicate post, a refused picture or video, a Community Standards block, a security check on the account | Fails the target with Facebook's reason; retrying would not help, so it does not |
+| A duplicate post, a refused picture or video, a link to facebook.com in the post, a Community Standards block, a Page blocked from posting for a while, a security check on the account | Fails the target with Facebook's reason; retrying would not help, so it does not |
 
 Facebook has no way to ask "did this post go out?", and a new attempt would make a new post. So
 when staqly sent the post but its answer never came, the target fails with "may have published"

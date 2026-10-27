@@ -1,6 +1,6 @@
 ---
 title: Tools reference
-description: Look up each of the 100 MCP tools, its inputs and the scope it needs in cloud mode.
+description: Look up each of the 104 MCP tools, its inputs and the scope it needs in cloud mode.
 ---
 
 These are the tools an agent sees once staqly is [connected over MCP](/mcp). You rarely call
@@ -59,13 +59,14 @@ A full walkthrough: [Let an agent fill a collection](/cookbook/agent-fills-a-col
 - Collection inputs accept an ID (`col_qjuybkx6355nz4no6pqk`) **or** the exact name.
 - Tools and REST go through the same authorization checks. Most REST operations have a tool;
   these have none: the browser flows (sign-in, sign-out, setup, redeeming a device link or a
-  connect link, the OAuth start and callback of a channel), cloud accounts (sign-in methods,
-  members and invitations: people are managed by people), the local access token, recovery key
+  connect link, the OAuth start and callback of a channel, a Telegram connect code), cloud accounts
+  (sign-in methods, notification settings, members and invitations: people are managed by people),
+  the local access token, recovery key
   rotation (dashboard session only), developer app registration (`PUT /v1/providers/{id}/app`),
   the agent list (`/v1/agents`), the list of workspace exports (`GET /v1/workspace/exports`), job
   details (`GET /v1/jobs/{id}`, `/stats`, `/cancel`), the design editor (`/v1/media-projects`,
-  `/v1/design/brand`, `/v1/ai`, `POST /v1/media/{id}/replace`) and the billing extras (details, add-ons, X post
-  bundles).
+  `/v1/design/brand`, `/v1/ai`, `/v1/stock/photos`, `POST /v1/media/{id}/replace`), the dashboard assistant
+  (`/v1/assistant`) and the billing extras (details, add-ons, X post bundles).
 - A suspended workspace (trial or paid period ended unpaid) can call read-only tools plus `revoke_session`,
   `revoke_api_key`, `create_device_link`, `start_workspace_export`,
   `start_billing_checkout`, `open_billing_portal`, `delete_workspace` and `purge_post`; other
@@ -267,7 +268,8 @@ Your own automation (provider `custom`) sends the numbers of a post it published
 |---|---|---|---|
 | `post_id` | string | <Required /> | Post ID (post_...) |
 | `channel_id` | string | <Required /> | The custom channel the target is on |
-| `impressions`, `likes`, `reposts`, `replies`, `quotes`, `bookmarks`, `link_clicks` | integer | | The numbers you have; leave out the ones you don't |
+| `impressions`, `likes`, `reposts`, `replies`, `quotes`, `bookmarks`, `link_clicks` | integer | No | The numbers you have; leave out the ones you don't |
+| `reactions` | object[] | No | Reactions by emoji: `emoji`, `count` and, when known, `people` (who reacted) |
 
 ### `create_preview_link`
 A link to a read-only [preview page](/dashboard/share-a-preview) of the post (as each channel shows it) where anyone with the link can comment without signing in. The `url` is returned once; `expires_in_days` 0 never expires. · `posts:write`
@@ -293,7 +295,7 @@ Stop a preview link from working. *Destructive* · `posts:write`
 | `preview_id` | string | <Required /> | Preview link ID (prv_...) |
 
 ### `list_post_comments`
-A post's feedback threads, oldest first: comments reviewers left on its preview pages (name, email) and the team's replies. A thread's first comment has `parent_id` empty and may mark a passage: `quote`, the channel's version (`channel_id`, empty: the shared text), `part` (0 the post's text, n its n-th comment), where the words are now (`anchor_start`/`anchor_end`, -1 when gone: `text_changed`) and `resolved_at` once resolved. *Read-only* · `posts:read`
+A post's feedback threads, oldest first: comments reviewers left on its preview pages (name, email) and the team's replies. A thread's first comment has `parent_id` empty and may mark a passage: `quote`, the channel's version (`channel_id`, empty: the shared text), `part` (0 the post's text, n its n-th comment), where the words are now (`anchor_start`/`anchor_end` in UTF-16 units, -1 when gone: `text_changed`) and `resolved_at` once resolved. *Read-only* · `posts:read`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -301,7 +303,7 @@ A post's feedback threads, oldest first: comments reviewers left on its preview 
 | `cursor` | string | No | Next_cursor of the previous page (500 comments a page), for later comments |
 
 ### `reply_to_post_comment`
-Reply to a feedback thread of a post as the team. · `posts:write`
+Reply to a feedback thread of a post as the team (`comment_id`: any comment of the thread). · `posts:write`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -362,7 +364,7 @@ Close a target on your own automation (provider custom) that waits for a result:
 ## Channels
 
 ### `list_providers`
-The platform catalog: every provider staqly can publish to, whether it is available in this build, how it connects (oauth2 in the dashboard, token here with connect_channel, none for your own automation), its limits (characters, media) and the per-post settings it takes. *Read-only* · `channels:read`
+The platform catalog: every provider staqly can publish to, whether it is available in this build, how it connects (oauth2 in the dashboard, token here with connect_channel, none for your own automation), its limits (characters, media, what it does with links: `limits.links` and the `link_modes` a channel may choose) and the per-post settings it takes. *Read-only* · `channels:read`
 
 No inputs.
 
@@ -586,7 +588,7 @@ The media library: uploaded pictures, videos and audio, newest first, with how m
 | `deleted` | boolean | No | list the files in Deleted (with deleted_at and purge_at) instead |
 | `duplicates` | boolean | No | only files with an identical twin, grouped by content |
 | `folder` | string | No | a folder ID (files directly in it) or root (the top level) |
-| `kind` | string | No | image, video or other |
+| `kind` | string | No | image, video or audio |
 | `limit` | integer | No | page size (default 60, max 200) |
 | `offset` | integer | No | next_offset of the previous page |
 | `q` | string | No | part of the file name |
@@ -699,6 +701,7 @@ Put a finished generate_media result in the media library; returns the media fil
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `job_id` | string | <Required /> | The id generate_media returned (aij_...) |
+| `wait_seconds` | integer | No | Wait up to this many seconds (at most 60) for it to finish |
 
 
 ## Activity log
