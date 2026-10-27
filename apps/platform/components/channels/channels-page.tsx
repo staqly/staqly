@@ -57,7 +57,7 @@ import { formatDateTime, pluralize, timeAgo } from '@/lib/format'
 import { LINKS_HELP, LINKS_LABELS, type LinksMode } from '@/lib/links'
 import { namedErrorToast, namedToast, toastApiError } from '@/lib/notify'
 import { ProviderIcon } from '@/lib/providers'
-import { qk, useChannelGroups, useChannels, useProviders } from '@/lib/queries'
+import { qk, refetchPostListsFromStart, useChannelGroups, useChannels, useProviders } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 import { cn } from '@/lib/utils'
 
@@ -698,7 +698,8 @@ export function ChannelsPage() {
     onSuccess: (_, c) => {
       qc.setQueryData<Channel[]>(qk.channels, (list) => list?.filter((x) => x.id !== c.id))
       countInGroups(qc, c.group_id, -1)
-      void qc.invalidateQueries({ queryKey: qk.postsAll })
+      // Every list from its first page: invalidating would reload each loaded page one by one.
+      refetchPostListsFromStart(qc)
       namedToast(c.name, 'was removed', 'Scheduled posts lose this channel.')
       setRemoving(null)
     },
