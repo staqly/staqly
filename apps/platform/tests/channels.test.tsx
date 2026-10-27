@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ConnectForm } from '@/components/channels/add-channel-sheet'
 import { ChannelsPage } from '@/components/channels/channels-page'
@@ -71,6 +71,52 @@ describe('channels', () => {
     expect(within(tg).getByText('Needs reconnect')).toBeInTheDocument()
     expect(within(tg).getByText('Token revoked')).toBeInTheDocument()
     expect(within(tg).getByRole('button', { name: 'Reconnect' })).toBeInTheDocument()
+  })
+
+  it('why a channel needs reconnecting is a short note read with its status, the whole text on hover or with More', async () => {
+    const why =
+      'Telegram: this channel was connected through @staqly_bot, but this server now posts as @staqly_dev_bot: add @staqly_dev_bot to the chat and connect it again'
+    // jsdom has no layout: the two lines hide part of the text.
+    const height = vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(80)
+    const observed: (() => void)[] = []
+
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(private cb: () => void) {}
+        observe() {
+          observed.push(this.cb)
+          this.cb()
+        }
+        disconnect() {}
+      },
+    )
+    mockApi({
+      'GET /v1/channels': {
+        data: [channel({ id: 'ch_2', name: 'News', provider: 'telegram', status: 'needs_reconnect', last_error: why })],
+      },
+      'GET /v1/providers': { data: [provider(), telegram] },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+    const note = await screen.findByTestId('channel-error')
+
+    expect(note).toHaveAttribute('title', why)
+    expect(within(note).getByText(why)).toHaveClass('line-clamp-2')
+    // A screen reader reads the reason with the status.
+    expect(screen.getByText('Needs reconnect')).toHaveAccessibleDescription(why)
+    const more = within(note).getByRole('button', { name: 'More' })
+
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    await user.click(more)
+    expect(within(note).getByRole('button', { name: 'Less' })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(note).getByText(why)).not.toHaveClass('line-clamp-2')
+    // The old long red line is gone.
+    expect(note.closest('li')?.querySelector('.text-destructive')).toBeNull()
+    expect(observed.length).toBeGreaterThan(0)
+    height.mockRestore()
+    vi.unstubAllGlobals()
   })
 
   it('Test connection names the channel and says whether it works', async () => {

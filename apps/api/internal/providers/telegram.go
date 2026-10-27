@@ -133,8 +133,13 @@ func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Creden
 	chat := strings.TrimSpace(fields["chat"])
 	shared := fields["bot"] == "shared" // connected through the server's bot (/connect CODE in the chat)
 	if shared {
-		if token, _ = TelegramBot(); token == "" {
+		var username string
+		if token, username = TelegramBot(); token == "" {
 			return nil, Profile{}, &Failure{Kind: ErrReauth, Msg: "Telegram: this server has no bot of its own any more; connect the chat with your own bot"}
+		}
+		// Checking a stored channel passes its credentials back in: one connected through another bot stays so.
+		if err := telegramBotChanged(fields, token, username); err != nil {
+			return nil, Profile{}, err
 		}
 	}
 	if token == "" {
@@ -185,9 +190,12 @@ func (t Telegram) Connect(ctx context.Context, fields map[string]string) (Creden
 
 	id := strconv.FormatInt(c.ID, 10)
 	creds := Credentials{"bot_token": token, "chat": chat, "chat_id": id, "chat_type": c.Type, "chat_username": c.Username}
-	if shared { // the server's token is read when it is used, never stored with the channel
+	if shared {
+		// The server's token is read when it is used, never stored with the channel; which bot it was (id and
+		// @username) is, so a later change of the server's bot can be told apart from a bot removed from the chat.
 		delete(creds, "bot_token")
 		creds["bot"] = "shared"
+		creds["bot_id"], creds["bot_username"] = strconv.FormatInt(bot.ID, 10), bot.Username
 	}
 	name := c.Title
 	if name == "" {
@@ -238,12 +246,57 @@ func TelegramBot() (token, username string) {
 	return telegramShared.token, telegramShared.username
 }
 
-func telegramToken(c Credentials) string {
+// telegramToken is the token a channel posts with; for a chat connected through the server's bot, an error when
+// the server's bot is not the one it was connected through any more.
+func telegramToken(c Credentials) (string, error) {
 	if c["bot"] == "shared" {
-		token, _ := TelegramBot()
-		return token
+		token, username := TelegramBot()
+		return token, telegramBotChanged(c, token, username)
 	}
-	return c["bot_token"]
+	return c["bot_token"], nil
+}
+
+// telegramBotID is the bot's numeric id, the part of its token before the colon ("" for a malformed token).
+func telegramBotID(token string) string {
+	id, _, ok := strings.Cut(token, ":")
+	if _, err := strconv.ParseInt(id, 10, 64); !ok || err != nil {
+		return ""
+	}
+	return id
+}
+
+// telegramBotChanged: a chat connected through the server's bot, when the server now runs another bot (the
+// operator set a new PROVIDER_TELEGRAM_BOT_TOKEN for a different bot). The new bot is usually not in the chat, so
+// Telegram would only say "chat not found"; this names both bots instead. Chats connected before the bot was
+// recorded (no bot_id, no bot_username) and a server whose bot is not ready yet are not judged.
+func telegramBotChanged(c map[string]string, token, username string) error {
+	if c["bot"] != "shared" || token == "" {
+		return nil
+	}
+	storedID, storedName := c["bot_id"], c["bot_username"]
+	changed := false
+	switch id := telegramBotID(token); {
+	case storedID != "" && id != "":
+		changed = storedID != id
+	case storedName != "" && username != "":
+		changed = !strings.EqualFold(storedName, username)
+	}
+	if !changed {
+		return nil
+	}
+	was, now := "another bot", "a different bot"
+	if storedName != "" {
+		was = "@" + storedName
+	}
+	if username != "" {
+		now = "@" + username
+	}
+	add := "it"
+	if username != "" {
+		add = now
+	}
+	return &Failure{Kind: ErrReauth, Msg: "Telegram: this channel was connected through " + was + ", but this server now posts as " +
+		now + ": add " + add + " to the chat and connect it again"}
 }
 
 // TelegramMe asks Telegram whose token this is: the bot's @username (without the @) and its display name.
@@ -263,10 +316,11 @@ type TelegramCommand struct {
 	ChatID    int64
 	MessageID int64
 	Code      string
+	Bot       string // the bot it is addressed to (/connect@bot CODE), without the @; "" for any bot
 }
 
 // /connect CODE, or /connect@thebot CODE as Telegram writes it in groups with several bots.
-var telegramConnect = regexp.MustCompile(`(?i)^/connect(?:@\w+)?\s+([a-z0-9]{4,12})\s*$`)
+var telegramConnect = regexp.MustCompile(`(?i)^/connect(?:@(\w+))?\s+([a-z0-9]{4,12})\s*$`)
 
 // TelegramCommands waits up to `wait` seconds for the bot's new messages (getUpdates, long polling) and returns
 // the /connect commands among them, with the offset that confirms them all.
@@ -299,7 +353,7 @@ func TelegramCommands(ctx context.Context, token string, offset int64, wait int)
 			continue
 		}
 		if g := telegramConnect.FindStringSubmatch(strings.TrimSpace(m.Text)); g != nil {
-			out = append(out, TelegramCommand{ChatID: m.Chat.ID, MessageID: m.MessageID, Code: strings.ToUpper(g[1])})
+			out = append(out, TelegramCommand{ChatID: m.Chat.ID, MessageID: m.MessageID, Code: strings.ToUpper(g[2]), Bot: g[1]})
 		}
 	}
 	return out, offset, nil
@@ -313,9 +367,11 @@ func TelegramDelete(ctx context.Context, token string, chatID, messageID int64) 
 // SetTelegramAPI points the Bot API somewhere else: a local Bot API server, or a test's.
 func SetTelegramAPI(base string) { telegramAPI = base }
 
-// TelegramSay sends a short note into a chat (why a /connect did not work).
+// TelegramSay sends a short note into a chat (why a /connect did not work). The text is Telegram HTML (<b>, <i>,
+// <code>, line breaks as \n): anything from outside goes through html.EscapeString first.
 func TelegramSay(ctx context.Context, token string, chatID int64, text string) {
-	_ = telegramCall(ctx, token, "sendMessage", map[string]any{"chat_id": chatID, "text": text}, nil)
+	_ = telegramCall(ctx, token, "sendMessage", map[string]any{"chat_id": chatID, "text": text, "parse_mode": "HTML",
+		"link_preview_options": map[string]any{"is_disabled": true}}, nil)
 }
 
 // telegramChatRef accepts @name, a bare name, a t.me link or a numeric id.
@@ -352,7 +408,11 @@ type telegramMessage struct {
 }
 
 func (t Telegram) send(ctx context.Context, c Credentials, p PostContent, s Settings, replyTo string) (Result, error) {
-	token, chat := telegramToken(c), c["chat_id"]
+	token, err := telegramToken(c)
+	if err != nil {
+		return Result{}, err
+	}
+	chat := c["chat_id"]
 	if token == "" && c["bot"] == "shared" && chat != "" && strings.TrimSpace(getenv(ctx, "PROVIDER_TELEGRAM_BOT_TOKEN")) != "" {
 		// The server has a bot, but it is ready only once Telegram answered at start: nothing is wrong with the
 		// channel, so it is not marked for reconnecting; the post is tried again.
@@ -380,7 +440,6 @@ func (t Telegram) send(ctx context.Context, c Credentials, p PostContent, s Sett
 	}
 
 	var id int64
-	var err error
 	switch len(p.Media) {
 	case 0:
 		params["text"] = p.Text

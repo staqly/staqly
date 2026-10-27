@@ -13,16 +13,24 @@ function Badge({
   status,
   title,
   className,
+  describedBy,
 }: {
   meta: StatusMeta
   status: string
   title?: string
   className?: string
+  /** The id of text that explains the status (why a channel needs reconnecting), read with it. */
+  describedBy?: string
 }) {
   const spin = status === 'publishing'
 
   return (
-    <span data-status={status} title={title || meta.description} className={cn(PILL, meta.badge, className)}>
+    <span
+      data-status={status}
+      title={title || meta.description}
+      aria-describedby={describedBy}
+      className={cn(PILL, meta.badge, className)}
+    >
       <meta.Icon aria-hidden className={cn('size-3', spin && 'animate-spin')} />
       {meta.label}
     </span>
@@ -52,10 +60,20 @@ export function ChannelStatusBadge({
   status,
   title,
   className,
+  describedBy,
 }: {
   status: string
   title?: string
   className?: string
+  describedBy?: string
 }) {
-  return <Badge meta={channelStatusMeta(status)} status={status} title={title} className={className} />
+  return (
+    <Badge
+      meta={channelStatusMeta(status)}
+      status={status}
+      title={title}
+      className={className}
+      describedBy={describedBy}
+    />
+  )
 }

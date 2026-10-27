@@ -22,7 +22,8 @@ token:
 3. Send the command in that chat. The bot checks it may post there, the chat becomes a channel (with the chat's title and
    picture), and the bot deletes the command (or, when it may not delete, asks you to). The dashboard sees it within a few seconds.
 
-A code lasts 10 minutes; a wrong or old one gets an answer in the chat, and once it runs out the dashboard offers
+A code lasts 10 minutes and only works with the staqly that showed it; a wrong or old one gets an answer in the
+chat (a command addressed to another bot is left to that bot), and once it runs out the dashboard offers
 **New code**. API: `POST /v1/channels/telegram/connect`
 gives the code, `GET /v1/channels/telegram/connect/{code}` says when it is connected. **Use a bot of your own
 instead** under the steps connects the way below.
@@ -32,8 +33,9 @@ instead** under the steps connects the way below.
 Make a bot with [@BotFather](https://t.me/BotFather) (`/newbot`), put its token in the server's environment and
 restart: `PROVIDER_TELEGRAM_BOT_TOKEN=123456789:AAH...`. The server reads the bot's messages by polling Telegram
 (`getUpdates`), so it needs no public address; one server per bot (Telegram refuses a second one polling the same
-token). Channels connected through it never store the token: a new token for the same bot keeps them working. Without
-the token, they turn **Needs reconnect**: connect those chats with a bot of your own.
+token). Channels connected through it never store the token, only which bot it was: a new token for the same bot keeps
+them working. A token for a different bot turns them **Needs reconnect**, naming both bots: add the new bot to each chat
+and connect it again. Without the token, they turn **Needs reconnect** too: connect those chats with a bot of your own.
 
 ## Connect with your own bot
 

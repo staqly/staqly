@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"errors"
+	"html"
 	"net/http"
 	"strconv"
 	"strings"
@@ -163,9 +164,13 @@ func (s *Service) runTelegramBot(ctx context.Context) {
 
 // telegramConnectChat connects the chat a /connect came from to the workspace whose code it names.
 func (s *Service) telegramConnectChat(ctx context.Context, token string, c providers.TelegramCommand) {
+	_, bot := s.telegramBot()
+	if c.Bot != "" && bot != "" && !strings.EqualFold(c.Bot, bot) {
+		return // /connect@otherbot CODE: another bot's command (another staqly's, often), not ours to answer
+	}
 	r, err := s.Q.FindTelegramCode(ctx, db.FindTelegramCodeParams{Code: c.Code, ExpiresAt: s.now()})
 	if errors.Is(err, sql.ErrNoRows) {
-		providers.TelegramSay(ctx, token, c.ChatID, "This code is not valid any more. Get a new one in staqly: Channels, Add channel, Telegram.")
+		providers.TelegramSay(ctx, token, c.ChatID, telegramCodeUnknown)
 		return
 	}
 	if err != nil {
@@ -190,12 +195,40 @@ func (s *Service) telegramConnectChat(ctx context.Context, token string, c provi
 	if err != nil {
 		msg := connectError(err).Error()
 		_ = s.W.FinishTelegramCode(ctx, db.FinishTelegramCodeParams{Code: r.Code, ChannelID: "", Error: truncateRunes(msg, 500)})
-		providers.TelegramSay(ctx, token, c.ChatID, "Could not connect this chat: "+msg)
+		providers.TelegramSay(ctx, token, c.ChatID, telegramConnectFailed(err))
 		return
 	}
 	_ = s.W.FinishTelegramCode(ctx, db.FinishTelegramCodeParams{Code: r.Code, ChannelID: ch.ID, Error: ""})
-	// The command did its job: it goes, so the chat stays clean; a bot that may not delete says so.
+	// The command did its job: it goes, so the chat stays clean (a channel's subscribers see every message, so
+	// the bot says nothing when it could tidy up); a bot that may not delete says so.
 	if providers.TelegramDelete(ctx, token, c.ChatID, c.MessageID) != nil {
-		providers.TelegramSay(ctx, token, c.ChatID, "Connected to staqly. I may not delete messages here, so please remove the /connect message yourself.")
+		providers.TelegramSay(ctx, token, c.ChatID, telegramConnectedKeepCommand)
 	}
+}
+
+// What the bot says in the chat, in Telegram HTML: a bold first line, then short plain steps.
+const (
+	telegramCodeUnknown = "<b>This code doesn't work here.</b>\n" +
+		"It has expired (a code lasts 10 minutes), was used already, or comes from another staqly: " +
+		"a code only works with the staqly that showed it.\n\n" +
+		"To get a new one:\n" +
+		"1. Open staqly and go to <b>Channels</b>.\n" +
+		"2. Choose <b>Add channel</b>, then <b>Telegram</b>.\n" +
+		"3. Send the command it shows here."
+	telegramConnectedKeepCommand = "<b>Connected to staqly.</b>\n" +
+		"I can't delete messages here, so please delete the /connect message yourself."
+)
+
+// telegramConnectFailed says why the chat was not connected (most often a right the bot lacks) and what next.
+func telegramConnectFailed(err error) string {
+	why := connectError(err).Error()
+	if ve := (*providers.ValidationError)(nil); errors.As(err, &ve) {
+		why = ve.Msg // "make @bot an administrator...", without the form's field name
+	}
+	why = strings.TrimRight(strings.TrimSpace(why), ".")
+	if why != "" {
+		why = strings.ToUpper(why[:1]) + why[1:] + ".\n\n"
+	}
+	return "<b>This chat is not connected yet.</b>\n" + html.EscapeString(why) +
+		"Fix that, then send the same /connect command again (the code lasts 10 minutes)."
 }

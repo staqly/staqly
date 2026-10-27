@@ -16,11 +16,12 @@ import {
   Settings2,
   Share2,
   Trash2,
+  TriangleAlert,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { ConnectErrorDialog } from '@/components/channels/connect-error-dialog'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
@@ -59,6 +60,7 @@ import { namedErrorToast, namedToast, toastApiError } from '@/lib/notify'
 import { ProviderIcon } from '@/lib/providers'
 import { qk, refetchPostListsFromStart, useChannelGroups, useChannels, useProviders } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 import { ChannelAvatar } from './channel-avatars'
@@ -271,6 +273,57 @@ function setChannelDragImage(e: React.DragEvent, channel: Channel) {
   setDragChip(e, channel.name, 'round')
 }
 
+/**
+ * Why a channel needs reconnecting: a small muted note with a warning icon, two lines at most. The full text shows
+ * on hover (title) and with More when it is cut; the status badge names it as its description, so a screen reader
+ * reads it with the status.
+ */
+function ChannelErrorNote({ id, message }: { id: string; message: string }) {
+  const [open, setOpen] = useState(false)
+  const [cut, setCut] = useState(false)
+  const text = useRef<HTMLSpanElement>(null)
+
+  // Whether the two lines hide part of the text, again when the row changes width (phones, a resized window).
+  useEffect(() => {
+    const el = text.current
+
+    if (!el || open || typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    const measure = () => setCut(el.scrollHeight > el.clientHeight + 1)
+    const watch = new ResizeObserver(measure)
+
+    watch.observe(el)
+
+    return () => watch.disconnect()
+  }, [open])
+
+  return (
+    <span
+      title={message}
+      data-testid="channel-error"
+      className="mt-1.5 flex items-start gap-1.5 rounded-md border bg-muted/50 px-2 py-1 text-xs text-muted-foreground"
+    >
+      <TriangleAlert aria-hidden className={cn('mt-px size-3.5 shrink-0', TONES.warning.text)} />
+      <span id={id} ref={text} className={cn('min-w-0 flex-1 wrap-anywhere', !open && 'line-clamp-2')}>
+        {message}
+      </span>
+      {(cut || open) && (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen(!open)}
+          className="shrink-0 rounded-sm font-medium text-foreground underline-offset-2 outline-ring hover:underline focus-visible:outline-1 pointer-coarse:-my-3 pointer-coarse:py-3"
+        >
+          {open ? 'Less' : 'More'}
+        </button>
+      )}
+    </span>
+  )
+}
+
 /** What a row can ask the page for; one stable object for every row. */
 interface RowActions {
   settings: (c: Channel) => void
@@ -304,6 +357,8 @@ const ChannelRow = memo(function ChannelRow({
 }) {
   const [dragging, setDragging] = useState(false)
   const profile = channel.profile_url ? safeHttpUrl(channel.profile_url) : null
+  const noteId = useId()
+  const noteShown = channel.status === 'needs_reconnect' && !!channel.last_error
 
   return (
     // Name and platform on the left (two lines), the post activity in its own column, then the menu. Phones put the
@@ -330,7 +385,11 @@ const ChannelRow = memo(function ChannelRow({
       <span className="min-w-0">
         <span className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium">{channel.name}</span>
-          <ChannelStatusBadge status={channel.status} title={channel.last_error || undefined} />
+          <ChannelStatusBadge
+            status={channel.status}
+            title={(!noteShown && channel.last_error) || undefined}
+            describedBy={noteShown ? noteId : undefined}
+          />
         </span>
         <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
           {/* The avatar already carries the platform mark: the handle is enough (the platform name without one). */}
@@ -350,9 +409,7 @@ const ChannelRow = memo(function ChannelRow({
             </Button>
           )}
         </span>
-        {channel.last_error && channel.status === 'needs_reconnect' && (
-          <span className="mt-0.5 block text-xs text-destructive wrap-anywhere">{channel.last_error}</span>
-        )}
+        {noteShown && <ChannelErrorNote id={noteId} message={channel.last_error} />}
       </span>
       <div className="max-sm:col-start-2 max-sm:row-start-2">
         <ChannelActivityLine activity={channel.activity} />
