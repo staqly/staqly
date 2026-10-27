@@ -42,7 +42,7 @@ func init() {
 	limits := Limits{MaxChars: 500, MaxMedia: 4, MediaKinds: []string{"image", "video"}}
 	Register(Mastodon{NewBase("mastodon", "Mastodon", AuthOAuth2, limits).WithSettings(settings...)}, StatusAvailable)
 	tok := NewBase("mastodon_token", "Mastodon (access token)", AuthToken, limits).WithSettings(settings...)
-	tok.docs = "https://docs.staqly.ai/channels/mastodon#with-an-access-token"
+	tok.docs = "https://docs.staqly.ai/channels/mastodon#channels-connected-with-an-access-token"
 	Register(Mastodon{tok}, StatusAvailable)
 }
 
