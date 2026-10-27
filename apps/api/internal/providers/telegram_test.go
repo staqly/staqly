@@ -327,6 +327,84 @@ func TestTelegramSharedBotSetWhilePublishing(t *testing.T) {
 	wg.Wait()
 }
 
+// A chat connected through the server's bot records that bot (its id and @username, not its token).
+func TestTelegramSharedBotIsRecorded(t *testing.T) {
+	useFakeTelegram(t)
+	t.Cleanup(func() { SetTelegramBot("", "") })
+	SetTelegramBot("123:abc", "janedoe_bot")
+	creds, _, err := Telegram{}.Connect(context.Background(), map[string]string{"bot": "shared", "chat": "-1001234567890"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds["bot"] != "shared" || creds["bot_id"] != "42" || creds["bot_username"] != "janedoe_bot" || creds["bot_token"] != "" {
+		t.Fatalf("creds %v", creds)
+	}
+	for k, v := range creds {
+		if strings.Contains(v, "abc") {
+			t.Fatalf("%s holds the token: %q", k, v)
+		}
+	}
+}
+
+// Was a bug: the operator gave the server another bot (a new PROVIDER_TELEGRAM_BOT_TOKEN for a different bot), and
+// chats connected through the old one failed with Telegram's "chat not found", which never said the bot changed.
+// Publishing and checking now name both bots; the same bot under a new token, and chats connected before the bot
+// was recorded, carry on as before.
+func TestTelegramSharedBotChanged(t *testing.T) {
+	f := useFakeTelegram(t)
+	t.Cleanup(func() { SetTelegramBot("", "") })
+	SetTelegramBot("123:abc", "janedoe_dev_bot")
+	chat := Credentials{"bot": "shared", "chat": "-1001234567890", "chat_id": "-1001234567890", "chat_username": "janedoe_news"}
+	with := func(kv ...string) Credentials {
+		c := Credentials{}
+		for k, v := range chat {
+			c[k] = v
+		}
+		for i := 0; i < len(kv); i += 2 {
+			c[kv[i]] = kv[i+1]
+		}
+		return c
+	}
+	want := "Telegram: this channel was connected through @janedoe_bot, but this server now posts as @janedoe_dev_bot: " +
+		"add @janedoe_dev_bot to the chat and connect it again"
+
+	for name, c := range map[string]Credentials{
+		"by id":       with("bot_id", "77", "bot_username", "janedoe_bot"),
+		"by username": with("bot_username", "janedoe_bot"),
+	} {
+		f.calls = nil
+		_, err := Telegram{}.Publish(context.Background(), c, PostContent{Text: "Hi"}, Settings{})
+		if !errors.Is(err, ErrReauth) || err.Error() != want || len(f.calls) != 0 {
+			t.Errorf("publish %s: %v (calls %v)", name, err, f.calls)
+		}
+		// Checking the channel (TestChannel passes the stored credentials to Connect) says the same.
+		if _, _, err := (Telegram{}).Connect(context.Background(), c); !errors.Is(err, ErrReauth) || err.Error() != want {
+			t.Errorf("check %s: %v", name, err)
+		}
+	}
+
+	for name, c := range map[string]Credentials{
+		"same bot, new token":   with("bot_id", "123", "bot_username", "janedoe_bot_renamed"),
+		"same username":         with("bot_username", "JaneDoe_Dev_Bot"),
+		"connected before this": chat,
+	} {
+		if r, err := (Telegram{}).Publish(context.Background(), c, PostContent{Text: "Hi"}, Settings{}); err != nil || r.ExternalID != "55" {
+			t.Errorf("publish %s: %+v %v", name, r, err)
+		}
+	}
+
+	// The old bot's name unknown: the message still says what to do.
+	err := telegramBotChanged(with("bot_id", "77"), "123:abc", "janedoe_dev_bot")
+	if err == nil || !strings.Contains(err.Error(), "through another bot, but this server now posts as @janedoe_dev_bot") {
+		t.Fatalf("unknown old bot: %v", err)
+	}
+	// A bot's own channels are not judged, nor a server whose bot is not ready yet.
+	if telegramBotChanged(Credentials{"bot_token": "123:abc", "bot_id": "77"}, "123:abc", "x") != nil ||
+		telegramBotChanged(with("bot_id", "77"), "", "") != nil {
+		t.Fatal("judged a channel it should not")
+	}
+}
+
 // What the Bot API answers outside the usual: a group that became a supergroup needs reconnecting (new id), an
 // outage page that is not JSON is tried again, a 2xx that can't be read is an error.
 func TestTelegramUnusualAnswers(t *testing.T) {
@@ -375,7 +453,7 @@ func TestTelegramConnectCommandParsing(t *testing.T) {
 	} {
 		got := ""
 		if g := telegramConnect.FindStringSubmatch(strings.TrimSpace(text)); g != nil {
-			got = g[1]
+			got = g[2]
 		}
 		if got != want {
 			t.Errorf("%q: %q, want %q", text, got, want)

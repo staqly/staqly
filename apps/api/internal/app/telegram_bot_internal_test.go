@@ -85,14 +85,39 @@ func TestTelegramSharedBotConnects(t *testing.T) {
 	if err != nil || row.Name != "News" || row.Handle != "@news" || creds["bot"] != "shared" || creds["bot_token"] != "" || creds["chat_id"] != "-100123" {
 		t.Fatalf("channel %+v %v %v", row, creds, err)
 	}
-	if len(fake.said) != 1 || !strings.Contains(fake.said[0], "remove the /connect message yourself") {
+	if len(fake.said) != 1 || !strings.Contains(fake.said[0], "delete the /connect message yourself") {
 		t.Fatalf("said %v", fake.said)
 	}
 
 	// A used or unknown code is turned down in the chat.
 	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 10, Code: code.Code})
-	if len(fake.said) != 2 || !strings.Contains(fake.said[1], "not valid any more") {
+	if len(fake.said) != 2 || !strings.Contains(fake.said[1], "doesn't work here") ||
+		!strings.Contains(fake.said[1], "only works with the staqly that showed it") || !strings.HasPrefix(fake.said[1], "<b>") {
 		t.Fatalf("said %v", fake.said)
+	}
+	// The channel records which bot it was connected through (never its token).
+	if creds["bot_id"] != "42" || creds["bot_username"] != "staqly_test_bot" {
+		t.Fatalf("bot not recorded: %v", creds)
+	}
+
+	// Was confusing: a /connect addressed to another bot (another staqly's) got "this code is not valid" from ours.
+	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 11, Code: "ZZZ234", Bot: "staqly_dev_bot"})
+	if len(fake.said) != 2 {
+		t.Fatalf("answered another bot's command: %v", fake.said)
+	}
+	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 12, Code: "ZZZ234", Bot: "Staqly_Test_Bot"})
+	if len(fake.said) != 3 || !strings.Contains(fake.said[2], "doesn't work here") {
+		t.Fatalf("its own command: %v", fake.said)
+	}
+}
+
+// Why a chat did not connect reads as one plain sentence with the next step, in Telegram HTML (escaped).
+func TestTelegramConnectFailedReply(t *testing.T) {
+	got := telegramConnectFailed(&providers.ValidationError{Field: "chat", Msg: "make @bot an administrator of the channel, allowed to post <messages>"})
+	want := "<b>This chat is not connected yet.</b>\nMake @bot an administrator of the channel, allowed to post &lt;messages&gt;.\n\n" +
+		"Fix that, then send the same /connect command again (the code lasts 10 minutes)."
+	if got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
 	}
 }
 
@@ -135,7 +160,7 @@ func TestTelegramConnectCodeExpiresAndStaysInItsWorkspace(t *testing.T) {
 			t.Fatalf("an expired code connected %+v", c)
 		}
 	}
-	if len(fake.said) != 1 || !strings.Contains(fake.said[0], "not valid any more") {
+	if len(fake.said) != 1 || !strings.Contains(fake.said[0], "doesn't work here") {
 		t.Fatalf("said %v", fake.said)
 	}
 }
