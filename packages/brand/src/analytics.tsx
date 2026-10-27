@@ -18,7 +18,9 @@ export function Analytics() {
 
     void import('posthog-js').then(({ default: posthog }) => {
       posthog.init(POSTHOG_TOKEN, {
-        api_host: 'https://eu.i.posthog.com',
+        // PostHog's managed reverse proxy (EU), so ad blockers that drop *.posthog.com let the events through.
+        api_host: 'https://relay.staqly.ai',
+        ui_host: 'https://eu.posthog.com',
         defaults: '2026-08-30',
         cookieless_mode: 'always',
         disable_session_recording: true,
