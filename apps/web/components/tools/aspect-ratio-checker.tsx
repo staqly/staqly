@@ -2,7 +2,7 @@
 
 import { ProviderTile } from '@staqly/brand/providers'
 import { ImageUp, Lightbulb, Ratio } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
+import { useId, useRef, useState, type DragEvent } from 'react'
 
 import { CopyButton, fieldClass } from '@/components/tools/shared'
 import {
@@ -17,7 +17,24 @@ import {
   type Placement,
 } from '@/lib/aspect-ratio'
 
-type Media = { url: string; kind: 'image' | 'video'; name: string }
+// A picture is shown from its pixels (drawn on a canvas, kept as a data: URL): no address made from the person's file
+// goes into the page.
+type Media = { kind: 'image' | 'video'; name: string; picture?: string }
+
+/** The preview's copy of a picture, at most this many pixels on its long side (the frames are small). */
+const PREVIEW_EDGE = 800
+
+function previewOf(bmp: ImageBitmap): string {
+  const k = Math.min(1, PREVIEW_EDGE / Math.max(bmp.width, bmp.height))
+  const canvas = document.createElement('canvas')
+
+  canvas.width = Math.max(1, Math.round(bmp.width * k))
+  canvas.height = Math.max(1, Math.round(bmp.height * k))
+  canvas.getContext('2d')?.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+
+  return canvas.toDataURL('image/png')
+}
+
 type Mode = 'fill' | 'fit'
 
 /** The picture (or a placeholder for a video or typed size) in a placement's frame, drawn in SVG so it scales exactly. */
@@ -36,12 +53,11 @@ function Preview({ media, w, h, p, mode }: { media: Media | null; w: number; h: 
         : { x: 0, y: 0, fw: h * target, fh: h }
   const view = mode === 'fill' ? { vw: w, vh: h } : { vw: frame.fw, vh: frame.fh }
   const img = mode === 'fill' ? { ix: 0, iy: 0 } : { ix: (frame.fw - w) / 2, iy: (frame.fh - h) / 2 }
-  const picture =
-    media?.kind === 'image' ? (
-      <image href={media.url} x={img.ix} y={img.iy} width={w} height={h} preserveAspectRatio="none" />
-    ) : (
-      <rect x={img.ix} y={img.iy} width={w} height={h} fill={`url(#${id}-g)`} />
-    )
+  const picture = media?.picture ? (
+    <image href={media.picture} x={img.ix} y={img.iy} width={w} height={h} preserveAspectRatio="none" />
+  ) : (
+    <rect x={img.ix} y={img.iy} width={w} height={h} fill={`url(#${id}-g)`} />
+  )
 
   return (
     <svg viewBox={`0 0 ${view.vw} ${view.vh}`} className="size-full" preserveAspectRatio="xMidYMid meet" aria-hidden>
@@ -90,16 +106,6 @@ export function AspectRatioChecker() {
   const ratio = valid ? w / h : 1
   const near = valid ? closest(ratio, w) : null
 
-  // The object URL lives as long as the file is shown.
-  useEffect(
-    () => () => {
-      if (media) {
-        URL.revokeObjectURL(media.url)
-      }
-    },
-    [media],
-  )
-
   function load(file: File | undefined) {
     const pick = ++picks.current
 
@@ -117,16 +123,12 @@ export function AspectRatioChecker() {
       return
     }
 
-    const url = URL.createObjectURL(file)
-    const done = (nw: number, nh: number) => {
+    const done = (nw: number, nh: number, picture?: string) => {
       if (pick !== picks.current) {
-        URL.revokeObjectURL(url)
-
         return
       }
 
       if (!nw || !nh) {
-        URL.revokeObjectURL(url)
         setError('Could not read the size of this file.')
 
         return
@@ -134,21 +136,36 @@ export function AspectRatioChecker() {
 
       setWidth(String(nw))
       setHeight(String(nh))
-      setMedia({ url, kind, name: file.name })
+      setMedia({ kind, name: file.name, picture })
     }
 
     if (kind === 'image') {
-      const el = new Image()
+      void createImageBitmap(file)
+        .then((bmp) => {
+          const picture = pick === picks.current ? previewOf(bmp) : undefined
 
-      el.addEventListener('load', () => done(el.naturalWidth, el.naturalHeight))
-      el.addEventListener('error', () => done(0, 0))
-      el.src = url
+          done(bmp.width, bmp.height, picture)
+          bmp.close()
+        })
+        .catch(() => done(0, 0))
     } else {
+      // A video's size needs the browser's player: it reads the file once and lets it go.
+      const url = URL.createObjectURL(file)
       const el = document.createElement('video')
+      let read = false
+      const measured = (nw: number, nh: number) => {
+        if (read) {
+          return
+        }
+
+        read = true
+        URL.revokeObjectURL(url)
+        done(nw, nh)
+      }
 
       el.preload = 'metadata'
-      el.addEventListener('loadedmetadata', () => done(el.videoWidth, el.videoHeight))
-      el.addEventListener('error', () => done(0, 0))
+      el.addEventListener('loadedmetadata', () => measured(el.videoWidth, el.videoHeight))
+      el.addEventListener('error', () => measured(0, 0))
       el.src = url
     }
   }

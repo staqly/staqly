@@ -547,14 +547,11 @@ function AiForm({ ctx, op, picture }: { ctx: PanelCtx; op: AIOperation; picture?
   const [prompt, setPrompt] = useState('')
   const [preparing, setPreparing] = useState(false)
   // The picture the mask is painted on (the mask matches its pixels, so it is also what is sent).
-  const [source, setSource] = useState<{ url: string; width: number; height: number; blob: Blob } | null>(null)
+  const [source, setSource] = useState<{ width: number; height: number; blob: Blob } | null>(null)
   const [painting, setPainting] = useState(false)
   const [mask, setMask] = useState<Blob | null>(null)
   const copy = AI_OPS[op.id]
   const needsPrompt = op.prompt === 'required'
-
-  // The picture shown for painting is a local copy: let it go when done.
-  useEffect(() => () => void (source && URL.revokeObjectURL(source.url)), [source])
 
   const paint = () => {
     if (source) {
@@ -570,7 +567,7 @@ function AiForm({ ctx, op, picture }: { ctx: PanelCtx; op: AIOperation; picture?
     setPreparing(true)
     void pictureOf(picture, 2048)
       .then((p) => {
-        setSource({ ...p, url: URL.createObjectURL(p.blob) })
+        setSource(p)
         setPainting(true)
       })
       .catch((e: unknown) => toast.error('Could not open the photo', { description: errorMessage(e) }))
@@ -682,12 +679,10 @@ const LOCAL_COPY: Record<LocalOp, { hint: string; model: string; run: string; do
 
 /** Removing an object or upscaling on this device (components/design/local-ai.ts): free, nothing uploaded. */
 function LocalForm({ ctx, op, picture }: { ctx: PanelCtx; op: LocalOp; picture: ImageEl }) {
-  const [source, setSource] = useState<{ url: string; width: number; height: number; blob: Blob } | null>(null)
+  const [source, setSource] = useState<{ width: number; height: number; blob: Blob } | null>(null)
   const [painting, setPainting] = useState(false)
   const [mask, setMask] = useState<Blob | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-
-  useEffect(() => () => void (source && URL.revokeObjectURL(source.url)), [source])
 
   const paint = () => {
     if (source) {
@@ -699,7 +694,7 @@ function LocalForm({ ctx, op, picture }: { ctx: PanelCtx; op: LocalOp; picture: 
     setBusy('Opening the photo')
     void pictureOf(picture, 2048)
       .then((p) => {
-        setSource({ ...p, url: URL.createObjectURL(p.blob) })
+        setSource(p)
         setPainting(true)
       })
       .catch((e: unknown) => toast.error('Could not open the photo', { description: errorMessage(e) }))

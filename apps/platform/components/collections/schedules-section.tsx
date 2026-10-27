@@ -31,7 +31,7 @@ import { api, type Collection, type Schedule, type ScheduleInput } from '@/lib/a
 import { apiFieldErrors } from '@/lib/form-errors'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { qk, useChannels, useSchedules, useSession } from '@/lib/queries'
+import { qk, refetchPostListsFromStart, useChannels, useSchedules, useSession } from '@/lib/queries'
 import { formatSchedule } from '@/lib/schedule'
 import { cn } from '@/lib/utils'
 
@@ -549,7 +549,8 @@ function ScheduleRow({
     mutationFn: () => api.runSchedule(schedule.id),
     onSuccess: (s) => {
       void refresh()
-      void qc.invalidateQueries({ queryKey: qk.postsAll })
+      // Every list from its first page: invalidating would reload each loaded page one by one.
+      refetchPostListsFromStart(qc)
       namedToast(s.name, 'ran', s.last_result || undefined)
     },
     onError: (e) => toastApiError(e),

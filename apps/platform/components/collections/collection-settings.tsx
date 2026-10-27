@@ -27,7 +27,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { api, ApiError, type Collection } from '@/lib/api'
 import { fieldsOf, focusFirstInvalid, formApiError, setFormApiError } from '@/lib/form-errors'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { qk, useSession } from '@/lib/queries'
+import { qk, refetchPostListsFromStart, useSession } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 import { zodResolver } from '@/lib/zod'
@@ -228,7 +228,8 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
     onSuccess: () => {
       qc.removeQueries({ queryKey: qk.collection(collection.id) })
       void qc.invalidateQueries({ queryKey: qk.collectionsAll })
-      void qc.invalidateQueries({ queryKey: qk.postsAll })
+      // Every list from its first page: invalidating would reload each loaded page one by one.
+      refetchPostListsFromStart(qc)
       namedToast(collection.name, 'was deleted', 'The collection and its posts are gone.')
       setDeleteOpen(false)
       onClose()

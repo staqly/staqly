@@ -3,9 +3,30 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import { describeSchedule, SchedulesSection } from '@/components/collections/schedules-section'
+import { usePostsInfinite } from '@/lib/queries'
 
-import { channel, collection, schedule } from './fixtures'
-import { mockApi, renderWithProviders } from './utils'
+import { channel, collection, post, schedule } from './fixtures'
+import { mockApi, renderWithProviders, type Call } from './utils'
+
+const LIST_QUERY = { collection_id: 'col_1' }
+
+/** A post list on screen with every page loaded (as after "Load more" twice). */
+function ThreePages() {
+  const { data, fetchNextPage } = usePostsInfinite(LIST_QUERY)
+
+  return (
+    <button type="button" data-testid="pages" onClick={() => void fetchNextPage()}>
+      {data?.pages.length ?? 0}
+    </button>
+  )
+}
+
+const pagedPosts = (c: Call) => {
+  const cursor = c.query.get('cursor') ?? ''
+  const next = { '': 'c2', c2: 'c3' }[cursor] ?? null
+
+  return { data: [post({ id: `pst_${cursor || 'c1'}` })], next_cursor: next }
+}
 
 describe('collection schedules', () => {
   it('describes a rule in words', () => {
@@ -43,6 +64,45 @@ describe('collection schedules', () => {
     await user.click(within(rows[1]!).getByRole('button', { name: 'Actions for Agent fill' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Run now' }))
     await waitFor(() => expect(api.find('POST', '/v1/schedules/sch_2/run')).toHaveLength(1))
+  })
+
+  it('running a schedule reloads post lists from their first page, not every loaded page', async () => {
+    const api = mockApi({
+      'GET /v1/schedules': { data: [schedule()] },
+      'GET /v1/channels': { data: [channel()] },
+      'GET /v1/posts': pagedPosts,
+      'POST /v1/schedules/sch_1/run': schedule({ last_result: 'Published one post' }),
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <>
+        <ThreePages />
+        <SchedulesSection collection={collection()} />
+      </>,
+      { mode: 'local' },
+    )
+    await waitFor(() => expect(screen.getByTestId('pages')).toHaveTextContent('1'))
+    await user.click(screen.getByTestId('pages'))
+    await waitFor(() => expect(screen.getByTestId('pages')).toHaveTextContent('2'))
+    await user.click(screen.getByTestId('pages'))
+    await waitFor(() => expect(screen.getByTestId('pages')).toHaveTextContent('3'))
+    const before = api.find('GET', '/v1/posts').length
+
+    await user.click(
+      within((await screen.findAllByTestId('schedule-row'))[0]!).getByRole('button', { name: /^Actions for/ }),
+    )
+    await user.click(await screen.findByRole('menuitem', { name: 'Run now' }))
+    await waitFor(() => expect(api.find('POST', '/v1/schedules/sch_1/run')).toHaveLength(1))
+    await waitFor(() => expect(api.find('GET', '/v1/posts').length).toBeGreaterThan(before))
+    await new Promise((r) => setTimeout(r, 50))
+    // One request (the first page); invalidating the list would have replayed all three.
+    expect(
+      api
+        .find('GET', '/v1/posts')
+        .slice(before)
+        .map((c) => c.query.get('cursor') ?? ''),
+    ).toEqual([''])
   })
 
   it('creates a recurring schedule from the drawer with times, weekdays, channels and an agent source', async () => {

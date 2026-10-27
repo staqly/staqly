@@ -1,7 +1,7 @@
 'use client'
 
 import { Brush, RotateCcw } from 'lucide-react'
-import { useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -34,10 +34,11 @@ export function MaskDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   /** The picture as it is sent (its pixels set the mask's size). */
-  picture: { url: string; width: number; height: number } | null
+  picture: { blob: Blob; width: number; height: number } | null
   title: string
   onDone: (mask: Blob) => void
 }) {
+  const backdrop = useRef<HTMLCanvasElement | null>(null)
   const shown = useRef<HTMLCanvasElement | null>(null)
   const mask = useRef<HTMLCanvasElement | null>(null)
   const last = useRef<{ x: number; y: number } | null>(null)
@@ -45,6 +46,33 @@ export function MaskDialog({
   const [painted, setPainted] = useState(false)
   const w = picture?.width ?? 1
   const h = picture?.height ?? 1
+  const blob = picture?.blob
+
+  // The picture is drawn on a canvas from its pixels (no blob: URL in an <img>, which code scanning treats as
+  // DOM text reinterpreted as HTML).
+  useEffect(() => {
+    if (!blob || typeof createImageBitmap !== 'function') {
+      return
+    }
+
+    let gone = false
+
+    void createImageBitmap(blob)
+      .then((bmp) => {
+        const c = backdrop.current?.getContext('2d')
+
+        if (!gone && c) {
+          c.drawImage(bmp, 0, 0, c.canvas.width, c.canvas.height)
+        }
+
+        bmp.close()
+      })
+      .catch(() => undefined)
+
+    return () => {
+      gone = true
+    }
+  }, [blob])
 
   // The mask starts black, the picture's size (the dialog mounts fresh for every painting).
   const maskCanvas = () => {
@@ -137,7 +165,7 @@ export function MaskDialog({
             className="relative mx-auto overflow-hidden rounded-md border bg-muted"
             style={{ aspectRatio: `${w} / ${h}`, width: `min(100%, calc(60vh * ${w / h}))` }}
           >
-            <img src={picture.url} alt="" className="absolute inset-0 size-full" />
+            <canvas ref={backdrop} width={w} height={h} aria-hidden className="absolute inset-0 size-full" />
             <canvas
               ref={shown}
               width={w}

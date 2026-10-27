@@ -613,7 +613,12 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
         setBaseline(d)
         dropDraft(draft)
         setDraft(`staqly-${kind}-draft:${p.id}`)
-        window.history.replaceState(null, '', `?project=${encodeURIComponent(p.id)}`)
+        // A reload keeps the way back (the post it came from) and the post that follows its saves.
+        window.history.replaceState(
+          null,
+          '',
+          `?project=${encodeURIComponent(p.id)}${params.back !== '/media' ? `&return=${encodeURIComponent(params.back)}` : ''}${params.fromComposer ? '&from=composer' : ''}`,
+        )
         toast.success(`Saved to Media as ${media.original_name}`, {
           description: 'Open it from Media to keep editing.',
         })
