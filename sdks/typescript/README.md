@@ -163,6 +163,12 @@ await staqly.channels.update(tg.id, { fields: { bot_token: "fresh" } });        
 await staqly.channels.test(tg.id);      // { ok, error, profile }: checks the credentials against the platform
 await staqly.channels.disable(tg.id);   // targets on it fail without trying; enable(id) turns it back on
 await staqly.channels.remove(tg.id);    // targets on it go with it
+await staqly.channels.options(pinterestChannelId, "board"); // [{ value, label }]: the choices of a remote setting
+
+// Telegram through the server's bot: add `bot` to the chat, send `command` there, then poll
+const code = await staqly.channels.telegramConnect();
+await staqly.channels.telegramConnectStatus(code.code); // status: waiting, connected or expired
+await staqly.providers.check("instagram");              // { ok, checks }: this server's setup for an OAuth platform
 ```
 
 A channel's `status` is `connected`, `needs_reconnect` (the platform refused the credentials; an
@@ -284,7 +290,25 @@ await staqly.media.upload(bytes, { filename: "a.png", contentType: "image/png" }
 const bytes = await staqly.media.download(media.id);        // Uint8Array
 const res = await staqly.media.downloadResponse(media.id);  // raw Response (streaming)
 staqly.media.url(media.id);                                 // absolute URL (needs auth)
+await staqly.media.replace(media.id, edited);               // same id, the edited content
 await staqly.media.delete(media.id);                        // posts that use it lose it
+```
+
+The design editor's projects and tools:
+
+```ts
+const project = await staqly.mediaProjects.create({ name: "Cover", file: design, source_ids: [media.id] });
+await staqly.mediaProjects.file(project.id);   // the design file's bytes; list, get, update, delete too
+
+const job = await staqly.ai.jobs.create({ operation: "remove_background", image: bytes });
+await staqly.ai.jobs.get(job.id);              // poll until status is succeeded, failed or canceled
+await staqly.ai.jobs.accept(job.id);           // keep the result in the library (result(id) = bytes, discard(id))
+await staqly.ai.text({ text, instruction: "Make it shorter" }); // the new text
+await staqly.ai.status();                      // which AI tools work, usage this month
+
+await staqly.design.setBrand({ colors: ["#16a34a"], fonts: ["Inter"], logos: [media.id] });
+const photos = await staqly.stock.photos({ query: "coffee" }); // Pixabay, 30 a page
+await staqly.stock.use(photos.data[0]!.id);    // into the library
 ```
 
 ## Analytics

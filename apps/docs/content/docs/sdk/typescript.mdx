@@ -401,6 +401,9 @@ Every method takes `RequestOptions` (`timeout`, `maxRetries`, `idempotencyKey`, 
 | `channels.update(id, { name?, settings?, status?, fields? })`, `channels.enable(id)`, `channels.disable(id)` | `PATCH /v1/channels/{id}` |
 | `channels.test(id)` | `POST /v1/channels/{id}/test` |
 | `channels.remove(id)` | `DELETE /v1/channels/{id}` |
+| `channels.options(id, key)` | `GET /v1/channels/{id}/options/{key}`: the choices of a remote setting (a Pinterest board...) |
+| `channels.telegramConnect({ group_id? })`, `channels.telegramConnectStatus(code)` | `POST /v1/channels/telegram/connect`, `GET .../{code}`: connect a Telegram chat through the server's bot |
+| `providers.check(id)` | `POST /v1/providers/{id}/check`: this server's setup for an OAuth platform |
 
 ### `schedules`
 
@@ -431,6 +434,23 @@ Every method takes `RequestOptions` (`timeout`, `maxRetries`, `idempotencyKey`, 
 | `keep(id)` | `POST /v1/media/{id}/keep` (keep this one of identical files) |
 | `organize({ ids, folder_id?, add_tags?, remove_tags? })` | `POST /v1/media/bulk` (move or tag up to 200 files) |
 | `folders()`, `createFolder({ name, parent_id? })`, `updateFolder(id, { name?, parent_id? })`, `deleteFolder(id)` | `/v1/media-folders` |
+| `replace(id, file, { filename? })` | `POST /v1/media/{id}/replace` (same id, the edited content) |
+
+### `mediaProjects`, `ai`, `design` and `stock`
+
+The design editor's projects and tools.
+
+| Method | Endpoint |
+|---|---|
+| `mediaProjects.list({ media? })`, `mediaProjects.get(id)`, `mediaProjects.file(id)` | `GET /v1/media-projects`, `GET /v1/media-projects/{id}`, `.../file` (the design file's bytes) |
+| `mediaProjects.create({ file, name?, source_ids?, output_id?, page_ids? })`, `mediaProjects.update(id, input)` | `POST /v1/media-projects`, `PUT /v1/media-projects/{id}` |
+| `mediaProjects.delete(id)` | `DELETE /v1/media-projects/{id}` |
+| `ai.status()` | `GET /v1/ai`: which AI tools work and this month's usage |
+| `ai.text({ text, instruction })` | `POST /v1/ai/text`: rewrite a short text |
+| `ai.jobs.create({ operation, prompt?, image?, mask?, ... })`, `ai.jobs.get(id)` | `POST /v1/ai/jobs` (202), `GET /v1/ai/jobs/{id}` |
+| `ai.jobs.result(id)`, `ai.jobs.accept(id)`, `ai.jobs.discard(id)` | `GET .../result` (bytes), `POST .../accept` (into the library), `DELETE /v1/ai/jobs/{id}` |
+| `design.brand()`, `design.setBrand({ colors, fonts, logos })` | `GET` / `PUT /v1/design/brand` |
+| `stock.photos({ query?, page? })`, `stock.use(id)` | `GET /v1/stock/photos`, `POST /v1/stock/photos/{id}/use` (into the library) |
 
 ### `events`
 

@@ -35,6 +35,8 @@ from .models import (
     AccessToken,
     AccessTokenRotated,
     Agent,
+    AIJob,
+    AIStatus,
     Alert,
     AlertDelivery,
     AlertTestResult,
@@ -46,9 +48,11 @@ from .models import (
     Channel,
     ChannelGroup,
     ChannelLink,
+    ChannelOption,
     ChannelTestResult,
     Collection,
     Delivery,
+    DesignBrand,
     DeviceLink,
     Event,
     EventPage,
@@ -61,6 +65,7 @@ from .models import (
     MediaFolder,
     MediaFolders,
     MediaPage,
+    MediaProject,
     MediaUse,
     Member,
     Plan,
@@ -72,6 +77,7 @@ from .models import (
     PostTargetInput,
     PreviewLink,
     Provider,
+    ProviderCheck,
     PurgeResult,
     Readiness,
     RecoveryKey,
@@ -82,8 +88,10 @@ from .models import (
     SessionRecovered,
     SetupStatus,
     StaqlyModel,
+    StockPage,
     Tag,
     TargetMetrics,
+    TelegramConnect,
     ThreadPart,
     Webhook,
     Whoami,
@@ -883,6 +891,29 @@ class MediaResource(_Resource):
         )
         return r.content
 
+    def replace(
+        self,
+        media_id: str,
+        file: FileInput,
+        *,
+        filename: str | None = None,
+        content_type: str | None = None,
+        request_options: RequestOptions | None = None,
+    ) -> Media:
+        """Replaces a file with its edit: the new file takes the original's name, alt text, folder and
+        tags, drafts that used the original use it instead, and the original moves to Deleted. A file
+        a scheduled or sent post uses answers 409. Needs ``media:write``, ``posts:write`` and
+        ``posts:delete``."""
+        r = self._http.request(
+            RequestSpec(
+                "POST",
+                f"/v1/media/{_q(media_id)}/replace",
+                files={"file": read_file(file, filename, content_type)},
+                options=_opts(request_options),
+            )
+        )
+        return _model(Media, r)
+
     def url(self, media_id: str) -> str:
         """Absolute URL of a file (requires the same authentication as the API)."""
         return self._http.url(f"/v1/media/{_q(media_id)}")
@@ -1541,6 +1572,42 @@ class Channels(_Resource):
         url: str = r.json()["url"]
         return url
 
+    def options(
+        self, channel_id: str, key: str, *, request_options: RequestOptions | None = None
+    ) -> builtins.list[ChannelOption]:
+        """The choices of a channel's remote setting (a settings field of kind ``remote``), read from
+        its platform: for Slack, ``channel`` lists the channels a post can go to."""
+        r = self._http.request(
+            RequestSpec(
+                "GET", f"/v1/channels/{_q(channel_id)}/options/{_q(key)}", options=_opts(request_options)
+            )
+        )
+        return _models(ChannelOption, r)
+
+    def telegram_connect(
+        self, *, group_id: str | None = None, request_options: RequestOptions | None = None
+    ) -> TelegramConnect:
+        """A code to connect a Telegram chat through the server's bot: add ``bot`` to the chat and send
+        ``command`` there; the code lasts 10 minutes. 409 when the server has no bot of its own."""
+        r = self._http.request(
+            RequestSpec(
+                "POST",
+                "/v1/channels/telegram/connect",
+                json=clean({"group_id": group_id}),
+                options=_opts(request_options),
+            )
+        )
+        return _model(TelegramConnect, r)
+
+    def telegram_connect_status(
+        self, code: str, *, request_options: RequestOptions | None = None
+    ) -> TelegramConnect:
+        """Whether the chat for a Telegram connect code is connected yet (``status``, ``channel_id``)."""
+        r = self._http.request(
+            RequestSpec("GET", f"/v1/channels/telegram/connect/{_q(code)}", options=_opts(request_options))
+        )
+        return _model(TelegramConnect, r)
+
 
 class Providers(_Resource):
     """The platform catalog: what staqly can publish to and what each platform needs."""
@@ -1573,6 +1640,272 @@ class Providers(_Resource):
         self._http.request(
             RequestSpec("DELETE", f"/v1/providers/{_q(provider)}/app", options=_opts(request_options))
         )
+
+    def check(self, provider: str, *, request_options: RequestOptions | None = None) -> ProviderCheck:
+        """Checks this server's setup for an OAuth platform without any connected account: app keys,
+        the return address to register, and whether the platform can reach media links. Needs
+        ``channels:manage``."""
+        r = self._http.request(
+            RequestSpec("POST", f"/v1/providers/{_q(provider)}/check", options=_opts(request_options))
+        )
+        return _model(ProviderCheck, r)
+
+
+# ------------------------------------------------------------------ design editor
+
+
+def _project_form(
+    name: str | None, source_ids: Sequence[str] | None, output_id: str | None, page_ids: Sequence[str] | None
+) -> dict[str, str]:
+    return clean(
+        {
+            "name": name,
+            "source_ids": None if source_ids is None else ",".join(source_ids),
+            "output_id": output_id,
+            "page_ids": None if page_ids is None else ",".join(page_ids),
+        }
+    )
+
+
+class MediaProjects(_Resource):
+    """The design editor's editable projects (a design as JSON, version 1)."""
+
+    def list(
+        self, *, media: str | None = None, request_options: RequestOptions | None = None
+    ) -> builtins.list[MediaProject]:
+        """Projects, newest first; ``media`` keeps the ones made from that file or saved as it."""
+        r = self._http.request(
+            RequestSpec("GET", "/v1/media-projects", params={"media": media}, options=_opts(request_options))
+        )
+        return _models(MediaProject, r)
+
+    def get(self, project_id: str, *, request_options: RequestOptions | None = None) -> MediaProject:
+        r = self._http.request(
+            RequestSpec("GET", f"/v1/media-projects/{_q(project_id)}", options=_opts(request_options))
+        )
+        return _model(MediaProject, r)
+
+    def create(
+        self,
+        file: FileInput,
+        *,
+        name: str | None = None,
+        source_ids: Sequence[str] | None = None,
+        output_id: str | None = None,
+        page_ids: Sequence[str] | None = None,
+        filename: str | None = None,
+        request_options: RequestOptions | None = None,
+    ) -> MediaProject:
+        """Saves an editable project: ``file`` is the editor's design; ``source_ids`` the library files it
+        was made from, ``output_id`` and ``page_ids`` the files it saved as. Counts toward storage."""
+        r = self._http.request(
+            RequestSpec(
+                "POST",
+                "/v1/media-projects",
+                data=_project_form(name, source_ids, output_id, page_ids),
+                files={"file": read_file(file, filename, "application/json")},
+                options=_opts(request_options),
+            )
+        )
+        return _model(MediaProject, r)
+
+    def update(
+        self,
+        project_id: str,
+        file: FileInput,
+        *,
+        name: str | None = None,
+        source_ids: Sequence[str] | None = None,
+        output_id: str | None = None,
+        page_ids: Sequence[str] | None = None,
+        filename: str | None = None,
+        request_options: RequestOptions | None = None,
+    ) -> MediaProject:
+        """Saves a new version of a project."""
+        r = self._http.request(
+            RequestSpec(
+                "PUT",
+                f"/v1/media-projects/{_q(project_id)}",
+                data=_project_form(name, source_ids, output_id, page_ids),
+                files={"file": read_file(file, filename, "application/json")},
+                options=_opts(request_options),
+            )
+        )
+        return _model(MediaProject, r)
+
+    def delete(self, project_id: str, *, request_options: RequestOptions | None = None) -> None:
+        """Deletes a project and its file; the files it was made from stay. Needs ``posts:delete``."""
+        self._http.request(
+            RequestSpec("DELETE", f"/v1/media-projects/{_q(project_id)}", options=_opts(request_options))
+        )
+
+    def file(self, project_id: str, *, request_options: RequestOptions | None = None) -> bytes:
+        """Downloads a project's design (JSON)."""
+        r = self._http.request(
+            RequestSpec("GET", f"/v1/media-projects/{_q(project_id)}/file", options=_opts(request_options))
+        )
+        return r.content
+
+
+class AIJobs(_Resource):
+    """AI requests (pictures and videos) on the server's own AI provider accounts."""
+
+    def create(
+        self,
+        operation: str,
+        *,
+        prompt: str | None = None,
+        image: FileInput | None = None,
+        mask: FileInput | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        duration: int | None = None,
+        aspect_ratio: str | None = None,
+        canvas_width: int | None = None,
+        canvas_height: int | None = None,
+        image_x: int | None = None,
+        image_y: int | None = None,
+        place_width: int | None = None,
+        place_height: int | None = None,
+        request_options: RequestOptions | None = None,
+    ) -> AIJob:
+        """Queues one AI operation (:meth:`AI.status` lists them: generate, edit, inpaint, erase, expand,
+        remove_background, replace_background, upscale, enhance, text_to_video, image_to_video); poll
+        :meth:`get` until it has succeeded, failed or was canceled. ``image`` and ``mask`` are PNG, JPEG or
+        WebP. A repeated ``request_options={"idempotency_key": ...}`` answers the earlier job."""
+        fields = clean(
+            {
+                "operation": operation,
+                "prompt": prompt,
+                "width": width,
+                "height": height,
+                "duration": duration,
+                "aspect_ratio": aspect_ratio,
+                "canvas_width": canvas_width,
+                "canvas_height": canvas_height,
+                "image_x": image_x,
+                "image_y": image_y,
+                "place_width": place_width,
+                "place_height": place_height,
+            }
+        )
+        # Every part goes in ``files`` so the body is multipart even without a picture, settings first.
+        parts: dict[str, tuple[str | None, bytes, str | None]] = {
+            k: (None, str(v).encode(), None) for k, v in fields.items()
+        }
+        if image is not None:
+            parts["image"] = read_file(image, None, None)
+        if mask is not None:
+            parts["mask"] = read_file(mask, None, "image/png")
+        opts = _opts(request_options)
+        if "idempotency_key" in opts:
+            opts = _merged(RequestOptions(headers={"Idempotency-Key": opts["idempotency_key"]}), opts)
+        r = self._http.request(RequestSpec("POST", "/v1/ai/jobs", files=parts, options=opts))
+        return _model(AIJob, r)
+
+    def get(self, job_id: str, *, request_options: RequestOptions | None = None) -> AIJob:
+        r = self._http.request(
+            RequestSpec("GET", f"/v1/ai/jobs/{_q(job_id)}", options=_opts(request_options))
+        )
+        return _model(AIJob, r)
+
+    def discard(self, job_id: str, *, request_options: RequestOptions | None = None) -> None:
+        """Cancels a running request or drops its result."""
+        self._http.request(RequestSpec("DELETE", f"/v1/ai/jobs/{_q(job_id)}", options=_opts(request_options)))
+
+    def result(self, job_id: str, *, request_options: RequestOptions | None = None) -> bytes:
+        """The made picture or video (kept for a day, until it is accepted or discarded)."""
+        r = self._http.request(
+            RequestSpec("GET", f"/v1/ai/jobs/{_q(job_id)}/result", options=_opts(request_options))
+        )
+        return r.content
+
+    def accept(self, job_id: str, *, request_options: RequestOptions | None = None) -> Media:
+        """Keeps the result in the media library (accepting again answers the same file)."""
+        r = self._http.request(
+            RequestSpec("POST", f"/v1/ai/jobs/{_q(job_id)}/accept", options=_opts(request_options))
+        )
+        return _model(Media, r)
+
+
+class AI(_Resource):
+    """The AI tools of the design editor: what this server offers, text rewrites and AI requests."""
+
+    def __init__(self, client: Staqly) -> None:
+        super().__init__(client)
+        self.jobs = AIJobs(client)
+
+    def status(self, *, request_options: RequestOptions | None = None) -> AIStatus:
+        """Which AI operations work on this server, and the workspace's AI usage this month."""
+        r = self._http.request(RequestSpec("GET", "/v1/ai", options=_opts(request_options)))
+        return _model(AIStatus, r)
+
+    def text(self, text: str, *, instruction: str, request_options: RequestOptions | None = None) -> str:
+        """Rewrites a short text (at most 4000 characters) as ``instruction`` says ("Make it shorter",
+        "Translate to German"). Counts toward AI usage."""
+        r = self._http.request(
+            RequestSpec(
+                "POST",
+                "/v1/ai/text",
+                json={"text": text, "instruction": instruction},
+                options=_opts(request_options),
+            )
+        )
+        out: str = r.json()["text"]
+        return out
+
+
+class Design(_Resource):
+    """The workspace's brand kit for the design editor."""
+
+    def brand(self, *, request_options: RequestOptions | None = None) -> DesignBrand:
+        r = self._http.request(RequestSpec("GET", "/v1/design/brand", options=_opts(request_options)))
+        return _model(DesignBrand, r)
+
+    def set_brand(
+        self,
+        *,
+        colors: Sequence[str],
+        fonts: Sequence[str],
+        logos: Sequence[str],
+        request_options: RequestOptions | None = None,
+    ) -> DesignBrand:
+        """Replaces the brand kit: ``colors`` like ``#22c55e``, ``fonts`` from the editor's list,
+        ``logos`` media ids."""
+        body = {"colors": list(colors), "fonts": list(fonts), "logos": list(logos)}
+        r = self._http.request(
+            RequestSpec("PUT", "/v1/design/brand", json=body, options=_opts(request_options))
+        )
+        return _model(DesignBrand, r)
+
+
+class Stock(_Resource):
+    """Stock photos from Pixabay (when the server has a key)."""
+
+    def photos(
+        self,
+        *,
+        query: str | None = None,
+        page: int | None = None,
+        request_options: RequestOptions | None = None,
+    ) -> StockPage:
+        """30 photos a page (``page`` 1 to 16); ``configured`` is false without a Pixabay key."""
+        r = self._http.request(
+            RequestSpec(
+                "GET",
+                "/v1/stock/photos",
+                params={"query": query, "page": page},
+                options=_opts(request_options),
+            )
+        )
+        return _model(StockPage, r)
+
+    def use(self, photo_id: str, *, request_options: RequestOptions | None = None) -> Media:
+        """Copies a photo into the media library (Pixabay allows no hotlinking)."""
+        r = self._http.request(
+            RequestSpec("POST", f"/v1/stock/photos/{_q(photo_id)}/use", options=_opts(request_options))
+        )
+        return _model(Media, r)
 
 
 # ------------------------------------------------------------------ schedules
@@ -2455,6 +2788,10 @@ class Staqly:
         self.jobs = Jobs(self)
         self.work = Work(self)
         self.media = MediaResource(self)
+        self.media_projects = MediaProjects(self)
+        self.ai = AI(self)
+        self.design = Design(self)
+        self.stock = Stock(self)
         self.events = Events(self)
         self.webhooks = Webhooks(self)
         self.alerts = Alerts(self)

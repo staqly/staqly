@@ -1084,6 +1084,100 @@ const cases: Case[] = [
     path: '/v1/setup',
     result: { initialized: true, mode: 'local', signup_open: false, setup_token_required: false },
   },
+  // channels: options, Telegram, provider check
+  {
+    name: 'channels.options',
+    call: (c) => c.channels.options('ch_1', 'board'),
+    reply: list([{ value: 'b1', label: 'Recipes' }]),
+    method: 'GET',
+    path: '/v1/channels/ch_1/options/board',
+    result: [{ value: 'b1', label: 'Recipes' }],
+  },
+  {
+    name: 'channels.telegramConnect',
+    call: (c) => c.channels.telegramConnect({ group_id: 'grp_1' }),
+    method: 'POST',
+    path: '/v1/channels/telegram/connect',
+    body: { group_id: 'grp_1' },
+  },
+  {
+    name: 'channels.telegramConnectStatus',
+    call: (c) => c.channels.telegramConnectStatus('ABC123'),
+    method: 'GET',
+    path: '/v1/channels/telegram/connect/ABC123',
+  },
+  {
+    name: 'providers.check',
+    call: (c) => c.providers.check('instagram'),
+    method: 'POST',
+    path: '/v1/providers/instagram/check',
+  },
+  // media projects, AI, design, stock
+  {
+    name: 'mediaProjects.list',
+    call: (c) => c.mediaProjects.list({ media: 'med_1' }),
+    reply: list([{ id: 'mpr_1' }]),
+    method: 'GET',
+    path: '/v1/media-projects',
+    query: { media: 'med_1' },
+    result: [{ id: 'mpr_1' }],
+  },
+  {
+    name: 'mediaProjects.get',
+    call: (c) => c.mediaProjects.get('mpr_1'),
+    method: 'GET',
+    path: '/v1/media-projects/mpr_1',
+  },
+  {
+    name: 'mediaProjects.delete',
+    call: (c) => c.mediaProjects.delete('mpr_1'),
+    reply: empty(),
+    method: 'DELETE',
+    path: '/v1/media-projects/mpr_1',
+  },
+  {
+    name: 'mediaProjects.file',
+    call: (c) => c.mediaProjects.file('mpr_1'),
+    reply: json({ version: 1 }),
+    method: 'GET',
+    path: '/v1/media-projects/mpr_1/file',
+    result: new TextEncoder().encode('{"version":1}'),
+  },
+  { name: 'ai.status', call: (c) => c.ai.status(), method: 'GET', path: '/v1/ai' },
+  {
+    name: 'ai.text',
+    call: (c) => c.ai.text({ text: 'Hello there', instruction: 'Make it shorter' }),
+    reply: json({ text: 'Hi' }),
+    method: 'POST',
+    path: '/v1/ai/text',
+    body: { text: 'Hello there', instruction: 'Make it shorter' },
+    result: 'Hi',
+  },
+  { name: 'ai.jobs.get', call: (c) => c.ai.jobs.get('aij_1'), method: 'GET', path: '/v1/ai/jobs/aij_1' },
+  {
+    name: 'ai.jobs.discard',
+    call: (c) => c.ai.jobs.discard('aij_1'),
+    reply: empty(),
+    method: 'DELETE',
+    path: '/v1/ai/jobs/aij_1',
+  },
+  { name: 'ai.jobs.accept', call: (c) => c.ai.jobs.accept('aij_1'), method: 'POST', path: '/v1/ai/jobs/aij_1/accept' },
+  { name: 'design.brand', call: (c) => c.design.brand(), method: 'GET', path: '/v1/design/brand' },
+  {
+    name: 'design.setBrand',
+    call: (c) => c.design.setBrand({ colors: ['#0f0'], fonts: ['Inter'], logos: [] }),
+    method: 'PUT',
+    path: '/v1/design/brand',
+    body: { colors: ['#0f0'], fonts: ['Inter'], logos: [] },
+  },
+  {
+    name: 'stock.photos',
+    call: (c) => c.stock.photos({ query: 'coffee', page: 2 }),
+    method: 'GET',
+    path: '/v1/stock/photos',
+    query: { query: 'coffee', page: '2' },
+  },
+  { name: 'stock.use', call: (c) => c.stock.use('123'), method: 'POST', path: '/v1/stock/photos/123/use' },
   { name: 'health', call: (c) => c.health(), method: 'GET', path: '/health' },
 ]
 
@@ -1140,6 +1234,47 @@ describe('media helpers', () => {
 
     expect(await c.media.download('med_1')).toEqual(new Uint8Array([9, 8]))
     expect(c.media.url('med 1')).toBe('http://api.test/v1/media/med%201')
+  })
+
+  it('media.replace sends multipart with the file', async () => {
+    const { c, calls } = client(json({ id: 'med_1' }))
+
+    await c.media.replace('med_1', new Uint8Array([1, 2]), { filename: 'edit.png', contentType: 'image/png' })
+    expect(calls[0]!.method).toBe('POST')
+    expect(calls[0]!.path).toBe('/v1/media/med_1/replace')
+    expect((calls[0]!.form!.get('file') as File).name).toBe('edit.png')
+  })
+
+  it('mediaProjects.create and update send the fields and the design as JSON', async () => {
+    const { c, calls } = client(json({ id: 'mpr_1' }, 201))
+
+    await c.mediaProjects.create({ name: 'Cover', source_ids: ['med_1', 'med_2'], file: { version: 1 } })
+    await c.mediaProjects.update('mpr_1', { page_ids: ['med_3'], file: new Blob(['{}']) })
+    const form = calls[0]!.form!
+
+    expect(calls[0]!.path).toBe('/v1/media-projects')
+    expect([...form.keys()]).toEqual(['name', 'source_ids', 'file'])
+    expect(form.get('source_ids')).toBe('med_1,med_2')
+    expect(JSON.parse(await (form.get('file') as File).text())).toEqual({ version: 1 })
+    expect(calls[1]!.method).toBe('PUT')
+    expect(calls[1]!.path).toBe('/v1/media-projects/mpr_1')
+    expect(calls[1]!.form!.get('page_ids')).toBe('med_3')
+  })
+
+  it('ai.jobs.create sends multipart with the idempotency key; result returns bytes', async () => {
+    const { c, calls } = client(json({ id: 'aij_1' }, 202), new Response(new Uint8Array([7])))
+
+    await c.ai.jobs.create({ operation: 'upscale', image: new Uint8Array([1]), width: 512 }, { idempotencyKey: 'k1' })
+    const form = calls[0]!.form!
+
+    expect(calls[0]!.path).toBe('/v1/ai/jobs')
+    expect(calls[0]!.headers.get('Idempotency-Key')).toBe('k1')
+    expect(form.get('operation')).toBe('upscale')
+    expect(form.get('width')).toBe('512')
+    expect(form.get('image')).toBeInstanceOf(File)
+    expect(form.get('mask')).toBeNull()
+    expect(await c.ai.jobs.result('aij_1')).toEqual(new Uint8Array([7]))
+    expect(calls[1]!.path).toBe('/v1/ai/jobs/aij_1/result')
   })
 })
 

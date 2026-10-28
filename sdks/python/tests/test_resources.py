@@ -264,6 +264,43 @@ def lst(*xs: Any) -> dict[str, Any]:
     return {"data": list(xs)}
 
 
+MEDIA = {"id": "med_1", "mime_type": "image/png", "size_bytes": 3, "original_name": "a.png", "url": "u"}
+PROJECT = {
+    "id": "prj_1",
+    "name": "Banner",
+    "source_ids": ["med_1"],
+    "output_id": "",
+    "page_ids": [],
+    "size_bytes": 10,
+    "created_at": TS,
+    "updated_at": TS,
+}
+AI_JOB = {
+    "id": "aij_1",
+    "operation": "generate",
+    "kind": "image",
+    "status": "succeeded",
+    "provider": "fal",
+    "model": "m",
+    "fallback_from": "",
+    "error": None,
+    "result": {"mime_type": "image/png", "width": 1024, "height": 1024},
+    "media_id": "",
+    "estimated_cost_usd": 0.01,
+    "duration_ms": 900,
+    "created_at": TS,
+    "finished_at": TS,
+}
+BRAND = {"colors": ["#22c55e"], "fonts": ["Inter"], "logos": []}
+TELEGRAM = {
+    "code": "ABC123",
+    "command": "/connect@bot ABC123",
+    "bot": "@bot",
+    "expires_at": TS,
+    "status": "waiting",
+}
+
+
 @dataclass
 class Case:
     name: str
@@ -1535,6 +1572,148 @@ CASES = [
         body={"token": "tok_1"},
         check=lambda r: r.csrf_token == "csrf_2",
     ),
+    # design editor, AI and stock (the dashboard's tools, reachable with an API key)
+    Case(
+        "channels.options",
+        lambda c: c.channels.options("ch_1", "channel"),
+        "GET",
+        "/v1/channels/ch_1/options/channel",
+        lst({"value": "C1", "label": "#general"}),
+        check=lambda r: r[0].label == "#general",
+    ),
+    Case(
+        "channels.telegram_connect",
+        lambda c: c.channels.telegram_connect(group_id="grp_1"),
+        "POST",
+        "/v1/channels/telegram/connect",
+        TELEGRAM,
+        201,
+        body={"group_id": "grp_1"},
+        check=lambda r: r.code == "ABC123",
+    ),
+    Case(
+        "channels.telegram_connect_status",
+        lambda c: c.channels.telegram_connect_status("ABC123"),
+        "GET",
+        "/v1/channels/telegram/connect/ABC123",
+        {**TELEGRAM, "status": "connected", "channel_id": "ch_9"},
+        check=lambda r: r.channel_id == "ch_9",
+    ),
+    Case(
+        "providers.check",
+        lambda c: c.providers.check("instagram"),
+        "POST",
+        "/v1/providers/instagram/check",
+        {
+            "provider": "instagram",
+            "ok": False,
+            "checks": [{"key": "keys", "label": "App keys", "ok": False, "detail": "missing"}],
+        },
+        check=lambda r: not r.checks[0].ok,
+    ),
+    Case(
+        "media_projects.list",
+        lambda c: c.media_projects.list(media="med_1"),
+        "GET",
+        "/v1/media-projects",
+        lst(PROJECT),
+        query={"media": "med_1"},
+        check=lambda r: r[0].id == "prj_1",
+    ),
+    Case(
+        "media_projects.get",
+        lambda c: c.media_projects.get("prj_1"),
+        "GET",
+        "/v1/media-projects/prj_1",
+        PROJECT,
+    ),
+    Case(
+        "media_projects.delete",
+        lambda c: c.media_projects.delete("prj_1"),
+        "DELETE",
+        "/v1/media-projects/prj_1",
+        None,
+        204,
+    ),
+    Case(
+        "ai.status",
+        lambda c: c.ai.status(),
+        "GET",
+        "/v1/ai",
+        {
+            "configured": True,
+            "providers": ["fal"],
+            "operations": [
+                {
+                    "id": "generate",
+                    "kind": "image",
+                    "prompt": "required",
+                    "image": False,
+                    "mask": False,
+                    "provider": "fal",
+                    "model": "m",
+                    "fallback": "",
+                }
+            ],
+            "usage": {"period": "2026-10", "used_usd": 0.5, "limit_usd": None},
+        },
+        check=lambda r: r.operations[0].id == "generate" and r.usage.limit_usd is None,
+    ),
+    Case(
+        "ai.text",
+        lambda c: c.ai.text("Hello there", instruction="Make it shorter"),
+        "POST",
+        "/v1/ai/text",
+        {"text": "Hi"},
+        body={"text": "Hello there", "instruction": "Make it shorter"},
+        check=lambda r: r == "Hi",
+    ),
+    Case(
+        "ai.jobs.get",
+        lambda c: c.ai.jobs.get("aij_1"),
+        "GET",
+        "/v1/ai/jobs/aij_1",
+        AI_JOB,
+        check=lambda r: r.result is not None and r.result.width == 1024,
+    ),
+    Case("ai.jobs.discard", lambda c: c.ai.jobs.discard("aij_1"), "DELETE", "/v1/ai/jobs/aij_1", None, 204),
+    Case(
+        "ai.jobs.accept",
+        lambda c: c.ai.jobs.accept("aij_1"),
+        "POST",
+        "/v1/ai/jobs/aij_1/accept",
+        MEDIA,
+        201,
+        check=lambda r: r.id == "med_1",
+    ),
+    Case("design.brand", lambda c: c.design.brand(), "GET", "/v1/design/brand", BRAND),
+    Case(
+        "design.set_brand",
+        lambda c: c.design.set_brand(colors=["#22c55e"], fonts=["Inter"], logos=[]),
+        "PUT",
+        "/v1/design/brand",
+        BRAND,
+        body=BRAND,
+        check=lambda r: r.colors == ["#22c55e"],
+    ),
+    Case(
+        "stock.photos",
+        lambda c: c.stock.photos(query="cat", page=2),
+        "GET",
+        "/v1/stock/photos",
+        {"configured": False, "data": []},
+        query={"query": "cat", "page": "2"},
+        check=lambda r: not r.configured,
+    ),
+    Case(
+        "stock.use",
+        lambda c: c.stock.use("123"),
+        "POST",
+        "/v1/stock/photos/123/use",
+        MEDIA,
+        201,
+        check=lambda r: r.id == "med_1",
+    ),
 ]
 
 
@@ -1615,6 +1794,52 @@ class TestPostHelpers:
         assert req.headers["content-type"].startswith("multipart/form-data; boundary=")
         assert b'filename="a.png"' in req.content
         assert "idempotency-key" not in req.headers
+
+    def test_media_replace(self, client: Staqly, mock: Mock) -> None:
+        mock.reply(jsonr(MEDIA, 201))
+        client.media.replace("med_1", b"\x89PNG", filename="a.png")
+        req = mock.last
+        assert req.url.path == "/v1/media/med_1/replace"
+        assert req.headers["content-type"].startswith("multipart/form-data; boundary=")
+        assert b'name="file"; filename="a.png"' in req.content
+
+    def test_media_projects_save(self, client: Staqly, mock: Mock) -> None:
+        mock.reply(jsonr(PROJECT, 201))
+        client.media_projects.create(b"{}", name="Banner", source_ids=["med_1", "med_2"])
+        req = mock.last
+        assert (req.method, req.url.path) == ("POST", "/v1/media-projects")
+        # The server reads the fields before the file.
+        assert req.content.index(b'name="source_ids"') < req.content.index(b'name="file"')
+        assert b"med_1,med_2" in req.content
+        mock.reply(jsonr(PROJECT))
+        client.media_projects.update("prj_1", b"{}", page_ids=["med_3"])
+        assert (mock.last.method, mock.last.url.path) == ("PUT", "/v1/media-projects/prj_1")
+
+    def test_downloads(self, client: Staqly, mock: Mock) -> None:
+        mock.reply(httpx.Response(200, content=b'{"version":1}'))
+        assert client.media_projects.file("prj_1") == b'{"version":1}'
+        assert mock.last.url.path == "/v1/media-projects/prj_1/file"
+        mock.reply(httpx.Response(200, content=b"\x89PNG"))
+        assert client.ai.jobs.result("aij_1") == b"\x89PNG"
+        assert mock.last.url.path == "/v1/ai/jobs/aij_1/result"
+
+    def test_ai_job_is_multipart_without_a_picture(self, client: Staqly, mock: Mock) -> None:
+        mock.reply(jsonr(AI_JOB, 202))
+        job = client.ai.jobs.create(
+            "generate", prompt="a cat", width=512, request_options={"idempotency_key": "k1"}
+        )
+        assert job.id == "aij_1"
+        req = mock.last
+        assert req.headers["content-type"].startswith("multipart/form-data; boundary=")
+        assert req.headers["idempotency-key"] == "k1"
+        assert b'name="operation"\r\n\r\ngenerate' in req.content
+        assert b'name="width"\r\n\r\n512' in req.content
+
+    def test_ai_job_sends_settings_before_files(self, client: Staqly, mock: Mock) -> None:
+        mock.reply(jsonr(AI_JOB, 202))
+        client.ai.jobs.create("inpaint", prompt="a hat", image=b"\x89PNG", mask=b"\x89PNG")
+        c = mock.last.content
+        assert c.index(b'name="prompt"') < c.index(b'name="image"') < c.index(b'name="mask"')
 
     def test_webhook_event_post(self) -> None:
         ev = models.WebhookEvent.model_validate(

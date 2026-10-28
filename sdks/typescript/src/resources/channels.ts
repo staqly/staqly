@@ -4,11 +4,14 @@ import type {
   ChannelGroupInput,
   ChannelLink,
   ChannelInput,
+  ChannelOption,
   ChannelPatch,
   ChannelTestResult,
   DeveloperAppInput,
   Provider,
+  ProviderCheck,
   RequestOptions,
+  TelegramConnect,
 } from '../types.js'
 import { APIResource, enc } from './base.js'
 
@@ -89,6 +92,30 @@ export class Channels extends APIResource {
     return this.http.request({ method: 'POST', path: `/v1/channels/${enc(id)}/test`, options })
   }
 
+  /** The choices of a channel's remote setting (`settings_fields` with options), read from its platform. */
+  async options(id: string, key: string, options?: RequestOptions): Promise<ChannelOption[]> {
+    return (
+      await this.http.request<{ data: ChannelOption[] }>({
+        method: 'GET',
+        path: `/v1/channels/${enc(id)}/options/${enc(key)}`,
+        options,
+      })
+    ).data
+  }
+
+  /**
+   * A code to connect a Telegram chat through the server's bot: add `bot` to the chat, send `command` there, then
+   * poll `telegramConnectStatus`. Needs `channels:manage`.
+   */
+  telegramConnect(params: { group_id?: string } = {}, options?: RequestOptions): Promise<TelegramConnect> {
+    return this.http.request({ method: 'POST', path: '/v1/channels/telegram/connect', body: params, options })
+  }
+
+  /** Whether the chat for a Telegram connect code is connected yet. */
+  telegramConnectStatus(code: string, options?: RequestOptions): Promise<TelegramConnect> {
+    return this.http.request({ method: 'GET', path: `/v1/channels/telegram/connect/${enc(code)}`, options })
+  }
+
   /**
    * Begins connecting an OAuth platform: returns the URL to open in a browser signed in to the
    * platform. `instance` is the server for OAuth platforms with many servers. The browser lands on
@@ -120,6 +147,11 @@ export class Providers extends APIResource {
   /** Removes the workspace's developer app; the server's `PROVIDER_<ID>_CLIENT_ID` applies again, if set. */
   async deleteApp(id: string, options?: RequestOptions): Promise<void> {
     await this.http.request({ method: 'DELETE', path: `/v1/providers/${enc(id)}/app`, options })
+  }
+
+  /** Checks this server's setup for an OAuth platform (keys, callback URL, scopes). Needs `channels:manage`. */
+  check(id: string, options?: RequestOptions): Promise<ProviderCheck> {
+    return this.http.request({ method: 'POST', path: `/v1/providers/${enc(id)}/check`, options })
   }
 
   /**

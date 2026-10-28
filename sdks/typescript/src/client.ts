@@ -4,6 +4,7 @@ import { AnalyticsResource } from './resources/analytics.js'
 import { BillingResource } from './resources/billing.js'
 import { Channels, Providers } from './resources/channels.js'
 import { Collections } from './resources/collections.js'
+import { AI, Design, MediaProjects, Stock } from './resources/design.js'
 import { Events } from './resources/events.js'
 import { Exports } from './resources/exports.js'
 import { Jobs } from './resources/jobs.js'
@@ -33,6 +34,10 @@ export class Staqly {
   readonly jobs: Jobs
   readonly work: Work
   readonly media: MediaResource
+  readonly mediaProjects: MediaProjects
+  readonly ai: AI
+  readonly design: Design
+  readonly stock: Stock
   readonly events: Events
   readonly webhooks: Webhooks
   readonly alerts: Alerts
@@ -58,6 +63,10 @@ export class Staqly {
     this.jobs = new Jobs(this.http)
     this.work = new Work(this.http)
     this.media = new MediaResource(this.http)
+    this.mediaProjects = new MediaProjects(this.http)
+    this.ai = new AI(this.http)
+    this.design = new Design(this.http)
+    this.stock = new Stock(this.http)
     this.events = new Events(this.http)
     this.webhooks = new Webhooks(this.http)
     this.alerts = new Alerts(this.http)

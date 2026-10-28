@@ -55,6 +55,18 @@ export class MediaResource extends APIResource {
     return this.http.request({ method: 'POST', path: '/v1/media', form, options })
   }
 
+  /**
+   * Replaces a file's content with its edit (same id, so posts using it get the edit). Needs `media:write`,
+   * `posts:write` and `posts:delete`.
+   */
+  replace(id: string, file: Uploadable, opts: UploadOptions = {}, options?: RequestOptions): Promise<Media> {
+    const form = new FormData()
+
+    form.set('file', toBlob(file, opts.contentType), filenameOf(file, opts.filename))
+
+    return this.http.request({ method: 'POST', path: `/v1/media/${enc(id)}/replace`, form, options })
+  }
+
   /** Downloads a file's bytes. */
   async download(id: string, options?: RequestOptions): Promise<Uint8Array> {
     const res = await this.downloadResponse(id, options)
