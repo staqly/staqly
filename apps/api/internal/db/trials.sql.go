@@ -154,6 +154,21 @@ func (q *Queries) MarkTrialFingerprintsUnpaid(ctx context.Context, arg MarkTrial
 	return err
 }
 
+const pruneTrialFingerprints = `-- name: PruneTrialFingerprints :execrows
+DELETE FROM trial_fingerprints
+WHERE (trial_fingerprints.unpaid_trial_at IS NOT NULL AND trial_fingerprints.unpaid_trial_at < ?1)
+   OR trial_fingerprints.workspace_id IN (SELECT t.workspace_id FROM workspace_trials t WHERE t.paid_at IS NOT NULL)
+`
+
+// Fingerprints that can no longer count: an unpaid trial older than the window (`before`), or a workspace that paid.
+func (q *Queries) PruneTrialFingerprints(ctx context.Context, before sql.NullString) (int64, error) {
+	result, err := q.db.ExecContext(ctx, pruneTrialFingerprints, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const recordTrialFingerprint = `-- name: RecordTrialFingerprint :exec
 INSERT INTO trial_fingerprints (kind, fingerprint, workspace_id, unpaid_trial_at, created_at, updated_at)
 VALUES (?1, ?2, ?3,

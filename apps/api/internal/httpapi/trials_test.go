@@ -336,8 +336,19 @@ func TestRepeatedTrialWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	keyB, wsB := e.trialWorkspace("B")
-	trialing(e, f, "sub_b", wsB, "")
+	subB := trialing(e, f, "sub_b", wsB, "")
 	e.connectAccount(keyB, "jane", 201)
+
+	// Past the window, the daily retention deletes the old trial's fingerprints (the privacy policy says so), and
+	// a workspace that paid keeps none.
+	f.set(e, subB, "active")
+	if _, err := e.svc.RunRetention(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var left int
+	if err := e.svc.DB.QueryRow(`SELECT COUNT(*) FROM trial_fingerprints WHERE workspace_id IN (?, ?)`, wsA, wsB).Scan(&left); err != nil || left != 0 {
+		t.Fatalf("fingerprints left after retention: %d %v", left, err)
+	}
 }
 
 // The card is the strong signal: a trial whose card an unpaid trial used ends at once (it was only known after

@@ -50,6 +50,8 @@ type RetentionReport struct {
 	Notifications int64 `json:"notifications"`
 	Agents        int64 `json:"agents"`
 	Media         int64 `json:"media"`
+	// TrialFingerprints: repeated-trial fingerprints past their use.
+	TrialFingerprints int64 `json:"trial_fingerprints"`
 }
 
 const retentionBatch = 1000
@@ -102,6 +104,14 @@ func (s *Service) RunRetention(ctx context.Context) (RetentionReport, error) {
 	if err := s.W.DeleteExpiredPendingConnections(ctx, s.now()); err != nil {
 		return rep, err
 	}
+
+	// 2b. Repeated-trial fingerprints that can no longer count (the privacy policy promises it): an unpaid trial
+	// older than trialWindow, or a workspace that paid.
+	pruned, err := s.W.PruneTrialFingerprints(ctx, nullStr(s.trialSince()))
+	if err != nil {
+		return rep, err
+	}
+	rep.TrialFingerprints = pruned
 
 	wss, err := s.Q.RetentionWorkspaceIDs(ctx)
 	if err != nil {

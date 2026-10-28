@@ -68,3 +68,9 @@ ON CONFLICT (workspace_id) DO UPDATE SET review_at = excluded.review_at, review_
 INSERT INTO workspace_trials (workspace_id, cleared_at, updated_at) VALUES (sqlc.arg(workspace_id), sqlc.arg(now), sqlc.arg(now))
 ON CONFLICT (workspace_id) DO UPDATE SET review_at = NULL, review_reason = NULL, revoked_at = NULL, revoked_reason = NULL,
   cleared_at = excluded.cleared_at, updated_at = excluded.updated_at;
+
+-- name: PruneTrialFingerprints :execrows
+-- Fingerprints that can no longer count: an unpaid trial older than the window (`before`), or a workspace that paid.
+DELETE FROM trial_fingerprints
+WHERE (trial_fingerprints.unpaid_trial_at IS NOT NULL AND trial_fingerprints.unpaid_trial_at < sqlc.arg(before))
+   OR trial_fingerprints.workspace_id IN (SELECT t.workspace_id FROM workspace_trials t WHERE t.paid_at IS NOT NULL);
