@@ -428,6 +428,12 @@ Methods that return a list return a Python `list`; `list()` on paginated endpoin
 |---|---|
 | `events.list(**filters)`, `events.iterate(**filters)` | `GET /v1/events` (`post_id`, `channel_id`, `schedule_id`, `collection_id`, `type`, `type_prefix`, `actor_type`, `actor_id`, `agent`, `from_`, `to`, `limit`, `cursor`) |
 
+### Analytics
+
+| Method | Endpoint |
+|---|---|
+| `analytics.get(*, from_=None, to=None, days=None, channel=None, collection=None, source=None)` | `GET /v1/analytics`: publishing outcomes, sources, posting times and cached platform numbers for a range of days ([Analytics](/dashboard/analytics)) |
+
 ### Webhooks
 
 | Method | Endpoint |

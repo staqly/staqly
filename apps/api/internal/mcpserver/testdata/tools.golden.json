@@ -1109,6 +1109,44 @@
       "idempotentHint": false,
       "readOnlyHint": true
     },
+    "description": "The workspace's publishing analytics for a range of days (from and to, YYYY-MM-DD in the workspace's time zone, both included; default the last 30 days, at most 366): totals with the previous period of the same length (posts published, targets published and failed, success rate, retries, average and p90 delay after the publish time), what waits now, published and failed per day, per channel (with the most common failure and the platform numbers already cached: views, engagements, link clicks), per source (dashboard, each agent over MCP or the API, schedules, repeats), posting times by weekday and hour with average engagements (low_confidence under min_samples), top posts and failure reasons. Optional channel, collection and source filters. Never calls a platform. Requires posts:read.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "description": "only this channel (channel ID)",
+          "type": "string"
+        },
+        "collection": {
+          "description": "only posts of this collection (collection ID)",
+          "type": "string"
+        },
+        "days": {
+          "description": "instead of from: the last n days up to to (1 to 366)",
+          "type": "integer"
+        },
+        "from": {
+          "description": "first day, YYYY-MM-DD in the workspace's time zone",
+          "type": "string"
+        },
+        "source": {
+          "description": "only posts from this source, as sources[].source names it",
+          "type": "string"
+        },
+        "to": {
+          "description": "last day (included), YYYY-MM-DD; default today",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_analytics"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
     "description": "Get billing status: whether Stripe billing is enabled, the plan, the subscription status and the end of the trial or paid period. Requires admin.",
     "inputSchema": {
       "additionalProperties": false,

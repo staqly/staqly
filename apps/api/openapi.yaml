@@ -77,6 +77,8 @@ tags:
     description: Uploaded files and thumbnails
   - name: events
     description: The workspace activity log
+  - name: analytics
+    description: What staqly knows about the workspace's publishing (outcomes, automation sources, posting times) and the platform numbers already cached on posts
   - name: webhooks
     description: >
       Outgoing webhooks and their deliveries. Delivery is at-least-once and not ordered
@@ -2012,6 +2014,32 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/analytics:
+    get:
+      operationId: getAnalytics
+      tags: [analytics]
+      summary: The workspace's publishing analytics for a range of days (posts:read)
+      description: |
+        Aggregated from the workspace's own posts and targets; platform numbers (views, likes...) are the ones already
+        cached on published targets (GET /v1/posts/{id}/metrics reads them, your automation reports its own), so this
+        never calls a platform. `from` and `to` are days in the workspace's time zone, both included (default: the last
+        30 days up to today; at most 366 days). `previous` holds the same totals for the period of the same length right
+        before, for comparisons. `queue` is what waits now. `sources` ignores the `source` filter so sources can be
+        compared; `feedback` ignores `channel`. A target's outcome time is when it was published, or for a failed one
+        when it failed.
+      parameters:
+        - { name: from, in: query, description: "First day, YYYY-MM-DD in the workspace's time zone", schema: { type: string, format: date } }
+        - { name: to, in: query, description: "Last day (included), YYYY-MM-DD; default today", schema: { type: string, format: date } }
+        - { name: days, in: query, description: "Instead of from: the last n days up to to (7, 30, 90...)", schema: { type: integer, minimum: 1, maximum: 366 } }
+        - { name: channel, in: query, description: "Only this channel's targets", schema: { type: string } }
+        - { name: collection, in: query, description: "Only posts of this collection", schema: { type: string } }
+        - { name: source, in: query, description: "Only posts from this source, as `sources[].source` names it (dashboard, an agent's name, schedule:<name>, repeat)", schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Analytics" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/posts/{id}/metrics:
@@ -5403,6 +5431,192 @@ components:
               emoji: { type: string, description: "The platform's name for it, e.g. thumbsup" }
               count: { type: integer, minimum: 0 }
               people: { type: array, items: { type: string } }
+    Analytics:
+      type: object
+      additionalProperties: false
+      required: [range, totals, previous, queue, daily, channels, sources, posting_times, top_posts, failures, feedback]
+      properties:
+        range:
+          type: object
+          additionalProperties: false
+          required: [from, to, days, timezone, start, end, previous_from, previous_to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date, description: Included }
+            days: { type: integer, minimum: 1, maximum: 366 }
+            timezone: { type: string, description: "The workspace's IANA time zone the days are in" }
+            start: { type: string, format: date-time, description: The first instant of the range }
+            end: { type: string, format: date-time, description: The instant right after the range }
+            previous_from: { type: string, format: date }
+            previous_to: { type: string, format: date }
+        totals: { $ref: "#/components/schemas/AnalyticsTotals" }
+        previous: { $ref: "#/components/schemas/AnalyticsTotals" }
+        queue:
+          type: object
+          additionalProperties: false
+          description: What waits now (not a period figure)
+          required: [scheduled, drafts, next_publish_at]
+          properties:
+            scheduled: { type: integer, minimum: 0 }
+            drafts: { type: integer, minimum: 0 }
+            next_publish_at: { type: [string, "null"], format: date-time }
+        daily:
+          type: array
+          description: Every day of the range, in the workspace's time zone
+          items:
+            type: object
+            additionalProperties: false
+            required: [date, published, failed]
+            properties:
+              date: { type: string, format: date }
+              published: { type: integer, minimum: 0, description: Targets published that day }
+              failed: { type: integer, minimum: 0, description: Targets that failed that day }
+        channels:
+          type: array
+          description: Every channel of the workspace (or the filtered one), busiest first
+          items: { $ref: "#/components/schemas/ChannelAnalytics" }
+        sources:
+          type: array
+          description: Where posts come from, most active first; ignores the source filter
+          items:
+            type: object
+            additionalProperties: false
+            required: [source, kind, label, posts_created, posts_published, targets_published, targets_failed, success_rate]
+            properties:
+              source: { type: string, description: "The posts' source as stored (pass it as the source filter)" }
+              kind: { type: string, enum: [dashboard, api, mcp, schedule, repeat, other], description: "dashboard; an agent over the API or MCP (as the workspace's agents list knows it; a source another client sent counts as api); schedule: a schedule that fetches posts from an endpoint; repeat: copies of repeating posts; other: none recorded" }
+              label: { type: string }
+              posts_created: { type: integer, minimum: 0 }
+              posts_published: { type: integer, minimum: 0 }
+              targets_published: { type: integer, minimum: 0 }
+              targets_failed: { type: integer, minimum: 0 }
+              success_rate: { type: [number, "null"], minimum: 0, maximum: 1 }
+        posting_times:
+          type: object
+          additionalProperties: false
+          required: [cells, best, min_samples]
+          properties:
+            cells: { type: array, description: "Weekday and hour slots with published targets, in the workspace's time zone", items: { $ref: "#/components/schemas/AnalyticsTimeSlot" } }
+            best: { type: array, maxItems: 3, description: "Up to three slots with the highest average engagements, confident ones first", items: { $ref: "#/components/schemas/AnalyticsTimeSlot" } }
+            min_samples: { type: integer, description: Below this many published targets with numbers a slot is low confidence }
+        top_posts:
+          type: object
+          additionalProperties: false
+          required: [by, posts]
+          properties:
+            by: { type: string, enum: [engagements, recent], description: "engagements when platform numbers exist in the range, else the most recent posts" }
+            posts:
+              type: array
+              maxItems: 10
+              items:
+                type: object
+                additionalProperties: false
+                required: [post_id, excerpt, published_at, channels, metrics]
+                properties:
+                  post_id: { type: string }
+                  excerpt: { type: string }
+                  published_at: { type: string, format: date-time, description: The first channel it went out on in the range }
+                  channels:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [channel_id, provider, external_url]
+                      properties:
+                        channel_id: { type: string }
+                        provider: { type: string }
+                        external_url: { type: string }
+                  metrics: { oneOf: [{ $ref: "#/components/schemas/AnalyticsMetrics" }, { type: "null" }] }
+        failures:
+          type: array
+          maxItems: 10
+          description: The most common failure reasons; errors that differ only by numbers, ids or links count as one
+          items:
+            type: object
+            additionalProperties: false
+            required: [reason, count, channels, last_at, sample_post_id]
+            properties:
+              reason: { type: string }
+              count: { type: integer, minimum: 1 }
+              channels: { type: array, items: { type: string }, description: Channel ids }
+              last_at: { type: string, format: date-time }
+              sample_post_id: { type: string, description: A post that failed this way }
+        feedback:
+          type: object
+          additionalProperties: false
+          description: Preview comment threads (ignores the channel filter)
+          required: [opened, resolved, open]
+          properties:
+            opened: { type: integer, minimum: 0, description: Threads started in the range }
+            resolved: { type: integer, minimum: 0, description: Threads resolved in the range }
+            open: { type: integer, minimum: 0, description: Threads open now }
+    AnalyticsTotals:
+      type: object
+      additionalProperties: false
+      required: [posts_created, posts_published, targets_published, targets_failed, success_rate, retried, delay_avg_seconds, delay_p90_seconds, metrics]
+      properties:
+        posts_created: { type: integer, minimum: 0 }
+        posts_published: { type: integer, minimum: 0, description: Posts with at least one channel published in the period }
+        targets_published: { type: integer, minimum: 0 }
+        targets_failed: { type: integer, minimum: 0 }
+        success_rate: { type: [number, "null"], minimum: 0, maximum: 1, description: "published / (published + failed); null when nothing finished" }
+        retried: { type: integer, minimum: 0, description: Targets that needed more than one attempt }
+        delay_avg_seconds: { type: [number, "null"], minimum: 0, description: "How long after its publish time a target went out, on average (null: nothing to measure)" }
+        delay_p90_seconds: { type: [number, "null"], minimum: 0, description: 90th percentile of the same delay }
+        metrics: { oneOf: [{ $ref: "#/components/schemas/AnalyticsMetrics" }, { type: "null" }], description: "Platform numbers summed over the published targets that have them; null when none has" }
+    AnalyticsMetrics:
+      type: object
+      additionalProperties: false
+      description: "Platform numbers in one vocabulary. engagements = likes + replies + reposts + quotes + bookmarks. A null field: no target in the sum reported it."
+      required: [impressions, engagements, likes, replies, reposts, quotes, bookmarks, link_clicks]
+      properties:
+        impressions: { type: [integer, "null"], minimum: 0, description: Views or impressions }
+        engagements: { type: integer, minimum: 0 }
+        likes: { type: [integer, "null"], minimum: 0 }
+        replies: { type: [integer, "null"], minimum: 0 }
+        reposts: { type: [integer, "null"], minimum: 0 }
+        quotes: { type: [integer, "null"], minimum: 0 }
+        bookmarks: { type: [integer, "null"], minimum: 0 }
+        link_clicks: { type: [integer, "null"], minimum: 0 }
+    ChannelAnalytics:
+      type: object
+      additionalProperties: false
+      required: [channel_id, name, provider, handle, avatar_url, status, published, failed, success_rate, last_published_at, top_failure, metrics, metrics_coverage, avg_engagements]
+      properties:
+        channel_id: { type: string }
+        name: { type: string }
+        provider: { type: string }
+        handle: { type: string }
+        avatar_url: { type: string }
+        status: { type: string, enum: [connected, needs_reconnect, disabled] }
+        published: { type: integer, minimum: 0 }
+        failed: { type: integer, minimum: 0 }
+        success_rate: { type: [number, "null"], minimum: 0, maximum: 1 }
+        last_published_at: { type: [string, "null"], format: date-time, description: The last target published in the range }
+        top_failure: { type: [string, "null"], description: The most common failure reason in the range }
+        metrics: { oneOf: [{ $ref: "#/components/schemas/AnalyticsMetrics" }, { type: "null" }] }
+        avg_engagements: { type: [number, "null"], minimum: 0, description: Per published target with numbers }
+        metrics_coverage:
+          type: object
+          additionalProperties: false
+          description: How complete the channel's numbers are; room for periodic snapshots later
+          required: [support, published, with_data, updated_at]
+          properties:
+            support: { type: string, enum: [platform, automation, none], description: "platform: staqly reads the numbers when a post's numbers are opened; automation: your automation reports them; none: the platform doesn't report numbers to staqly yet" }
+            published: { type: integer, minimum: 0, description: Published targets in the range }
+            with_data: { type: integer, minimum: 0, description: "Of those, how many have numbers" }
+            updated_at: { type: [string, "null"], format: date-time, description: When the newest numbers in the range were read }
+    AnalyticsTimeSlot:
+      type: object
+      additionalProperties: false
+      required: [weekday, hour, published, samples, avg_engagements, low_confidence]
+      properties:
+        weekday: { type: integer, minimum: 0, maximum: 6, description: 0 is Monday }
+        hour: { type: integer, minimum: 0, maximum: 23 }
+        published: { type: integer, minimum: 0 }
+        samples: { type: integer, minimum: 0, description: Published targets with numbers }
+        avg_engagements: { type: [number, "null"], minimum: 0 }
+        low_confidence: { type: boolean, description: Fewer samples than min_samples }
     TargetMetrics:
       type: object
       required: [channel_id, channel_name, provider, status, external_url, available, metrics, updated_at]

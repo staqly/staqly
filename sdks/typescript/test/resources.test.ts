@@ -507,6 +507,36 @@ const cases: Case[] = [
     path: '/v1/events',
     query: { type: 'post.published', post_id: 'pst_1', channel_id: 'ch_1', limit: '10' },
   },
+  // analytics
+  {
+    name: 'analytics.get',
+    call: (c) => c.analytics.get(),
+    reply: json({ range: { days: 30 } }),
+    method: 'GET',
+    path: '/v1/analytics',
+    result: { range: { days: 30 } },
+  },
+  {
+    name: 'analytics.get filtered',
+    call: (c) =>
+      c.analytics.get({
+        from: '2026-10-01',
+        to: '2026-10-28',
+        channel: 'ch_1',
+        collection: 'col_1',
+        source: 'claude-code',
+      }),
+    method: 'GET',
+    path: '/v1/analytics',
+    query: { from: '2026-10-01', to: '2026-10-28', channel: 'ch_1', collection: 'col_1', source: 'claude-code' },
+  },
+  {
+    name: 'analytics.get last n days',
+    call: (c) => c.analytics.get({ days: 7 }),
+    method: 'GET',
+    path: '/v1/analytics',
+    query: { days: '7' },
+  },
   // channels and providers
   {
     name: 'providers.list',
