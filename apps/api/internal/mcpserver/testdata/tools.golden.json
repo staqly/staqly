@@ -748,7 +748,7 @@
       "idempotentHint": false,
       "readOnlyHint": false
     },
-    "description": "Permanently delete a collection with its posts and schedules. confirm must equal the collection name. Requires collections:delete (collections:write alone is not enough).",
+    "description": "Permanently delete a collection and its schedules. Its posts move to the Default collection unchanged (drafts, scheduled posts and posts that went out alike); the Default collection itself cannot be deleted. confirm must equal the collection name. Requires collections:delete (collections:write alone is not enough).",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1735,7 +1735,7 @@
       "idempotentHint": false,
       "readOnlyHint": true
     },
-    "description": "List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; sort created_desc lists the newest first.",
+    "description": "List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; hide_past leaves out posts that went out; sort created_desc lists the newest first.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1750,6 +1750,10 @@
         "cursor": {
           "description": "next_cursor of the previous page",
           "type": "string"
+        },
+        "hide_past": {
+          "description": "leave out posts that went out (published); failed ones stay",
+          "type": "boolean"
         },
         "limit": {
           "description": "page size (default 50, max 200)",
@@ -2583,6 +2587,10 @@
         "cursor": {
           "description": "next_cursor of the previous page",
           "type": "string"
+        },
+        "hide_past": {
+          "description": "leave out posts that went out (published); failed ones stay",
+          "type": "boolean"
         },
         "limit": {
           "description": "page size (default 50, max 200)",

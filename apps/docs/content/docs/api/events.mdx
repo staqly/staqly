@@ -102,7 +102,7 @@ objects carry them in `data` (`data.channel`, `data.schedule`, `data.webhook`).
 | Type | When | Extra `data` |
 |---|---|---|
 | `post.created` | A post was created (by anyone, including a schedule that fetched it) | — |
-| `post.updated` | Content, media, targets, tags, metadata or collection changed via `PATCH` | — |
+| `post.updated` | Content, media, targets, tags, metadata or collection changed via `PATCH`, or the post moved to Default because its collection was deleted | `moved_from` (`id`, `name`) when it moved with a deleted collection |
 | `post.scheduled` | A publish time was set or moved (`POST .../schedule`, `PATCH` with `publish_at`, created as `scheduled`) | `publish_at`, `previous_publish_at` when moved |
 | `post.unscheduled` | The time was cleared: cancel, or `PATCH` with `publish_at: null` | — |
 | `post.publish_requested` | A target on [your own automation](/channels/your-own-automation) waits for a result | `channel`, `target` (`channel_id`, `content`, `settings`, `thread`), `timeout_seconds` |
@@ -139,7 +139,7 @@ publishing history.
 
 | Type | When | `data` |
 |---|---|---|
-| `collection.created`, `collection.updated`, `collection.deleted` | A collection was created, changed or deleted | `collection` |
+| `collection.created`, `collection.updated`, `collection.deleted` | A collection was created, changed or deleted | `collection`; on `collection.deleted` also `moved_posts` (how many posts moved) and `moved_to` (the Default collection's `id`, `name`) |
 | `collection.archived` | A collection was archived (an update that set `archived`) | `collection` |
 | `webhook.created`, `webhook.updated` | A webhook was created or changed (the secret is never included) | `webhook`; `secret_rotated` on update |
 | `webhook.deleted` | A webhook was deleted | `webhook_id` |

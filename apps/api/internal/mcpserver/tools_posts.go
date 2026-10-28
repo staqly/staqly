@@ -36,7 +36,7 @@ func (t *tools) addPostTools(s *mcp.Server) {
 	add(s, t, &mcp.Tool{Name: "create_post", Description: "Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. Requires posts:write.",
 		Annotations: wr()}, t.createPost)
 	add(s, t, &mcp.Tool{Name: "get_post", Description: "Get one post with its targets (status, link, error per channel).", Annotations: ro()}, t.getPost)
-	add(s, t, &mcp.Tool{Name: "list_posts", Description: "List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; sort created_desc lists the newest first.", Annotations: ro()}, t.listPosts)
+	add(s, t, &mcp.Tool{Name: "list_posts", Description: "List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; hide_past leaves out posts that went out; sort created_desc lists the newest first.", Annotations: ro()}, t.listPosts)
 	add(s, t, &mcp.Tool{Name: "search_posts", Description: "Find posts whose content contains a text, with the same filters as list_posts.", Annotations: ro()}, t.searchPosts)
 	add(s, t, &mcp.Tool{Name: "update_post", Description: "Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (an empty string clears it), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. Requires posts:write.",
 		Annotations: wr()}, t.updatePost)
@@ -251,6 +251,7 @@ type listPostsIn struct {
 	Tag           string `json:"tag,omitempty"`
 	PublishAfter  string `json:"publish_after,omitempty" jsonschema:"RFC3339 or YYYY-MM-DD, inclusive"`
 	PublishBefore string `json:"publish_before,omitempty" jsonschema:"RFC3339 or YYYY-MM-DD, exclusive"`
+	HidePast      bool   `json:"hide_past,omitempty" jsonschema:"leave out posts that went out (published); failed ones stay"`
 	Sort          string `json:"sort,omitempty" jsonschema:"publish_asc (default), publish_desc, created_desc, created_asc"`
 	Cursor        string `json:"cursor,omitempty" jsonschema:"next_cursor of the previous page"`
 	Limit         int    `json:"limit,omitempty" jsonschema:"page size (default 50, max 200)"`
@@ -262,7 +263,7 @@ func (t *tools) postFilter(ctx context.Context, in listPostsIn, q string) (app.P
 		return app.PostFilter{}, err
 	}
 	return app.PostFilter{CollectionID: col, Status: in.Status, ChannelID: in.ChannelID, Tag: in.Tag, Q: q, PublishAfter: in.PublishAfter,
-		PublishBefore: in.PublishBefore, Sort: in.Sort, Cursor: in.Cursor, Limit: in.Limit}, nil
+		PublishBefore: in.PublishBefore, HidePast: in.HidePast, Sort: in.Sort, Cursor: in.Cursor, Limit: in.Limit}, nil
 }
 
 func (t *tools) listPosts(ctx context.Context, _ *mcp.CallToolRequest, in listPostsIn) (*mcp.CallToolResult, any, error) {

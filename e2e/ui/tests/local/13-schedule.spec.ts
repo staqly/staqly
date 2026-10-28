@@ -221,6 +221,10 @@ test.describe('the schedule', () => {
     // The calendar re-reads its range on a reload (live updates refresh the open post, not the grid).
     await page.reload()
     await showWeekOf(page, when)
+    // A post that went out is hidden until the switch shows it; one that failed before its time stays.
+    await expect(entry(page, b.id)).toHaveAttribute('data-state', 'failed')
+    await expect(entry(page, a.id)).toHaveCount(0)
+    await page.getByRole('switch', { name: 'Show past posts' }).click()
     await expect(entry(page, a.id)).toHaveAttribute('data-state', 'published')
     await expect(entry(page, a.id)).toHaveAttribute('draggable', 'false')
     await expect(entry(page, b.id)).toHaveAttribute('data-state', 'failed')

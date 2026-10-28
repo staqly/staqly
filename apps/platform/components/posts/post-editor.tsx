@@ -64,7 +64,7 @@ export function PostEditor({
   below?: React.ReactNode
   /** In the bottom bar before the formatting buttons (Insert media). */
   start?: React.ReactNode
-  /** At the bar's right end (the counter); in the text's bottom right corner when there is no bar (read only). */
+  /** In the text's bottom right corner (the counter), above the media, with or without the bar. */
   end?: React.ReactNode
 }) {
   const last = useRef(value)
@@ -114,12 +114,13 @@ export function PostEditor({
 
   return (
     <RichTextEditorRoot editor={editor} editable={editable} variant="subtle" className={cn('post-editor', className)}>
-      {/* Read only, the corner holds the counter: the text keeps room at its foot so it never covers the last line. */}
-      <div className={cn('relative', end && !editable && '[&_.ProseMirror]:pb-10')}>
+      {/* The counter sits in the box's bottom right corner, under the text or beside the media: the text keeps room
+          at its foot (no media) or the media row keeps room on its right, so it never covers either. */}
+      <div className={cn('relative', end && '[&_.media-strip]:pr-36 [&:not(:has(.media-strip))_.ProseMirror]:pb-10')}>
         <Content />
-        {end && !editable && <div className="absolute right-2 bottom-2">{end}</div>}
+        {below}
+        {end && <div className="absolute right-2 bottom-2">{end}</div>}
       </div>
-      {below}
       {/* The tools sit in a bar under the text, not in a toolbar above it. */}
       <div
         hidden={!editable}
@@ -144,7 +145,6 @@ export function PostEditor({
           <UndoControl />
           <RedoControl />
         </ControlsGroup>
-        {end && editable && <div className="ml-auto">{end}</div>}
       </div>
     </RichTextEditorRoot>
   )

@@ -36,10 +36,15 @@ type PostSearch struct {
 	Tag                         string
 	Query                       string // substring of the content, case-insensitive
 	PublishAfter, PublishBefore string // publish_at range; NULL never matches
+	HidePast                    string // non-empty: published posts are left out (PastPostSQL)
 	Sort                        string
 	Cursor                      string // opaque, from a previous page
 	Limit                       int
 }
+
+// PastPostSQL is true for a post that is past: it went out (published). Failed posts stay in view, as do drafts,
+// scheduled and publishing ones.
+const PastPostSQL = "(p.status = 'published')"
 
 var ErrBadCursor = errors.New("invalid cursor")
 
@@ -89,6 +94,9 @@ func (q *Queries) SearchPosts(ctx context.Context, s PostSearch) ([]Post, string
 	}
 	if s.PublishBefore != "" {
 		add("p.publish_at < ?", s.PublishBefore)
+	}
+	if s.HidePast != "" {
+		add("NOT " + PastPostSQL)
 	}
 	if qs := strings.TrimSpace(s.Query); qs != "" {
 		esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(qs)

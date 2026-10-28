@@ -30,3 +30,6 @@ WHERE workspace_id = ? AND id = ?;
 
 -- name: DeleteCollection :execrows
 DELETE FROM collections WHERE workspace_id = ? AND id = ?;
+
+-- name: GetDefaultCollection :one
+SELECT * FROM collections WHERE workspace_id = ? AND is_default = 1;

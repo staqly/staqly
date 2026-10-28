@@ -1363,9 +1363,14 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Permanently delete a collection and its posts (collections:delete)
+         * Permanently delete a collection; its posts move to Default (collections:delete)
          * @description Requires `collections:delete`; `collections:write` alone answers 403.
          *     The Default collection (`is_default`) cannot be deleted (409).
+         *     The collection's schedules are deleted with it. Its posts are kept: every one moves to the
+         *     Default collection unchanged (drafts stay drafts, a scheduled post still goes out at its time
+         *     and then follows Default's processing timeout, posts that went out keep their status and
+         *     history). Each moved post emits `post.updated` with `moved_from`; `collection.deleted`
+         *     carries `moved_posts` and `moved_to`.
          */
         delete: operations["deleteCollection"];
         options?: never;
@@ -5708,6 +5713,8 @@ export interface components {
         publishAfter: string;
         /** @description publish_at < (RFC3339 or YYYY-MM-DD) */
         publishBefore: string;
+        /** @description true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay. */
+        hidePast: boolean;
         /** @description Default publish_asc (soonest first, posts without a time last). created_* and updated_desc order by those times. */
         postSort: "publish_asc" | "publish_desc" | "created_desc" | "created_asc" | "updated_desc";
         /**
@@ -8652,6 +8659,8 @@ export interface operations {
                 publish_after?: components["parameters"]["publishAfter"];
                 /** @description publish_at < (RFC3339 or YYYY-MM-DD) */
                 publish_before?: components["parameters"]["publishBefore"];
+                /** @description true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay. */
+                hide_past?: components["parameters"]["hidePast"];
                 /** @description Words of the content (case-insensitive substring match) */
                 q?: components["parameters"]["q"];
                 /** @description Posts carrying this tag */
@@ -8699,6 +8708,8 @@ export interface operations {
                 publish_after?: components["parameters"]["publishAfter"];
                 /** @description publish_at < (RFC3339 or YYYY-MM-DD) */
                 publish_before?: components["parameters"]["publishBefore"];
+                /** @description true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay. */
+                hide_past?: components["parameters"]["hidePast"];
                 /** @description Words of the content (case-insensitive substring match) */
                 q?: components["parameters"]["q"];
                 /** @description Posts carrying this tag */

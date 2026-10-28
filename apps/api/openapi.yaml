@@ -1777,10 +1777,15 @@ paths:
     delete:
       operationId: deleteCollection
       tags: [collections]
-      summary: Permanently delete a collection and its posts (collections:delete)
+      summary: Permanently delete a collection; its posts move to Default (collections:delete)
       description: |
         Requires `collections:delete`; `collections:write` alone answers 403.
         The Default collection (`is_default`) cannot be deleted (409).
+        The collection's schedules are deleted with it. Its posts are kept: every one moves to the
+        Default collection unchanged (drafts stay drafts, a scheduled post still goes out at its time
+        and then follows Default's processing timeout, posts that went out keep their status and
+        history). Each moved post emits `post.updated` with `moved_from`; `collection.deleted`
+        carries `moved_posts` and `moved_to`.
       parameters:
         - { name: confirm, in: query, required: true, description: Must equal the collection name, schema: { type: string } }
         - { $ref: "#/components/parameters/idempotencyKey" }
@@ -1805,6 +1810,7 @@ paths:
         - { $ref: "#/components/parameters/channelId" }
         - { $ref: "#/components/parameters/publishAfter" }
         - { $ref: "#/components/parameters/publishBefore" }
+        - { $ref: "#/components/parameters/hidePast" }
         - { $ref: "#/components/parameters/q" }
         - { $ref: "#/components/parameters/tag" }
         - { $ref: "#/components/parameters/postSort" }
@@ -1832,6 +1838,7 @@ paths:
         - { $ref: "#/components/parameters/channelId" }
         - { $ref: "#/components/parameters/publishAfter" }
         - { $ref: "#/components/parameters/publishBefore" }
+        - { $ref: "#/components/parameters/hidePast" }
         - { $ref: "#/components/parameters/q" }
         - { $ref: "#/components/parameters/tag" }
         - { $ref: "#/components/parameters/postSort" }
@@ -4434,6 +4441,7 @@ components:
     q: { name: q, in: query, description: "Words of the content (case-insensitive substring match)", schema: { type: string } }
     publishAfter: { name: publish_after, in: query, description: "publish_at >= (RFC3339 or YYYY-MM-DD); posts without a time never match", schema: { type: string } }
     publishBefore: { name: publish_before, in: query, description: "publish_at < (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
+    hidePast: { name: hide_past, in: query, description: "true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay.", schema: { type: boolean, default: false } }
     postSort: { name: sort, in: query, description: "Default publish_asc (soonest first, posts without a time last). created_* and updated_desc order by those times.", schema: { type: string, enum: [publish_asc, publish_desc, created_desc, created_asc, updated_desc] } }
     idempotencyKey:
       name: Idempotency-Key

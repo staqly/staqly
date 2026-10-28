@@ -50,8 +50,10 @@ Avatar*, *Weekly digest*. Each collection has:
 - its [schedules](#schedules);
 - an archived flag: archived collections are read-only (creating posts returns `409`).
 
-Deleting a collection is permanent and removes its posts and schedules; the API requires
-`?confirm=<collection name>`.
+Deleting a collection is permanent and removes its schedules; the API requires
+`?confirm=<collection name>`. Its posts are kept: every one moves to the Default collection as it
+is. Drafts stay drafts, a scheduled post still goes out at its time, and posts that went out keep
+their status and history.
 
 Every workspace has one **Default** collection (`is_default: true`), created with the
 workspace and listed first. You can rename it, but it cannot be archived or deleted (`409`), so

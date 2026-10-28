@@ -3,7 +3,7 @@ import type { Scope } from '@/lib/api'
 export const SCOPE_INFO: Record<Scope, string> = {
   'collections:read': 'List and read collections',
   'collections:write': 'Create, rename and archive collections',
-  'collections:delete': 'Permanently delete collections and their posts',
+  'collections:delete': 'Permanently delete collections (their posts move to Default)',
   'posts:read': 'List, search and read posts',
   'posts:write': 'Create and edit posts',
   'posts:delete': 'Delete posts',

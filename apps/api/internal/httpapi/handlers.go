@@ -634,7 +634,7 @@ func postFilter(r *http.Request) app.PostFilter {
 	q := r.URL.Query()
 	return app.PostFilter{CollectionID: q.Get("collection_id"), Status: q.Get("status"), ChannelID: q.Get("channel_id"), Q: q.Get("q"),
 		Tag: q.Get("tag"), PublishAfter: q.Get("publish_after"), PublishBefore: q.Get("publish_before"), Sort: q.Get("sort"),
-		Limit: qInt(r, "limit"), Cursor: q.Get("cursor")}
+		HidePast: q.Get("hide_past") == "true", Limit: qInt(r, "limit"), Cursor: q.Get("cursor")}
 }
 
 func (s *Server) listPosts(w http.ResponseWriter, r *http.Request) {

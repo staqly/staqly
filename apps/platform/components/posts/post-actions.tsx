@@ -76,7 +76,9 @@ const NO_COMMENTS: PostComment[] = []
 
 /** Open on the platform: one published channel opens straight away, several get a short menu. */
 function OpenOnPlatform({ post }: { post: Post }) {
-  const links = (post.targets ?? []).flatMap((t) => {
+  // Nothing to open while the post still waits to go out (as in the list's menu).
+  const waiting = post.status === 'scheduled' || post.status === 'publishing'
+  const links = (waiting ? [] : (post.targets ?? [])).flatMap((t) => {
     const url = t.status === 'published' ? safeHttpUrl(t.external_url) : undefined
 
     return url ? [{ ...t, url }] : []

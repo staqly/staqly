@@ -10,6 +10,7 @@ import { FilterButton } from '@/components/common/filter-button'
 import { IdChip } from '@/components/common/id-chip'
 import { MultiSelect } from '@/components/common/multi-select'
 import { PageContainer } from '@/components/common/page-header'
+import { PastPostsSwitch } from '@/components/common/past-posts-switch'
 import { SkeletonList } from '@/components/common/skeleton-list'
 import { TagFilter } from '@/components/common/tag-filter'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDebounced } from '@/hooks/use-debounced'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
+import { hidePastParam, setShowPast, useShowPast } from '@/hooks/use-show-past'
 import { POST_STATUSES, type Collection, type PostQuery, type PostStatus } from '@/lib/api'
 import {
   flattenPosts,
@@ -71,17 +73,20 @@ export function CollectionPosts({ id }: { id: string }) {
   const tags = useMemo(() => splitList(params.get('tag') ?? ''), [params])
   const [search, setSearch] = useState(params.get('q') ?? '')
   const q = useDebounced(search.trim(), 300)
+  const showPast = useShowPast()
+  const hidePast = hidePastParam(showPast, status)
   const query: PostQuery = useMemo(
     () => ({
       collection_id: id,
       status: status || undefined,
+      hide_past: hidePast,
       channel_id: channelIds[0] || undefined,
       tag: tags[0] || undefined,
       q: q || undefined,
       sort: 'created_desc',
       limit: 50,
     }),
-    [id, status, channelIds, tags, q],
+    [id, status, channelIds, tags, q, hidePast],
   )
   const posts = usePostsInfinite(query, { refetchOnWindowFocus: false })
   // ?compose=1 (the getting-started checklist) opens the composer at once.
@@ -182,6 +187,13 @@ export function CollectionPosts({ id }: { id: string }) {
   const filtered = !!status || channelIds.length > 0 || tags.length > 0 || !!q
   // Filters help only once there is something to filter; an active filter keeps them so it can be cleared.
   const showFilters = filtered || !!search || Object.values(c.status_counts ?? {}).some((n) => n > 0)
+  // Posts that went out are left out of the list: say so when that is why it is empty.
+  const pastHidden = !!hidePast && (c.status_counts?.published ?? 0) + (c.status_counts?.failed ?? 0) > 0
+  const showPastButton = (
+    <Button variant="outline" onClick={() => setShowPast(true)}>
+      Show past posts
+    </Button>
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -257,27 +269,32 @@ export function CollectionPosts({ id }: { id: string }) {
             </Button>
           </div>
         </div>
-        {/* Filters in use, as chips under the title; each one comes off with its ×. */}
-        {filtered && (
-          <div className="flex flex-wrap items-center gap-1.5" data-testid="post-filters">
-            {q && <FilterChip label={`“${q}”`} onRemove={() => setSearch('')} />}
-            {status && (
-              <FilterChip label={POST_STATUS_META[status].label} onRemove={() => setParam('status', undefined)} />
+        {/* Filters in use, as chips under the title (each one comes off with its ×), and the past posts switch. */}
+        {showFilters && (
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            {filtered && (
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="post-filters">
+                {q && <FilterChip label={`“${q}”`} onRemove={() => setSearch('')} />}
+                {status && (
+                  <FilterChip label={POST_STATUS_META[status].label} onRemove={() => setParam('status', undefined)} />
+                )}
+                {channelIds.map((ch) => (
+                  <FilterChip
+                    key={ch}
+                    label={channels.data?.find((x) => x.id === ch)?.name ?? ch}
+                    onRemove={() => setParam('channel', channelIds.filter((x) => x !== ch).join(',') || undefined)}
+                  />
+                ))}
+                {tags.map((t) => (
+                  <FilterChip
+                    key={t}
+                    label={`#${t}`}
+                    onRemove={() => setParam('tag', tags.filter((x) => x !== t).join(',') || undefined)}
+                  />
+                ))}
+              </div>
             )}
-            {channelIds.map((ch) => (
-              <FilterChip
-                key={ch}
-                label={channels.data?.find((x) => x.id === ch)?.name ?? ch}
-                onRemove={() => setParam('channel', channelIds.filter((x) => x !== ch).join(',') || undefined)}
-              />
-            ))}
-            {tags.map((t) => (
-              <FilterChip
-                key={t}
-                label={`#${t}`}
-                onRemove={() => setParam('tag', tags.filter((x) => x !== t).join(',') || undefined)}
-              />
-            ))}
+            <PastPostsSwitch className="ml-auto" />
           </div>
         )}
       </div>
@@ -298,17 +315,26 @@ export function CollectionPosts({ id }: { id: string }) {
           <PageContainer>
             <EmptyState
               icon={<PenSquare />}
-              title={filtered ? 'No posts match' : 'No posts yet'}
+              title={filtered ? 'No posts match' : pastHidden ? 'No upcoming posts' : 'No posts yet'}
               description={
                 filtered
-                  ? 'Try another status, channel or search.'
-                  : 'Write the first post here, or let your agent add posts to this collection through the API.'
+                  ? `Try another status, channel or search.${pastHidden ? ' Past posts are hidden.' : ''}`
+                  : pastHidden
+                    ? 'Posts that went out are hidden.'
+                    : 'Write the first post here, or let your agent add posts to this collection through the API.'
               }
               action={
-                filtered ? undefined : (
-                  <Button onClick={() => compose.setOpen(true)} disabled={c.archived}>
-                    <Plus /> New post
-                  </Button>
+                filtered ? (
+                  pastHidden ? (
+                    showPastButton
+                  ) : undefined
+                ) : (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {pastHidden && showPastButton}
+                    <Button onClick={() => compose.setOpen(true)} disabled={c.archived}>
+                      <Plus /> New post
+                    </Button>
+                  </div>
                 )
               }
             />
