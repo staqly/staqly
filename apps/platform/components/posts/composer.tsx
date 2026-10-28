@@ -326,7 +326,7 @@ function MediaStrip({
   }
 
   return (
-    <div ref={strip} className="flex flex-wrap gap-2 px-3 pt-1 pb-3">
+    <div ref={strip} className="media-strip flex flex-wrap gap-2 px-3 pt-1 pb-3">
       {media.map((m) => (
         // The tools show on hover or focus (always on touch), on solid chips in the corners.
         <span

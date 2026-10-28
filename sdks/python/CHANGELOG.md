@@ -21,6 +21,13 @@ agents write, no longer a review inbox.
   stops it); `ProviderField.when` for fields that apply only to one choice of another field.
 - Models `Post`, `PostTarget`, `PostTargetInput`, `Channel`, `Provider`, `Schedule`, `ScheduleRule`,
   `Job`, `JobStats`, `Alert`, `WorkItem`; `WebhookEvent.post`.
+- `analytics.get(from_=..., to=..., days=..., channel=..., collection=..., source=...)`
+  (`GET /v1/analytics`): totals against the period before, the queue, daily counts, channels,
+  sources, posting times, top posts, failures and feedback for a range of days (`from_` / `to` as
+  `str` or `date`). Models `Analytics`, `AnalyticsRange`, `AnalyticsTotals`, `AnalyticsMetrics`,
+  `AnalyticsQueue`, `AnalyticsDay`, `ChannelAnalytics`, `MetricsCoverage`, `AnalyticsSource`,
+  `AnalyticsTimeSlot`, `PostingTimes`, `TopPosts`, `TopPost`, `TopPostChannel`, `AnalyticsFailure`,
+  `AnalyticsFeedback`.
 
 ### Removed
 - `items`, `watchers`, `notification_channels`, `decision_links`, `request_approval`,

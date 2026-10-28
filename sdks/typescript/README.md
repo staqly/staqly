@@ -29,6 +29,7 @@ npm install @staqly/sdk
 - [Schedules](#schedules)
 - [Jobs](#jobs)
 - [Media](#media)
+- [Analytics](#analytics)
 - [Events](#events)
 - [Webhooks](#webhooks)
 - [Alerts](#alerts)
@@ -284,6 +285,21 @@ const bytes = await staqly.media.download(media.id);        // Uint8Array
 const res = await staqly.media.downloadResponse(media.id);  // raw Response (streaming)
 staqly.media.url(media.id);                                 // absolute URL (needs auth)
 await staqly.media.delete(media.id);                        // posts that use it lose it
+```
+
+## Analytics
+
+How publishing went over a range of days in the workspace's time zone (`from` and `to` both
+included; default the last 30 days, at most 366). Needs `posts:read`.
+
+```ts
+const a = await staqly.analytics.get();                      // the last 30 days
+console.log(a.totals.targets_published, a.totals.success_rate, a.previous.success_rate);
+await staqly.analytics.get({ from: "2026-10-01", to: "2026-10-28" });
+await staqly.analytics.get({ days: 7 });                      // the last 7 days up to today (or `to`)
+await staqly.analytics.get({ channel: tg.id, collection: col.id, source: "claude-code" });
+for (const ch of a.channels) console.log(ch.name, ch.published, ch.failed, ch.metrics?.engagements);
+// also: a.queue, a.daily, a.sources, a.posting_times.best, a.top_posts.posts, a.failures, a.feedback
 ```
 
 ## Events
@@ -574,7 +590,7 @@ for (const t of result.targets) console.log(t.channel_name, t.status, t.external
 ## Types
 
 All models come from the OpenAPI contract: `Post`, `PostTarget`, `Collection`, `Channel`,
-`Provider`, `Schedule`, `Job`, `Alert`, `Event`, `Webhook`, `Delivery`, `Workspace`, `APIKey`,
+`Provider`, `Schedule`, `Job`, `Alert`, `Analytics`, `Event`, `Webhook`, `Delivery`, `Workspace`, `APIKey`,
 `Plan` and more. Webhook payloads are typed by `WebhookEvent<D>` and `PostEventData`. Low-level
 `components` and `paths` are exported for anything else.
 

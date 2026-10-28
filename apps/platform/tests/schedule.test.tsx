@@ -101,15 +101,16 @@ describe('schedule page', () => {
     const slotA = screen.getByTestId(`schedule-slot-${dayKey(today)}-9`)
     const slotB = screen.getByTestId(`schedule-slot-${dayKey(at(other, 15))}-15`)
 
-    // One card per channel, each with that channel's own state. A cell shows the first; "+1 more" opens the rest.
+    // One card per channel. A scheduled post is upcoming on every card, whatever an earlier try left on a channel.
+    // A cell shows the first; "+1 more" opens the rest.
     expect(within(slotA).getAllByTestId('schedule-entry')).toHaveLength(1)
     fireEvent.click(within(slotA).getByRole('button', { name: '+1 more' }))
     const cards = within(within(slotA).getByRole('group', { name: /Everything at/ })).getAllByTestId('schedule-entry')
 
     expect(cards).toHaveLength(2)
     expect(cards.map((c) => c.dataset.channelId)).toEqual(['ch_1', 'ch_2'])
-    expect(cards.map((c) => c.dataset.state)).toEqual(['scheduled', 'failed'])
-    expect(cards[1]).toHaveAccessibleName(/Spring sale post on Brand on Bluesky: Failed/)
+    expect(cards.map((c) => c.dataset.state)).toEqual(['scheduled', 'scheduled'])
+    expect(cards[1]).toHaveAccessibleName(/Spring sale post on Brand on Bluesky: Scheduled/)
     expect(within(slotB).getByTestId('schedule-entry')).toHaveAttribute('data-state', 'failed')
     // One line per post: the state is its icon, named in the card's accessible name.
     expect(within(slotB).getByTestId('schedule-entry')).toHaveAccessibleName(/: Failed/)

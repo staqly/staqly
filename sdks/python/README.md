@@ -27,6 +27,7 @@ pip install staqly        # or: uv add staqly
 - [Schedules](#schedules)
 - [Jobs](#jobs)
 - [Media](#media)
+- [Analytics](#analytics)
 - [Events](#events)
 - [Webhooks](#webhooks)
 - [Alerts](#alerts)
@@ -287,6 +288,24 @@ staqly.media.delete(media.id)  # posts that use it lose it
 ```
 
 Uploads are read into memory. Per-file limits depend on the plan.
+
+## Analytics
+
+How publishing went over a range of days in the workspace's time zone (`from_` and `to` both
+included; default the last 30 days, at most 366). Needs `posts:read`.
+
+```python
+from datetime import date
+
+a = staqly.analytics.get()  # the last 30 days
+print(a.totals.targets_published, a.totals.success_rate, a.previous.success_rate)
+staqly.analytics.get(from_=date(2026, 10, 1), to="2026-10-28")  # str or date
+staqly.analytics.get(days=7)  # the last 7 days up to today (or `to`)
+staqly.analytics.get(channel=tg.id, collection=col.id, source="claude-code")
+for ch in a.channels:
+    print(ch.name, ch.published, ch.failed, ch.metrics.engagements if ch.metrics else None)
+# also: a.queue, a.daily, a.sources, a.posting_times.best, a.top_posts.posts, a.failures, a.feedback
+```
 
 ## Events
 
