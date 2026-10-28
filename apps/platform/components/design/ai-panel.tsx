@@ -18,6 +18,7 @@ import {
   Wand2,
   X,
   ZoomIn,
+  ExternalLink,
   type LucideIcon,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
@@ -374,9 +375,15 @@ export function AiPanel({ ctx }: { ctx: PanelCtx }) {
               picture={tool.photo ? picture : undefined}
             />
           )}
-          {tool && !tool.server && tool.device && picture && (
-            <LocalForm key={`${tool.id}:${picture.id}`} ctx={ctx} op={tool.device} picture={picture} />
-          )}
+          {tool &&
+            !tool.server &&
+            tool.device &&
+            picture &&
+            (ctx.inDrawer ? (
+              <InFullEditor picture={picture} />
+            ) : (
+              <LocalForm key={`${tool.id}:${picture.id}`} ctx={ctx} op={tool.device} picture={picture} />
+            ))}
 
           {/* Making something new is always at hand; with nothing selected it is the open form above. */}
           {make && sel.kind !== 'none' && tool?.id !== 'generate' && (
@@ -675,6 +682,26 @@ const LOCAL_COPY: Record<LocalOp, { hint: string; model: string; run: string; do
     run: 'Upscale',
     done: 'Upscaled four times',
   },
+}
+
+/** In a drawer over a post the on-device tools can't fetch their models: the photo opens in the full editor. */
+function InFullEditor({ picture }: { picture: ImageEl }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-muted-foreground">
+        This tool runs in the full editor. It opens the photo in a new tab and saves the result in your library.
+      </p>
+      {picture.mediaId ? (
+        <Button asChild variant="outline">
+          <a href={`/media/edit?ids=${encodeURIComponent(picture.mediaId)}`} target="_blank" rel="noopener">
+            <ExternalLink /> Open in the full editor
+          </a>
+        </Button>
+      ) : (
+        <p className="text-xs text-muted-foreground">Only a photo from your library opens there.</p>
+      )}
+    </div>
+  )
 }
 
 /** Removing an object or upscaling on this device (components/design/local-ai.ts): free, nothing uploaded. */

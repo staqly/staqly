@@ -117,6 +117,22 @@ describe('the AI panel', () => {
     expect(screen.getByRole('button', { name: 'Paint the area' })).toBeInTheDocument()
   })
 
+  it('in a drawer over a post, an on-device tool opens the photo in the full editor in a new tab', async () => {
+    mockApi({ 'GET /v1/ai': status([]) })
+    const d = newDesign()
+    const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
+    const { ctx } = ctxWith({ ...d.pages[0]!, elements: [pic] }, [pic.id])
+
+    renderWithProviders(<AiPanel ctx={{ ...ctx, inDrawer: true }} />)
+
+    await userEvent.click(await screen.findByRole('radio', { name: /Upscale.*On this device/ }))
+    const open = screen.getByRole('link', { name: 'Open in the full editor' })
+
+    expect(open).toHaveAttribute('href', '/media/edit?ids=med_1')
+    expect(open).toHaveAttribute('target', '_blank')
+    expect(screen.queryByRole('button', { name: /Upscale/ })).not.toBeInTheDocument()
+  })
+
   it('shows the tools for what is selected: a new picture with nothing, the photo tools with a photo', async () => {
     mockApi({ 'GET /v1/ai': status([op('generate'), op('edit'), op('erase', { prompt: 'none' }), op('upscale')]) })
     const d = newDesign(1080, 1350)

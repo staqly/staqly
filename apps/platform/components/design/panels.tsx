@@ -95,6 +95,9 @@ export interface PanelCtx {
   showPage: (id: string) => void
   /** In a drawer over a post: opens another saved design in its place (a link would leave the post). */
   openProject?: (id: string) => void
+  /** In a drawer over a post: the tools that run on this device open the full editor instead (its own page may load
+   * their models, the dashboard's doesn't). */
+  inDrawer?: boolean
 }
 
 /** Moves elements of the page on screen to another page (on top of it), or to a new page after this one. */
