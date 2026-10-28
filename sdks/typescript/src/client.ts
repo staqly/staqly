@@ -1,5 +1,6 @@
 import { type ClientOptions, HTTPClient } from './core.js'
 import { Alerts } from './resources/alerts.js'
+import { AnalyticsResource } from './resources/analytics.js'
 import { BillingResource } from './resources/billing.js'
 import { Channels, Providers } from './resources/channels.js'
 import { Collections } from './resources/collections.js'
@@ -35,6 +36,7 @@ export class Staqly {
   readonly events: Events
   readonly webhooks: Webhooks
   readonly alerts: Alerts
+  readonly analytics: AnalyticsResource
   readonly workspace: WorkspaceResource
   readonly workspaces: Workspaces
   readonly plans: Plans
@@ -59,6 +61,7 @@ export class Staqly {
     this.events = new Events(this.http)
     this.webhooks = new Webhooks(this.http)
     this.alerts = new Alerts(this.http)
+    this.analytics = new AnalyticsResource(this.http)
     this.workspace = new WorkspaceResource(this.http)
     this.workspaces = new Workspaces(this.http)
     this.plans = new Plans(this.http)

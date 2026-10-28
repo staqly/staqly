@@ -62,9 +62,9 @@ func TestBaselineSquash(t *testing.T) {
 			INSERT INTO goose_db_version (version_id, is_applied) VALUES (0, 1), (?, 1);
 			CREATE TABLE workspaces (id TEXT PRIMARY KEY);
 			CREATE TABLE webhook_deliveries (workspace_id TEXT, status TEXT, next_attempt_at TEXT);
-			CREATE TABLE posts (id TEXT PRIMARY KEY, workspace_id TEXT, publish_at TEXT);
+			CREATE TABLE posts (id TEXT PRIMARY KEY, workspace_id TEXT, status TEXT, publish_at TEXT);
 			CREATE TABLE post_targets (channel_id TEXT, status TEXT, published_at TEXT);
-			CREATE TABLE post_comments (preview_id TEXT, created_at TEXT);
+			CREATE TABLE post_comments (workspace_id TEXT, parent_id TEXT, preview_id TEXT, created_at TEXT);
 			CREATE TABLE email_codes (id TEXT PRIMARY KEY);
 			CREATE TABLE channels (id TEXT PRIMARY KEY, provider TEXT);
 			CREATE TABLE media_projects (id TEXT PRIMARY KEY)`, tc.max)

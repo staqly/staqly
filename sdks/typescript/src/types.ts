@@ -40,6 +40,28 @@ export type PostPage = Schemas['PostPage']
 export type PostPreview = Schemas['PostPreview']
 export type PostMetrics = Schemas['Metrics']
 export type TargetMetrics = Schemas['TargetMetrics']
+/** The analytics report (`analytics.get`). */
+export type Analytics = Schemas['Analytics']
+export type AnalyticsTotals = Schemas['AnalyticsTotals']
+/** Platform numbers in one vocabulary; engagements = likes + replies + reposts + quotes + bookmarks. */
+export type AnalyticsMetrics = Schemas['AnalyticsMetrics']
+export type ChannelAnalytics = Schemas['ChannelAnalytics']
+export type AnalyticsTimeSlot = Schemas['AnalyticsTimeSlot']
+/** Filters for `analytics.get`; days are YYYY-MM-DD in the workspace's time zone. */
+export interface AnalyticsParams {
+  /** First day (default: 29 days before `to`). */
+  from?: string
+  /** Last day, included (default: today). At most 366 days in all. */
+  to?: string
+  /** Instead of `from`: the last n days up to `to` (1 to 366; 7, 30, 90...). Sending both is a 422. */
+  days?: number
+  /** Only this channel's targets. */
+  channel?: string
+  /** Only posts of this collection. */
+  collection?: string
+  /** Only posts from this source, as `sources[].source` names it (`dashboard`, an agent's name, `schedule:<name>`, `repeat`). */
+  source?: string
+}
 export type PreviewLink = Schemas['PreviewLink']
 export type ChannelLink = Schemas['ChannelLink']
 export type ChannelLinkPublic = Schemas['ChannelLinkPublic']

@@ -36,6 +36,7 @@ from .models import (
     Alert,
     AlertDelivery,
     AlertTestResult,
+    Analytics,
     APIKey,
     Billing,
     BillingDetails,
@@ -142,6 +143,15 @@ def _dump(value: Any) -> Any:
 def _when(v: TimeFilter | None) -> str | None:
     """A time for a JSON body: datetimes become ISO 8601, strings pass through (``""`` clears)."""
     if isinstance(v, (datetime, date)):
+        return v.isoformat()
+    return v
+
+
+def _day(v: str | date | None) -> str | None:
+    """A calendar day as YYYY-MM-DD (a datetime keeps only its date)."""
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date):
         return v.isoformat()
     return v
 
@@ -1183,6 +1193,40 @@ class AsyncEvents(_Resource):
             if not page.next_cursor:
                 return
             cursor = page.next_cursor
+
+
+# ------------------------------------------------------------------ analytics
+
+
+class AsyncAnalyticsResource(_Resource):
+    """How publishing went: totals, channels, sources, posting times, top posts and failures."""
+
+    async def get(
+        self,
+        *,
+        from_: str | date | None = None,
+        to: str | date | None = None,
+        days: int | None = None,
+        channel: str | None = None,
+        collection: str | None = None,
+        source: str | None = None,
+        request_options: RequestOptions | None = None,
+    ) -> Analytics:
+        """The report for a range of days in the workspace's time zone (``from_`` and ``to``
+        both included, YYYY-MM-DD; default the last 30 days, at most 366). ``days`` instead of
+        ``from_``: the last n days up to ``to`` (sending both is a 422). Needs ``posts:read``."""
+        params = {
+            "from": _day(from_),
+            "to": _day(to),
+            "days": days,
+            "channel": channel,
+            "collection": collection,
+            "source": source,
+        }
+        r = await self._http.request(
+            RequestSpec("GET", "/v1/analytics", params=params, options=_opts(request_options))
+        )
+        return _model(Analytics, r)
 
 
 # ------------------------------------------------------------------- webhooks
@@ -2460,6 +2504,7 @@ class AsyncStaqly:
         self.events = AsyncEvents(self)
         self.webhooks = AsyncWebhooks(self)
         self.alerts = AsyncAlerts(self)
+        self.analytics = AsyncAnalyticsResource(self)
         self.workspace = AsyncWorkspaceResource(self)
         self.workspaces = AsyncWorkspaces(self)
         self.plans = AsyncPlans(self)

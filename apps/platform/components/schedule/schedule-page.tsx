@@ -65,7 +65,7 @@ const SlotScheduleDialog = dynamic(() => import('./slot-schedule-dialog').then((
 type Layout = 'grid' | 'list'
 
 const STATE_TONE: Record<ScheduleState, Tone> = {
-  scheduled: 'success',
+  scheduled: 'info',
   publishing: 'info',
   published: 'neutral',
   failed: 'danger',
@@ -164,8 +164,11 @@ const Entry = memo(function Entry({
   variant?: 'cell' | 'row'
   onOpen: (id: string, channel?: string) => void
 }) {
+  // A post scheduled again (a channel took it on an earlier try) is upcoming on every card until it goes out.
   const state: ScheduleState =
-    target && target.status !== 'pending' ? target.status : (scheduleState(post) ?? 'scheduled')
+    target && target.status !== 'pending' && post.status !== 'scheduled'
+      ? target.status
+      : (scheduleState(post) ?? 'scheduled')
   const tone = TONES[STATE_TONE[state]]
   const StateIcon = STATE_ICON[state]
   const draggable = variant === 'cell' && canReschedule(post)

@@ -811,13 +811,14 @@ function Chat({
                   Write and schedule posts, set up collections, find what failed. Changes wait for you to allow them.
                 </p>
               </div>
-              <div className="grid w-full gap-2 text-left @xl:grid-cols-2">
+              {/* Inset from the panel's edges, with room inside each option. */}
+              <div className="grid w-full gap-2 px-2 text-left sm:px-4 @xl:grid-cols-2">
                 {SUGGESTIONS.map(({ icon: Icon, text }) => (
                   <button
                     key={text}
                     type="button"
                     onClick={() => send(text)}
-                    className="flex items-start gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-left text-sm transition-colors outline-none hover:border-brand/40 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:py-3"
+                    className="flex items-start gap-2.5 rounded-xl border bg-card px-4 py-2.5 text-left text-sm transition-colors outline-none hover:border-brand/40 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:py-3"
                   >
                     <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                     {text}
@@ -1047,10 +1048,25 @@ export function AssistantPanel({ open, onOpenChange }: { open: boolean; onOpenCh
     )
   }
 
-  return open ? <DockedPanel workspaceId={workspaceId} onClose={() => onOpenChange(false)} /> : null
+  return <Docked workspaceId={workspaceId} open={open} onClose={() => onOpenChange(false)} />
+}
+
+/** Keeps the docked panel mounted while it slides out, then lets it go. */
+function Docked({ workspaceId, open, onClose }: { workspaceId: string; open: boolean; onClose: () => void }) {
+  const [mounted, setMounted] = useState(open)
+
+  if (open && !mounted) {
+    setMounted(true)
+  }
+
+  return mounted ? (
+    <DockedPanel workspaceId={workspaceId} open={open} onClose={onClose} onGone={() => setMounted(false)} />
+  ) : null
 }
 
 const MIN_WIDTH = 320
+// How long the panel takes to slide in or out (the width transition's duration-200).
+const SLIDE_MS = 200
 const DEFAULT_WIDTH = 420
 // Dragged narrower than this, the panel closes (it reopens at its last real width).
 const CLOSE_BELOW = 220
@@ -1073,9 +1089,40 @@ function savedWidth() {
  * (at least MIN_WIDTH, at most most of the window); dragged nearly shut it closes. The edge also takes the arrow
  * keys, 16 px a press.
  */
-function DockedPanel({ workspaceId, onClose }: { workspaceId: string; onClose: () => void }) {
+function DockedPanel({
+  workspaceId,
+  open,
+  onClose,
+  onGone,
+}: {
+  workspaceId: string
+  open: boolean
+  onClose: () => void
+  onGone: () => void
+}) {
   const [width, setWidth] = useState(savedWidth)
   const [expanded, setExpanded] = useState(false)
+  // It slides in from the right edge when it opens and back out when it closes (Close, ⌘J or the sidebar's
+  // Assistant): width 0 before its first frame and once closed, then it unmounts.
+  const [entered, setEntered] = useState(false)
+  const shut = !entered || !open
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setEntered(true))
+
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  useEffect(() => {
+    if (open) {
+      return
+    }
+
+    const t = window.setTimeout(onGone, SLIDE_MS)
+
+    return () => window.clearTimeout(t)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- onGone only clears the parent's flag
+  }, [open])
   // One element whatever the mode, so the chat (and an answer on its way) stays mounted.
   const children = (
     <Chat
@@ -1157,11 +1204,12 @@ function DockedPanel({ workspaceId, onClose }: { workspaceId: string; onClose: (
   return (
     <aside
       aria-label="Assistant"
-      style={expanded ? undefined : { width: Math.max(shown, 0) }}
+      style={expanded ? undefined : { width: shut ? 0 : Math.max(shown, 0) }}
       className={cn(
         expanded
           ? 'fixed inset-0 z-50 flex flex-col bg-background'
-          : 'sticky top-0 flex h-svh shrink-0 flex-col border-l bg-sidebar shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.35)]',
+          : 'sticky top-0 flex h-svh shrink-0 flex-col overflow-x-clip border-l bg-sidebar shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.35)]',
+        !expanded && !dragging && 'transition-[width] duration-200 ease-out motion-reduce:transition-none',
         dragging && 'select-none',
       )}
     >
@@ -1185,11 +1233,17 @@ function DockedPanel({ workspaceId, onClose }: { workspaceId: string; onClose: (
           }
         }}
         className={cn(
-          'absolute inset-y-0 -left-1 z-20 w-2 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:transition-colors hover:after:bg-ring focus-visible:after:w-0.5 focus-visible:after:bg-ring',
+          'absolute inset-y-0 left-0 z-20 w-2 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:transition-colors hover:after:bg-ring focus-visible:after:w-0.5 focus-visible:after:bg-ring',
           dragging && 'after:bg-ring',
         )}
       />
-      {children}
+      {/* The chat keeps its width while the panel slides, so its text doesn't reflow on the way. */}
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        style={expanded ? undefined : { width: Math.max(shown, 0), minWidth: Math.max(shown, 0) }}
+      >
+        {children}
+      </div>
       {!expanded && width < MIN_WIDTH && (
         <p className="absolute inset-0 z-10 grid place-items-center bg-sidebar/90 px-4 text-center text-sm text-muted-foreground">
           Release to close

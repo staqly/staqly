@@ -23,12 +23,23 @@ __all__ = [
     "Alert",
     "AlertDelivery",
     "AlertTestResult",
+    "Analytics",
+    "AnalyticsDay",
+    "AnalyticsFailure",
+    "AnalyticsFeedback",
+    "AnalyticsMetrics",
+    "AnalyticsQueue",
+    "AnalyticsRange",
+    "AnalyticsSource",
+    "AnalyticsTimeSlot",
+    "AnalyticsTotals",
     "Billing",
     "BillingURL",
     "XBundle",
     "XPosts",
     "Channel",
     "ChannelActivity",
+    "ChannelAnalytics",
     "ChannelGroup",
     "ChannelStatus",
     "ChannelTestResult",
@@ -50,6 +61,7 @@ __all__ = [
     "MediaLibraryItem",
     "MediaPage",
     "MediaUse",
+    "MetricsCoverage",
     "Plan",
     "PlanLimits",
     "Post",
@@ -57,6 +69,7 @@ __all__ = [
     "PostPreview",
     "PostPreviewTarget",
     "PostStatus",
+    "PostingTimes",
     "PostTarget",
     "PostTargetInput",
     "Reply",
@@ -80,6 +93,9 @@ __all__ = [
     "StaqlyModel",
     "Tag",
     "TargetStatus",
+    "TopPost",
+    "TopPostChannel",
+    "TopPosts",
     "Usage",
     "Webhook",
     "WebhookEvent",
@@ -819,6 +835,205 @@ class TargetMetrics(StaqlyModel):
     updated_at: datetime | None = None
     #: Why the last read failed.
     error: str = ""
+
+
+# ------------------------------------------------------------------- analytics
+
+
+class AnalyticsMetrics(StaqlyModel):
+    """Platform numbers in one vocabulary (engagements = likes + replies + reposts + quotes +
+    bookmarks). None: no target in the sum reported that number."""
+
+    #: Views or impressions.
+    impressions: int | None = None
+    engagements: int = 0
+    likes: int | None = None
+    replies: int | None = None
+    reposts: int | None = None
+    quotes: int | None = None
+    bookmarks: int | None = None
+    link_clicks: int | None = None
+
+
+class AnalyticsTotals(StaqlyModel):
+    posts_created: int = 0
+    #: Posts with at least one channel published in the period.
+    posts_published: int = 0
+    targets_published: int = 0
+    targets_failed: int = 0
+    #: published / (published + failed); None when nothing finished.
+    success_rate: float | None = None
+    #: Targets that needed more than one attempt.
+    retried: int = 0
+    #: How long after its publish time a target went out, on average (None: nothing to measure).
+    delay_avg_seconds: float | None = None
+    #: 90th percentile of the same delay.
+    delay_p90_seconds: float | None = None
+    #: Platform numbers summed over the published targets that have them; None when none has.
+    metrics: AnalyticsMetrics | None = None
+
+
+class AnalyticsRange(StaqlyModel):
+    """The days of the report (``to`` included) in the workspace's time zone."""
+
+    from_: str = Field(alias="from")
+    to: str
+    days: int
+    #: The workspace's IANA time zone the days are in.
+    timezone: str
+    #: The first instant of the range.
+    start: datetime
+    #: The instant right after the range.
+    end: datetime
+    previous_from: str
+    previous_to: str
+
+
+class AnalyticsQueue(StaqlyModel):
+    """What waits now (not a period figure)."""
+
+    scheduled: int = 0
+    drafts: int = 0
+    next_publish_at: OptionalDatetime = None
+
+
+class AnalyticsDay(StaqlyModel):
+    date: str
+    #: Targets published that day.
+    published: int = 0
+    #: Targets that failed that day.
+    failed: int = 0
+
+
+class MetricsCoverage(StaqlyModel):
+    """How complete a channel's numbers are."""
+
+    #: ``platform``, ``automation`` or ``none``.
+    support: str
+    #: Published targets in the range.
+    published: int = 0
+    #: Of those, how many have numbers.
+    with_data: int = 0
+    #: When the newest numbers in the range were read.
+    updated_at: OptionalDatetime = None
+
+
+class ChannelAnalytics(StaqlyModel):
+    channel_id: str
+    name: str = ""
+    provider: str = ""
+    handle: str = ""
+    avatar_url: str = ""
+    #: See :data:`ChannelStatus`.
+    status: str = ""
+    published: int = 0
+    failed: int = 0
+    success_rate: float | None = None
+    #: The last target published in the range.
+    last_published_at: OptionalDatetime = None
+    #: The most common failure reason in the range.
+    top_failure: str | None = None
+    metrics: AnalyticsMetrics | None = None
+    #: Per published target with numbers.
+    avg_engagements: float | None = None
+    metrics_coverage: MetricsCoverage
+
+
+class AnalyticsSource(StaqlyModel):
+    #: The posts' source as stored (pass it as the ``source`` filter).
+    source: str
+    #: ``dashboard``, ``api``, ``mcp``, ``schedule``, ``repeat`` or ``other``.
+    kind: str
+    label: str = ""
+    posts_created: int = 0
+    posts_published: int = 0
+    targets_published: int = 0
+    targets_failed: int = 0
+    success_rate: float | None = None
+
+
+class AnalyticsTimeSlot(StaqlyModel):
+    #: 0 is Monday.
+    weekday: int
+    hour: int
+    published: int = 0
+    #: Published targets with numbers.
+    samples: int = 0
+    avg_engagements: float | None = None
+    #: Fewer samples than ``min_samples``.
+    low_confidence: bool = False
+
+
+class PostingTimes(StaqlyModel):
+    #: Weekday and hour slots with published targets, in the workspace's time zone.
+    cells: list[AnalyticsTimeSlot] = Field(default_factory=list)
+    #: Up to three slots with the highest average engagements, confident ones first.
+    best: list[AnalyticsTimeSlot] = Field(default_factory=list)
+    #: Below this many published targets with numbers a slot is low confidence.
+    min_samples: int = 0
+
+
+class TopPostChannel(StaqlyModel):
+    channel_id: str
+    provider: str = ""
+    external_url: str = ""
+
+
+class TopPost(StaqlyModel):
+    post_id: str
+    excerpt: str = ""
+    #: The first channel it went out on in the range.
+    published_at: datetime
+    channels: list[TopPostChannel] = Field(default_factory=list)
+    metrics: AnalyticsMetrics | None = None
+
+
+class TopPosts(StaqlyModel):
+    #: ``engagements`` when platform numbers exist in the range, else ``recent``.
+    by: str
+    posts: list[TopPost] = Field(default_factory=list)
+
+
+class AnalyticsFailure(StaqlyModel):
+    reason: str
+    count: int = 0
+    #: Channel ids.
+    channels: list[str] = Field(default_factory=list)
+    last_at: datetime
+    #: A post that failed this way.
+    sample_post_id: str = ""
+
+
+class AnalyticsFeedback(StaqlyModel):
+    """Preview comment threads (ignores the channel filter)."""
+
+    #: Threads started in the range.
+    opened: int = 0
+    #: Threads resolved in the range.
+    resolved: int = 0
+    #: Threads open now.
+    open: int = 0
+
+
+class Analytics(StaqlyModel):
+    """How publishing went over a range of days (``analytics.get``)."""
+
+    range: AnalyticsRange
+    totals: AnalyticsTotals
+    #: The same figures for the period right before.
+    previous: AnalyticsTotals
+    queue: AnalyticsQueue
+    #: Every day of the range, in the workspace's time zone.
+    daily: list[AnalyticsDay] = Field(default_factory=list)
+    #: Every channel of the workspace (or the filtered one), busiest first.
+    channels: list[ChannelAnalytics] = Field(default_factory=list)
+    #: Where posts come from, most active first; ignores the source filter.
+    sources: list[AnalyticsSource] = Field(default_factory=list)
+    posting_times: PostingTimes
+    top_posts: TopPosts
+    #: The most common failure reasons; errors that differ only by numbers, ids or links count as one.
+    failures: list[AnalyticsFailure] = Field(default_factory=list)
+    feedback: AnalyticsFeedback
 
 
 class PreviewLink(StaqlyModel):

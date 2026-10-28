@@ -21,8 +21,21 @@ func TestHotQueriesUseTheirIndex(t *testing.T) {
 		{"SELECT id FROM posts WHERE repeat_of = ? AND repeat_of <> '' LIMIT 1", "posts_repeat_of"},
 		// The per-link comment limit on public preview pages.
 		{"SELECT COUNT(*) FROM post_comments WHERE preview_id = ? AND created_at > ?", "post_comments_preview"},
+		// Analytics: what waits now, and the preview feedback threads.
+		{`SELECT SUM(p.status = 'scheduled'), SUM(p.status = 'draft'), MIN(CASE WHEN p.status = 'scheduled' THEN p.publish_at END)
+			FROM posts p WHERE p.workspace_id = ? AND p.status IN ('scheduled', 'draft')`, "posts_status"},
+		{`SELECT COUNT(*) FROM post_comments c JOIN posts p ON p.id = c.post_id WHERE c.workspace_id = ? AND c.parent_id = ''`,
+			"post_comments_workspace"},
+		// Analytics: a workspace's finished targets go through its posts, never every workspace's targets.
+		{`SELECT COUNT(*) FROM posts p JOIN post_targets t ON t.post_id = p.id
+			WHERE p.workspace_id = ? AND t.status IN ('published', 'failed') AND COALESCE(t.published_at, t.updated_at) >= ?`,
+			"SEARCH t USING INDEX sqlite_autoindex_post_targets_1"},
 	} {
-		rows, err := db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+c.query, "x", "x")
+		args := make([]any, strings.Count(c.query, "?"))
+		for i := range args {
+			args[i] = "x"
+		}
+		rows, err := db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+c.query, args...)
 		if err != nil {
 			t.Fatal(err)
 		}

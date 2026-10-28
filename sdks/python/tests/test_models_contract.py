@@ -54,6 +54,11 @@ PAIRS: dict[str, type[models.StaqlyModel]] = {
     "Session": models.Session,
     "Billing": models.Billing,
     "BillingURL": models.BillingURL,
+    "Analytics": models.Analytics,
+    "AnalyticsTotals": models.AnalyticsTotals,
+    "AnalyticsMetrics": models.AnalyticsMetrics,
+    "ChannelAnalytics": models.ChannelAnalytics,
+    "AnalyticsTimeSlot": models.AnalyticsTimeSlot,
 }
 
 
@@ -106,6 +111,29 @@ def test_nested_models_match(schemas: dict[str, Any]) -> None:
     assert set(models.JobKindStats.model_fields) == set(
         schemas["JobStats"]["properties"]["by_kind"]["additionalProperties"]["properties"]
     )
+
+
+def test_analytics_nested_models_match(schemas: dict[str, Any]) -> None:
+    def wire(model: type[models.StaqlyModel]) -> set[str]:
+        return {f.alias or n for n, f in model.model_fields.items()}
+
+    a = schemas["Analytics"]["properties"]
+    top = a["top_posts"]["properties"]["posts"]["items"]
+    pairs: list[tuple[type[models.StaqlyModel], dict[str, Any]]] = [
+        (models.AnalyticsRange, a["range"]),
+        (models.AnalyticsQueue, a["queue"]),
+        (models.AnalyticsDay, a["daily"]["items"]),
+        (models.AnalyticsSource, a["sources"]["items"]),
+        (models.PostingTimes, a["posting_times"]),
+        (models.TopPosts, a["top_posts"]),
+        (models.TopPost, top),
+        (models.TopPostChannel, top["properties"]["channels"]["items"]),
+        (models.AnalyticsFailure, a["failures"]["items"]),
+        (models.AnalyticsFeedback, a["feedback"]),
+        (models.MetricsCoverage, schemas["ChannelAnalytics"]["properties"]["metrics_coverage"]),
+    ]
+    for model, schema in pairs:
+        assert wire(model) == set(schema["properties"]), f"{model.__name__}: model and OpenAPI differ"
 
 
 def test_plan_limits_match(schemas: dict[str, Any]) -> None:

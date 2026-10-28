@@ -1,0 +1,65 @@
+---
+title: Analytics
+description: See what went out, what failed, where your posts come from and when they do best.
+---
+
+**Analytics** shows how your publishing goes: how many posts went out, how many channels
+failed and why, how late the queue was, which agents and automations create your posts, and
+when your posts get the most engagement. It is built from your workspace's own data, so it works
+the same in [local and cloud mode](/local-vs-cloud). In cloud mode everyone who can read posts
+sees it.
+
+Staqly never asks a platform for numbers to draw this page. Views, likes and other platform
+numbers are the ones it already has: read when someone opens a published post's **Statistics**
+tab, or reported by [your own automation](/concepts#providers). Platforms that don't
+report numbers to staqly yet still show everything staqly knows itself.
+
+## Pick a range and filters
+
+Open **Analytics** in the sidebar. One row above the page holds the filters:
+
+- **7 days**, **30 days** (the default) or **90 days**, or a **Custom range** of days.
+- **Channel**: one channel's posts only.
+- **Source**: posts from one source only (the dashboard, an agent, a schedule).
+
+Days are in the workspace's time zone (**Settings → General → Workspace**), shown under the filters.
+Filters are kept in the address, so you can bookmark or share a view.
+
+## What each part shows
+
+| Part | What it shows | Why it matters |
+|---|---|---|
+| **Tiles** | Posts published, success rate, failures, upcoming posts and the average delay | The health of your publishing at a glance. Each tile says whether it is a period total, a period average or right now, and compares with the previous period of the same length (no arrow when that period had nothing to compare with). |
+| **Published and failed per day** | Channels published and failed on each day of the range | Spots a bad day or a gap in your schedule. Use the arrow keys on the chart to read each day, or **Show as a table**. |
+| **Channels** | Per channel: published, failed, success rate, last post, views, engagements and the most common failure | Finds the channel that needs attention. Click a column header to sort. |
+| **Automation** | Per source: posts created and published, channels published and failed, success rate | Compares the dashboard with your agents (over MCP or the API), schedules that fetch posts and repeating posts. A source is who created the post. |
+| **Performance** | Views, engagements, likes, replies, reposts and link clicks summed over the range | How your posts do, with how many posts the numbers cover and when they were read. |
+| **Posting times** | Channels published per weekday and hour; with numbers, the average engagements per slot | When you post, and when posts do best. A slot with fewer than five posts with numbers is marked low confidence. |
+| **Failure reasons** | The most common reasons, how often, on which channels | What to fix first. Each reason links to the failed posts on that channel and to an example post. |
+| **Top posts** | The ten posts with the most engagements, or the most recent ones when no numbers exist yet | What worked, with links to each post and to where it was published. |
+
+**Engagements** are likes, replies, reposts, quotes and bookmarks added up, so platforms that
+name them differently can be compared. The **delay** is how long after its publish time a
+channel's post went out: the queue, retries and the platform's answer included.
+
+## When a number is missing
+
+A channel without numbers says why:
+
+- **This platform doesn't report numbers to staqly yet**: staqly can't read numbers from it.
+  Everything else (published, failed, delay) still counts.
+- **No numbers read yet**: the platform reports them, but no post in the range has been read.
+  Open a published post's **Statistics** tab to read its numbers.
+- **No data yet in this range**: nothing was published on that channel in the range.
+
+## For agents and the API
+
+The same report is `GET /v1/analytics` (scope `posts:read`, see the
+[API reference](/api/reference/analytics/get-analytics)) and the MCP tool
+[`get_analytics`](/mcp/tools#get_analytics). Pass `from` and `to` (days, both included) or
+`days`, plus optional `channel`, `collection` and `source`. The SDKs have
+`staqly.analytics.get()` and `client.analytics.get()`.
+
+```bash
+curl -s "http://localhost:3333/v1/analytics?days=7" -H "Authorization: Bearer $STAQLY_API_KEY"
+```
