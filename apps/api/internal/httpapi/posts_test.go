@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -234,6 +235,20 @@ func TestCustomTargetRoundTrip(t *testing.T) {
 	types := map[string]int{}
 	for _, ev := range evs.Data {
 		types[ev.Type]++
+		// Per-target events name the channel and its platform (notifications say where a post went).
+		if ev.Type == "post.target_published" || ev.Type == "post.target_failed" {
+			var d struct {
+				Channel map[string]any `json:"channel"`
+			}
+			_ = json.Unmarshal(ev.Data, &d)
+			c := d.Channel
+			if c["id"] != ch.ID || c["name"] != "My worker" || c["provider"] != "custom" || c["provider_name"] != "Your own automation" {
+				t.Fatalf("%s channel: %+v", ev.Type, c)
+			}
+			if _, ok := c["credentials"]; ok {
+				t.Fatalf("credentials in an event: %+v", c)
+			}
+		}
 	}
 	if types["post.publish_requested"] != 2 || types["post.target_failed"] != 1 || types["post.failed"] != 1 ||
 		types["post.target_published"] != 1 || types["post.published"] != 1 {

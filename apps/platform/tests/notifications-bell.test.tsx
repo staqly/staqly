@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { NotificationsPage } from '@/components/notifications/notifications-page'
 import { NotificationsBell } from '@/components/shell/notifications-bell'
 import type { StashEvent } from '@/lib/api'
-import { notificationFor } from '@/lib/notifications'
+import { formatDateTimeIn } from '@/lib/format'
+import { notificationFor, notificationsFor } from '@/lib/notifications'
+import { qk } from '@/lib/queries'
 
-import { mockApi, renderWithProviders } from './utils'
+import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
 
 function event(over: Partial<StashEvent> & { type: string; seq: number }): StashEvent {
   return {
@@ -25,9 +27,19 @@ const postData = { post: { id: 'pst_1', content: 'Spring sale post\nmore' } }
 const published = event({
   type: 'post.target_published',
   seq: 12,
-  data: { ...postData, channel: { name: 'Brand on Mastodon' }, target: { external_url: 'https://x.test/p/1' } },
+  data: {
+    ...postData,
+    channel_id: 'ch_1',
+    channel: { id: 'ch_1', name: 'Brand', provider: 'mastodon', provider_name: 'Mastodon' },
+    url: 'https://x.test/p/1',
+  },
 })
-const failed = event({ type: 'post.failed', seq: 11, data: { ...postData, error: 'Rate limited' } })
+const failed = event({
+  type: 'post.failed',
+  seq: 11,
+  post_id: 'pst_2',
+  data: { post: { id: 'pst_2', content: 'Spring sale post' }, error: 'Rate limited' },
+})
 const requested = event({ type: 'schedule.posts_requested', seq: 10, data: { schedule: { name: 'Mornings' } } })
 const reconnect = event({
   type: 'channel.needs_reconnect',
@@ -36,6 +48,43 @@ const reconnect = event({
   data: { channel: { name: 'News bot' }, error: 'Token revoked' },
 })
 const edited = event({ type: 'post.updated', seq: 8, data: postData })
+
+/** About an hour ago, `secondsAgo` before that. */
+const at = (secondsAgo: number) => new Date(Date.now() - 3_600_000 - secondsAgo * 1000).toISOString()
+
+const channels = [
+  ['ch_a', 'Brand', 'bluesky', 'Bluesky'],
+  ['ch_b', 'Brand', 'mastodon', 'Mastodon'],
+  ['ch_c', 'News', 'linkedin', 'LinkedIn'],
+  ['ch_d', 'News', 'threads', 'Threads'],
+  ['ch_e', 'Shop', 'x', 'X'],
+] as const
+
+function target(i: number, seq: number, outcome: 'published' | 'failed' = 'published') {
+  const [id, name, provider, provider_name] = channels[i]!
+
+  return event({
+    type: outcome === 'published' ? 'post.target_published' : 'post.target_failed',
+    seq,
+    channel_id: id,
+    created_at: at(60 - seq),
+    data: {
+      post: { id: 'pst_1', content: 'xxxxxxxxx' },
+      channel_id: id,
+      channel: { id, name, provider, provider_name, avatar_url: '' },
+      url: outcome === 'published' ? `https://social.test/${id}` : '',
+      error: outcome === 'failed' ? 'Media too large' : '',
+    },
+  })
+}
+
+const summary = (seq: number, type = 'post.published') =>
+  event({
+    type,
+    seq,
+    created_at: at(60 - seq),
+    data: { post: { id: 'pst_1', content: 'xxxxxxxxx' }, error: type === 'post.failed' ? 'A channel failed' : '' },
+  })
 
 beforeEach(() => localStorage.clear())
 
@@ -120,5 +169,176 @@ describe('notifications', () => {
       'href',
       '/activity?type=channel.needs_reconnect',
     )
+  })
+
+  describe('one publish to several channels', () => {
+    it('stacks the channels of one publish into one entry with the latest time', () => {
+      const evs = [summary(26), target(4, 25), target(3, 24), target(2, 23), target(1, 22), target(0, 21)]
+      const list = notificationsFor(evs)
+
+      expect(list).toHaveLength(1)
+      expect(list[0]).toMatchObject({
+        text: '“xxxxxxxxx” is out on 5 channels',
+        tone: 'success',
+        seq: 26,
+        at: evs[0]!.created_at,
+        href: '/posts/pst_1',
+      })
+      expect(list[0]!.link).toBeUndefined()
+      expect(list[0]!.channels?.map((c) => c.url)).toEqual(
+        ['ch_e', 'ch_d', 'ch_c', 'ch_b', 'ch_a'].map((id) => `https://social.test/${id}`),
+      )
+    })
+
+    it('says plainly when some channels failed, and lists the failed ones first', () => {
+      const evs = [
+        summary(26, 'post.failed'),
+        target(4, 25, 'failed'),
+        target(3, 24),
+        target(2, 23),
+        target(1, 22),
+        target(0, 21),
+      ]
+      const [n] = notificationsFor(evs)
+
+      expect(n).toMatchObject({ text: '“xxxxxxxxx” is out on 4 channels, failed on 1', tone: 'danger' })
+      expect(n!.channels![0]).toMatchObject({ id: 'ch_e', status: 'failed', error: 'Media too large' })
+      expect(notificationsFor([target(1, 22, 'failed'), target(0, 21, 'failed')])[0]).toMatchObject({
+        text: '“xxxxxxxxx” failed on 2 channels',
+        tone: 'danger',
+      })
+    })
+
+    it('never hides the post failing behind channels that went out', () => {
+      const [n] = notificationsFor([summary(26, 'post.failed'), target(1, 22), target(0, 21)])
+
+      expect(n).toMatchObject({
+        text: '“xxxxxxxxx” is out on 2 channels, but publishing failed: A channel failed',
+        tone: 'danger',
+      })
+    })
+
+    it('a retry keeps the newest outcome of a channel', () => {
+      const [n] = notificationsFor([target(0, 23), target(0, 22, 'failed'), target(1, 21)])
+
+      expect(n).toMatchObject({ text: '“xxxxxxxxx” is out on 2 channels', tone: 'success' })
+    })
+
+    it('names the channel when there is only one', () => {
+      const [n] = notificationsFor([summary(22), target(0, 21)])
+
+      expect(n).toMatchObject({ text: '“xxxxxxxxx” is out on Brand on Bluesky', link: 'https://social.test/ch_a' })
+      expect(notificationsFor([target(4, 21, 'failed')])[0]?.text).toBe(
+        '“xxxxxxxxx” did not go out on Shop on X: Media too large',
+      )
+      // Events from before the API named the channel: the post's target has its name.
+      const old = event({
+        type: 'post.target_published',
+        seq: 5,
+        data: {
+          post: {
+            content: 'Old',
+            targets: [
+              { channel_id: 'ch_z', channel_name: 'Brand', provider: 'bluesky', external_url: 'https://o.test/1' },
+            ],
+          },
+          channel_id: 'ch_z',
+        },
+      })
+
+      expect(notificationFor(old)).toMatchObject({ text: '“Old” is out on Brand', link: 'https://o.test/1' })
+    })
+
+    it('keeps publishes apart: other posts, and the same post again later', () => {
+      const other = event({
+        type: 'post.published',
+        seq: 30,
+        post_id: 'pst_9',
+        created_at: at(40),
+        data: { post: { content: 'Other' } },
+      })
+      const later = { ...target(0, 40), created_at: new Date(Date.now() - 600_000).toISOString() }
+      const list = notificationsFor([later, other, target(1, 22), requested, target(0, 21)])
+
+      expect(list.map((n) => n.text)).toEqual([
+        '“xxxxxxxxx” is out on Brand on Bluesky',
+        '“Other” was published',
+        '“xxxxxxxxx” is out on 2 channels',
+        '“Mornings” found nothing to publish and asked for new posts',
+      ])
+    })
+
+    it('the bell shows one stacked entry: unread, expandable, failures in view, a readable time', async () => {
+      mockApi({
+        'GET /v1/events': {
+          data: [
+            summary(26, 'post.failed'),
+            target(4, 25, 'failed'),
+            target(3, 24),
+            target(2, 23),
+            target(1, 22),
+            target(0, 21),
+          ],
+        },
+      })
+      const client = makeClient()
+      const session = sessionFixture('local')
+
+      client.setQueryData(qk.setup, {
+        initialized: true,
+        mode: 'local',
+        signup_open: false,
+        setup_token_required: false,
+      })
+      client.setQueryData(qk.session, { ...session, workspace: { ...session.workspace, timezone: 'Asia/Tokyo' } })
+      const user = userEvent.setup()
+
+      renderWithProviders(<NotificationsBell />, { client })
+      const bell = await screen.findByRole('button', { name: 'Notifications, 1 unread' })
+
+      await user.click(bell)
+      const rows = within(await screen.findByTestId('notifications-list')).getAllByRole('listitem')
+
+      expect(rows).toHaveLength(1)
+      const row = within(rows[0]!)
+
+      expect(row.getByRole('button', { name: '“xxxxxxxxx” is out on 4 channels, failed on 1' })).toBeInTheDocument()
+      expect(row.getByText('Failed on Shop on X')).toBeInTheDocument()
+      const time = rows[0]!.querySelector('time')!
+
+      expect(time.title).toBe(formatDateTimeIn(time.dateTime, 'Asia/Tokyo'))
+      expect(time.title).not.toMatch(/\d{4}-\d{2}-\d{2}T/)
+      expect(time.title).toMatch(/GMT\+9/)
+      await user.click(row.getByRole('button', { name: /Show 5 channels/ }))
+      const items = within(screen.getByTestId('publish-channels')).getAllByRole('listitem')
+
+      expect(items).toHaveLength(5)
+      expect(items[0]).toHaveTextContent(/Shop on X\s*Failed\s*Media too large/)
+      expect(within(items[1]!).getByRole('link', { name: /Open on the platform/ })).toHaveAttribute(
+        'href',
+        'https://social.test/ch_d',
+      )
+      await user.click(screen.getByRole('button', { name: 'Mark all as read' }))
+      expect(screen.getByRole('button', { name: 'Notifications' })).toHaveAttribute('data-unread', '0')
+    })
+
+    it('the page shows the stack once, with its channels', async () => {
+      mockApi({ 'GET /v1/events': { data: [summary(26), target(2, 23), target(1, 22), target(0, 21)] } })
+      const user = userEvent.setup()
+
+      renderWithProviders(<NotificationsPage />, { mode: 'local' })
+      const rows = within(await screen.findByTestId('notifications-page-list')).getAllByRole('listitem')
+
+      expect(rows).toHaveLength(1)
+      expect(within(rows[0]!).getByRole('link', { name: '“xxxxxxxxx” is out on 3 channels' })).toHaveAttribute(
+        'href',
+        '/posts/pst_1',
+      )
+      expect(within(rows[0]!).getByText('evt_26')).toBeInTheDocument()
+      await user.click(within(rows[0]!).getByRole('button', { name: /Show 3 channels/ }))
+      expect(
+        within(screen.getByTestId('publish-channels')).getAllByRole('link', { name: /Open on the platform/ }),
+      ).toHaveLength(3)
+    })
   })
 })

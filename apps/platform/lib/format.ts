@@ -72,6 +72,44 @@ export function formatDateTime(value?: string | null): string {
   return dateTimeFormat().format(d)
 }
 
+const zonedFormats = new Map<string, Intl.DateTimeFormat>()
+
+/**
+ * A date and time in a given time zone (the workspace's), with the zone's short name: "Oct 27, 2026, 10:39 PM
+ * GMT+1". Without a zone, or with one the browser doesn't know, the viewer's own.
+ */
+export function formatDateTimeIn(value?: string | null, timeZone?: string | null): string {
+  const d = parseDate(value)
+
+  if (!d) {
+    return '—'
+  }
+
+  const zone = timeZone || ''
+  let f = zonedFormats.get(zone)
+
+  if (!f) {
+    const opts: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    }
+
+    try {
+      f = new Intl.DateTimeFormat(undefined, zone ? { ...opts, timeZone: zone } : opts)
+    } catch {
+      f = new Intl.DateTimeFormat(undefined, opts)
+    }
+
+    zonedFormats.set(zone, f)
+  }
+
+  return f.format(d)
+}
+
 export function formatBytes(bytes?: number | null): string {
   if (bytes === undefined || bytes === null) {
     return '—'
