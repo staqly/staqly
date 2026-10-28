@@ -55,7 +55,7 @@ The same integrations work against Staqly Community Edition on your own computer
 | Aspect | Community Edition | Staqly Cloud |
 |---|---|---|
 | Status | Self-hosted, ready to use | Hosted by us at `app.staqly.ai` |
-| Base URL | `http://localhost:3333` | `https://app.staqly.ai` |
+| Base URL | `http://localhost:3333` | `https://api.staqly.ai` |
 | Setup | `curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh \| sh` then `staqly serve`, or [Docker](/self-hosting/docker) | [Sign up](https://app.staqly.ai/signup) (Google, an email code or a passkey); create a scoped key (`stk_...`) for each tool under **Integrations → API keys** |
 | Credentials | `Authorization: Bearer` with the access token staqly prints at start (`staqly serve token`), full access | `Authorization: Bearer` API key with [scopes](/api/authentication) |
 | API surface | Full REST API, MCP at `/mcp`, webhooks | Same REST API, MCP at `/mcp`, webhooks |
@@ -76,7 +76,7 @@ import os
 from staqly import Staqly
 
 local = Staqly()  # http://localhost:3333, the access token from STAQLY_API_KEY
-cloud = Staqly(base_url="https://app.staqly.ai", api_key=os.environ["STAQLY_API_KEY"])
+cloud = Staqly(base_url="https://api.staqly.ai", api_key=os.environ["STAQLY_API_KEY"])
 ```
 
 </Tab>
@@ -86,7 +86,7 @@ cloud = Staqly(base_url="https://app.staqly.ai", api_key=os.environ["STAQLY_API_
 import { Staqly } from '@staqly/sdk'
 
 const local = new Staqly() // http://localhost:3333, the access token from STAQLY_API_KEY
-const cloud = new Staqly({ baseUrl: 'https://app.staqly.ai', apiKey: process.env.STAQLY_API_KEY })
+const cloud = new Staqly({ baseUrl: 'https://api.staqly.ai', apiKey: process.env.STAQLY_API_KEY })
 ```
 
 </Tab>

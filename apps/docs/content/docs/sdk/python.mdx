@@ -29,7 +29,7 @@ pip install staqly        # or: uv add staqly
 **Staqly Cloud:** create an API key (**Integrations → API keys**) and set both variables:
 
 ```bash
-export STAQLY_API_URL=https://app.staqly.ai
+export STAQLY_API_URL=https://api.staqly.ai
 export STAQLY_API_KEY=stk_...
 ```
 
@@ -81,7 +81,7 @@ import httpx
 from staqly import Staqly
 
 staqly = Staqly(
-    base_url="https://app.staqly.ai",  # default: $STAQLY_API_URL, then http://localhost:3333
+    base_url="https://api.staqly.ai",  # default: $STAQLY_API_URL, then http://localhost:3333
     api_key="stk_...",  # default: $STAQLY_API_KEY; "" = ignore the env var
     timeout=60.0,  # seconds per request (or an httpx.Timeout)
     max_retries=2,  # retries for 408/429/5xx/network errors

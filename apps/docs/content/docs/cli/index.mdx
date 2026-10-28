@@ -46,7 +46,7 @@ folder by itself.
 
 Already running staqly in Docker or in the cloud? Skip this step. With Docker, save the access
 token once: `staqly login --key "$(docker exec staqly server token)"`. For a cloud server, save
-its URL and key once with `staqly login --url https://app.staqly.ai --key stk_...`.
+its URL and key once with `staqly login --url https://api.staqly.ai --key stk_...`.
 
 </Step>
 <Step>
@@ -154,8 +154,8 @@ post's link) use `--url` for their own field. Set the API address with `--api-ur
 
 ```bash
 staqly login --key "$(docker exec staqly server token)"        # Community Edition in Docker → profile "default"
-staqly login --url https://app.staqly.ai --key stk_... --profile work
-echo "$KEY" | staqly login --url https://app.staqly.ai --key - --profile ci
+staqly login --url https://api.staqly.ai --key stk_... --profile work
+echo "$KEY" | staqly login --url https://api.staqly.ai --key - --profile ci
 staqly profiles                 # list (keys masked); * marks the current one
 staqly profiles use work        # switch
 staqly status --profile ci      # use a profile for one command
