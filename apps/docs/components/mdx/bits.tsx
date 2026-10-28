@@ -9,7 +9,7 @@ export function Badge({
   tone = 'neutral',
 }: {
   children: ReactNode
-  tone?: 'neutral' | 'brand' | 'success' | 'warn'
+  tone?: 'neutral' | 'brand' | 'success' | 'warn' | 'soon'
 }) {
   return <span className={`sq-badge sq-badge-${tone}`}>{children}</span>
 }

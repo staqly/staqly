@@ -105,49 +105,49 @@ listing them needs `channels:read`. Credentials are never returned by any call.
 
 `GET /v1/providers` (MCP `list_providers`, CLI `staqly channels providers`) lists every provider
 with its `auth`, `status`, `limits`, `credential_fields` and `settings_fields`. In this
-release every platform below is available except Farcaster and Skool, which stay `soon` (no way
+release every platform below is available except Farcaster and Skool, which stay `soon` and are greyed out (no way
 to publish to them that a person can set up alone). OAuth platforms are available once the server
 has their app keys; token platforms right away.
 
 | Provider | `id` | Connects with | Text limit | Media | Needs |
 |---|---|---|---|---|---|
 | Your own automation | `custom` | nothing (`none`) | none | up to 10 images, videos, GIFs or files | — |
-| [X](/channels/x) (**available**) | `x` | OAuth | 280 | 4 pictures or 1 video | — |
-| [LinkedIn](/channels/linkedin) (**available**) | `linkedin` | OAuth | 3,000 | 9 pictures or 1 video | — |
-| [LinkedIn Page](/channels/linkedin_page) (**available**) | `linkedin_page` | OAuth, pick Pages | 3,000 | 9 pictures or 1 video | — |
-| [Reddit](/channels/reddit) (**available**) | `reddit` | OAuth | 40,000 | 1 picture or video | a title and a subreddit |
-| [Instagram](/channels/instagram) (**available**) | `instagram` | OAuth | 2,200 | 10 JPEG pictures and videos, or 1 reel or story | media |
-| [Instagram Business (through a Facebook Page)](/channels/instagram_business) (**available**) | `instagram_business` | OAuth, pick accounts | 2,200 | 10 JPEG pictures and videos, or 1 reel or story | media |
-| [Facebook Page](/channels/facebook) (**available**) | `facebook` | OAuth, pick Pages | 63,206 | 10 pictures or 1 video | — |
-| [Threads](/channels/threads) (**available**) | `threads` | OAuth | 500 | 10 | — |
-| [YouTube](/channels/youtube) (**available**) | `youtube` | OAuth, pick channels | 5,000 | 1 video | a title and the video |
-| [Google Business Profile](/channels/google_business) (**available**) | `google_business` | OAuth, pick locations | 1,500 | 1 picture | text |
-| [TikTok](/channels/tiktok) (**available**) | `tiktok` | OAuth | 2,200 | 1 video | the video and who can watch |
-| [Pinterest](/channels/pinterest) (**available**) | `pinterest` | OAuth | 500 | 1 picture | a title, a board, the picture and a link |
-| [Dribbble](/channels/dribbble) (**available**) | `dribbble` | OAuth | 1,000 | 1 picture (400x300 or 800x600) | a title and the picture |
-| [Discord](/channels/discord) (**available**) | `discord` | OAuth, adds the server's bot to a Discord server; each post picks its channels | 2,000 | 10 | the Discord channels |
-| [Discord webhook](/channels/discord#through-a-webhook) (**available**) | `discord_webhook` | token (a channel webhook), when the server has no Discord bot | 2,000 | 10 | — |
-| [Slack](/channels/slack) (**available**) | `slack` | OAuth, a workspace; each post picks its channels | 40,000 | 10 | the Slack channels |
-| [Kick](/channels/kick) (**available**) | `kick` | OAuth | 500 | — | — |
-| [Twitch](/channels/twitch) (**available**) | `twitch` | OAuth | 500 | — | — |
-| [Mastodon](/channels/mastodon) (**available**) | `mastodon` | OAuth (no keys) | 500 | 4 pictures or 1 video | — |
-| [Mastodon with an access token](/channels/mastodon#channels-connected-with-an-access-token) (**available**) | `mastodon_token` | token | 500 | 4 pictures or 1 video | — |
-| [Bluesky](/channels/bluesky) (**available**) | `bluesky` | OAuth (no keys) | 300 | 4 pictures | — |
-| [Bluesky with an app password](/channels/bluesky#with-an-app-password) (**available**) | `bluesky_app_password` | token | 300 | 4 pictures | — |
-| [Lemmy](/channels/lemmy) (**available**) | `lemmy` | token | 10,000 | 1 picture | a title and a community |
-| Farcaster (soon) | `farcaster` | token | 320 | 2 images | — |
-| [Telegram](/channels/telegram) (**available**) | `telegram` | token: `/connect CODE` to the server's bot in a chat, or your own bot's token | 4,096 (1,024 with media) | 10 | — |
-| [Nostr](/channels/nostr) (**available**) | `nostr` | token | none | — | — |
-| [Medium](/channels/medium) (**available**) | `medium` | token | none | 1 picture | a title |
-| [Dev.to](/channels/devto) (**available**) | `devto` | token | none | 1 picture (cover) | a title |
-| [Hashnode](/channels/hashnode) (**available**) | `hashnode` | token | none | 1 picture (cover) | a title |
-| [WordPress](/channels/wordpress) (**available**) | `wordpress` | token | none | 1 picture (featured) | a title |
-| [listmonk](/channels/listmonk) (**available**) | `listmonk` | token | none | — | a subject and lists |
-| [Moltbook](/channels/moltbook) (**available**) | `moltbook` | token | 40,000 | — | a title |
-| [Whop](/channels/whop) (**available**) | `whop` | token | 5,000 | 4 | — |
-| Skool (soon) | `skool` | token | 5,000 | 4 images | a title |
-| [MeWe](/channels/mewe) (**available**) | `mewe` | OAuth, pick timeline or groups | 5,000 | 4 pictures | — |
-| [Tumblr](/channels/tumblr) (**available**) | `tumblr` | OAuth, pick blogs | 4,096 | 10 pictures, at most 1 video | — |
+| [X](/channels/x) | `x` | OAuth | 280 | 4 pictures or 1 video | — |
+| [LinkedIn](/channels/linkedin) | `linkedin` | OAuth | 3,000 | 9 pictures or 1 video | — |
+| [LinkedIn Page](/channels/linkedin_page) | `linkedin_page` | OAuth, pick Pages | 3,000 | 9 pictures or 1 video | — |
+| [Reddit](/channels/reddit) | `reddit` | OAuth | 40,000 | 1 picture or video | a title and a subreddit |
+| [Instagram](/channels/instagram) | `instagram` | OAuth | 2,200 | 10 JPEG pictures and videos, or 1 reel or story | media |
+| [Instagram Business (through a Facebook Page)](/channels/instagram_business) | `instagram_business` | OAuth, pick accounts | 2,200 | 10 JPEG pictures and videos, or 1 reel or story | media |
+| [Facebook Page](/channels/facebook) | `facebook` | OAuth, pick Pages | 63,206 | 10 pictures or 1 video | — |
+| [Threads](/channels/threads) | `threads` | OAuth | 500 | 10 | — |
+| [YouTube](/channels/youtube) | `youtube` | OAuth, pick channels | 5,000 | 1 video | a title and the video |
+| [Google Business Profile](/channels/google_business) | `google_business` | OAuth, pick locations | 1,500 | 1 picture | text |
+| [TikTok](/channels/tiktok) | `tiktok` | OAuth | 2,200 | 1 video | the video and who can watch |
+| [Pinterest](/channels/pinterest) | `pinterest` | OAuth | 500 | 1 picture | a title, a board, the picture and a link |
+| [Dribbble](/channels/dribbble) | `dribbble` | OAuth | 1,000 | 1 picture (400x300 or 800x600) | a title and the picture |
+| [Discord](/channels/discord) | `discord` | OAuth, adds the server's bot to a Discord server; each post picks its channels | 2,000 | 10 | the Discord channels |
+| [Discord webhook](/channels/discord#through-a-webhook) | `discord_webhook` | token (a channel webhook), when the server has no Discord bot | 2,000 | 10 | — |
+| [Slack](/channels/slack) | `slack` | OAuth, a workspace; each post picks its channels | 40,000 | 10 | the Slack channels |
+| [Kick](/channels/kick) | `kick` | OAuth | 500 | — | — |
+| [Twitch](/channels/twitch) | `twitch` | OAuth | 500 | — | — |
+| [Mastodon](/channels/mastodon) | `mastodon` | OAuth (no keys) | 500 | 4 pictures or 1 video | — |
+| [Mastodon with an access token](/channels/mastodon#channels-connected-with-an-access-token) | `mastodon_token` | token | 500 | 4 pictures or 1 video | — |
+| [Bluesky](/channels/bluesky) | `bluesky` | OAuth (no keys) | 300 | 4 pictures | — |
+| [Bluesky with an app password](/channels/bluesky#with-an-app-password) | `bluesky_app_password` | token | 300 | 4 pictures | — |
+| [Lemmy](/channels/lemmy) | `lemmy` | token | 10,000 | 1 picture | a title and a community |
+| Farcaster <Badge tone="soon">soon</Badge> | `farcaster` | token | 320 | 2 images | — |
+| [Telegram](/channels/telegram) | `telegram` | token: `/connect CODE` to the server's bot in a chat, or your own bot's token | 4,096 (1,024 with media) | 10 | — |
+| [Nostr](/channels/nostr) | `nostr` | token | none | — | — |
+| [Medium](/channels/medium) | `medium` | token | none | 1 picture | a title |
+| [Dev.to](/channels/devto) | `devto` | token | none | 1 picture (cover) | a title |
+| [Hashnode](/channels/hashnode) | `hashnode` | token | none | 1 picture (cover) | a title |
+| [WordPress](/channels/wordpress) | `wordpress` | token | none | 1 picture (featured) | a title |
+| [listmonk](/channels/listmonk) | `listmonk` | token | none | — | a subject and lists |
+| [Moltbook](/channels/moltbook) | `moltbook` | token | 40,000 | — | a title |
+| [Whop](/channels/whop) | `whop` | token | 5,000 | 4 | — |
+| Skool <Badge tone="soon">soon</Badge> | `skool` | token | 5,000 | 4 images | a title |
+| [MeWe](/channels/mewe) | `mewe` | OAuth, pick timeline or groups | 5,000 | 4 pictures | — |
+| [Tumblr](/channels/tumblr) | `tumblr` | OAuth, pick blogs | 4,096 | 10 pictures, at most 1 video | — |
 
 ### Platforms on a server
 
@@ -257,13 +257,15 @@ channel without it.
 Removing a channel removes the targets on it from every post; posts with no other
 target become drafts.
 
-<Method m="GET" path="/v1/channels" /> ·
-<Method m="POST" path="/v1/channels" /> ·
-<Method m="GET" path="/v1/channels/{id}" /> ·
-<Method m="PATCH" path="/v1/channels/{id}" /> ·
-<Method m="DELETE" path="/v1/channels/{id}" /> ·
-<Method m="POST" path="/v1/channels/{id}/test" /> ·
-<Method m="GET" path="/v1/channels/oauth/{provider}/start" />
+| Endpoint | What it does |
+|---|---|
+| <Method m="GET" path="/v1/channels" /> | list your channels |
+| <Method m="POST" path="/v1/channels" /> | connect a channel with a token (or your own automation) |
+| <Method m="GET" path="/v1/channels/oauth/{provider}/start" /> | connect a platform that signs in with OAuth |
+| <Method m="GET" path="/v1/channels/{id}" /> | get one channel (credentials are never returned) |
+| <Method m="PATCH" path="/v1/channels/{id}" /> | rename it, change its settings or group, turn it off or on |
+| <Method m="POST" path="/v1/channels/{id}/test" /> | check its credentials still work |
+| <Method m="DELETE" path="/v1/channels/{id}" /> | remove it |
 
 Plan limits (cloud): **5 channels on Starter, 15 on Plus, 40 on Pro, unlimited on Business**. Over the limit, connecting a channel
 answers `402 plan_limit_exceeded` with `details.limit = "channels"`. See [Plans](/plans).
