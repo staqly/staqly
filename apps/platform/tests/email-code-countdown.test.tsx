@@ -1,4 +1,5 @@
 import { act, fireEvent, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { EmailCodeForm } from '@/components/auth/email-sign-in'
@@ -32,5 +33,50 @@ describe('email code countdown', () => {
     vi.setSystemTime(Date.now() + 120_000)
     fireEvent.click(button)
     expect(await screen.findByText('Send a new code in 30 s')).toBeInTheDocument()
+  })
+})
+
+const renderForm = () => {
+  const verify = vi.fn<(code: string) => Promise<unknown>>(() => new Promise(() => {}))
+
+  renderWithProviders(
+    <EmailCodeForm
+      email="jane@example.com"
+      sent={{ resend_in: 30, expires_in: 600 }}
+      verify={verify}
+      resend={() => Promise.resolve({ resend_in: 30, expires_in: 600 })}
+      onDone={() => {}}
+      onBack={() => {}}
+    />,
+  )
+
+  return { verify, input: screen.getByLabelText(/code/i) }
+}
+
+describe('email code field', () => {
+  it('is a one-time-code text field of 6 digits', () => {
+    const { input } = renderForm()
+
+    expect(input).toHaveAttribute('type', 'text')
+    expect(input).toHaveAttribute('inputmode', 'numeric')
+    expect(input).toHaveAttribute('autocomplete', 'one-time-code')
+    expect(input).toHaveAttribute('maxlength', '6')
+  })
+
+  it('typed digit by digit, keeps the leading zero and submits at 6', async () => {
+    const { verify, input } = renderForm()
+
+    await userEvent.type(input, '012345')
+    expect(input).toHaveValue('012345')
+    expect(verify).toHaveBeenCalledExactlyOnceWith('012345')
+  })
+
+  it('pasted or autofilled whole, keeps the leading zero and submits once', async () => {
+    const { verify, input } = renderForm()
+
+    input.focus()
+    await userEvent.paste('000123')
+    expect(input).toHaveValue('000123')
+    expect(verify).toHaveBeenCalledExactlyOnceWith('000123')
   })
 })

@@ -308,7 +308,9 @@ export function EmailCodeForm({
             <Input
               id="sign-in-code"
               ref={input}
+              type="text"
               inputMode="numeric"
+              maxLength={6}
               autoComplete="one-time-code"
               pattern="[0-9]*"
               className="absolute inset-0 h-full rounded-lg border-0 bg-transparent text-transparent caret-transparent shadow-none outline-none selection:bg-transparent focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 aria-invalid:ring-0 dark:bg-transparent"
