@@ -67,8 +67,15 @@ export async function checkLinks({ root, basePath = '' }) {
 
   for (const page of html) {
     const src = await readFile(page, 'utf8')
-    // Only real anchors/assets in markup, not strings inside the RSC payload.
-    const markup = src.replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
+    // Only real anchors/assets in markup, not strings inside the RSC payload: everything between <script and the
+    // next </script ...>, taken out until none is left (a removal can't join two halves into a new tag).
+    let markup = src
+    let prev
+
+    do {
+      prev = markup
+      markup = markup.replace(/<script\b[\s\S]*?<\/script\b[^>]*>/gi, '')
+    } while (markup !== prev)
 
     for (const m of markup.matchAll(/\s(?:href|src)="([^"]*)"/g)) {
       const raw = m[1].replaceAll('&amp;', '&')

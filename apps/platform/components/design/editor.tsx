@@ -373,6 +373,7 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
     add,
     showPage,
     openProject: embedded ? leave : undefined,
+    inDrawer: !!embedded,
   }
 
   // In a drawer, Escape reaches the drawer first: it leaves a field (the name), clears a selection or crop, else
