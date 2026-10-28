@@ -135,6 +135,17 @@ export function routes({
       },
     },
     {
+      // The live preview: a second drawer over (phones) or beside (wide screens) the composer, on one channel.
+      name: 'composer live preview',
+      path: collection,
+      open: async (p) => {
+        await click(p, '[data-testid=new-post]:visible')
+        await pickChannels(p, channelIds[0]!, channelIds[1]!)
+        await click(p, '[data-testid=open-live-preview]:visible')
+        await click(p, `[data-testid=preview-tab-${channelIds[1]}]:visible`)
+      },
+    },
+    {
       name: 'composer counters',
       path: collection,
       open: async (p) => {
