@@ -59,6 +59,15 @@ PAIRS: dict[str, type[models.StaqlyModel]] = {
     "AnalyticsMetrics": models.AnalyticsMetrics,
     "ChannelAnalytics": models.ChannelAnalytics,
     "AnalyticsTimeSlot": models.AnalyticsTimeSlot,
+    "TelegramConnect": models.TelegramConnect,
+    "ProviderCheck": models.ProviderCheck,
+    "MediaProject": models.MediaProject,
+    "DesignBrand": models.DesignBrand,
+    "StockPage": models.StockPage,
+    "StockPhoto": models.StockPhoto,
+    "AIStatus": models.AIStatus,
+    "AIOperation": models.AIOperation,
+    "AIJob": models.AIJob,
 }
 
 
@@ -108,6 +117,15 @@ def test_nested_models_match(schemas: dict[str, Any]) -> None:
     assert set(models.ProviderFieldOption.model_fields) == set(
         schemas["ProviderField"]["properties"]["options"]["items"]["properties"]
     )
+    assert set(models.ProviderCheckItem.model_fields) == set(
+        schemas["ProviderCheck"]["properties"]["checks"]["items"]["properties"]
+    )
+    assert set(models.AIUsage.model_fields) == set(schemas["AIStatus"]["properties"]["usage"]["properties"])
+    job = schemas["AIJob"]["properties"]
+    assert set(models.AIJobError.model_fields) == set(job["error"]["oneOf"][1]["properties"])
+    assert set(models.AIJobResult.model_fields) == set(job["result"]["oneOf"][1]["properties"])
+    options = _inline("/v1/channels/{id}/options/{key}", "get", "200")["properties"]["data"]["items"]
+    assert set(models.ChannelOption.model_fields) == set(options["properties"])
     assert set(models.JobKindStats.model_fields) == set(
         schemas["JobStats"]["properties"]["by_kind"]["additionalProperties"]["properties"]
     )

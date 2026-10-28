@@ -59,7 +59,8 @@ class RequestSpec:
     path: str
     params: Mapping[str, Any] | None = None
     json: Any = None
-    files: dict[str, tuple[str, bytes, str]] | None = None
+    #: Multipart parts; a ``(None, value, None)`` part is a plain form field.
+    files: dict[str, tuple[str | None, bytes, str | None]] | None = None
     data: dict[str, str] | None = None
     no_auth: bool = False
     options: RequestOptions = field(default_factory=lambda: RequestOptions())

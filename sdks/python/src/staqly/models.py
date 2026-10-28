@@ -105,6 +105,20 @@ __all__ = [
     "WorkspaceCreated",
     "WorkspaceExport",
     "WorkspaceUsage",
+    "AIJob",
+    "AIJobError",
+    "AIJobResult",
+    "AIOperation",
+    "AIStatus",
+    "AIUsage",
+    "ChannelOption",
+    "DesignBrand",
+    "MediaProject",
+    "ProviderCheck",
+    "ProviderCheckItem",
+    "StockPage",
+    "StockPhoto",
+    "TelegramConnect",
 ]
 
 PostStatus = Literal["draft", "scheduled", "publishing", "published", "failed"]
@@ -677,6 +691,133 @@ class MediaUse(StaqlyModel):
     publish_at: OptionalDatetime = None
 
 
+class MediaProject(StaqlyModel):
+    """An editable picture of the design editor (its design: :meth:`MediaProjects.file`)."""
+
+    id: str
+    name: str
+    #: The library files it was made from.
+    source_ids: list[str] = Field(default_factory=list)
+    #: The file it last saved; empty until saved.
+    output_id: str = ""
+    #: The files its pages saved as, in page order; ``output_id`` is the first.
+    page_ids: list[str] = Field(default_factory=list)
+    size_bytes: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class DesignBrand(StaqlyModel):
+    """The design editor's brand kit, shared by the workspace."""
+
+    #: Colours like ``#22c55e`` (at most 24).
+    colors: list[str] = Field(default_factory=list)
+    #: Names from the editor's font list (at most 6).
+    fonts: list[str] = Field(default_factory=list)
+    #: Media ids of pictures in the library (at most 12).
+    logos: list[str] = Field(default_factory=list)
+
+
+class StockPhoto(StaqlyModel):
+    """A Pixabay photo; ``url`` is temporary (:meth:`Stock.use` keeps a copy)."""
+
+    id: str
+    width: int
+    height: int
+    #: Pixabay's tags, comma-separated.
+    alt: str
+    #: At most 640 px wide or tall.
+    thumb: str
+    #: At most 1280 px.
+    url: str
+    author: str
+    author_url: str
+    page_url: str
+
+
+class StockPage(StaqlyModel):
+    #: Whether this server has a Pixabay key.
+    configured: bool
+    data: list[StockPhoto] = Field(default_factory=list)
+
+
+class AIOperation(StaqlyModel):
+    """An AI operation this server offers, what it takes and who runs it."""
+
+    #: generate, edit, inpaint, erase, expand, remove_background, replace_background, upscale, enhance,
+    #: text_to_video, image_to_video or assistant.
+    id: str
+    #: image, video or text.
+    kind: str
+    #: required, optional or none.
+    prompt: str
+    #: Needs a picture.
+    image: bool
+    #: Needs a mask (white: the area to change).
+    mask: bool
+    provider: str
+    model: str
+    #: The provider that takes over when the first does not take a request; empty: none.
+    fallback: str = ""
+
+
+class AIUsage(StaqlyModel):
+    #: The month (UTC), YYYY-MM.
+    period: str
+    #: The workspace's estimated AI spending this month.
+    used_usd: float
+    #: The plan's monthly limit; ``None``: none.
+    limit_usd: float | None = None
+
+
+class AIStatus(StaqlyModel):
+    """Which AI tools work on this server, and the workspace's AI usage this month."""
+
+    #: At least one AI operation works.
+    configured: bool
+    providers: list[str] = Field(default_factory=list)
+    operations: list[AIOperation] = Field(default_factory=list)
+    usage: AIUsage
+    assistant_browser_model: str | None = None
+
+
+class AIJobError(StaqlyModel):
+    code: str
+    message: str
+
+
+class AIJobResult(StaqlyModel):
+    """The made file, at :meth:`AIJobs.result` until it is kept or discarded."""
+
+    mime_type: str
+    #: 0 for a video.
+    width: int
+    height: int
+
+
+class AIJob(StaqlyModel):
+    """One AI request."""
+
+    id: str
+    operation: str
+    #: image or video.
+    kind: str
+    #: queued, running, succeeded, failed or canceled.
+    status: str
+    provider: str = ""
+    model: str = ""
+    fallback_from: str = ""
+    error: AIJobError | None = None
+    result: AIJobResult | None = None
+    #: The library file it was kept as; empty until accepted.
+    media_id: str = ""
+    estimated_cost_usd: float = 0
+    duration_ms: int = 0
+    created_at: datetime
+    #: Empty while it runs.
+    finished_at: str = ""
+
+
 class ThreadPart(StaqlyModel):
     """A reply published under the post: text and/or media, ``delay_seconds`` after the part before
     (the first after the post). Platforms that take replies publish it (X); your own automation gets
@@ -1168,6 +1309,47 @@ class ChannelTestResult(StaqlyModel):
     error: str | None = None
     #: What the platform knows the account as (handle, name, avatar_url, profile_url).
     profile: dict[str, Any] | None = None
+
+
+class ChannelOption(StaqlyModel):
+    """A choice of a channel's remote setting, read from its platform (a Slack channel, say)."""
+
+    value: str
+    label: str
+    icon: str | None = None
+
+
+class TelegramConnect(StaqlyModel):
+    """A code to connect a Telegram chat through the server's bot, and what became of it."""
+
+    code: str
+    #: What to send in the chat: ``/connect@bot CODE``.
+    command: str
+    #: The bot to add (@username).
+    bot: str
+    expires_at: datetime
+    #: waiting, connected or expired.
+    status: str
+    channel_id: str | None = None
+    error: str | None = None
+
+
+class ProviderCheckItem(StaqlyModel):
+    #: keys, bot_token, platform, return_address or media.
+    key: str
+    label: str
+    ok: bool
+    #: What was found; for return_address, the address to register with the platform.
+    detail: str
+
+
+class ProviderCheck(StaqlyModel):
+    """The server's setup for an OAuth platform, checked without any connected account."""
+
+    provider: str
+    #: Every check passed.
+    ok: bool
+    checks: list[ProviderCheckItem]
 
 
 class ProviderFieldOption(StaqlyModel):

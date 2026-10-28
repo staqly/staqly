@@ -383,6 +383,7 @@ Methods that return a list return a Python `list`; `list()` on paginated endpoin
 |---|---|
 | `providers.list()` | `GET /v1/providers` |
 | `providers.set_app(provider_id, *, client_id, client_secret)`, `providers.delete_app(provider_id)` | `PUT` / `DELETE /v1/providers/{id}/app` |
+| `providers.check(provider_id)` | `POST /v1/providers/{id}/check`: this server's setup for an OAuth platform (keys, return address, media links) |
 | `channels.list(group=None)`, `channels.get(channel_id)` | `GET /v1/channels`, `GET /v1/channels/{id}` |
 | `channels.connect(provider, *, name=None, fields=None, settings=None, group_id=None)` | `POST /v1/channels` (token platforms and `custom`) |
 | `channels.update(channel_id, *, name=None, settings=None, status=None, fields=None, group_id=None)`, `channels.enable(channel_id)`, `channels.disable(channel_id)` | `PATCH /v1/channels/{id}` |
@@ -390,6 +391,8 @@ Methods that return a list return a Python `list`; `list()` on paginated endpoin
 | `channels.create_link(...)`, `channels.links()`, `channels.revoke_link(link_id)` | `/v1/channel-links` (connect links) |
 | `channels.list_groups()`, `create_group()`, `update_group()`, `delete_group()` | Channel groups |
 | `channels.test(channel_id)` | `POST /v1/channels/{id}/test` |
+| `channels.options(channel_id, key)` | `GET /v1/channels/{id}/options/{key}`: the choices of a remote setting (Slack channels) |
+| `channels.telegram_connect(group_id=None)`, `channels.telegram_connect_status(code)` | `POST /v1/channels/telegram/connect`, `GET .../connect/{code}`: connect a Telegram chat through the server's bot |
 | `channels.remove(channel_id)` | `DELETE /v1/channels/{id}` |
 
 ### Schedules
@@ -421,6 +424,20 @@ Methods that return a list return a Python `list`; `list()` on paginated endpoin
 | `media.keep(media_id)` | `POST /v1/media/{id}/keep` (keep this one of identical files) |
 | `media.organize(media_ids, folder_id=None, add_tags=None, remove_tags=None)` | `POST /v1/media/bulk` (move or tag up to 200 files) |
 | `media.folders()`, `media.create_folder(name, parent_id=None)`, `media.update_folder(folder_id, name=None, parent_id=None)`, `media.delete_folder(folder_id)` | `/v1/media-folders` |
+| `media.replace(media_id, file, *, filename=None, content_type=None)` | `POST /v1/media/{id}/replace` (the edit takes the original's place) |
+
+### Design editor, AI and stock photos
+| Method | Endpoint |
+|---|---|
+| `media_projects.list(media=None)`, `media_projects.get(project_id)` | `GET /v1/media-projects`, `GET /v1/media-projects/{id}` |
+| `media_projects.create(file, *, name=None, source_ids=None, output_id=None, page_ids=None)`, `media_projects.update(project_id, file, ...)` | `POST /v1/media-projects`, `PUT /v1/media-projects/{id}` (multipart) |
+| `media_projects.file(project_id)`, `media_projects.delete(project_id)` | `GET /v1/media-projects/{id}/file` (bytes), `DELETE /v1/media-projects/{id}` |
+| `design.brand()`, `design.set_brand(*, colors, fonts, logos)` | `GET` / `PUT /v1/design/brand` |
+| `ai.status()` | `GET /v1/ai`: the AI operations this server offers and this month's usage |
+| `ai.text(text, *, instruction)` | `POST /v1/ai/text` (returns the new text) |
+| `ai.jobs.create(operation, *, prompt=None, image=None, mask=None, width=None, ...)` | `POST /v1/ai/jobs` (multipart; poll `ai.jobs.get(job_id)`) |
+| `ai.jobs.get(job_id)`, `ai.jobs.result(job_id)`, `ai.jobs.accept(job_id)`, `ai.jobs.discard(job_id)` | `GET /v1/ai/jobs/{id}`, `.../result` (bytes), `POST .../accept` (a library file), `DELETE` |
+| `stock.photos(query=None, page=None)`, `stock.use(photo_id)` | `GET /v1/stock/photos`, `POST /v1/stock/photos/{id}/use` (Pixabay) |
 
 ### Events
 

@@ -78,6 +78,12 @@ export type MediaPage = Schemas['MediaPage']
 export type MediaUse = Schemas['MediaUse']
 export type MediaFolder = Schemas['MediaFolder']
 export type MediaFolders = Schemas['MediaFolders']
+export type MediaProject = Schemas['MediaProject']
+export type AIStatus = Schemas['AIStatus']
+export type AIJob = Schemas['AIJob']
+export type DesignBrand = Schemas['DesignBrand']
+export type StockPhoto = Schemas['StockPhoto']
+export type StockPage = Schemas['StockPage']
 export interface MediaListParams {
   /** Part of the file name (case-insensitive). */
   q?: string
@@ -133,6 +139,10 @@ export type ChannelGroupInput = Schemas['ChannelGroupInput']
 export type ChannelInput = Schemas['ChannelInput']
 export type ChannelPatch = Schemas['ChannelPatch']
 export type ChannelTestResult = JSONResponse<'/v1/channels/{id}/test', 'post'>
+/** One choice of a channel's remote setting (a Pinterest board, a Discord channel...). */
+export type ChannelOption = JSONResponse<'/v1/channels/{id}/options/{key}', 'get'>['data'][number]
+export type TelegramConnect = Schemas['TelegramConnect']
+export type ProviderCheck = Schemas['ProviderCheck']
 export type DeveloperAppInput = Schemas['DeveloperAppInput']
 export type Provider = Schemas['Provider']
 export type ProviderField = Schemas['ProviderField']

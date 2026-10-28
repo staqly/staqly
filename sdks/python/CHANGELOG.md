@@ -9,6 +9,12 @@ First release, rebuilt for the posts pivot (2026-10-19): staqly is a scheduler f
 agents write, no longer a review inbox.
 
 ### Added
+- The rest of what an API key can do: `channels.options`, `channels.telegram_connect` /
+  `telegram_connect_status`, `providers.check`, `media.replace`, and the design editor's endpoints:
+  `media_projects` (list, get, create, update, delete, file), `design` (brand, set_brand), `ai`
+  (status, text, `jobs`: create, get, result, accept, discard) and `stock` (photos, use). Models
+  `ChannelOption`, `TelegramConnect`, `ProviderCheck`, `MediaProject`, `DesignBrand`, `StockPage`,
+  `StockPhoto`, `AIStatus`, `AIOperation`, `AIUsage`, `AIJob`.
 - Local mode needs its access token: pass it as `api_key` or `STAQLY_API_KEY` (`staqly serve token`);
   `workspace.access_token()` and `workspace.rotate_access_token()` (models `AccessToken`,
   `AccessTokenRotated`); `sessions.sign_in_with_api_key` takes the token in local mode.

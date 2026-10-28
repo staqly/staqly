@@ -160,6 +160,10 @@ staqly.channels.get(tg.id)
 staqly.channels.update(tg.id, name="News", settings={"silent": True})  # defaults for new targets
 staqly.channels.update(tg.id, fields={"bot_token": "fresh"})  # reconnect
 staqly.channels.test(tg.id)  # ok / error / profile: checks the credentials against the platform
+staqly.channels.options(slack_channel_id, "channel")  # the choices of a remote setting, from the platform
+staqly.providers.check("instagram")  # this server's setup for an OAuth platform, without an account
+code = staqly.channels.telegram_connect()  # send code.command in the chat
+staqly.channels.telegram_connect_status(code.code)  # connected yet?
 staqly.channels.disable(tg.id)  # targets on it fail without trying; enable(id) turns it back on
 staqly.channels.remove(tg.id)  # targets on it go with it
 ```
@@ -285,6 +289,32 @@ staqly.media.upload(png_bytes, filename="a.png", content_type="image/png")
 data = staqly.media.download(media.id)  # bytes
 staqly.media.url(media.id)  # absolute URL (needs auth)
 staqly.media.delete(media.id)  # posts that use it lose it
+staqly.media.replace(media.id, "clip-edited.mp4")  # the edit takes the original's place in drafts
+```
+
+### Design editor, AI and stock photos
+
+The dashboard's design tools are reachable with an API key too (`media:read` / `media:write`):
+
+```python
+import time
+
+staqly.design.brand()  # colors, fonts, logos
+staqly.design.set_brand(colors=["#22c55e"], fonts=["Inter"], logos=[logo.id])
+
+project = staqly.media_projects.create(open("design.json", "rb"), name="Banner", source_ids=[photo.id])
+staqly.media_projects.file(project.id)  # the design, as bytes
+
+if staqly.ai.status().configured:
+    staqly.ai.text("Our new release is out today", instruction="Make it shorter")
+    job = staqly.ai.jobs.create("generate", prompt="a lighthouse at dawn", width=1024, height=1024)
+    while not (job := staqly.ai.jobs.get(job.id)).finished_at:
+        time.sleep(2)
+    if job.status == "succeeded":
+        image = staqly.ai.jobs.accept(job.id)  # a library file to put in a post
+
+photo = staqly.stock.photos(query="mountains").data[0]  # Pixabay, when the server has a key
+staqly.stock.use(photo.id)  # copy it into the media library
 ```
 
 Uploads are read into memory. Per-file limits depend on the plan.
