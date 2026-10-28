@@ -559,6 +559,9 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 		if err := p.require(ScopePostsPublish); err != nil {
 			return Post{}, err
 		}
+		if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
+			return Post{}, err
+		}
 	}
 	if in.Status == "scheduled" {
 		if publishAt == "" {
@@ -951,6 +954,9 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 	if err := p.require(ScopePostsPublish); err != nil {
 		return Post{}, err
 	}
+	if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
+		return Post{}, err
+	}
 	at, err := s.parsePublishAt(publishAt)
 	if err != nil {
 		return Post{}, err
@@ -1006,6 +1012,9 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 // PublishPost publishes now (from draft, scheduled or failed).
 func (s *Service) PublishPost(ctx context.Context, p Principal, id string) (Post, error) {
 	if err := p.require(ScopePostsPublish); err != nil {
+		return Post{}, err
+	}
+	if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
 		return Post{}, err
 	}
 	err := s.tx(ctx, func(q *db.Queries) error {
@@ -1225,8 +1234,8 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	if err != nil {
 		return err
 	}
-	if s.suspended(ctx, row.WorkspaceID) {
-		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, ErrSuspended.Message)
+	if blocked := s.publishBlocked(ctx, row.WorkspaceID); blocked != nil {
+		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, blocked.(*Error).Message)
 	}
 	ch, err := s.Q.GetChannelByID(ctx, channelID)
 	if err != nil {
@@ -1533,6 +1542,9 @@ func (s *Service) ReportTargetResult(ctx context.Context, p Principal, postID, c
 // RetryTarget tries a failed target once more, now.
 func (s *Service) RetryTarget(ctx context.Context, p Principal, postID, channelID string) (Post, error) {
 	if err := p.require(ScopePostsPublish); err != nil {
+		return Post{}, err
+	}
+	if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
 		return Post{}, err
 	}
 	err := s.tx(ctx, func(q *db.Queries) error {

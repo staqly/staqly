@@ -74,8 +74,11 @@ acted, `agent` (the MCP or REST client's name, e.g. `Claude Code`) are on every 
 | `ai_job_finished` | It ended | `op`, `provider`, `model`, `status`, `error_code`, `fallback`, `duration_ms` |
 | `api_key_created`, `webhook_created`, `alert_created` | Integrations | — |
 | `checkout_started` | A Stripe checkout was opened (cloud) | `plan`, `interval`, `trial` |
-| `plan_changed` | A workspace's plan changed (Stripe webhooks, the operator CLI, trials) | `from`, `to`, `reason` (e.g. `stripe:active`, `stripe:canceled`) |
+| `plan_changed` | A workspace's plan changed (Stripe webhooks, the operator CLI, trials) | `from`, `to`, `reason` (e.g. `stripe:active`, `stripe:canceled`, `trial_revoked:card`) |
 | `subscription_payment_failed` | Stripe says a renewal did not go through (`past_due`, `incomplete`) | `status`, `plan` |
+| `trial_revoked` | A trial was ended at once because its card was used in an earlier unpaid trial (cloud) | `reason` (`card`), `charged` |
+| `trial_paused` | A trial was paused for review because it connected accounts of an earlier unpaid trial (cloud; nothing charged) | `reason` (`channels`) |
+| `trial_ended_early` | An owner chose to start the paid plan during the trial (Start paid plan now) | `charged` |
 | `credits_purchased` | A bundle of extra posts paid | `posts` |
 | `$exception` | An error report (server or dashboard) | PostHog's exception properties; server: `request_id`, `trace_id`, `route`, `workspace_id`, `worker` and the log line's fields |
 | `$pageview`, `$web_vitals` | Dashboard pages | PostHog's, URL without query and fragment |

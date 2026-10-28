@@ -20,7 +20,7 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 	var list struct {
 		Data []stripeSubscription `json:"data"`
 	}
-	q := url.Values{"customer": {customer}, "status": {"all"}, "limit": {"1"}}
+	q := url.Values{"customer": {customer}, "status": {"all"}, "limit": {"1"}, "expand[]": {"data.default_payment_method"}}
 	if err := s.stripe(ctx, "GET", "/v1/subscriptions?"+q.Encode(), nil, &list); err != nil {
 		return err
 	}
@@ -28,7 +28,10 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 		return nil // no subscription yet: a checkout not finished
 	}
 	sub := list.Data[0]
-	return s.tx(ctx, func(q *db.Queries) error { return s.applySubscription(ctx, q, sub, "billing.sync") })
+	if err := s.tx(ctx, func(q *db.Queries) error { return s.applySubscription(ctx, q, sub, "billing.sync") }); err != nil {
+		return err
+	}
+	return s.guardCard(ctx, sub)
 }
 
 // SyncBilling asks Stripe for the workspace's subscription now (the dashboard calls it when it comes back from

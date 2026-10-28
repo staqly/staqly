@@ -193,6 +193,9 @@ func (Facebook) UseAccount(ctx context.Context, c Credentials, accountID string)
 			continue
 		}
 		creds := Credentials{"access_token": p.AccessToken, "page_id": p.ID}
+		if c["user_id"] != "" { // the Facebook user who connected the Page (a Page has many admins)
+			creds["authorized_by"] = c["user_id"]
+		}
 		if c["no_comments"] == "true" {
 			creds["no_comments"] = "true"
 		}

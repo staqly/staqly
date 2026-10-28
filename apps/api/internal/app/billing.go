@@ -261,9 +261,16 @@ type Billing struct {
 	// accepted). The subscription's quantity follows it.
 	Seats int64 `json:"seats"`
 	// Trial: whether choosing Starter now starts its 7-day trial: "available"; "used" (this workspace had a
-	// subscription before); "other_workspace" (another workspace of the account is in its trial); "none"
-	// (billing is off, or the workspace already pays).
+	// subscription before); "card_used" (its card on file was used in an earlier free trial that wasn't paid for);
+	// "other_workspace" (another workspace of the account is in its trial); "none" (billing is off, or the
+	// workspace already pays).
 	Trial string `json:"trial"`
+	// TrialRevoked: "card" when the free trial was ended at once because the workspace's card was used in an
+	// earlier unpaid trial (Stripe charged it then): while unpaid, and for two weeks after; null otherwise.
+	TrialRevoked *string `json:"trial_revoked"`
+	// TrialReview: "channels" while the free trial is paused because the workspace connected accounts an earlier
+	// unpaid trial used: publishing and new channels wait until it pays (StartPaidPlan) or the operator clears it.
+	TrialReview *string `json:"trial_review"`
 }
 
 // Trial availability (Billing.Trial).
@@ -283,6 +290,10 @@ func (s *Service) trialOffer(ctx context.Context, q *db.Queries, w db.GetWorkspa
 		return TrialNone, nil
 	case w.StripeSubscriptionID.Valid && w.StripeSubscriptionID.String != "":
 		return TrialUsed, nil
+	}
+	// A card on file that an unpaid trial used: no trial, said before Checkout opens.
+	if used, err := s.cardUsed(ctx, q, w.ID); err != nil || used {
+		return TrialCardUsed, err
 	}
 	n, err := q.CountOwnersOtherTrials(ctx, w.ID)
 	if err != nil {
@@ -348,6 +359,9 @@ func (s *Service) GetBilling(ctx context.Context, p Principal) (Billing, error) 
 		b.PlanExpiresAt = &w.PlanExpiresAt.String
 	}
 	b.TrialEndsAt = s.trialEndsAt(w)
+	if b.TrialRevoked, b.TrialReview, err = s.trialState(ctx, p.WorkspaceID); err != nil {
+		return Billing{}, err
+	}
 	if s.Cfg.Mode == ModeLocal {
 		b.Plan = UnlockedPlan.ID
 	}
@@ -842,7 +856,9 @@ type stripeSubscription struct {
 	TrialEnd           int64             `json:"trial_end"`
 	Metadata           map[string]string `json:"metadata"`
 	Discounts          []json.RawMessage `json:"discounts"` // ids, or objects when expanded
-	Items              struct {
+	// DefaultPaymentMethod: an id, or the payment method when expanded (its card's fingerprint: cardFingerprint).
+	DefaultPaymentMethod json.RawMessage `json:"default_payment_method"`
+	Items                struct {
 		Data []struct {
 			ID                 string      `json:"id"`
 			Quantity           int64       `json:"quantity"`
@@ -944,8 +960,8 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 		if err := json.Unmarshal(ev.Data.Object, &cs); err != nil || cs.Subscription == "" {
 			return nil // not a subscription checkout
 		}
-		// The session carries only the id; read the subscription itself.
-		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(cs.Subscription), nil, &sub); err != nil {
+		// The session carries only the id; read the subscription itself (with the card it is paid with).
+		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(cs.Subscription)+subscriptionExpand, nil, &sub); err != nil {
 			return err
 		}
 	case "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
@@ -964,9 +980,12 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 		}
 		id := sub.ID
 		sub = stripeSubscription{}
-		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(id), nil, &sub); err != nil {
+		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(id)+subscriptionExpand, nil, &sub); err != nil {
 			return err
 		}
+	case "payment_method.attached":
+		// A card added to a customer: fingerprinted, and checked while the workspace is in its trial.
+		return s.paymentMethodAttached(ctx, ev.ID, ev.Data.Object)
 	case "charge.refunded", "charge.dispute.created":
 		// A refunded or disputed bundle of extra posts: its unused posts go back in the refunded share. Read
 		// outside the transaction (it asks Stripe); unreachable Stripe fails the event so it is retried.
@@ -1009,13 +1028,23 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 	default:
 		return nil
 	}
-	return s.tx(ctx, func(q *db.Queries) error {
+	err := s.tx(ctx, func(q *db.Queries) error {
 		if n, err := q.InsertStripeEvent(ctx, db.InsertStripeEventParams{ID: ev.ID, CreatedAt: s.now()}); err != nil || n == 0 {
 			return err // n == 0: already applied
 		}
 		return s.applySubscription(ctx, q, sub, ev.Type)
 	})
+	if err != nil {
+		return err
+	}
+	// A trial paid with a card an unpaid trial used ends now (Stripe is called after the transaction). On a
+	// retried event too: the check reads the subscription as it is, so it runs again until it went through.
+	return s.guardCard(ctx, sub)
 }
+
+// subscriptionExpand: subscription reads expand the default payment method, whose card fingerprint is kept for
+// repeated trials (trials.go).
+const subscriptionExpand = "?expand[]=default_payment_method"
 
 // subscriptionIsOurs: the subscription names a workspace of this instance (metadata or a known customer).
 func (s *Service) subscriptionIsOurs(ctx context.Context, sub stripeSubscription) (bool, error) {
@@ -1066,6 +1095,9 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 	}
 	if err := q.SetSubscription(ctx, db.SetSubscriptionParams{StripeSubscriptionID: nullStr(sub.ID),
 		SubscriptionStatus: nullStr(sub.Status), UpdatedAt: s.now(), ID: ws}); err != nil {
+		return err
+	}
+	if err := s.settleTrial(ctx, q, ws, sub); err != nil {
 		return err
 	}
 	// The quantity follows the members: a subscription whose seats differ (changed at Stripe, or a join that

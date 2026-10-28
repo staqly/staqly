@@ -38,7 +38,7 @@ import (
 )
 
 // Main runs the server, or one of its operator subcommands (backup, import-sqlite, storage migrate,
-// workspaces, recovery-key, set-plan, connect-link, attach-workspace, token), and returns the exit code.
+// workspaces, recovery-key, set-plan, connect-link, attach-workspace, clear-trial-review, token), and returns the exit code.
 func Main(args []string, version string) int {
 	if len(args) > 0 {
 		switch args[0] {
@@ -50,7 +50,7 @@ func Main(args []string, version string) int {
 			return storageCmd(args[1:])
 		case "token":
 			return tokenCmd(args[1:])
-		case "recovery-key", "set-plan", "workspaces", "connect-link", "stats", "attach-workspace":
+		case "recovery-key", "set-plan", "workspaces", "connect-link", "stats", "attach-workspace", "clear-trial-review":
 			return admin(args[0], args[1:])
 		}
 	}
@@ -387,6 +387,9 @@ func copyUploads(ctx context.Context, cfg config.Config, dir string, dry bool) i
 //	server set-plan <workspace_id> <plan> [--until DATE]
 //	                                        starter | plus | pro | business; without --until it has no end date (ends a
 //	                                        trial or suspension), with it the plan is comped until then
+//	server clear-trial-review <workspace_id>
+//	                                        a trial paused (or ended) because it reused an unpaid trial's accounts
+//	                                        or card was a mistake: lift it, and don't check that workspace again
 //	server stats                            JSON overview: workspaces by plan, trials, signups, usage
 //	server connect-link [workspace_id]      one-time sign-in link for a browser (5 min)
 //	server attach-workspace <workspace_id> <email>
@@ -480,6 +483,16 @@ func admin(cmd string, args []string) int {
 		} else {
 			fmt.Printf("workspace %s is now on the %s plan\n", pos[0], pos[1])
 		}
+	case "clear-trial-review":
+		if len(args) != 1 {
+			fmt.Fprintln(os.Stderr, "usage: server clear-trial-review <workspace_id>")
+			return 2
+		}
+		if err := svc.ClearTrialReview(ctx, args[0]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Printf("workspace %s: its trial is no longer paused or ended for reuse, and it isn't checked again\n", args[0])
 	case "attach-workspace":
 		if len(args) != 2 {
 			fmt.Fprintln(os.Stderr, "usage: server attach-workspace <workspace_id> <email>")

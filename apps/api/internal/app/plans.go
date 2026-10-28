@@ -223,7 +223,20 @@ var ErrSuspended = &Error{Code: "plan_expired", Status: 402,
 // schedules and repeats stop with it, as they do over the API. An error reading the plan counts as not
 // suspended (the work goes on; the request path still checks).
 func (s *Service) suspended(ctx context.Context, workspaceID string) bool {
-	return errors.Is(s.CheckWritable(ctx, workspaceID), ErrSuspended)
+	return s.publishBlocked(ctx, workspaceID) != nil
+}
+
+// publishBlocked: why the workspace publishes nothing now: ErrSuspended (read-only), errTrialReview (its trial is
+// paused for review: drafts stay editable, publishing waits), nil otherwise; an error reading the state counts as
+// nil, as in suspended.
+func (s *Service) publishBlocked(ctx context.Context, workspaceID string) error {
+	if errors.Is(s.CheckWritable(ctx, workspaceID), ErrSuspended) {
+		return ErrSuspended
+	}
+	if errors.Is(s.checkTrialReview(ctx, workspaceID), errTrialReview) {
+		return errTrialReview
+	}
+	return nil
 }
 
 // CheckWritable returns ErrSuspended when the workspace may not change.
