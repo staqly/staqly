@@ -19,6 +19,10 @@ your agents write, no longer a review inbox.
 - `PostEventData` for `post.*` webhook payloads; `SCOPES` lists the 16 scopes.
 - `repeat_every` on posts (`RepeatEvery`: `1d` to `6d`, `1w`, `2w`, `1mo`): once published, a copy is
   scheduled that much later; `posts.update(id, { repeat_every: null })` stops it.
+- `analytics.get({ from, to, days, channel, collection, source })` (`GET /v1/analytics`): totals against the
+  period before, the queue, daily counts, channels, sources, posting times, top posts, failures and
+  feedback for a range of days. Types `Analytics`, `AnalyticsParams`, `AnalyticsTotals`,
+  `AnalyticsMetrics`, `ChannelAnalytics`, `AnalyticsTimeSlot`.
 
 ### Removed
 - `items`, `watchers`, `notificationChannels`, `decisionLinks`, `requestApproval`,

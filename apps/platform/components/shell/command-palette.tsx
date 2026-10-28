@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  BarChart3,
   BellRing,
   Blocks,
   CalendarClock,
@@ -73,6 +74,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             </CommandItem>
             <CommandItem onSelect={() => go('/channels')}>
               <Share2 /> Channels
+            </CommandItem>
+            <CommandItem onSelect={() => go('/analytics')}>
+              <BarChart3 /> Analytics
             </CommandItem>
             <CommandItem onSelect={() => go('/activity')}>
               <Activity /> Activity
