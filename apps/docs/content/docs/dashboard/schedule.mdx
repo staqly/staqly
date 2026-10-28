@@ -57,9 +57,16 @@ new schedule starts in the workspace's time zone (**Settings → General → Wor
 history in [Activity](/dashboard/activity) records *Scheduled* or *Rescheduled* with the time,
 *Schedule cleared*, and *Published* or *Failed* per channel.
 
-API: `POST /v1/posts/{id}/schedule`, `POST /v1/posts/{id}/cancel`,
-`GET /v1/posts?publish_after=&publish_before=&sort=publish_asc` for the calendar, and the
-`post.scheduled` / `post.unscheduled` events; `GET /v1/schedules` for the runs.
+Over the API:
+
+| Endpoint | What it does |
+|---|---|
+| <Method m="POST" path="/v1/posts/{id}/schedule" /> | schedule a post |
+| <Method m="POST" path="/v1/posts/{id}/cancel" /> | take it off the schedule (back to draft) |
+| <Method m="GET" path="/v1/posts" /> | the calendar: `?publish_after=&publish_before=&sort=publish_asc` |
+| <Method m="GET" path="/v1/schedules" /> | the publishing schedules (runs) |
+
+Webhooks and alerts get `post.scheduled` and `post.unscheduled`.
 
 ## Next steps
 

@@ -259,6 +259,11 @@ a.sq-endpoint:hover code {
   color: oklch(0.75 0.15 27);
 }
 
+/* A table row for something not available yet (<Badge tone="soon">) reads greyed out. */
+tr:has(.sq-badge-soon) {
+  opacity: 0.5;
+}
+
 .sq-coming-soon {
   display: flex;
   flex-direction: column;

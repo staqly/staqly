@@ -196,13 +196,15 @@ Over an API key this needs the **`alerts:manage`** scope (or `admin`). Grant it 
 only deliberately, because alerts hold secrets. Dashboard sessions and the Staqly Community Edition's access token have it
 implicitly.
 
-<Method m="GET" path="/v1/alerts" /> ·
-<Method m="POST" path="/v1/alerts" /> ·
-<Method m="GET" path="/v1/alerts/{id}" /> ·
-<Method m="PATCH" path="/v1/alerts/{id}" /> ·
-<Method m="DELETE" path="/v1/alerts/{id}" /> ·
-<Method m="POST" path="/v1/alerts/{id}/test" /> ·
-<Method m="GET" path="/v1/alerts/{id}/deliveries" />
+| Endpoint | What it does |
+|---|---|
+| <Method m="GET" path="/v1/alerts" /> | list your alert channels |
+| <Method m="POST" path="/v1/alerts" /> | add one |
+| <Method m="GET" path="/v1/alerts/{id}" /> | get one (stored secrets are never returned) |
+| <Method m="PATCH" path="/v1/alerts/{id}" /> | change it, pause or re-enable it |
+| <Method m="POST" path="/v1/alerts/{id}/test" /> | send a test message now |
+| <Method m="GET" path="/v1/alerts/{id}/deliveries" /> | its recent deliveries |
+| <Method m="DELETE" path="/v1/alerts/{id}" /> | remove it |
 
 | Field | Description |
 |---|---|
