@@ -438,6 +438,12 @@ Every method takes `RequestOptions` (`timeout`, `maxRetries`, `idempotencyKey`, 
 |---|---|
 | `list(params?)`, `iterate(params?)` | `GET /v1/events` (`post_id`, `channel_id`, `schedule_id`, `collection_id`, `type`, `type_prefix`, `actor_type`, `actor_id`, `agent`, `from`, `to`, `limit`, `cursor`) |
 
+### `analytics`
+
+| Method | Endpoint |
+|---|---|
+| `get({ from?, to?, days?, channel?, collection?, source? })` | `GET /v1/analytics`: publishing outcomes, sources, posting times and cached platform numbers for a range of days ([Analytics](/dashboard/analytics)) |
+
 ### `webhooks`
 
 | Method | Endpoint |

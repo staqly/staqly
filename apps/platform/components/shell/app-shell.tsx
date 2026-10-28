@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
+  BarChart3,
   Bell,
   BellRing,
   Blocks,
@@ -678,6 +679,13 @@ function AppSidebar() {
                 <SidebarMenuButton asChild isActive={isActive('/posts')} tooltip="Posts">
                   <Link href="/posts" onClick={close}>
                     <PenSquare /> <span>Posts</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/analytics')} tooltip="Analytics">
+                  <Link href="/analytics" onClick={close}>
+                    <BarChart3 /> <span>Analytics</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

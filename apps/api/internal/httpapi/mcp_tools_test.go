@@ -39,7 +39,7 @@ func TestMCPToolsCoverREST(t *testing.T) {
 		get_workspace_export list_plans get_usage get_billing list_providers list_channels get_channel list_posts get_post
 		search_posts get_post_history preview_post list_requested_work list_tags list_schedules list_jobs
 		get_post_metrics list_preview_links list_post_comments list_channel_groups list_channel_links list_channel_options
-		get_generated_media`)
+		get_generated_media get_analytics`)
 	writes := strings.Fields(`create_collection update_collection delete_collection upload_media update_media delete_media create_media_folder update_media_folder delete_media_folder organize_media restore_media keep_media generate_media keep_generated_media create_webhook
 		update_webhook delete_webhook rotate_webhook_secret test_webhook retry_webhook_delivery create_alert update_alert
 		delete_alert test_alert create_api_key revoke_api_key rotate_api_key revoke_session rename_workspace delete_workspace
@@ -66,7 +66,7 @@ func TestMCPToolsCoverREST(t *testing.T) {
 			t.Errorf("%s must not be read-only", n)
 		}
 	}
-	if want := len(readOnly) + len(writes); len(tools) != want || want != 104 {
+	if want := len(readOnly) + len(writes); len(tools) != want || want != 105 {
 		t.Errorf("tool count %d, want %d (every tool listed here)", len(tools), want)
 	}
 	if _, ok := tools["rotate_recovery_key"]; ok {
