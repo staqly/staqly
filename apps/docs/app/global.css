@@ -329,6 +329,13 @@ tr:has(.sq-badge-soon) {
   max-width: 1040px;
 }
 
+/* The docs' header reads apart from staqly.ai's (same logo, same dark): a faint green surface and a green rule. */
+#nd-nav > nav,
+#nd-subnav {
+  background-color: color-mix(in oklch, var(--brand) 8%, var(--color-fd-background));
+  border-bottom-color: color-mix(in oklch, var(--brand) 28%, transparent);
+}
+
 /* ── Touch screens: 40px hit areas ─────────────────────────────────────── */
 
 /* Fumadocs sizes its header icon buttons (32-34px) and sidebar rows (32-36px) for a mouse. */
