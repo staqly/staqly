@@ -1418,12 +1418,33 @@ func (s *Service) settleTarget(ctx context.Context, postID, channelID, status st
 		if status == "failed" {
 			typ = "post.target_failed"
 		}
-		data := s.postEventData(ctx, q, row.WorkspaceID, postID, map[string]any{"channel_id": channelID, "url": result.URL, "external_id": result.ExternalID, "error": errMsg})
+		extra := map[string]any{"channel_id": channelID, "url": result.URL, "external_id": result.ExternalID, "error": errMsg}
+		// The channel as it is now (name, platform, picture), so a notification can say where it went.
+		if ch, err := q.GetChannel(ctx, db.GetChannelParams{WorkspaceID: row.WorkspaceID, ID: channelID}); err == nil {
+			extra["channel"] = targetChannel(ch)
+		} else if !isNoRows(err) {
+			return err
+		}
+		data := s.postEventData(ctx, q, row.WorkspaceID, postID, extra)
 		if _, err := s.emitRef(ctx, q, sys, typ, Ref{Collection: row.CollectionID, Post: postID, Channel: channelID}, data); err != nil {
 			return err
 		}
 		return s.settlePost(ctx, q, sys, row.WorkspaceID, postID)
 	})
+}
+
+// eventChannel is a channel in a per-target event: the channel plus its platform's display name.
+type eventChannel struct {
+	Channel
+	ProviderName string `json:"provider_name"`
+}
+
+func targetChannel(c db.Channel) eventChannel {
+	out := eventChannel{Channel: toChannelOut(c), ProviderName: c.Provider}
+	if e, ok := providers.Get(c.Provider); ok {
+		out.ProviderName = e.Name()
+	}
+	return out
 }
 
 // settlePost: with no target left pending or publishing, the post is published (all did) or failed (one did not).
