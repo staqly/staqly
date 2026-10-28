@@ -136,6 +136,26 @@ describe('collection schedules', () => {
     })
   })
 
+  it('editing a paused schedule keeps it paused', async () => {
+    const api = mockApi({
+      'GET /v1/schedules': { data: [schedule({ enabled: false })] },
+      'GET /v1/channels': { data: [channel()] },
+      'PATCH /v1/schedules/sch_1': schedule({ enabled: false }),
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<SchedulesSection collection={collection()} />, { mode: 'local' })
+    await user.click(
+      within((await screen.findAllByTestId('schedule-row'))[0]!).getByRole('button', { name: /^Actions for/ }),
+    )
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+    const sheet = await screen.findByRole('dialog', { name: 'Edit schedule' })
+
+    await user.click(within(sheet).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(api.find('PATCH', '/v1/schedules/sch_1')).toHaveLength(1))
+    expect(api.find('PATCH', '/v1/schedules/sch_1')[0].body).toMatchObject({ enabled: false })
+  })
+
   it('shows the generated endpoint secret once after creating an endpoint schedule', async () => {
     const api = mockApi({
       'GET /v1/schedules': { data: [] },
