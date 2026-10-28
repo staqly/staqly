@@ -64,26 +64,31 @@ const all = walk(join(out, '_next/static'))
 // that name it, like dynamic imports do) and no other page does.
 const EDITORS = ['/media/edit', '/media/video', '/media/audio']
 const isEditor = (route) => EDITORS.includes(route)
-const lazy = (editor) =>
-  walk(join(root, '.next/server/app'))
-    .filter((p) => p.endsWith('react-loadable-manifest.json') && EDITORS.some((e) => p.includes(`${e}/`)) === editor)
-    .flatMap((p) => Object.values(JSON.parse(readFileSync(p, 'utf8'))).flatMap((v) => v.files ?? []))
-    .filter((f) => f.endsWith('.js'))
-    .map((f) => `_next/${f}`)
+const text = new Map(all.map((a) => [a, readFileSync(join(out, a), 'utf8')]))
 const names = new Map(all.map((a) => [a.split('/').pop(), a]))
-const refs = new Map(
-  all.map((a) => {
-    const text = readFileSync(join(out, a), 'utf8')
+// The design editor also opens in a drawer over a post (components/design/design-drawer.tsx), so dashboard pages
+// lazy-load it too. That load is still the editor's: the chunk with the editor's own code holds its drafts' key
+// prefix (a string minifying keeps), and the list of chunks a lazy load fetches together (`Promise.all([...])`)
+// that names it is skipped when following what the dashboard loads, as is a lazy-load entry that includes it.
+const EDITOR_MARKERS = ['staqly-design-draft:']
+const marked = all.filter((a) => EDITOR_MARKERS.some((m) => text.get(a).includes(m))).map((a) => a.split('/').pop())
+const withoutEditor = (t) => t.replace(/\[[^[\]]*\]/g, (list) => (marked.some((n) => list.includes(n)) ? '' : list))
+const refsOf = (strip) =>
+  new Map(
+    all.map((a) => {
+      const t = strip ? withoutEditor(text.get(a)) : text.get(a)
 
-    return [a, [...names.keys()].filter((n) => n !== a.split('/').pop() && text.includes(n)).map((n) => names.get(n))]
-  }),
-)
-const reach = (roots) => {
+      return [a, [...names.keys()].filter((n) => n !== a.split('/').pop() && t.includes(n)).map((n) => names.get(n))]
+    }),
+  )
+const refs = refsOf(false)
+const dashboardRefs = refsOf(true)
+const reach = (roots, edges = refs) => {
   const seen = new Set(roots)
   const todo = [...roots]
 
   while (todo.length) {
-    for (const r of refs.get(todo.pop()) ?? []) {
+    for (const r of edges.get(todo.pop()) ?? []) {
       if (!seen.has(r)) {
         seen.add(r)
         todo.push(r)
@@ -93,11 +98,35 @@ const reach = (roots) => {
 
   return seen
 }
+const lazy = (editor) =>
+  walk(join(root, '.next/server/app'))
+    .filter((p) => p.endsWith('react-loadable-manifest.json'))
+    .flatMap((p) =>
+      Object.values(JSON.parse(readFileSync(p, 'utf8'))).flatMap((v) => {
+        const files = (v.files ?? []).filter((f) => f.endsWith('.js'))
+        const isEditorLoad =
+          EDITORS.some((e) => p.includes(`${e}/`)) || files.some((f) => marked.includes(f.split('/').pop()))
+
+        return isEditorLoad === editor ? files.map((f) => `_next/${f}`) : []
+      }),
+    )
 const pageFiles = (editor) => rows.filter((r) => isEditor(r.route) === editor).flatMap((r) => r.files)
-const dashboard = reach([...pageFiles(false), ...lazy(false)])
-const editorOnly = [...reach([...pageFiles(true), ...lazy(true)])].filter((a) => !dashboard.has(a) && refs.has(a))
-const editorGz = editorOnly.reduce((n, a) => n + size(a).gz, 0)
-const totalGz = all.reduce((n, a) => n + size(a).gz, 0) - editorGz
+const dashboard = reach([...pageFiles(false), ...lazy(false)], dashboardRefs)
+const editorSide = reach([...pageFiles(true), ...lazy(true)])
+const gzOf = (chunks) => chunks.reduce((n, a) => n + size(a).gz, 0)
+// Each page that opens the drawer loads the editor's own chunks plus a grouping of the shared modules that page
+// lacks (the checkbox, picture downscaling...): those groupings count with the dashboard, like any other split of
+// shared chunks. Printed per load for reference.
+const drawerLoads = [
+  ...new Set(
+    all
+      .flatMap((a) => [...text.get(a).matchAll(/\[[^[\]]*\]/g)].map((m) => m[0]))
+      .filter((list) => marked.some((n) => list.includes(n))),
+  ),
+].map((list) => gzOf([...names.keys()].filter((n) => list.includes(n) && n.endsWith('.js')).map((n) => names.get(n))))
+const editorOnly = [...editorSide].filter((a) => !dashboard.has(a) && refs.has(a))
+const editorGz = gzOf(editorOnly)
+const totalGz = gzOf(all) - editorGz
 const largest = all
   .map((a) => ({ chunk: a.replace('_next/static/chunks/', ''), KB: kb(size(a).raw), gzKB: kb(size(a).gz) }))
   .toSorted((a, b) => b.KB - a.KB)
@@ -116,6 +145,9 @@ if (args.has('--json')) {
   console.table(largest)
   console.log(`all JS chunks: ${all.length - editorOnly.length} files, ${kb(totalGz)} KB gzipped`)
   console.log(`editors only: ${editorOnly.length} files, ${kb(editorGz)} KB gzipped`)
+  console.log(
+    `each load of the design editor (its page, the drawer on each page): ${drawerLoads.map(kb).join(', ')} KB gzipped`,
+  )
 }
 
 if (args.has('--check')) {
