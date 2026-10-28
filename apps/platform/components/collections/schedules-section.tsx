@@ -116,7 +116,7 @@ function fromSchedule(s: Schedule | null, collection: Collection, zone: string):
   }
 }
 
-function toInput(f: FormState, collectionId: string): ScheduleInput {
+function toInput(f: FormState, collectionId: string, enabled: boolean): ScheduleInput {
   return {
     collection: collectionId,
     name: f.name.trim(),
@@ -134,7 +134,7 @@ function toInput(f: FormState, collectionId: string): ScheduleInput {
     source: f.source,
     endpoint_url: f.source === 'endpoint' ? f.endpointUrl.trim() : '',
     ...(f.source === 'endpoint' && f.endpointSecret ? { endpoint_secret: f.endpointSecret } : {}),
-    enabled: true,
+    enabled,
   }
 }
 
@@ -222,7 +222,8 @@ function ScheduleSheet({
   }
   const save = useMutation({
     mutationFn: () => {
-      const body = toInput(f, collection.id)
+      // Editing keeps a paused schedule paused; the switch on its row turns it on.
+      const body = toInput(f, collection.id, schedule?.enabled ?? true)
 
       return schedule ? api.updateSchedule(schedule.id, body) : api.createSchedule(body)
     },
