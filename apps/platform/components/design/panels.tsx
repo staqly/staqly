@@ -93,6 +93,8 @@ export interface PanelCtx {
   add: (...els: El[]) => void
   /** Shows another page. */
   showPage: (id: string) => void
+  /** In a drawer over a post: opens another saved design in its place (a link would leave the post). */
+  openProject?: (id: string) => void
 }
 
 /** Moves elements of the page on screen to another page (on top of it), or to a new page after this one. */
@@ -293,7 +295,17 @@ function TemplatesPanel({ ctx }: { ctx: PanelCtx }) {
         <Section title="Your designs">
           <div className="grid grid-cols-2 gap-3">
             {mine.data.map((p) => (
-              <a key={p.id} href={`/media/edit?project=${encodeURIComponent(p.id)}`} className="flex flex-col gap-1">
+              <a
+                key={p.id}
+                href={`/media/edit?project=${encodeURIComponent(p.id)}`}
+                onClick={(e) => {
+                  if (ctx.openProject) {
+                    e.preventDefault()
+                    ctx.openProject(p.id)
+                  }
+                }}
+                className="flex flex-col gap-1"
+              >
                 <span className="flex aspect-square items-center justify-center overflow-hidden rounded-lg border bg-muted/40 p-3">
                   {p.output_id ? (
                     <img

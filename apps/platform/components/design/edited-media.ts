@@ -1,7 +1,8 @@
 'use client'
 
-// The design editor and an open post: when the editor saves a picture the post uses, the post takes the edit
-// (same browser, any tab). Edit on an attachment opens the editor in a new tab, so the draft stays as it is.
+// The editors and an open post: when an editor in another tab saves a picture the post uses, the post takes the
+// edit (same browser). The post's own Design and Edit open the design editor in a drawer (design-drawer.tsx),
+// which hands the pictures over directly; the video editor still opens in a new tab and answers here.
 import { useEffect } from 'react'
 
 import { api, type Media } from '@/lib/api'

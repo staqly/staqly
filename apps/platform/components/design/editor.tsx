@@ -58,6 +58,7 @@ import {
 } from './doc'
 import { draftKey, dropDraft, offerDraft, writeDraft } from './drafts'
 import { announceEdited } from './edited-media'
+import type { Embedded } from './embed'
 import { NameField } from './name-field'
 import { addFile, Panel, PANELS, type PanelCtx, type PanelId } from './panels'
 import { jpegsToPdf } from './pdf'
@@ -233,7 +234,11 @@ async function saveAll({ design, saved, project, render }: SaveArgs) {
   return { project: p.id, saved: files, media }
 }
 
-export default function DesignEditor({ search }: { search: string }) {
+/**
+ * The design editor: its own page (/media/edit), or `embedded` in a drawer over a post (design-drawer.tsx), where
+ * Back closes the drawer and Save and use in the post hands the pictures to the post instead of another tab.
+ */
+export default function DesignEditor({ search, embedded }: { search: string; embedded?: Embedded }) {
   const [params] = useState(() => readParams(search))
   const store = useDesignStore(newDesign())
   const { design, update, undo, redo, replace } = store
@@ -259,9 +264,25 @@ export default function DesignEditor({ search }: { search: string }) {
   const channels = (providers.data ?? []).filter((p) => p.status === 'available' && p.limits.image?.max_bytes)
   // Any change since it opened or saved (a new design: anything at all, even only its name).
   const dirty = baseline ? baseline !== design : store.canUndo
-  const [leaving, setLeaving] = useState(false)
+  // Where Back (or, in a drawer, Escape or another design) goes once unsaved changes are confirmed: 'back' or a
+  // project to open.
+  const [leaving, setLeaving] = useState('')
   const [draft, setDraft] = useState(() => draftKey(DRAFT, params))
   const left = useRef(false)
+  const root = useRef<HTMLDivElement>(null)
+
+  const go = (to: string) => {
+    left.current = true
+
+    if (!embedded) {
+      window.location.href = params.back
+    } else if (to === 'back') {
+      embedded.onClose()
+    } else {
+      embedded.onOpen(to)
+    }
+  }
+  const leave = (to: string) => (dirty ? setLeaving(to) : go(to))
 
   const showPage = useCallback((id: string) => {
     setPageId(id)
@@ -343,14 +364,61 @@ export default function DesignEditor({ search }: { search: string }) {
   )
   // Picking one member of a group picks the whole group.
   const select = useCallback((ids: string[]) => setSelected(withGroups(page.elements, ids)), [page])
-  const ctx: PanelCtx = { store, page, updatePage, selected, onSelect: select, add, showPage }
+  const ctx: PanelCtx = {
+    store,
+    page,
+    updatePage,
+    selected,
+    onSelect: select,
+    add,
+    showPage,
+    openProject: embedded ? leave : undefined,
+  }
+
+  // In a drawer, Escape reaches the drawer first: it leaves a field (the name), clears a selection or crop, else
+  // closes like Back.
+  const onEscape = embedded?.onEscape
+  const escape = () => {
+    const field = document.activeElement
+
+    if (
+      field instanceof HTMLElement &&
+      field.matches('input, textarea, [contenteditable="true"]') &&
+      root.current?.contains(field)
+    ) {
+      field.blur()
+    } else if (selected.length || cropping) {
+      setSelected([])
+      setCropping(null)
+    } else {
+      leave('back')
+    }
+  }
+
+  // The drawer keeps one function, which calls the newest escape (it reads the selection and the changes).
+  const latestEscape = useRef(escape)
+
+  useEffect(() => {
+    latestEscape.current = escape
+  })
+
+  useEffect(() => {
+    onEscape?.(() => latestEscape.current())
+
+    return () => onEscape?.(null)
+  }, [onEscape])
 
   // Shortcuts, unless a field has the keyboard.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
+      // Not in another dialog (the drawer the editor sits in is not one).
+      const dialog = t.closest('[role="dialog"]')
 
-      if (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]')) {
+      if (
+        t.closest('input, textarea, select, [contenteditable="true"], [role="menu"]') ||
+        (dialog && !dialog.contains(root.current))
+      ) {
         return
       }
 
@@ -550,14 +618,18 @@ export default function DesignEditor({ search }: { search: string }) {
       setBaseline(doc)
       dropDraft(draft)
       setDraft(DRAFT + out.project)
-      window.history.replaceState(
-        null,
-        '',
-        `?project=${encodeURIComponent(out.project)}${params.back !== '/media' ? `&return=${encodeURIComponent(params.back)}` : ''}${params.fromComposer ? '&from=composer' : ''}`,
-      )
 
-      // A post open in another tab follows: its attachments become the new files (or get them, for a new design).
-      if (params.fromComposer) {
+      // On its own page the address names the saved design, and a post open in another tab follows: its
+      // attachments become the new files (or get them, for a new design). In a drawer the post takes them below.
+      if (!embedded) {
+        window.history.replaceState(
+          null,
+          '',
+          `?project=${encodeURIComponent(out.project)}${params.back !== '/media' ? `&return=${encodeURIComponent(params.back)}` : ''}${params.fromComposer ? '&from=composer' : ''}`,
+        )
+      }
+
+      if (params.fromComposer && !embedded) {
         for (const [i, m] of out.media.entries()) {
           const from = m.before ?? (i === 0 ? params.ids[0] : undefined)
 
@@ -573,12 +645,20 @@ export default function DesignEditor({ search }: { search: string }) {
       const n = out.media.length
 
       toast.success(n > 1 ? `Saved ${n} pages to Media` : `Saved to Media as ${out.media[0]!.after.original_name}`, {
-        description: params.fromComposer
-          ? 'The post you came from uses it now.'
-          : owed.length
-            ? `Credit when you post: ${owed.join(', ')}.`
-            : 'Open it from Media to keep editing.',
+        description: embedded
+          ? 'The post uses it now.'
+          : params.fromComposer
+            ? 'The post you came from uses it now.'
+            : owed.length
+              ? `Credit when you post: ${owed.join(', ')}.`
+              : 'Open it from Media to keep editing.',
       })
+
+      // In a drawer the post takes the pictures, and the drawer closes.
+      if (embedded) {
+        left.current = true
+        embedded.onSaved(out.media)
+      }
     })
 
   const download = (type: 'image/png' | 'image/jpeg', all: boolean) =>
@@ -637,7 +717,12 @@ export default function DesignEditor({ search }: { search: string }) {
 
   return (
     <div
-      className="fixed inset-0 flex flex-col bg-background"
+      ref={root}
+      className={cn(
+        'flex flex-col bg-background',
+        // In a drawer it fills the drawer, clear of the notch and the home indicator.
+        embedded ? 'size-full min-h-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]' : 'fixed inset-0',
+      )}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault()
@@ -660,33 +745,39 @@ export default function DesignEditor({ search }: { search: string }) {
         />
       )}
       <ConfirmDialog
-        open={leaving}
-        onOpenChange={setLeaving}
+        open={!!leaving}
+        onOpenChange={(shown) => !shown && setLeaving('')}
         title="Leave without saving?"
         description="Your changes to this design are not saved yet. Leave and they are gone, or stay and save them to Media."
         confirmLabel="Leave without saving"
         variant="destructive"
         onConfirm={() => {
-          left.current = true
           dropDraft(draft)
-          window.location.href = params.back
+          go(leaving)
         }}
       />
       <header className="flex h-14 shrink-0 items-center gap-1.5 border-b px-2 sm:px-3">
-        <Button variant="ghost" asChild>
-          <a
-            href={params.back}
-            onClick={(e) => {
-              if (dirty) {
-                e.preventDefault()
-                setLeaving(true)
-              }
-            }}
-          >
+        {embedded ? (
+          <Button variant="ghost" onClick={() => leave('back')} data-testid="design-back">
             <ArrowLeft aria-hidden />
-            <span className="max-sm:sr-only">{toPost ? 'Back to the post' : 'Media'}</span>
-          </a>
-        </Button>
+            <span className="max-sm:sr-only">Back to the post</span>
+          </Button>
+        ) : (
+          <Button variant="ghost" asChild>
+            <a
+              href={params.back}
+              onClick={(e) => {
+                if (dirty) {
+                  e.preventDefault()
+                  setLeaving('back')
+                }
+              }}
+            >
+              <ArrowLeft aria-hidden />
+              <span className="max-sm:sr-only">{toPost ? 'Back to the post' : 'Media'}</span>
+            </a>
+          </Button>
+        )}
         <span className="h-5 w-px bg-border" aria-hidden />
         <NameField value={design.name} onChange={(name) => update((d) => void (d.name = name), 'name')} />
         <div className="ml-auto flex items-center gap-1">

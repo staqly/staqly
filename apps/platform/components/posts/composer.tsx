@@ -32,7 +32,9 @@ import { Callout } from '@/components/common/callout'
 import { DateTimeFields, formatShort } from '@/components/common/date-time-picker'
 import { MultiSelect } from '@/components/common/multi-select'
 import { PostStatusBadge, TargetStatusBadge } from '@/components/common/status-badge'
+import { DesignDrawer } from '@/components/design/design-drawer'
 import { useDesignedMedia, useEditedMedia } from '@/components/design/edited-media'
+import { placeSaved } from '@/components/design/embed'
 import { LibraryPickerButton } from '@/components/media/library-picker'
 import { PostStats } from '@/components/posts/post-actions'
 import { Button } from '@/components/ui/button'
@@ -314,22 +316,29 @@ function ChannelPicker({
 function MediaStrip({
   media,
   onRemove,
-  editable,
+  onEdit,
 }: {
   media: Media[]
   onRemove?: (id: string) => void
-  editable?: boolean
+  /** Edit opens the design editor in a drawer; what it saves replaces the picture here. */
+  onEdit?: (update: (ms: Media[]) => Media[]) => void
 }) {
+  const strip = useRef<HTMLDivElement>(null)
+  const [editing, setEditing] = useState({ open: false, id: '' })
+  // The picture that took the edited one's place, for focus once the drawer closes.
+  const placed = useRef('')
+
   if (!media.length) {
     return null
   }
 
   return (
-    <div className="media-strip flex flex-wrap gap-2 px-3 pt-1 pb-3">
+    <div ref={strip} className="media-strip flex flex-wrap gap-2 px-3 pt-1 pb-3">
       {media.map((m) => (
         // The tools show on hover or focus (always on touch), on solid chips in the corners.
         <span
           key={m.id}
+          data-media={m.id}
           className="group/media relative size-20 overflow-hidden rounded-lg bg-muted ring-1 ring-border pointer-coarse:size-24"
         >
           {m.mime_type.startsWith('image/') ? (
@@ -343,18 +352,16 @@ function MediaStrip({
               {m.original_name}
             </span>
           )}
-          {editable && m.mime_type.startsWith('image/') && (
-            // A new tab: this draft stays open; the edited picture replaces this one here when it is saved.
-            <a
-              href={`/media/edit?ids=${encodeURIComponent(m.id)}&from=composer`}
-              target="_blank"
-              rel="noopener"
+          {onEdit && m.mime_type.startsWith('image/') && (
+            <button
+              type="button"
               aria-label={`Edit ${m.original_name}`}
               data-testid="edit-attachment"
+              onClick={() => setEditing({ open: true, id: m.id })}
               className="absolute bottom-1 left-1 flex size-6 items-center justify-center rounded-full border bg-background text-foreground opacity-0 shadow-sm transition-opacity group-focus-within/media:opacity-100 group-hover/media:opacity-100 hover:bg-muted pointer-coarse:size-8 pointer-coarse:opacity-100"
             >
               <Pencil className="size-3" />
-            </a>
+            </button>
           )}
           {onRemove && (
             <button
@@ -368,6 +375,30 @@ function MediaStrip({
           )}
         </span>
       ))}
+      {onEdit && editing.id && (
+        <DesignDrawer
+          open={editing.open}
+          onOpenChange={(open) => setEditing((e) => ({ ...e, open }))}
+          edit={editing.id}
+          onSaved={(files) => {
+            placed.current = files[0]?.after.id ?? ''
+            onEdit((ms) => placeSaved(ms, files, editing.id))
+          }}
+          onCloseAutoFocus={(e) => {
+            // The edited picture was replaced: focus its replacement's Edit.
+            const next = placed.current
+              ? strip.current?.querySelector<HTMLElement>(`[data-media="${CSS.escape(placed.current)}"] button`)
+              : null
+
+            placed.current = ''
+
+            if (next) {
+              e.preventDefault()
+              next.focus()
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -375,8 +406,10 @@ function MediaStrip({
 /** The "Insert media" button: uploads and hands each file back. */
 function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
   const input = useRef<HTMLInputElement>(null)
-  // Design opens the design editor in a new tab; what it saves for this token lands here.
+  // Video opens the video editor in a new tab; what it saves for this token lands here.
   const [token] = useState(() => Math.random().toString(36).slice(2, 12))
+  // Design opens the design editor in a drawer over the post (its code loads on first open).
+  const design = useLazyDialog()
 
   useDesignedMedia(token, onAdd)
   const upload = useMutation({
@@ -413,11 +446,20 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
         <ImagePlus /> {upload.isPending ? 'Uploading...' : 'Insert media'}
       </Button>
       <LibraryPickerButton onAdd={onAdd} />
-      <Button type="button" variant="outline" size="sm" asChild>
-        <a href={`/media/edit?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="design-new">
-          <Palette /> Design
-        </a>
+      <Button type="button" variant="outline" size="sm" onClick={() => design.setOpen(true)} data-testid="design-new">
+        <Palette /> Design
       </Button>
+      {design.used && (
+        <DesignDrawer
+          open={design.open}
+          onOpenChange={design.setOpen}
+          onSaved={(files) => {
+            for (const f of files) {
+              onAdd(f.after)
+            }
+          }}
+        />
+      )}
       <Button type="button" variant="outline" size="sm" asChild>
         <a href={`/media/video?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="video-new">
           <Film /> Video
@@ -821,6 +863,7 @@ function ThreadEditor({
                 below={
                   <MediaStrip
                     media={part.media}
+                    onEdit={locked ? undefined : (fn) => set(part.uid, (p) => ({ media: fn(p.media) }))}
                     onRemove={
                       locked ? undefined : (id) => set(part.uid, (p) => ({ media: p.media.filter((m) => m.id !== id) }))
                     }
@@ -1035,7 +1078,7 @@ const ChannelEditor = memo(
           below={
             <MediaStrip
               media={media}
-              editable={!locked}
+              onEdit={locked ? undefined : onMedia}
               onRemove={locked ? undefined : (id) => onMedia((ms) => ms.filter((m) => m.id !== id))}
             />
           }
