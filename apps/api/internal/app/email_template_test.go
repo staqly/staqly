@@ -36,6 +36,12 @@ func TestTextEmailDocFindsCodeAndLink(t *testing.T) {
 	if c.Code != "123456" || c.Button != nil {
 		t.Fatalf("code: %+v", c)
 	}
+	// One unbroken string in both bodies (copy and the phone's code suggestion), leading zero kept.
+	_, text := emailCodeMessage(purposeSignIn, "012345")
+	h, txt := renderEmail(textEmailDoc("Your Staqly sign-in code: 012345", text), "")
+	if !strings.Contains(h, `letter-spacing:0.2em;color:#111827">012345</span>`) || !strings.Contains(txt, "    012345\n") {
+		t.Fatalf("code not one string:\n%s\n%s", h, txt)
+	}
 }
 
 func TestUnsubscribeTokenIsSigned(t *testing.T) {
