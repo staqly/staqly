@@ -69,12 +69,12 @@ Codex reads the bearer token from an environment variable:
 
 ```bash
 export STAQLY_API_KEY=stk_...
-codex mcp add staqly --url https://app.staqly.ai/mcp --bearer-token-env-var STAQLY_API_KEY
+codex mcp add staqly --url https://api.staqly.ai/mcp --bearer-token-env-var STAQLY_API_KEY
 ```
 
 ```toml title="~/.codex/config.toml"
 [mcp_servers.staqly]
-url = "https://app.staqly.ai/mcp"
+url = "https://api.staqly.ai/mcp"
 bearer_token_env_var = "STAQLY_API_KEY"
 ```
 

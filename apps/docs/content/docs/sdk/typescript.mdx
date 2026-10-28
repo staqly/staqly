@@ -32,7 +32,7 @@ The package is ESM-only. CommonJS code can still `require('@staqly/sdk')` on Nod
 **Staqly Cloud:** create an API key (**Integrations → API keys**) and set both variables:
 
 ```bash
-export STAQLY_API_URL=https://app.staqly.ai
+export STAQLY_API_URL=https://api.staqly.ai
 export STAQLY_API_KEY=stk_...
 ```
 
@@ -85,7 +85,7 @@ status per channel.
 import { Staqly } from '@staqly/sdk'
 
 const staqly = new Staqly({
-  baseUrl: 'https://app.staqly.ai', // default: $STAQLY_API_URL, then http://localhost:3333
+  baseUrl: 'https://api.staqly.ai', // default: $STAQLY_API_URL, then http://localhost:3333
   apiKey: process.env.STAQLY_API_KEY, // default: $STAQLY_API_KEY; null = ignore the env var
   timeout: 60_000, // per-request timeout in ms
   maxRetries: 2, // retries for 408/429/5xx/network errors

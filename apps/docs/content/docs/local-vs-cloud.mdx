@@ -21,7 +21,8 @@ supported for the Community Edition only.
 | Workspaces | Many: your first sign-in creates a workspace you own; members join by invitation | One, created automatically |
 | People | Sign in with Google, an email code or a passkey; members with roles ([Accounts](/accounts)) | You; each browser signs in once with the access token |
 | Agents, n8n, scripts | Scoped API keys `stk_...`; the key decides which workspace you work in | The access token `stk_local_...` as `Authorization: Bearer` (API keys `stk_...` are refused, `401`) |
-| MCP | `https://app.staqly.ai/mcp` + `Authorization: Bearer {API_KEY}` | `http://localhost:3333/mcp` + `Authorization: Bearer {ACCESS_TOKEN}`, or `docker exec -i staqly mcp-stdio` (Docker only, no token) |
+| API | `https://api.staqly.ai/v1` (`https://app.staqly.ai/v1` works too) | `http://localhost:3333/v1` |
+| MCP | `https://api.staqly.ai/mcp` + `Authorization: Bearer {API_KEY}` | `http://localhost:3333/mcp` + `Authorization: Bearer {ACCESS_TOKEN}`, or `docker exec -i staqly mcp-stdio` (Docker only, no token) |
 | Phones and tablets | Sign in at `app.staqly.ai`, or **Connect a device** QR | **Connect a device** QR (with `--expose` or Docker; the QR uses your Wi-Fi address, which Docker users type once in the dialog) |
 | OAuth platforms | Our developer apps, ready to connect | Your own developer app per platform, in the server's environment (`PROVIDER_<ID>_CLIENT_ID` / `_SECRET`; see [Developer apps](/channels/developer-apps)) |
 | Plan | Starter, Plus, Pro or Business, per user (Starter with a 7-day trial, card required) | **Community Edition** (no limits) |
@@ -58,23 +59,23 @@ choosing a plan and connecting a first channel.
 Clients use the hosted address plus your workspace's API key:
 
 ```bash tab="curl"
-curl "https://app.staqly.ai/v1/posts?status=scheduled" \
+curl "https://api.staqly.ai/v1/posts?status=scheduled" \
   -H "Authorization: Bearer $STAQLY_API_KEY"
 ```
 
 ```bash tab="Claude Code"
-claude mcp add --transport http staqly https://app.staqly.ai/mcp \
+claude mcp add --transport http staqly https://api.staqly.ai/mcp \
   --header "Authorization: Bearer $STAQLY_API_KEY"
 ```
 
 ```bash tab="Codex"
-codex mcp add staqly --url https://app.staqly.ai/mcp --bearer-token-env-var STAQLY_API_KEY
+codex mcp add staqly --url https://api.staqly.ai/mcp --bearer-token-env-var STAQLY_API_KEY
 ```
 
 ```ts tab="TypeScript SDK"
 import { Staqly } from '@staqly/sdk';
 
-const cloud = new Staqly({ baseUrl: 'https://app.staqly.ai', apiKey: process.env.STAQLY_API_KEY });
+const cloud = new Staqly({ baseUrl: 'https://api.staqly.ai', apiKey: process.env.STAQLY_API_KEY });
 ```
 
 Several workspaces means several keys: each key only sees its own workspace.

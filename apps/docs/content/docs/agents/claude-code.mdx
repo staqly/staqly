@@ -85,7 +85,7 @@ as a header:
 
 ```bash
 export STAQLY_API_KEY=stk_...
-claude mcp add --transport http staqly https://app.staqly.ai/mcp \
+claude mcp add --transport http staqly https://api.staqly.ai/mcp \
   --header "Authorization: Bearer $STAQLY_API_KEY"
 ```
 
@@ -97,7 +97,7 @@ stays out of git:
   "mcpServers": {
     "staqly": {
       "type": "http",
-      "url": "https://app.staqly.ai/mcp",
+      "url": "https://api.staqly.ai/mcp",
       "headers": { "Authorization": "Bearer ${STAQLY_API_KEY}" }
     }
   }
