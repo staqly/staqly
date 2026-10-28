@@ -8,35 +8,25 @@ import { closeTrialUsed, useTrialUsed, type TrialUsedKind } from '@/lib/trial-us
 
 const TrialUsedContent = dynamic(() => import('./trial-used-content'), { ssr: false })
 
-const SEEN_KEY = 'staqly.trial-used-seen'
+// Shown once per page load: the dashboard is one page, so moving around keeps it closed; a reload asks again.
+let seenKind = ''
 
-function seenThisSession(): string {
-  try {
-    return sessionStorage.getItem(SEEN_KEY) ?? ''
-  } catch {
-    return ''
-  }
-}
-
-function rememberSeen(kind: TrialUsedKind) {
-  try {
-    sessionStorage.setItem(SEEN_KEY, kind)
-  } catch {
-    // Shown again on the next page load, nothing more.
-  }
+/** Tests start each case as a fresh page load. */
+export function forgetTrialUsedSeen() {
+  seenKind = ''
 }
 
 /**
  * Why the free trial is paused (the workspace connected accounts of an earlier unpaid trial) or gone (its card was
  * used for one). Opens when a connect or publish is refused for it (openTrialUsed) and, for owners and admins,
- * once a session while the billing state says so.
+ * once a page load while the billing state says so.
  */
 export function TrialUsedDialog() {
   const { isLocal } = useMode()
   const { role, canManagePeople } = useRole()
   const billing = useBilling({ enabled: !isLocal && canManagePeople })
   const asked = useTrialUsed()
-  const [seen, setSeen] = useState(seenThisSession)
+  const [seen, setSeen] = useState(seenKind)
   const fromBilling: TrialUsedKind | null = billing.data?.trial_review
     ? 'paused'
     : billing.data?.trial_revoked
@@ -49,7 +39,7 @@ export function TrialUsedDialog() {
   }
 
   const close = () => {
-    rememberSeen(kind)
+    seenKind = kind
     setSeen(kind)
     closeTrialUsed()
   }

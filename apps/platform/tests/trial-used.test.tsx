@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { TrialUsedDialog } from '@/components/billing/trial-used-dialog'
+import { forgetTrialUsedSeen, TrialUsedDialog } from '@/components/billing/trial-used-dialog'
 import { OAuthCallback } from '@/components/channels/oauth-callback'
 import { ApiError } from '@/lib/api'
 import { toastApiError } from '@/lib/notify'
@@ -50,7 +50,7 @@ const paused = () =>
   })
 
 describe('a free trial that reused an unpaid one', () => {
-  beforeEach(() => sessionStorage.clear())
+  beforeEach(() => forgetTrialUsedSeen())
   afterEach(() => {
     nav.reset()
     act(() => closeTrialUsed())
@@ -86,7 +86,7 @@ describe('a free trial that reused an unpaid one', () => {
     expect(within(dialog).getByRole('link', { name: /Contact us/ })).toBeInTheDocument()
   })
 
-  it('opens from the billing state once a session', async () => {
+  it('opens from the billing state once a page load', async () => {
     setup('admin', { review: 'channels' })
 
     const dialog = await screen.findByTestId('trial-used')
@@ -94,7 +94,6 @@ describe('a free trial that reused an unpaid one', () => {
     expect(dialog).toHaveAttribute('data-kind', 'paused')
     await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByTestId('trial-used')).not.toBeInTheDocument())
-    expect(sessionStorage.getItem('staqly.trial-used-seen')).toBe('paused')
   })
 
   it('says a card used for a trial before means no trial, charged or not', async () => {
