@@ -559,6 +559,9 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 		if err := p.require(ScopePostsPublish); err != nil {
 			return Post{}, err
 		}
+		if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
+			return Post{}, err
+		}
 	}
 	if in.Status == "scheduled" {
 		if publishAt == "" {
@@ -951,6 +954,9 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 	if err := p.require(ScopePostsPublish); err != nil {
 		return Post{}, err
 	}
+	if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
+		return Post{}, err
+	}
 	at, err := s.parsePublishAt(publishAt)
 	if err != nil {
 		return Post{}, err
@@ -1006,6 +1012,9 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 // PublishPost publishes now (from draft, scheduled or failed).
 func (s *Service) PublishPost(ctx context.Context, p Principal, id string) (Post, error) {
 	if err := p.require(ScopePostsPublish); err != nil {
+		return Post{}, err
+	}
+	if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
 		return Post{}, err
 	}
 	err := s.tx(ctx, func(q *db.Queries) error {
@@ -1225,8 +1234,8 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	if err != nil {
 		return err
 	}
-	if s.suspended(ctx, row.WorkspaceID) {
-		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, ErrSuspended.Message)
+	if blocked := s.publishBlocked(ctx, row.WorkspaceID); blocked != nil {
+		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, blocked.(*Error).Message)
 	}
 	ch, err := s.Q.GetChannelByID(ctx, channelID)
 	if err != nil {
@@ -1418,12 +1427,33 @@ func (s *Service) settleTarget(ctx context.Context, postID, channelID, status st
 		if status == "failed" {
 			typ = "post.target_failed"
 		}
-		data := s.postEventData(ctx, q, row.WorkspaceID, postID, map[string]any{"channel_id": channelID, "url": result.URL, "external_id": result.ExternalID, "error": errMsg})
+		extra := map[string]any{"channel_id": channelID, "url": result.URL, "external_id": result.ExternalID, "error": errMsg}
+		// The channel as it is now (name, platform, picture), so a notification can say where it went.
+		if ch, err := q.GetChannel(ctx, db.GetChannelParams{WorkspaceID: row.WorkspaceID, ID: channelID}); err == nil {
+			extra["channel"] = targetChannel(ch)
+		} else if !isNoRows(err) {
+			return err
+		}
+		data := s.postEventData(ctx, q, row.WorkspaceID, postID, extra)
 		if _, err := s.emitRef(ctx, q, sys, typ, Ref{Collection: row.CollectionID, Post: postID, Channel: channelID}, data); err != nil {
 			return err
 		}
 		return s.settlePost(ctx, q, sys, row.WorkspaceID, postID)
 	})
+}
+
+// eventChannel is a channel in a per-target event: the channel plus its platform's display name.
+type eventChannel struct {
+	Channel
+	ProviderName string `json:"provider_name"`
+}
+
+func targetChannel(c db.Channel) eventChannel {
+	out := eventChannel{Channel: toChannelOut(c), ProviderName: c.Provider}
+	if e, ok := providers.Get(c.Provider); ok {
+		out.ProviderName = e.Name()
+	}
+	return out
 }
 
 // settlePost: with no target left pending or publishing, the post is published (all did) or failed (one did not).
@@ -1533,6 +1563,9 @@ func (s *Service) ReportTargetResult(ctx context.Context, p Principal, postID, c
 // RetryTarget tries a failed target once more, now.
 func (s *Service) RetryTarget(ctx context.Context, p Principal, postID, channelID string) (Post, error) {
 	if err := p.require(ScopePostsPublish); err != nil {
+		return Post{}, err
+	}
+	if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
 		return Post{}, err
 	}
 	err := s.tx(ctx, func(q *db.Queries) error {

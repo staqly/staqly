@@ -1,32 +1,28 @@
 'use client'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, Bell, CheckCircle2, ExternalLink, Info, XCircle } from 'lucide-react'
+import { ArrowRight, Bell } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { api } from '@/lib/api'
-import { timeAgo } from '@/lib/format'
-import { NOTIFICATION_TYPES, notificationsFor, readSeenSeq, writeSeenSeq, type Notification } from '@/lib/notifications'
+import { groupNotificationEvents, NOTIFICATION_TYPES, readSeenSeq, writeSeenSeq } from '@/lib/notification-groups'
+import type { Notification } from '@/lib/notifications'
 import { qk, useRecentEvents, useRole, useSession } from '@/lib/queries'
-import { safeHttpUrl } from '@/lib/safe'
-import { TONES, type Tone } from '@/lib/tones'
 import { cn } from '@/lib/utils'
+
+// The rows (icons, a publish's channel avatars with every platform's mark) load when the bell opens, not with
+// the shell.
+const NotificationList = dynamic(
+  () => import('@/components/notifications/notification-list').then((m) => m.NotificationList),
+  { ssr: false, loading: () => <div className="h-16" aria-hidden /> },
+)
 
 /** The events request behind the bell and the Notifications page (they share its first page). */
 export const NOTIFICATIONS_QUERY = { types: NOTIFICATION_TYPES, limit: 30 }
-
-export const ICONS: Record<Tone, typeof Bell> = {
-  success: CheckCircle2,
-  danger: XCircle,
-  warning: AlertTriangle,
-  info: Info,
-  neutral: Info,
-  attention: AlertTriangle,
-  accent: Info,
-}
 
 /**
  * The bell: what the automations and staqly did while nobody was looking (published, failed, started on
@@ -34,7 +30,10 @@ export const ICONS: Record<Tone, typeof Bell> = {
  * page live. Unread = newer than the last seen mark (kept per workspace in localStorage): unread rows carry a
  * dot, closing the list or Mark all as read moves the mark.
  */
-/** The bell's state: the list, the unread count and the seen mark of this workspace. */
+/**
+ * The bell's state: its entries (events grouped, one per publish; worded by the list when it opens), the unread
+ * count and the seen mark of this workspace.
+ */
 export function useNotifications() {
   // Only the events that make a notification; refreshed with every new event (the live list's newest).
   const live = useRecentEvents().data?.[0]?.seq
@@ -57,11 +56,11 @@ export function useNotifications() {
     () => new Set((prefs.data?.events ?? []).filter((c) => !c.in_app).map((c) => c.event)),
     [prefs.data],
   )
-  const list = useMemo(() => notificationsFor(recent, muted), [recent, muted])
-  const unread = list.filter((n) => n.seq > seenSeq).length
+  const groups = useMemo(() => groupNotificationEvents(recent, muted), [recent, muted])
+  const unread = groups.filter((g) => g[0]!.seq > seenSeq).length
 
   function markRead() {
-    const top = list[0]?.seq ?? recent?.[0]?.seq ?? seenSeq
+    const top = groups[0]?.[0]?.seq ?? recent?.[0]?.seq ?? seenSeq
 
     if (top > seenSeq) {
       writeSeenSeq(workspace, top)
@@ -70,7 +69,7 @@ export function useNotifications() {
   }
 
   return {
-    list,
+    groups,
     unread,
     seenSeq,
     markRead,
@@ -98,11 +97,13 @@ export function NotificationsPopover({
   children: ReactNode
 }) {
   const router = useRouter()
-  const { list, unread, seenSeq, markRead } = notes
+  const { groups, unread, seenSeq, markRead } = notes
+  const zone = useSession().data?.workspace?.timezone
   // The bell holds what is new; everything else is on the Notifications page. What was new when it opened stays
   // while it is open (Mark all as read takes the dots off), and goes once it closes.
   const [since, setSince] = useState(seenSeq)
-  const fresh = list.filter((n) => n.seq > (open ? since : seenSeq))
+  const cut = open ? since : seenSeq
+  const fresh = useMemo(() => groups.filter((g) => g[0]!.seq > cut), [groups, cut])
 
   function change(o: boolean) {
     if (o) {
@@ -148,50 +149,7 @@ export function NotificationsPopover({
             You&apos;re all caught up. Published, failed and scheduled runs show up here.
           </p>
         ) : (
-          <ul className="max-h-[60svh] overflow-y-auto overscroll-contain py-1" data-testid="notifications-list">
-            {fresh.map((n) => {
-              const Icon = ICONS[n.tone]
-              const link = n.link ? safeHttpUrl(n.link) : undefined
-              const isNew = n.seq > seenSeq
-
-              return (
-                <li
-                  key={n.id}
-                  data-unread={isNew || undefined}
-                  className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2.5 px-3 py-2 hover:bg-muted/60"
-                >
-                  <Icon className={cn('mt-0.5 size-4 shrink-0', TONES[n.tone].text)} aria-hidden />
-                  <div className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => go(n)}
-                      className={cn(
-                        'block w-full text-left text-sm leading-snug wrap-anywhere hover:underline pointer-coarse:py-1',
-                        isNew && 'font-medium',
-                      )}
-                    >
-                      {n.text}
-                    </button>
-                    {link && (
-                      <a
-                        href={link}
-                        target="_blank"
-                        rel="noopener noreferrer nofollow"
-                        className="mt-0.5 inline-flex max-w-full items-center gap-1 text-xs text-brand underline underline-offset-2 pointer-coarse:py-1"
-                      >
-                        <span className="truncate">{link}</span>
-                        <ExternalLink className="size-3 shrink-0" aria-hidden />
-                      </a>
-                    )}
-                    <span className="mt-0.5 block text-xs text-muted-foreground" title={n.at}>
-                      {timeAgo(n.at)}
-                    </span>
-                  </div>
-                  {isNew && <span className="mt-1.5 size-2 rounded-full bg-brand" aria-label="New" role="img" />}
-                </li>
-              )
-            })}
-          </ul>
+          <NotificationList groups={fresh} seenSeq={seenSeq} zone={zone} onGo={go} />
         )}
         <div className="border-t p-1">
           <Button

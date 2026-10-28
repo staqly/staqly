@@ -289,6 +289,12 @@ class Billing(StaqlyModel):
     #: (the workspace had a subscription before), ``other_workspace`` (another workspace of the account is
     #: in its trial, so this one is charged today) or ``none`` (billing off, or already paying).
     trial: str = "none"
+    #: ``card`` when the free trial was ended at once because the workspace's card was used in an earlier
+    #: free trial that wasn't paid for (Stripe charged it then); ``None`` otherwise.
+    trial_revoked: str | None = None
+    #: ``channels`` while the free trial is paused for review (it connected accounts of an earlier unpaid
+    #: trial): publishing and new channels wait until the paid plan starts; ``None`` otherwise.
+    trial_review: str | None = None
 
 
 class SubscriptionDiscount(StaqlyModel):

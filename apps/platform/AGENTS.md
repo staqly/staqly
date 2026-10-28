@@ -262,7 +262,8 @@ must re-render only the component it concerns.
 * Budgets: `pnpm size` (after `pnpm build`, part of `pnpm check`) fails when
   a page's first-load JS (gzipped) or the CSS grows past
   `bundle-budget.json`; `node scripts/bundle-size.mjs` prints every route and
-  the largest chunks. Only Geist Sans is preloaded (`app/fonts.ts`; mono loads
+  the largest chunks. The budgets are ceilings with room: a change only raises
+  one when it truly needs to, and says why in its commit, not in the file. Only Geist Sans is preloaded (`app/fonts.ts`; mono loads
   when used). The live performance run (Chrome, large seeded workspace) is
   `e2e/perf/` (e2e/README.md, Performance).
 * The Go web server sends the export gzipped with an ETag (pages and RSC

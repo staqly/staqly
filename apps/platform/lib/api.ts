@@ -1151,6 +1151,8 @@ export const api = {
   pendingPayment: () => request<PendingPayment>('/v1/billing/pending-payment'),
   /** Reads the subscription from Stripe now (back from Checkout, before or without its webhook). */
   syncBilling: () => request<Billing>('/v1/billing/sync', { method: 'POST' }),
+  /** Ends the free trial now and pays for the plan (the card on file is charged at once). */
+  startPaidPlan: () => request<Billing>('/v1/billing/start-paid-plan', { method: 'POST' }),
   /** Posts to X this period: included, used and bought ones left. */
   xPosts: () => request<XPosts>('/v1/billing/x-posts'),
   /** Buys a bundle of extra posts to X (Stripe Checkout URL). */

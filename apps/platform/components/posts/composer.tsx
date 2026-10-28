@@ -8,12 +8,12 @@ import {
   ChevronDown,
   Trash2,
   MessageSquarePlus,
+  MonitorSmartphone,
   Clock3,
   ChevronUp,
   ExternalLink,
   Film,
   Repeat2,
-  Globe,
   ImagePlus,
   RotateCcw,
   Send,
@@ -21,6 +21,7 @@ import {
   Palette,
   Pencil,
 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { memo, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { flushSync } from 'react-dom'
@@ -85,7 +86,13 @@ import { appendHashtags, normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 import { xPostsWarning } from '@/lib/x-posts'
 
+import { AllChannelsTab, ChannelTab } from './channel-tab'
 import { PostEditor } from './post-editor'
+
+// The live preview and the platforms' templates load on its first opening, not with the composer.
+const PostPreviewSheet = dynamic(() => import('./preview/post-preview').then((m) => m.PostPreviewSheet), {
+  ssr: false,
+})
 
 /** How often a published post comes back: a copy is scheduled that much later (the API's repeat_every). */
 const REPEAT_OPTIONS = [
@@ -1085,64 +1092,6 @@ const ChannelEditor = memo(
     a.hidden && b.hidden ? sameProps(a, b, ['value', 'overrides'] as const) : sameProps(a, b),
 )
 
-/** A picked channel in the "Text for" row: its avatar, a dot when it has its own text, its delivery state. */
-const ChannelTab = memo(function ChannelTab({
-  channel,
-  selected,
-  own,
-  status,
-  onSelect,
-}: {
-  channel: Channel
-  selected: boolean
-  own: boolean
-  status?: PostTarget['status']
-  onSelect: (id: string) => void
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={selected}
-      aria-label={`Text for ${channel.name}`}
-      title={`Text for ${channel.name}`}
-      onClick={() => onSelect(channel.id)}
-      data-testid={`tab-channel-${channel.id}`}
-      className="group/tab inline-grid place-items-center rounded-full p-0.5 outline-none pointer-coarse:p-1.5"
-    >
-      <span className="relative inline-flex size-7">
-        {/* The ring circles the avatar alone (the platform badge sits on top of it): drawn first, under the avatar. */}
-        <span
-          aria-hidden
-          data-testid="tab-channel-ring"
-          className={cn(
-            // Solid colours: the theme's border and focus colours are see-through and blur against the avatar.
-            'pointer-events-none absolute -inset-0.5 rounded-full ring-2 group-focus-visible/tab:ring-brand',
-            selected ? 'ring-brand' : 'ring-transparent group-hover/tab:ring-muted-foreground',
-          )}
-        />
-        <ChannelAvatar channel={channel} className="size-7" />
-        {own && (
-          <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-primary ring-2 ring-background" />
-        )}
-        {/* Delivery state at the top left, clear of the platform badge at the bottom right. */}
-        {status && status !== 'pending' && (
-          <span
-            aria-hidden
-            data-testid="tab-channel-status"
-            className={cn(
-              'absolute -top-0.5 -left-0.5 size-2.5 rounded-full ring-2 ring-background',
-              status === 'published' && 'bg-emerald-500',
-              status === 'failed' && 'bg-destructive',
-              status === 'publishing' && 'bg-sky-500',
-            )}
-          />
-        )}
-      </span>
-    </button>
-  )
-})
-
 /**
  * A remote setting with preferred labels (Slack's channels: #random, else #general), filled in as soon as the
  * channel is picked: the settings card may stay folded, and the post still saves. None of them there, the person
@@ -1693,6 +1642,35 @@ export function ComposerForm({
   const live = !!post && post.status !== 'draft'
   const canSend = picked.length > 0 && content.trim().length > 0 && !!collection
   const { mutate: saveAs, isPending: busy } = save
+  // The live preview: a second drawer beside this one, fed the same state (nothing is saved for it).
+  const { open: previewOpen, used: previewUsed, setOpen: setPreviewOpen, toggle: togglePreview } = useLazyDialog()
+  const previewState = useMemo(
+    () => ({ channels: picked, providers: providerList, content, overrides, media, thread, tags }),
+    [picked, providerList, content, overrides, media, thread, tags],
+  )
+  const previewButton = (
+    <Button
+      type="button"
+      size="icon-sm"
+      variant={previewOpen ? 'secondary' : 'ghost'}
+      aria-label="Live preview"
+      aria-expanded={previewOpen}
+      tooltip="Live preview"
+      onClick={togglePreview}
+      data-testid="open-live-preview"
+    >
+      <MonitorSmartphone />
+    </Button>
+  )
+  const preview = previewUsed && (
+    <PostPreviewSheet
+      open={previewOpen}
+      onOpenChange={setPreviewOpen}
+      state={previewState}
+      // Opens on the channel being written for (the only one, when there is one).
+      initialTab={picked.length === 1 ? picked[0]!.id : shownTab}
+    />
+  )
 
   return (
     // Like every drawer: the header and the footer stay put, the fields scroll between them.
@@ -1732,11 +1710,14 @@ export function ComposerForm({
               <SheetDescription>Pick the channels, write once, change it per channel if you like.</SheetDescription>
             )}
           </div>
-          {headerActions && (
-            <div className="flex shrink-0 items-center gap-1.5" data-testid="post-actions">
-              {headerActions}
-            </div>
-          )}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {previewButton}
+            {headerActions && (
+              <div className="flex items-center gap-1.5" data-testid="post-actions">
+                {headerActions}
+              </div>
+            )}
+          </div>
         </div>
       </SheetHeader>
       <Tabs
@@ -1852,22 +1833,12 @@ export function ComposerForm({
               {multi && (
                 <div
                   role="tablist"
-                  aria-label="Edit the text for"
+                  // No visible label: the avatars say it (the user asked for the row without one); screen readers
+                  // still hear what the row picks.
+                  aria-label="Text for"
                   className="flex flex-wrap items-center gap-1.5 border-b pb-3"
                 >
-                  <span className="mr-1 text-xs text-muted-foreground">Text for</span>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={shownTab === 'all'}
-                    onClick={() => setTab('all')}
-                    className={cn(
-                      'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:h-10',
-                      shownTab === 'all' ? 'border-primary bg-primary/10 font-medium' : 'hover:bg-muted',
-                    )}
-                  >
-                    <Globe className="size-4" /> All channels
-                  </button>
+                  <AllChannelsTab selected={shownTab === 'all'} onSelect={setTab} />
                   {picked.map((ch) => (
                     <ChannelTab
                       key={ch.id}
@@ -1887,7 +1858,8 @@ export function ComposerForm({
                     <>
                       <span className="shrink-0 font-normal text-muted-foreground">Text for</span>{' '}
                       <span
-                        className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-muted py-0.5 pr-2.5 pl-0.5"
+                        // Solid fill and border in both themes: the dark muted colour is nearly the drawer's own.
+                        className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-input bg-muted py-0.5 pr-2.5 pl-0.5 dark:border-[oklch(0.4_0.012_265)] dark:bg-[oklch(0.31_0.01_265)]"
                         title={active.name}
                         data-testid="text-for-channel"
                       >
@@ -2012,6 +1984,7 @@ export function ComposerForm({
           </div>
         </div>
       </Tabs>
+      {preview}
       <ComposerFooter
         post={post}
         locked={locked}

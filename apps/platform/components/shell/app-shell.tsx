@@ -35,6 +35,7 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 import { toast } from 'sonner'
 
 import { daysLeft } from '@/components/billing/billing-format'
+import { TrialUsedDialog } from '@/components/billing/trial-used-dialog'
 import { PlanBadge } from '@/components/plans/plan-badge'
 import { NewWorkspaceDialog } from '@/components/settings/new-workspace-dialog'
 import { UserAvatar } from '@/components/settings/user-avatar'
@@ -1008,6 +1009,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {command.used && <CommandPalette open={command.open} onOpenChange={setCommandOpen} />}
       {create.used && <CreateCollectionDialog open={create.open} onOpenChange={setCreateOpen} />}
       {connect.used && <ConnectDeviceDialog open={connect.open} onOpenChange={setConnectOpen} />}
+      <TrialUsedDialog />
     </ShellContext.Provider>
   )
 }

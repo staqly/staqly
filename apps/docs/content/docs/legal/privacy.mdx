@@ -3,7 +3,7 @@ title: Privacy Policy
 description: What personal data staqly cloud processes, why, for how long, and your rights.
 ---
 
-Last updated: 2026-10-24
+Last updated: 2026-10-28
 
 This policy explains how **staqly, Switzerland** ("staqly", "we", "us") processes
 personal data when you use **staqly cloud** (the hosted dashboard, API and MCP endpoint), the website
@@ -35,12 +35,38 @@ Contact for privacy questions and requests: [support@staqly.ai](mailto:support@s
 | Data | Why | Legal basis |
 |---|---|---|
 | Workspace name, plan, trial and billing period, usage counters | Run your workspace, enforce plan limits, the Starter trial | Contract |
+| Free trial checks: pseudonymised fingerprints of the personal accounts a workspace connects (their platform ids), of the person who connected a shared space (a Slack workspace, a Facebook or LinkedIn Page), and of the payment card (the fingerprint Stripe gives it, never the card number), each with whether the workspace's free trial ended without a payment. See [Free trial checks](#free-trial-checks) | Offer the free trial once per person and per card, and stop the same accounts or card from taking it again and again | Legitimate interest (preventing abuse of the free trial) |
 | Your account: name, email address and picture from Google or the address you sign in with, your passkeys' public keys, the members and roles of your workspaces | Sign you in, invite people, show who did what | Contract |
 | Hashed API keys, email codes, invitation links and session tokens (never stored in plain text) | Sign you in and keep the workspace secure | Contract |
 | Browser sessions: user agent, sign-in time, last use | Show your signed-in devices so you can revoke them | Contract, security |
 | Request logs: IP address, time, path, status, user agent, request ID | Security, abuse prevention, rate limits, troubleshooting | Legitimate interest |
 | Billing data (once payments are available): name, email, country, invoices | Charge for your plan and keep accounting records | Contract, legal obligation |
 | Messages you send us | Answer you | Contract, legitimate interest |
+
+#### Free trial checks
+
+The Starter plan has a free trial. So that it is offered once, staqly cloud keeps fingerprints of the accounts and
+cards used during a trial:
+
+- **What is stored.** A fingerprint is a keyed hash (HMAC, with a secret key only our servers hold) of a platform
+  account id, of the platform id of the person who connected a shared space, or of Stripe's fingerprint of a card.
+  It cannot be turned back into the id or the card; we can only check whether an id or card we are given matches
+  one we have seen. We never store the ids, handles, card numbers or Stripe's card fingerprint themselves. Shared
+  spaces such as a company's Slack workspace or a Discord server are never fingerprinted as such, so colleagues
+  using the same space are not mistaken for one another. Spaces connected without a person (webhooks, bots,
+  Telegram) have no fingerprint.
+- **When it is used.** Only when a workspace on a free trial connects an account or adds a card that a free trial
+  which ended without a payment, in the last 180 days, also used. A card match means no free trial: the plan is
+  charged from the first day, and if the trial had already started, it ends early and the plan is charged. An
+  account match never charges anyone: the trial is paused (no publishing and no new channels; your drafts and
+  settings stay) and you choose whether to start the paid plan.
+- **Your say.** These checks run automatically. If one pauses or ends your trial and you think it is wrong, write to
+  [support@staqly.ai](mailto:support@staqly.ai): a person reviews it and can lift it. You can also object to this
+  processing; we then weigh your reasons against preventing abuse of the trial.
+
+We rely on our legitimate interest in preventing abuse of the free trial, which we have weighed against your
+interests: the data is pseudonymised, used for this purpose only, kept briefly (see
+[How long we keep data](#how-long-we-keep-data)) and never shared or used for anything else.
 
 ### 2. Content in your workspace
 
@@ -144,6 +170,9 @@ on standard contractual clauses recognised under the FADP and GDPR.
 - **Analytics events and error reports** (sections 3 and 4) are kept in PostHog for at most
   the retention of our PostHog plan, currently 12 months.
 - **Billing records** are kept as long as accounting law requires (in Switzerland, 10 years).
+- **Free trial fingerprints** ([Free trial checks](#free-trial-checks)) are deleted within a day once the workspace
+  pays, and with the workspace when it is deleted. After a free trial that ended without a payment they are kept for
+  180 days, also when that workspace is deleted, and then deleted.
 
 ## Security
 

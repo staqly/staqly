@@ -453,6 +453,10 @@ func (s *Service) saveChannel(ctx context.Context, p Principal, e providers.Entr
 	if err := checkChannelSettings(e, settings); err != nil {
 		return Channel{}, err
 	}
+	fp := s.channelFingerprint(e.ID(), creds, profile)
+	if err := s.guardChannel(ctx, p.WorkspaceID, fp); err != nil {
+		return Channel{}, err
+	}
 	now := s.now()
 	row := db.Channel{ID: newID("ch"), WorkspaceID: p.WorkspaceID, Provider: e.ID(), Name: name, Handle: profile.Handle,
 		AvatarUrl: profile.AvatarURL, ProfileUrl: profile.ProfileURL, Status: "connected", Credentials: sealed,
@@ -470,6 +474,9 @@ func (s *Service) saveChannel(ctx context.Context, p Principal, e providers.Entr
 			return err
 		}
 		if err := q.SetChannelComments(ctx, db.SetChannelCommentsParams{Comments: row.Comments, ID: row.ID}); err != nil {
+			return err
+		}
+		if err := s.recordFingerprint(ctx, q, p.WorkspaceID, fp.kind, fp.fp); err != nil {
 			return err
 		}
 		_, err := s.emitRef(ctx, q, p, "channel.connected", Ref{Channel: row.ID}, map[string]any{"channel": toChannelOut(row)})
@@ -696,6 +703,10 @@ func (s *Service) completeOAuth(ctx context.Context, p Principal, e providers.En
 }
 
 func (s *Service) reconnectChannel(ctx context.Context, p Principal, row db.Channel, creds providers.Credentials, profile providers.Profile) (Channel, error) {
+	fp := s.channelFingerprint(row.Provider, creds, profile)
+	if err := s.guardChannel(ctx, p.WorkspaceID, fp); err != nil {
+		return Channel{}, err
+	}
 	sealed, err := s.seal(creds)
 	if err != nil {
 		return Channel{}, err
@@ -705,6 +716,9 @@ func (s *Service) reconnectChannel(ctx context.Context, p Principal, row db.Chan
 	row.Comments = boolInt(!profile.NoComments) // a reconnect through an app that may comment turns them on
 	err = s.tx(ctx, func(q *db.Queries) error {
 		if err := q.SetChannelComments(ctx, db.SetChannelCommentsParams{Comments: row.Comments, ID: row.ID}); err != nil {
+			return err
+		}
+		if err := s.recordFingerprint(ctx, q, p.WorkspaceID, fp.kind, fp.fp); err != nil {
 			return err
 		}
 		if err := q.UpdateChannel(ctx, db.UpdateChannelParams{Name: row.Name, Handle: row.Handle, AvatarUrl: row.AvatarUrl,
@@ -817,6 +831,7 @@ func (s *Service) UpdateChannel(ctx context.Context, p Principal, id string, in 
 	var reconnected *struct {
 		sealed  string
 		profile providers.Profile
+		fp      channelPrint
 	}
 	if in.Fields != nil {
 		row, err := s.channelRow(ctx, p, id)
@@ -840,6 +855,10 @@ func (s *Service) UpdateChannel(ctx context.Context, p Principal, id string, in 
 		if err != nil {
 			return Channel{}, connectError(err)
 		}
+		fp := s.channelFingerprint(row.Provider, creds, profile)
+		if err := s.guardChannel(ctx, p.WorkspaceID, fp); err != nil {
+			return Channel{}, err
+		}
 		sealed, err := s.seal(creds)
 		if err != nil {
 			return Channel{}, err
@@ -847,7 +866,8 @@ func (s *Service) UpdateChannel(ctx context.Context, p Principal, id string, in 
 		reconnected = &struct {
 			sealed  string
 			profile providers.Profile
-		}{sealed, profile}
+			fp      channelPrint
+		}{sealed, profile, fp}
 	}
 	var out db.Channel
 	err := s.tx(ctx, func(q *db.Queries) error {
@@ -868,6 +888,9 @@ func (s *Service) UpdateChannel(ctx context.Context, p Principal, id string, in 
 			}
 			if reconnected.profile.ProfileURL != "" {
 				row.ProfileUrl = reconnected.profile.ProfileURL
+			}
+			if err := s.recordFingerprint(ctx, q, p.WorkspaceID, reconnected.fp.kind, reconnected.fp.fp); err != nil {
+				return err
 			}
 		}
 		if in.Name != nil {

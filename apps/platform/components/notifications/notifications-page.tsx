@@ -1,21 +1,29 @@
 'use client'
 
 import { Bell, ExternalLink, History } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useMemo } from 'react'
 
 import { IdChip } from '@/components/common/id-chip'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
-import { ICONS, NOTIFICATIONS_QUERY, useNotifications } from '@/components/shell/notifications-bell'
+import { NOTIFICATIONS_QUERY, useNotifications } from '@/components/shell/notifications-bell'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { StashEvent } from '@/lib/api'
-import { formatDateTime, lazyDateFormat, timeAgo } from '@/lib/format'
-import { notificationFor, type Notification } from '@/lib/notifications'
+import { formatDateTimeIn, lazyDateFormat, timeAgo } from '@/lib/format'
+import { channelLabel, notificationsFor, type Notification } from '@/lib/notifications'
 import { useEventsInfinite, useSession } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
+
+import { ICONS } from './notification-icons'
+
+// A publish's channel avatars bring every platform's mark: loaded with the first stacked entry, not with the page.
+const PublishChannels = dynamic(() => import('./publish-channels').then((m) => m.PublishChannels), {
+  ssr: false,
+  loading: () => <span className="mt-1 block h-5" aria-hidden />,
+})
 
 const dayFormat = lazyDateFormat({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
@@ -42,20 +50,14 @@ export function NotificationsPage() {
   const notes = useNotifications()
   const events = useEventsInfinite(NOTIFICATIONS_QUERY)
   const workspace = session.data?.workspace?.name
-  const rows = useMemo(
-    () =>
-      (events.data?.pages.flatMap((p) => p.data) ?? []).flatMap((e) => {
-        const n = notificationFor(e)
-
-        return n ? [{ e, n }] : []
-      }),
-    [events.data],
-  )
+  const zone = session.data?.workspace?.timezone
+  // Grouped over every loaded page: a publish split by a page boundary joins up once the older page loads.
+  const rows = useMemo(() => notificationsFor(events.data?.pages.flatMap((p) => p.data)), [events.data])
   const days = useMemo(() => {
     const out: { label: string; rows: typeof rows }[] = []
 
     for (const r of rows) {
-      const label = dayLabel(r.n.at)
+      const label = dayLabel(r.at)
 
       if (out.at(-1)?.label !== label) {
         out.push({ label, rows: [] })
@@ -99,8 +101,8 @@ export function NotificationsPage() {
             <section key={day.label} aria-label={day.label} className="grid gap-2">
               <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{day.label}</h2>
               <ul className="divide-y rounded-xl border" data-testid="notifications-page-list">
-                {day.rows.map(({ e, n }) => (
-                  <NotificationRow key={n.id} e={e} n={n} workspace={workspace} isNew={n.seq > notes.seenSeq} />
+                {day.rows.map((n) => (
+                  <NotificationRow key={n.id} n={n} workspace={workspace} zone={zone} isNew={n.seq > notes.seenSeq} />
                 ))}
               </ul>
             </section>
@@ -123,19 +125,22 @@ export function NotificationsPage() {
 
 /** One notification: its sentence (to the page it is about), when, and its details. */
 function NotificationRow({
-  e,
   n,
   workspace,
+  zone,
   isNew,
 }: {
-  e: StashEvent
   n: Notification
   workspace?: string
+  zone?: string
   isNew: boolean
 }) {
+  const e = n.event
   const Icon = ICONS[n.tone]
   const link = n.link ? safeHttpUrl(n.link) : null
-  const channel = (e.data as { channel?: { name?: string } } | undefined)?.channel?.name
+  const only = n.channels?.length === 1 ? n.channels[0] : undefined
+  const channel = only ? channelLabel(only) : (e.data as { channel?: { name?: string } } | undefined)?.channel?.name
+  const when = formatDateTimeIn(n.at, zone)
   const activity = e.post_id
     ? `/activity?post=${encodeURIComponent(e.post_id)}`
     : `/activity?type=${encodeURIComponent(e.type)}`
@@ -160,11 +165,14 @@ function NotificationRow({
           )}
           {isNew && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-brand" aria-label="New" role="img" />}
         </div>
+        {n.channels && n.channels.length > 1 && <PublishChannels channels={n.channels} />}
         <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <div className="flex gap-1">
             <dt className="sr-only">When</dt>
-            <dd title={formatDateTime(n.at)}>
-              {formatDateTime(n.at)} · {timeAgo(n.at)}
+            <dd>
+              <time dateTime={n.at} title={when}>
+                {when} · {timeAgo(n.at)}
+              </time>
             </dd>
           </div>
           {workspace && (
@@ -173,7 +181,7 @@ function NotificationRow({
               <dd className="text-foreground/80">{workspace}</dd>
             </div>
           )}
-          {channel && (
+          {channel && !(n.channels && n.channels.length > 1) && (
             <div className="flex gap-1">
               <dt>Channel</dt>
               <dd className="text-foreground/80">{channel}</dd>

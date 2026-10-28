@@ -36,6 +36,7 @@ Switch on `error.code`; the `message` is for humans and may change.
 | `plan_limit_exceeded`, `ai_limit_reached`, `x_posts_exhausted`, `linkedin_posts_exhausted`, `linkedin_videos_exhausted` | Don't retry: the plan, the month or the bought X posts have to change |
 | `payment_failed` | Don't retry as is: the card or the bank has to confirm the payment first (`details.reason`, `details.pay_url`) |
 | `plan_expired` | Don't retry: the workspace is read-only until a plan is paid for |
+| `trial_already_used` | Don't retry: the free trial is paused because it reused an earlier unpaid trial's accounts; it works again once the paid plan starts |
 | `not_available`, `*_disabled` | Don't retry: the feature is off on this server |
 | `code_expired`, `link_expired`, `link_used`, `link_revoked`, `invitation_expired`, `state_expired`, `passkey_expired` | Start the step again (a new code, link, QR code or invitation) |
 | `internal`, `bad_gateway`, `timeout`, `payment_provider_error`, `ai_failed`, `mail_failed`, `google_unavailable` | Retry later; report it with the `request_id` |
@@ -164,6 +165,7 @@ A target that fails while publishing doesn't answer an error code: the post's ta
 | 409 | `conflict` | A checkout for a workspace that already has a subscription, or the billing portal before any checkout |
 | 410 | `gone` | A workspace export or backup is no longer available (after 24 hours) |
 | 402 | `payment_failed` | A plan change that charges at once (such as leaving the trial) wasn't paid, so nothing changed; `details` has `reason` and, when known, `pay_url` (Stripe's page to confirm the payment), `decline_code`, `plan` and `expires_at` |
+| 402 | `trial_already_used` | Cloud: the workspace's free trial is paused for review because it connected a personal account (or the people behind two shared spaces) of a free trial that ended unpaid. Connecting channels, scheduling and publishing answer this until the paid plan starts (`POST /v1/billing/start-paid-plan`); nothing is charged meanwhile and drafts stay. `details.reason` is `channels`. See [Plans](/plans#the-starter-trial) |
 | 502 | `payment_provider_error` | Stripe rejected a checkout or portal request; retry later, the operator sees the reason in the logs |
 | 402 | `ai_limit_reached` | An AI request (`POST /v1/ai/jobs`, the assistant, a text rewrite) would pass the workspace's monthly AI allowance; `details` has `used_usd`, `limit_usd` and `estimate_usd`. It renews on the 1st (UTC) |
 | 409 | `not_available` | An AI operation this server does not offer (no provider key, or `AI_OPERATIONS` leaves it out); `GET /v1/ai` lists the offered ones |

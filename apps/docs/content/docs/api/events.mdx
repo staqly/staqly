@@ -106,8 +106,8 @@ objects carry them in `data` (`data.channel`, `data.schedule`, `data.webhook`).
 | `post.scheduled` | A publish time was set or moved (`POST .../schedule`, `PATCH` with `publish_at`, created as `scheduled`) | `publish_at`, `previous_publish_at` when moved |
 | `post.unscheduled` | The time was cleared: cancel, or `PATCH` with `publish_at: null` | — |
 | `post.publish_requested` | A target on [your own automation](/channels/your-own-automation) waits for a result | `channel`, `target` (`channel_id`, `content`, `settings`, `thread`), `timeout_seconds` |
-| `post.target_published` | One target was published | `channel_id`, `url`, `external_id` |
-| `post.target_failed` | One target failed: the platform refused, your automation reported a failure, or nothing was reported within the timeout (`error` *No result reported in time*) | `channel_id`, `error` |
+| `post.target_published` | One target was published | `channel_id`, `channel` (the channel, plus `provider_name`: the platform's name), `url`, `external_id` |
+| `post.target_failed` | One target failed: the platform refused, your automation reported a failure, or nothing was reported within the timeout (`error` *No result reported in time*) | `channel_id`, `channel` (as above), `error` |
 | `post.reply_published` | One [thread](/concepts#threads-comments-under-a-post) part was published as a reply on a channel | `channel_id`, `index`, `url`, `external_id` |
 | `post.reply_failed` | A reply was refused or ran out of retries; the parts after it are skipped | `channel_id`, `index`, `error` |
 | `post.published` | Every target is published | — |
@@ -149,6 +149,7 @@ publishing history.
 | `workspace.created` | The workspace was set up | `workspace` |
 | `workspace.updated` | The workspace was renamed or its time zone changed | `name`, `timezone` (the fields that changed) |
 | `workspace.plan_changed` | The [plan](/plans) changed: a Stripe subscription, or set by the operator | `from`, `to`, `expires_at`, `reason` (`stripe:<status>`, `operator`, `operator_comp`) |
+| `workspace.trial_review` | The free trial reused an earlier unpaid trial's accounts or card (cloud, see [Plans](/plans#the-starter-trial)): paused for review, ended for its card, or cleared by staqly support | `state` (`paused`, `ended`, `cleared`), `reason` (`channels`, `card`), `charged` (ended), `by` (cleared) |
 | `workspace.credits_added` | A bought bundle of extra posts to X was paid for (Stripe Checkout) | `provider` (`x`), `posts`, `expires_at` (the end of the billing period) |
 | `workspace.account_attached` | A workspace without people got its first owner: they accepted an owner invitation (e.g. one the operator handed over) | `account_id`, `owner_user_id`, `sessions_revoked`, `api_keys_adopted`, `connect_links_expired` |
 | `member.updated` | A member's role changed (cloud) | `user_id`, `role`, `previous_role` |
