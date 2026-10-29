@@ -230,9 +230,9 @@
   }
 }
 
-/* Collapsed icon rail: only the icon of each menu button is visible.
+/* Collapsed icon rail: only the icon of each menu button (and its unread dot) is visible.
    Unlayered on purpose so it beats display utilities such as `grid`. */
-[data-collapsible='icon'] [data-sidebar='menu-button'] > :not(svg, [data-logo]) {
+[data-collapsible='icon'] [data-sidebar='menu-button'] > :not(svg, [data-logo], [data-rail-dot]) {
   display: none;
 }
 

@@ -24,7 +24,6 @@ import {
   Search,
   Settings,
   Share2,
-  Sparkles,
   UserRound,
   Users,
   Webhook,
@@ -32,18 +31,10 @@ import {
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useId,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
+import { AssistantIcon } from '@/components/assistant/assistant-icon'
 import { daysLeft } from '@/components/billing/billing-format'
 import { TrialUsedDialog } from '@/components/billing/trial-used-dialog'
 import { PlanBadge } from '@/components/plans/plan-badge'
@@ -558,27 +549,6 @@ function useModKey() {
 }
 
 /** Opens the assistant on the right (⌘J); only when the server has AI for it. */
-/** The Assistant's sparkles in a green-to-violet gradient, so it stands apart from the plain icons around it. */
-function AssistantIcon({ className }: { className?: string }) {
-  const id = useId()
-
-  return (
-    <>
-      <svg aria-hidden width="0" height="0" className="absolute">
-        <defs>
-          {/* userSpaceOnUse: one gradient across the whole 24 x 24 icon, not one per path. */}
-          <linearGradient id={id} x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#22c55e" />
-            <stop offset="0.5" stopColor="#3b82f6" />
-            <stop offset="1" stopColor="#a855f7" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <Sparkles className={className} style={{ stroke: `url("#${id}")` }} />
-    </>
-  )
-}
-
 function SidebarAssistant() {
   const { assistant } = useShell()
   const MOD_KEY = useModKey()
@@ -591,13 +561,13 @@ function SidebarAssistant() {
     <SidebarMenu className="in-data-[mobile=true]:hidden">
       <SidebarMenuItem>
         <SidebarMenuButton
-          tooltip={`Assistant (${MOD_KEY}J)`}
+          tooltip={`AI Assistant (${MOD_KEY}J)`}
           isActive={assistant.open}
           onClick={assistant.toggle}
           data-testid="assistant-toggle"
         >
           <AssistantIcon />
-          <span>Assistant</span>
+          <span>AI Assistant</span>
           <KbdGroup className="ml-auto group-data-[collapsible=icon]:hidden">
             <Kbd className="border bg-sidebar-accent text-sidebar-foreground/80">{MOD_KEY}</Kbd>
             <Kbd className="border bg-sidebar-accent text-sidebar-foreground/80">J</Kbd>
@@ -626,10 +596,13 @@ function SidebarNotifications() {
           >
             <Bell />
             <span>Notifications</span>
+            {/* The collapsed rail has no count badge: a dot on the bell says there is something new. */}
             {notes.unread > 0 && (
               <span
                 aria-hidden
-                className="absolute top-1 left-5 hidden size-2 rounded-full bg-brand ring-2 ring-sidebar group-data-[collapsible=icon]:block"
+                data-testid="notifications-dot"
+                data-rail-dot
+                className="pointer-events-none absolute top-1.5 left-[1.375rem] hidden size-2 rounded-full bg-brand ring-2 ring-sidebar group-data-[collapsible=icon]:block"
               />
             )}
           </SidebarMenuButton>
@@ -802,7 +775,7 @@ function MobileHeader() {
           <button
             type="button"
             onClick={assistant.toggle}
-            aria-label="Assistant"
+            aria-label="AI Assistant"
             className="flex size-11 shrink-0 items-center justify-center rounded-lg text-brand hover:bg-muted"
           >
             <AssistantIcon className="size-5" />
