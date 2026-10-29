@@ -54,13 +54,12 @@ const renderForm = () => {
 }
 
 describe('email code field', () => {
-  it('is a one-time-code text field of 6 digits', () => {
+  it('is a one-time-code text field (no maxlength: a pasted "123 456" must not be cut)', () => {
     const { input } = renderForm()
 
     expect(input).toHaveAttribute('type', 'text')
     expect(input).toHaveAttribute('inputmode', 'numeric')
     expect(input).toHaveAttribute('autocomplete', 'one-time-code')
-    expect(input).toHaveAttribute('maxlength', '6')
   })
 
   it('typed digit by digit, keeps the leading zero and submits at 6', async () => {

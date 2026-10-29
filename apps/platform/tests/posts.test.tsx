@@ -84,6 +84,23 @@ describe('posts workspace', () => {
     )
     expect(api.find('GET', '/v1/posts').length).toBeGreaterThan(0)
   })
+
+  it('with one collection, no collections pane or strip: New collection sits in the header', async () => {
+    nav.set('/posts')
+    mockApi({
+      'GET /v1/collections': { data: [collection()] },
+      'GET /v1/channels': { data: [] },
+      'GET /v1/tags': { data: [] },
+      'GET /v1/events': { data: [] },
+      'GET /v1/posts': { data: [], next_cursor: null },
+    })
+
+    renderWithProviders(<PostsWorkspace />, { mode: 'local' })
+    expect(await screen.findByRole('heading', { level: 1, name: 'Instagram Avatar' })).toBeInTheDocument()
+    expect(screen.queryByTestId('collections-pane')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('collections-strip')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /New collection/ })).toBeInTheDocument()
+  })
 })
 
 // ProseMirror does not run in jsdom: the post sheet's editor is a plain textarea here.

@@ -205,8 +205,11 @@ export function WelcomeWizard() {
             <AgentStep
               heading={heading}
               isLocal={isLocal}
+              canMakeKey={billingKnown && !needsPlan}
               tool={draft.agent}
+              keyMade={draft.keyMade}
               onBack={back}
+              onKeyMade={(agent) => update({ agent, keyMade: true })}
               onDone={(agent) => {
                 update({ agent })
                 next()
@@ -509,39 +512,103 @@ function ChannelStep({
   )
 }
 
+/**
+ * Connect an agent: only an explicit "Make a key" makes one. A workspace that can already write gets it here, at
+ * once; one that still needs its plan gets it right after the payment, on a step of its own (DoneStep).
+ */
 function AgentStep({
   heading,
   isLocal,
+  canMakeKey,
   tool: initial,
+  keyMade,
   onBack,
+  onKeyMade,
   onDone,
 }: {
   heading: React.RefObject<HTMLHeadingElement | null>
   isLocal: boolean
+  /** The workspace can write now (a plan, or no billing): the key is made in this step. */
+  canMakeKey: boolean
   tool?: 'claude' | 'codex'
+  keyMade?: boolean
   onBack?: () => void
+  onKeyMade: (tool: 'claude' | 'codex') => void
   onDone: (tool: 'claude' | 'codex' | undefined) => void
 }) {
   const [tool, setTool] = useState<'claude' | 'codex'>(initial ?? 'claude')
+  const key = useRememberedApiKey()
+  const make = useMutation({
+    mutationFn: (t: 'claude' | 'codex') => createAgentKey(t),
+    onSuccess: (made, t) => {
+      if (made) {
+        rememberApiKey(made)
+      }
+
+      onKeyMade(t)
+    },
+  })
+  const label = tool === 'claude' ? 'Claude Code' : 'Codex'
 
   return (
     <div>
       <StepHeader heading={heading} title="Connect an agent">
         Let Claude Code or Codex write posts into your collections, put them on the calendar and refill them when they
         run dry.
-        {!isLocal && ' Its key is made in the last step, ready to paste.'}
+        {!isLocal && !keyMade && !canMakeKey && ' Its key is made right after the payment, ready to paste.'}
       </StepHeader>
-      <AgentPanel isLocal={isLocal} tool={tool} onTool={setTool} />
+      <AgentPanel
+        isLocal={isLocal}
+        tool={tool}
+        onTool={keyMade ? undefined : setTool}
+        apiKey={keyMade ? key?.key : undefined}
+      />
+      {make.error && (
+        <p role="alert" className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          {errorMessage(make.error)}
+        </p>
+      )}
       <Actions onBack={onBack}>
-        <Button type="button" variant="ghost" className={bigButton} onClick={() => onDone(undefined)}>
-          Skip
-        </Button>
-        <Button type="button" className={bigButton} onClick={() => onDone(tool)}>
-          Continue <ArrowRight />
-        </Button>
+        {isLocal || keyMade ? (
+          <>
+            {!keyMade && (
+              <Button type="button" variant="ghost" className={bigButton} onClick={() => onDone(undefined)}>
+                Not now
+              </Button>
+            )}
+            <Button type="button" className={bigButton} onClick={() => onDone(tool)}>
+              Continue <ArrowRight />
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button type="button" variant="ghost" className={bigButton} onClick={() => onDone(undefined)}>
+              Not now
+            </Button>
+            <Button
+              type="button"
+              className={bigButton}
+              disabled={make.isPending}
+              onClick={() => (canMakeKey ? make.mutate(tool) : onDone(tool))}
+              data-testid="make-agent-key"
+            >
+              {make.isPending ? 'Making the key...' : `Make a key for ${label}`} <ArrowRight />
+            </Button>
+          </>
+        )}
       </Actions>
     </div>
   )
+}
+
+/** The agent's key: named after the tool, with the first scope preset. */
+async function createAgentKey(tool: 'claude' | 'codex'): Promise<RememberedKey | undefined> {
+  const k = await api.createApiKey({
+    name: tool === 'claude' ? 'Claude Code' : 'Codex',
+    scopes: SCOPE_PRESETS[0]!.scopes,
+  })
+
+  return k.key ? { id: k.id, name: k.name, key: k.key } : undefined
 }
 
 function TeamStep({
@@ -847,13 +914,9 @@ async function applyDraft(
 
   let key: RememberedKey | undefined
 
-  if (draft.agent && !isLocal) {
-    const k = await api.createApiKey({
-      name: draft.agent === 'claude' ? 'Claude Code' : 'Codex',
-      scopes: SCOPE_PRESETS[0]!.scopes,
-    })
-
-    key = k.key ? { id: k.id, name: k.name, key: k.key } : undefined
+  // Made in the agent step already when the workspace could write then.
+  if (draft.agent && !draft.keyMade && !isLocal) {
+    key = await createAgentKey(draft.agent)
   }
 
   return { applied: { keyCreated: !!key, invited, failed }, key }
@@ -890,6 +953,7 @@ function DoneStep({
   const providers = useProviders()
   const key = useRememberedApiKey()
   const [connecting, setConnecting] = useState<string | null>(null)
+  const [keySeen, setKeySeen] = useState(false)
   const [waited, setWaited] = useState(0)
   const started = useRef(false)
   const apply = useMutation({
@@ -984,6 +1048,23 @@ function DoneStep({
         <Actions>
           <Button type="button" className={bigButton} onClick={() => mutate()} disabled={apply.isPending}>
             Try again
+          </Button>
+        </Actions>
+      </div>
+    )
+  }
+
+  // A key made after the payment gets its own step first (the key lives in memory: after a reload it's gone).
+  if (draft.agent && applied?.keyCreated && key?.key && !keySeen) {
+    return (
+      <div>
+        <StepHeader heading={heading} title={`Connect ${draft.agent === 'claude' ? 'Claude Code' : 'Codex'}`}>
+          Your workspace is ready. Add staqly to your agent, then ask it to write and schedule posts.
+        </StepHeader>
+        <AgentPanel isLocal={isLocal} tool={draft.agent} apiKey={key.key} />
+        <Actions>
+          <Button type="button" className={bigButton} onClick={() => setKeySeen(true)}>
+            Continue <ArrowRight />
           </Button>
         </Actions>
       </div>
@@ -1093,9 +1174,6 @@ function DoneStep({
             </ul>
           )}
         </div>
-      )}
-      {draft.agent && (applied?.keyCreated || isLocal) && (
-        <AgentPanel isLocal={isLocal} tool={draft.agent} apiKey={key?.key} />
       )}
       <div className="mt-10 grid gap-3 sm:grid-cols-2">
         <NextStep

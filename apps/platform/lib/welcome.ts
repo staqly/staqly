@@ -20,6 +20,8 @@ export interface WelcomeDraft {
   /** Platforms to connect once the workspace is ready (provider ids). */
   providers?: string[]
   agent?: 'claude' | 'codex'
+  /** The agent's key was made in the agent step (the workspace could write then): the end doesn't make another. */
+  keyMade?: boolean
   invites?: { emails: string[]; role: 'admin' | 'editor' | 'viewer' }
   /** The workspace this draft belongs to: a draft from another workspace is dropped. */
   workspace?: string
