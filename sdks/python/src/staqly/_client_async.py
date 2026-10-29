@@ -1421,11 +1421,13 @@ class AsyncChannels(_Resource):
         name: str,
         *,
         color: str | None = None,
+        icon: str | None = None,
         position: int | None = None,
         request_options: RequestOptions | None = None,
     ) -> ChannelGroup:
-        """Creates a channel group (``name`` unique in the workspace; ``color`` like ``#22c55e``)."""
-        body = clean({"name": name, "color": color, "position": position})
+        """Creates a channel group (``name`` unique in the workspace; ``color`` like ``#22c55e``;
+        ``icon`` a name such as ``briefcase``)."""
+        body = clean({"name": name, "color": color, "icon": icon, "position": position})
         r = await self._http.request(
             RequestSpec("POST", "/v1/channel-groups", json=body, options=_opts(request_options))
         )
@@ -1437,11 +1439,12 @@ class AsyncChannels(_Resource):
         *,
         name: str | None = None,
         color: str | None = None,
+        icon: str | None = None,
         position: int | None = None,
         request_options: RequestOptions | None = None,
     ) -> ChannelGroup:
-        """Renames a channel group or changes its colour or position."""
-        body = clean({"name": name, "color": color, "position": position})
+        """Renames a channel group or changes its colour, icon (``""`` removes it) or position."""
+        body = clean({"name": name, "color": color, "icon": icon, "position": position})
         r = await self._http.request(
             RequestSpec(
                 "PATCH", f"/v1/channel-groups/{_q(group_id)}", json=body, options=_opts(request_options)

@@ -111,7 +111,7 @@ test.describe('channels', () => {
     expect((await api.raw('GET', `/v1/channels/${channel.id}`)).status).toBe(404)
   })
 
-  test('a row shows the last post; groups: create, move a channel there, filter, delete (back to Default)', async ({
+  test('a row shows the last post; groups: create, move a channel there, open one, delete (back to Default)', async ({
     page,
     api,
   }) => {
@@ -128,8 +128,8 @@ test.describe('channels', () => {
     await expect(r.getByTestId('channel-activity')).toContainText('1 post in 30 days')
     await expect(r.getByRole('link', { name: /ago|now/ })).toHaveAttribute('href', `/posts/${col.posts[0]!.id}`)
 
-    // A new group (a modal), then the channel moves there from its row menu.
-    await page.getByRole('button', { name: 'New group' }).click()
+    // A new group (a modal) shows in the groups pane; the channel moves there from its row menu.
+    await page.getByTestId('new-group').click()
     const dialog = page.getByRole('dialog', { name: 'New group' })
 
     await dialog.getByRole('textbox', { name: /Name/ }).fill(groupName)
@@ -137,12 +137,12 @@ test.describe('channels', () => {
     await expect(dialog).toBeHidden()
     const section = page.getByTestId('channel-group').filter({ hasText: groupName })
 
-    await expect(section).toContainText('No channels in this group')
+    await expect(section).toContainText('0')
     await r.getByRole('button', { name: `Actions for ${channel.name}` }).click()
     await page.getByRole('menuitem', { name: 'Move to group' }).click()
     // By keyboard: the group's "created" toast can sit over the submenu at the bottom right.
     await page.getByRole('menuitem', { name: groupName }).press('Enter')
-    await expect(section.getByTestId('channel-row').filter({ hasText: channel.name })).toBeVisible()
+    await expect(section).toContainText('1')
     const groups = (await api.get<{ data: { id: string; name: string }[] }>('/v1/channel-groups')).data
     const created = groups.find((g) => g.name === groupName)!
 
@@ -150,12 +150,11 @@ test.describe('channels', () => {
       .poll(async () => (await api.get<{ group_id: string }>(`/v1/channels/${channel.id}`)).group_id)
       .toBe(created.id)
 
-    // The filter keeps one group.
-    await page.getByRole('combobox', { name: 'Group filter' }).click()
-    await page.getByRole('option', { name: groupName }).click()
-    await expect(page.getByTestId('channel-group')).toHaveCount(1)
-    await page.getByRole('combobox', { name: 'Group filter' }).click()
-    await page.getByRole('option', { name: 'All groups' }).click()
+    // Opening the group in the pane shows its channels only.
+    await section.getByRole('link', { name: new RegExp(groupName) }).click()
+    await expect(page).toHaveURL(new RegExp(`group=${created.id}`))
+    await expect(page.getByTestId('channel-row')).toHaveCount(1)
+    await page.getByTestId('channel-group').filter({ hasText: 'Default' }).getByRole('link').click()
 
     // Deleting the group (after a confirmation) moves the channel back to Default; Default has no Delete.
     await page.getByRole('button', { name: 'Actions for the group Default' }).click()

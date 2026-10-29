@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
@@ -11,9 +12,11 @@ import (
 // ChannelGroup is the one structural bucket a channel sits in ("Client A", "Personal"). Every workspace
 // has a Default group, which can't be deleted; a deleted group's channels move to Default.
 type ChannelGroup struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Color    string `json:"color"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+	// Icon is one of channelGroupIcons, '' for none.
+	Icon     string `json:"icon"`
 	Position int64  `json:"position"`
 	Default  bool   `json:"default"`
 	// Channels in the group (list only).
@@ -26,6 +29,7 @@ type ChannelGroup struct {
 type ChannelGroupInput struct {
 	Name     *string `json:"name"`
 	Color    *string `json:"color"`
+	Icon     *string `json:"icon"`
 	Position *int64  `json:"position"`
 }
 
@@ -33,8 +37,13 @@ const maxChannelGroups = 100
 
 var reHexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
+// channelGroupIcons are the icons a group can have; the dashboard draws each (components/channels/group-icon.tsx).
+var channelGroupIcons = []string{"briefcase", "building", "store", "house", "user", "users", "heart", "star",
+	"rocket", "sparkles", "zap", "flame", "trophy", "globe", "megaphone", "camera", "music", "gamepad", "coffee",
+	"shopping-bag", "graduation-cap", "palette", "code", "leaf", "car", "plane", "bike", "utensils", "pizza", "wine", "dumbbell", "book", "film", "tv", "mic", "headphones", "gift", "shirt", "gem", "crown", "paw-print", "flower", "tree", "mountain", "sun", "moon", "lightbulb", "target", "flag", "bell", "mail", "newspaper", "landmark", "banknote", "shield", "bot"}
+
 func toChannelGroup(g db.ChannelGroup, channels int64) ChannelGroup {
-	return ChannelGroup{ID: g.ID, Name: g.Name, Color: g.Color, Position: g.Position, Default: g.IsDefault == 1,
+	return ChannelGroup{ID: g.ID, Name: g.Name, Color: g.Color, Icon: g.Icon, Position: g.Position, Default: g.IsDefault == 1,
 		Channels: channels, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt}
 }
 
@@ -120,8 +129,8 @@ func (s *Service) ListChannelGroups(ctx context.Context, p Principal) ([]Channel
 	return out, err
 }
 
-// checkGroupFields validates a name (unique in the workspace, case-insensitive) and a colour.
-func checkGroupFields(groups []db.ChannelGroup, selfID string, name, color *string) error {
+// checkGroupFields validates a name (unique in the workspace, case-insensitive), a colour and an icon.
+func checkGroupFields(groups []db.ChannelGroup, selfID string, name, color, icon *string) error {
 	if name != nil {
 		n, err := trimmed(*name, "name", 60, true)
 		if err != nil {
@@ -137,6 +146,9 @@ func checkGroupFields(groups []db.ChannelGroup, selfID string, name, color *stri
 	}
 	if color != nil && *color != "" && !reHexColor.MatchString(*color) {
 		return invalid("color", "a colour like #22c55e, or empty")
+	}
+	if icon != nil && *icon != "" && !slices.Contains(channelGroupIcons, *icon) {
+		return invalid("icon", "one of "+strings.Join(channelGroupIcons, ", ")+", or empty")
 	}
 	return nil
 }
@@ -160,7 +172,7 @@ func (s *Service) CreateChannelGroup(ctx context.Context, p Principal, in Channe
 		if len(groups) >= maxChannelGroups {
 			return invalid("name", "at most 100 channel groups")
 		}
-		if err := checkGroupFields(groups, "", in.Name, in.Color); err != nil {
+		if err := checkGroupFields(groups, "", in.Name, in.Color, in.Icon); err != nil {
 			return err
 		}
 		pos := int64(len(groups))
@@ -168,10 +180,10 @@ func (s *Service) CreateChannelGroup(ctx context.Context, p Principal, in Channe
 			pos = *in.Position
 		}
 		now := s.now()
-		out = db.ChannelGroup{ID: newID("grp"), WorkspaceID: p.WorkspaceID, Name: *in.Name, Color: deref(in.Color), Position: pos,
+		out = db.ChannelGroup{ID: newID("grp"), WorkspaceID: p.WorkspaceID, Name: *in.Name, Color: deref(in.Color), Icon: deref(in.Icon), Position: pos,
 			CreatedAt: now, UpdatedAt: now}
 		return q.CreateChannelGroup(ctx, db.CreateChannelGroupParams{ID: out.ID, WorkspaceID: out.WorkspaceID, Name: out.Name,
-			Color: out.Color, Position: out.Position, CreatedAt: now, UpdatedAt: now})
+			Color: out.Color, Icon: out.Icon, Position: out.Position, CreatedAt: now, UpdatedAt: now})
 	})
 	return toChannelGroup(out, 0), err
 }
@@ -193,7 +205,7 @@ func (s *Service) UpdateChannelGroup(ctx context.Context, p Principal, id string
 		if err != nil {
 			return err
 		}
-		if err := checkGroupFields(groups, g.ID, in.Name, in.Color); err != nil {
+		if err := checkGroupFields(groups, g.ID, in.Name, in.Color, in.Icon); err != nil {
 			return err
 		}
 		if in.Name != nil {
@@ -202,12 +214,15 @@ func (s *Service) UpdateChannelGroup(ctx context.Context, p Principal, id string
 		if in.Color != nil {
 			g.Color = *in.Color
 		}
+		if in.Icon != nil {
+			g.Icon = *in.Icon
+		}
 		if in.Position != nil {
 			g.Position = *in.Position
 		}
 		g.UpdatedAt = s.now()
 		out = g
-		return q.UpdateChannelGroup(ctx, db.UpdateChannelGroupParams{Name: g.Name, Color: g.Color, Position: g.Position,
+		return q.UpdateChannelGroup(ctx, db.UpdateChannelGroupParams{Name: g.Name, Color: g.Color, Icon: g.Icon, Position: g.Position,
 			UpdatedAt: g.UpdatedAt, WorkspaceID: p.WorkspaceID, ID: g.ID})
 	})
 	return toChannelGroup(out, 0), err

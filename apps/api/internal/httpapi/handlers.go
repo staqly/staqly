@@ -856,11 +856,6 @@ func oauthExtra(q url.Values) map[string]string {
 	return extra
 }
 
-// oauthCode is the sign-in's code: "code" for OAuth 2.0, "loginRequestToken" for MeWe's sign-in.
-func oauthCode(q url.Values) string {
-	return firstNonEmptyStr(q.Get("code"), q.Get("loginRequestToken"))
-}
-
 func (s *Server) oauthStart(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	u, err := s.svc.StartOAuth(r.Context(), principal(r), provider, s.oauthRedirect(provider), oauthExtra(r.URL.Query()))
@@ -892,7 +887,7 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		land(url.Values{"error": {"The connection did not start in this browser; try again"}})
 		return
 	}
-	ch, err := s.svc.CompleteOAuth(r.Context(), principal(r), provider, oauthCode(q), q.Get("state"), s.oauthRedirect(provider), oauthExtra(q))
+	ch, err := s.svc.CompleteOAuth(r.Context(), principal(r), provider, q.Get("code"), q.Get("state"), s.oauthRedirect(provider), oauthExtra(q))
 	if err != nil {
 		s.log.WarnContext(r.Context(), "channel connection failed", "provider", provider, "err", err)
 		var ae *app.Error

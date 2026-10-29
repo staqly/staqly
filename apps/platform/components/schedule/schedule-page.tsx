@@ -17,7 +17,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { ErrorState } from '@/components/common/error-state'
-import { PageIcon } from '@/components/common/page-header'
+import { PageIcon, pageSubtitle } from '@/components/common/page-header'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -735,7 +735,7 @@ export function SchedulePage() {
         </PageIcon>
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight">Schedule</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <p className={pageSubtitle}>
             {/* The range the calendar shows, by the page title rather than between the toolbar's buttons. */}
             <span className="font-medium text-foreground" aria-live="polite" data-testid="schedule-range">
               {title}

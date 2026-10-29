@@ -24,6 +24,7 @@ export function group(over: Partial<ChannelGroup> = {}): ChannelGroup {
     id: 'grp_default',
     name: 'Default',
     color: '',
+    icon: '',
     position: 0,
     default: true,
     channels: 0,

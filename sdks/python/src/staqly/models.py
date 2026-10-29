@@ -1296,6 +1296,8 @@ class ChannelGroup(StaqlyModel):
     id: str
     name: str
     color: str = ""
+    #: An icon name (``briefcase``, ``rocket``...), or empty.
+    icon: str = ""
     position: int = 0
     default: bool = False
     #: Channels in the group (from :meth:`Channels.list_groups`).

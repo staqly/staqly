@@ -42,8 +42,8 @@ func (q *Queries) CountChannelsByGroup(ctx context.Context, workspaceID string) 
 }
 
 const createChannelGroup = `-- name: CreateChannelGroup :exec
-INSERT INTO channel_groups (id, workspace_id, name, color, position, is_default, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+INSERT INTO channel_groups (id, workspace_id, name, color, icon, position, is_default, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
 `
 
 type CreateChannelGroupParams struct {
@@ -51,6 +51,7 @@ type CreateChannelGroupParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	Name        string `json:"name"`
 	Color       string `json:"color"`
+	Icon        string `json:"icon"`
 	Position    int64  `json:"position"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
@@ -62,6 +63,7 @@ func (q *Queries) CreateChannelGroup(ctx context.Context, arg CreateChannelGroup
 		arg.WorkspaceID,
 		arg.Name,
 		arg.Color,
+		arg.Icon,
 		arg.Position,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -87,7 +89,7 @@ func (q *Queries) DeleteChannelGroup(ctx context.Context, arg DeleteChannelGroup
 }
 
 const getChannelGroup = `-- name: GetChannelGroup :one
-SELECT id, workspace_id, name, color, position, is_default, created_at, updated_at FROM channel_groups WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, name, color, position, is_default, created_at, updated_at, icon FROM channel_groups WHERE workspace_id = ? AND id = ?
 `
 
 type GetChannelGroupParams struct {
@@ -107,12 +109,13 @@ func (q *Queries) GetChannelGroup(ctx context.Context, arg GetChannelGroupParams
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Icon,
 	)
 	return i, err
 }
 
 const getDefaultChannelGroup = `-- name: GetDefaultChannelGroup :one
-SELECT id, workspace_id, name, color, position, is_default, created_at, updated_at FROM channel_groups WHERE workspace_id = ? AND is_default = 1
+SELECT id, workspace_id, name, color, position, is_default, created_at, updated_at, icon FROM channel_groups WHERE workspace_id = ? AND is_default = 1
 `
 
 func (q *Queries) GetDefaultChannelGroup(ctx context.Context, workspaceID string) (ChannelGroup, error) {
@@ -127,6 +130,7 @@ func (q *Queries) GetDefaultChannelGroup(ctx context.Context, workspaceID string
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Icon,
 	)
 	return i, err
 }
@@ -155,7 +159,7 @@ func (q *Queries) InsertDefaultChannelGroup(ctx context.Context, arg InsertDefau
 }
 
 const listChannelGroups = `-- name: ListChannelGroups :many
-SELECT id, workspace_id, name, color, position, is_default, created_at, updated_at FROM channel_groups WHERE workspace_id = ? ORDER BY is_default DESC, position, name COLLATE NOCASE, id
+SELECT id, workspace_id, name, color, position, is_default, created_at, updated_at, icon FROM channel_groups WHERE workspace_id = ? ORDER BY is_default DESC, position, name COLLATE NOCASE, id
 `
 
 func (q *Queries) ListChannelGroups(ctx context.Context, workspaceID string) ([]ChannelGroup, error) {
@@ -176,6 +180,7 @@ func (q *Queries) ListChannelGroups(ctx context.Context, workspaceID string) ([]
 			&i.IsDefault,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Icon,
 		); err != nil {
 			return nil, err
 		}
@@ -233,12 +238,13 @@ func (q *Queries) SetChannelGroup(ctx context.Context, arg SetChannelGroupParams
 }
 
 const updateChannelGroup = `-- name: UpdateChannelGroup :exec
-UPDATE channel_groups SET name = ?, color = ?, position = ?, updated_at = ? WHERE workspace_id = ? AND id = ?
+UPDATE channel_groups SET name = ?, color = ?, icon = ?, position = ?, updated_at = ? WHERE workspace_id = ? AND id = ?
 `
 
 type UpdateChannelGroupParams struct {
 	Name        string `json:"name"`
 	Color       string `json:"color"`
+	Icon        string `json:"icon"`
 	Position    int64  `json:"position"`
 	UpdatedAt   string `json:"updated_at"`
 	WorkspaceID string `json:"workspace_id"`
@@ -249,6 +255,7 @@ func (q *Queries) UpdateChannelGroup(ctx context.Context, arg UpdateChannelGroup
 	_, err := q.db.ExecContext(ctx, updateChannelGroup,
 		arg.Name,
 		arg.Color,
+		arg.Icon,
 		arg.Position,
 		arg.UpdatedAt,
 		arg.WorkspaceID,

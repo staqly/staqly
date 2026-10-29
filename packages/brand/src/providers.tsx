@@ -6,16 +6,13 @@ import {
   siDiscord,
   siDribbble,
   siFacebook,
-  siFarcaster,
   siGoogle,
   siHashnode,
   siInstagram,
   siKick,
-  siLemmy,
   siListmonk,
   siMastodon,
   siMedium,
-  siMewe,
   siPinterest,
   siReddit,
   siTelegram,
@@ -104,10 +101,7 @@ const LOOKS: Record<string, Look> = {
   mastodon_token: { icon: siMastodon, color: '#6364FF' },
   bluesky: { icon: siBluesky, color: '#1185FE' },
   bluesky_app_password: { icon: siBluesky, color: '#1185FE' },
-  lemmy: { icon: siLemmy, color: '#000000' },
-  farcaster: { icon: siFarcaster, color: '#855DCD' },
   telegram: { icon: siTelegram, color: '#26A5E4' },
-  nostr: { color: '#8E30EB', letters: 'N' },
   medium: { icon: siMedium, color: '#000000' },
   devto: { icon: siDevdotto, color: '#0A0A0A' },
   hashnode: { icon: siHashnode, color: '#2962FF' },
@@ -116,7 +110,6 @@ const LOOKS: Record<string, Look> = {
   moltbook: { color: '#E11D48', letters: 'M' },
   whop: { color: '#FF6243', letters: 'W' },
   skool: { color: '#E8B31F', letters: 'sk' },
-  mewe: { icon: siMewe, color: '#17377F' },
   tumblr: { icon: siTumblr, color: '#36465D' },
 }
 
@@ -144,7 +137,7 @@ function luminance(color: string) {
 
 /**
  * The brand colour per theme, as CSS variables for THEMED: a very light one (Kick's green) is deepened on light
- * backgrounds, a very dark one (Tumblr's slate, MeWe's navy) lifted on dark ones; the rest stay as the brand has them.
+ * backgrounds, a very dark one (Tumblr's slate) lifted on dark ones; the rest stay as the brand has them.
  */
 function themed(color: string): CSSProperties {
   const l = luminance(color)

@@ -42,8 +42,8 @@ How you connect depends on the platform's `auth`:
 ### Pick the accounts
 
 Some sign-ins can publish as several accounts: the Facebook Pages you manage, the Instagram accounts
-linked to them, LinkedIn Pages, YouTube channels, Google Business Profile locations, Tumblr blogs,
-MeWe groups. When there is only one, staqly connects it right away. When there are
+linked to them, LinkedIn Pages, YouTube channels, Google Business Profile locations and Tumblr blogs.
+When there is only one, staqly connects it right away. When there are
 several, the platform sends you back to a list: tick the ones you want and click **Connect**. Every
 account you pick becomes its own channel (one already connected is reconnected instead), and nothing is
 ticked for you. The list waits ten minutes; after that, connect again. The same list appears on a
@@ -105,7 +105,7 @@ listing them needs `channels:read`. Credentials are never returned by any call.
 
 `GET /v1/providers` (MCP `list_providers`, CLI `staqly channels providers`) lists every provider
 with its `auth`, `status`, `limits`, `credential_fields` and `settings_fields`. In this
-release every platform below is available except Farcaster and Skool, which stay `soon` and are greyed out (no way
+release every platform below is available except Skool, which stays `soon` and is greyed out (no way
 to publish to them that a person can set up alone). OAuth platforms are available once the server
 has their app keys; token platforms right away.
 
@@ -134,10 +134,7 @@ has their app keys; token platforms right away.
 | [Mastodon with an access token](/channels/mastodon#channels-connected-with-an-access-token) | `mastodon_token` | token | 500 | 4 pictures or 1 video | — |
 | [Bluesky](/channels/bluesky) | `bluesky` | OAuth (no keys) | 300 | 4 pictures | — |
 | [Bluesky with an app password](/channels/bluesky#with-an-app-password) | `bluesky_app_password` | token | 300 | 4 pictures | — |
-| [Lemmy](/channels/lemmy) | `lemmy` | token | 10,000 | 1 picture | a title and a community |
-| Farcaster <Badge tone="soon">soon</Badge> | `farcaster` | token | 320 | 2 images | — |
 | [Telegram](/channels/telegram) | `telegram` | token: `/connect CODE` to the server's bot in a chat, or your own bot's token | 4,096 (1,024 with media) | 10 | — |
-| [Nostr](/channels/nostr) | `nostr` | token | none | — | — |
 | [Medium](/channels/medium) | `medium` | token | none | 1 picture | a title |
 | [Dev.to](/channels/devto) | `devto` | token | none | 1 picture (cover) | a title |
 | [Hashnode](/channels/hashnode) | `hashnode` | token | none | 1 picture (cover) | a title |
@@ -146,7 +143,6 @@ has their app keys; token platforms right away.
 | [Moltbook](/channels/moltbook) | `moltbook` | token | 40,000 | — | a title |
 | [Whop](/channels/whop) | `whop` | token | 5,000 | 4 | — |
 | Skool <Badge tone="soon">soon</Badge> | `skool` | token | 5,000 | 4 images | a title |
-| [MeWe](/channels/mewe) | `mewe` | OAuth, pick timeline or groups | 5,000 | 4 pictures | — |
 | [Tumblr](/channels/tumblr) | `tumblr` | OAuth, pick blogs | 4,096 | 10 pictures, at most 1 video | — |
 
 ### Platforms on a server

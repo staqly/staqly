@@ -106,6 +106,7 @@ type ChannelGroup struct {
 	IsDefault   int64  `json:"is_default"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+	Icon        string `json:"icon"`
 }
 
 type ChannelLink struct {

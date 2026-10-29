@@ -73,7 +73,7 @@ func (m Mastodon) Validate(p PostContent, s Settings) error {
 	return CheckFields(m.SettingsFields(), s)
 }
 
-// fediInstance turns what a person typed ("mastodon.social", "https://lemmy.world/") into a base URL.
+// fediInstance turns what a person typed ("mastodon.social", "https://mastodon.social/") into a base URL.
 func fediInstance(raw, def, field string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

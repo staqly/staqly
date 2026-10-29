@@ -142,7 +142,7 @@ func TestChannelsTokenProvider(t *testing.T) {
 	}
 	if byID["custom"].Status != "available" || byID["custom"].Auth != "none" || byID["faketoken"].Auth != "token" ||
 		len(byID["faketoken"].CredentialFields) != 1 || byID["faketoken"].CredentialFields[0].Placeholder != "123:abc" ||
-		byID["faketoken"].Limits.MaxChars != 20 || byID["farcaster"].Status != "soon" || !strings.HasPrefix(byID["faketoken"].DocsURL, "https://docs.staqly.ai/channels/") {
+		byID["faketoken"].Limits.MaxChars != 20 || byID["skool"].Status != "soon" || !strings.HasPrefix(byID["faketoken"].DocsURL, "https://docs.staqly.ai/channels/") {
 		t.Fatalf("providers: %+v", byID)
 	}
 
@@ -157,7 +157,7 @@ func TestChannelsTokenProvider(t *testing.T) {
 	if !strings.Contains(errBody.Error.Message+errBody.Error.Fields["fields"], "refused") {
 		t.Fatalf("refused token: %+v", errBody.Error)
 	}
-	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "farcaster", "fields": map[string]string{"token": "x"}}, 409, nil) // soon
+	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "skool", "fields": map[string]string{"token": "x"}}, 409, nil) // soon
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "nope"}, 422, nil)
 	var ch app.Channel
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "faketoken", "fields": map[string]string{"token": "good"}}, 201, &ch)
@@ -611,6 +611,18 @@ func TestChannelGroups(t *testing.T) {
 		t.Fatalf("renamed: %+v", client)
 	}
 	e.do(nil, "PATCH", "/v1/channel-groups/"+def.ID, e.admin, map[string]any{"name": "Client B"}, 409, nil)
+
+	// An icon: one name from the set; '' removes it.
+	e.do(nil, "PATCH", "/v1/channel-groups/"+client.ID, e.admin, map[string]any{"icon": "rocket"}, 200, &client)
+	if client.Icon != "rocket" || client.Name != "Client B" {
+		t.Fatalf("icon: %+v", client)
+	}
+	e.do(nil, "PATCH", "/v1/channel-groups/"+client.ID, e.admin, map[string]any{"icon": "<svg/>"}, 422, nil)
+	e.do(nil, "POST", "/v1/channel-groups", e.admin, map[string]any{"name": "Pic", "icon": "data:image/png;base64,iVBORw0KGgo="}, 422, nil)
+	e.do(nil, "PATCH", "/v1/channel-groups/"+client.ID, e.admin, map[string]any{"icon": ""}, 200, &client)
+	if client.Icon != "" {
+		t.Fatalf("icon removed: %+v", client)
+	}
 
 	// Default stays; deleting another group moves its channels to Default.
 	var errBody struct{ Error app.Error }

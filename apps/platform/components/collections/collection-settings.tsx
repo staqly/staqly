@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Archive, ArchiveRestore, ChevronDown, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
 import { ConfirmNameField, confirmNameError } from '@/components/common/confirm-name-field'
@@ -38,7 +38,7 @@ import { TimeoutSelect, timeoutOf } from './timeout-select'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(100, 'At most 100 characters'),
-  description: z.string().max(2000, 'At most 2000 characters'),
+  description: z.string().max(180, 'At most 180 characters'),
   color: z.string(),
   processing_timeout_seconds: z.string(),
 })
@@ -189,6 +189,7 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
   const defaultName = useCollections(true, defaultNameOf).data ?? 'Default'
   const serverTimeout = useSession().data?.defaults?.processing_timeout_seconds ?? 3600
   const { register, handleSubmit, formState, reset, control, setError } = form
+  const description = useWatch({ control, name: 'description' })
 
   const onSaved = (c: Collection) => {
     qc.setQueryData(qk.collection(c.id), c)
@@ -301,6 +302,9 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
                     id="settings-description"
                     rows={3}
                     {...register('description')}
+                    value={description}
+                    maxLength={180}
+                    className="resize-none field-sizing-fixed"
                     aria-invalid={!!formState.errors.description}
                   />
                   <FieldError errors={[formState.errors.description]} />

@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ import { TimeoutSelect } from './timeout-select'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(100, 'At most 100 characters'),
-  description: z.string().max(2000, 'At most 2000 characters'),
+  description: z.string().max(180, 'At most 180 characters'),
   color: z.string(),
   processing_timeout_seconds: z.string(),
 })
@@ -55,6 +55,7 @@ export function CreateCollectionDialog({
     },
   })
   const { register, handleSubmit, formState, reset, setError, control } = form
+  const description = useWatch({ control, name: 'description' })
 
   const create = useMutation({
     mutationFn: (v: Values) =>
@@ -137,6 +138,9 @@ export function CreateCollectionDialog({
                   placeholder="What gets posted here, and where?"
                   aria-invalid={!!formState.errors.description}
                   {...register('description')}
+                  value={description}
+                  maxLength={180}
+                  className="resize-none field-sizing-fixed"
                 />
                 <FieldError errors={[formState.errors.description]} />
               </Field>
