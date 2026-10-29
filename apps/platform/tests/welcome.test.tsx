@@ -17,6 +17,16 @@ const routes = {
   'POST /v1/session/onboarded': { status: 204 },
 }
 
+/**
+ * A step focuses its heading in a requestAnimationFrame: typing before that lands loses the keystrokes that follow
+ * the focus move. Wait for it, like a person who sees the step first.
+ */
+async function reach(name: string) {
+  const heading = await screen.findByRole('heading', { name })
+
+  await waitFor(() => expect(heading).toHaveFocus())
+}
+
 function render(extra: Record<string, unknown>, ui = <WelcomeWizard />) {
   // The session is in place before the first render, as the auth gate guarantees in the app.
   const client = makeClient()
@@ -57,30 +67,35 @@ describe('welcome wizard', () => {
     await user.click(screen.getByLabelText(/Run a team/))
     await user.click(screen.getByRole('button', { name: /Continue/ }))
 
-    expect(await screen.findByRole('heading', { name: 'Name your workspace' })).toBeInTheDocument()
+    await reach('Name your workspace')
     expect(screen.getByLabelText(/Workspace name/)).toHaveValue('Test WS')
     await user.clear(screen.getByLabelText(/Workspace name/))
     await user.type(screen.getByLabelText(/Workspace name/), 'Acme')
     await user.click(screen.getByRole('button', { name: /Continue/ }))
 
-    expect(await screen.findByRole('heading', { name: 'Where do you post?' })).toBeInTheDocument()
+    await reach('Where do you post?')
     await user.click(screen.getByRole('button', { name: /do it later/ }))
 
     // The team goal asks for people first; connecting an agent is its own step after it.
-    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument()
+    await reach('Invite your team')
     await user.type(screen.getByLabelText('Email addresses'), 'sam@example.com')
     await user.click(screen.getByRole('button', { name: /Invite 1 when ready/ }))
-    expect(await screen.findByRole('heading', { name: 'Connect an agent' })).toBeInTheDocument()
+    await reach('Connect an agent')
     // Nothing was written on the way.
     expect(api.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
+    // The workspace can write already (no billing): the key is made here, on the explicit ask.
+    await user.click(screen.getByRole('button', { name: /Make a key for Claude Code/ }))
+    expect((await screen.findAllByText(/stk_agent_secret/)).length).toBeGreaterThan(0)
+    expect(api.find('POST', '/v1/api-keys')).toHaveLength(1)
     await user.click(screen.getByRole('button', { name: /Continue/ }))
 
     expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
     expect(api.find('PATCH', '/v1/workspace')[0].body).toMatchObject({ name: 'Acme' })
     expect(api.find('POST', '/v1/invitations')[0].body).toEqual({ email: 'sam@example.com', role: 'editor' })
+    // Not a second key at the end, and the end doesn't show it again.
     expect(api.find('POST', '/v1/api-keys')).toHaveLength(1)
     expect(screen.getByText('1 invitation sent')).toBeInTheDocument()
-    expect(screen.getAllByText(/stk_agent_secret/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/stk_agent_secret/)).not.toBeInTheDocument()
     // The last step ends the wizard itself: nothing left to skip.
     expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument()
 
@@ -168,6 +183,38 @@ describe('welcome wizard', () => {
     expect(sync).toHaveBeenCalledTimes(1)
     sync.mockRestore()
     vi.useRealTimers()
+  })
+
+  it('Not now on Connect an agent makes no key', async () => {
+    const api = mockApi({ ...routes, 'POST /v1/api-keys': { status: 201, body: { id: 'k', name: 'x', key: 'stk_x' } } })
+    const user = userEvent.setup()
+
+    nav.set('/welcome', 'step=agent')
+    render({})
+    expect(await screen.findByRole('heading', { name: 'Connect an agent' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Not now' }))
+    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Skip' }))
+    expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
+    expect(api.find('POST', '/v1/api-keys')).toHaveLength(0)
+  })
+
+  it('an agent chosen before the payment gets its key on a step of its own right after it', async () => {
+    const api = mockApi({
+      ...routes,
+      'POST /v1/api-keys': { status: 201, body: { id: 'key_1', name: 'Codex', key: 'stk_agent_secret' } },
+    })
+    const user = userEvent.setup()
+
+    sessionStorage.setItem('staqly:welcome', JSON.stringify({ name: 'Ana', agent: 'codex' }))
+    nav.set('/welcome', 'step=done&checkout=success')
+    render({})
+    expect(await screen.findByRole('heading', { name: 'Connect Codex' })).toBeInTheDocument()
+    expect(screen.getAllByText(/stk_agent_secret/).length).toBeGreaterThan(0)
+    expect(api.find('POST', '/v1/api-keys')[0].body).toMatchObject({ name: 'Codex' })
+    await user.click(screen.getByRole('button', { name: /Continue/ }))
+    expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
+    expect(screen.queryByText(/stk_agent_secret/)).not.toBeInTheDocument()
   })
 
   it('setting up again after a failure counts people already invited as invited', async () => {

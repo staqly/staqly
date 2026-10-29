@@ -665,13 +665,6 @@ export function SchedulePage() {
           <ChevronRight />
         </Button>
       </ButtonGroup>
-      <h2
-        className="min-w-0 truncate text-sm font-medium whitespace-nowrap"
-        aria-live="polite"
-        data-testid="schedule-range"
-      >
-        {title}
-      </h2>
       <div className="flex items-center gap-2 sm:ml-2">
         <ToggleGroup
           type="single"
@@ -743,6 +736,11 @@ export function SchedulePage() {
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight">Schedule</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
+            {/* The range the calendar shows, by the page title rather than between the toolbar's buttons. */}
+            <span className="font-medium text-foreground" aria-live="polite" data-testid="schedule-range">
+              {title}
+            </span>
+            <span aria-hidden> · </span>
             <span data-testid="schedule-count">{pluralize(scheduledCount, 'post')} scheduled</span>
             <span aria-hidden> · </span>
             <span>

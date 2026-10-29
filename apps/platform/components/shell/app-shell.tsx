@@ -10,6 +10,7 @@ import {
   CalendarClock,
   ChevronsUpDown,
   Clock,
+  Crown,
   CreditCard,
   Gauge,
   Images,
@@ -31,7 +32,16 @@ import {
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
 import { toast } from 'sonner'
 
 import { daysLeft } from '@/components/billing/billing-format'
@@ -422,7 +432,7 @@ function UserMenu() {
                   className="mt-1 bg-brand-soft font-medium text-brand-strong focus:bg-brand-soft focus:text-brand-strong focus:brightness-110 [&_svg]:text-brand-strong!"
                   onSelect={() => go('/plans')}
                 >
-                  <Sparkles /> {upgradeLabel}
+                  <Crown /> {upgradeLabel}
                 </DropdownMenuItem>
               </>
             )}
@@ -526,7 +536,7 @@ function SidebarTrial() {
         {canManagePeople && (
           <Button size="sm" asChild onClick={() => setOpenMobile(false)}>
             <Link href="/plans">
-              <Sparkles /> Upgrade
+              <Crown /> Upgrade
             </Link>
           </Button>
         )}
@@ -548,6 +558,27 @@ function useModKey() {
 }
 
 /** Opens the assistant on the right (⌘J); only when the server has AI for it. */
+/** The Assistant's sparkles in a green-to-violet gradient, so it stands apart from the plain icons around it. */
+function AssistantIcon({ className }: { className?: string }) {
+  const id = useId()
+
+  return (
+    <>
+      <svg aria-hidden width="0" height="0" className="absolute">
+        <defs>
+          {/* userSpaceOnUse: one gradient across the whole 24 x 24 icon, not one per path. */}
+          <linearGradient id={id} x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#22c55e" />
+            <stop offset="0.5" stopColor="#3b82f6" />
+            <stop offset="1" stopColor="#a855f7" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <Sparkles className={className} style={{ stroke: `url("#${id}")` }} />
+    </>
+  )
+}
+
 function SidebarAssistant() {
   const { assistant } = useShell()
   const MOD_KEY = useModKey()
@@ -565,7 +596,7 @@ function SidebarAssistant() {
           onClick={assistant.toggle}
           data-testid="assistant-toggle"
         >
-          <Sparkles className="text-brand" />
+          <AssistantIcon />
           <span>Assistant</span>
           <KbdGroup className="ml-auto group-data-[collapsible=icon]:hidden">
             <Kbd className="border bg-sidebar-accent text-sidebar-foreground/80">{MOD_KEY}</Kbd>
@@ -774,7 +805,7 @@ function MobileHeader() {
             aria-label="Assistant"
             className="flex size-11 shrink-0 items-center justify-center rounded-lg text-brand hover:bg-muted"
           >
-            <Sparkles className="size-5" />
+            <AssistantIcon className="size-5" />
           </button>
         )}
         <NotificationsBell className="size-11 shrink-0 rounded-lg [&_svg]:size-5" />

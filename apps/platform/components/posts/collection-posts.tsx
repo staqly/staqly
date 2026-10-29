@@ -1,6 +1,6 @@
 'use client'
 
-import { Archive, PenSquare, Plus, Search, Settings2, X } from 'lucide-react'
+import { Archive, FolderPlus, PenSquare, Plus, Search, Settings2, X } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -61,7 +61,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 }
 
 /** A collection's posts: header, filters, the list. */
-export function CollectionPosts({ id }: { id: string }) {
+export function CollectionPosts({ id, onNewCollection }: { id: string; onNewCollection?: () => void }) {
   const router = useRouter()
   const params = useSearchParams()
   // From the collections list (cached by the pane already): no request of its own before the posts load.
@@ -214,6 +214,12 @@ export function CollectionPosts({ id }: { id: string }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {/* The only collection: the collections pane is hidden, so its New lives here. */}
+            {onNewCollection && (
+              <Button variant="outline" size="sm" onClick={onNewCollection}>
+                <FolderPlus /> <span className="max-sm:sr-only">New collection</span>
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => settings.setOpen(true)}>
               <Settings2 /> <span className="max-sm:sr-only">Settings</span>
             </Button>

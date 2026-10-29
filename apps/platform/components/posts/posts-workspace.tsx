@@ -220,6 +220,8 @@ function CollectionsStrip({
   )
 }
 
+const countAll = (cols: Collection[]) => cols.length
+
 /**
  * Posts by collection in one view: the collections on the left (a strip of chips on phones), the open
  * collection's posts on the right. /posts shows the first collection; /posts?collection=<id> a chosen one
@@ -241,6 +243,8 @@ export function PostsWorkspace() {
   const [create, setCreate] = useState(() => ({ open: params.get('new') === '1', used: params.get('new') === '1' }))
   const setCreateOpen = (open: boolean) => setCreate({ open, used: true })
   const collections = useCollections(showArchived)
+  // One collection (archived ones count) is the usual case: no pane or strip until there is a second one.
+  const single = useCollections(true, countAll).data === 1
   const list = useMemo(() => collections.data ?? [], [collections.data])
   const current = waiting
     ? undefined
@@ -296,14 +300,14 @@ export function PostsWorkspace() {
       </PageContainer>
     )
   } else {
-    content = <CollectionPosts key={current} id={current} />
+    content = <CollectionPosts key={current} id={current} onNewCollection={single ? openCreate : undefined} />
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col md:flex-row" data-testid="posts-workspace">
-      {pane}
+      {!single && pane}
       <div className="flex min-w-0 flex-1 flex-col">
-        {!collections.isLoading && list.length > 0 && (
+        {!single && !collections.isLoading && list.length > 0 && (
           <CollectionsStrip collections={list} selectedId={current} showArchived={showArchived} onCreate={openCreate} />
         )}
         {content}
