@@ -17,6 +17,16 @@ const routes = {
   'POST /v1/session/onboarded': { status: 204 },
 }
 
+/**
+ * A step focuses its heading in a requestAnimationFrame: typing before that lands loses the keystrokes that follow
+ * the focus move. Wait for it, like a person who sees the step first.
+ */
+async function reach(name: string) {
+  const heading = await screen.findByRole('heading', { name })
+
+  await waitFor(() => expect(heading).toHaveFocus())
+}
+
 function render(extra: Record<string, unknown>, ui = <WelcomeWizard />) {
   // The session is in place before the first render, as the auth gate guarantees in the app.
   const client = makeClient()
@@ -57,20 +67,20 @@ describe('welcome wizard', () => {
     await user.click(screen.getByLabelText(/Run a team/))
     await user.click(screen.getByRole('button', { name: /Continue/ }))
 
-    expect(await screen.findByRole('heading', { name: 'Name your workspace' })).toBeInTheDocument()
+    await reach('Name your workspace')
     expect(screen.getByLabelText(/Workspace name/)).toHaveValue('Test WS')
     await user.clear(screen.getByLabelText(/Workspace name/))
     await user.type(screen.getByLabelText(/Workspace name/), 'Acme')
     await user.click(screen.getByRole('button', { name: /Continue/ }))
 
-    expect(await screen.findByRole('heading', { name: 'Where do you post?' })).toBeInTheDocument()
+    await reach('Where do you post?')
     await user.click(screen.getByRole('button', { name: /do it later/ }))
 
     // The team goal asks for people first; connecting an agent is its own step after it.
-    expect(await screen.findByRole('heading', { name: 'Invite your team' })).toBeInTheDocument()
+    await reach('Invite your team')
     await user.type(screen.getByLabelText('Email addresses'), 'sam@example.com')
     await user.click(screen.getByRole('button', { name: /Invite 1 when ready/ }))
-    expect(await screen.findByRole('heading', { name: 'Connect an agent' })).toBeInTheDocument()
+    await reach('Connect an agent')
     // Nothing was written on the way.
     expect(api.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
     // The workspace can write already (no billing): the key is made here, on the explicit ask.
