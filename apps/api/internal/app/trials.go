@@ -97,7 +97,6 @@ var accountIDKeys = map[string][]string{
 	"tumblr":             {"user", "blog"},
 	"reddit":             {"username"},
 	"pinterest":          {"username"},
-	"mewe":               {"user_id"},
 }
 
 // sharedSpaces: platforms whose channel is a space many people may use, with who authorized the connection ("" when
@@ -126,12 +125,6 @@ func channelIdentity(providerID string, creds providers.Credentials, profile pro
 	family := providerID
 	if f, ok := providerFamilies[providerID]; ok {
 		family = f
-	}
-	if family == "mewe" && creds["group_id"] != "" { // a MeWe group: the member who connected it
-		if creds["user_id"] == "" {
-			return "", ""
-		}
-		return fingerprintPerson, "mewe\x00" + creds["user_id"]
 	}
 	if who, ok := sharedSpaces[family]; ok {
 		id := strings.ToLower(strings.TrimSpace(who(creds)))

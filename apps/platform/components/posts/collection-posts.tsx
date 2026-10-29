@@ -201,17 +201,21 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           {/* basis + min-w-0: a long name or a description without spaces wraps instead of widening the page. */}
           <div className="min-w-0 flex-1 basis-64">
-            <h1 className="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight">
-              <span className="truncate" title={c.name}>
-                {c.name}
-              </span>
-              {c.archived && <Archive className="size-4 text-muted-foreground" aria-label="Archived" />}
-            </h1>
-            {c.description && <p className="mt-0.5 text-sm wrap-anywhere text-muted-foreground">{c.description}</p>}
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <StatusCounts counts={c.status_counts ?? {}} />
-              <IdChip id={c.id} label="collection" />
+            {/* The ID beside the name, outside the heading so it is not part of its accessible name. */}
+            <div className="flex min-w-0 items-center gap-x-3">
+              <h1 className="flex min-w-0 items-center gap-2 text-xl font-semibold tracking-tight">
+                <span className="truncate" title={c.name}>
+                  {c.name}
+                </span>
+                {c.archived && <Archive className="size-4 text-muted-foreground" aria-label="Archived" />}
+              </h1>
+              <IdChip id={c.id} label="collection" className="shrink-[3]" />
             </div>
+            {c.description && <p className="mt-0.5 text-sm wrap-anywhere text-muted-foreground">{c.description}</p>}
+            {/* Only with posts: an empty collection says so in the list below. */}
+            {Object.values(c.status_counts ?? {}).some((n) => n > 0) && (
+              <StatusCounts counts={c.status_counts ?? {}} className="mt-1.5" />
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {/* The only collection: the collections pane is hidden, so its New lives here. */}

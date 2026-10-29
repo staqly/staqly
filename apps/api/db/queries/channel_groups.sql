@@ -13,11 +13,11 @@ INSERT OR IGNORE INTO channel_groups (id, workspace_id, name, color, position, i
 VALUES (?, ?, 'Default', '', 0, 1, ?, ?);
 
 -- name: CreateChannelGroup :exec
-INSERT INTO channel_groups (id, workspace_id, name, color, position, is_default, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, 0, ?, ?);
+INSERT INTO channel_groups (id, workspace_id, name, color, icon, position, is_default, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?);
 
 -- name: UpdateChannelGroup :exec
-UPDATE channel_groups SET name = ?, color = ?, position = ?, updated_at = ? WHERE workspace_id = ? AND id = ?;
+UPDATE channel_groups SET name = ?, color = ?, icon = ?, position = ?, updated_at = ? WHERE workspace_id = ? AND id = ?;
 
 -- name: DeleteChannelGroup :execrows
 DELETE FROM channel_groups WHERE workspace_id = ? AND id = ? AND is_default = 0;

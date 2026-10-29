@@ -5022,7 +5022,7 @@ components:
       type: object
       properties:
         name: { type: string }
-        description: { type: string }
+        description: { type: string, maxLength: 180 }
         icon: { type: string }
         color: { type: string }
         processing_timeout_seconds: { type: [integer, "null"], minimum: 60, maximum: 86400, description: "How long targets on your own automation may wait for a result before they fail; null goes back to the server's PROCESSING_TIMEOUT." }
@@ -5887,11 +5887,12 @@ components:
     ChannelGroup:
       type: object
       description: The one bucket a channel sits in (a group per client, say). The Default group always exists and can't be deleted.
-      required: [id, name, color, position, default, channels, created_at, updated_at]
+      required: [id, name, color, icon, position, default, channels, created_at, updated_at]
       properties:
         id: { type: string }
         name: { type: string }
         color: { type: string, description: "#rrggbb, or empty" }
+        icon: { type: string, description: "An icon name (briefcase, building, store, house, user, users, heart, star, rocket, sparkles, zap, flame, trophy, globe, megaphone, camera, music, gamepad, coffee, shopping-bag, graduation-cap, palette, code, leaf, car, plane, bike, utensils, pizza, wine, dumbbell, book, film, tv, mic, headphones, gift, shirt, gem, crown, paw-print, flower, tree, mountain, sun, moon, lightbulb, target, flag, bell, mail, newspaper, landmark, banknote, shield, bot), or empty" }
         position: { type: integer, description: Sort order (Default always leads) }
         default: { type: boolean }
         channels: { type: integer, description: Channels in the group (list only; 0 elsewhere) }
@@ -5903,6 +5904,7 @@ components:
       properties:
         name: { type: string, maxLength: 60, description: Unique in the workspace (case-insensitive); required on create }
         color: { type: string, description: "#rrggbb, or empty" }
+        icon: { type: string, description: "An icon name (briefcase, building, store, house, user, users, heart, star, rocket, sparkles, zap, flame, trophy, globe, megaphone, camera, music, gamepad, coffee, shopping-bag, graduation-cap, palette, code, leaf, car, plane, bike, utensils, pizza, wine, dumbbell, book, film, tv, mic, headphones, gift, shirt, gem, crown, paw-print, flower, tree, mountain, sun, moon, lightbulb, target, flag, bell, mail, newspaper, landmark, banknote, shield, bot); empty removes it" }
         position: { type: integer }
 
     DeveloperAppInput:

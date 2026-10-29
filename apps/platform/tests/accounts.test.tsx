@@ -98,12 +98,13 @@ describe('the signed-in person in the sidebar', () => {
     await user.click(screen.getAllByTestId('user-menu-trigger')[0])
     menu = await screen.findByRole('menu')
     expect(within(menu).getByTestId('user-role')).toHaveTextContent('Owner')
-    // The open workspace's pages, then the person's own account.
-    expect(
-      within(menu)
-        .getAllByRole('menuitem')
-        .map((i) => i.textContent?.trim()),
-    ).toEqual(expect.arrayContaining(['Plan & usage', 'Members', 'Workspace settings', 'Account settings', 'Sign out']))
+    // Members and the person's own account, then the workspace's settings; Plan & usage is in the workspace menu.
+    const items = within(menu)
+      .getAllByRole('menuitem')
+      .map((i) => i.textContent?.trim())
+
+    expect(items).toEqual(expect.arrayContaining(['Members', 'Account settings', 'Workspace settings', 'Sign out']))
+    expect(items).not.toContain('Plan & usage')
     expect(within(menu).queryByRole('menuitem', { name: 'Billing' })).not.toBeInTheDocument()
     await user.click(within(menu).getByRole('menuitem', { name: /sign out/i }))
     await waitFor(() => expect(api.find('DELETE', '/v1/session')).toHaveLength(1))

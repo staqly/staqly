@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -261,14 +261,17 @@ describe('channels', () => {
     expect(screen.queryByRole('combobox', { name: 'Group filter' })).not.toBeInTheDocument()
   })
 
-  it('with groups: sections per group, move a channel, create, rename and delete a group (Default stays)', async () => {
+  it('with groups: a pane of groups, one group open, move a channel, create, edit and delete a group (Default stays)', async () => {
     const api = mockApi({
       'GET /v1/channels': {
         data: [channel(), channel({ id: 'ch_2', name: 'Client bot', provider: 'telegram', group_id: 'grp_a' })],
       },
       'GET /v1/providers': { data: [provider(), telegram] },
       'GET /v1/channel-groups': {
-        data: [group({ channels: 1 }), group({ id: 'grp_a', name: 'Client A', default: false, channels: 1 })],
+        data: [
+          group({ channels: 1 }),
+          group({ id: 'grp_a', name: 'Client A', default: false, icon: 'rocket', channels: 1 }),
+        ],
       },
       'PATCH /v1/channels/ch_1': channel({ group_id: 'grp_a' }),
       'POST /v1/channel-groups': group({ id: 'grp_b', name: 'Client B', default: false }),
@@ -277,16 +280,22 @@ describe('channels', () => {
     })
     const user = userEvent.setup()
 
+    nav.set('/channels', 'group=grp_a')
     renderWithProviders(<ChannelsPage />, { mode: 'local' })
-    const sections = await screen.findAllByTestId('channel-group')
+    const pane = await screen.findByTestId('groups-pane')
 
-    expect(sections).toHaveLength(2)
-    expect(within(sections[0]!).getByText('Brand on Mastodon')).toBeInTheDocument()
-    expect(within(sections[1]!).getByText('Client bot')).toBeInTheDocument()
+    // The pane: each group with its count; the open group is marked and its channels show.
+    expect(within(pane).queryByRole('link', { name: /All channels/ })).not.toBeInTheDocument()
+    expect(within(pane).getByRole('link', { name: /Default\s*1/ })).not.toHaveAttribute('aria-current')
+    expect(within(pane).getByRole('link', { name: /Client A\s*1/ })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByText('Client bot')).toBeInTheDocument()
+    expect(screen.queryByText('Brand on Mastodon')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: /Client A/ })).toBeInTheDocument()
 
-    // Folding a group hides its channels.
-    await user.click(within(sections[1]!).getByRole('button', { name: /Client A/, expanded: true }))
-    expect(within(sections[1]!).queryByText('Client bot')).not.toBeVisible()
+    nav.set('/channels')
+    cleanup()
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+    await screen.findByText('Brand on Mastodon')
 
     // Move to group from the row menu.
     await user.click(screen.getByRole('button', { name: 'Actions for Brand on Mastodon' }))
@@ -299,13 +308,24 @@ describe('channels', () => {
     expect(api.find('PATCH', '/v1/channels/ch_1')[0]!.body).toEqual({ group_id: 'grp_a' })
 
     // New group (a modal).
-    await user.click(screen.getByRole('button', { name: 'New group' }))
+    await user.click(within(screen.getByTestId('groups-pane')).getByRole('button', { name: 'New group' }))
     const dialog = await screen.findByRole('dialog', { name: 'New group' })
 
     await user.type(within(dialog).getByRole('textbox', { name: /Name/ }), 'Client B')
     await user.click(within(dialog).getByRole('button', { name: 'Create group' }))
     await waitFor(() => expect(api.find('POST', '/v1/channel-groups')).toHaveLength(1))
     expect(api.find('POST', '/v1/channel-groups')[0]!.body).toEqual({ name: 'Client B' })
+
+    // Edit: an icon picked from the set goes with the name.
+    await user.click(screen.getByRole('button', { name: 'Actions for the group Client A' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+    const edit = await screen.findByRole('dialog', { name: 'Edit group' })
+
+    await user.click(within(edit).getByRole('button', { name: 'Icon: rocket' }))
+    await user.click(await screen.findByRole('button', { name: 'star' }))
+    await user.click(within(edit).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.find('PATCH', '/v1/channel-groups/grp_a')).toHaveLength(1))
+    expect(api.find('PATCH', '/v1/channel-groups/grp_a')[0]!.body).toEqual({ name: 'Client A', icon: 'star' })
 
     // Default has no Delete; another group asks first.
     await user.click(screen.getByRole('button', { name: 'Actions for the group Default' }))

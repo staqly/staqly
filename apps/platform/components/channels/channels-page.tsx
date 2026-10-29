@@ -3,9 +3,9 @@
 import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Check,
-  ChevronDown,
   Ellipsis,
   ExternalLink,
+  Folder,
   FolderInput,
   FolderPlus,
   Pencil,
@@ -20,10 +20,11 @@ import {
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Fragment, memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { ConnectErrorDialog } from '@/components/channels/connect-error-dialog'
+import { GroupIcon, GroupIconPicker } from '@/components/channels/group-icon'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
@@ -52,6 +53,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/c
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
+import { useScrollFade } from '@/hooks/use-scroll-fade'
 import { api, errorMessage, type Channel, type ChannelGroup, type Provider } from '@/lib/api'
 import { setDragChip } from '@/lib/drag-chip'
 import { formatDateTime, pluralize, timeAgo } from '@/lib/format'
@@ -483,27 +485,32 @@ const ChannelRow = memo(function ChannelRow({
   )
 })
 
-/** New group, or a new name for one: a single field, so a modal. */
+/** New group, or a new name or icon for one: a short form, so a modal. */
 function GroupNameDialog({
   group,
   open,
   onOpenChange,
 }: {
-  /** Rename this group; without one, create a group. */
+  /** Edit this group; without one, create a group. */
   group?: ChannelGroup
   open: boolean
   onOpenChange: (o: boolean) => void
 }) {
   const qc = useQueryClient()
   const [name, setName] = useState(group?.name ?? '')
+  const [icon, setIcon] = useState(group?.icon ?? '')
   const [error, setError] = useState('')
   const save = useMutation({
-    mutationFn: () =>
-      group ? api.updateChannelGroup(group.id, { name: name.trim() }) : api.createChannelGroup({ name: name.trim() }),
+    mutationFn: () => {
+      // Only what changed, so an unchanged icon isn't sent back.
+      const body = { name: name.trim(), ...(icon !== (group?.icon ?? '') ? { icon } : {}) }
+
+      return group ? api.updateChannelGroup(group.id, body) : api.createChannelGroup(body)
+    },
     onSuccess: (g) => {
-      // A name or a new empty group: the channels don't change.
+      // A name, an icon or a new empty group: the channels don't change.
       void qc.invalidateQueries({ queryKey: qk.channelGroups })
-      namedToast(g.name, group ? 'was renamed' : 'was created')
+      namedToast(g.name, group ? 'was saved' : 'was created')
       onOpenChange(false)
     },
     onError: (e) => setError(errorMessage(e)),
@@ -513,7 +520,7 @@ function GroupNameDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{group ? 'Rename group' : 'New group'}</DialogTitle>
+          <DialogTitle>{group ? 'Edit group' : 'New group'}</DialogTitle>
           <DialogDescription>Group channels as you work with them, for example one group per client.</DialogDescription>
         </DialogHeader>
         <form
@@ -535,15 +542,18 @@ function GroupNameDialog({
             <FieldLabel htmlFor="group-name" required>
               Name
             </FieldLabel>
-            <Input
-              id="group-name"
-              maxLength={60}
-              placeholder="Client A"
-              value={name}
-              aria-invalid={!!error}
-              aria-required
-              onChange={(e) => setName(e.target.value)}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="group-name"
+                maxLength={60}
+                placeholder="Client A"
+                value={name}
+                aria-invalid={!!error}
+                aria-required
+                onChange={(e) => setName(e.target.value)}
+              />
+              <GroupIconPicker value={icon} onChange={setIcon} />
+            </div>
             <FieldError>{error}</FieldError>
           </Field>
           <DialogFooter>
@@ -551,7 +561,7 @@ function GroupNameDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={save.isPending}>
-              {save.isPending ? 'Saving...' : group ? 'Rename' : 'Create group'}
+              {save.isPending ? 'Saving...' : group ? 'Save' : 'Create group'}
             </Button>
           </DialogFooter>
         </form>
@@ -560,115 +570,226 @@ function GroupNameDialog({
   )
 }
 
-/** One channel group: a header that folds it, its menu, and its channels. */
-function GroupSection({
-  group,
-  children,
-  count,
-  onRename,
-  onDelete,
-  onDropChannel,
-}: {
-  group: ChannelGroup
-  children: React.ReactNode
-  count: number
-  onRename: () => void
-  onDelete: () => void
-  /** A channel row dropped on this group. */
-  onDropChannel: (channelId: string) => void
-}) {
-  const [open, setOpen] = useState(true)
-  const [over, setOver] = useState(false)
-  const panel = `group-${group.id}`
+const groupHref = (g: ChannelGroup) => (g.default ? '/channels' : `/channels?group=${g.id}`)
 
-  return (
-    // A drop target for dragged channel rows (a mouse extra; Move to group in the row menu does the same).
-    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
-    <section
-      aria-label={group.name}
-      className={cn(
-        '-m-1.5 grid gap-2 rounded-2xl p-1.5 transition-colors',
-        over && 'bg-brand-soft/40 ring-2 ring-brand/50',
-      )}
-      data-testid="channel-group"
-      onDragOver={(e) => {
+/** Accepts channel rows dragged onto a group (a mouse extra; Move to group in the row menu does the same). */
+function useChannelDrop(onDrop: (channelId: string) => void) {
+  const [over, setOver] = useState(false)
+
+  return {
+    over,
+    props: {
+      onDragOver: (e: React.DragEvent) => {
         if (e.dataTransfer.types.includes(CHANNEL_DRAG)) {
           e.preventDefault()
           e.dataTransfer.dropEffect = 'move'
           setOver(true)
         }
-      }}
-      onDragLeave={(e) => {
+      },
+      onDragLeave: (e: React.DragEvent) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
           setOver(false)
         }
-      }}
-      onDrop={(e) => {
+      },
+      onDrop: (e: React.DragEvent) => {
         const id = e.dataTransfer.getData(CHANNEL_DRAG)
 
         setOver(false)
 
         if (id) {
           e.preventDefault()
-          onDropChannel(id)
+          onDrop(id)
         }
-      }}
+      },
+    },
+  }
+}
+
+// The count sits at the right edge; on hover (or with the keyboard in the row) the menu takes its place.
+const paneRow =
+  'flex min-h-9 items-center gap-2 rounded-lg py-1.5 pr-2.5 pl-2 text-sm transition-colors hover:bg-muted pointer-coarse:min-h-10 pointer-coarse:pr-10'
+
+/** One group in the pane: its icon, name and channel count, a menu, and a drop target for channel rows. */
+function GroupRow({
+  group,
+  count,
+  active,
+  onEdit,
+  onDelete,
+  onDropChannel,
+}: {
+  group: ChannelGroup
+  count: number
+  active: boolean
+  onEdit: () => void
+  onDelete: () => void
+  onDropChannel: (channelId: string) => void
+}) {
+  const drop = useChannelDrop(onDropChannel)
+
+  return (
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    <li
+      className={cn('group/row relative rounded-lg', drop.over && 'bg-brand-soft/40 ring-2 ring-brand/50')}
+      data-testid="channel-group"
+      {...drop.props}
     >
-      <div className="flex items-center gap-1">
+      <Link
+        prefetch={false}
+        href={groupHref(group)}
+        aria-current={active ? 'page' : undefined}
+        title={group.name}
+        className={cn(paneRow, active && 'bg-muted font-medium')}
+      >
+        <span aria-hidden className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+          <GroupIcon group={group} className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1 truncate">{group.name}</span>
+        <span className="shrink-0 text-xs text-muted-foreground tabular-nums group-focus-within/row:invisible group-hover/row:invisible pointer-coarse:visible">
+          {count}
+        </span>
+      </Link>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={`Actions for the group ${group.name}`}
+            className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100"
+          >
+            <Ellipsis />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onSelect={onEdit}>
+            <Pencil /> Edit
+          </DropdownMenuItem>
+          {!group.default && (
+            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+              <Trash2 /> Delete group
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </li>
+  )
+}
+
+/** The groups pane, like the collections pane of Posts: every group with its count, Default first. */
+function GroupsPane({
+  groups,
+  counts,
+  selected,
+  onCreate,
+  onEdit,
+  onDelete,
+  onDropChannel,
+}: {
+  groups: ChannelGroup[]
+  counts: Map<string, number>
+  selected: string
+  onCreate: () => void
+  onEdit: (g: ChannelGroup) => void
+  onDelete: (g: ChannelGroup) => void
+  onDropChannel: (channelId: string, g: ChannelGroup) => void
+}) {
+  return (
+    <nav
+      aria-label="Channel groups"
+      data-testid="groups-pane"
+      className="hidden min-h-0 flex-col border-r bg-sidebar/40 md:sticky md:top-0 md:flex md:h-svh md:w-75 md:shrink-0"
+    >
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Folder className="size-4 text-muted-foreground" aria-hidden /> Groups
+        </h2>
+        <Button size="sm" variant="outline" onClick={onCreate} data-testid="new-group">
+          <Plus /> New group
+        </Button>
+      </div>
+      <ul className="grid min-h-0 flex-1 content-start gap-0.5 overflow-y-auto overscroll-contain p-2">
+        {groups.map((g) => (
+          <GroupRow
+            key={g.id}
+            group={g}
+            count={counts.get(g.id) ?? 0}
+            active={g.id === selected}
+            onEdit={() => onEdit(g)}
+            onDelete={() => onDelete(g)}
+            onDropChannel={(id) => onDropChannel(id, g)}
+          />
+        ))}
+      </ul>
+    </nav>
+  )
+}
+
+/** Phones: the groups as a strip of chips over the channels. */
+function GroupsStrip({
+  groups,
+  selected,
+  onCreate,
+}: {
+  groups: ChannelGroup[]
+  selected: string
+  onCreate: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const fade = useScrollFade(ref)
+  const chip = (g: ChannelGroup, label: React.ReactNode) => (
+    <Link
+      key={g.id}
+      prefetch={false}
+      href={groupHref(g)}
+      aria-current={g.id === selected ? 'page' : undefined}
+      className={cn(
+        'inline-flex h-9 max-w-48 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm whitespace-nowrap pointer-coarse:h-10',
+        g.id === selected ? 'border-foreground bg-foreground text-background' : 'bg-background text-foreground',
+      )}
+    >
+      {label}
+    </Link>
+  )
+
+  return (
+    <nav aria-label="Channel groups" className="border-b md:hidden" data-testid="groups-strip">
+      <div
+        ref={ref}
+        data-fade={fade.fade ?? undefined}
+        className={cn('scrollbar-none flex items-center gap-1.5 overflow-x-auto px-4 py-2', fade.className)}
+      >
         <button
           type="button"
-          aria-expanded={open}
-          aria-controls={panel}
-          onClick={() => setOpen((o) => !o)}
-          className="-ml-1 flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:py-2.5"
+          onClick={onCreate}
+          aria-label="New group"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full border text-muted-foreground pointer-coarse:size-10"
         >
-          <ChevronDown
-            className={cn('size-4 shrink-0 text-muted-foreground transition-transform', !open && '-rotate-90')}
-          />
-          <span className="truncate" title={group.name}>
-            {group.name}
-          </span>
-          <span className="font-normal text-muted-foreground">{count}</span>
+          <Plus className="size-4" />
         </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon-sm" variant="ghost" aria-label={`Actions for the group ${group.name}`}>
-              <Ellipsis />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={onRename}>
-              <Pencil /> Rename
-            </DropdownMenuItem>
-            {!group.default && (
-              <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-                <Trash2 /> Delete group
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <div id={panel} hidden={!open}>
-        {count === 0 ? (
-          <p className="rounded-xl border border-dashed px-3 py-4 text-sm text-muted-foreground">
-            No channels in this group. Drag one here, or use Move to group in its menu.
-          </p>
-        ) : (
-          children
+        {groups.map((g) =>
+          chip(
+            g,
+            <>
+              <GroupIcon group={g} className="size-3.5 shrink-0" />
+              <span className="truncate">{g.name}</span>
+            </>,
+          ),
         )}
       </div>
-    </section>
+    </nav>
   )
 }
 
 /**
- * Connected channels with Add channel. With one group (Default) the list is grouped by platform; with more, by
- * channel group, each folding open and closed.
+ * Connected channels with Add channel, by platform. With more groups than Default, a pane (a strip of chips on
+ * phones) lists them like the collections of Posts and one group shows at a time: Default on /channels, another
+ * on /channels?group=<id>.
  */
 export function ChannelsPage() {
   const channels = useChannels()
   const providers = useProviders()
   const search = useSearchParams()
+  const router = useRouter()
   // ?add=1 (the getting-started checklist) opens the platform grid at once.
   const add = useLazyDialog(search.get('add') === '1')
   // A connection that came back with an error (from the OAuth callback page).
@@ -680,7 +801,12 @@ export function ChannelsPage() {
   const [reconnect, setReconnect] = useState<Channel | null>(null)
   const groupsQuery = useChannelGroups()
   const channelGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])
-  const [groupFilter, setGroupFilter] = useState('all')
+  // ?group=<id> shows one group; without it (or for a group that is gone) Default. With Default alone, every channel.
+  const groupParam = search.get('group')
+  const groupFilter =
+    channelGroups.length < 2
+      ? 'all'
+      : ((channelGroups.find((g) => g.id === groupParam) ?? channelGroups.find((g) => g.default))?.id ?? 'all')
   const [naming, setNaming] = useState<{ group?: ChannelGroup } | null>(null)
   const [deleting, setDeleting] = useState<ChannelGroup | null>(null)
   const qc = useQueryClient()
@@ -703,7 +829,7 @@ export function ChannelsPage() {
       setDeleting(null)
 
       if (groupFilter === g.id) {
-        setGroupFilter('all')
+        router.replace('/channels', { scroll: false })
       }
     },
     onError: (e) => toastApiError(e),
@@ -795,6 +921,12 @@ export function ChannelsPage() {
   }
 
   const groups = [...byProvider.entries()].toSorted(([a], [b]) => a.localeCompare(b))
+  const counts = new Map<string, number>()
+
+  for (const c of all ?? []) {
+    counts.set(c.group_id, (counts.get(c.group_id) ?? 0) + 1)
+  }
+
   const providerById = useMemo(() => new Map((providers.data ?? []).map((p) => [p.id, p])), [providers.data])
   const providerOf = (id: string) => providerById.get(id)
   const row = (c: Channel) => (
@@ -809,152 +941,146 @@ export function ChannelsPage() {
     />
   )
 
-  return (
-    <PageContainer>
-      <PageHeader
-        title="Channels"
-        icon={<Share2 className="size-4" />}
-        description="The accounts your posts go to: connect as many per platform as you need; every post picks its channels."
-        actions={
-          <>
-            <Button variant="outline" onClick={() => setNaming({})} data-testid="new-group">
-              <FolderPlus /> New group
-            </Button>
-            <Button onClick={() => add.setOpen(true)} data-testid="add-channel">
-              <Plus /> Add channel
-            </Button>
-            <ConnectLinkButton />
-          </>
-        }
-      />
-      {byGroups && (
-        <div className="mt-6 flex flex-wrap items-center gap-2" data-testid="channel-filters">
-          <Select value={groupFilter} onValueChange={setGroupFilter}>
-            <SelectTrigger size="sm" className="w-48" aria-label="Group filter">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All groups</SelectItem>
-              {channelGroups.map((g) => (
-                <SelectItem key={g.id} value={g.id}>
-                  {g.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-      <div className="mt-6">
-        {channels.isLoading ? (
-          <SkeletonList count={4} className="h-14 rounded-lg" />
-        ) : channels.error ? (
-          <ErrorState error={channels.error} onRetry={() => channels.refetch()} />
-        ) : byGroups ? (
-          <div className="grid gap-6">
-            {channelGroups
-              .filter((g) => groupFilter === 'all' || g.id === groupFilter)
-              .map((g) => {
-                const list = shown.filter((c) => c.group_id === g.id)
+  const openGroup = channelGroups.find((g) => g.id === groupFilter)
 
-                return (
-                  <GroupSection
-                    key={g.id}
-                    group={g}
-                    count={list.length}
-                    onRename={() => setNaming({ group: g })}
-                    onDelete={() => setDeleting(g)}
-                    onDropChannel={(id) => {
-                      if (all?.find((c) => c.id === id)?.group_id !== g.id) {
-                        moveChannel({ id, group: g })
-                      }
-                    }}
-                  >
-                    <ul className="divide-y rounded-xl border" data-testid={`channels-group-${g.id}`}>
-                      {list.map(row)}
-                    </ul>
-                  </GroupSection>
-                )
-              })}
-          </div>
-        ) : groups.length === 0 ? (
-          <EmptyState
-            icon={<Share2 />}
-            title="No channels yet"
-            description="Connect the first platform. Your posts can then go there at their time, with retries when the platform is slow."
-            action={
-              <Button onClick={() => add.setOpen(true)}>
-                <Plus /> Add channel
-              </Button>
+  return (
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row" data-testid="channels-workspace">
+      {byGroups && (
+        <GroupsPane
+          groups={channelGroups}
+          counts={counts}
+          selected={groupFilter}
+          onCreate={() => setNaming({})}
+          onEdit={(g) => setNaming({ group: g })}
+          onDelete={setDeleting}
+          onDropChannel={(id, g) => {
+            if (all?.find((c) => c.id === id)?.group_id !== g.id) {
+              moveChannel({ id, group: g })
+            }
+          }}
+        />
+      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {byGroups && <GroupsStrip groups={channelGroups} selected={groupFilter} onCreate={() => setNaming({})} />}
+        <PageContainer>
+          <PageHeader
+            title={openGroup?.name ?? 'Channels'}
+            icon={
+              openGroup && (openGroup.icon || openGroup.default) ? (
+                <GroupIcon group={openGroup} className="size-4" />
+              ) : (
+                <Share2 className="size-4" />
+              )
+            }
+            description="The accounts your posts go to: connect as many per platform as you need; every post picks its channels."
+            actions={
+              <>
+                {!byGroups && (
+                  <Button variant="outline" onClick={() => setNaming({})} data-testid="new-group">
+                    <FolderPlus /> New group
+                  </Button>
+                )}
+                <ConnectLinkButton />
+                <Button onClick={() => add.setOpen(true)} data-testid="add-channel">
+                  <Plus /> Add channel
+                </Button>
+              </>
             }
           />
-        ) : (
-          <div className="grid gap-6">
-            {groups.map(([providerId, list]) => (
-              <section key={providerId} aria-label={providerOf(providerId)?.name ?? providerId} className="grid gap-2">
-                <h2 className="flex items-center gap-2 text-sm font-semibold">
-                  <ProviderIcon id={providerId} className="size-4" /> {providerOf(providerId)?.name ?? providerId}
-                  <span className="font-normal text-muted-foreground">{list.length}</span>
-                </h2>
-                <ul className="divide-y rounded-xl border" data-testid={`channels-${providerId}`}>
-                  {list.map(row)}
-                </ul>
-              </section>
-            ))}
+          <div className="mt-6">
+            {channels.isLoading ? (
+              <SkeletonList count={4} className="h-14 rounded-lg" />
+            ) : channels.error ? (
+              <ErrorState error={channels.error} onRetry={() => channels.refetch()} />
+            ) : groups.length === 0 && openGroup ? (
+              <p className="rounded-xl border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                No channels in this group. Drag one onto it in the pane, or use Move to group in its menu.
+              </p>
+            ) : groups.length === 0 ? (
+              <EmptyState
+                icon={<Share2 />}
+                title="No channels yet"
+                description="Connect the first platform. Your posts can then go there at their time, with retries when the platform is slow."
+                action={
+                  <Button onClick={() => add.setOpen(true)}>
+                    <Plus /> Add channel
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="grid gap-6">
+                {groups.map(([providerId, list]) => (
+                  <section
+                    key={providerId}
+                    aria-label={providerOf(providerId)?.name ?? providerId}
+                    className="grid gap-2"
+                  >
+                    <h2 className="flex items-center gap-2 text-sm font-semibold">
+                      <ProviderIcon id={providerId} className="size-4" /> {providerOf(providerId)?.name ?? providerId}
+                      <span className="font-normal text-muted-foreground">{list.length}</span>
+                    </h2>
+                    <ul className="divide-y rounded-xl border" data-testid={`channels-${providerId}`}>
+                      {list.map(row)}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      {add.used && (
-        <AddChannelSheet
-          open={add.open}
-          onOpenChange={(o) => {
-            add.setOpen(o)
+          {add.used && (
+            <AddChannelSheet
+              open={add.open}
+              onOpenChange={(o) => {
+                add.setOpen(o)
 
-            if (!o) {
-              setReconnect(null)
-            }
-          }}
-          reconnect={reconnect}
-        />
-      )}
-      {connectError && (
-        <ConnectErrorDialog
-          {...connectError}
-          onClose={() => {
-            setConnectError(null)
-            window.history.replaceState(null, '', '/channels')
-          }}
-        />
-      )}
-      {editing && (
-        <ChannelSettingsDialog
-          // A fresh form per channel.
-          key={editing.id}
-          channel={editing}
-          provider={providerById.get(editing.provider)}
-          groups={channelGroups}
-          open
-          onOpenChange={(o) => !o && setEditing(null)}
-        />
-      )}
-      <ConfirmDialog
-        open={!!removing}
-        onOpenChange={(o) => !o && setRemoving(null)}
-        title={`Remove ${removing?.name ?? ''}?`}
-        description="Staqly forgets the sign-in and the channel. Posts already published stay on the platform; scheduled posts lose this channel."
-        confirmLabel={del.isPending ? 'Removing...' : 'Remove'}
-        variant="destructive"
-        onConfirm={() => removing && del.mutate(removing)}
-      />
-      {naming && <GroupNameDialog group={naming.group} open onOpenChange={(o) => !o && setNaming(null)} />}
-      <ConfirmDialog
-        open={!!deleting}
-        onOpenChange={(o) => !o && setDeleting(null)}
-        title={`Delete the group ${deleting?.name ?? ''}?`}
-        description={`Its ${pluralize(deleting?.channels ?? 0, 'channel')} move to Default. The channels and their posts stay.`}
-        confirmLabel={removeGroup.isPending ? 'Deleting...' : 'Delete group'}
-        variant="destructive"
-        onConfirm={() => deleting && removeGroup.mutate(deleting)}
-      />
-    </PageContainer>
+                if (!o) {
+                  setReconnect(null)
+                }
+              }}
+              reconnect={reconnect}
+            />
+          )}
+          {connectError && (
+            <ConnectErrorDialog
+              {...connectError}
+              onClose={() => {
+                setConnectError(null)
+                window.history.replaceState(null, '', '/channels')
+              }}
+            />
+          )}
+          {editing && (
+            <ChannelSettingsDialog
+              // A fresh form per channel.
+              key={editing.id}
+              channel={editing}
+              provider={providerById.get(editing.provider)}
+              groups={channelGroups}
+              open
+              onOpenChange={(o) => !o && setEditing(null)}
+            />
+          )}
+          <ConfirmDialog
+            open={!!removing}
+            onOpenChange={(o) => !o && setRemoving(null)}
+            title={`Remove ${removing?.name ?? ''}?`}
+            description="Staqly forgets the sign-in and the channel. Posts already published stay on the platform; scheduled posts lose this channel."
+            confirmLabel={del.isPending ? 'Removing...' : 'Remove'}
+            variant="destructive"
+            onConfirm={() => removing && del.mutate(removing)}
+          />
+          {naming && <GroupNameDialog group={naming.group} open onOpenChange={(o) => !o && setNaming(null)} />}
+          <ConfirmDialog
+            open={!!deleting}
+            onOpenChange={(o) => !o && setDeleting(null)}
+            title={`Delete the group ${deleting?.name ?? ''}?`}
+            description={`Its ${pluralize(deleting?.channels ?? 0, 'channel')} move to Default. The channels and their posts stay.`}
+            confirmLabel={removeGroup.isPending ? 'Deleting...' : 'Delete group'}
+            variant="destructive"
+            onConfirm={() => deleting && removeGroup.mutate(deleting)}
+          />
+        </PageContainer>
+      </div>
+    </div>
   )
 }

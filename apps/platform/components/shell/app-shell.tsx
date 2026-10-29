@@ -204,13 +204,16 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
     <SidebarMenuButton
       size="lg"
       tooltip={name}
-      // Collapsed, the button is the logo itself (the default icon padding would clip it away).
-      className="select-none data-[state=open]:bg-sidebar-accent group-data-[collapsible=icon]:p-0!"
+      // Collapsed, the button holds just the logo, centred (the default icon padding would clip it away).
+      className="select-none data-[state=open]:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!"
       aria-label={triggerLabel}
       data-testid="workspace-menu-trigger"
     >
-      {/* Collapsed, only the logo shows: it keeps its size and the name and plan step aside. */}
-      <WorkspaceLogo src={ws?.logo} className="size-8 shrink-0" />
+      {/* Collapsed, only the logo shows, a little smaller to sit with the rail's icons; the name and plan step aside. */}
+      <WorkspaceLogo
+        src={ws?.logo}
+        className="size-8 shrink-0 transition-[width,height] group-data-[collapsible=icon]:size-5.5"
+      />
       <div className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
         <span className="truncate text-sm font-semibold" data-testid="workspace-name">
           {name}
@@ -375,9 +378,16 @@ function UserMenu() {
               // Named by what it shows (the name, then the address or role) so speech input can say it; the collapsed
               // rail shows only the picture, so there it is named outright.
               aria-label={state === 'collapsed' && !isMobile ? `${name}, account menu` : undefined}
+              // Collapsed, the button holds just the picture, centred and a little smaller, like the workspace logo.
+              className="group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!"
               data-testid="user-menu-trigger"
             >
-              <UserAvatar name={name} src={user?.avatar_url} className="size-8 rounded-lg" logo />
+              <UserAvatar
+                name={name}
+                src={user?.avatar_url}
+                className="size-8 rounded-lg transition-[width,height] group-data-[collapsible=icon]:size-6"
+                logo
+              />
               <div className="grid min-w-0 flex-1 text-left leading-tight">
                 <span className="truncate text-sm font-medium" data-testid="user-name">
                   {name}
@@ -428,22 +438,20 @@ function UserMenu() {
               </>
             )}
             <DropdownMenuSeparator />
-            {/* People in an account: the open workspace's pages, then their own account. */}
+            {/* People in an account: members and their own account, then the workspace's settings apart (Plan & usage is in the workspace menu). */}
             {accountsEnabled ? (
               <>
-                <DropdownMenuItem onSelect={() => go('/settings/plan')}>
-                  <Gauge /> Plan & usage
-                </DropdownMenuItem>
                 {canManagePeople && (
                   <DropdownMenuItem onSelect={() => go('/settings/members')}>
                     <Users /> Members
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onSelect={() => go('/settings')}>
-                  <Settings /> Workspace settings
-                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => go('/settings/account')}>
                   <UserRound /> Account settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => go('/settings')}>
+                  <Settings /> Workspace settings
                 </DropdownMenuItem>
               </>
             ) : (
@@ -564,6 +572,7 @@ function SidebarAssistant() {
           tooltip={`AI Assistant (${MOD_KEY}J)`}
           isActive={assistant.open}
           onClick={assistant.toggle}
+          className="shine"
           data-testid="assistant-toggle"
         >
           <AssistantIcon />
@@ -973,8 +982,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   // workspace menu and notifications list. The shell renders after the session loads, never while hydrating
   // the static page, so this reads the real width on the first render (no flash on phones).
   const isMobile = useIsMobile()
-  // The user's explicit toggle wins until the breakpoint changes again.
-  const [override, setOverride] = useState<{ wide: boolean; open: boolean } | null>(null)
+  // The user's explicit toggle wins until the breakpoint changes again; on wide screens it is remembered.
+  const [override, setOverride] = useState<{ wide: boolean; open: boolean } | null>(() => {
+    const saved = readSidebarOpen()
+
+    return saved === null ? null : { wide: true, open: saved }
+  })
   const sidebarOpen = override && override.wide === wide ? override.open : wide
   const ctx = useMemo<ShellContextValue>(
     () => ({
@@ -991,7 +1004,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ShellContext.Provider value={ctx}>
       <LiveUpdates />
       <IdRoutePrefetch />
-      <SidebarProvider open={sidebarOpen} onOpenChange={(open) => setOverride({ wide, open })}>
+      <SidebarProvider
+        open={sidebarOpen}
+        onOpenChange={(open) => {
+          setOverride({ wide, open })
+
+          if (wide) {
+            saveSidebarOpen(open)
+          }
+        }}
+      >
         {/* The first Tab on every page: keyboard users skip the sidebar's two dozen links. */}
         <a
           href="#main"
@@ -1064,4 +1086,25 @@ function PlanGate({ children }: { children: ReactNode }) {
       </div>
     </div>
   )
+}
+
+/** Whether the sidebar was left open or collapsed on a wide screen, kept in this browser (null: never toggled). */
+const SIDEBAR_KEY = 'staqly.sidebar-open'
+
+function readSidebarOpen(): boolean | null {
+  try {
+    const v = localStorage.getItem(SIDEBAR_KEY)
+
+    return v === null ? null : v === '1'
+  } catch {
+    return null
+  }
+}
+
+function saveSidebarOpen(open: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_KEY, open ? '1' : '0')
+  } catch {
+    // Storage blocked (private mode): the toggle still works for this visit.
+  }
 }

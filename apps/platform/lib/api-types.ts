@@ -5294,6 +5294,8 @@ export interface components {
             name: string;
             /** @description #rrggbb, or empty */
             color: string;
+            /** @description An icon name (briefcase, building, store, house, user, users, heart, star, rocket, sparkles, zap, flame, trophy, globe, megaphone, camera, music, gamepad, coffee, shopping-bag, graduation-cap, palette, code, leaf, car, plane, bike, utensils, pizza, wine, dumbbell, book, film, tv, mic, headphones, gift, shirt, gem, crown, paw-print, flower, tree, mountain, sun, moon, lightbulb, target, flag, bell, mail, newspaper, landmark, banknote, shield, bot), or empty */
+            icon: string;
             /** @description Sort order (Default always leads) */
             position: number;
             default: boolean;
@@ -5309,6 +5311,8 @@ export interface components {
             name?: string;
             /** @description #rrggbb, or empty */
             color?: string;
+            /** @description An icon name (briefcase, building, store, house, user, users, heart, star, rocket, sparkles, zap, flame, trophy, globe, megaphone, camera, music, gamepad, coffee, shopping-bag, graduation-cap, palette, code, leaf, car, plane, bike, utensils, pizza, wine, dumbbell, book, film, tv, mic, headphones, gift, shirt, gem, crown, paw-print, flower, tree, mountain, sun, moon, lightbulb, target, flag, bell, mail, newspaper, landmark, banknote, shield, bot); empty removes it */
+            icon?: string;
             position?: number;
         };
         /** @description An OAuth client the workspace registered with a platform */

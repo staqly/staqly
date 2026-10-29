@@ -30,8 +30,6 @@ func TestChannelIdentity(t *testing.T) {
 		{"facebook", providers.Credentials{"page_id": "pg"}, providers.Profile{Handle: "page"}, "", ""},
 		{"linkedin_page", providers.Credentials{"organization_id": "o1", "person_id": "p1"}, providers.Profile{}, "person", "linkedin_page\x00p1"},
 		{"google_business", providers.Credentials{"location": "l1", "google_id": "g1"}, providers.Profile{}, "person", "google_business\x00g1"},
-		{"mewe", providers.Credentials{"group_id": "g", "user_id": "u"}, providers.Profile{}, "person", "mewe\x00u"},
-		{"mewe", providers.Credentials{"user_id": "u"}, providers.Profile{}, "account", "mewe\x00u"},
 		{"discord", providers.Credentials{"guild_id": "42"}, providers.Profile{Handle: "42"}, "", ""},
 		{"discord_webhook", providers.Credentials{"guild_id": "42", "webhook_id": "7"}, providers.Profile{Handle: "Hook (7)"}, "", ""},
 		{"telegram", providers.Credentials{"chat_id": "-100123"}, providers.Profile{Handle: "-100123"}, "", ""},

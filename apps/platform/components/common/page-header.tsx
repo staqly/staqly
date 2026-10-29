@@ -27,7 +27,7 @@ export function PageHeader({
             >
               {title}
             </h1>
-            {description && <p className="mt-0.5 text-sm text-muted-foreground wrap-break-word">{description}</p>}
+            {description && <p className={cn(pageSubtitle, 'wrap-break-word')}>{description}</p>}
           </div>
         </div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
@@ -40,10 +40,14 @@ export function PageContainer({ children, className }: { children: React.ReactNo
   return <div className={cn('mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8', className)}>{children}</div>
 }
 
-/** The boxed icon beside every page title (PageHeader, and pages that build their own header row). */
+/** The line under a page title: with the title 28 + 2 + 18 = 48 px, which PageIcon (42 px, 3 px down) sits centred on. */
+export const pageSubtitle = 'mt-0.5 text-[13px] leading-[18px] text-muted-foreground'
+
+/** The boxed icon beside every page title (PageHeader, and pages that build their own header row), centred on the
+ * title and its subtitle together. */
 export function PageIcon({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border bg-card text-muted-foreground shadow-xs [&_svg]:size-4">
+    <div className="mt-[3px] flex size-[42px] shrink-0 items-center justify-center rounded-xl border bg-card text-muted-foreground shadow-xs [&_svg]:size-5">
       {children}
     </div>
   )

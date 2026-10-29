@@ -495,7 +495,7 @@ describe('user menu', () => {
 
     expect(first).toBeGreaterThanOrEqual(0)
     expect(items.findIndex((i) => i.textContent?.includes('Choose a plan'))).toBeGreaterThan(first)
-    expect(items.findIndex((i) => i.textContent?.includes('Plan & usage'))).toBeGreaterThan(first)
+    expect(items.findIndex((i) => i.textContent?.includes('Workspace settings'))).toBeGreaterThan(first)
     await user.keyboard('{Escape}')
     cleanup()
 
@@ -514,7 +514,7 @@ describe('user menu', () => {
     expect(within(banner).getByRole('link', { name: /Upgrade/ })).toHaveAttribute('href', '/plans')
   })
 
-  it('in the trial: a highlighted Choose a plan and Plan & usage', async () => {
+  it('in the trial: a highlighted Choose a plan, no Plan & usage (it is in the workspace menu)', async () => {
     shell()
     const user = userEvent.setup()
 
@@ -522,7 +522,7 @@ describe('user menu', () => {
     const menu = await screen.findByRole('menu')
 
     expect(await within(menu).findByTestId('menu-upgrade')).toHaveTextContent('Choose a plan')
-    expect(within(menu).getByRole('menuitem', { name: 'Plan & usage' })).toBeInTheDocument()
+    expect(within(menu).queryByRole('menuitem', { name: 'Plan & usage' })).not.toBeInTheDocument()
   })
 
   it('paying for Plus: Upgrade to the next plan, Pro', async () => {
@@ -535,14 +535,14 @@ describe('user menu', () => {
     expect(await within(menu).findByTestId('menu-upgrade')).toHaveTextContent('Upgrade to Pro')
   })
 
-  it('on the top plan (Business): Plan & usage, no upgrade', async () => {
+  it('on the top plan (Business): no upgrade and no Plan & usage', async () => {
     shell(PLANS[3], { ...BILLING_PRO, plan: 'business' })
     const user = userEvent.setup()
 
     await user.click((await screen.findAllByTestId('user-menu-trigger'))[0])
     const menu = await screen.findByRole('menu')
 
-    expect(within(menu).getByRole('menuitem', { name: 'Plan & usage' })).toBeInTheDocument()
+    expect(within(menu).queryByRole('menuitem', { name: 'Plan & usage' })).not.toBeInTheDocument()
     await waitFor(() => expect(within(menu).queryByTestId('menu-upgrade')).not.toBeInTheDocument())
   })
 })

@@ -32,10 +32,7 @@ func init() {
 		{"twitch", "Twitch", AuthOAuth2, Limits{MaxChars: 500}},
 		{"mastodon", "Mastodon", AuthOAuth2, Limits{MaxChars: 500, MaxMedia: 4, MediaKinds: imgVid}},
 		{"bluesky", "Bluesky", AuthOAuth2, Limits{MaxChars: 300, MaxMedia: 4, MediaKinds: img}},
-		{"lemmy", "Lemmy", AuthToken, Limits{MaxChars: 10000, MaxMedia: 1, MediaKinds: img, NeedsTitle: true}},
-		{"farcaster", "Farcaster", AuthToken, Limits{MaxChars: 320, MaxMedia: 2, MediaKinds: img}},
 		{"telegram", "Telegram", AuthToken, Limits{MaxChars: 4096, MaxMedia: 10, MediaKinds: imgVid}},
-		{"nostr", "Nostr", AuthToken, Limits{MaxChars: 0}},
 		{"medium", "Medium", AuthToken, Limits{MaxChars: 0, MaxMedia: 1, MediaKinds: img, NeedsTitle: true}},
 		{"devto", "Dev.to", AuthToken, Limits{MaxChars: 0, MaxMedia: 1, MediaKinds: img, NeedsTitle: true}},
 		{"hashnode", "Hashnode", AuthToken, Limits{MaxChars: 0, MaxMedia: 1, MediaKinds: img, NeedsTitle: true}},
@@ -44,7 +41,6 @@ func init() {
 		{"moltbook", "Moltbook", AuthToken, Limits{MaxChars: 40000, NeedsTitle: true}},
 		{"whop", "Whop", AuthToken, Limits{MaxChars: 5000, MaxMedia: 4, MediaKinds: imgVid}},
 		{"skool", "Skool", AuthToken, Limits{MaxChars: 5000, MaxMedia: 4, MediaKinds: img, NeedsTitle: true}},
-		{"mewe", "MeWe", AuthOAuth2, Limits{MaxChars: 5000, MaxMedia: 4, MediaKinds: img}},
 		{"tumblr", "Tumblr", AuthOAuth2, Limits{MaxChars: 4096, MaxMedia: 10, MediaKinds: imgVid}},
 	} {
 		if _, taken := registry[p.id]; taken {
@@ -158,11 +154,6 @@ func soonSettings(id string, l Limits) []Field {
 		fields = []Field{titleField(100),
 			{Key: "tags", Label: "Tags", Kind: "list", MaxItems: 5, Placeholder: "productivity"},
 			{Key: "canonical_url", Label: "Original link", Kind: "url", Help: "Where the article first appeared, if anywhere."},
-		}
-	case "lemmy":
-		fields = []Field{titleField(200),
-			{Key: "community", Label: "Community", Kind: "text", Required: true, Placeholder: "technology@lemmy.world"},
-			linkField,
 		}
 	}
 	has := func(key string) bool {

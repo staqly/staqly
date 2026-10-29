@@ -68,7 +68,7 @@ func (s *Service) applyCollectionInput(c *db.Collection, in CollectionInput) err
 		}
 	}
 	if in.Description != nil {
-		if c.Description, err = trimmed(*in.Description, "description", 2000, false); err != nil {
+		if c.Description, err = trimmed(*in.Description, "description", 180, false); err != nil {
 			return err
 		}
 	}
