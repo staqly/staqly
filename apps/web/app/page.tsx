@@ -305,10 +305,13 @@ function Features() {
             href={DOCS + f.href}
             className="group flex flex-col gap-3 bg-card p-6 transition-colors hover:bg-accent/60 sm:p-7"
           >
-            <span className="flex size-10 items-center justify-center rounded-xl border border-border bg-background text-brand [&_svg]:size-5">
-              {f.icon}
-            </span>
-            <h3 className="font-semibold tracking-tight">{f.title}</h3>
+            {/* The icon beside the title, so the card reads as a heading line and its text. */}
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-brand [&_svg]:size-5">
+                {f.icon}
+              </span>
+              <h3 className="font-semibold tracking-tight">{f.title}</h3>
+            </div>
             <p className="text-sm leading-relaxed text-muted-foreground">{f.body}</p>
             <span className="mt-auto inline-flex items-center gap-1 pt-2 text-sm font-medium text-muted-foreground transition-colors group-hover:text-brand-strong">
               Learn more <ArrowRight className="size-3.5" />

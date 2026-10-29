@@ -32,15 +32,18 @@ func TestTextEmailDocFindsCodeAndLink(t *testing.T) {
 	if d.Button == nil || d.Button.URL != "https://app.example/invite?token=abc" || d.Button.Text != "Accept the invitation" || len(d.Paragraphs) != 3 {
 		t.Fatalf("invitation: %+v", d)
 	}
-	c := textEmailDoc("Your Staqly sign-in code: 123456", "Your sign-in code is 123456.\n\nIt works once.\n")
-	if c.Code != "123456" || c.Button != nil {
-		t.Fatalf("code: %+v", c)
+	// The subject leads with the code; the heading drops it (the panel shows it).
+	subject, text := emailCodeMessage(purposeSignIn, "012345")
+	c := textEmailDoc(subject, text)
+	if subject != "012345 is your Staqly sign-in code" || c.Code != "012345" || c.Title != "Your Staqly sign-in code" || c.Button != nil {
+		t.Fatalf("code: %q %+v", subject, c)
 	}
-	// One unbroken string in both bodies (copy and the phone's code suggestion), leading zero kept.
-	_, text := emailCodeMessage(purposeSignIn, "012345")
-	h, txt := renderEmail(textEmailDoc("Your Staqly sign-in code: 012345", text), "")
-	if !strings.Contains(h, `letter-spacing:0.2em;color:#111827">012345</span>`) || !strings.Contains(txt, "    012345\n") {
-		t.Fatalf("code not one string:\n%s\n%s", h, txt)
+	// One unbroken string in both bodies (copy and the phone's code suggestion), leading zero kept, right after the first line.
+	h, txt := renderEmail(c, "")
+	first := strings.Index(h, "Your sign-in code is 012345.")
+	panel := strings.Index(h, `color:#111827">012345</td>`)
+	if first < 0 || panel < first || strings.Index(h, "It works once") < panel || !strings.Contains(txt, "    012345\n") {
+		t.Fatalf("code not one string after the first line:\n%s\n%s", h, txt)
 	}
 }
 
