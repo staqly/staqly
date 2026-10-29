@@ -3,7 +3,7 @@ title: Privacy Policy
 description: What personal data staqly cloud processes, why, for how long, and your rights.
 ---
 
-Last updated: 2026-10-28
+Last updated: 2026-10-29
 
 This policy explains how **staqly, Switzerland** ("staqly", "we", "us") processes
 personal data when you use **staqly cloud** (the hosted dashboard, API and MCP endpoint), the website
@@ -179,6 +179,24 @@ on standard contractual clauses recognised under the FADP and GDPR.
 All traffic is encrypted with HTTPS. API keys, sessions, recovery keys and sign-in links are
 stored only as hashes; channel credentials and alert secrets are encrypted at rest. Workspaces are
 isolated from each other in every query. See [Security](/self-hosting/security) for details.
+
+## Data from Facebook, Instagram and Threads
+
+When you connect a Facebook Page, an Instagram account or a Threads account, staqly keeps what it needs to
+publish for you: the access token Meta issues (encrypted at rest), the account or Page ID, its name and
+profile picture, and the IDs of the posts it publishes and the comments on them. staqly uses them only to
+publish, schedule and show your posts and their comments; it does not sell them or use them for advertising.
+
+To delete this data:
+
+- **In staqly:** open **Channels**, choose the channel and **Remove** it. Its token and account details are
+  deleted from the live system right away (backups as described in [How long we keep data](#how-long-we-keep-data)).
+  Deleting the workspace removes all its channels.
+- **On Meta:** remove staqly from the apps that may use your account: on Facebook **Settings & privacy →
+  Settings → Apps and websites**, on Instagram **Settings → Website permissions → Apps and websites**, on Threads
+  **Settings → Account → Website permissions**. staqly can then no longer use the token; remove the channel in
+  staqly as well to delete what it stored.
+- **By email:** write to [support@staqly.ai](mailto:support@staqly.ai) and we delete it for you within 30 days.
 
 ## Your rights
 

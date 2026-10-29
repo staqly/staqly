@@ -18,7 +18,6 @@ import {
   RotateCcw,
   Search,
   SearchX,
-  Sparkles,
   Square,
   Trash2,
   X,
@@ -26,6 +25,7 @@ import {
 import { usePathname } from 'next/navigation'
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 
+import { AssistantIcon } from '@/components/assistant/assistant-icon'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -381,8 +381,8 @@ const MAX_TEXT = 100_000
 /** The assistant's mark beside its words. */
 function AssistantAvatar() {
   return (
-    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand" aria-hidden>
-      <Sparkles className="size-3.5" />
+    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-muted" aria-hidden>
+      <AssistantIcon className="size-3.5" />
     </span>
   )
 }
@@ -750,7 +750,7 @@ function Chat({
         <AssistantAvatar />
         <div className="ml-1 grid min-w-0 flex-1 leading-tight">
           <h2 className="truncate text-sm font-semibold">
-            {history ? 'Chats' : title || state.messages.find((m) => m.role === 'user')?.content || 'Assistant'}
+            {history ? 'Chats' : title || state.messages.find((m) => m.role === 'user')?.content || 'AI Assistant'}
           </h2>
           {onDevice && <span className="text-xs text-muted-foreground">On this device</span>}
         </div>
@@ -802,8 +802,8 @@ function Chat({
         >
           {state.messages.length === 0 ? (
             <div className="my-auto grid justify-items-center gap-5 py-8 text-center">
-              <span className="grid size-12 place-items-center rounded-2xl bg-brand-soft text-brand">
-                <Sparkles className="size-6" />
+              <span className="grid size-12 place-items-center rounded-2xl bg-muted">
+                <AssistantIcon className="size-6" />
               </span>
               <div className="grid gap-1.5">
                 <p className="text-lg font-semibold">How can I help?</p>
@@ -1041,7 +1041,7 @@ export function AssistantPanel({ open, onOpenChange }: { open: boolean; onOpenCh
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md" showCloseButton={false}>
-          <SheetTitle className="sr-only">Assistant</SheetTitle>
+          <SheetTitle className="sr-only">AI Assistant</SheetTitle>
           {chat}
         </SheetContent>
       </Sheet>
@@ -1203,7 +1203,7 @@ function DockedPanel({
 
   return (
     <aside
-      aria-label="Assistant"
+      aria-label="AI Assistant"
       style={expanded ? undefined : { width: shut ? 0 : Math.max(shown, 0) }}
       className={cn(
         expanded
