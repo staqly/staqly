@@ -225,23 +225,25 @@ func (s *Service) sendEmailCode(ctx context.Context, email, purpose, userID stri
 	return EmailCodeSent{ResendIn: int(emailCodeCooldown.Seconds()), ExpiresIn: int(emailCodeTTL.Seconds())}, nil
 }
 
+// emailCodeMessage: the code leads the subject ("123456 is your Staqly code", as Instagram and Google do), so it shows
+// in the inbox list and mail apps offer to copy or autofill it.
 func emailCodeMessage(purpose, code string) (string, string) {
 	switch purpose {
 	case purposeChangeCurrent:
-		return "Your Staqly code: " + code, fmt.Sprintf("Your code to change the address you sign in to Staqly with is %s.\n\n"+
+		return code + " is your Staqly code", fmt.Sprintf("Your code to change the address you sign in to Staqly with is %s.\n\n"+
 			"Enter it in Settings, Account. It works once, for 10 minutes.\n\n"+
 			"If you did not ask for it, someone may be signed in to your account: sign out other sessions in Settings.\n", code)
 	case purposeChangeNew:
-		return "Your Staqly code: " + code, fmt.Sprintf("Your code to sign in to Staqly with this address from now on is %s.\n\n"+
+		return code + " is your Staqly code", fmt.Sprintf("Your code to sign in to Staqly with this address from now on is %s.\n\n"+
 			"Enter it in Settings, Account. It works once, for 10 minutes.\n\n"+
 			"If you did not ask for it, ignore this email.\n", code)
 	}
 	if purpose == purposeLink {
-		return "Your Staqly code: " + code, fmt.Sprintf("Your code to sign in to Staqly with this address is %s.\n\n"+
+		return code + " is your Staqly code", fmt.Sprintf("Your code to sign in to Staqly with this address is %s.\n\n"+
 			"Enter it in Settings, Account. It works once, for 10 minutes.\n\n"+
 			"If you did not ask for it, ignore this email.\n", code)
 	}
-	return "Your Staqly sign-in code: " + code, fmt.Sprintf("Your sign-in code is %s.\n\n"+
+	return code + " is your Staqly sign-in code", fmt.Sprintf("Your sign-in code is %s.\n\n"+
 		"Enter it on the sign-in page. It works once, for 10 minutes.\n\n"+
 		"If you did not try to sign in to Staqly, ignore this email: nobody can sign in without the code.\n", code)
 }

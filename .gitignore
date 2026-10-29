@@ -18,6 +18,7 @@ dist/
 # internal notes (anchored: apps/docs is the docs site and stays in the repo); they move to their own repo
 /docs/
 coverage/
+.vscode/
 *.tsbuildinfo
 
 .DS_Store

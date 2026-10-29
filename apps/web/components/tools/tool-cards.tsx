@@ -38,11 +38,14 @@ export function ToolCards({ items = TOOLS }: { items?: Tool[] }) {
           href={`/tools/${t.slug}`}
           className="group flex flex-col rounded-2xl border border-border bg-card p-6 transition-colors hover:bg-accent/50"
         >
-          <span className="flex size-10 items-center justify-center rounded-xl border border-border bg-background text-brand [&_svg]:size-5">
-            {ICONS[t.icon]}
-          </span>
-          <h3 className="mt-4 font-semibold tracking-tight text-balance">{t.title}</h3>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t.summary}</p>
+          {/* The icon beside the title, so the card reads as a heading line and its text. */}
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-brand [&_svg]:size-5">
+              {ICONS[t.icon]}
+            </span>
+            <h3 className="font-semibold tracking-tight text-balance">{t.title}</h3>
+          </div>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{t.summary}</p>
           <span className="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-muted-foreground transition-colors group-hover:text-brand-strong">
             Open the tool <ArrowRight className="size-3.5" />
           </span>

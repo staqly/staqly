@@ -66,11 +66,14 @@ func renderEmail(d emailDoc, logoURL string) (string, string) {
 	// Card
 	w(`<tr><td style="background:#ffffff;border:1px solid %s;border-radius:16px;padding:32px 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:%s">`, emailBorder, emailInk)
 	w(`<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;font-weight:700;color:%s">%s</h1>`, emailInk, esc(d.Title))
-	for _, p := range d.Paragraphs {
+	for i, p := range d.Paragraphs {
 		w(`<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#374151">%s</p>`, esc(p))
-	}
-	if d.Code != "" {
-		w(`<p style="margin:8px 0 20px"><span style="display:inline-block;padding:12px 20px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:28px;font-weight:700;letter-spacing:0.2em;color:%s">%s</span></p>`, emailInk, esc(d.Code))
+		// The code right under the line that introduces it: large, centred on a neutral panel, digits evenly spaced.
+		if i == 0 && d.Code != "" {
+			w(`<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:6px 0 22px"><tr>`)
+			w(`<td align="center" style="padding:20px 12px;background:#f9fafb;border:1px solid %s;border-radius:12px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:36px;line-height:1;font-weight:700;letter-spacing:0.3em;font-variant-numeric:tabular-nums;color:%s">%s</td>`, emailBorder, emailInk, esc(d.Code))
+			w(`</tr></table>`)
+		}
 	}
 	if d.Quote != "" {
 		w(`<p style="margin:0 0 20px;padding:12px 16px;border-left:3px solid %s;background:#f9fafb;border-radius:0 8px 8px 0;font-size:15px;line-height:1.55;color:%s">%s</p>`, emailBrand, emailInk, esc(d.Quote))
@@ -206,6 +209,10 @@ func textEmailDoc(subject, text string) emailDoc {
 	if d.Code == "" && len(d.Paragraphs) > 0 {
 		if code := emailCodeRe.FindString(d.Paragraphs[0]); code != "" {
 			d.Code = code
+			// "123456 is your Staqly code" leads with the code for the inbox; the heading needn't repeat what the panel shows.
+			if rest, ok := strings.CutPrefix(subject, code+" is your "); ok {
+				d.Title = "Your " + rest
+			}
 		}
 	}
 	return d
