@@ -19,6 +19,22 @@ export interface Call {
 type Reply = { status?: number; body?: unknown } | undefined
 type Handler = (call: Call) => Reply | unknown
 
+function filterPosts(out: unknown, query: URLSearchParams): unknown {
+  const page = out as { data?: { status?: string }[] } | undefined
+
+  if (!Array.isArray(page?.data)) {
+    return out
+  }
+
+  const status = query.get('status')
+  const hidePast = query.get('hide_past') === 'true'
+
+  return {
+    ...page,
+    data: page.data.filter((p) => (status ? p.status === status : !(hidePast && p.status === 'published'))),
+  }
+}
+
 /**
  * Minimal fetch mock: routes are "METHOD /v1/path" (exact) or functions.
  * Unmatched requests fail loudly with 501 so tests notice them.
@@ -78,6 +94,12 @@ export function mockApi(routes: Record<string, Handler | unknown>) {
       console.error('mock handler failed for', key, e)
 
       throw e
+    }
+
+    // A fixed list of posts answers like the server: status and hide_past filter it (the posts list asks for its
+    // upcoming and its published posts separately).
+    if (key === 'GET /v1/posts' && typeof route !== 'function') {
+      out = filterPosts(out, call.query)
     }
 
     // A reply is { status: number, body }; anything else is a 200 JSON body.

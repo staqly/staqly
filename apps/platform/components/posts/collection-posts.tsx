@@ -1,6 +1,17 @@
 'use client'
 
-import { Archive, FolderPlus, PenSquare, Plus, Search, Settings2, X } from 'lucide-react'
+import {
+  Archive,
+  BadgeCheck,
+  CalendarClock,
+  FolderPlus,
+  PenSquare,
+  Plus,
+  Search,
+  Settings2,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -10,7 +21,6 @@ import { FilterButton } from '@/components/common/filter-button'
 import { IdChip } from '@/components/common/id-chip'
 import { MultiSelect } from '@/components/common/multi-select'
 import { PageContainer } from '@/components/common/page-header'
-import { PastPostsSwitch } from '@/components/common/past-posts-switch'
 import { SkeletonList } from '@/components/common/skeleton-list'
 import { TagFilter } from '@/components/common/tag-filter'
 import { Button } from '@/components/ui/button'
@@ -18,8 +28,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDebounced } from '@/hooks/use-debounced'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
-import { hidePastParam, setShowPast, useShowPast } from '@/hooks/use-show-past'
-import { POST_STATUSES, type Collection, type PostQuery, type PostStatus } from '@/lib/api'
+import { POST_STATUSES, type Collection, type Post, type PostQuery, type PostStatus } from '@/lib/api'
 import {
   flattenPosts,
   useChannels,
@@ -33,7 +42,7 @@ import { POST_STATUS_META } from '@/lib/status'
 import { cn, hrefWithParams } from '@/lib/utils'
 
 import { PostsQueryContext, postsQuery } from './post-href'
-import { PostListHeader, PostRow, PostSelectionBar, usePostRowActions } from './post-list'
+import { PostListHeader, PostRow, PostSelectionBar, usePostRowActions, type PostAction } from './post-list'
 import { StatusCounts } from './status-counts'
 
 const Composer = dynamic(() => import('./composer').then((m) => m.Composer), { ssr: false })
@@ -43,6 +52,7 @@ const CollectionSettingsSheet = dynamic(
 )
 
 const splitList = (v: string) => v.split(',').filter(Boolean)
+const NO_POSTS: Post[] = []
 
 /** A filter in use under the title, with × to take it off. */
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
@@ -61,7 +71,89 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
   )
 }
 
-/** A collection's posts: header, filters, the list. */
+/** One part of the list (upcoming or published): a heading with its icon, count and subtitle, then its rows. */
+function PostSection({
+  icon: Icon,
+  title,
+  description,
+  count,
+  posts,
+  list,
+  selected,
+  onToggle,
+  onSelect,
+  onAction,
+  empty,
+  testId,
+}: {
+  icon: LucideIcon
+  title: string
+  description: string
+  count?: number
+  posts: ReturnType<typeof usePostsInfinite>
+  list: Post[]
+  selected: Set<string>
+  onToggle?: (postId: string, range: boolean) => void
+  onSelect?: (ids: string[]) => void
+  onAction: (action: PostAction, post: Post) => void
+  empty: string
+  testId: string
+}) {
+  const all = list.length > 0 && list.every((p) => selected.has(p.id))
+
+  return (
+    <section aria-labelledby={`${testId}-title`} data-testid={testId} className="@container">
+      <div className="flex items-start gap-3 border-t px-4 pt-4 pb-3 sm:px-6 lg:px-8">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <Icon className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <h2 id={`${testId}-title`} className="flex items-center gap-2 text-sm font-semibold">
+            {title}{' '}
+            {count !== undefined && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
+                {count}
+              </span>
+            )}
+          </h2>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      {posts.isLoading ? (
+        <div className="grid gap-2 px-4 pb-4 sm:px-6 lg:px-8">
+          <SkeletonList count={3} className="h-12 rounded-lg" />
+        </div>
+      ) : posts.error && !posts.data ? (
+        <div className="px-4 pb-4 sm:px-6 lg:px-8">
+          <ErrorState error={posts.error} onRetry={() => posts.refetch()} />
+        </div>
+      ) : list.length === 0 ? (
+        <p className="px-4 pb-4 text-sm text-muted-foreground sm:px-6 lg:px-8">{empty}</p>
+      ) : (
+        <>
+          <PostListHeader allSelected={all} onSelectAll={onSelect && (() => onSelect(list.map((p) => p.id)))} />
+          {/* data-selecting: every row's box shows while anything is selected, by CSS (no row renders for it). */}
+          <ul className="group/list divide-y" data-testid="posts-list" data-selecting={selected.size > 0 || undefined}>
+            {list.map((p) => (
+              <PostRow key={p.id} post={p} selected={selected.has(p.id)} onToggle={onToggle} onAction={onAction} />
+            ))}
+          </ul>
+          {posts.hasNextPage && (
+            <LoadMore
+              className="py-4"
+              size="sm"
+              onLoad={() => void posts.fetchNextPage()}
+              loading={posts.isFetchingNextPage}
+              failed={posts.isFetchNextPageError}
+            />
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+/** A collection's posts: header, filters, then the upcoming posts and, under them, the published ones. */
 export function CollectionPosts({ id, onNewCollection }: { id: string; onNewCollection?: () => void }) {
   const router = useRouter()
   const params = useSearchParams()
@@ -74,34 +166,53 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
   const tags = useMemo(() => splitList(params.get('tag') ?? ''), [params])
   const [search, setSearch] = useState(params.get('q') ?? '')
   const q = useDebounced(search.trim(), 300)
-  const showPast = useShowPast()
-  const hidePast = hidePastParam(showPast, status)
-  const query: PostQuery = useMemo(
+  // Two lists: what is still to come (drafts, scheduled, publishing, failed) and what went out. A status filter
+  // shows the one it belongs to.
+  const showUpcoming = status !== 'published'
+  const showPublished = !status || status === 'published'
+  const base = useMemo(
     () => ({
       collection_id: id,
-      status: status || undefined,
-      hide_past: hidePast,
       channel_id: channelIds[0] || undefined,
       tag: tags[0] || undefined,
       q: q || undefined,
-      sort: 'created_desc',
       limit: 50,
     }),
-    [id, status, channelIds, tags, q, hidePast],
+    [id, channelIds, tags, q],
   )
-  const posts = usePostsInfinite(query, { refetchOnWindowFocus: false })
+  const upcomingQuery: PostQuery = useMemo(
+    () => ({ ...base, status: status || undefined, hide_past: true, sort: 'created_desc' }),
+    [base, status],
+  )
+  const publishedQuery: PostQuery = useMemo(() => ({ ...base, status: 'published', sort: 'publish_desc' }), [base])
+  const upcoming = usePostsInfinite(upcomingQuery, { enabled: showUpcoming, refetchOnWindowFocus: false })
+  const published = usePostsInfinite(publishedQuery, { enabled: showPublished, refetchOnWindowFocus: false })
   // ?compose=1 (the getting-started checklist) opens the composer at once.
   const compose = useLazyDialog(params.get('compose') === '1')
   const settings = useLazyDialog()
 
-  useRefetchOnForeignChange(posts.refetch)
+  const { refetch: refetchUpcoming } = upcoming
+  const { refetch: refetchPublished } = published
+  const refetch = useCallback(() => {
+    if (showUpcoming) {
+      void refetchUpcoming()
+    }
+
+    if (showPublished) {
+      void refetchPublished()
+    }
+  }, [showUpcoming, showPublished, refetchUpcoming, refetchPublished])
+
+  useRefetchOnForeignChange(refetch)
 
   const { canWrite } = useRole()
   // Links to a post keep this view (collection, filters) behind its sheet.
   const linkQuery = useMemo(() => postsQuery(params, id), [params, id])
   const rowActions = usePostRowActions(linkQuery)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const list = flattenPosts(posts.data)
+  const upcomingList = showUpcoming ? flattenPosts(upcoming.data) : NO_POSTS
+  const publishedList = showPublished ? flattenPosts(published.data) : NO_POSTS
+  const list = useMemo(() => [...upcomingList, ...publishedList], [upcomingList, publishedList])
 
   useRefreshDuePosts(list)
   // Rows get one stable toggle; it reads the current list and the last clicked row from refs (Shift+click ranges).
@@ -190,13 +301,30 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
   const filtered = !!status || channelIds.length > 0 || tags.length > 0 || !!q
   // Filters help only once there is something to filter; an active filter keeps them so it can be cleared.
   const showFilters = filtered || !!search || Object.values(c.status_counts ?? {}).some((n) => n > 0)
-  // Posts that went out are left out of the list: say so when that is why it is empty.
-  const pastHidden = !!hidePast && (c.status_counts?.published ?? 0) + (c.status_counts?.failed ?? 0) > 0
-  const showPastButton = (
-    <Button variant="outline" onClick={() => setShowPast(true)}>
-      Show past posts
-    </Button>
-  )
+  const counts = c.status_counts ?? {}
+  const loading = (showUpcoming && upcoming.isLoading) || (showPublished && published.isLoading)
+  const placeholder = upcoming.isPlaceholderData || published.isPlaceholderData
+  // Counts per section come from the collection; with a filter they would not match the rows, so they hide.
+  const upcomingCount = filtered
+    ? undefined
+    : (counts.draft ?? 0) + (counts.scheduled ?? 0) + (counts.publishing ?? 0) + (counts.failed ?? 0)
+  const publishedCount = filtered ? undefined : (counts.published ?? 0)
+  // Shift+click ranges and the header's box work per section; the selection bar acts on both.
+  const selectSection = (ids: string[]) =>
+    setSelected((cur) => {
+      const next = new Set(cur)
+      const all = ids.every((x) => next.has(x))
+
+      for (const x of ids) {
+        if (all) {
+          next.delete(x)
+        } else {
+          next.add(x)
+        }
+      }
+
+      return next
+    })
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -282,120 +410,96 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
             </Button>
           </div>
         </div>
-        {/* Filters in use, as chips under the title (each one comes off with its ×), and the past posts switch. */}
-        {showFilters && (
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            {filtered && (
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="post-filters">
-                {q && <FilterChip label={`“${q}”`} onRemove={() => setSearch('')} />}
-                {status && (
-                  <FilterChip label={POST_STATUS_META[status].label} onRemove={() => setParam('status', undefined)} />
-                )}
-                {channelIds.map((ch) => (
-                  <FilterChip
-                    key={ch}
-                    label={channels.data?.find((x) => x.id === ch)?.name ?? ch}
-                    onRemove={() => setParam('channel', channelIds.filter((x) => x !== ch).join(',') || undefined)}
-                  />
-                ))}
-                {tags.map((t) => (
-                  <FilterChip
-                    key={t}
-                    label={`#${t}`}
-                    onRemove={() => setParam('tag', tags.filter((x) => x !== t).join(',') || undefined)}
-                  />
-                ))}
-              </div>
+        {/* Filters in use, as chips under the title (each one comes off with its ×). */}
+        {filtered && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="post-filters">
+            {q && <FilterChip label={`“${q}”`} onRemove={() => setSearch('')} />}
+            {status && (
+              <FilterChip label={POST_STATUS_META[status].label} onRemove={() => setParam('status', undefined)} />
             )}
-            <PastPostsSwitch className="ml-auto" />
+            {channelIds.map((ch) => (
+              <FilterChip
+                key={ch}
+                label={channels.data?.find((x) => x.id === ch)?.name ?? ch}
+                onRemove={() => setParam('channel', channelIds.filter((x) => x !== ch).join(',') || undefined)}
+              />
+            ))}
+            {tags.map((t) => (
+              <FilterChip
+                key={t}
+                label={`#${t}`}
+                onRemove={() => setParam('tag', tags.filter((x) => x !== t).join(',') || undefined)}
+              />
+            ))}
           </div>
         )}
       </div>
 
-      <div
-        className={cn('flex min-h-0 flex-1 flex-col', posts.isPlaceholderData && 'opacity-60')}
-        aria-busy={posts.isPlaceholderData}
-      >
-        {posts.isLoading ? (
+      <div className={cn('flex min-h-0 flex-1 flex-col', placeholder && 'opacity-60')} aria-busy={placeholder}>
+        {loading ? (
           <div className="grid gap-2 px-4 sm:px-6 lg:px-8" data-testid="posts-loading">
             <SkeletonList count={6} className="h-12 rounded-lg" />
           </div>
-        ) : posts.error && !posts.data ? (
-          <PageContainer>
-            <ErrorState error={posts.error} onRetry={() => posts.refetch()} />
-          </PageContainer>
-        ) : list.length === 0 ? (
+        ) : list.length === 0 && !upcoming.error && !published.error ? (
           <PageContainer>
             <EmptyState
               icon={<PenSquare />}
-              title={filtered ? 'No posts match' : pastHidden ? 'No upcoming posts' : 'No posts yet'}
+              title={filtered ? 'No posts match' : 'No posts yet'}
               description={
                 filtered
-                  ? `Try another status, channel or search.${pastHidden ? ' Past posts are hidden.' : ''}`
-                  : pastHidden
-                    ? 'Posts that went out are hidden.'
-                    : 'Write the first post here, or let your agent add posts to this collection through the API.'
+                  ? 'Try another status, channel or search.'
+                  : 'Write the first post here, or let your agent add posts to this collection through the API.'
               }
               action={
-                filtered ? (
-                  pastHidden ? (
-                    showPastButton
-                  ) : undefined
-                ) : (
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {pastHidden && showPastButton}
-                    <Button onClick={() => compose.setOpen(true)} disabled={c.archived}>
-                      <Plus /> New post
-                    </Button>
-                  </div>
+                filtered ? undefined : (
+                  <Button onClick={() => compose.setOpen(true)} disabled={c.archived}>
+                    <Plus /> New post
+                  </Button>
                 )
               }
             />
           </PageContainer>
         ) : (
-          <>
-            {/* Container queries: the row shows its columns once the list itself is wide enough. */}
-            <div className="@container border-t">
-              <PostListHeader
-                allSelected={picked.length > 0 && picked.length === list.length}
-                onSelectAll={
-                  canWrite
-                    ? () => setSelected(picked.length === list.length ? new Set() : new Set(list.map((p) => p.id)))
-                    : undefined
+          <PostsQueryContext value={linkQuery}>
+            {showUpcoming && (
+              <PostSection
+                icon={CalendarClock}
+                title="Upcoming"
+                description="Drafts, scheduled posts and the ones to retry"
+                count={upcomingCount}
+                posts={upcoming}
+                list={upcomingList}
+                selected={selected}
+                onToggle={canWrite ? toggle : undefined}
+                onSelect={canWrite ? selectSection : undefined}
+                onAction={rowActions.onAction}
+                empty={
+                  filtered ? 'No upcoming posts match.' : 'Nothing coming up: new drafts and scheduled posts show here.'
                 }
+                testId="posts-upcoming"
               />
-              {/* data-selecting: every row's box shows while anything is selected, by CSS (no row renders for it). */}
-              <ul
-                className="group/list divide-y"
-                data-testid="posts-list"
-                data-selecting={selected.size > 0 || undefined}
-              >
-                <PostsQueryContext value={linkQuery}>
-                  {list.map((p) => (
-                    <PostRow
-                      key={p.id}
-                      post={p}
-                      selected={selected.has(p.id)}
-                      onToggle={canWrite ? toggle : undefined}
-                      onAction={rowActions.onAction}
-                    />
-                  ))}
-                </PostsQueryContext>
-              </ul>
-            </div>
-            {posts.hasNextPage && (
-              <LoadMore
-                className="py-4"
-                size="sm"
-                onLoad={() => void posts.fetchNextPage()}
-                loading={posts.isFetchingNextPage}
-                failed={posts.isFetchNextPageError}
+            )}
+            {/* Nothing went out yet: no empty Published section under the upcoming posts. */}
+            {showPublished && (publishedList.length > 0 || !!published.error || status === 'published') && (
+              <PostSection
+                icon={BadgeCheck}
+                title="Published"
+                description="Out on their channels, the latest first"
+                count={publishedCount}
+                posts={published}
+                list={publishedList}
+                selected={selected}
+                onToggle={canWrite ? toggle : undefined}
+                onSelect={canWrite ? selectSection : undefined}
+                onAction={rowActions.onAction}
+                empty="No published posts match."
+                testId="posts-published"
               />
             )}
             {picked.length > 0 && (
               <PostSelectionBar selected={picked} canWrite={canWrite} onClear={() => setSelected(new Set())} />
             )}
-          </>
+          </PostsQueryContext>
         )}
       </div>
 
