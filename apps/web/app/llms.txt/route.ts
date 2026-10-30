@@ -19,7 +19,7 @@ source (AGPL-3.0) and can be self-hosted as Staqly Community Edition, with no pl
 
 ## Site
 
-- [Home](${SITE_URL}/): what staqly does and how the write, schedule, publish loop works
+- [Home](${SITE_URL}/): what staqly does, who it is for, and the write, schedule, publish loop with the real dashboard
 - [Agents](${SITE_URL}/agents): one-line MCP setup for every agent and the main MCP tools
 - [Pricing](${SITE_URL}/pricing): Starter, Plus, Pro and Business, monthly or yearly (save 20 % or more), Starter with a 7-day free trial
 - [Compare plans](${SITE_URL}/pricing/compare): every limit and feature by plan

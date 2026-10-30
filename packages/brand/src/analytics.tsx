@@ -16,14 +16,22 @@ export function Analytics() {
       return
     }
 
-    void import('posthog-js').then(({ default: posthog }) => {
+    // The extensions ship in the bundle: fetched from the relay at runtime they are blocked by ad blockers by file
+    // name (dead-clicks-autocapture.js) and leave errors in the console.
+    void Promise.all([
+      import('posthog-js/no-external'),
+      import('posthog-js/dist/dead-clicks-autocapture'),
+      import('posthog-js/dist/web-vitals'),
+    ]).then(([{ default: posthog }]) => {
       posthog.init(POSTHOG_TOKEN, {
         // PostHog's managed reverse proxy (EU), so ad blockers that drop *.posthog.com let the events through.
         api_host: 'https://relay.staqly.ai',
         ui_host: 'https://eu.posthog.com',
         defaults: '2026-08-30',
         cookieless_mode: 'always',
+        disable_external_dependency_loading: true,
         disable_session_recording: true,
+        disable_surveys: true,
       })
     })
   }, [])

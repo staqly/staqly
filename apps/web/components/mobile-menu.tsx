@@ -9,7 +9,7 @@ import { isActive } from '@/components/nav-links'
 
 /** Hamburger menu below `lg`; closes on navigation and on Escape.
  * Absolute, not fixed: the header's backdrop-filter makes it the containing block. */
-export function MobileMenu({ links, signup }: { links: [string, string][]; signup: string }) {
+export function MobileMenu({ links, signup, login }: { links: [string, string][]; signup: string; login: string }) {
   const pathname = usePathname()
   // Remember which page the menu was opened on, so navigating away closes it without an effect.
   const [openOn, setOpenOn] = useState<string | null>(null)
@@ -61,8 +61,14 @@ export function MobileMenu({ links, signup }: { links: [string, string][]; signu
             </Link>
           ))}
           <a
+            href={login}
+            className="mt-auto inline-flex h-12 items-center justify-center rounded-xl border border-border bg-card font-semibold"
+          >
+            Log in
+          </a>
+          <a
             href={signup}
-            className="mt-auto inline-flex h-12 items-center justify-center rounded-xl sq-rainbow font-semibold"
+            className="mt-2 inline-flex h-12 items-center justify-center rounded-xl sq-rainbow font-semibold"
           >
             Start free trial
           </a>
