@@ -31,7 +31,7 @@ import { safeHttpUrl } from '@/lib/safe'
 
 import { postHref } from './post-href'
 
-const METRIC_LABELS: [keyof NonNullable<TargetMetrics['metrics']>, string][] = [
+const METRIC_LABELS: [Exclude<keyof NonNullable<TargetMetrics['metrics']>, 'reactions'>, string][] = [
   ['impressions', 'Views'],
   ['likes', 'Likes'],
   ['reposts', 'Reposts'],
@@ -39,7 +39,24 @@ const METRIC_LABELS: [keyof NonNullable<TargetMetrics['metrics']>, string][] = [
   ['quotes', 'Quotes'],
   ['bookmarks', 'Bookmarks'],
   ['link_clicks', 'Link clicks'],
+  ['shares', 'Shares'],
+  ['watch_minutes', 'Watch time'],
+  ['avg_view_seconds', 'Average view'],
+  ['subscribers_gained', 'Subscribers gained'],
 ]
+
+/** Durations read as time: 1,284 min watched becomes 21 h 24 min, a 72 s average view 1:12. */
+function metricValue(key: string, n: number) {
+  if (key === 'watch_minutes') {
+    return n >= 60 ? `${Math.floor(n / 60).toLocaleString('en-US')} h ${n % 60} min` : `${n} min`
+  }
+
+  if (key === 'avg_view_seconds') {
+    return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
+  }
+
+  return n.toLocaleString('en-US')
+}
 
 /** What a platform calls a number when it isn't the usual word (Slack has reactions, not likes). */
 function metricLabel(provider: string, key: string, label: string) {
@@ -165,7 +182,7 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
                   {METRIC_LABELS.filter(([k]) => t.metrics?.[k] != null).map(([k, label]) => (
                     <div key={k} className="flex flex-col-reverse rounded-lg bg-muted/50 px-2.5 py-2">
                       <dt className="text-xs text-muted-foreground">{metricLabel(t.provider, k, label)}</dt>
-                      <dd className="text-lg font-semibold tabular-nums">{t.metrics![k]!.toLocaleString('en-US')}</dd>
+                      <dd className="text-lg font-semibold tabular-nums">{metricValue(k, t.metrics![k]!)}</dd>
                     </div>
                   ))}
                   {(t.metrics.reactions?.length ?? 0) > 0 && (

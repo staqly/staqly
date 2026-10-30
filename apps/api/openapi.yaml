@@ -5480,6 +5480,10 @@ components:
         quotes: { type: integer, minimum: 0 }
         bookmarks: { type: integer, minimum: 0 }
         link_clicks: { type: integer, minimum: 0 }
+        shares: { type: integer, minimum: 0 }
+        watch_minutes: { type: integer, minimum: 0, description: "Minutes watched in all (video)" }
+        avg_view_seconds: { type: integer, minimum: 0, description: "How long a view lasts on average, in seconds (video)" }
+        subscribers_gained: { type: integer, minimum: 0, description: "Subscribers the video brought (YouTube)" }
         reactions:
           type: array
           description: Reactions by emoji (Slack), with the names of who reacted when the platform gives them (at most 20 per emoji)
