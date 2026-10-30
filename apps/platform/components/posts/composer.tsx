@@ -88,6 +88,7 @@ import { xPostsWarning } from '@/lib/x-posts'
 
 import { AllChannelsTab, ChannelTab } from './channel-tab'
 import { PostEditor } from './post-editor'
+import { isVideo, MediaItem } from './preview/parts'
 
 // The live preview and the platforms' templates load on its first opening, not with the composer.
 const PostPreviewSheet = dynamic(() => import('./preview/post-preview').then((m) => m.PostPreviewSheet), {
@@ -347,6 +348,11 @@ function MediaStrip({
               alt={m.alt_text || m.original_name}
               className="size-full object-cover"
             />
+          ) : isVideo(m) ? (
+            // Its first frame with a play mark, as the previews show it; the name for screen readers.
+            <span role="img" aria-label={m.original_name} className="block size-full">
+              <MediaItem media={m} />
+            </span>
           ) : (
             <span className="flex size-full items-center justify-center p-1 text-center text-[10px] wrap-anywhere text-muted-foreground">
               {m.original_name}
@@ -403,7 +409,7 @@ function MediaStrip({
   )
 }
 
-/** The "Insert media" button: uploads and hands each file back. */
+/** The "Upload" button: uploads and hands each file back. */
 function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
   const input = useRef<HTMLInputElement>(null)
   // Video opens the video editor in a new tab; what it saves for this token lands here.
@@ -443,7 +449,7 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
         onClick={() => input.current?.click()}
         disabled={upload.isPending}
       >
-        <ImagePlus /> {upload.isPending ? 'Uploading...' : 'Insert media'}
+        <ImagePlus /> {upload.isPending ? 'Uploading...' : 'Upload'}
       </Button>
       <LibraryPickerButton onAdd={onAdd} />
       <Button type="button" variant="outline" size="sm" onClick={() => design.setOpen(true)} data-testid="design-new">
@@ -1353,7 +1359,7 @@ function ComposerFooter({
 /**
  * Write or edit a post: the channels in a multi-select with their avatars, a tab row (all channels, then each
  * picked one, from two channels on) that switches the editor between the shared text and one channel's own
- * text, the editor with Insert media and a counter per channel, the platform's settings folded under it.
+ * text, the editor with Upload and a counter per channel, the platform's settings folded under it.
  * Footer: the collection, the time, Repeat, tags, Save draft and Schedule or Publish now.
  */
 export function Composer({
