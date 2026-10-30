@@ -22,11 +22,13 @@ test.describe('posts', () => {
     await expect(pane.getByRole('link', { name: /Old campaigns/ })).toHaveCount(0)
     const list = rows(page)
 
-    // Posts that went out are hidden until the switch shows them (remembered in this browser).
-    await expect(list.filter({ hasText: 'Beach day' })).toContainText('Scheduled')
-    await expect(list.filter({ hasText: 'Posted yesterday' })).toHaveCount(0)
-    await page.getByRole('switch', { name: 'Show past posts' }).click()
-    await expect(list.filter({ hasText: 'Posted yesterday' })).toContainText('Published')
+    // Upcoming posts first; the ones that went out in their own section under them.
+    await expect(
+      page.getByTestId('posts-upcoming').getByTestId('post-row').filter({ hasText: 'Beach day' }),
+    ).toContainText('Scheduled')
+    await expect(
+      page.getByTestId('posts-published').getByTestId('post-row').filter({ hasText: 'Posted yesterday' }),
+    ).toContainText('Published')
     await expect(list.filter({ hasText: 'Upload failed' })).toContainText('Failed')
     await expect(list.filter({ hasText: 'Beach day' })).toContainText('Scheduled')
     await expect(list.filter({ hasText: 'Draft carousel' })).toContainText('Draft')
@@ -79,8 +81,7 @@ test.describe('posts', () => {
     srv,
   }) => {
     await page.goto(`/posts?collection=${srv.seed.collections.instagram}`)
-    // A published post: past posts show once the switch is on.
-    await page.getByRole('switch', { name: 'Show past posts' }).click()
+    // A published post, in the Published section.
     await rows(page).filter({ hasText: 'Posted yesterday' }).click()
     await expect(page).toHaveURL(new RegExp(`/posts/${srv.seed.posts.published}`))
     const sheet = page.getByRole('dialog')

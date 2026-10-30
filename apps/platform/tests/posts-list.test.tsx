@@ -30,6 +30,9 @@ function setup(extra: Record<string, unknown> = {}) {
   })
 }
 
+// Published posts list under the upcoming ones, so a row is found by its text.
+const row = (text: string) => screen.getAllByTestId('post-row').find((r) => r.textContent?.includes(text))!
+
 describe('posts list', () => {
   it('selects posts (Shift+click for a range) and deletes them from the bar after a confirmation', async () => {
     const api = setup({ 'POST /v1/posts/delete': { deleted: ['pst_1', 'pst_2', 'pst_3'], missing: [], kept: [] } })
@@ -76,11 +79,11 @@ describe('posts list', () => {
     const user = userEvent.setup()
 
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
-    const rows = await screen.findAllByTestId('post-row')
+    await screen.findAllByTestId('post-row')
 
-    expect(within(rows[0]!).queryByTestId('post-row-delete')).not.toBeInTheDocument()
-    expect(within(rows[1]!).queryByTestId('post-row-delete')).not.toBeInTheDocument()
-    expect(within(rows[2]!).getByTestId('post-row-delete')).toBeInTheDocument()
+    expect(within(row('Out everywhere')).queryByTestId('post-row-delete')).not.toBeInTheDocument()
+    expect(within(row('Out on one channel')).queryByTestId('post-row-delete')).not.toBeInTheDocument()
+    expect(within(row('Never out')).getByTestId('post-row-delete')).toBeInTheDocument()
 
     // Only what went out is selected: Delete says why it does nothing.
     await user.click(screen.getByRole('checkbox', { name: 'Select Out everywhere' }))

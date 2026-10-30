@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -17,7 +17,7 @@ beforeEach(() => {
 
 const hidePastOf = (calls: Call[]) => calls.map((c) => c.query.get('hide_past'))
 
-function setupPosts(posts: (call: Call) => unknown, counts = { draft: 1, published: 2 }) {
+function setupPosts(posts: (call: Call) => unknown, counts: Record<string, number> = { draft: 1, published: 2 }) {
   nav.set('/posts', 'collection=col_1')
 
   return mockApi({
@@ -29,71 +29,65 @@ function setupPosts(posts: (call: Call) => unknown, counts = { draft: 1, publish
   })
 }
 
-describe('past posts in the posts list', () => {
-  it('are hidden by default; the switch brings them back and is remembered in this browser', async () => {
-    const api = setupPosts((call) => ({
-      data:
-        call.query.get('hide_past') === 'true'
-          ? [post({ id: 'pst_1', content: 'Upcoming one', status: 'scheduled' })]
-          : [
-              post({ id: 'pst_1', content: 'Upcoming one', status: 'scheduled' }),
-              post({ id: 'pst_2', content: 'Went out', status: 'published' }),
-            ],
-      next_cursor: null,
-    }))
-    const user = userEvent.setup()
+const twoLists = (call: Call) => ({
+  data:
+    call.query.get('status') === 'published'
+      ? [post({ id: 'pst_2', content: 'Went out', status: 'published' })]
+      : [post({ id: 'pst_1', content: 'Upcoming one', status: 'scheduled' })],
+  next_cursor: null,
+})
+
+describe('upcoming and published posts in the posts list', () => {
+  it('shows two sections, each with its count, without a switch', async () => {
+    const api = setupPosts(twoLists, { draft: 1, scheduled: 2, failed: 1, published: 5 })
 
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
-    expect(await screen.findAllByTestId('post-row')).toHaveLength(1)
-    expect(hidePastOf(api.find('GET', '/v1/posts'))).toEqual(['true'])
+    const upcoming = await screen.findByTestId('posts-upcoming')
+    const published = await screen.findByTestId('posts-published')
 
-    const toggle = screen.getByRole('switch', { name: 'Show past posts' })
+    expect(within(upcoming).getByRole('heading', { name: 'Upcoming 4' })).toBeInTheDocument()
+    expect(within(upcoming).getByText('Upcoming one')).toBeInTheDocument()
+    expect(within(published).getByRole('heading', { name: 'Published 5' })).toBeInTheDocument()
+    expect(within(published).getByText('Went out')).toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Show past posts' })).not.toBeInTheDocument()
 
-    expect(toggle).toHaveAttribute('aria-checked', 'false')
-    await user.click(toggle)
-    await waitFor(() => expect(screen.getAllByTestId('post-row')).toHaveLength(2))
-    expect(hidePastOf(api.find('GET', '/v1/posts')).at(-1)).toBeNull()
-    expect(localStorage.getItem('staqly.posts.showPast')).toBe('1')
+    const calls = api.find('GET', '/v1/posts')
+
+    expect(calls.map((c) => [c.query.get('hide_past'), c.query.get('status'), c.query.get('sort')]).toSorted()).toEqual(
+      [
+        [null, 'published', 'publish_desc'],
+        ['true', null, 'created_desc'],
+      ],
+    )
   })
 
-  it('a status filter for published posts asks for them even while the switch is off', async () => {
-    const api = setupPosts(() => ({ data: [post({ status: 'published' })], next_cursor: null }))
+  it('a status filter shows only its section', async () => {
+    const api = setupPosts(twoLists)
 
     nav.set('/posts', 'collection=col_1&status=published')
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
-    await screen.findAllByTestId('post-row')
+    await screen.findByTestId('posts-published')
+    expect(screen.queryByTestId('posts-upcoming')).not.toBeInTheDocument()
     expect(hidePastOf(api.find('GET', '/v1/posts'))).toEqual([null])
   })
 
-  it('an empty list says the past posts are hidden, with a way to show them', async () => {
-    const api = setupPosts((call) => ({
-      data:
-        call.query.get('hide_past') === 'true' ? [] : [post({ id: 'pst_2', content: 'Went out', status: 'published' })],
-      next_cursor: null,
-    }))
-    const user = userEvent.setup()
-
+  it('nothing coming up says so above the published posts', async () => {
+    setupPosts((call) => (call.query.get('status') === 'published' ? twoLists(call) : { data: [], next_cursor: null }))
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
-    expect(await screen.findByText('No upcoming posts')).toBeInTheDocument()
-    expect(screen.getByText('Posts that went out are hidden.')).toBeInTheDocument()
-    expect(screen.queryByText('No posts yet')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Show past posts' }))
-    expect(await screen.findByText('Went out')).toBeInTheDocument()
-    expect(hidePastOf(api.find('GET', '/v1/posts')).at(-1)).toBeNull()
+    expect(await screen.findByText('Nothing coming up: new drafts and scheduled posts show here.')).toBeInTheDocument()
+    expect(within(screen.getByTestId('posts-published')).getByText('Went out')).toBeInTheDocument()
   })
 
-  it('a collection with nothing that went out still says No posts yet', async () => {
+  it('a collection with no posts says No posts yet, and no published section', async () => {
     setupPosts(() => ({ data: [], next_cursor: null }), { draft: 0, published: 0 })
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
     expect(await screen.findByText('No posts yet')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Show past posts' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('posts-published')).not.toBeInTheDocument()
   })
 })
 
 describe('past posts on the calendar', () => {
-  it('always shows them, whatever the posts list hides', async () => {
-    localStorage.removeItem('staqly.posts.showPast')
+  it('always shows them', async () => {
     const api = mockApi({
       'GET /v1/posts': { data: [] },
       'GET /v1/collections': { data: [] },
@@ -101,10 +95,9 @@ describe('past posts on the calendar', () => {
     })
 
     renderWithProviders(<SchedulePage />, { mode: 'local' })
-    const empty = await screen.findByTestId('schedule-empty')
+    await screen.findByTestId('schedule-empty')
 
     expect(hidePastOf(api.find('GET', '/v1/posts'))).toEqual([null])
-    expect(empty).not.toHaveTextContent('Past posts are hidden.')
     expect(screen.queryByRole('switch', { name: 'Show past posts' })).not.toBeInTheDocument()
   })
 })
