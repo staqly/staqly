@@ -692,8 +692,11 @@ func (s *Service) ListPosts(ctx context.Context, p Principal, f PostFilter) (Pos
 	if err := p.require(ScopePostsRead); err != nil {
 		return PostPage{}, err
 	}
-	if f.Status != "" && !slices.Contains(PostStatuses, f.Status) {
-		return PostPage{}, invalid("status", "must be one of "+strings.Join(PostStatuses, ", "))
+	// One status or several, comma-separated (the dashboard's Upcoming: draft,scheduled,publishing).
+	for _, st := range strings.Split(f.Status, ",") {
+		if f.Status != "" && !slices.Contains(PostStatuses, st) {
+			return PostPage{}, invalid("status", "must be one of "+strings.Join(PostStatuses, ", ")+", or several comma-separated")
+		}
 	}
 	if f.Sort == "" {
 		f.Sort = "publish_asc"

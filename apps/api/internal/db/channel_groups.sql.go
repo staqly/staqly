@@ -10,7 +10,7 @@ import (
 )
 
 const countChannelsByGroup = `-- name: CountChannelsByGroup :many
-SELECT group_id, COUNT(*) AS channels FROM channels WHERE workspace_id = ? GROUP BY group_id
+SELECT group_id, COUNT(*) AS channels FROM channels WHERE workspace_id = ? AND deleted_at IS NULL GROUP BY group_id
 `
 
 type CountChannelsByGroupRow struct {

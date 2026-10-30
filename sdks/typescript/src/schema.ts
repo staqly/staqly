@@ -5966,7 +5966,8 @@ export interface components {
         cursor: string;
         /** @description The previous page's next_cursor (an event seq) */
         eventCursor: string;
-        postStatus: components["schemas"]["PostStatus"];
+        /** @description One status, or several comma-separated (draft,scheduled,publishing) */
+        postStatus: string;
         /** @description Posts with a target on this channel */
         channelId: string;
         /** @description Posts carrying this tag */
@@ -8923,6 +8924,7 @@ export interface operations {
     listCollectionPosts: {
         parameters: {
             query?: {
+                /** @description One status, or several comma-separated (draft,scheduled,publishing) */
                 status?: components["parameters"]["postStatus"];
                 /** @description Posts with a target on this channel */
                 channel_id?: components["parameters"]["channelId"];
@@ -8972,6 +8974,7 @@ export interface operations {
             query?: {
                 /** @description A collection id or exact name */
                 collection_id?: string;
+                /** @description One status, or several comma-separated (draft,scheduled,publishing) */
                 status?: components["parameters"]["postStatus"];
                 /** @description Posts with a target on this channel */
                 channel_id?: components["parameters"]["channelId"];

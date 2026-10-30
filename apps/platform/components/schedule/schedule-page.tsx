@@ -1394,6 +1394,82 @@ function MonthGrid({
 }
 
 /** The range as a list grouped by day (the list layout, and phones). */
+/**
+ * One post on one channel in the list view: the time in a column of its own, then the title with the channel and
+ * the collection under it, and the state as a badge. Roomier than a calendar card, since a row has the width.
+ */
+const AgendaRow = memo(function AgendaRow({
+  post,
+  target,
+  collectionName,
+  collectionColor,
+  onOpen,
+}: {
+  post: Post
+  target?: PostTarget
+  collectionName?: string
+  collectionColor?: string | null
+  onOpen: (id: string, channel?: string) => void
+}) {
+  const state: ScheduleState =
+    target && target.status !== 'pending' && post.status !== 'scheduled'
+      ? target.status
+      : (scheduleState(post) ?? 'scheduled')
+  const tone = TONES[STATE_TONE[state]]
+  const StateIcon = STATE_ICON[state]
+  const color = safeCssColor(collectionColor)
+  const time = formatTime(new Date(post.publish_at!))
+  const title = postTitle(post)
+  const where = target ? ` on ${target.channel_name}` : ''
+
+  return (
+    <button
+      type="button"
+      data-testid="schedule-entry"
+      data-post-id={post.id}
+      data-channel-id={target?.channel_id}
+      data-state={state}
+      aria-label={`${time} ${title}${where}: ${SCHEDULE_LABELS[state]}${collectionName ? `, ${collectionName}` : ''}`}
+      onClick={() => onOpen(post.id, target?.channel_id)}
+      className="grid w-full min-w-0 cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-4 rounded-xl border bg-card px-4 py-3 text-left transition-colors outline-ring hover:bg-muted/60 focus-visible:outline-2 sm:grid-cols-[4rem_minmax(0,1fr)_auto]"
+    >
+      <span className="text-base font-semibold tabular-nums">{time}</span>
+      <span className="grid min-w-0 gap-1">
+        <span className="truncate text-sm font-medium" title={title}>
+          {title}
+        </span>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {target && (
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <ProviderTile id={target.provider} className="size-4 shrink-0" />
+              <span className="truncate">{target.channel_name}</span>
+            </span>
+          )}
+          {collectionName && (
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <span
+                aria-hidden
+                className="size-2 shrink-0 rounded-full bg-muted-foreground/40"
+                style={color ? { background: color } : undefined}
+              />
+              <span className="truncate">{collectionName}</span>
+            </span>
+          )}
+        </span>
+      </span>
+      <span
+        className={cn(
+          'col-start-2 inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset sm:col-start-3',
+          tone.badge,
+        )}
+      >
+        <StateIcon aria-hidden className={cn('size-3.5', state === 'publishing' && 'animate-spin')} />
+        {SCHEDULE_LABELS[state]}
+      </span>
+    </button>
+  )
+})
+
 function AgendaList({
   days,
   byDay,
@@ -1415,33 +1491,34 @@ function AgendaList({
   )
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 sm:px-6 lg:px-8" data-testid="schedule-list">
-      <div className="grid gap-4">
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-6 sm:px-6 lg:px-8" data-testid="schedule-list">
+      {/* A readable column, not rows stretched across a wide screen. */}
+      <div className="mx-auto grid max-w-4xl gap-8">
         {infos.map((d) => {
           const k = d.key
+          const n = (byDay.get(k) ?? NO_POSTS).reduce((sum, p) => sum + cardsOf(p).length, 0)
 
           return (
-            <section key={k} aria-label={d.long} className="grid gap-1.5">
-              <h2
-                className={cn(
-                  'flex items-center gap-2 text-xs font-medium tracking-wide uppercase',
-                  k === today ? 'text-brand' : 'text-muted-foreground',
+            <section key={k} aria-label={d.long} className="grid gap-2">
+              <h2 className="flex items-baseline gap-2 border-b pb-2">
+                <span className={cn('text-base font-semibold', k === today && 'text-brand')}>{d.long}</span>
+                {k === today && (
+                  <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">Today</span>
                 )}
-              >
-                {k === today && <span aria-hidden className="size-1.5 rounded-full bg-brand" />}
-                {d.long}
+                {n > 0 && (
+                  <span className="ml-auto text-xs text-muted-foreground tabular-nums">{pluralize(n, 'post')}</span>
+                )}
               </h2>
               {(byDay.get(k) ?? NO_POSTS).flatMap((it) => {
                 const look = looks.get(it.collection_id)
 
                 return cardsOf(it).map((t) => (
-                  <Entry
+                  <AgendaRow
                     key={`${it.id}:${t?.channel_id ?? ''}`}
                     post={it}
                     target={t}
                     collectionName={look?.name}
                     collectionColor={look?.color}
-                    variant="row"
                     onOpen={onOpen}
                   />
                 ))

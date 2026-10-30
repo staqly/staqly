@@ -357,3 +357,33 @@
     animation: none;
   }
 }
+
+/*
+ * The assistant's empty chat: two soft brand-coloured lights drift slowly behind the greeting
+ * (components/assistant/assistant-panel.tsx). Reduced motion: they stay still.
+ */
+@keyframes assistant-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate(12%, -8%) scale(1.15);
+  }
+}
+
+.assistant-glow {
+  animation: assistant-drift 14s ease-in-out infinite;
+}
+
+.assistant-glow-2 {
+  animation: assistant-drift 18s ease-in-out -7s infinite reverse;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-glow,
+  .assistant-glow-2 {
+    animation: none;
+  }
+}

@@ -218,7 +218,7 @@ export const PostRow = memo(function PostRow({
             scroll={false}
             href={href}
             draggable={false}
-            className="min-w-0 truncate text-sm font-medium outline-none after:absolute after:inset-0 focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+            className="min-w-0 truncate text-sm font-medium outline-none after:absolute after:inset-0 focus-visible:after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
             data-testid="post-link"
           >
             {postTitle(post)}

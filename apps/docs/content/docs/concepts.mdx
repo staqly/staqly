@@ -157,7 +157,7 @@ and `profile_url`, provider-level default `settings` for new targets, and a stat
 
 Credentials are stored **sealed** (AES-256-GCM with a key kept in `DATA_DIR/secret.key` or
 `STAQLY_SECRET_KEY`) and never returned. `POST /v1/channels/{id}/test` checks them against the
-platform. Removing a channel removes its targets. See [Channels](/channels).
+platform. Removing a channel removes its targets that have not gone out; the published ones stay on their posts, with the channel's name and picture. See [Channels](/channels).
 
 ## Providers
 

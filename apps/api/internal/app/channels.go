@@ -959,13 +959,17 @@ func (s *Service) DeleteChannel(ctx context.Context, p Principal, id string) err
 		if err != nil {
 			return err
 		}
-		// Posts still publishing to it lose that target with the channel (ON DELETE CASCADE): their other targets
-		// decide how they end, or they would wait for this one for good.
+		// The channel stays as a row without credentials, so posts it published still show where they went. Its
+		// targets that never went out go with it: posts still publishing to it lose that target, and their other
+		// targets decide how they end, or they would wait for this one for good.
 		publishing, err := q.PublishingPostsOfChannel(ctx, id)
 		if err != nil {
 			return err
 		}
-		if _, err := q.DeleteChannel(ctx, db.DeleteChannelParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+		if _, err := q.DeleteChannel(ctx, db.DeleteChannelParams{DeletedAt: nullStr(s.now()), WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+			return err
+		}
+		if err := q.DeleteUnpublishedTargetsOfChannel(ctx, id); err != nil {
 			return err
 		}
 		if err := s.cancelJobs(ctx, q, "refresh_channel:"+id); err != nil {

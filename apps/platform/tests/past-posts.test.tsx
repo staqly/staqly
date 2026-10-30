@@ -33,7 +33,9 @@ const twoLists = (call: Call) => ({
   data:
     call.query.get('status') === 'published'
       ? [post({ id: 'pst_2', content: 'Went out', status: 'published' })]
-      : [post({ id: 'pst_1', content: 'Upcoming one', status: 'scheduled' })],
+      : call.query.get('status') === 'failed'
+        ? []
+        : [post({ id: 'pst_1', content: 'Upcoming one', status: 'scheduled' })],
   next_cursor: null,
 })
 
@@ -45,7 +47,9 @@ describe('upcoming and published posts in the posts list', () => {
     const upcoming = await screen.findByTestId('posts-upcoming')
     const published = await screen.findByTestId('posts-published')
 
-    expect(within(upcoming).getByRole('heading', { name: 'Upcoming 4' })).toBeInTheDocument()
+    // Failed posts have their own section above (none here): Upcoming counts drafts, scheduled and publishing.
+    expect(within(upcoming).getByRole('heading', { name: 'Upcoming 3' })).toBeInTheDocument()
+    expect(screen.queryByTestId('posts-failed')).not.toBeInTheDocument()
     expect(within(upcoming).getByText('Upcoming one')).toBeInTheDocument()
     expect(within(published).getByRole('heading', { name: 'Published 5' })).toBeInTheDocument()
     expect(within(published).getByText('Went out')).toBeInTheDocument()
@@ -55,10 +59,33 @@ describe('upcoming and published posts in the posts list', () => {
 
     expect(calls.map((c) => [c.query.get('hide_past'), c.query.get('status'), c.query.get('sort')]).toSorted()).toEqual(
       [
+        [null, 'draft,scheduled,publishing', 'created_desc'],
+        [null, 'failed', 'created_desc'],
         [null, 'published', 'publish_desc'],
-        ['true', null, 'created_desc'],
       ],
     )
+  })
+
+  it('failed posts get a section of their own above Upcoming', async () => {
+    setupPosts(
+      (call) => ({
+        data:
+          call.query.get('status') === 'failed'
+            ? [post({ id: 'pst_3', content: 'Went wrong', status: 'failed' })]
+            : twoLists(call).data,
+        next_cursor: null,
+      }),
+      { scheduled: 1, failed: 1, published: 1 },
+    )
+
+    renderWithProviders(<PostsWorkspace />, { mode: 'local' })
+    const failed = await screen.findByTestId('posts-failed')
+    const upcoming = await screen.findByTestId('posts-upcoming')
+
+    expect(within(failed).getByRole('heading', { name: 'Needs attention 1' })).toBeInTheDocument()
+    expect(within(failed).getByText('Went wrong')).toBeInTheDocument()
+    expect(within(upcoming).queryByText('Went wrong')).not.toBeInTheDocument()
+    expect(failed.compareDocumentPosition(upcoming) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('a status filter shows only its section', async () => {

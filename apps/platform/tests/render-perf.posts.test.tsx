@@ -9,7 +9,7 @@ import { removePostFromLists, syncPostInCache } from '@/lib/queries'
 import { channel, collection, post, provider, target } from './fixtures'
 import { nav } from './navigation'
 import { renders } from './render-count'
-import { mockApi, renderWithProviders } from './utils'
+import { byStatus, mockApi, renderWithProviders, type Call } from './utils'
 
 // ProseMirror does not type in jsdom: the editor is a textarea here, like in composer.test.tsx.
 vi.mock('@/components/posts/post-editor', () => ({
@@ -54,7 +54,7 @@ function setupList() {
     'GET /v1/channels': { data: CHANNELS },
     'GET /v1/tags': { data: [] },
     'GET /v1/events': { data: [] },
-    'GET /v1/posts': { data: POSTS, next_cursor: null },
+    'GET /v1/posts': (call: Call) => ({ data: byStatus(POSTS, call), next_cursor: null }),
   })
 }
 

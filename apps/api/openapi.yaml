@@ -4483,7 +4483,7 @@ components:
     limit: { name: limit, in: query, description: "Page size (default 50, at most 200)", schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
     cursor: { name: cursor, in: query, description: Opaque keyset cursor (the previous page's next_cursor), schema: { type: string } }
     eventCursor: { name: cursor, in: query, description: "The previous page's next_cursor (an event seq)", schema: { type: string, pattern: "^[0-9]+$" } }
-    postStatus: { name: status, in: query, schema: { $ref: "#/components/schemas/PostStatus" } }
+    postStatus: { name: status, in: query, description: "One status, or several comma-separated (draft,scheduled,publishing)", schema: { type: string, example: "draft,scheduled,publishing" } }
     channelId: { name: channel_id, in: query, description: Posts with a target on this channel, schema: { type: string } }
     tag: { name: tag, in: query, description: Posts carrying this tag, schema: { type: string, example: "launch" } }
     q: { name: q, in: query, description: "Words of the content (case-insensitive substring match)", schema: { type: string } }

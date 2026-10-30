@@ -453,7 +453,7 @@ Delete a channel group; its channels move to the Default group, which can't be d
 | `group_id` | string | <Required /> | Channel group ID (grp_...) |
 
 ### `delete_channel`
-Remove a channel; targets on it go with it. *Destructive* · `channels:manage`
+Remove a channel; its targets that have not gone out go with it, the published ones stay on their posts. *Destructive* · `channels:manage`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|

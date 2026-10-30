@@ -7,7 +7,7 @@ import { PostsWorkspace } from '@/components/posts/posts-workspace'
 
 import { channel, collection, post, target } from './fixtures'
 import { nav } from './navigation'
-import { mockApi, renderWithProviders } from './utils'
+import { byStatus, mockApi, renderWithProviders, type Call } from './utils'
 
 beforeEach(() => nav.reset())
 
@@ -20,13 +20,16 @@ describe('posts workspace', () => {
       'GET /v1/channels': { data: [channel()] },
       'GET /v1/tags': { data: [] },
       'GET /v1/events': { data: [] },
-      'GET /v1/posts': {
-        data: [
-          post({ id: 'pst_1', status: 'scheduled', publish_at: '2026-02-01T09:00:00Z' }),
-          post({ id: 'pst_2', content: 'Second draft', status: 'draft', targets: [] }),
-        ],
+      'GET /v1/posts': (call: Call) => ({
+        data: byStatus(
+          [
+            post({ id: 'pst_1', status: 'scheduled', publish_at: '2026-02-01T09:00:00Z' }),
+            post({ id: 'pst_2', content: 'Second draft', status: 'draft', targets: [] }),
+          ],
+          call,
+        ),
         next_cursor: null,
-      },
+      }),
     })
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
 
@@ -49,15 +52,18 @@ describe('posts workspace', () => {
       'GET /v1/channels': { data: [] },
       'GET /v1/tags': { data: [] },
       'GET /v1/events': { data: [] },
-      'GET /v1/posts': { data: [post({ id: 'pst_9', collection_id: 'col_2' })], next_cursor: null },
+      'GET /v1/posts': (call: Call) => ({
+        data: byStatus([post({ id: 'pst_9', collection_id: 'col_2' })], call),
+        next_cursor: null,
+      }),
     })
 
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
     expect(await screen.findByRole('heading', { level: 1, name: 'Blog' })).toBeInTheDocument()
     expect(await screen.findByTestId('post-link')).toHaveAttribute('href', '/posts/pst_9?collection=col_2')
-    // Only the post's collection was listed (its upcoming and its published posts), and no collection was fetched
+    // Only the post's collection was listed (its failed, its upcoming and its published posts), and no collection was fetched
     // on its own.
-    expect(api.find('GET', '/v1/posts').map((c) => c.query.get('collection_id'))).toEqual(['col_2', 'col_2'])
+    expect(api.find('GET', '/v1/posts').map((c) => c.query.get('collection_id'))).toEqual(['col_2', 'col_2', 'col_2'])
     expect(api.calls.filter((c) => c.path.startsWith('/v1/collections/'))).toHaveLength(0)
   })
 
@@ -69,7 +75,7 @@ describe('posts workspace', () => {
       'GET /v1/channels': { data: [] },
       'GET /v1/tags': { data: [] },
       'GET /v1/events': { data: [] },
-      'GET /v1/posts': { data: [post()], next_cursor: null },
+      'GET /v1/posts': (call: Call) => ({ data: byStatus([post()], call), next_cursor: null }),
     })
     const user = userEvent.setup()
 
@@ -93,7 +99,7 @@ describe('posts workspace', () => {
       'GET /v1/channels': { data: [] },
       'GET /v1/tags': { data: [] },
       'GET /v1/events': { data: [] },
-      'GET /v1/posts': { data: [], next_cursor: null },
+      'GET /v1/posts': (call: Call) => ({ data: byStatus([], call), next_cursor: null }),
     })
 
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })

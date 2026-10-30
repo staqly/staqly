@@ -29,4 +29,4 @@ UPDATE channels SET group_id = @to_group, updated_at = @updated_at WHERE workspa
 UPDATE channels SET group_id = ?, updated_at = ? WHERE workspace_id = ? AND id = ?;
 
 -- name: CountChannelsByGroup :many
-SELECT group_id, COUNT(*) AS channels FROM channels WHERE workspace_id = ? GROUP BY group_id;
+SELECT group_id, COUNT(*) AS channels FROM channels WHERE workspace_id = ? AND deleted_at IS NULL GROUP BY group_id;
