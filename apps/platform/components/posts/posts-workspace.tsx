@@ -12,6 +12,7 @@ import { SkeletonList } from '@/components/common/skeleton-list'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { useDropTarget } from '@/hooks/use-drop-target'
 import { useRouteId } from '@/hooks/use-route-id'
 import { useScrollFade } from '@/hooks/use-scroll-fade'
 import type { Collection } from '@/lib/api'
@@ -21,6 +22,7 @@ import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 import { CollectionPosts } from './collection-posts'
+import { POST_DRAG, useMovePosts } from './post-list'
 
 // zod + react-hook-form load with the drawer, on first open.
 const CreateCollectionDialog = dynamic(
@@ -52,10 +54,25 @@ function ScheduledBadge({ n, className }: { n: number; className?: string }) {
 
 const hrefOf = (id: string, archived: boolean) => `/posts?collection=${id}${archived ? '&archived=1' : ''}`
 
-/** One collection in the pane: colour, name, archived mark and how many posts wait. */
-function CollectionRow({ c, active, href }: { c: Collection; active: boolean; href: string }) {
+/**
+ * One collection in the pane: colour, name, archived mark and how many posts wait. Post rows dragged onto it move
+ * here (not onto the open one or an archived one).
+ */
+function CollectionRow({
+  c,
+  active,
+  href,
+  onDropPosts,
+}: {
+  c: Collection
+  active: boolean
+  href: string
+  onDropPosts: (ids: string[], to: Collection) => void
+}) {
+  const drop = useDropTarget(active || c.archived ? '' : POST_DRAG, (ids) => onDropPosts(ids.split(','), c))
+
   return (
-    <li>
+    <li className={cn('rounded-lg', drop.over && 'bg-brand-soft/40 ring-2 ring-brand/50')} {...drop.props}>
       <Link
         prefetch={false}
         href={href}
@@ -85,6 +102,7 @@ function CollectionsPane({
   showArchived,
   onToggleArchived,
   onCreate,
+  onDropPosts,
 }: {
   collections: Collection[]
   isLoading: boolean
@@ -92,6 +110,7 @@ function CollectionsPane({
   showArchived: boolean
   onToggleArchived: (on: boolean) => void
   onCreate: () => void
+  onDropPosts: (ids: string[], to: Collection) => void
 }) {
   return (
     <nav
@@ -125,7 +144,13 @@ function CollectionsPane({
             return archived.length === 0 ? (
               <ul className="grid gap-0.5" data-testid="collections-list">
                 {current.map((c) => (
-                  <CollectionRow key={c.id} c={c} active={c.id === selectedId} href={hrefOf(c.id, showArchived)} />
+                  <CollectionRow
+                    key={c.id}
+                    c={c}
+                    active={c.id === selectedId}
+                    href={hrefOf(c.id, showArchived)}
+                    onDropPosts={onDropPosts}
+                  />
                 ))}
               </ul>
             ) : (
@@ -136,7 +161,13 @@ function CollectionsPane({
                   </h3>
                   <ul className="grid gap-0.5" data-testid="archived-collections">
                     {archived.map((c) => (
-                      <CollectionRow key={c.id} c={c} active={c.id === selectedId} href={hrefOf(c.id, showArchived)} />
+                      <CollectionRow
+                        key={c.id}
+                        c={c}
+                        active={c.id === selectedId}
+                        href={hrefOf(c.id, showArchived)}
+                        onDropPosts={onDropPosts}
+                      />
                     ))}
                   </ul>
                 </section>
@@ -146,7 +177,13 @@ function CollectionsPane({
                   </h3>
                   <ul className="grid gap-0.5" data-testid="collections-list">
                     {current.map((c) => (
-                      <CollectionRow key={c.id} c={c} active={c.id === selectedId} href={hrefOf(c.id, showArchived)} />
+                      <CollectionRow
+                        key={c.id}
+                        c={c}
+                        active={c.id === selectedId}
+                        href={hrefOf(c.id, showArchived)}
+                        onDropPosts={onDropPosts}
+                      />
                     ))}
                   </ul>
                 </section>
@@ -258,6 +295,7 @@ export function PostsWorkspace() {
   }
 
   const openCreate = () => setCreateOpen(true)
+  const { mutate: movePosts } = useMovePosts()
   const pane = (
     <CollectionsPane
       collections={list}
@@ -266,6 +304,7 @@ export function PostsWorkspace() {
       showArchived={showArchived}
       onToggleArchived={toggleArchived}
       onCreate={openCreate}
+      onDropPosts={(ids, to) => movePosts({ ids, to })}
     />
   )
 
