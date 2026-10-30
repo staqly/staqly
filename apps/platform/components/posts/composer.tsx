@@ -366,7 +366,7 @@ function MediaStrip({
               aria-label={`Edit ${m.original_name}`}
               data-testid="edit-attachment"
               onClick={() => setEditing({ open: true, id: m.id })}
-              className="absolute bottom-1 left-1 flex size-6 items-center justify-center rounded-full border bg-background text-foreground opacity-0 shadow-sm transition-opacity group-focus-within/media:opacity-100 group-hover/media:opacity-100 hover:bg-muted pointer-coarse:size-8 pointer-coarse:opacity-100"
+              className="absolute bottom-1 left-1 flex size-6 items-center justify-center rounded-full border bg-background text-foreground opacity-0 shadow-sm transition-opacity group-focus-within/media:opacity-100 group-hover/media:opacity-100 hover:bg-muted pointer-coarse:size-8 pointer-coarse:opacity-100 pointer-coarse:after:absolute pointer-coarse:after:-inset-1"
             >
               <Pencil className="size-3" />
             </button>
@@ -376,7 +376,7 @@ function MediaStrip({
               type="button"
               aria-label={`Remove ${m.original_name}`}
               onClick={() => onRemove(m.id)}
-              className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full border bg-background text-foreground opacity-0 shadow-sm transition-opacity group-focus-within/media:opacity-100 group-hover/media:opacity-100 hover:bg-muted pointer-coarse:size-8 pointer-coarse:opacity-100"
+              className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full border bg-background text-foreground opacity-0 shadow-sm transition-opacity group-focus-within/media:opacity-100 group-hover/media:opacity-100 hover:bg-muted pointer-coarse:size-8 pointer-coarse:opacity-100 pointer-coarse:after:absolute pointer-coarse:after:-inset-1"
             >
               <X className="size-3" />
             </button>

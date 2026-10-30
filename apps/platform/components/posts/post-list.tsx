@@ -250,7 +250,7 @@ export const PostRow = memo(function PostRow({
             type="button"
             onClick={() => onAction('preview', post)}
             aria-label={`${post.open_comments} open ${post.open_comments === 1 ? 'comment' : 'comments'}`}
-            className="inline-flex h-8 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-foreground tabular-nums outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-8 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-foreground tabular-nums outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:h-10 pointer-coarse:min-w-10 pointer-coarse:justify-center"
           >
             <MessageSquare className="size-3.5" /> {post.open_comments}
           </button>
