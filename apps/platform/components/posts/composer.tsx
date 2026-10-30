@@ -476,8 +476,8 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
   )
 }
 
-/** How one channel of a saved post went: state, the link once published, the error and Retry when failed. */
-function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
+/** Retry for a channel that failed: queues it again. */
+function RetryTarget({ post, target, className }: { post: Post; target: PostTarget; className?: string }) {
   const qc = useQueryClient()
   const retry = useMutation({
     mutationFn: () => api.retryTarget(post.id, target.channel_id),
@@ -488,6 +488,26 @@ function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
     },
     onError: (e) => toastApiError(e),
   })
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className={className}
+      onClick={() => retry.mutate()}
+      disabled={retry.isPending}
+    >
+      <RotateCcw /> Retry
+    </Button>
+  )
+}
+
+/**
+ * How one channel of a saved post went: state, the link once published, the error, and Retry when failed (unless
+ * the card shows Retry in its own header: `retry={false}`).
+ */
+function TargetStatus({ post, target, retry = true }: { post: Post; target: PostTarget; retry?: boolean }) {
   const url = target.external_url ? safeHttpUrl(target.external_url) : undefined
 
   return (
@@ -509,18 +529,7 @@ function TargetStatus({ post, target }: { post: Post; target: PostTarget }) {
           {timeAgo(target.published_at)}
         </span>
       )}
-      {target.status === 'failed' && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="ml-auto"
-          onClick={() => retry.mutate()}
-          disabled={retry.isPending}
-        >
-          <RotateCcw /> Retry
-        </Button>
-      )}
+      {retry && target.status === 'failed' && <RetryTarget post={post} target={target} className="ml-auto" />}
       {target.error && <DeliveryError error={target.error} />}
       {(target.replies?.length ?? 0) > 0 && (
         <ol className="grid basis-full gap-1 border-l pl-3" aria-label={`Comments on ${target.channel_name}`}>
@@ -1215,6 +1224,32 @@ const SettingsCard = memo(function SettingsCard({
  * The composer's footer: the picked time as a chip, Save draft, and the split button: Publish now (Save changes
  * on a live post) with the calendar half. It holds the "is the picked time past" timer, so the form itself never renders for the clock.
  */
+/** The publish time's problem: the picked time went by, or the API refused it. */
+function publishTimeError(locked: boolean, inPast: boolean, error?: string) {
+  if (locked) {
+    return undefined
+  }
+
+  return error ?? (inPast ? 'This time is in the past. Pick a future time or clear it.' : undefined)
+}
+
+/** The publish time's problem at the top of the drawer, where it is seen first; the footer's chip points at it. */
+function PublishTimeAlert({ locked, publishAt, error }: { locked: boolean; publishAt: Date | null; error?: string }) {
+  const message = publishTimeError(locked, useIsPast(publishAt), error)
+
+  if (!message) {
+    return null
+  }
+
+  return (
+    <div className="px-4 pt-3">
+      <Callout tone="danger" size="xs" role="alert" id="publish-at-error" data-testid="publish-at-error">
+        {message}
+      </Callout>
+    </div>
+  )
+}
+
 function ComposerFooter({
   post,
   locked,
@@ -1243,10 +1278,8 @@ function ComposerFooter({
   onApplySchedule: (at: Date, repeat: string) => void
 }) {
   const inPast = useIsPast(publishAt)
-  // The time's problem, said next to its chip: the picked time went by, or the API refused it.
-  const timeError = locked
-    ? undefined
-    : (error ?? (inPast ? 'This time is in the past. Pick a future time or clear it.' : undefined))
+  // The time's problem (shown at the top by PublishTimeAlert): the chip turns red and points at it.
+  const timeError = publishTimeError(locked, inPast, error)
   // Publish now with a past time would be refused: the button stays focusable and says why (a disabled button
   // gets no hover or focus, so no tooltip).
   const nowBlocked = !locked && inPast
@@ -1261,19 +1294,6 @@ function ComposerFooter({
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      {/* Above the buttons, so they stay where they are when it appears. */}
-      {timeError && (
-        <Callout
-          tone="danger"
-          size="xs"
-          role="alert"
-          id="publish-at-error"
-          className="basis-full"
-          data-testid="publish-at-error"
-        >
-          {timeError}
-        </Callout>
-      )}
       {locked ? (
         <p className="ml-auto text-sm text-muted-foreground">
           {post?.status === 'publishing'
@@ -1727,6 +1747,7 @@ export function ComposerForm({
           </div>
         </div>
       </SheetHeader>
+      <PublishTimeAlert locked={locked} publishAt={publishAt} error={errors.publish_at} />
       <Tabs
         value={shownSection}
         onValueChange={(v) => setSection(v as typeof section)}
@@ -1975,8 +1996,12 @@ export function ComposerForm({
                 <ul className="grid gap-2" aria-label="Delivery per channel">
                   {deliveryTargets.map((t) => (
                     <li key={t.channel_id} className="grid gap-1 rounded-xl border p-3">
-                      <span className="text-sm font-medium">{t.channel_name}</span>
-                      <TargetStatus post={post} target={t} />
+                      {/* Retry in the card's top right corner, beside the channel's name. */}
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 text-sm font-medium wrap-anywhere">{t.channel_name}</span>
+                        {t.status === 'failed' && <RetryTarget post={post} target={t} className="shrink-0" />}
+                      </div>
+                      <TargetStatus post={post} target={t} retry={false} />
                     </li>
                   ))}
                 </ul>
