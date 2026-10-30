@@ -14,6 +14,7 @@ import { api, ApiError, errorMessage, type EmailCodeSent } from '@/lib/api'
 import { getPasskey, passkeyAutofillAvailable, passkeyCancelled, passkeysSupported } from '@/lib/passkeys'
 import { useSetupStatus } from '@/lib/queries'
 import { safeNextPath } from '@/lib/safe'
+import { browserTimeZone } from '@/lib/time-zone'
 
 import { AuthLayout } from './auth-layout'
 import { EmailAddressForm, EmailCodeForm, useFinishSignIn } from './email-sign-in'
@@ -195,6 +196,9 @@ export function googleStartURL(opts: { next?: string | null; invite?: string; se
   if (opts.setupToken) {
     q.set('setup_token', opts.setupToken)
   }
+
+  // A new person's first workspace starts in the browser's zone.
+  q.set('timezone', browserTimeZone())
 
   return `/api/v1/auth/google/start?${q.toString()}`
 }

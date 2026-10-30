@@ -6,10 +6,13 @@ import { SignIn } from '@/components/auth/sign-in'
 import { MembersPage } from '@/components/settings/members-page'
 import { AppShell } from '@/components/shell/app-shell'
 import { qk } from '@/lib/queries'
+import { browserTimeZone } from '@/lib/time-zone'
 
 import { nav } from './navigation'
 import { PLANS, UNLOCKED, usage } from './plans-fixtures'
 import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
+
+const zone = encodeURIComponent(browserTimeZone())
 
 const ANA = { id: 'usr_1', name: 'Ana Owner', email: 'ana@example.com', avatar_url: '' }
 
@@ -50,12 +53,12 @@ describe('sign-in with Google', () => {
 
     const button = await screen.findByTestId('google-sign-in')
 
-    expect(button).toHaveAttribute('href', '/api/v1/auth/google/start?next=%2Fposts')
+    expect(button).toHaveAttribute('href', `/api/v1/auth/google/start?next=%2Fposts&timezone=${zone}`)
     expect(screen.getByRole('alert')).toHaveTextContent(/accepts new people by invitation/i)
     expect(screen.queryByLabelText(/api key/i)).not.toBeInTheDocument()
 
     await userEvent.setup().type(screen.getByLabelText(/setup token/i), 'tok')
-    expect(button).toHaveAttribute('href', '/api/v1/auth/google/start?next=%2Fposts&setup_token=tok')
+    expect(button).toHaveAttribute('href', `/api/v1/auth/google/start?next=%2Fposts&setup_token=tok&timezone=${zone}`)
   })
 })
 

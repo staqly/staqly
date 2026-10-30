@@ -42,6 +42,7 @@ type fakeAI struct {
 	bodies  []map[string]any
 	idem    []string
 	cancels atomic.Int32
+	polls   atomic.Int32 // status checks: the worker has stored the provider's request id
 	forgets atomic.Int32
 	uploads atomic.Int32
 	png     []byte
@@ -120,6 +121,7 @@ func newFakeFal(t *testing.T) *fakeAI {
 				f.cancels.Add(1)
 				_, _ = io.WriteString(w, `{"status":"OK"}`)
 			case strings.HasSuffix(r.URL.Path, "/status"):
+				f.polls.Add(1)
 				if st == "slow" {
 					_, _ = io.WriteString(w, `{"status":"IN_PROGRESS"}`)
 					return
@@ -677,11 +679,12 @@ func TestAICancelRunning(t *testing.T) {
 		defer cancel()
 		e.svc.RunDueJobsOnce(ctx)
 	}()
+	// Cancel once the worker polls: by then it stored the provider's request id, so the cancel can reach the
+	// provider (a fixed pause after the submit was too short on a loaded CI runner).
 	deadline := time.Now().Add(10 * time.Second)
-	for fal.count() == 0 && time.Now().Before(deadline) {
+	for fal.polls.Load() == 0 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
-	time.Sleep(50 * time.Millisecond) // the submit is recorded
 	e.do(nil, "DELETE", "/v1/ai/jobs/"+job.ID, e.key, nil, 204, nil)
 	select {
 	case <-done:

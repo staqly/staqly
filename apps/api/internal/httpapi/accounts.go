@@ -62,7 +62,7 @@ func (s *Server) setLoginCookie(w http.ResponseWriter, value string, maxAge int)
 // googleStart sends the browser to Google; the sealed state rides in an HttpOnly cookie.
 func (s *Server) googleStart(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	authURL, sealed, err := s.svc.StartGoogleLogin(r.Context(), q.Get("next"), q.Get("invite"), q.Get("setup_token"))
+	authURL, sealed, err := s.svc.StartGoogleLogin(r.Context(), q.Get("next"), q.Get("invite"), q.Get("setup_token"), q.Get("timezone"))
 	if err != nil {
 		loginRedirect(w, r, err)
 		return
@@ -123,11 +123,12 @@ func (s *Server) emailVerify(w http.ResponseWriter, r *http.Request) {
 		Next       string `json:"next"`
 		Invite     string `json:"invite"`
 		SetupToken string `json:"setup_token"`
+		Timezone   string `json:"timezone"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	res, err := s.svc.VerifyEmailSignIn(r.Context(), in.Email, in.Code, in.Next, in.Invite, in.SetupToken, r.UserAgent())
+	res, err := s.svc.VerifyEmailSignIn(r.Context(), in.Email, in.Code, in.Next, in.Invite, in.SetupToken, in.Timezone, r.UserAgent())
 	if err != nil {
 		writeErr(w, r, err)
 		return

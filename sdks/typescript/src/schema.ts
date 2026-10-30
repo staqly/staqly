@@ -6851,6 +6851,8 @@ export interface operations {
                 invite?: string;
                 /** @description Lets a new person create an account when SETUP_TOKEN is set */
                 setup_token?: string;
+                /** @description The browser's IANA time zone: a new person's first workspace gets it (an unknown zone is ignored: UTC). An existing or invited-to workspace keeps its zone. */
+                timezone?: string;
             };
             header?: never;
             path?: never;
@@ -6952,6 +6954,11 @@ export interface operations {
                     invite?: string;
                     /** @description Lets a new person create an account when SETUP_TOKEN is set */
                     setup_token?: string;
+                    /**
+                     * @description The browser's IANA time zone: a new person's first workspace gets it (an unknown zone is ignored: UTC). An existing or invited-to workspace keeps its zone.
+                     * @example Europe/Warsaw
+                     */
+                    timezone?: string;
                 };
             };
         };

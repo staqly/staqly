@@ -91,14 +91,14 @@ func (s *Service) StartEmailSignIn(ctx context.Context, email string) (EmailCode
 }
 
 // VerifyEmailSignIn checks the code and signs in (a new person gets an account and a first workspace,
-// an invitation is accepted), with a fresh session.
-func (s *Service) VerifyEmailSignIn(ctx context.Context, email, code, next, invite, setupToken, userAgent string) (_ LoginResult, err error) {
+// an invitation is accepted), with a fresh session. tz is the browser's zone for a new person's first workspace.
+func (s *Service) VerifyEmailSignIn(ctx context.Context, email, code, next, invite, setupToken, tz, userAgent string) (_ LoginResult, err error) {
 	defer func() { s.trackSignInFailed(ProviderEmail, err) }()
 	row, email, err := s.checkEmailCode(ctx, email, code, purposeSignIn, "")
 	if err != nil {
 		return LoginResult{}, err
 	}
-	st := loginState{Next: SafeNext(next), Invite: strings.TrimSpace(invite), SetupToken: setupToken}
+	st := loginState{Next: SafeNext(next), Invite: strings.TrimSpace(invite), SetupToken: setupToken, Timezone: signInZone(tz)}
 	var res LoginResult
 	err = s.tx(ctx, func(q *db.Queries) error {
 		if err := useEmailCode(ctx, q, s.now(), row.ID); err != nil {

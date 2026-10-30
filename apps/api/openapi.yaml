@@ -736,6 +736,7 @@ paths:
         - { name: next, in: query, schema: { type: string }, description: A path on this dashboard to land on }
         - { name: invite, in: query, schema: { type: string }, description: An invitation token to accept after signing in }
         - { name: setup_token, in: query, schema: { type: string }, description: Lets a new person create an account when SETUP_TOKEN is set }
+        - { name: timezone, in: query, schema: { type: string, examples: [Europe/Warsaw] }, description: "The browser's IANA time zone: a new person's first workspace gets it (an unknown zone is ignored: UTC). An existing or invited-to workspace keeps its zone." }
       responses:
         "302": { description: "Redirect to Google, or to /login?error=<code>" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -800,6 +801,7 @@ paths:
                 next: { type: string, description: A path on this dashboard to land on }
                 invite: { type: string, description: An invitation token to accept }
                 setup_token: { type: string, description: Lets a new person create an account when SETUP_TOKEN is set }
+                timezone: { type: string, examples: [Europe/Warsaw], description: "The browser's IANA time zone: a new person's first workspace gets it (an unknown zone is ignored: UTC). An existing or invited-to workspace keeps its zone." }
       responses:
         "201": { description: Session cookie set, content: { application/json: { schema: { type: object, required: [csrf_token, next], properties: { csrf_token: { type: string }, next: { type: string } } } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
