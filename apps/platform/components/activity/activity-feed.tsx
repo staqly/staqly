@@ -32,6 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { eventsExportUrl, type Collection, type EventExportQuery, type EventQuery, type StashEvent } from '@/lib/api'
 import { qk, refreshEventList, useCollections, useEventsInfinite, useMode } from '@/lib/queries'
+import { dayFromKey } from '@/lib/schedule'
 import { cn, hrefWithParams } from '@/lib/utils'
 
 import { AuditEventList } from './audit-event'
@@ -91,11 +92,9 @@ export function nextDay(day: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** Midnight of a YYYY-MM-DD day in the browser's time zone, as RFC 3339 (the API compares in UTC). */
+/** Midnight of a YYYY-MM-DD day in the workspace's time zone, as RFC 3339 (the API compares in UTC). */
 export function localDayStart(day: string): string {
-  const [y, m, d] = day.split('-').map(Number)
-
-  return new Date(y, m - 1, d).toISOString()
+  return dayFromKey(day).toISOString()
 }
 
 /** Text filter applied on Enter or blur, kept in the URL. */

@@ -1,20 +1,16 @@
 import { useEffect, useState } from 'react'
 
-/** `t` rounded down to its local minute or hour. */
+import { wallOf } from '@/lib/zone'
+
+/** `t` rounded down to its minute or to its hour in the workspace's zone (half-hour zones turn at :30). */
 function floorTo(t: number, unit: 'minute' | 'hour') {
-  const d = new Date(t)
+  const minute = Math.floor(t / 60_000) * 60_000
 
-  if (unit === 'hour') {
-    d.setMinutes(0, 0, 0)
-  } else {
-    d.setSeconds(0, 0)
-  }
-
-  return d.getTime()
+  return unit === 'hour' ? minute - wallOf(t).minute * 60_000 : minute
 }
 
 /**
- * The current time rounded down to the local minute or hour. One timer to the next boundary, so the component
+ * The current time rounded down to the minute or the workspace's hour. One timer to the next boundary, so the component
  * renders when the shown minute (or hour) changes and every clock on the page turns over together.
  */
 export function useClock(unit: 'minute' | 'hour') {
@@ -25,17 +21,11 @@ export function useClock(unit: 'minute' | 'hour') {
 
     const arm = () => {
       const current = floorTo(Date.now(), unit)
-      const next = new Date(current)
-
-      if (unit === 'hour') {
-        next.setHours(next.getHours() + 1)
-      } else {
-        next.setMinutes(next.getMinutes() + 1)
-      }
+      const next = current + (unit === 'hour' ? 3_600_000 : 60_000)
 
       setNow(current)
       // A few ms late, so the timer never fires just before the boundary.
-      t = setTimeout(arm, next.getTime() - Date.now() + 5)
+      t = setTimeout(arm, next - Date.now() + 5)
     }
 
     arm()

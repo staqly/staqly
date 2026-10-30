@@ -10,33 +10,32 @@ import { nextRange, type DateRange } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useNow } from '@/hooks/use-now'
-import { addDays, dayFromKey, dayKey } from '@/lib/schedule'
+import { addDays, addMonths, dateFormats, dayFromKey, dayKey } from '@/lib/schedule'
 import { cn } from '@/lib/utils'
 
 // The calendar grid loads with the first popover, not with every page that has a date filter.
 const Calendar = dynamic(() => import('@/components/ui/calendar').then((m) => m.Calendar), { ssr: false })
 
-/** Local calendar days as the API and the URL carry them: "2026-10-12". */
+/** Calendar days in the workspace's zone as the API and the URL carry them: "2026-10-12". */
 export interface DayRange {
   from: string
   to: string
 }
 
-const fmt = (key: string) =>
-  dayFromKey(key).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+const fmt = (key: string) => dateFormats.monthDayYear().format(dayFromKey(key))
 
 /** "Oct 12, 2026 to Oct 18, 2026", or one day. */
 export function formatDayRange(r: DayRange) {
   return r.from === r.to ? fmt(r.from) : `${fmt(r.from)} to ${fmt(r.to)}`
 }
 
-/** The quick picks, as local days ending today (or last month). */
+/** The quick picks, as days in the workspace's zone ending today (or last month). */
 export function rangePresets(now: number = Date.now()): { label: string; range: DayRange }[] {
   const today = new Date(now)
   const t = dayKey(today)
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-  const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-  const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0)
+  const firstOfMonth = addMonths(today, 0)
+  const lastMonthStart = addMonths(today, -1)
+  const lastMonthEnd = addDays(firstOfMonth, -1)
 
   return [
     { label: 'Today', range: { from: t, to: t } },
@@ -50,7 +49,7 @@ export function rangePresets(now: number = Date.now()): { label: string; range: 
 
 /**
  * A range of days, picked on a calendar (two months side by side on desktop, one on phones) or from the
- * presets. Days are local; the consumer gets "YYYY-MM-DD" ends, both inclusive, or null.
+ * presets. Days are in the workspace's zone; the consumer gets "YYYY-MM-DD" ends, both inclusive, or null.
  */
 export function DateRangePicker({
   value,

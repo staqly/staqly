@@ -30,7 +30,7 @@ export async function pickDateTime(
     await picker.getByRole('button', { name: 'Next month' }).click()
   }
 
-  await picker.getByRole('button', { name: dayName(when) }).click()
+  await picker.getByRole('button', { name: dayName(when), exact: true }).click()
   await picker
     .getByRole('radiogroup', { name: 'Hour' })
     .getByRole('radio', { name: pad(when.getHours()), exact: true })

@@ -8,20 +8,26 @@ import { ButtonGroup } from '@/components/ui/button-group'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useNow } from '@/hooks/use-now'
-import { formatTime, nextFullHour, presets, sameDay } from '@/lib/schedule'
+import { dateFormats, formatTime, nextFullHour, presets, sameDay } from '@/lib/schedule'
 import { cn } from '@/lib/utils'
+import { fromWall, wallOf } from '@/lib/zone'
 
 const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'))
 const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'))
 
 /** "Tue 21 Oct 2026" for the date half of the trigger. */
 function formatDay(d: Date) {
-  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+  return dateFormats.shortDayYear().format(d)
 }
 
-/** "Mon 19 Oct 2026, 02:00": the footer's summary. */
+/** "Mon 19 Oct 2026, 02:00 GMT+1": the footer's summary, with the zone the time is in. */
 export function formatShort(d: Date) {
-  return `${formatDay(d)}, ${formatTime(d)}`
+  const zone = dateFormats
+    .zoneName()
+    .formatToParts(d)
+    .find((p) => p.type === 'timeZoneName')?.value
+
+  return `${formatDay(d)}, ${formatTime(d)}${zone ? ` ${zone}` : ''}`
 }
 
 /**
@@ -146,34 +152,29 @@ export function DateTimeFields({
   const now = useNow(true, 30_000)
   const today = new Date(now)
   const [month, setMonth] = useState(() => value ?? today)
-  const time = value ?? nextFullHour(now)
-  const hour = HOURS[time.getHours()]
-  const minute = String(Math.floor(time.getMinutes() / 5) * 5).padStart(2, '0')
+  // Hours and minutes as the workspace's clock shows them, not the browser's.
+  const at = value ?? nextFullHour(now)
+  const time = wallOf(at)
+  const clock = wallOf(now)
+  const hour = HOURS[time.hour]
+  const minute = String(Math.floor(time.minute / 5) * 5).padStart(2, '0')
   // Today: the hours before now, and the minutes before now within the current hour, have passed.
-  const isToday = sameDay(time, today)
-  const hourFloor = isToday ? today.getHours() : undefined
-  const minuteFloor = isToday && time.getHours() === today.getHours() ? today.getMinutes() : undefined
+  const isToday = sameDay(at, today)
+  const hourFloor = isToday ? clock.hour : undefined
+  const minuteFloor = isToday && time.hour === clock.hour ? clock.minute : undefined
 
   function pickDay(d: Date) {
-    const next = new Date(d)
-
-    next.setHours(time.getHours(), time.getMinutes(), 0, 0)
+    const day = wallOf(d)
+    const next = fromWall(day.year, day.month, day.day, time.hour, time.minute)
 
     // A day picked today with a time already gone: the next full hour instead.
-    if (next.getTime() <= now && sameDay(next, today)) {
-      const n = nextFullHour(now)
-
-      next.setHours(n.getHours(), n.getMinutes(), 0, 0)
-    }
-
-    onChange(next)
+    onChange(next.getTime() <= now && sameDay(next, today) ? nextFullHour(now) : next)
   }
 
   function setTime(hours: number, minutes: number) {
-    const next = new Date(value ?? today)
+    const day = wallOf(value ?? today)
 
-    next.setHours(hours, minutes, 0, 0)
-    onChange(next)
+    onChange(fromWall(day.year, day.month, day.day, hours, minutes))
   }
 
   return (
@@ -213,7 +214,7 @@ export function DateTimeFields({
           values={HOURS}
           value={hour}
           disabledBefore={hourFloor}
-          onPick={(h) => setTime(Number(h), time.getMinutes())}
+          onPick={(h) => setTime(Number(h), time.minute)}
           autoFocusRef={hourRef}
         />
         <TimeColumn
@@ -221,7 +222,7 @@ export function DateTimeFields({
           values={MINUTES}
           value={minute}
           disabledBefore={minuteFloor}
-          onPick={(m) => setTime(time.getHours(), Number(m))}
+          onPick={(m) => setTime(time.hour, Number(m))}
         />
       </div>
     </div>
