@@ -111,7 +111,7 @@ func editorPath(p string) bool {
 var idRoutes = map[string]int{"posts": 1, "channels/callback": 2}
 
 // moved: routes of earlier dashboards, for old bookmarks. /collections/<id> → /posts?collection=<id>.
-var moved = map[string]string{"/inbox": "/schedule", "/notifications": "/alerts", "/collections": "/posts"}
+var moved = map[string]string{"/inbox": "/schedule", "/collections": "/posts"}
 
 // RelayHeader carries relayToken on every proxied request: the API in the same process (staqly serve, the
 // image) takes the browser's address from X-Forwarded-For only on requests that bear it.

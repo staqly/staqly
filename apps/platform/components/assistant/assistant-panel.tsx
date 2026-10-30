@@ -1156,13 +1156,24 @@ export function AssistantPanel({ open, onOpenChange }: { open: boolean; onOpenCh
 /** Keeps the docked panel mounted while it slides out, then lets it go. */
 function Docked({ workspaceId, open, onClose }: { workspaceId: string; open: boolean; onClose: () => void }) {
   const [mounted, setMounted] = useState(open)
+  // Open on load (remembered from the last visit): already there, no slide in. Opened later: it slides.
+  const [slideIn, setSlideIn] = useState(!open)
 
   if (open && !mounted) {
     setMounted(true)
   }
 
   return mounted ? (
-    <DockedPanel workspaceId={workspaceId} open={open} onClose={onClose} onGone={() => setMounted(false)} />
+    <DockedPanel
+      workspaceId={workspaceId}
+      open={open}
+      slideIn={slideIn}
+      onClose={onClose}
+      onGone={() => {
+        setMounted(false)
+        setSlideIn(true)
+      }}
+    />
   ) : null
 }
 
@@ -1194,11 +1205,13 @@ function savedWidth() {
 function DockedPanel({
   workspaceId,
   open,
+  slideIn,
   onClose,
   onGone,
 }: {
   workspaceId: string
   open: boolean
+  slideIn: boolean
   onClose: () => void
   onGone: () => void
 }) {
@@ -1206,7 +1219,7 @@ function DockedPanel({
   const [expanded, setExpanded] = useState(false)
   // It slides in from the right edge when it opens and back out when it closes (Close, ⌘J or the sidebar's
   // Assistant): width 0 before its first frame and once closed, then it unmounts.
-  const [entered, setEntered] = useState(false)
+  const [entered, setEntered] = useState(!slideIn)
   const shut = !entered || !open
 
   useEffect(() => {

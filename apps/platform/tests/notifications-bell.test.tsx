@@ -49,6 +49,10 @@ const reconnect = event({
 })
 const edited = event({ type: 'post.updated', seq: 8, data: postData })
 
+/** The page's rows across its day sections. */
+const pageRows = () =>
+  screen.getAllByTestId('notifications-page-list').flatMap((l) => within(l).getAllByRole('listitem'))
+
 /** About an hour ago, `secondsAgo` before that. */
 const at = (secondsAgo: number) => new Date(Date.now() - 3_600_000 - secondsAgo * 1000).toISOString()
 
@@ -142,6 +146,22 @@ describe('notifications', () => {
     expect(
       await screen.findByText("You're all caught up. Published, failed and scheduled runs show up here."),
     ).toBeInTheDocument()
+  })
+
+  it('the page shows 15 notifications at a time, whatever their day, and loads 15 more', async () => {
+    const many = Array.from({ length: 20 }, (_, i) =>
+      event({ type: 'channel.needs_reconnect', seq: 100 - i, post_id: null, data: { channel: { name: `Bot ${i}` } } }),
+    )
+
+    mockApi({ 'GET /v1/events': { data: many } })
+    const user = userEvent.setup()
+
+    renderWithProviders(<NotificationsPage />, { mode: 'local' })
+    await screen.findAllByTestId('notifications-page-list')
+    expect(pageRows()).toHaveLength(15)
+    await user.click(screen.getByRole('button', { name: 'Load more' }))
+    expect(pageRows()).toHaveLength(20)
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
   })
 
   it('the page lists every notification with its details and where to go from it', async () => {

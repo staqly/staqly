@@ -40,7 +40,7 @@ export function NotificationList({
   )
 
   return (
-    <ul className="max-h-[60svh] overflow-y-auto overscroll-contain py-1" data-testid="notifications-list">
+    <ul className="max-h-[min(60svh,32rem)] overflow-y-auto overscroll-contain py-1" data-testid="notifications-list">
       {list.map((n) => {
         const Icon = ICONS[n.tone]
         const link = n.link ? safeHttpUrl(n.link) : undefined
@@ -57,8 +57,9 @@ export function NotificationList({
               <button
                 type="button"
                 onClick={() => onGo(n)}
+                title={n.text}
                 className={cn(
-                  'block min-h-6 w-full text-left text-sm leading-snug wrap-anywhere hover:underline pointer-coarse:min-h-10 pointer-coarse:py-1',
+                  'line-clamp-2 min-h-6 w-full text-left text-sm leading-snug wrap-anywhere hover:underline pointer-coarse:min-h-10 pointer-coarse:py-1',
                   isNew && 'font-medium',
                 )}
               >
