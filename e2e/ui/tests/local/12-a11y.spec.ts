@@ -166,8 +166,16 @@ test.describe('accessibility', () => {
 
     await expect(sheet).toBeVisible()
     expect(await sheet.evaluate((d) => d.contains(document.activeElement))).toBe(true)
-    // Tab reaches the Channels list, Enter opens it, typing finds the channel and Enter picks it,
-    // Escape closes the list back onto its button; Tab then reaches the editor.
+    // Tab reaches the Title first, then the Channels list: Enter opens it, typing finds the channel and Enter
+    // picks it, Escape closes the list back onto its button; Tab then reaches the editor.
+    const title = sheet.getByTestId('post-title')
+
+    for (let i = 0; i < 20 && !(await title.evaluate((el) => el === document.activeElement)); i++) {
+      await page.keyboard.press('Tab')
+    }
+
+    await expect(title).toBeFocused()
+    await page.keyboard.type('Keyboard post')
     const channels = sheet.getByRole('button', { name: 'Channels' })
 
     for (let i = 0; i < 20 && !(await channels.evaluate((el) => el === document.activeElement)); i++) {

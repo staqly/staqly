@@ -183,6 +183,7 @@ describe.each(['local', 'cloud'] as const)('%s: typed errors are the same in eve
 
     for (const mode of MODES) {
       const e = await py.fail(mode, pyc(t), 'posts.create', [col], {
+        title: 'Post',
         content: 'x',
         targets: [{ channel_id: channel }],
         publish_at: '2020-01-01T00:00:00Z',
@@ -430,7 +431,7 @@ describe.each(['local', 'cloud'] as const)('%s: idempotency keys', (name) => {
   it.each(MODES)('Python %s sends one key per unsafe JSON request, none on GET and multipart', async (mode) => {
     const client = pyc(t, { record: true, record_key: `${name}-${mode}` })
 
-    await py.call(mode, client, 'posts.create', [col], { content: 'key' })
+    await py.call(mode, client, 'posts.create', [col], { title: 'Post', content: 'key' })
     await py.call(mode, client, 'posts.list', [], { collection_id: col })
     await py.call(mode, client, 'media.upload', [b64(PNG)], { filename: 'a.png' })
     const seen = await py.call<{ method: string; headers: Record<string, string> }[]>(mode, client, '_requests', [], {
@@ -469,6 +470,7 @@ describe.each(['local', 'cloud'] as const)('%s: idempotency keys', (name) => {
   it.each(MODES)('a create whose response was lost is retried and applied once: Python %s', async (mode) => {
     const ref = `lost-py-${mode}-${Date.now()}`
     const post = await py.call<Post>(mode, pyc(t, { drop_first_response: true }), 'posts.create', [col], {
+      title: 'Post',
       content: 'once more',
       external_ref: ref,
     })
@@ -509,6 +511,7 @@ describe.each(['local', 'cloud'] as const)('%s: idempotency keys', (name) => {
     // same body with the same key replays there too
     for (const mode of MODES) {
       const py1 = (await py.call(mode, pyc(t), 'posts.create', [col], {
+        title: 'Post',
         content: body.content,
         request_options: { idempotency_key: key },
       })) as { id: string }
@@ -526,6 +529,7 @@ describe.each(['local', 'cloud'] as const)('%s: idempotency keys', (name) => {
 
     for (const mode of MODES) {
       const e = await py.fail(mode, pyc(t), 'posts.create', [col], {
+        title: 'Post',
         content: 'other',
         request_options: { idempotency_key: key },
       })

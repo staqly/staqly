@@ -159,15 +159,16 @@ Answer within 60 seconds with `2xx` and a JSON body:
 {
   "posts": [
     { "content": "Tip of the day: drag a post on the calendar to move it.", "tags": ["tips"] },
-    { "content": "A longer one for the newsletter.", "media": ["med_t4w6pz2kqm7xr3nb5vya"],
-      "targets": [{ "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a", "settings": { "title": "Tip of the day" } }],
+    { "title": "Tip of the day", "content": "A longer one for the newsletter.", "media": ["med_t4w6pz2kqm7xr3nb5vya"],
+      "targets": [{ "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a" }],
       "metadata": { "campaign": "launch" } }
   ]
 }
 ```
 
-- Each entry takes `content`, `media` (ids from `POST /v1/media`), `targets`, `tags` and
-  `metadata`; a post without `targets` gets one per schedule channel. At most 50 posts per
+- Each entry takes `title`, `content`, `media` (ids from `POST /v1/media`), `targets`, `tags` and
+  `metadata`; a post without `title` is titled with the first line of its `content`, a post without
+  `targets` gets one per schedule channel. At most 50 posts per
   answer are used.
 - The posts are created in the schedule's collection with `source` `schedule:<name>` and
   published by the same run. A post the API refuses (over a provider's limit, say) fails the run.

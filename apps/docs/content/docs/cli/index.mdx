@@ -55,7 +55,7 @@ its URL and key once with `staqly login --url https://api.staqly.ai --key stk_..
 ```bash
 staqly channels connect custom --name "My publisher"      # your own automation; see `staqly channels providers` for the rest
 staqly collections create "Product updates"
-staqly posts create "Product updates" --content "v1.4 is out." --channel "My publisher" --publish-at "+1h"
+staqly posts create "Product updates" --title "v1.4 is out" --content "v1.4 is out." --channel "My publisher" --publish-at "+1h"
 ```
 
 `posts create` prints the new post with its ID and status (`scheduled` here, because of `--publish-at`).

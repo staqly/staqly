@@ -158,7 +158,7 @@ export async function seed(t: SeedTarget, media: SeedMedia): Promise<SeedResult>
     },
   })
   const create = async (key: string, body: Record<string, unknown>) => {
-    const p = await post<Post>('/v1/posts', { collection: main.id, ...body })
+    const p = await post<Post>('/v1/posts', { collection: main.id, title: 'Post', ...body })
 
     postIds[key] = p.id
 
@@ -272,6 +272,7 @@ export async function seed(t: SeedTarget, media: SeedMedia): Promise<SeedResult>
 
     await post('/v1/posts', {
       collection: c.id,
+      title: 'Post',
       ...common(i),
       content:
         i % 5 === 0

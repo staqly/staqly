@@ -110,6 +110,7 @@ test.describe('posts', () => {
     await expect(sheet.getByRole('combobox', { name: 'Collection' })).toContainText(col.name)
     await expect(sheet.getByRole('button', { name: 'Save draft' })).toBeDisabled()
     await expect(sheet.getByTestId('publish-now')).toBeDisabled()
+    await sheet.getByTestId('post-title').fill('Hello')
     await sheet.getByTestId('post-content').fill('Hello from the composer')
     await expect(sheet.getByRole('button', { name: 'Save draft' })).toBeEnabled()
     // No channel yet: publishing is not offered, a draft is.
@@ -137,6 +138,7 @@ test.describe('posts', () => {
 
     // Schedule one: Schedule in the calendar popover sends it.
     await page.getByTestId('new-post').click()
+    await sheet.getByTestId('post-title').fill('Scheduled')
     await sheet.getByTestId('post-content').fill('Scheduled from the composer')
     await pickChannels(page, sheet, col.channel.name)
     const when = daysAhead(2, 11)
@@ -155,6 +157,7 @@ test.describe('posts', () => {
 
     // Publish now: the post goes to the automation.
     await page.getByTestId('new-post').click()
+    await sheet.getByTestId('post-title').fill('Published')
     await sheet.getByTestId('post-content').fill('Published from the composer')
     await pickChannels(page, sheet, col.channel.name)
     await sheet.getByTestId('publish-now').click()
@@ -196,6 +199,7 @@ test.describe('posts', () => {
     await expect(old).toHaveAttribute('aria-disabled', 'true')
     await expect(old).toContainText('turned off')
     await page.keyboard.press('Escape')
+    await sheet.getByTestId('post-title').fill('Same text')
     await sheet.getByTestId('post-content').fill('Same text everywhere')
     await pickChannels(page, sheet, col.channel.name, 'Company blog')
     // From two channels on, each gets a tab for a text of its own.

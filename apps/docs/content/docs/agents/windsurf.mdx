@@ -106,7 +106,7 @@ When asked for a social post, announcement or release note, write it into staqly
 
 1. Call `list_channels` once to know the channels and their limits, and `list_collections`
    for the collection names.
-2. Call `create_post` with the collection, the text, one target per channel the post is for,
+2. Call `create_post` with the collection, a title, the text, one target per channel the post is for,
    and a shorter `content` on a target whose platform allows fewer characters.
 3. Call `preview_post` and fix what a platform objects to; then `schedule_post` if a time was
    given, otherwise leave it as a draft for the collection's schedule.

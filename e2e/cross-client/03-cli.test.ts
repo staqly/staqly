@@ -138,6 +138,8 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
       'posts',
       'create',
       colName,
+      '--title',
+      'Post',
       '--content',
       'A draft\nfrom the CLI',
       '--tag',
@@ -157,11 +159,15 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
       source: 'cli',
     })
     // A time without a channel is refused before anything is sent.
-    expect((await cli(['posts', 'create', colName, '--content', 'x', '--publish-at', '+2h'])).code).not.toBe(0)
+    expect(
+      (await cli(['posts', 'create', colName, '--title', 'Post', '--content', 'x', '--publish-at', '+2h'])).code,
+    ).not.toBe(0)
     const scheduled = await cli([
       'posts',
       'create',
       colName,
+      '--title',
+      'Post',
       '--content',
       'Scheduled from the CLI',
       '--channel',
@@ -183,6 +189,8 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
       'posts',
       'create',
       colName,
+      '--title',
+      'Post',
       '--content',
       'nowok',
       '--channel',
@@ -200,6 +208,8 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
       'posts',
       'create',
       colName,
+      '--title',
+      'Post',
       '--content',
       'nowno',
       '--channel',
@@ -217,6 +227,8 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
       'posts',
       'create',
       colName,
+      '--title',
+      'Post',
       '--content',
       'nowslow',
       '--channel',
@@ -234,6 +246,8 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
       'posts',
       'create',
       colName,
+      '--title',
+      'Post',
       '--content',
       'nowjson',
       '--channel',
@@ -250,22 +264,58 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
   })
 
   it('posts create variants: --file, --stdin, --idempotency-key, @file content', async () => {
-    const file = await cli(['posts', 'create', colName, '--content', 'pixel', '--file', png, '--json'])
+    const file = await cli([
+      'posts',
+      'create',
+      colName,
+      '--title',
+      'Post',
+      '--content',
+      'pixel',
+      '--file',
+      png,
+      '--json',
+    ])
 
     expect(file).toMatchObject({ code: 0 })
     expect(file.json<Post>().media_items[0]!.mime_type).toBe('image/png')
-    const stdin = await cli(['posts', 'create', colName, '--stdin', '--json'], { input: 'piped body' })
+    const stdin = await cli(['posts', 'create', colName, '--title', 'Post', '--stdin', '--json'], {
+      input: 'piped body',
+    })
 
     expect(stdin.json<Post>().content).toBe('piped body')
     const md = join(dir, `${name}-post.md`)
 
     writeFileSync(md, 'From a file\nsecond line')
-    expect((await cli(['posts', 'create', colName, '--content', `@${md}`, '--json'])).json<Post>().content).toBe(
-      'From a file\nsecond line',
-    )
+    expect(
+      (await cli(['posts', 'create', colName, '--title', 'Post', '--content', `@${md}`, '--json'])).json<Post>()
+        .content,
+    ).toBe('From a file\nsecond line')
     const k = `cli-${name}-${Date.now()}`
-    const a = await cli(['posts', 'create', colName, '--content', 'idem', '--idempotency-key', k, '--json'])
-    const b = await cli(['posts', 'create', colName, '--content', 'idem', '--idempotency-key', k, '--json'])
+    const a = await cli([
+      'posts',
+      'create',
+      colName,
+      '--title',
+      'Post',
+      '--content',
+      'idem',
+      '--idempotency-key',
+      k,
+      '--json',
+    ])
+    const b = await cli([
+      'posts',
+      'create',
+      colName,
+      '--title',
+      'Post',
+      '--content',
+      'idem',
+      '--idempotency-key',
+      k,
+      '--json',
+    ])
 
     expect(b.json<Post>().id).toBe(a.json<Post>().id)
   })

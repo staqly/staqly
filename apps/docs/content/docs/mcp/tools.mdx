@@ -22,7 +22,7 @@ No inputs. Returns every connected account with its `id`, `provider`, `name` and
 ### Write the post: `create_post`
 
 ```json
-{ "collection": "Product updates", "content": "v1.4 is out: schedules, channels and a calendar.", "targets": [{ "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a" }, { "channel_id": "ch_q2w8n5k7r3t9y4u6i1o0", "content": "v1.4 is out." }] }
+{ "collection": "Product updates", "title": "v1.4 is out", "content": "v1.4 is out: schedules, channels and a calendar.", "targets": [{ "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a" }, { "channel_id": "ch_q2w8n5k7r3t9y4u6i1o0", "content": "v1.4 is out." }] }
 ```
 
 The post is created as `draft`, with a shorter text of its own on the second channel.
@@ -179,6 +179,7 @@ Create a post in a collection: content, media (ids from upload_media), targets (
 | `tags` | string[] | No |  |
 | `targets` | object[] | No |  |
 | `thread` | object[] | No | Replies published under the post, in order (at most 25): `content`, `media`, `delay_seconds` |
+| `title` | string | <Required /> | The post's title (required): platforms with a title (YouTube, Reddit, blogs) publish it, the others show it in staqly's lists |
 
 ### `update_post`
 Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (an empty string clears it), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. · `posts:write`
@@ -197,6 +198,7 @@ Edit a draft, scheduled or failed post: content, media, targets (the full list r
 | `tags` | string[] | No |  |
 | `thread` | object[] | No | Replaces the replies; [] clears them |
 | `targets` | object[] | No | Replaces the whole list |
+| `title` | string | No | The post's title (can't be emptied) |
 
 ### `schedule_post`
 Set when a post goes out (RFC3339, in the future) and make it scheduled; the post needs at least one target. · `posts:publish`

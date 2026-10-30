@@ -436,6 +436,7 @@ CASES = [
         "posts.create draft",
         lambda c: c.posts.create(
             "Posts",
+            title="Post",
             content="Hello",
             media=["med_1"],
             targets=[
@@ -452,6 +453,7 @@ CASES = [
         201,
         body={
             "collection": "Posts",
+            "title": "Post",
             "content": "Hello",
             "media": ["med_1"],
             "targets": [
@@ -467,6 +469,7 @@ CASES = [
         "posts.create scheduled",
         lambda c: c.posts.create(
             "col_1",
+            title="Post",
             content="x",
             targets=[{"channel_id": "ch_1"}],
             status="scheduled",
@@ -478,6 +481,7 @@ CASES = [
         201,
         body={
             "collection": "col_1",
+            "title": "Post",
             "content": "x",
             "targets": [{"channel_id": "ch_1"}],
             "status": "scheduled",
@@ -486,13 +490,16 @@ CASES = [
     ),
     Case(
         "posts.create publish now",
-        lambda c: c.posts.create("col_1", content="x", targets=[{"channel_id": "ch_1"}], publish_now=True),
+        lambda c: c.posts.create(
+            "col_1", title="Post", content="x", targets=[{"channel_id": "ch_1"}], publish_now=True
+        ),
         "POST",
         "/v1/posts",
         post(status="publishing"),
         201,
         body={
             "collection": "col_1",
+            "title": "Post",
             "content": "x",
             "targets": [{"channel_id": "ch_1"}],
             "publish_now": True,
@@ -500,10 +507,12 @@ CASES = [
     ),
     Case(
         "posts.update",
-        lambda c: c.posts.update("pst_1", content="Edited", tags=["a"], expected_version=3),
+        lambda c: c.posts.update(
+            "pst_1", title="Edited title", content="Edited", tags=["a"], expected_version=3
+        ),
         "PATCH",
         "/v1/posts/pst_1",
-        body={"content": "Edited", "tags": ["a"], "expected_version": 3},
+        body={"title": "Edited title", "content": "Edited", "tags": ["a"], "expected_version": 3},
     ),
     Case(
         "posts.update unschedule and move",
@@ -514,12 +523,12 @@ CASES = [
     ),
     Case(
         "posts.create repeating",
-        lambda c: c.posts.create("col_1", content="x", repeat_every="1w"),
+        lambda c: c.posts.create("col_1", title="Post", content="x", repeat_every="1w"),
         "POST",
         "/v1/posts",
         post(repeat_every="1w"),
         201,
-        body={"collection": "col_1", "content": "x", "repeat_every": "1w"},
+        body={"collection": "col_1", "title": "Post", "content": "x", "repeat_every": "1w"},
         check=lambda r: r.repeat_every == "1w",
     ),
     Case(
@@ -533,6 +542,7 @@ CASES = [
         "posts.create with a thread",
         lambda c: c.posts.create(
             "col_1",
+            title="Post",
             content="x",
             thread=[ThreadPart(content="first reply"), {"content": "second", "delay_seconds": 300}],
         ),
@@ -560,6 +570,7 @@ CASES = [
         201,
         body={
             "collection": "col_1",
+            "title": "Post",
             "content": "x",
             "thread": [
                 {"content": "first reply", "media": [], "delay_seconds": 0},

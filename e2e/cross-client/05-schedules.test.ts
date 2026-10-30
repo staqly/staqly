@@ -40,8 +40,14 @@ describe.each(['local', 'cloud'] as const)('%s: schedules, jobs and requested wo
     const channel = await py.call<{ id: string; name: string }>('async', pyc, 'channels.connect', ['custom'], {
       name: `pipeline ${name} ${Date.now()}`,
     })
-    const first = await py.call<Post>('sync', pyc, 'posts.create', [col.id], { content: 'first in line' })
-    const second = await py.call<Post>('async', pyc, 'posts.create', [col.id], { content: 'second in line' })
+    const first = await py.call<Post>('sync', pyc, 'posts.create', [col.id], {
+      title: 'Post',
+      content: 'first in line',
+    })
+    const second = await py.call<Post>('async', pyc, 'posts.create', [col.id], {
+      title: 'Post',
+      content: 'second in line',
+    })
 
     // The CLI creates the schedule: weekday mornings, the next waiting post, on the channel.
     const created = await cli([
@@ -210,7 +216,11 @@ describe.each(['local', 'cloud'] as const)('%s: schedules, jobs and requested wo
 
     expect(work.work.find((w) => w.kind === 'posts' && w.schedule?.id === schedule.id)?.collection.id).toBe(col.id)
     // The agent answers over MCP; the next run publishes it.
-    const reply = await mcp<Post>(url, key, 'create_post', { collection: colName, content: 'written on request' })
+    const reply = await mcp<Post>(url, key, 'create_post', {
+      collection: colName,
+      title: 'Post',
+      content: 'written on request',
+    })
 
     expect((await c.work.list()).find((w) => w.kind === 'posts' && w.schedule?.id === schedule.id)).toBeUndefined()
     expect((await mcp<Schedule>(url, key, 'run_schedule', { schedule_id: schedule.id })).last_result).toBe(

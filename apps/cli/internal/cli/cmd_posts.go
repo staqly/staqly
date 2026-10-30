@@ -144,7 +144,7 @@ func renderPosts(c *Ctx, posts []Post) {
 		t.row(p.ID, c.status(p.Status), fmtOptTime(p.PublishAt), truncate(firstNonEmpty(p.CollectionName, p.CollectionID), 24),
 			truncate(targetNames(p), 30), truncate(firstLine(p.Content), 60))
 	}
-	t.flush("No posts. Create one with: staqly posts create <collection> --content \"...\" --channel <channel>")
+	t.flush("No posts. Create one with: staqly posts create <collection> --title \"...\" --content \"...\" --channel <channel>")
 }
 
 func targetNames(p Post) string {
@@ -189,7 +189,7 @@ func printPost(c *Ctx, p Post) {
 			media = append(media, id)
 		}
 	}
-	c.kv("ID", p.ID, "Status", c.status(p.Status), "Collection", firstNonEmpty(p.CollectionName, p.CollectionID),
+	c.kv("ID", p.ID, "Title", p.Title, "Status", c.status(p.Status), "Collection", firstNonEmpty(p.CollectionName, p.CollectionID),
 		"Publish at", fmtOptTime(p.PublishAt), "Published", fmtOptTime(p.PublishedAt),
 		"Tags", strings.Join(p.Tags, ", "), "Media", strings.Join(media, ", "),
 		"Repeats", repeatLabel(p.RepeatEvery), "Source", p.Source, "External ref", p.ExternalRef, "Version", strconv.Itoa(p.Version),
@@ -251,12 +251,12 @@ func indent(s, prefix string) string {
 
 // postFlags are the fields create and update share.
 type postFlags struct {
-	content, metadata, extRef, publishAt, repeat *string
-	stdin                                        *bool
-	media, channels, tags                        *multiFlag
-	meta                                         multiFlag
-	files                                        multiFlag
-	replies                                      *replyFlags
+	title, content, metadata, extRef, publishAt, repeat *string
+	stdin                                               *bool
+	media, channels, tags                               *multiFlag
+	meta                                                multiFlag
+	files                                               multiFlag
+	replies                                             *replyFlags
 }
 
 // replyFlags collects --reply parts in order; --reply-delay sets the wait for the --reply that follows it.
@@ -288,6 +288,7 @@ func (v replyDelay) Set(s string) error {
 
 func addPostFlags(fs *flag.FlagSet) *postFlags {
 	pf := &postFlags{
+		title:     fs.String("title", "", "the post's title: platforms with a title publish it, the others show it in staqly"),
 		content:   fs.String("content", "", "the text; '-' reads stdin, '@path' reads a file"),
 		stdin:     fs.Bool("stdin", false, "read the content from stdin"),
 		metadata:  fs.String("metadata", "", "metadata as a JSON object"),
@@ -335,6 +336,7 @@ func (pf *postFlags) body(c *Ctx, cl *Client, body map[string]any) error {
 		}
 		body["metadata"] = m
 	}
+	setIf(body, "title", *pf.title)
 	setIf(body, "external_ref", *pf.extRef)
 	if len(pf.replies.parts) > 0 {
 		body["thread"] = pf.replies.parts
@@ -393,6 +395,9 @@ func postsCreateCommand() *Command {
 		wait := fs.Bool("wait", false, "with --now or --publish-at: wait until the post is published or failed")
 		timeout := fs.Duration("timeout", 10*time.Minute, "how long --wait waits")
 		return func(c *Ctx, args []string) error {
+			if strings.TrimSpace(*pf.title) == "" {
+				return usageErrf("--title is required")
+			}
 			if *now && *pf.publishAt != "" {
 				return usageErrf("--now and --publish-at cannot be combined")
 			}
@@ -424,13 +429,14 @@ func postsCreateCommand() *Command {
 			describePost(c, "Created", p)
 			return nil
 		}
-	}, "staqly posts create \"Blog posts\" --content \"Launch day!\" --channel X --publish-at 2026-11-03T09:00:00Z",
-		"staqly posts create Announcements --content @post.md --file cover.png --channel x,\"My pipeline\" --now --wait",
-		"cat post.txt | staqly posts create Drafts --stdin --tag launch --meta campaign=q4",
-		"staqly posts create Tips --content @tip.md --channel X --publish-at \"2026-11-03 09:00\" --repeat 1w",
-		"staqly posts create Drafts --content \"Idea\" --json | jq -r .id")
-	cmd.Long = `Create a post in a collection (ID or name). Without --publish-at or --now it is a
-draft. --publish-at schedules it (needs at least one --channel); --now publishes
+	}, "staqly posts create \"Blog posts\" --title \"Launch day\" --content \"Launch day!\" --channel X --publish-at 2026-11-03T09:00:00Z",
+		"staqly posts create Announcements --title \"Launch\" --content @post.md --file cover.png --channel x,\"My pipeline\" --now --wait",
+		"cat post.txt | staqly posts create Drafts --title \"From a file\" --stdin --tag launch --meta campaign=q4",
+		"staqly posts create Tips --title \"Weekly tip\" --content @tip.md --channel X --publish-at \"2026-11-03 09:00\" --repeat 1w",
+		"staqly posts create Drafts --title \"Idea\" --content \"Idea\" --json | jq -r .id")
+	cmd.Long = `Create a post in a collection (ID or name) with a --title (required: platforms
+with a title publish it, the others show it in staqly). Without --publish-at or
+--now it is a draft. --publish-at schedules it (needs at least one --channel); --now publishes
 it right away. Each --channel becomes a target; the dashboard or 'posts update'
 can give a target its own text and provider settings.
 
@@ -545,7 +551,7 @@ func postsUpdateCommand() *Command {
 				body["expected_version"] = *version
 			}
 			if len(body) == 0 {
-				return usageErrf("nothing to update; pass at least one of --content, --media, --file, --channel, --tag, --metadata, --meta, --external-ref, --collection, --publish-at, --clear-publish-at, --no-channels, --repeat, --reply, --no-replies")
+				return usageErrf("nothing to update; pass at least one of --title, --content, --media, --file, --channel, --tag, --metadata, --meta, --external-ref, --collection, --publish-at, --clear-publish-at, --no-channels, --repeat, --reply, --no-replies")
 			}
 			var p Post
 			raw, err := cl.Patch(c, "/v1/posts/"+url.PathEscape(args[0]), body, &p)

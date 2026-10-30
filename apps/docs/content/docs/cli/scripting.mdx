@@ -25,7 +25,7 @@ staqly login --url https://api.staqly.ai --key "$STAQLY_API_KEY"   # cloud; skip
 ### Write a draft into a collection
 
 ```bash
-./generate-tip.sh | staqly posts create "Daily tips" --stdin --channel Announcements --tag tips --idempotency-key "tip-$(date +%F)"
+./generate-tip.sh | staqly posts create "Daily tips" --title "Tip of the day" --stdin --channel Announcements --tag tips --idempotency-key "tip-$(date +%F)"
 ```
 
 The post is a draft; the collection's schedule publishes it at the next slot. The idempotency
@@ -36,7 +36,7 @@ key makes a re-run of the same day's job harmless.
 ### Or give it a time
 
 ```bash
-staqly posts create "Daily tips" --content @tip.md --channel Announcements --publish-at "+1d"   # or "2026-11-03 09:00", RFC 3339, +2h
+staqly posts create "Daily tips" --title "Tip of the day" --content @tip.md --channel Announcements --publish-at "+1d"   # or "2026-11-03 09:00", RFC 3339, +2h
 ```
 
 </Step>
@@ -49,7 +49,7 @@ on the exit code:
 
 ```bash
 set -e
-POST=$(staqly posts create Releases --content @notes.md --channel Blog --channel Announcements --json | jq -r .id)
+POST=$(staqly posts create Releases --title "Release notes" --content @notes.md --channel Blog --channel Announcements --json | jq -r .id)
 staqly posts preview "$POST"                      # see what each platform objects to before publishing
 
 if staqly posts publish "$POST" --wait --timeout 10m; then
@@ -91,7 +91,7 @@ and schedules that ask for new posts. A [webhook](/automation/webhooks) on
 staqly work --json | jq -c '.data[] | select(.kind=="posts")' | while read -r w; do
   COL=$(jq -r .collection.id <<<"$w")
   ./write-three-drafts.sh | while read -r line; do
-    staqly posts create "$COL" --content "$line"
+    staqly posts create "$COL" --title "$line" --content "$line"
   done
 done
 ```

@@ -50,7 +50,7 @@ against limits and how many posts are scheduled.
 
 ```bash
 staqly channels connect custom --name "My publisher"
-staqly posts create "Product updates" --content @post.md --channel "My publisher" --publish-at "2026-11-03 09:00"
+staqly posts create "Product updates" --title "v1.4 is out" --content @post.md --channel "My publisher" --publish-at "2026-11-03 09:00"
 ```
 
 </Step>
@@ -122,8 +122,8 @@ staqly status --json
 ```bash
 staqly posts list [--collection C] [--status draft|scheduled|publishing|published|failed] [--channel CH] [--tag t] [-q text] [--publish-after 2026-10-20] [--publish-before 2026-10-27] [--sort publish_asc] [--limit 50] [--cursor X] [--all]
 staqly posts get post_123                  # content, media, targets with their status and link, history summary
-staqly posts create <collection> [--content TEXT|-|@file --stdin] [--channel CH ...] [--media med_1 ...] [--file PATH ...] [--tag t ...] [--metadata '{json}' --meta k=v] [--source s] [--external-ref r] [--repeat 1w] [--reply-delay 5m --reply TEXT ...] [--publish-at TIME | --now] [--wait [--timeout 10m]]
-staqly posts update post_1 [--content TEXT] [--channel CH ...] [--media ...] [--tag ...] [--metadata '{json}'] [--collection C] [--publish-at TIME | --clear-publish-at] [--repeat 1w|none] [--reply TEXT ... | --no-replies] [--no-channels] [--expected-version N]
+staqly posts create <collection> --title TEXT [--content TEXT|-|@file --stdin] [--channel CH ...] [--media med_1 ...] [--file PATH ...] [--tag t ...] [--metadata '{json}' --meta k=v] [--source s] [--external-ref r] [--repeat 1w] [--reply-delay 5m --reply TEXT ...] [--publish-at TIME | --now] [--wait [--timeout 10m]]
+staqly posts update post_1 [--title TEXT] [--content TEXT] [--channel CH ...] [--media ...] [--tag ...] [--metadata '{json}'] [--collection C] [--publish-at TIME | --clear-publish-at] [--repeat 1w|none] [--reply TEXT ... | --no-replies] [--no-channels] [--expected-version N]
 staqly posts schedule post_1 <time>        # set the time, status scheduled
 staqly posts publish post_1 [--wait [--timeout 10m]]
 staqly posts cancel post_1                 # off the calendar, back to draft

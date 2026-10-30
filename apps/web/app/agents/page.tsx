@@ -161,7 +161,7 @@ export default function AgentsPage() {
           title="claude"
           code={`# you: "Announce v1.4 on every channel tomorrow at 9"
 list_channels
-create_post    {"collection":"Product updates","content":"v1.4 is out: ...",
+create_post    {"collection":"Product updates","title":"v1.4","content":"v1.4 is out: ...",
                 "targets":[{"channel_id":"ch_n8n..."},{"channel_id":"ch_x...","content":"v1.4: ..."}]}
 preview_post   {"post_id":"post_..."}  → every target ok
 schedule_post  {"post_id":"post_...","publish_at":"2026-10-21T09:00:00Z"}`}

@@ -207,7 +207,7 @@ describe('publishing through your own automation', () => {
       (
         await agent.raw('/v1/posts', {
           method: 'POST',
-          json: { collection: post.collection_id, content: 'x', targets: [{ channel_id: off.id }] },
+          json: { collection: post.collection_id, title: 'Post', content: 'x', targets: [{ channel_id: off.id }] },
         })
       ).status,
     ).toBe(422)

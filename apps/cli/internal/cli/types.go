@@ -9,6 +9,7 @@ type Post struct {
 	ID             string         `json:"id"`
 	CollectionID   string         `json:"collection_id"`
 	CollectionName string         `json:"collection_name"`
+	Title          string         `json:"title"`
 	Content        string         `json:"content"`
 	Media          []string       `json:"media"`
 	MediaItems     []Media        `json:"media_items"`

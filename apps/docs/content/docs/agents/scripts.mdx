@@ -24,7 +24,7 @@ curl -s "$API/v1/posts?status=scheduled&publish_after=2026-10-20&publish_before=
 
 # a draft, then publish it now
 POST=$(curl -s -X POST $API/v1/posts -H "$AUTH" -H 'Content-Type: application/json' \
-  -d "{\"collection\":\"Product updates\",\"content\":\"v1.4 is out.\",\"targets\":[{\"channel_id\":\"$CHANNEL\"}]}" | jq -r .id)
+  -d "{\"collection\":\"Product updates\",\"title\":\"v1.4 is out\",\"content\":\"v1.4 is out.\",\"targets\":[{\"channel_id\":\"$CHANNEL\"}]}" | jq -r .id)
 curl -s -X POST $API/v1/posts/$POST/publish -H "$AUTH"
 
 # history
@@ -40,7 +40,7 @@ for await (const post of staqly.posts.iterate({ status: 'scheduled', publish_aft
   console.log(post.publish_at, post.content);
 }
 
-const post = await staqly.posts.create({ collection: 'Product updates', content: 'v1.4 is out.', targets: [{ channel_id: channelId }] });
+const post = await staqly.posts.create({ collection: 'Product updates', title: 'v1.4 is out', content: 'v1.4 is out.', targets: [{ channel_id: channelId }] });
 await staqly.posts.publish(post.id);
 const done = await staqly.posts.waitForPublished(post.id);
 ```
@@ -52,7 +52,7 @@ with Staqly() as staqly:  # http://localhost:3333, the access token from STAQLY_
     for post in staqly.posts.iterate(status="scheduled", publish_after="2026-10-20", publish_before="2026-10-27"):
         print(post.publish_at, post.content)
 
-    post = staqly.posts.create("Product updates", content="v1.4 is out.", targets=[{"channel_id": channel_id}])
+    post = staqly.posts.create("Product updates", title="v1.4 is out", content="v1.4 is out.", targets=[{"channel_id": channel_id}])
     staqly.posts.publish(post.id)
     done = staqly.posts.wait_for_published(post.id)
 ```

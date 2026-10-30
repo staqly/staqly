@@ -192,6 +192,7 @@ test.describe('the schedule', () => {
     await expect(composer.getByTestId('publish-at-chip')).toContainText(/\d/)
     await composer.getByRole('combobox', { name: 'Collection' }).click()
     await page.getByRole('option', { name: col.name }).click()
+    await composer.getByTestId('post-title').fill('From the calendar')
     await composer.getByTestId('post-content').fill('Written from the calendar')
     await pickChannels(page, composer, col.channel.name)
     // Schedule opens the calendar with the slot's time picked; its own Schedule sends the post.

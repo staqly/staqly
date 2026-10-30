@@ -26,7 +26,7 @@ credential: the Community Edition's access token (the CLI reads it from
 		Examples: []string{
 			"staqly status",
 			"staqly channels connect custom --name Announcements   # your own automation publishes",
-			"staqly posts create \"Blog posts\" --content @post.md --channel Announcements --publish-at 2026-11-03T09:00:00Z",
+			"staqly posts create \"Blog posts\" --title \"Launch day\" --content @post.md --channel Announcements --publish-at 2026-11-03T09:00:00Z",
 			"staqly posts publish pst_123 --wait",
 			"staqly schedule",
 			"staqly login --url https://staqly.example.com --key stk_... --profile work",

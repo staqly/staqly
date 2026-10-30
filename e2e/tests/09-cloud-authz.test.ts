@@ -183,7 +183,7 @@ describe('scope matrix (REST)', () => {
       request: async () => ({
         method: 'POST',
         path: '/v1/posts',
-        json: { collection: collectionId, content: 'by key' },
+        json: { collection: collectionId, title: 'Post', content: 'by key' },
       }),
     },
     {
@@ -430,7 +430,7 @@ describe('scope matrix (REST)', () => {
       (
         await withKey(keys['media:write'], '/v1/posts', {
           method: 'POST',
-          json: { collection: collectionId, content: 'x' },
+          json: { collection: collectionId, title: 'Post', content: 'x' },
         })
       ).status,
     ).toBe(403)
@@ -440,14 +440,14 @@ describe('scope matrix (REST)', () => {
     const as = (key: string) => ({ Authorization: `Bearer ${key}` })
     const reader = await callTool(
       'create_post',
-      { collection: collectionId, content: 'over MCP' },
+      { collection: collectionId, title: 'Post', content: 'over MCP' },
       as(keys['posts:read']),
     )
 
     expect(reader.isError).toBe(true)
     const writer = await callTool<Post>(
       'create_post',
-      { collection: collectionId, content: 'over MCP', targets: [{ channel_id: channelId }] },
+      { collection: collectionId, title: 'Post', content: 'over MCP', targets: [{ channel_id: channelId }] },
       as(keys['posts:write']),
     )
 
@@ -809,7 +809,7 @@ describe('workspace isolation (IDs guessed from another workspace)', () => {
       ['POST', `/v1/posts/${ids.post}/purge`],
       ['GET', `/v1/collections/${ids.collection}`],
       ['GET', `/v1/collections/${ids.collection}/posts`],
-      ['POST', '/v1/posts', { collection: ids.collection, content: 'planted' }],
+      ['POST', '/v1/posts', { collection: ids.collection, title: 'Post', content: 'planted' }],
       ['PATCH', `/v1/collections/${ids.collection}`, { name: 'hijacked' }],
       ['GET', `/v1/channels/${ids.channel}`],
       ['PATCH', `/v1/channels/${ids.channel}`, { name: 'hijacked' }],
@@ -855,7 +855,7 @@ describe('workspace isolation (IDs guessed from another workspace)', () => {
     // B's own post cannot target A's channel either.
     const planted = await withKey(b.key, '/v1/posts', {
       method: 'POST',
-      json: { collection: 'Default', content: 'x', targets: [{ channel_id: ids.channel }] },
+      json: { collection: 'Default', title: 'Post', content: 'x', targets: [{ channel_id: ids.channel }] },
     })
 
     expect(planted.status).toBe(422)

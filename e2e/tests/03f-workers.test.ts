@@ -167,6 +167,7 @@ describe('the clock (one shared minute)', () => {
         method: 'POST',
         json: {
           collection: collection.id,
+          title: 'Post',
           content: 'x',
           targets: [{ channel_id: channel.id }],
           publish_at,

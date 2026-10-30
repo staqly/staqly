@@ -36,7 +36,7 @@ const send = (body: string | Buffer, contentType = 'application/json', path = '/
   raw(path, { method: 'POST', body, headers: { 'Content-Type': contentType } })
 
 const create = (json: Record<string, unknown>, headers: Record<string, string> = {}) =>
-  raw('/v1/posts', { method: 'POST', json: { collection: collection.id, ...json }, headers })
+  raw('/v1/posts', { method: 'POST', json: { collection: collection.id, title: 'Post', ...json }, headers })
 
 beforeAll(async () => {
   collection = await agent.collection({ name: unique('Input') })
@@ -77,9 +77,10 @@ describe('malformed bodies', () => {
 
   it('a missing collection, a post without a time but scheduled, or with unknown media and channels are 404/422', async () => {
     expect((await raw('/v1/posts', { method: 'POST', json: { content: 'homeless' } })).status).toBe(422)
-    expect((await raw('/v1/posts', { method: 'POST', json: { collection: 'col_nope', content: 'x' } })).status).toBe(
-      404,
-    )
+    expect(
+      (await raw('/v1/posts', { method: 'POST', json: { collection: 'col_nope', title: 'Post', content: 'x' } }))
+        .status,
+    ).toBe(404)
     expect((await create({ content: 'x', status: 'scheduled' })).status).toBe(422)
     expect((await create({ content: 'x', status: 'published' })).status).toBe(422)
     expect((await create({ content: 'x', media: ['med_nope'] })).status).toBe(422)
@@ -355,7 +356,7 @@ describe('races', () => {
     const col = await agent.collection({ name: unique('Burst') })
     const created = await Promise.all(
       Array.from({ length: 50 }, (_, i) =>
-        raw('/v1/posts', { method: 'POST', json: { collection: col.id, content: `b${i}` } }),
+        raw('/v1/posts', { method: 'POST', json: { collection: col.id, title: 'Post', content: `b${i}` } }),
       ),
     )
 

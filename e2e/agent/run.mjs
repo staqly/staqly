@@ -168,7 +168,7 @@ const col = async (name) => ((await get('/v1/collections?limit=200')).data ?? []
 const posts = async (cid) => (await get(`/v1/posts?collection_id=${cid}&limit=200&sort=created_asc`)).data ?? []
 const events = async (q) => (await get('/v1/events?limit=200&' + q)).data ?? []
 const newCol = async (name, extra = {}) => (await api('POST', '/v1/collections', { name, ...extra })).body
-const newPost = async (cid, body) => (await api('POST', '/v1/posts', { collection: cid, ...body })).body
+const newPost = async (cid, body) => (await api('POST', '/v1/posts', { collection: cid, title: 'Post', ...body })).body
 const newChannel = async (name) => (await api('POST', '/v1/channels', { provider: 'custom', name })).body
 /** The first line of a post's content, as the dashboard titles it. */
 const titleOf = (p) => (p?.content ?? '').split('\n')[0].trim()
@@ -1374,11 +1374,11 @@ function suspendedWorkspace() {
     await api(
       'POST',
       '/v1/posts',
-      { collection: ws.col, content: 'Waiting post\nx', targets: [{ channel_id: ws.ch }] },
+      { collection: ws.col, title: 'Post', content: 'Waiting post\nx', targets: [{ channel_id: ws.ch }] },
       ws.key,
     )
     operator('set-plan', ws.id, 'pro', '--until', '2020-01-01')
-    const probe = await api('POST', '/v1/posts', { collection: ws.col, content: 'Probe' }, ws.key)
+    const probe = await api('POST', '/v1/posts', { collection: ws.col, title: 'Post', content: 'Probe' }, ws.key)
 
     if (probe.status !== 402 || probe.body?.error?.code !== 'plan_expired') {
       throw new Error(`workspace not suspended: ${probe.status} ${JSON.stringify(probe.body)}`)

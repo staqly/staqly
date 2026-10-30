@@ -150,6 +150,7 @@ describe('cloud mode on the local data', () => {
       method: 'POST',
       json: {
         collection: (await api(key).getPost(draft)).collection_id,
+        title: 'Post',
         content: 'x',
         targets: [{ channel_id: channel }],
         publish_at: new Date(Date.now() + 3600_000).toISOString(),

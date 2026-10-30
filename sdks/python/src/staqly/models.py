@@ -887,6 +887,8 @@ class Post(StaqlyModel):
     id: str
     collection_id: str
     collection_name: str = ""
+    #: The post's title; empty on posts from before titles were required.
+    title: str = ""
     content: str = ""
     #: Media ids, in order.
     media: list[str] = Field(default_factory=list)
@@ -1388,6 +1390,8 @@ class ProviderField(StaqlyModel):
     max_items: int | None = None
     #: remote: the option labels to pick while the field is empty, the first the list has.
     prefer: list[str] = Field(default_factory=list)
+    #: The value comes from the post (its title, its tags), not from the channel's settings.
+    from_post: bool = False
 
 
 class ImageRules(StaqlyModel):

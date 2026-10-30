@@ -214,7 +214,7 @@ export class Api {
   }
 
   createPost(collection: string, body: Record<string, unknown>): Promise<Post> {
-    return this.post<Post>('/v1/posts', { collection, ...body })
+    return this.post<Post>('/v1/posts', { collection, title: 'Post', ...body })
   }
 
   getPost(id: string): Promise<Post> {

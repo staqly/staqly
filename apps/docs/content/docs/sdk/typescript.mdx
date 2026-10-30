@@ -57,6 +57,7 @@ await staqly.collections.create({ name: 'Product updates' })
 
 const post = await staqly.posts.create({
   collection: 'Product updates',
+  title: 'v1.4 is out',
   content: 'v1.4 is out: schedules, channels and a calendar.',
   targets: [{ channel_id: channel.id }],
   publish_now: true,
@@ -103,7 +104,7 @@ Every method takes an optional last argument with per-request overrides:
 
 ```ts
 await staqly.posts.list({ status: 'scheduled' }, { timeout: 5_000, maxRetries: 0, signal })
-await staqly.posts.create({ collection: 'Posts', content: 'x' }, { idempotencyKey: `job-${jobId}` })
+await staqly.posts.create({ collection: 'Posts', title: 'x', content: 'x' }, { idempotencyKey: `job-${jobId}` })
 ```
 
 Request bodies and query parameters use the API's `snake_case` names (`publish_at`,
@@ -120,6 +121,7 @@ returns the server mode, the workspace and the calling principal with its scopes
 // a draft with a text of its own on one channel (x and publisher are channels from channels.list())
 const post = await staqly.posts.create({
   collection: 'Product updates', // ID or exact name
+  title: 'Spring sale',
   content: 'Three days, every avatar half price.',
   media: [media.id], // from staqly.media.upload
   targets: [
@@ -221,7 +223,7 @@ for (const w of await staqly.work.list()) {
     }
   } else {
     // a schedule found nothing to publish: write drafts into w.collection
-    await staqly.posts.create({ collection: w.collection.id, content: await draftOne() })
+    await staqly.posts.create({ collection: w.collection.id, title: 'Tip', content: await draftOne() })
   }
 }
 ```

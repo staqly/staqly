@@ -37,6 +37,7 @@ def post(**overrides: Any) -> dict[str, Any]:
         "id": "pst_1",
         "collection_id": "col_1",
         "collection_name": "Posts",
+        "title": "Launch",
         "content": "Launch day",
         "media": [],
         "media_items": [],

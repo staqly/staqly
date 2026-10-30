@@ -293,7 +293,7 @@ class TestRetries:
 
     def test_caller_idempotency_key(self, client: Staqly, mock: Mock) -> None:
         mock.reply(jsonr(post(), 201))
-        client.posts.create("Posts", content="x", request_options={"idempotency_key": "job-42"})
+        client.posts.create("Posts", title="Post", content="x", request_options={"idempotency_key": "job-42"})
         assert mock.last.headers["idempotency-key"] == "job-42"
 
     def test_get_has_no_idempotency_key(self, client: Staqly, mock: Mock) -> None:
@@ -357,5 +357,5 @@ class TestRetries:
     def test_no_automatic_key_without_retries(self, mock: Mock) -> None:
         mock.reply(jsonr(post(), 201))
         with Staqly(base_url=BASE, max_retries=0) as c:
-            c.posts.create("x", content="t")
+            c.posts.create("x", title="Post", content="t")
         assert "idempotency-key" not in mock.last.headers

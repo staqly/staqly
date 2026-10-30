@@ -41,6 +41,7 @@ const CLIENTS = ['ts', 'py', 'pyasync', 'cli', 'curl', 'mcp'] as const
 type ClientName = (typeof CLIENTS)[number]
 
 const INPUT = {
+  title: 'Same operation',
   content: 'Same operation\nBody text: ünïcödé ✓',
   metadata: { n: 1, nested: { a: [1, 2], ok: true } },
   source: 'xc',
@@ -90,7 +91,7 @@ describe.each(['local', 'cloud'] as const)('%s: one operation, six clients', (na
     const targets = [{ channel_id: channel }]
     const steps: Record<ClientName, () => Promise<string>> = {
       ts: async () => {
-        const created = await c.posts.create({ title: 'Post', collection: col, ...INPUT, targets })
+        const created = await c.posts.create({ collection: col, ...INPUT, targets })
 
         await c.posts.publish(created.id)
         await requested(c, created.id)
@@ -105,6 +106,8 @@ describe.each(['local', 'cloud'] as const)('%s: one operation, six clients', (na
           'posts',
           'create',
           col,
+          '--title',
+          INPUT.title,
           '--content',
           INPUT.content,
           '--metadata',
@@ -328,6 +331,7 @@ describe.each(['local', 'cloud'] as const)('%s: workflows across clients', (name
     expect(connected).toMatchObject({ code: 0 })
     const channel = connected.json<{ id: string; name: string }>()
     const post = await py.call<Post>('sync', pyc, 'posts.create', [colName], {
+      title: 'Post',
       content: 'Launch post\nv1',
       targets: [{ channel_id: channel.id }],
     })
@@ -571,10 +575,12 @@ describe.each(['local', 'cloud'] as const)('%s: clients racing on the same post'
     const results = await Promise.allSettled([
       c.posts.create(body, { idempotencyKey: k }),
       py.call<Post>('sync', pyc, 'posts.create', [col], {
+        title: 'Post',
         content: body.content,
         request_options: { idempotency_key: k },
       }),
       py.call<Post>('async', pyc, 'posts.create', [col], {
+        title: 'Post',
         content: body.content,
         request_options: { idempotency_key: k },
       }),

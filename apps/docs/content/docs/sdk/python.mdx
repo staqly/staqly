@@ -53,6 +53,7 @@ with Staqly() as staqly:  # $STAQLY_API_URL (default http://localhost:3333) and 
 
     post = staqly.posts.create(
         "Product updates",
+        title="v1.4 is out",
         content="v1.4 is out: schedules, channels and a calendar.",
         targets=[{"channel_id": channel.id}],
         publish_now=True,
@@ -99,7 +100,7 @@ Every method accepts `request_options=` for per-request overrides:
 
 ```python
 staqly.posts.list(status="scheduled", request_options={"timeout": 5, "max_retries": 0})
-staqly.posts.create("Posts", content="x", request_options={"idempotency_key": f"job-{job_id}"})
+staqly.posts.create("Posts", title="x", content="x", request_options={"idempotency_key": f"job-{job_id}"})
 ```
 
 `staqly.health()` checks liveness, `staqly.ready()` checks readiness, and `staqly.whoami()`
@@ -112,6 +113,7 @@ returns the server mode, the workspace and the calling principal with its scopes
 # a draft with a text of its own on one channel (x and publisher are channels from channels.list())
 post = staqly.posts.create(
     "Product updates",  # ID or exact name
+    title="Spring sale",
     content="Three days, every avatar half price.",
     media=[media.id],  # from staqly.media.upload
     targets=[
@@ -201,7 +203,7 @@ for w in staqly.work.list():
             staqly.posts.report_result(w.post.id, w.channel.id, status="failed", error=str(e))
     else:
         # a schedule found nothing to publish: write drafts into w.collection
-        staqly.posts.create(w.collection.id, content=draft_one())
+        staqly.posts.create(w.collection.id, title="Tip", content=draft_one())
 ```
 
 `work.list()` is `GET /v1/work`. With a webhook on `post.publish_requested` you get the same
@@ -306,7 +308,7 @@ from staqly import AsyncStaqly
 
 async def main() -> None:
     async with AsyncStaqly() as staqly:
-        post = await staqly.posts.create("Drafts", content="Hello", targets=[{"channel_id": channel_id}])
+        post = await staqly.posts.create("Drafts", title="Hello", content="Hello", targets=[{"channel_id": channel_id}])
         await staqly.posts.publish(post.id)
         done = await staqly.posts.wait_for_published(post.id)
         print(done.status)
@@ -342,7 +344,7 @@ Methods that return a list return a Python `list`; `list()` on paginated endpoin
 | `posts.list(**filters)`, `posts.iterate(**filters)` | `GET /v1/posts` (`collection_id`, `status`, `channel_id`, `tag`, `publish_after`, `publish_before`, `q`, `sort`, `limit`, `cursor`) |
 | `posts.search(q, **filters)` | `GET /v1/posts?q=` |
 | `posts.get(post_id)` | `GET /v1/posts/{id}` |
-| `posts.create(collection, *, content=None, media=None, targets=None, publish_at=None, status=None, publish_now=None, tags=None, metadata=None, source=None, external_ref=None, repeat_every=None, thread=None)` | `POST /v1/posts` |
+| `posts.create(collection, *, title, content=None, media=None, targets=None, publish_at=None, status=None, publish_now=None, tags=None, metadata=None, source=None, external_ref=None, repeat_every=None, thread=None)` | `POST /v1/posts` |
 | `posts.update(post_id, **fields)` | `PATCH /v1/posts/{id}` (`expected_version` refuses a stale edit; `clear_publish_at=True` clears the time) |
 | `posts.schedule(post_id, publish_at)`, `posts.cancel(post_id)` | `POST .../schedule`, `POST .../cancel` |
 | `posts.publish(post_id)` | `POST .../publish` (202) |

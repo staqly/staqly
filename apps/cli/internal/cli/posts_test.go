@@ -72,12 +72,12 @@ func TestPostsCreateBody(t *testing.T) {
 	f := newFake(t)
 	f.on("POST /v1/posts", 201, post("pst_1", "draft"))
 	f.on("GET /v1/channels", 200, map[string]any{"data": []any{channel("ch_1", "mastodon", "Brand"), channel("ch_2", "bluesky", "Sky")}})
-	r := f.run("posts", "create", "Blog posts", "--content", "Hello", "--channel", "Brand,ch_2", "--tag", "launch", "--tag", "q4",
+	r := f.run("posts", "create", "Blog posts", "--title", "Post", "--content", "Hello", "--channel", "Brand,ch_2", "--tag", "launch", "--tag", "q4",
 		"--meta", "score=0.9", "--metadata", `{"campaign":"q4"}`, "--external-ref", "T-1", "--media", "med_1", "--source", "agent").mustCode(t, 0)
 	mustContain(t, r.out, "Created pst_1")
 	c := f.last("POST", "/v1/posts")
 	b := c.json(t)
-	if b["collection"] != "Blog posts" || b["content"] != "Hello" || b["source"] != "agent" || b["external_ref"] != "T-1" {
+	if b["collection"] != "Blog posts" || b["title"] != "Post" || b["content"] != "Hello" || b["source"] != "agent" || b["external_ref"] != "T-1" {
 		t.Fatalf("body = %v", b)
 	}
 	targets := b["targets"].([]any)
@@ -99,19 +99,21 @@ func TestPostsCreateBody(t *testing.T) {
 	}
 
 	// --publish-at makes it scheduled; --now publishes; both together is a usage error.
-	f.run("posts", "create", "Blog posts", "--content", "x", "--channel", "ch_1", "--publish-at", "2026-11-03T09:00:00Z").mustCode(t, 0)
+	f.run("posts", "create", "Blog posts", "--title", "Post", "--content", "x", "--channel", "ch_1", "--publish-at", "2026-11-03T09:00:00Z").mustCode(t, 0)
 	b = f.last("POST", "/v1/posts").json(t)
 	if b["status"] != "scheduled" || b["publish_at"] != "2026-11-03T09:00:00Z" {
 		t.Fatalf("scheduled body = %v", b)
 	}
-	f.run("posts", "create", "Blog posts", "--content", "x", "--channel", "ch_1", "--now", "--idempotency-key", "job-1").mustCode(t, 0)
+	f.run("posts", "create", "Blog posts", "--title", "Post", "--content", "x", "--channel", "ch_1", "--now", "--idempotency-key", "job-1").mustCode(t, 0)
 	c = f.last("POST", "/v1/posts")
 	if c.json(t)["publish_now"] != true || c.Header.Get("Idempotency-Key") != "job-1" {
 		t.Fatalf("now body = %v %v", c.json(t), c.Header)
 	}
-	f.run("posts", "create", "Blog posts", "--content", "x", "--now", "--publish-at", "+1h").mustCode(t, ExitUsage)
-	f.run("posts", "create", "Blog posts", "--content", "x", "--publish-at", "next tuesday").mustCode(t, ExitUsage)
-	f.run("posts", "create", "Blog posts", "--meta", "broken").mustCode(t, ExitUsage)
+	f.run("posts", "create", "Blog posts", "--title", "Post", "--content", "x", "--now", "--publish-at", "+1h").mustCode(t, ExitUsage)
+	f.run("posts", "create", "Blog posts", "--title", "Post", "--content", "x", "--publish-at", "next tuesday").mustCode(t, ExitUsage)
+	f.run("posts", "create", "Blog posts", "--title", "Post", "--meta", "broken").mustCode(t, ExitUsage)
+	f.run("posts", "create", "Blog posts", "--content", "x").mustCode(t, ExitUsage)                 // no title
+	f.run("posts", "create", "Blog posts", "--title", " ", "--content", "x").mustCode(t, ExitUsage) // a blank one
 }
 
 func TestPostsCreateContentSourcesAndFile(t *testing.T) {
@@ -128,11 +130,11 @@ func TestPostsCreateContentSourcesAndFile(t *testing.T) {
 		uploaded = part.FileName() + ":" + readAllString(part)
 		writeJSON(w, 201, map[string]any{"id": "med_9", "mime_type": "image/png", "size_bytes": 4, "original_name": "cover.png", "url": "/v1/media/med_9"})
 	})
-	f.runWith(runOpts{stdin: "from stdin"}, "posts", "create", "Posts", "--stdin").mustCode(t, 0)
+	f.runWith(runOpts{stdin: "from stdin"}, "posts", "create", "Posts", "--title", "Post", "--stdin").mustCode(t, 0)
 	if b := f.last("POST", "/v1/posts").json(t); b["content"] != "from stdin" {
 		t.Fatalf("stdin body = %v", b)
 	}
-	f.runWith(runOpts{stdin: "dash"}, "posts", "create", "Posts", "--content", "-").mustCode(t, 0)
+	f.runWith(runOpts{stdin: "dash"}, "posts", "create", "Posts", "--title", "Post", "--content", "-").mustCode(t, 0)
 	if b := f.last("POST", "/v1/posts").json(t); b["content"] != "dash" {
 		t.Fatalf("dash body = %v", b)
 	}
@@ -141,22 +143,22 @@ func TestPostsCreateContentSourcesAndFile(t *testing.T) {
 	os.WriteFile(txt, []byte("# from file"), 0o600)
 	png := filepath.Join(dir, "cover.png")
 	os.WriteFile(png, []byte("\x89PNG"), 0o600)
-	f.run("posts", "create", "Posts", "--content", "@"+txt, "--file", png).mustCode(t, 0)
+	f.run("posts", "create", "Posts", "--title", "Post", "--content", "@"+txt, "--file", png).mustCode(t, 0)
 	b := f.last("POST", "/v1/posts").json(t)
 	if b["content"] != "# from file" || b["media"].([]any)[0] != "med_9" || uploaded != "cover.png:\x89PNG" {
 		t.Fatalf("file body = %v uploaded=%q", b, uploaded)
 	}
-	f.run("posts", "create", "Posts", "--file", filepath.Join(dir, "missing.png")).mustCode(t, ExitError)
+	f.run("posts", "create", "Posts", "--title", "Post", "--file", filepath.Join(dir, "missing.png")).mustCode(t, ExitError)
 }
 
 func TestPostsUpdate(t *testing.T) {
 	f := newFake(t)
 	f.on("PATCH /v1/posts/pst_1", 200, post("pst_1", "draft"))
 	f.on("GET /v1/channels", 200, map[string]any{"data": []any{channel("ch_1", "mastodon", "Brand")}})
-	f.run("posts", "update", "pst_1", "--content", "Edited", "--channel", "Brand", "--publish-at", "2026-11-04 10:00", "--expected-version", "3",
+	f.run("posts", "update", "pst_1", "--title", "New title", "--content", "Edited", "--channel", "Brand", "--publish-at", "2026-11-04 10:00", "--expected-version", "3",
 		"--collection", "Archive", "--tag", "a").mustCode(t, 0)
 	b := f.last("PATCH", "/v1/posts/pst_1").json(t)
-	if b["content"] != "Edited" || b["expected_version"] != float64(3) || b["collection"] != "Archive" || b["publish_at"] == nil ||
+	if b["title"] != "New title" || b["content"] != "Edited" || b["expected_version"] != float64(3) || b["collection"] != "Archive" || b["publish_at"] == nil ||
 		b["targets"].([]any)[0].(map[string]any)["channel_id"] != "ch_1" || b["tags"].([]any)[0] != "a" {
 		t.Fatalf("body = %v", b)
 	}
@@ -267,10 +269,10 @@ func TestPostsCreateNowWait(t *testing.T) {
 	f.on("POST /v1/posts", 201, post("pst_1", "publishing"))
 	f.on("GET /v1/posts/pst_1", 200, post("pst_1", "published"))
 	f.on("GET /v1/channels", 200, map[string]any{"data": []any{channel("ch_1", "mastodon", "Brand")}})
-	f.run("posts", "create", "Posts", "--content", "x", "--channel", "Brand", "--now", "--wait").mustCode(t, 0)
+	f.run("posts", "create", "Posts", "--title", "Post", "--content", "x", "--channel", "Brand", "--now", "--wait").mustCode(t, 0)
 	// A plain draft with --wait has nothing to wait for.
 	f.on("POST /v1/posts", 201, post("pst_1", "draft"))
-	r := f.run("posts", "create", "Posts", "--content", "x", "--wait").mustCode(t, 0)
+	r := f.run("posts", "create", "Posts", "--title", "Post", "--content", "x", "--wait").mustCode(t, 0)
 	mustContain(t, r.out, "Created pst_1 (draft)")
 }
 
@@ -326,7 +328,7 @@ func TestPostsRepeat(t *testing.T) {
 	f := newFake(t)
 	f.on("POST /v1/posts", 201, post("pst_1", "scheduled"))
 	f.on("PATCH /v1/posts/pst_1", 200, post("pst_1", "scheduled"))
-	f.run("posts", "create", "Tips", "--content", "x", "--channel", "ch_1", "--publish-at", "+1d", "--repeat", "1w").mustCode(t, 0)
+	f.run("posts", "create", "Tips", "--title", "Post", "--content", "x", "--channel", "ch_1", "--publish-at", "+1d", "--repeat", "1w").mustCode(t, 0)
 	if b := f.last("POST", "/v1/posts").json(t); b["repeat_every"] != "1w" {
 		t.Fatalf("create body = %v", b)
 	}
@@ -334,7 +336,7 @@ func TestPostsRepeat(t *testing.T) {
 	if v, ok := f.last("PATCH", "/v1/posts/pst_1").json(t)["repeat_every"]; !ok || v != "" {
 		t.Fatalf("none clears: %v", v)
 	}
-	f.run("posts", "create", "Tips", "--content", "x", "--repeat", "weekly").mustCode(t, ExitUsage)
+	f.run("posts", "create", "Tips", "--title", "Post", "--content", "x", "--repeat", "weekly").mustCode(t, ExitUsage)
 
 	p := post("pst_1", "scheduled")
 	p["repeat_every"] = "2w"
@@ -346,7 +348,7 @@ func TestPostsThread(t *testing.T) {
 	f := newFake(t)
 	f.on("POST /v1/posts", 201, post("pst_1", "draft"))
 	f.on("PATCH /v1/posts/pst_1", 200, post("pst_1", "draft"))
-	f.run("posts", "create", "Tips", "--content", "x", "--reply", "first", "--reply-delay", "5m", "--reply", "second", "--reply", "third").mustCode(t, 0)
+	f.run("posts", "create", "Tips", "--title", "Post", "--content", "x", "--reply", "first", "--reply-delay", "5m", "--reply", "second", "--reply", "third").mustCode(t, 0)
 	th, _ := f.last("POST", "/v1/posts").json(t)["thread"].([]any)
 	if len(th) != 3 {
 		t.Fatalf("thread = %v", th)
@@ -357,7 +359,7 @@ func TestPostsThread(t *testing.T) {
 			t.Fatalf("part %d = %v", i, part)
 		}
 	}
-	f.run("posts", "create", "Tips", "--content", "x", "--reply-delay", "2d", "--reply", "y").mustCode(t, ExitUsage)
+	f.run("posts", "create", "Tips", "--title", "Post", "--content", "x", "--reply-delay", "2d", "--reply", "y").mustCode(t, ExitUsage)
 	f.run("posts", "update", "pst_1", "--no-replies").mustCode(t, 0)
 	if v, ok := f.last("PATCH", "/v1/posts/pst_1").json(t)["thread"].([]any); !ok || len(v) != 0 {
 		t.Fatalf("--no-replies clears: %v", v)

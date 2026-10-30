@@ -129,7 +129,7 @@ curl -s -X POST $API/v1/collections -H "$AUTH" -H 'Content-Type: application/jso
   -d '{"name":"Product updates","description":"Release notes and tips"}'
 
 curl -s -X POST $API/v1/posts -H "$AUTH" -H 'Content-Type: application/json' \
-  -d '{"collection":"Product updates","content":"v1.4 is out: schedules, channels and a calendar.","targets":[{"channel_id":"ch_7h2kq9xw3nbvd5yhzm6a"}],"publish_at":"2026-11-03T09:00:00Z","status":"scheduled"}'
+  -d '{"collection":"Product updates","title":"v1.4 is out","content":"v1.4 is out: schedules, channels and a calendar.","targets":[{"channel_id":"ch_7h2kq9xw3nbvd5yhzm6a"}],"publish_at":"2026-11-03T09:00:00Z","status":"scheduled"}'
 ```
 
 The response is the new post:

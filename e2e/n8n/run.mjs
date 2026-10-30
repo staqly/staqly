@@ -429,7 +429,7 @@ function producerWorkflow() {
       'Create post',
       'POST',
       `=${API_FROM_N8N}/v1/posts`,
-      '={{ JSON.stringify({ collection: $json.body.collection, content: $json.body.content, targets: [{ channel_id: $json.body.channel }], source: "n8n", metadata: { scenario: $json.body.scenario || "ok" }, publish_now: $json.body.publish !== false }) }}',
+      '={{ JSON.stringify({ collection: $json.body.collection, title: "n8n post", content: $json.body.content, targets: [{ channel_id: $json.body.channel }], source: "n8n", metadata: { scenario: $json.body.scenario || "ok" }, publish_now: $json.body.publish !== false }) }}',
       { headers: { 'Idempotency-Key': '={{ $json.body.key }}' }, retry: true, fullResponse: true },
     ),
   )
@@ -888,6 +888,7 @@ S.push({
     await setActive(workflows[`${RUN} down-receiver`], false)
     const r = await api('POST', '/v1/posts', {
       collection: fx.down.id,
+      title: 'Post',
       content: `${RUN} manual retry`,
       targets: [{ channel_id: fx.downChannel.id }],
       publish_now: true,
@@ -925,6 +926,7 @@ S.push({
     // A publishing post no webhook covers, so only forged events could touch it.
     const r = await api('POST', '/v1/posts', {
       collection: fx.poll.id,
+      title: 'Post',
       content: `${RUN} forge target`,
       targets: [{ channel_id: fx.channel.id }],
       publish_now: true,
@@ -1075,6 +1077,7 @@ S.push({
         (
           await api('POST', '/v1/posts', {
             collection: fx.poll.id,
+            title: 'Post',
             content: `${RUN} poll ${i}`,
             targets: [{ channel_id: fx.channel.id }],
           })
@@ -1240,6 +1243,7 @@ S.push({
     // MCP writes and publishes, n8n publishes and reports.
     const a = await mcp('create_post', {
       collection: fx.main.name,
+      title: 'Post',
       content: `${RUN} mcp writes`,
       targets: [{ channel_id: fx.channel.id }],
     })

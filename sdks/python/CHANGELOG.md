@@ -23,6 +23,10 @@ agents write, no longer a review inbox.
   report_result, preview, history, tags, purge, `wait_for_published`), `channels` (connect, update,
   enable/disable, remove, test, `oauth_start`), `providers` (list, set_app, delete_app), `schedules`
   (CRUD, enable/disable, run), `jobs` (list, iterate, stats, get, retry, cancel), `work` and `alerts`.
+- `title` on `Post`; `posts.create` requires it (`title=...`, right after the collection; at most 300
+  characters: platforms with a title publish it, the others show it in staqly) and `posts.update`
+  takes it (it can't be emptied). `ProviderField.from_post`: the field (title, tags) is filled
+  from the post.
 - `repeat_every` on `Post` and on `posts.create` / `posts.update` (`1d` to `6d`, `1w`, `2w`, `1mo`; `""`
   stops it); `ProviderField.when` for fields that apply only to one choice of another field.
 - Models `Post`, `PostTarget`, `PostTargetInput`, `Channel`, `Provider`, `Schedule`, `ScheduleRule`,

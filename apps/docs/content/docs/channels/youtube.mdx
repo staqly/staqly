@@ -110,15 +110,16 @@ arrives, so a failed attempt leaves nothing behind on the channel.
 
 | Setting | What it does |
 |---|---|
-| **Title** (`title`) | The video's title (required) |
+| **Title** (`title`) | The video's title (required). It is the post's **Title**, shared by every channel, not set per channel |
 | **Visibility** (`privacy`) | `public` (default), `unlisted` or `private` |
 | **Made for kids** (`made_for_kids`) | YouTube asks for every video; `false` by default. Videos made for kids take no comments |
-| **Tags** (`tags`) | Comma-separated |
+| **Tags** (`tags`) | Comma-separated. They are the post's tags, sent as the platform's own tags (no hashtags are added to the text) |
 | **Category** (`category`) | YouTube's category id, `22` (People & Blogs) by default |
 | **Add to playlist** (`playlist`) | The playlist's link (`https://www.youtube.com/playlist?list=PL...`); it must belong to the channel, which staqly checks before uploading |
 
-Over the API: `{"title": "Morning run", "privacy": "unlisted", "tags": "running, sport"}` in the
-target's `settings`.
+The title and the tags are the post's own (`title` and `tags` on the post): the video's title is the
+post's title, its tags the post's tags (no hashtags are added to the description). Over the API:
+`{"privacy": "unlisted"}` in the target's `settings`.
 
 ## Comments
 

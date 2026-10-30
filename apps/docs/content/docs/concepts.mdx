@@ -65,20 +65,21 @@ A post is one piece of content on its way to one or more channels.
 
 | Field | Notes |
 |---|---|
+| `title` | Required (at most 300 characters; a `PATCH` can't empty it). Every channel shares it: platforms with a title (YouTube, Reddit, Pinterest, blogs, newsletters) publish it, refusing one longer than their own limit; elsewhere it names the post in staqly's lists. |
 | `content` | The text. Each target may carry a text of its own instead (see [Targets](#targets)). |
 | `media` | Media ids from `POST /v1/media`, in order; `media_items` is the same list resolved (type, size, URL). |
 | `targets` | One per channel. A post needs at least one to be scheduled or published. |
 | `status` | `draft`, `scheduled`, `publishing`, `published` or `failed` (see [below](#status-lifecycle)). |
 | `publish_at` | When it goes out. A draft keeps the time as a note after a cancel. |
 | `published_at` | When the last target was published. |
-| `tags` | Labels such as `launch` or `client-a`; `GET /v1/tags` counts them. Every channel but your own automation gets them as hashtags at the end of the text (`#launch #clienta`), except those the text already has. |
+| `tags` | Labels such as `launch` or `client-a`; `GET /v1/tags` counts them. Every channel shares them: platforms with tags of their own (YouTube, Dev.to, Hashnode, Medium, WordPress) get them as their tags, your own automation gets them in `tags`, and every other channel gets them as hashtags at the end of the text (`#launch #clienta`), except those the text already has. |
 | `metadata` | Free JSON for your own use: prompt, model, campaign. |
 | `source` | Who created it: a client name, an agent, or `schedule:<name>` for posts a schedule fetched. |
 | `external_ref` | Your own reference. |
 | `repeat_every` | Repeat after publishing: `1d` to `6d`, `1w`, `2w` or `1mo` (empty: no repeat). See [Repeating posts](#repeating-posts). |
 | `version` | Grows with every edit; pass `expected_version` on an update to refuse a stale edit (`409 post_changed`). |
 
-Posts are created with `POST /v1/posts` (`collection` is an id or an exact name), MCP
+Posts are created with `POST /v1/posts` (`collection` is an id or an exact name, `title` is required), MCP
 `create_post`, the CLI `staqly posts create` or an SDK. A `PATCH` edits a draft, scheduled or
 failed post; a published post is read-only (duplicate it into a new draft instead).
 

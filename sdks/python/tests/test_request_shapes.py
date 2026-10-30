@@ -323,7 +323,7 @@ class TestErrorMapping:
     ) -> None:
         mock.reply(api_error(status, code))
         with pytest.raises(cls) as exc:
-            await aclient.posts.create("Posts", content="x", request_options={"max_retries": 0})
+            await aclient.posts.create("Posts", title="Post", content="x", request_options={"max_retries": 0})
         assert exc.value.status_code == status
         assert exc.value.code == code
 
