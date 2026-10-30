@@ -94,16 +94,15 @@ export function PricingCards() {
       </div>
       <p className="mx-auto mt-8 max-w-5xl text-center text-sm leading-relaxed text-muted-foreground">
         {/* One line on wide screens; phones wrap it. */}
-        <span className="lg:whitespace-nowrap">
-          Starter comes with a {TRIAL_DAYS}-day free trial: card required, cancel anytime. Collections, schedules, MCP
-          and the full history come with every plan.
+        <span>
+          Prices are per user. Channels, posts, storage and AI are shared per workspace, not multiplied by seats.
         </span>
         <br />
-        Rather run it yourself?{' '}
+        Starter includes a {TRIAL_DAYS}-day free trial: card required, cancel anytime. Rather run it yourself?{' '}
         <a href={SELF_HOST} className="font-medium text-foreground underline-offset-4 hover:underline">
           Self-host Staqly Community Edition
         </a>{' '}
-        for free, with no limits ·{' '}
+        for free; your hosting and provider costs apply ·{' '}
         <a href={`${DOCS}/plans`} className="font-medium text-foreground underline-offset-4 hover:underline">
           Plan details
         </a>

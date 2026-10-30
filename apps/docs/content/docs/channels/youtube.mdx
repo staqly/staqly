@@ -89,8 +89,10 @@ reconnects the existing one.
   private**, whatever visibility you chose. Request the audit with YouTube's
   [API Services audit form](https://support.google.com/youtube/contact/yt_api_form) to publish
   public videos.
-- **Quota**: a project gets 10,000 units a day and an upload costs about 1,600, so about **6 videos
-  a day** per server; the same form asks for more.
+- **Quota**: the default `videos.insert` bucket allows **100 upload calls per day**, shared by the
+  project. Other endpoints have their own quota costs. Check the [current quota table](https://developers.google.com/youtube/v3/determine_quota_cost)
+  and your Google Cloud console; the same audit form requests more. Cloud plans also apply
+  [shared publishing safeguards](/plans#shared-platform-capacity).
 
 </Step>
 </Steps>

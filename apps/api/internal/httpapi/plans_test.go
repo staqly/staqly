@@ -18,12 +18,11 @@ import (
 // a change here is a pricing change. No plan caps the seats: every member is billed as one.
 func TestPlanLimitValues(t *testing.T) {
 	const mb, gb = 1 << 20, 1 << 30
-	u := int64(app.Unlimited)
 	want := map[string]app.PlanLimits{
-		"starter":  {PostsPerMonth: u, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 10 * gb, MaxUploadBytes: 25 * mb, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 30, AIMonthlyCents: u},
-		"plus":     {PostsPerMonth: u, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 50 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 450, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 60, AIMonthlyCents: u},
-		"pro":      {PostsPerMonth: u, Channels: 40, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 200 * gb, MaxUploadBytes: 250 * mb, DataExport: true, XPostsPerPeriod: 950, LinkedInPostsPerPeriod: 1200, LinkedInVideosPerPeriod: 150, AIMonthlyCents: u},
-		"business": {PostsPerMonth: u, Channels: u, Alerts: u, Webhooks: u, APIKeys: u, StorageBytes: 1024 * gb, MaxUploadBytes: 1024 * mb, DataExport: true, XPostsPerPeriod: 1600, LinkedInPostsPerPeriod: 2500, LinkedInVideosPerPeriod: 300, AIMonthlyCents: u},
+		"starter":  {PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 2 * gb, MaxUploadBytes: 25 * mb, DataExport: false, XPostsPerPeriod: 50, LinkedInPostsPerPeriod: 100, LinkedInVideosPerPeriod: 5, AIMonthlyCents: 100},
+		"plus":     {PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 10 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200},
+		"pro":      {PostsPerMonth: 5000, Channels: 40, Alerts: 25, Webhooks: 25, APIKeys: 25, StorageBytes: 30 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 30, AIMonthlyCents: 500},
+		"business": {PostsPerMonth: 15000, Channels: 100, Alerts: 50, Webhooks: 50, APIKeys: 50, StorageBytes: 100 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 500, LinkedInPostsPerPeriod: 900, LinkedInVideosPerPeriod: 60, AIMonthlyCents: 1000},
 	}
 	prices := map[string][2]int{"starter": {15, 144}, "plus": {29, 276}, "pro": {59, 564}, "business": {99, 948}}
 	for id, pr := range prices {
@@ -250,7 +249,7 @@ func TestWebsitePricesMatchPlans(t *testing.T) {
 	}
 	for _, p := range app.OfferedPlans() {
 		n := strings.ReplaceAll(fmt.Sprintf("%d", p.Limits.XPostsPerPeriod), "1600", "1,600")
-		if !strings.Contains(string(src), "'"+n+" posts to X a month included'") {
+		if !strings.Contains(string(src), "'"+n+" X credits a month'") {
 			t.Errorf("apps/web/lib/plans.ts: %s should include %s posts to X a month", p.ID, n)
 		}
 		thousands := func(n int64) string {

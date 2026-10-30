@@ -80,13 +80,13 @@ func TestLinkedInAllowances(t *testing.T) {
 		e.do(nil, "GET", "/v1/workspace/usage", e.key, nil, 200, &u)
 		return u.Usage["linkedin_posts_per_period"], u.Usage["linkedin_videos_per_period"], u
 	}
-	if _, _, u := usage(); u.Plan.Limits.LinkedInPostsPerPeriod != 300 || u.Plan.Limits.LinkedInVideosPerPeriod != 30 {
+	if _, _, u := usage(); u.Plan.Limits.LinkedInPostsPerPeriod != 100 || u.Plan.Limits.LinkedInVideosPerPeriod != 5 {
 		t.Fatalf("starter limits: %+v", u.Plan.Limits)
 	}
 
-	// Under: 298 of 300 used, a post with a comment to the profile and the Page takes the last two. The comments
+	// Under: 98 of 100 used, a post with a comment to the profile and the Page takes the last two. The comments
 	// are published and not counted; running the jobs again counts nothing twice.
-	seed(app.MeterLinkedIn, 298)
+	seed(app.MeterLinkedIn, 98)
 	p := e.post(c.ID, map[string]any{"content": "hello", "targets": both, "thread": []map[string]any{{"content": "and more"}}})
 	e.do(nil, "POST", "/v1/posts/"+p.ID+"/publish", e.key, nil, 202, nil)
 	e.svc.RunDueJobsOnce(ctx)
@@ -95,7 +95,7 @@ func TestLinkedInAllowances(t *testing.T) {
 	if comments, _ := fake.counts(); p.Status != "published" || comments != 2 {
 		t.Fatalf("published with comments: %s, %d comments", p.Status, comments)
 	}
-	if posts, videos, _ := usage(); posts != 300 || videos != 0 {
+	if posts, videos, _ := usage(); posts != 100 || videos != 0 {
 		t.Fatalf("at the allowance: %d posts, %d videos", posts, videos)
 	}
 
@@ -116,7 +116,7 @@ func TestLinkedInAllowances(t *testing.T) {
 	seed(app.MeterLinkedIn, 0)
 	p3 := e.post(c.ID, map[string]any{"content": "queued", "targets": []map[string]any{{"channel_id": profile.ID}}})
 	e.do(nil, "POST", "/v1/posts/"+p3.ID+"/publish", e.key, nil, 202, nil)
-	seed(app.MeterLinkedIn, 300)
+	seed(app.MeterLinkedIn, 100)
 	_, before := fake.counts()
 	e.svc.RunDueJobsOnce(ctx)
 	e.do(nil, "GET", "/v1/posts/"+p3.ID, e.key, nil, 200, &p3)
@@ -124,16 +124,16 @@ func TestLinkedInAllowances(t *testing.T) {
 		t.Fatalf("at publish time: %+v (%d calls)", p3, after-before)
 	}
 
-	// A video counts against both: 29 of 30 videos used, one post with a video fits, the next one doesn't, a post
+	// A video counts against both: 4 of 5 videos used, one post with a video fits, the next one doesn't, a post
 	// without a video still does.
 	seed(app.MeterLinkedIn, 0)
-	seed(app.MeterLinkedInVideo, 29)
+	seed(app.MeterLinkedInVideo, 4)
 	var clip app.Media
 	e.upload("/v1/media", e.key, nil, "clip.mp4", append([]byte("\x00\x00\x00\x18ftypmp42"), make([]byte, 64)...), 201, &clip)
 	v := e.post(c.ID, map[string]any{"content": "watch", "media": []string{clip.ID}, "targets": []map[string]any{{"channel_id": profile.ID}}})
 	e.do(nil, "POST", "/v1/posts/"+v.ID+"/publish", e.key, nil, 202, nil)
 	e.svc.RunDueJobsOnce(ctx)
-	if posts, videos, _ := usage(); posts != 1 || videos != 30 {
+	if posts, videos, _ := usage(); posts != 1 || videos != 5 {
 		t.Fatalf("a video counts on both: %d posts, %d videos", posts, videos)
 	}
 	v2 := e.post(c.ID, map[string]any{"content": "again", "media": []string{clip.ID}, "targets": []map[string]any{{"channel_id": page.ID}}})
@@ -145,7 +145,7 @@ func TestLinkedInAllowances(t *testing.T) {
 	text := e.post(c.ID, map[string]any{"content": "words only", "targets": []map[string]any{{"channel_id": page.ID}}})
 	e.do(nil, "POST", "/v1/posts/"+text.ID+"/publish", e.key, nil, 202, nil)
 	e.svc.RunDueJobsOnce(ctx)
-	if posts, videos, _ := usage(); posts != 2 || videos != 30 {
+	if posts, videos, _ := usage(); posts != 2 || videos != 5 {
 		t.Fatalf("a post without a video: %d posts, %d videos", posts, videos)
 	}
 
@@ -157,12 +157,12 @@ func TestLinkedInAllowances(t *testing.T) {
 		`[{"lookup_key":"linkedin_videos_extra","name":"LinkedIn videos","metadata":{"staqly_limit_linkedin_videos_per_period":"+10"}}]`, ws.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, u := usage(); u.Plan.Limits.LinkedInVideosPerPeriod != 40 {
+	if _, _, u := usage(); u.Plan.Limits.LinkedInVideosPerPeriod != 15 {
 		t.Fatalf("with the entitlement: %+v", u.Plan.Limits)
 	}
 	e.do(nil, "POST", "/v1/posts/"+v2.ID+"/publish", e.key, nil, 202, nil)
 	e.svc.RunDueJobsOnce(ctx)
-	if posts, videos, _ := usage(); posts != 3 || videos != 31 {
+	if posts, videos, _ := usage(); posts != 3 || videos != 6 {
 		t.Fatalf("over the plan's allowance with the entitlement: %d posts, %d videos", posts, videos)
 	}
 

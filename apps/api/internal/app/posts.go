@@ -1360,7 +1360,7 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	}
 	// The run's budget comes from the job (jobRunTimeout["publish_target"]: uploads and the platform's
 	// processing included). Platform calls (and your own endpoint) go through the same SSRF guard as webhooks.
-	pctx := s.providerCtx(ctx)
+	pctx := s.publishingCtx(ctx, row.WorkspaceID)
 	result, err := e.Publish(pctx, creds, content, settings)
 	// Whatever the platform answered is recorded even if the budget ran out or the lease was lost meanwhile:
 	// the post may already be live, and forgetting that would publish it twice on the next attempt.

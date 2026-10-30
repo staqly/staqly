@@ -94,7 +94,7 @@ func (s *Service) runRepost(ctx context.Context, postID, channelID, repostBy str
 		}
 		return err
 	}
-	err = reposter.Repost(s.providerCtx(ctx), creds, target.ExternalID)
+	err = reposter.Repost(s.publishingCtx(ctx, ch.WorkspaceID), creds, target.ExternalID)
 	switch {
 	case errors.Is(err, providers.ErrReauth):
 		_ = s.channelNeedsReconnect(ctx, ch, err)

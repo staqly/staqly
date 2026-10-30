@@ -44,8 +44,8 @@ counts as AI usage of the workspace: what the endpoint reports it cost, or else 
 
 ### When it can't answer
 
-`AI_ASSISTANT_FALLBACK_*` sets a second, usually cheaper model. It answers when the workspace's monthly AI
-allowance has run out, and when the first model refuses before answering (its own quota ran out, it is down). A
+`AI_ASSISTANT_FALLBACK_*` sets a second, usually cheaper model. It answers when the first model refuses before answering (its own quota ran out, it is down). Both models
+share the workspace's allowance; a fallback never bypasses an exhausted allowance. A
 model that already started answering is not replaced halfway.
 
 When neither can answer and the server names a model for the device (`AI_ASSISTANT_BROWSER_MODEL`), the chat offers

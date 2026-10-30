@@ -197,6 +197,9 @@ type Config struct {
 	Analytics posthog.EnqueueClient
 	// AI: the design editor's AI tools, called with each workspace's own provider key (see ai.go).
 	AI AIConfig
+	// Shared publishing capacity; zero uses conservative defaults. Local mode ignores these.
+	LinkedInDailyAPICalls int64
+	YouTubeDailyUploads   int64
 	// Stock: the design editor's stock photos (PIXABAY_API_KEY; see stock.go).
 	Stock StockConfig
 	// TrialPlan: the plan a new cloud workspace tries for TrialDays (TRIAL_PLAN). Empty = Starter, the only plan

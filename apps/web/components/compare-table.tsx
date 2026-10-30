@@ -7,7 +7,9 @@ import {
   ChevronDown,
   HardDrive,
   Infinity as InfinityIcon,
-  LifeBuoy,
+  BarChart3,
+  Image,
+  Clock,
   Minus,
   Plug,
   Share2,
@@ -36,7 +38,9 @@ const ICONS: Record<string, ReactNode> = {
   'Automation and agents': <Bot />,
   'API and integrations': <Plug />,
   'Storage and data': <HardDrive />,
-  Support: <LifeBuoy />,
+  Analytics: <BarChart3 />,
+  'Create and edit': <Image />,
+  'Coming soon — not available yet': <Clock />,
 }
 
 /** Every row, by category: rows equal on every plan stay in (checks read fast and show what's included). */
@@ -121,7 +125,7 @@ export function CompareTable() {
             >
               <span className="block text-lg font-semibold tracking-tight text-foreground">Compare plans</span>
               <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                Every plan has unlimited posts, MCP and the REST API. Prices per user, {VAT_NOTE}.
+                Limits are shared per workspace. Prices per user, {VAT_NOTE}.
               </span>
               <div className="mt-4">
                 <IntervalToggle value={interval} onChange={setInterval} />

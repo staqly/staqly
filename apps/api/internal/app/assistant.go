@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,6 +27,7 @@ import (
 const DefaultAssistantModel = "google/gemini-2.5-flash"
 
 const (
+	assistantMaxOutput     = 2048    // bound the provider bill before making a reservation
 	assistantMaxSteps      = 12      // model calls per request (a tool-using answer takes a few)
 	assistantMaxMessages   = 60      // the conversation sent to the model, most recent last
 	assistantMaxToolResult = 24_000  // characters of one tool result the model sees
@@ -317,7 +317,7 @@ var serverInstructionsForAssistant string
 func SetAssistantInstructions(v string) { serverInstructionsForAssistant = v }
 
 // assistantStep: one model call (streamed), recorded as an AI job against the allowance. When the model can't
-// take it (the allowance ran out, or it refused before answering) the fallback model gets the same call.
+// take it (it refused before answering) the fallback gets the same call, within the same allowance.
 func (s *Service) assistantStep(ctx context.Context, p Principal, msgs []AssistantMessage, sys string, tools []AssistantTool, onText func(string)) (AssistantMessage, error) {
 	if len(msgs) > assistantMaxMessages {
 		msgs = msgs[len(msgs)-assistantMaxMessages:]
@@ -325,25 +325,20 @@ func (s *Service) assistantStep(ctx context.Context, p Principal, msgs []Assista
 			msgs = msgs[1:]
 		}
 	}
-	m, _ := aiModelFor(AIProviderFal, AIAssistant)
-	estimate := s.estimateCost(m, aiCall{Op: AIAssistant})
 	var err error
-	overLimit := false
 	for _, e := range s.assistantEndpoints() {
-		// ponytail: the fallback runs past the monthly allowance (rate-limited only), so a cheap model keeps the
-		// chat going; give it its own allowance if its spending matters.
+		estimate := s.assistantEstimate(e, msgs, sys, tools)
 		var id string
-		if id, err = s.reserveAI(ctx, p, AIAssistant, "", map[string]any{"model": e.Model}, estimate, !overLimit); err != nil {
-			var ae *Error
-			if errors.As(err, &ae) && ae.Code == "ai_limit_reached" && !overLimit {
-				overLimit = true
-				continue
-			}
+		if id, err = s.reserveAI(ctx, p, AIAssistant, "", map[string]any{"model": e.Model}, estimate); err != nil {
 			return AssistantMessage{}, err
 		}
 		started := s.Now()
 		wrote := false
 		out, cost, cerr := s.assistantCall(ctx, e, msgs, sys, tools, func(t string) { wrote = true; onText(t) })
+		// Missing usage or an interrupted stream is not proof that the provider charged nothing.
+		if cost == 0 {
+			cost = estimate
+		}
 		status, code, msg := "succeeded", "", ""
 		if cerr != nil {
 			status, code, msg = "failed", "ai_failed", cerr.Error()
@@ -358,9 +353,28 @@ func (s *Service) assistantStep(ctx context.Context, p Principal, msgs []Assista
 	return AssistantMessage{}, err
 }
 
+// assistantEstimate reserves input bytes (a conservative token estimate), message/tool overhead and the
+// maximum output at this endpoint's rates. Large conversations can require a smaller context to fit a plan.
+func (s *Service) assistantEstimate(e AIEndpoint, msgs []AssistantMessage, sys string, tools []AssistantTool) int64 {
+	input, _ := json.Marshal(msgs)
+	defs, _ := json.Marshal(tools)
+	n := int64(len(input) + len(defs) + len(sys) + 1024)
+	for _, m := range msgs {
+		if m.parts != nil {
+			parts, _ := json.Marshal(m.parts)
+			n += int64(len(parts)) + 16384*int64(len(m.Attachments))
+		}
+	}
+	p := tokenPrice(s.Cfg.AI.TokenPrices, e.Model)
+	if e.Prices != nil {
+		p = TokenPrice{Input: e.Prices[0], Output: e.Prices[1]}
+	}
+	return max(1, p.cost(n, 0, assistantMaxOutput))
+}
+
 // reserveAI records a request that runs at once (no job queue) with its estimate, refusing it when the month's
 // allowance would be exceeded; finishAIJob records how it went and what it cost.
-func (s *Service) reserveAI(ctx context.Context, p Principal, op, prompt string, params map[string]any, estimate int64, checkLimit bool) (string, error) {
+func (s *Service) reserveAI(ctx context.Context, p Principal, op, prompt string, params map[string]any, estimate int64) (string, error) {
 	if !aiLimiter.allow(p.WorkspaceID, s.clock()) {
 		return "", &Error{Code: "rate_limited", Status: 429, Message: fmt.Sprintf("at most %d AI requests per %s per workspace; try again in a few minutes", aiLimitCalls, aiLimitWindow)}
 	}
@@ -371,7 +385,7 @@ func (s *Service) reserveAI(ctx context.Context, p Principal, op, prompt string,
 		if err != nil {
 			return err
 		}
-		if limit >= 0 && checkLimit {
+		if limit >= 0 {
 			used, err := q.SumAICost(ctx, db.SumAICostParams{WorkspaceID: p.WorkspaceID, CreatedAt: s.monthStart()})
 			if err != nil {
 				return err
@@ -430,6 +444,11 @@ func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []Assist
 	}
 	payload := map[string]any{"model": e.Model, "messages": wire, "stream": true,
 		"stream_options": map[string]any{"include_usage": true}}
+	if strings.Contains(e.BaseURL, ".openai.com") {
+		payload["max_completion_tokens"] = assistantMaxOutput
+	} else {
+		payload["max_tokens"] = assistantMaxOutput
+	}
 	if len(defs) > 0 { // a text request has none, and some APIs refuse an empty list
 		payload["tools"] = defs
 	}

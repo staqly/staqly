@@ -76,12 +76,12 @@ const XPOSTS = {
   period: '2026-10',
   period_end: '2026-11-01T00:00:00Z',
   unlimited: false,
-  included: 450,
+  included: 100,
   used: 40,
-  included_left: 410,
+  included_left: 60,
   credits_left: 0,
   credits_expire_at: null,
-  left: 410,
+  left: 60,
   bundles: [{ posts: 200, price: 10 }],
   currency: 'eur',
   link_post_weight: 14,
@@ -200,15 +200,15 @@ describe('plan & usage', () => {
     const x = within(list).getByTestId('platform-posts-x')
 
     expect(x).toHaveTextContent('Posts')
-    expect(x).toHaveTextContent('12 / 450')
+    expect(x).toHaveTextContent('12 / 100')
     expect(x).toHaveAttribute('data-level', 'ok')
     expect(x).not.toHaveTextContent('Almost full')
 
     const meter = within(x).getByRole('progressbar', { name: 'X posts' })
 
     expect(meter).toHaveAttribute('aria-valuenow', '12')
-    expect(meter).toHaveAttribute('aria-valuemax', '450')
-    expect(meter).toHaveAttribute('aria-valuetext', '12 of 450')
+    expect(meter).toHaveAttribute('aria-valuemax', '100')
+    expect(meter).toHaveAttribute('aria-valuetext', '12 of 100')
     // Bought posts are bought and explained in X's block, not in a section of their own.
     expect(within(x).getByRole('button', { name: 'Buy more X posts' })).toBeInTheDocument()
     expect(within(row).getByTestId('platform-x')).toHaveTextContent('None bought this period.')
@@ -228,7 +228,7 @@ describe('plan & usage', () => {
       'GET /v1/workspace/usage': usage(PLANS[1], {
         x_posts_per_period: 12,
         linkedin_posts_per_period: 120,
-        linkedin_videos_per_period: 60,
+        linkedin_videos_per_period: 15,
       }),
     })
     renderPlan()
@@ -243,17 +243,17 @@ describe('plan & usage', () => {
     expect(within(list).getByTestId('platform-linkedin')).toHaveTextContent(/^LinkedIn/)
     expect(posts).toHaveTextContent('Posts')
     expect(within(posts).queryByRole('button')).toBeNull()
-    expect(posts).toHaveTextContent('120 / 600')
+    expect(posts).toHaveTextContent('120 / 300')
     expect(posts).toHaveAttribute('data-level', 'ok')
     expect(within(posts).getByRole('progressbar', { name: 'LinkedIn posts' })).toHaveAttribute(
       'aria-valuetext',
-      '120 of 600',
+      '120 of 300',
     )
     expect(videos).toHaveTextContent('Videos')
-    expect(videos).toHaveTextContent('60 / 60')
+    expect(videos).toHaveTextContent('15 / 15')
     expect(videos).toHaveAttribute('data-level', 'full')
     expect(videos).toHaveTextContent('Limit reached')
-    expect(within(videos).getByRole('progressbar', { name: 'LinkedIn videos' })).toHaveAttribute('aria-valuemax', '60')
+    expect(within(videos).getByRole('progressbar', { name: 'LinkedIn videos' })).toHaveAttribute('aria-valuemax', '15')
   })
 
   it('without an X allowance the row says nothing about bought posts', async () => {
@@ -269,7 +269,7 @@ describe('plan & usage', () => {
     const row = await screen.findByTestId('platform-posts')
 
     expect(within(row).queryByTestId('platform-posts-x')).toBeNull()
-    expect(within(row).getByTestId('platform-posts-linkedin')).toHaveTextContent('0 / 600')
+    expect(within(row).getByTestId('platform-posts-linkedin')).toHaveTextContent('0 / 300')
     expect(within(row).queryByTestId('x-posts')).toBeNull()
   })
 
@@ -279,14 +279,14 @@ describe('plan & usage', () => {
       'GET /v1/billing/details': DETAILS,
       'GET /v1/billing/addons': { data: [] },
       'GET /v1/billing/x-posts': XPOSTS,
-      'GET /v1/workspace/usage': usage(PLANS[1], { x_posts_per_period: 400 }),
+      'GET /v1/workspace/usage': usage(PLANS[1], { x_posts_per_period: 90 }),
     })
     renderPlan()
 
     const warn = await screen.findByTestId('platform-posts-x')
 
     expect(warn).toHaveAttribute('data-level', 'warn')
-    expect(warn).toHaveTextContent('400 / 450')
+    expect(warn).toHaveTextContent('90 / 100')
     expect(warn).toHaveTextContent('Almost full')
 
     cleanup()
@@ -295,7 +295,7 @@ describe('plan & usage', () => {
       'GET /v1/billing/details': DETAILS,
       'GET /v1/billing/addons': { data: [] },
       'GET /v1/billing/x-posts': XPOSTS,
-      'GET /v1/workspace/usage': usage(PLANS[1], { x_posts_per_period: 450 }),
+      'GET /v1/workspace/usage': usage(PLANS[1], { x_posts_per_period: 100 }),
     })
     renderPlan()
 

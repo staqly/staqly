@@ -285,8 +285,7 @@ func googleError(name string, status int, raw []byte) error {
 		// client (APIs & Services -> Library).
 		return &Failure{Kind: ErrRejected, Msg: name + " is not turned on for this server's app (" + detail + ")"}
 	case reasons["quotaExceeded"], reasons["dailyLimitExceeded"], reasons["uploadLimitExceeded"]:
-		// For whoever runs the server: YouTube gives every Cloud project 10,000 quota units a day (an upload costs
-		// 1,600); more needs a quota extension request.
+		// YouTube has separate daily buckets (including videos.insert); the operator can request a quota extension.
 		return &Failure{Kind: ErrRejected, Msg: name + "'s daily limit is used up (" + detail + "); it resets at midnight Pacific time, so schedule the post for later"}
 	case status == http.StatusTooManyRequests, reasons["RESOURCE_EXHAUSTED"], reasons["rateLimitExceeded"],
 		reasons["userRateLimitExceeded"], reasons["RATE_LIMIT_EXCEEDED"]:

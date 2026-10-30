@@ -481,10 +481,10 @@ func TestRecoveryRotatesAndIssuesAdminKey(t *testing.T) {
 	}
 }
 
-func TestRecoveryKeepsKeysOnUnlimitedPlans(t *testing.T) {
-	e := newEnv(t) // Pro trial: no key limit
+func TestRecoveryReplacesAdminKeyOnPro(t *testing.T) {
+	e := newEnv(t) // Pro now has a finite API key allowance.
 	e.do(nil, "POST", "/v1/sessions/recover", "", map[string]string{"recovery_key": e.recovery}, 201, nil)
-	e.do(nil, "GET", "/v1/collections", e.admin, nil, 200, nil)
+	e.do(nil, "GET", "/v1/collections", e.admin, nil, 401, nil)
 }
 
 func TestCollectionCRUD(t *testing.T) {
