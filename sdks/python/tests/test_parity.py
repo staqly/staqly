@@ -57,6 +57,7 @@ NOT_IN_SDK = {
     ("PATCH", "/v1/members/{}"),
     ("DELETE", "/v1/members/{}"),
     ("GET", "/v1/oauth/{}/client-metadata.json"),
+    ("GET", "/v1/media-links/{}/{}/{}"),  # platforms download from these links, clients never call them
     ("POST", "/v1/notifications/unsubscribe"),
     ("POST", "/v1/billing/webhook"),
     ("GET", "/v1/channels/oauth/{}/callback"),

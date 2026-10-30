@@ -316,6 +316,7 @@ func Load() (Config, error) {
 			SetupToken:         os.Getenv("SETUP_TOKEN"),
 			PublicURL:          env("PUBLIC_API_URL", "http://localhost:3333"),
 			PublicDashboardURL: os.Getenv("PUBLIC_DASHBOARD_URL"),
+			PublicMediaURL:     strings.TrimRight(os.Getenv("PUBLIC_MEDIA_URL"), "/"),
 			SecretKey:          secretKey,
 			DashboardPort:      env("DASHBOARD_PORT", dashboardPort),
 			// A dashboard listening beyond loopback can't vouch for "this computer".
