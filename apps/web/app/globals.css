@@ -119,3 +119,60 @@ body {
   background-size: 22px 22px;
   mask-image: radial-gradient(ellipse 50% 60% at 50% 50%, #000 30%, transparent 100%);
 }
+
+/* Sections ease in as they scroll into view (scroll-driven, no JS); browsers without it, and reduced motion, show them
+   at once. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .sq-reveal {
+      animation: sq-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+  }
+
+  /* The channel strip under the hero drifts left; two copies of the list make the loop seamless. */
+  .sq-marquee {
+    animation: sq-marquee 60s linear infinite;
+  }
+
+  .sq-marquee-wrap:hover .sq-marquee {
+    animation-play-state: paused;
+  }
+
+  .sq-float {
+    animation: sq-float 7s ease-in-out infinite;
+  }
+}
+
+@keyframes sq-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+}
+
+@keyframes sq-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes sq-float {
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.sq-marquee-wrap {
+  mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+}
+
+/* A soft brand light behind product pictures. */
+.sq-halo {
+  background: radial-gradient(
+    60% 55% at 50% 45%,
+    color-mix(in oklch, var(--brand-glow) 20%, transparent),
+    transparent 70%
+  );
+}

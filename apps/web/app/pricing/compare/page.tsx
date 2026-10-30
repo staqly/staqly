@@ -1,8 +1,7 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 
 import { ComparePicker, CompareTable } from '@/components/compare-table'
-import { CtaButtons, PageHero } from '@/components/site'
+import { Breadcrumb, CtaButtons, PageHero } from '@/components/site'
 import { FAQ } from '@/lib/plans'
 import { ldJson, pageMeta } from '@/lib/seo'
 import { wrap } from '@/lib/site'
@@ -23,8 +22,8 @@ export default function ComparePage() {
   return (
     <main id="main" className="flex-1">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(faqLd) }} />
-      <PageHero eyebrow={<Link href="/pricing">Pricing</Link>} title="Compare plans">
-        <p className="mt-5 max-w-2xl text-lg text-muted-foreground">
+      <PageHero eyebrow={<Breadcrumb items={[['Pricing', '/pricing']]} />} title="Compare plans">
+        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
           Editors, analytics and automation on every plan. Compare shared workspace limits and planned features below.
         </p>
         <CtaButtons />
@@ -40,8 +39,8 @@ export default function ComparePage() {
         </div>
       </section>
 
-      <section aria-labelledby="faq" className="border-t border-border bg-card/50">
-        <div className={`${wrap} py-12 sm:py-16`}>
+      <section aria-labelledby="faq" className="border-t border-border bg-card/40">
+        <div className={`${wrap} py-16 sm:py-20`}>
           <h2 id="faq" className="text-2xl font-semibold tracking-[-0.03em]">
             Questions about plans
           </h2>

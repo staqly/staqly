@@ -5,6 +5,7 @@ export const GITHUB = 'https://github.com/staqly/staqly'
 // Hosted dashboard; /signup creates an account and its first workspace (apps/platform/app/signup), /login signs in.
 export const APP = env.appUrl
 export const SIGNUP = `${APP}/signup`
+export const LOGIN = `${APP}/login`
 /** Sign-up with a plan picked on the pricing page: after the first sign-in the plan picker opens with it. */
 export const signupFor = (plan: string, interval?: 'month' | 'year') =>
   `${SIGNUP}?${new URLSearchParams({ plan, ...(interval ? { interval } : {}) })}`
@@ -28,6 +29,6 @@ export const wrap = 'mx-auto w-full max-w-6xl px-5 sm:px-8'
 export const wrapWide = 'mx-auto w-full max-w-7xl px-5 sm:px-8'
 
 export const SITE_URL = env.siteUrl
-export const TAGLINE = 'The local-first social media scheduler for people and their AI agents'
+export const TAGLINE = 'The social media scheduler for people and their AI agents'
 export const DESCRIPTION =
-  'Staqly is the local-first social media scheduler for people and their AI agents. You and your agents write posts into collections, and a schedule publishes them to X, LinkedIn, Instagram, TikTok and more, or through your own n8n workflow or script.'
+  'Staqly is the social media scheduler for people and their AI agents. Write, design and schedule posts once, and Staqly publishes them to Instagram, LinkedIn, X, TikTok, YouTube and more on time. Draft with the built-in assistant or Claude Code, Codex and n8n; open source and self-hostable.'

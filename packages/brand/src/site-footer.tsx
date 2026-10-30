@@ -1,4 +1,4 @@
-import { ArrowRight, Heart } from 'lucide-react'
+import { ArrowRight, ChevronDown, Heart } from 'lucide-react'
 import { Fragment } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 
@@ -41,7 +41,7 @@ function columns(web: string, docs: string): Column[] {
         ['Pricing', `${web}/pricing`],
         ['Compare plans', `${web}/pricing/compare`],
         ['Use cases', `${web}/use-cases`],
-        ['Agents', `${web}/agents`],
+        ['AI agents', `${web}/agents`],
       ],
     },
     {
@@ -100,6 +100,8 @@ const linkClass =
 const wrap = 'mx-auto w-full max-w-6xl px-5 sm:px-8'
 
 export function SiteFooter({ web, docs, basePath, link: Link = A }: SiteFooterProps) {
+  const cols = columns(web, docs)
+
   return (
     <footer className="border-t border-border">
       <div className={`${wrap} grid gap-10 py-12 sm:grid-cols-2 sm:py-16 lg:grid-cols-[1.4fr_repeat(4,1fr)]`}>
@@ -118,42 +120,25 @@ export function SiteFooter({ web, docs, basePath, link: Link = A }: SiteFooterPr
             <GitHubIcon className="size-4" /> Star on GitHub
           </a>
         </div>
-        {columns(web, docs).map((c) => (
-          <nav key={c.title} aria-label={c.title}>
+        {/* Phones: each column folds away; wider screens show them all. */}
+        <nav aria-label="Site" className="-mt-4 divide-y divide-border border-y border-border sm:hidden">
+          {cols.map((c) => (
+            <details key={c.title} className="group">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-xs font-semibold tracking-wider text-foreground/80 uppercase [&::-webkit-details-marker]:hidden">
+                {c.title}
+                <ChevronDown
+                  className="size-4 text-muted-foreground transition-transform group-open:rotate-180"
+                  aria-hidden
+                />
+              </summary>
+              <ColumnLinks c={c} Link={Link} className="pb-5" />
+            </details>
+          ))}
+        </nav>
+        {cols.map((c) => (
+          <nav key={c.title} aria-label={c.title} className="hidden sm:block">
             <h2 className="text-xs font-semibold tracking-wider text-foreground/80 uppercase">{c.title}</h2>
-            <ul className="mt-4 grid gap-2.5 text-sm">
-              {c.links.map(([label, href]) => (
-                <li key={label} className={typeof href === 'string' ? undefined : 'text-muted-foreground'}>
-                  {typeof href === 'string' ? (
-                    <Link href={href} className={linkClass}>
-                      {label}
-                    </Link>
-                  ) : (
-                    <>
-                      {label}:{' '}
-                      {href.map(([name, url], i) => (
-                        <Fragment key={name}>
-                          {i > 0 && ' & '}
-                          <Link href={url} className={linkClass}>
-                            {name}
-                          </Link>
-                        </Fragment>
-                      ))}
-                    </>
-                  )}
-                </li>
-              ))}
-              {c.more && (
-                <li>
-                  <Link
-                    href={c.more[1]}
-                    className="inline-flex min-h-6 items-center gap-1.5 font-medium text-foreground/90 transition-colors hover:text-brand-strong pointer-coarse:min-h-10"
-                  >
-                    {c.more[0]} <ArrowRight className="size-3.5" aria-hidden />
-                  </Link>
-                </li>
-              )}
-            </ul>
+            <ColumnLinks c={c} Link={Link} className="mt-4" />
           </nav>
         ))}
       </div>
@@ -171,5 +156,44 @@ export function SiteFooter({ web, docs, basePath, link: Link = A }: SiteFooterPr
         </div>
       </div>
     </footer>
+  )
+}
+
+/** One footer column's links. */
+function ColumnLinks({ c, Link, className }: { c: Column; Link: ComponentType<LinkProps>; className: string }) {
+  return (
+    <ul className={`grid gap-2.5 text-sm ${className}`}>
+      {c.links.map(([label, href]) => (
+        <li key={label} className={typeof href === 'string' ? undefined : 'text-muted-foreground'}>
+          {typeof href === 'string' ? (
+            <Link href={href} className={linkClass}>
+              {label}
+            </Link>
+          ) : (
+            <>
+              {label}:{' '}
+              {href.map(([name, url], i) => (
+                <Fragment key={name}>
+                  {i > 0 && ' & '}
+                  <Link href={url} className={linkClass}>
+                    {name}
+                  </Link>
+                </Fragment>
+              ))}
+            </>
+          )}
+        </li>
+      ))}
+      {c.more && (
+        <li>
+          <Link
+            href={c.more[1]}
+            className="inline-flex min-h-6 items-center gap-1.5 font-medium text-foreground/90 transition-colors hover:text-brand-strong pointer-coarse:min-h-10"
+          >
+            {c.more[0]} <ArrowRight className="size-3.5" aria-hidden />
+          </Link>
+        </li>
+      )}
+    </ul>
   )
 }

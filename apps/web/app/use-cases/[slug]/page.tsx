@@ -1,9 +1,8 @@
 import { ArrowRight } from 'lucide-react'
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { CtaButtons, Eyebrow, PageHero } from '@/components/site'
+import { Breadcrumb, CtaButtons, Eyebrow, PageHero, Step } from '@/components/site'
 import { TerminalCard } from '@/components/terminal'
 import { UseCaseCards } from '@/components/use-case-cards'
 import { breadcrumbLd, ldJson, pageMeta } from '@/lib/seo'
@@ -51,50 +50,38 @@ export default async function UseCasePage({ params }: Props) {
       />
       <PageHero
         eyebrow={
-          <>
-            <Link
-              href="/"
-              className="hover:text-foreground pointer-coarse:-my-2.5 pointer-coarse:inline-block pointer-coarse:py-2.5"
-            >
-              staqly
-            </Link>{' '}
-            ›{' '}
-            <Link
-              href="/use-cases"
-              className="hover:text-foreground pointer-coarse:-my-2.5 pointer-coarse:inline-block pointer-coarse:py-2.5"
-            >
-              Use cases
-            </Link>
-          </>
+          <Breadcrumb
+            items={[
+              ['staqly', '/'],
+              ['Use cases', '/use-cases'],
+            ]}
+          />
         }
         title={u.title}
       >
-        <p className="mt-5 max-w-2xl text-lg text-muted-foreground">{u.intro}</p>
+        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-muted-foreground">{u.intro}</p>
         <CtaButtons />
       </PageHero>
 
-      <article className={`${wrap} grid gap-14 py-12 sm:py-16 lg:grid-cols-[1fr_1.05fr]`}>
+      <article className={`${wrap} grid gap-14 py-14 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]`}>
         <div className="space-y-12">
           <section>
             <Eyebrow>The problem</Eyebrow>
-            <p className="mt-3 leading-relaxed text-muted-foreground">{u.problem}</p>
+            <p className="mt-3 text-lg leading-relaxed text-muted-foreground">{u.problem}</p>
           </section>
           <section>
             <Eyebrow>How it runs</Eyebrow>
-            <ol className="mt-4 space-y-3">
-              {u.steps.map((s, i) => (
-                <li key={s} className="flex gap-4">
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-card font-mono text-xs text-brand">
-                    {i + 1}
-                  </span>
-                  <span className="pt-0.5 text-sm leading-relaxed">{s}</span>
-                </li>
+            <ol className="mt-4 space-y-4">
+              {u.steps.map((st, i) => (
+                <Step key={st} n={i + 1}>
+                  {st}
+                </Step>
               ))}
             </ol>
           </section>
-          <section>
+          <section className="rounded-2xl border border-[color-mix(in_oklch,var(--brand)_30%,transparent)] bg-brand-soft/30 p-6">
             <Eyebrow>Result</Eyebrow>
-            <p className="mt-3 leading-relaxed text-muted-foreground">{u.result}</p>
+            <p className="mt-2 text-lg leading-relaxed text-pretty">{u.result}</p>
           </section>
         </div>
         <div className="min-w-0 space-y-6 lg:sticky lg:top-24 lg:self-start">
@@ -118,8 +105,8 @@ export default async function UseCasePage({ params }: Props) {
         </div>
       </article>
 
-      <section className="border-t border-border bg-card/50">
-        <div className={`${wrap} py-12 sm:py-16`}>
+      <section className="border-t border-border bg-card/40">
+        <div className={`${wrap} py-16 sm:py-20`}>
           <h2 className="text-2xl font-semibold tracking-[-0.03em]">More use cases</h2>
           <div className="mt-8">
             <UseCaseCards items={more} />

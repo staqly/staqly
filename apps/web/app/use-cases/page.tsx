@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 
-import { PageHero } from '@/components/site'
+import { CtaButtons, PageHero } from '@/components/site'
 import { UseCaseCards } from '@/components/use-case-cards'
 import { pageMeta } from '@/lib/seo'
 import { DOCS, wrap } from '@/lib/site'
@@ -15,18 +15,27 @@ export const metadata: Metadata = pageMeta(
 export default function UseCasesPage() {
   return (
     <main id="main" className="flex-1">
-      <PageHero eyebrow="Use cases" title="What people use staqly for.">
-        <p className="mt-5 max-w-2xl text-lg text-muted-foreground">Six ways to stop copying posts around by hand.</p>
+      <PageHero
+        eyebrow="Use cases"
+        title={
+          <>
+            What people use Staqly for. <span className="sq-gradient-text">Step by step.</span>
+          </>
+        }
+      >
+        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+          Six ways to stop copying posts around by hand, each with the exact setup and a recipe in the docs.
+        </p>
       </PageHero>
-      <section aria-labelledby="all-cases" className={`${wrap} py-12 sm:py-16`}>
+      <section aria-labelledby="all-cases" className={`${wrap} py-14 sm:py-20`}>
         <h2 id="all-cases" className="sr-only">
           All use cases
         </h2>
         <UseCaseCards items={allCases} />
       </section>
       <section className="border-t border-border">
-        <div className={`${wrap} flex flex-col items-center py-12 sm:py-16 text-center`}>
-          <h2 className="text-3xl font-semibold tracking-[-0.03em]">Not seeing your case?</h2>
+        <div className={`${wrap} flex flex-col items-center py-16 text-center sm:py-20`}>
+          <h2 className="text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">Not seeing your case?</h2>
           <p className="mt-4 max-w-xl text-muted-foreground">
             The pattern is always the same: write, schedule, publish. The{' '}
             <a href={`${DOCS}/concepts`} className="font-medium text-foreground underline-offset-4 hover:underline">
@@ -34,6 +43,7 @@ export default function UseCasesPage() {
             </a>{' '}
             shows how to fit it to anything.
           </p>
+          <CtaButtons center />
         </div>
       </section>
     </main>

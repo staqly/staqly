@@ -111,9 +111,10 @@ const subscribeReduced = (onChange: () => void) => {
 /**
  * The tools as tabs over a terminal that shows how each one talks to Staqly. It moves to the next tool every few
  * seconds while on screen, and stops for good once someone picks a tab (or hovers or focuses it, for the while).
- * With reduced motion it never moves on its own.
+ * With reduced motion it never moves on its own. `agents` shows only the agent tools (the first five), in less height.
  */
-export function ToolPreview() {
+export function ToolPreview({ agents }: { agents?: boolean }) {
+  const previews = agents ? PREVIEWS.slice(0, 5) : PREVIEWS
   const root = useRef<HTMLDivElement>(null)
   const tabs = useRef<(HTMLButtonElement | null)[]>([])
   const [active, setActive] = useState(0)
@@ -149,7 +150,7 @@ export function ToolPreview() {
     }
   }
 
-  const p = PREVIEWS[active]!
+  const p = previews[active]!
 
   return (
     <div
@@ -164,8 +165,12 @@ export function ToolPreview() {
         }
       }}
     >
-      <div role="tablist" aria-label="Tools that work with Staqly" className="flex flex-wrap justify-center gap-2">
-        {PREVIEWS.map((x, i) => (
+      <div
+        role="tablist"
+        aria-label="Tools that work with Staqly"
+        className={`flex flex-wrap gap-2 ${agents ? '' : 'justify-center'}`}
+      >
+        {previews.map((x, i) => (
           <button
             key={x.name}
             ref={(el) => {
@@ -179,12 +184,12 @@ export function ToolPreview() {
             tabIndex={i === active ? 0 : -1}
             onClick={() => pick(i)}
             onKeyDown={(e) => {
-              const last = PREVIEWS.length - 1
+              const last = previews.length - 1
               const to =
                 e.key === 'ArrowRight'
-                  ? (i + 1) % PREVIEWS.length
+                  ? (i + 1) % previews.length
                   : e.key === 'ArrowLeft'
-                    ? (i + last) % PREVIEWS.length
+                    ? (i + last) % previews.length
                     : e.key === 'Home'
                       ? 0
                       : e.key === 'End'
@@ -210,7 +215,7 @@ export function ToolPreview() {
                 aria-hidden
                 className="sq-tab-progress absolute inset-x-0 bottom-0 h-0.5 origin-left bg-brand"
                 // The bar's end is the clock: it pauses with hover, focus and scrolling away.
-                onAnimationEnd={() => setActive((a) => (a + 1) % PREVIEWS.length)}
+                onAnimationEnd={() => setActive((a) => (a + 1) % previews.length)}
                 style={{
                   animationDuration: `${ROTATE_MS}ms`,
                   animationPlayState: held || !onScreen ? 'paused' : 'running',
@@ -225,7 +230,7 @@ export function ToolPreview() {
         id="tool-panel"
         role="tabpanel"
         aria-labelledby={`tool-tab-${active}`}
-        className="mx-auto mt-5 grid min-h-[20rem] max-w-3xl sm:min-h-[23rem]"
+        className={`mx-auto mt-5 grid max-w-3xl ${agents ? 'min-h-[17.25rem]' : 'min-h-[20rem] sm:min-h-[23rem]'}`}
       >
         <TerminalCard key={p.name} title={p.title} code={p.code} />
       </div>
