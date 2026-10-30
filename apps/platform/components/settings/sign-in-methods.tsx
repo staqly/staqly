@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Fingerprint, KeyRound, Mail, Plus } from 'lucide-react'
+import { Fingerprint, KeyRound, Mail, Plus, Trash2 } from 'lucide-react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
@@ -164,8 +164,16 @@ export function SignInMethodsCard() {
               )}
               {/* The only way to sign in can't be removed: no button until there is another. */}
               {!only && (
-                <Button variant="ghost" size="sm" disabled={remove.isPending} onClick={() => setRemoving(m)}>
-                  Remove
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Remove"
+                  title="Remove"
+                  className="text-destructive hover:text-destructive"
+                  disabled={remove.isPending}
+                  onClick={() => setRemoving(m)}
+                >
+                  <Trash2 />
                 </Button>
               )}
             </li>
