@@ -16,7 +16,7 @@ const CAPTION: Record<PostStatus, string> = {
 
 /**
  * A collection's posts by status, in a card under the title: one cell per status (Publishing only while a post
- * is going out), each a toggle that filters the list below to it. Failed posts turn their cell red.
+ * is going out), each a toggle that filters the list below to it; icon and number in the status's colour.
  */
 export function StatusSummary({
   counts,
@@ -46,7 +46,6 @@ export function StatusSummary({
           const meta = POST_STATUS_META[s]
           const n = counts[s] ?? 0
           const on = active === s
-          const alarm = s === 'failed' && n > 0
 
           return (
             <button
@@ -60,7 +59,6 @@ export function StatusSummary({
                 'group grid gap-1 bg-card px-4 py-3 text-left text-card-foreground transition-colors outline-ring',
                 'hover:bg-muted/60 focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2',
                 'disabled:cursor-default disabled:hover:bg-card',
-                alarm && 'bg-red-500/[0.06] hover:bg-red-500/10 dark:bg-red-400/[0.07]',
                 on && 'bg-muted hover:bg-muted',
               )}
             >
@@ -71,13 +69,7 @@ export function StatusSummary({
                 {meta.label}
                 {on && <span className="ml-auto text-[11px] font-normal">Filtered</span>}
               </span>
-              <span
-                className={cn(
-                  'text-2xl font-semibold tracking-tight tabular-nums',
-                  n === 0 && 'text-muted-foreground',
-                  alarm && TONES.danger.text,
-                )}
-              >
+              <span className={cn('text-2xl font-semibold tracking-tight tabular-nums', TONES[meta.tone].text)}>
                 {n}
               </span>
               <span className="truncate text-xs text-muted-foreground">{n === 0 ? 'None' : CAPTION[s]}</span>
