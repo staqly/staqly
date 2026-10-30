@@ -1879,6 +1879,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/media-links/{workspace}/{media}/{signature}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The file's workspace id */
+                workspace: string;
+                /** @description The media id */
+                media: string;
+                /** @description The signature the server made for the link */
+                signature: string;
+            };
+            cookie?: never;
+        };
+        /** A file through the link a platform downloads it from (PUBLIC_MEDIA_URL); a wrong signature is 404 */
+        get: operations["getLinkedMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/posts/{id}/events": {
         parameters: {
             query?: never;
@@ -9880,6 +9904,56 @@ export interface operations {
                 token: string;
                 /** @description A media id of the previewed post */
                 media: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description Part of the file (Range) */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description Range not satisfiable */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getLinkedMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The file's workspace id */
+                workspace: string;
+                /** @description The media id */
+                media: string;
+                /** @description The signature the server made for the link */
+                signature: string;
             };
             cookie?: never;
         };

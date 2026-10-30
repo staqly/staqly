@@ -2364,6 +2364,23 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "416": { description: Range not satisfiable }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/media-links/{workspace}/{media}/{signature}:
+    parameters:
+      - { name: workspace, in: path, required: true, description: The file's workspace id, schema: { type: string } }
+      - { name: media, in: path, required: true, description: The media id, schema: { type: string } }
+      - { name: signature, in: path, required: true, description: The signature the server made for the link, schema: { type: string } }
+    get:
+      operationId: getLinkedMedia
+      tags: [media]
+      security: []
+      summary: A file through the link a platform downloads it from (PUBLIC_MEDIA_URL); a wrong signature is 404
+      responses:
+        "200": { description: The file, content: { "*/*": { schema: { type: string, format: binary } } } }
+        "206": { description: Part of the file (Range) }
+        "304": { description: Not modified }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "416": { description: Range not satisfiable }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /v1/posts/{id}/events:
     parameters: [{ $ref: "#/components/parameters/id" }]
     get:

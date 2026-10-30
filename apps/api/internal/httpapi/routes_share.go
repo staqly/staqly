@@ -34,7 +34,21 @@ func init() {
 		r.Post("/previews/{token}/comments/{comment}/resolve", s.resolvePreviewComment(true))
 		r.Post("/previews/{token}/comments/{comment}/reopen", s.resolvePreviewComment(false))
 		r.Get("/previews/{token}/media/{media}", s.previewMedia)
+		// The links platforms download a post's media from (PUBLIC_MEDIA_URL): the signature is the credential.
+		r.Get("/media-links/{workspace}/{media}/{signature}", s.linkedMedia)
 	})
+}
+
+func (s *Server) linkedMedia(w http.ResponseWriter, r *http.Request) {
+	f, m, err := s.svc.OpenLinkedMedia(r.Context(), chi.URLParam(r, "workspace"), chi.URLParam(r, "media"), chi.URLParam(r, "signature"))
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	defer f.Close()
+	w.Header().Set("Content-Type", m.MimeType)
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	serveMediaFile(w, r, f, m)
 }
 
 func (s *Server) postMetrics(w http.ResponseWriter, r *http.Request) {

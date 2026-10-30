@@ -105,12 +105,14 @@ func (s *Service) CheckProvider(ctx context.Context, p Principal, providerID str
 func (s *Service) mediaCheck(ctx context.Context, name string) SetupCheck {
 	c := SetupCheck{Key: "media", Label: "Media storage"}
 	link := ""
-	if s.Cfg.Blob != nil {
+	if s.Cfg.PublicMediaURL != "" {
+		link = s.Cfg.PublicMediaURL
+	} else if s.Cfg.Blob != nil {
 		link, _ = s.Cfg.Blob.SignedURL(ctx, "staqly-setup-check", time.Minute)
 	}
 	if link == "" {
 		// For whoever runs the server: STORAGE_DRIVER=s3 with a bucket the platform can reach.
-		c.Detail = name + " downloads pictures and videos from a link, and this server keeps them on its own disk: store media in cloud storage"
+		c.Detail = name + " downloads pictures and videos from a link, and this server keeps them on its own disk: store media in cloud storage or set PUBLIC_MEDIA_URL"
 		return c
 	}
 	u, err := url.Parse(link)

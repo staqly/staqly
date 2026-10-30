@@ -3,7 +3,9 @@ package app
 import (
 	"bufio"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -125,6 +127,31 @@ func mediaKey(workspaceID, storageName string) string {
 
 // signedMediaTTL is how long a platform may fetch a file from S3 after the publish job hands it the link.
 const signedMediaTTL = 2 * time.Hour
+
+// mediaLinkSig signs a media link: whoever has the link can download that one file, like a link to a public bucket,
+// and nothing else. It stays valid while the file exists (blog covers keep pointing at it).
+func (s *Service) mediaLinkSig(workspaceID, id string) string {
+	mac := hmac.New(sha256.New, s.Cfg.SecretKey)
+	mac.Write([]byte("media-link:" + workspaceID + "/" + id))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:16])
+}
+
+// MediaLink is the link platforms download a file from when PUBLIC_MEDIA_URL is set ("" otherwise).
+func (s *Service) MediaLink(workspaceID, id string) string {
+	if s.Cfg.PublicMediaURL == "" {
+		return ""
+	}
+	return s.Cfg.PublicMediaURL + "/v1/media-links/" + workspaceID + "/" + id + "/" + s.mediaLinkSig(workspaceID, id)
+}
+
+// OpenLinkedMedia opens the file of a media link; a wrong signature is the same 404 as a missing file.
+func (s *Service) OpenLinkedMedia(ctx context.Context, workspaceID, id, sig string) (io.ReadSeekCloser, db.Medium, error) {
+	if !hmac.Equal([]byte(sig), []byte(s.mediaLinkSig(workspaceID, id))) {
+		return nil, db.Medium{}, notFound("media")
+	}
+	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "media-link", Name: "Media link", Scopes: AdminKeyScopes}
+	return s.OpenMedia(ctx, sys, id)
+}
 
 // openMediaFile opens an upload from the store; a missing file is ErrNotExist.
 func (s *Service) openMediaFile(ctx context.Context, workspaceID, storageName string) (io.ReadSeekCloser, error) {

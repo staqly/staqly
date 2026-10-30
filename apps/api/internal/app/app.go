@@ -214,7 +214,10 @@ type Config struct {
 	SetupToken         string // optional; required by Setup when set
 	PublicURL          string // base URL of this API as seen by webhook receivers
 	PublicDashboardURL string // dashboard URL other devices use (QR "connect a device" links)
-	DashboardPort      string // dashboard port, for links printed by the CLI
+	// PublicMediaURL (PUBLIC_MEDIA_URL): where this server answers /v1/media-links, on an address platforms reach.
+	// Set, platforms that download a post's media get signed links there instead of the store's own (S3).
+	PublicMediaURL string
+	DashboardPort  string // dashboard port, for links printed by the CLI
 	// DashboardExposed: the dashboard listens beyond loopback (default in compose.yml), so
 	// requests arriving through it can't be trusted as "this computer".
 	DashboardExposed bool

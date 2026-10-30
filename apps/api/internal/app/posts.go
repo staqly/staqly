@@ -451,10 +451,16 @@ func (s *Service) mediaFiles(ctx context.Context, q *db.Queries, workspaceID str
 		f := providers.MediaFile{ID: m.ID, Name: m.OriginalName, MimeType: m.MimeType, Size: m.SizeBytes,
 			URL:  strings.TrimRight(s.Cfg.PublicURL, "/") + "/v1/media/" + m.ID,
 			Open: func(ctx context.Context) (io.ReadCloser, error) { return s.openMediaFile(ctx, workspaceID, storage) }}
-		if d, ok := s.Cfg.Blob.(*blob.Disk); ok {
+		d, disk := s.Cfg.Blob.(*blob.Disk)
+		if disk {
 			f.Path = filepath.Join(d.Root, filepath.FromSlash(mediaKey(workspaceID, storage)))
-		} else if u, err := s.Cfg.Blob.SignedURL(ctx, mediaKey(workspaceID, storage), signedMediaTTL); err == nil {
-			f.SignedURL = u // platforms that pull media fetch it here, not from the API
+		}
+		if link := s.MediaLink(workspaceID, m.ID); link != "" {
+			f.SignedURL = link // PUBLIC_MEDIA_URL: platforms download it from this server
+		} else if !disk {
+			if u, err := s.Cfg.Blob.SignedURL(ctx, mediaKey(workspaceID, storage), signedMediaTTL); err == nil {
+				f.SignedURL = u // platforms that pull media fetch it here, not from the API
+			}
 		}
 		out = append(out, f)
 	}
