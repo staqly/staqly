@@ -146,6 +146,11 @@ func (f *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"error":{"code":403,"message":"The video identified by the <code>videoId</code> parameter has disabled comments.","errors":[{"reason":"commentsDisabled"}]}}`))
 			return
 		}
+		if strings.Contains(string(raw), "private video") {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":403,"message":"The comment thread could not be created due to insufficient permissions. The request might not be properly authorized.","errors":[{"reason":"forbidden"}]}}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"id":"Ugz1"}`))
 	case r.URL.Path == "/youtube/v3/videos":
 		_, _ = w.Write([]byte(`{"items":[{"id":"vid1","statistics":{"viewCount":"1200","likeCount":"30","commentCount":"4"}}]}`))
@@ -429,6 +434,10 @@ func TestYouTubeReplyAndMetrics(t *testing.T) {
 	}
 	if sn, _ := f.comment["snippet"].(map[string]any); sn["videoId"] != "vid1" {
 		t.Fatalf("second comment %v", f.comment)
+	}
+	if _, err := r.Reply(context.Background(), youtubeCreds(), "vid1", PostContent{Text: "private video"}, nil); failureKind(t, err) != ErrRejected ||
+		!strings.Contains(err.Error(), "usually because it is private") {
+		t.Fatalf("private video: %v", err)
 	}
 	if _, err := r.Reply(context.Background(), youtubeCreds(), "vid1", PostContent{Text: "made for kids"}, nil); failureKind(t, err) != ErrRejected ||
 		!strings.Contains(err.Error(), "comments turned off") {

@@ -105,16 +105,18 @@ describe('live preview', () => {
     await user.click(within(sheet).getByRole('tab', { name: 'Preview for Brand on Kick' }))
     expect(await within(sheet).findByRole('article', { name: 'Kick post by Brand on Kick' })).toHaveTextContent('Kick')
 
-    // Typing in the composer shows at once, no saving.
-    await user.click(within(screen.getByTestId('composer')).getByRole('tab', { name: 'All channels' }))
-    await user.type(screen.getByTestId('post-content'), ' and more')
-    expect(within(sheet).getByRole('article', { name: 'Kick post by Brand on Kick' })).toHaveTextContent(
-      'Hello from everyone and more',
-    )
-
-    // Back to the post closes it.
+    // Back to the post closes it; what was typed meanwhile shows when it opens again, no saving.
     await user.click(within(sheet).getByRole('button', { name: 'Back to the post' }))
     expect(screen.queryByTestId('post-preview-sheet')).not.toBeInTheDocument()
+    await user.click(within(screen.getByTestId('composer')).getByRole('tab', { name: 'All channels' }))
+    await user.type(screen.getByTestId('post-content'), ' and more')
+    await user.click(screen.getByRole('button', { name: 'Live preview' }))
+    const again = await screen.findByTestId('post-preview-sheet')
+
+    await user.click(within(again).getByRole('tab', { name: 'Preview for Brand on Kick' }))
+    expect(await within(again).findByRole('article', { name: 'Kick post by Brand on Kick' })).toHaveTextContent(
+      'Hello from everyone and more',
+    )
   })
 
   it('the text row has no visible label but keeps its name', async () => {

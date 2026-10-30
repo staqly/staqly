@@ -12,6 +12,7 @@ import {
   Eye,
   Globe,
   Heart,
+  ListFilter,
   MessageCircle,
   MessageSquare,
   MoreHorizontal,
@@ -20,6 +21,7 @@ import {
   Send,
   Share,
   Star,
+  ThumbsDown,
   ThumbsUp,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -704,19 +706,41 @@ function YouTubeTemplate(p: PreviewProps) {
         />
       </div>
       {p.comments.length > 0 && (
-        <ul className="grid gap-3 px-1 pt-4 pb-2" aria-label="Comments">
-          {p.comments.map((c) => (
-            <li key={c.key} className="flex gap-3">
-              <Avatar channel={p.channel} className="size-8" />
-              <div className="min-w-0 text-sm">
-                <p className="w-fit rounded-full bg-(--pv-muted) px-1.5 text-xs font-medium text-(--pv-bg)">
-                  {atHandle(p.channel)}
-                </p>
-                <PostText text={c.text} accent={YT.accent} className="mt-1 leading-5" />
-              </div>
-            </li>
-          ))}
-        </ul>
+        // As under a video on youtube.com: the count with Sort by, then each comment with the channel's handle on
+        // the grey pill YouTube gives the video's own channel, the time, and the like, dislike and Reply row.
+        <section aria-label="Comments" className="px-1 pt-5 pb-2">
+          <p className="flex items-center gap-8">
+            <span className="text-xl leading-7 font-bold">
+              {p.comments.length} {p.comments.length === 1 ? 'Comment' : 'Comments'}
+            </span>
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <ListFilter aria-hidden className="size-5" /> Sort by
+            </span>
+          </p>
+          <ul className="mt-6 grid gap-4">
+            {p.comments.map((c) => (
+              <li key={c.key} className="flex gap-4">
+                <Avatar channel={p.channel} className="size-10" />
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-1 text-xs leading-[18px]">
+                    <span className={cn('rounded-full px-1.5 font-medium', YT.bubble)}>{atHandle(p.channel)}</span>
+                    <span className={YT.muted}>Just now</span>
+                  </p>
+                  <PostText text={c.text} accent={YT.accent} className="mt-0.5 text-sm leading-5" />
+                  <p className="mt-1 -ml-2 flex items-center text-xs font-medium">
+                    <span className="grid size-8 place-items-center">
+                      <ThumbsUp aria-hidden className="size-4" />
+                    </span>
+                    <span className="grid size-8 place-items-center">
+                      <ThumbsDown aria-hidden className="size-4" />
+                    </span>
+                    <span className="ml-1 rounded-full px-3 py-2">Reply</span>
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </Frame>
   )

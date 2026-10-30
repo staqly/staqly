@@ -380,6 +380,12 @@ func (YouTube) Reply(ctx context.Context, c Credentials, parentExternalID string
 		if errors.As(err, &f) && strings.Contains(f.Msg, "disabled comments") {
 			return Result{}, &Failure{Kind: ErrRejected, Msg: "YouTube has comments turned off for this video (videos made for kids never take them). The video itself is live"}
 		}
+		// YouTube's 403 forbidden on commentThreads: most often a private video, which every upload from a project
+		// YouTube has not audited is, whatever visibility was picked.
+		if errors.As(err, &f) && strings.Contains(f.Msg, "insufficient permissions") {
+			return Result{}, &Failure{Kind: ErrRejected, Msg: "YouTube takes no comments on this video, usually because it is private: " +
+				"videos from an app YouTube has not audited stay private whatever visibility you pick. The video itself is up"}
+		}
 		return Result{}, err
 	}
 	return Result{ExternalID: "comment:" + video + ":" + out.ID, URL: "https://www.youtube.com/watch?v=" + video + "&lc=" + out.ID}, nil

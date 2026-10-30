@@ -1835,27 +1835,54 @@ export function ComposerForm({
                 <FieldError>{errors.title}</FieldError>
               </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="post-channels" required>
-                  Channels
-                </Label>
-                <ChannelPicker
-                  channels={channelList}
-                  providers={providerList}
-                  selected={selected}
-                  onChange={(ids) => setSelected(new Set(ids))}
-                  disabled={locked}
-                  invalid={!!errors.targets}
-                />
-                <FieldError>{errors.targets}</FieldError>
-                {/* Posts to X are metered: say so before publishing when this period's are used up. */}
-                {!locked && xOut && picked.some((c) => c.provider === 'x') && (
-                  <Callout tone="danger" size="xs" data-testid="x-posts-exhausted">
-                    {xOut}{' '}
-                    <Link href="/settings/plan" className="font-medium underline underline-offset-2">
-                      Plan & usage
-                    </Link>
-                  </Callout>
+              {/* Channels and, for a new post, its collection side by side (4:1); stacked on phones. */}
+              <div className={cn('grid gap-4', !post && 'sm:grid-cols-[minmax(0,4fr)_minmax(0,1fr)]')}>
+                <div className="grid min-w-0 content-start gap-2">
+                  <Label htmlFor="post-channels" required>
+                    Channels
+                  </Label>
+                  <ChannelPicker
+                    channels={channelList}
+                    providers={providerList}
+                    selected={selected}
+                    onChange={(ids) => setSelected(new Set(ids))}
+                    disabled={locked}
+                    invalid={!!errors.targets}
+                  />
+                  <FieldError>{errors.targets}</FieldError>
+                  {/* Posts to X are metered: say so before publishing when this period's are used up. */}
+                  {!locked && xOut && picked.some((c) => c.provider === 'x') && (
+                    <Callout tone="danger" size="xs" data-testid="x-posts-exhausted">
+                      {xOut}{' '}
+                      <Link href="/settings/plan" className="font-medium underline underline-offset-2">
+                        Plan & usage
+                      </Link>
+                    </Callout>
+                  )}
+                </div>
+                {!post && (
+                  <div className="grid min-w-0 content-start gap-2">
+                    <Label htmlFor="post-collection" required>
+                      Collection
+                    </Label>
+                    <Select value={collection} onValueChange={setCollection}>
+                      <SelectTrigger
+                        id="post-collection"
+                        className="w-full [&>span]:truncate"
+                        aria-invalid={!!errors.collection}
+                      >
+                        <SelectValue placeholder="Choose a collection" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(collections.data ?? []).map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldError>{errors.collection}</FieldError>
+                  </div>
                 )}
               </div>
 
@@ -1873,31 +1900,6 @@ export function ComposerForm({
                   creatable={{ normalize: normalizeTag }}
                 />
               </div>
-
-              {!post && (
-                <div className="grid gap-2">
-                  <Label htmlFor="post-collection" required>
-                    Collection
-                  </Label>
-                  <Select value={collection} onValueChange={setCollection}>
-                    <SelectTrigger
-                      id="post-collection"
-                      className="w-full sm:w-64 [&>span]:truncate"
-                      aria-invalid={!!errors.collection}
-                    >
-                      <SelectValue placeholder="Choose a collection" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(collections.data ?? []).map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FieldError>{errors.collection}</FieldError>
-                </div>
-              )}
 
               {multi && (
                 <div

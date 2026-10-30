@@ -16,8 +16,7 @@ const CAPTION: Record<PostStatus, string> = {
 
 /**
  * A collection's posts by status, in a card under the title: one cell per status (Publishing only while a post
- * is going out), each a toggle that filters the list below to it, and a bar of the shares under them. Failed
- * posts turn their cell red.
+ * is going out), each a toggle that filters the list below to it; icon and number in the status's colour.
  */
 export function StatusSummary({
   counts,
@@ -32,7 +31,6 @@ export function StatusSummary({
   className?: string
 }) {
   const shown = COUNT_ORDER.filter((s) => s !== 'publishing' || (counts[s] ?? 0) > 0)
-  const total = shown.reduce((n, s) => n + (counts[s] ?? 0), 0)
 
   return (
     <section aria-label="Posts by status" className={cn('overflow-hidden rounded-xl border', className)}>
@@ -48,7 +46,6 @@ export function StatusSummary({
           const meta = POST_STATUS_META[s]
           const n = counts[s] ?? 0
           const on = active === s
-          const alarm = s === 'failed' && n > 0
 
           return (
             <button
@@ -62,30 +59,17 @@ export function StatusSummary({
                 'group grid gap-1 bg-card px-4 py-3 text-left text-card-foreground transition-colors outline-ring',
                 'hover:bg-muted/60 focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2',
                 'disabled:cursor-default disabled:hover:bg-card',
-                alarm && 'bg-red-500/[0.06] hover:bg-red-500/10 dark:bg-red-400/[0.07]',
                 on && 'bg-muted hover:bg-muted',
               )}
             >
               <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <span
-                  aria-hidden
-                  className={cn(
-                    'grid size-6 place-items-center rounded-md',
-                    n > 0 ? TONES[meta.tone].chip : TONES.neutral.chip,
-                  )}
-                >
+                <span aria-hidden className={cn('grid size-6 place-items-center rounded-md', TONES[meta.tone].chip)}>
                   <meta.Icon className="size-3.5" />
                 </span>
                 {meta.label}
                 {on && <span className="ml-auto text-[11px] font-normal">Filtered</span>}
               </span>
-              <span
-                className={cn(
-                  'text-2xl font-semibold tracking-tight tabular-nums',
-                  n === 0 && 'text-muted-foreground',
-                  alarm && TONES.danger.text,
-                )}
-              >
+              <span className={cn('text-2xl font-semibold tracking-tight tabular-nums', TONES[meta.tone].text)}>
                 {n}
               </span>
               <span className="truncate text-xs text-muted-foreground">{n === 0 ? 'None' : CAPTION[s]}</span>
@@ -93,20 +77,6 @@ export function StatusSummary({
           )
         })}
       </div>
-      {/* The shares at a glance; the numbers above say the same in words. */}
-      {total > 0 && (
-        <div aria-hidden className="flex h-1.5 gap-px bg-muted">
-          {shown.map((s) =>
-            (counts[s] ?? 0) > 0 ? (
-              <span
-                key={s}
-                className={TONES[POST_STATUS_META[s].tone].fill}
-                style={{ width: `${((counts[s] ?? 0) / total) * 100}%` }}
-              />
-            ) : null,
-          )}
-        </div>
-      )}
     </section>
   )
 }
