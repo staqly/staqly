@@ -7,7 +7,7 @@ import (
 
 func TestApplyEntitlements(t *testing.T) {
 	plus, _ := PlanByID("plus")
-	business, _ := PlanByID("business")
+	business := UnlockedPlan
 	starter, _ := PlanByID("starter")
 	pack := func(key, name string, md map[string]string) Entitlement {
 		return Entitlement{LookupKey: key, Name: name, Metadata: md}
@@ -25,13 +25,13 @@ func TestApplyEntitlements(t *testing.T) {
 		{"deltas add up across features", plus, []Entitlement{
 			pack("channels_extra_10", "Channels pack", map[string]string{"staqly_limit_channels": "+10"}),
 			pack("deal_acme", "ACME deal", map[string]string{"staqly_limit_channels": "5", "staqly_limit_storage_gb": "+100"})},
-			func(p Plan) bool { return p.Limits.Channels == 30 && p.Limits.StorageBytes == 150*gb }, 3},
+			func(p Plan) bool { return p.Limits.Channels == 30 && p.Limits.StorageBytes == 110*gb }, 3},
 		{"unlimited lifts a limit", starter, []Entitlement{pack("x_unlimited", "X unlimited", map[string]string{"staqly_limit_x_posts_per_period": "unlimited"})},
 			func(p Plan) bool { return p.Limits.XPostsPerPeriod == Unlimited }, 1},
 		{"LinkedIn allowances rise", starter, []Entitlement{pack("linkedin_extra", "LinkedIn pack", map[string]string{
 			"staqly_limit_linkedin_posts_per_period": "+100", "staqly_limit_linkedin_videos_per_period": "+20"})},
 			func(p Plan) bool {
-				return p.Limits.LinkedInPostsPerPeriod == 400 && p.Limits.LinkedInVideosPerPeriod == 50 && p.BaseLimits.LinkedInPostsPerPeriod == 300
+				return p.Limits.LinkedInPostsPerPeriod == 200 && p.Limits.LinkedInVideosPerPeriod == 25 && p.BaseLimits.LinkedInPostsPerPeriod == 100
 			}, 2},
 		{"an unlimited limit stays unlimited", business, []Entitlement{pack("channels_extra_10", "Channels pack", map[string]string{"staqly_limit_channels": "+10"})},
 			func(p Plan) bool { return p.Limits.Channels == Unlimited && p.BaseLimits == nil }, 0},
@@ -51,7 +51,7 @@ func TestApplyEntitlements(t *testing.T) {
 			if !c.check(got) || len(got.LimitBonuses) != c.bonuses {
 				t.Fatalf("%+v (bonuses %+v)", got.Limits, got.LimitBonuses)
 			}
-			if c.plan.Limits != plansByID(c.plan.ID).Limits {
+			if c.plan.ID != UnlockedPlan.ID && c.plan.Limits != plansByID(c.plan.ID).Limits {
 				t.Fatal("the shared plan must not change")
 			}
 		})

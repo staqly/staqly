@@ -578,7 +578,7 @@ func (s *Service) Recover(ctx context.Context, recoveryKey, userAgent string) (R
 	return res, err
 }
 
-// revokeLostAdminKeys: on a plan with a key limit (Starter, Plus), the new
+// revokeLostAdminKeys: on a plan with a key limit, the new
 // admin key replaces the lost ones, so the workspace stays within its limit and
 // a lost key stops working. Unlimited plans keep every key.
 func (s *Service) revokeLostAdminKeys(ctx context.Context, q *db.Queries, sys Principal) ([]string, error) {

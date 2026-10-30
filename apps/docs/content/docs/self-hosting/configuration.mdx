@@ -141,7 +141,7 @@ with `AI_ASSISTANT_BASE_URL` below.
 | `AI_ASSISTANT_API_KEY` | — | Its key, sent as `Authorization: Bearer`. Empty for a local server that takes none. |
 | `AI_ASSISTANT_PRICES` | from the price list | USD per million input and output tokens of this one endpoint, over the price list below. `0,0` for a model that costs nothing. |
 | `AI_PRICES_FILE` | — | A JSON price list of language models, merged over the built-in one (GPT-6 models and the default Gemini): `{"models": {"my-model": {"input": 0.5, "cached_input": 0.05, "output": 2}}}`, USD per million tokens. The assistant's tokens count as the workspace's AI usage at these prices when the endpoint reports no cost (OpenAI doesn't; OpenRouter and fal.ai do); a model not listed counts at the default model's prices. |
-| `AI_ASSISTANT_FALLBACK_MODEL`, `_BASE_URL`, `_API_KEY`, `_PRICES` | — | A second, usually cheaper model, set like the four above (without a base URL it runs on fal.ai's router and needs `AI_FAL_KEY`). It answers when the workspace's monthly AI allowance has run out, and when the first model refuses a request before answering (its own quota, an outage). Past the allowance it is only rate-limited. |
+| `AI_ASSISTANT_FALLBACK_MODEL`, `_BASE_URL`, `_API_KEY`, `_PRICES` | — | A second, usually cheaper model, set like the four above (without a base URL it runs on fal.ai's router and needs `AI_FAL_KEY`). It answers when the first model refuses before answering (its own quota, an outage). Both endpoints share the workspace AI allowance; exhaustion stops both. |
 | `AI_ASSISTANT_BROWSER_MODEL` | — | A [WebLLM](https://webllm.mlc.ai) model id, such as `Qwen2.5-3B-Instruct-q4f16_1-MLC`. When neither model can answer, the assistant offers to go on in the person's browser (WebGPU): free, text only, without the workspace's tools. The first time downloads the model from Hugging Face (a few GB). Setting it lets the dashboard's pages run WebAssembly and fetch from Hugging Face and MLC's model library on GitHub. |
 | `AI_OPERATIONS` | every one | The tools offered, comma-separated: `generate`, `edit`, `inpaint`, `erase`, `expand`, `remove_background`, `replace_background`, `upscale`, `enhance`, `text_to_video`, `image_to_video` (e.g. `generate,edit,erase` keeps videos off). |
 | `AI_PRICES` | built in | Overrides the estimate of a model, `model=price` per its unit (image, megapixel or video second), comma-separated: `fal-ai/flux/schnell=0.004,fal-ai/flux-pro/kontext=0.05`. |
@@ -270,3 +270,25 @@ Read by `scripts/install.sh` (the `curl -fsSL https://raw.githubusercontent.com/
   <Card title="Security model" href="/self-hosting/security">What the access settings protect against.</Card>
   <Card title="Troubleshooting" href="/self-hosting/troubleshooting">When staqly refuses to start.</Card>
 </Cards>
+
+## Shared publishing capacity
+
+Cloud publishing, replies, reposts and metric refreshes use persistent daily counters across workers. Each
+workspace may use at most 10% of the configured daily publishing pool (rounded down, minimum one).
+Community Edition does not use these caps. The underlying provider quota still applies.
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `LINKEDIN_DAILY_API_CALLS` | `400` | Calls to api.linkedin.com while publishing or reading metrics, across all workspaces; midnight UTC reset |
+| `YOUTUBE_DAILY_UPLOADS` | `90` | YouTube upload starts across all workspaces; midnight America/Los_Angeles reset |
+
+These are conservative starting points, not detected quotas. Set them below your app's approved limits,
+leaving capacity for connecting accounts and token refreshes, which are not counted here. LinkedIn's
+Development tier documents 500 API calls per app per day; video polling and statistics reads also consume
+calls. YouTube currently documents a separate default bucket of 100 `videos.insert` calls per day.
+Check the provider console before increasing either value. A monthly plan allowance does not bypass these
+shared safeguards. Failures and retries count as attempts.
+
+AI has a separate shared **workspace** allowance: see [Plans](/plans). Keep model prices current with
+`AI_PRICES` / `AI_PRICES_FILE`, use the Higgsfield authenticated estimate endpoint to verify your account's
+rates, and set provider account spending controls. A configured fallback model shares the allowance.

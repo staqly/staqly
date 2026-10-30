@@ -775,7 +775,7 @@ function PlanStep({
     <div>
       <StepHeader heading={heading} title="Choose a plan">
         {draft.workspaceName ? `${draft.workspaceName} opens` : 'Your workspace opens'} as soon as the payment is
-        through. Every plan has unlimited posts, MCP and the REST API; cancel anytime.
+        through. Every plan includes editors, analytics, MCP and the REST API; cancel anytime.
       </StepHeader>
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <IntervalToggle value={interval} onChange={setInterval} />

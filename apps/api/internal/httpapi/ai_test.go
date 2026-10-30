@@ -339,7 +339,7 @@ func TestAIFalOnly(t *testing.T) {
 
 	var st app.AIStatus
 	e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
-	if !st.Configured || len(st.Operations) != 12 || st.Providers[0] != "fal" || st.Usage.LimitUSD != nil {
+	if !st.Configured || len(st.Operations) != 12 || st.Providers[0] != "fal" || st.Usage.LimitUSD == nil || *st.Usage.LimitUSD <= 0 {
 		t.Fatalf("fal only: %+v", st)
 	}
 	for _, o := range st.Operations {
@@ -461,6 +461,24 @@ func TestAIHiggsfieldOnly(t *testing.T) {
 
 // Both: fal.ai first. Higgsfield takes over only when fal.ai did not take the request, and only for operations
 // it does the same way; when fal.ai may have started it (no answer) or refused the input, nothing is sent again.
+func TestAIFallbackReservationMustFitAllowance(t *testing.T) {
+	e := newEnv(t)
+	e.paid()
+	fal, hf := newFakeFal(t), newFakeHiggsfield(t)
+	e.aiSetup(fal, hf)
+	saved := append([]app.Plan(nil), app.Plans...)
+	t.Cleanup(func() { copy(app.Plans, saved) })
+	for i := range app.Plans {
+		app.Plans[i].Limits.AIMonthlyCents = 5 // fits fal's $0.003, not Higgsfield's $0.10
+	}
+	if code, _, body := e.aiJob(e.key, map[string]string{"operation": "generate", "prompt": "bounded fallback"}, nil, nil); code != 402 || !strings.Contains(body, "ai_limit_reached") {
+		t.Fatalf("fallback reservation: %d %s", code, body)
+	}
+	if fal.count() != 0 || hf.count() != 0 {
+		t.Fatal("a provider was contacted despite insufficient allowance")
+	}
+}
+
 func TestAIFallback(t *testing.T) {
 	e := newEnv(t)
 	e.paid()
@@ -899,20 +917,19 @@ func TestAssistant(t *testing.T) {
 		t.Fatalf("status with a fallback: %+v %q", op, st.AssistantBrowserModel)
 	}
 
-	// The month's allowance ran out: the model isn't asked, the fallback answers; without one it is a 402.
+	// Exhaustion stops both paid endpoints; a fallback must not bypass the allowance.
 	saved := append([]app.Plan(nil), app.Plans...)
 	for i := range app.Plans {
 		app.Plans[i].Limits.AIMonthlyCents = 0
 	}
 	t.Cleanup(func() { copy(app.Plans, saved) })
 	asked, model = 0, ""
-	for _, ev := range e.assistantTurn([]app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}, nil) {
-		if ev.Type == "error" {
-			t.Fatalf("over the allowance: %+v", ev.Error)
-		}
+	evs = e.assistantTurn([]app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}, nil)
+	if last := evs[len(evs)-1]; last.Type != "error" || last.Error.Code != "ai_limit_reached" {
+		t.Fatalf("over the allowance with a fallback: %+v", evs)
 	}
-	if model != "gpt-cheap" || asked != 0 {
-		t.Fatalf("over the allowance got %q, the model asked %d times", model, asked)
+	if model != "" || asked != 0 {
+		t.Fatalf("exhausted workspace contacted a provider: %q, %d calls", model, asked)
 	}
 	e.svc.Cfg.AI.AssistantFallback = app.AIEndpoint{}
 	evs = e.assistantTurn([]app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}, nil)

@@ -6,7 +6,7 @@ description: Starter, Plus, Pro and Business on Staqly Cloud, priced per user, m
 Plans set how much each workspace may use on [Staqly Cloud](/local-vs-cloud#staqly-cloud): channels, storage, posts
 to X and so on. Prices are in euros, **exclude VAT** (added at checkout where it applies) and are
 **per user**: every member of the workspace is a seat billed at the plan's price,
-whatever their role. Posts, collections and schedules are unlimited on every plan. If you run
+whatever their role. All usage limits are shared by the workspace and do not multiply with seats. Collections and schedules have no count limit; created posts do. If you run
 **Staqly Community Edition** on your own computer or server (`staqly serve` or the Docker image),
 plans don't apply to you: its plan is **Community Edition**, with no limits (usage is still shown
 for information).
@@ -17,25 +17,28 @@ for information).
 |---|---|---|---|---|
 | Per user, billed monthly | €15 / month | €29 / month | €59 / month | €99 / month |
 | Per user, billed yearly | €12 / month (€144 a year) | €23 / month (€276) | €47 / month (€564) | €79 / month (€948) |
-| Posts per month | Unlimited | Unlimited | Unlimited | Unlimited |
+| New posts per month | 300 | 1,500 | 5,000 | 15,000 |
 | Collections and schedules | Unlimited | Unlimited | Unlimited | Unlimited |
-| Connected channels | 5 | 15 | 40 | Unlimited |
-| Posts to X per month | 250 | 450 | 950 | 1,600 |
-| Posts to LinkedIn per month | 300 | 600 | 1,200 | 2,500 |
-| LinkedIn posts with a video per month | 30 | 60 | 150 | 300 |
+| Connected channels | 5 | 15 | 40 | 100 |
+| Posts to X per month | 50 | 100 | 250 | 500 |
+| Posts to LinkedIn per month | 100 | 300 | 600 | 900 |
+| LinkedIn posts with a video per month | 5 | 15 | 30 | 60 |
 | People | Per user | Per user | Per user | Per user |
-| Alerts | 3 | 10 | Unlimited | Unlimited |
-| Webhooks | 3 | 10 | Unlimited | Unlimited |
-| Active API keys | 2 | 10 | Unlimited | Unlimited |
-| Storage | 10 GB | 50 GB | 200 GB | 1 TB |
-| Max file size | 25 MB | 100 MB | 250 MB | 1 GB |
+| Alerts | 3 | 10 | 25 | 50 |
+| Webhooks | 3 | 10 | 25 | 50 |
+| Active API keys | 2 | 10 | 25 | 50 |
+| Storage | 2 GB | 10 GB | 30 GB | 100 GB |
+| Max file size | 25 MB | 100 MB | 100 MB | 100 MB |
 | Workspace data export (ZIP of collections, posts, channels, schedules, events) | Yes, without files | Yes, with files | Yes, with files | Yes, with files |
 | Backups and activity log export | No | Yes | Yes | Yes |
-| Priority support | No | No | No | Yes |
+| Shared AI allowance per month (estimated provider cost, USD) | $1 | $2 | $5 | $10 |
+| Fresh X statistics reads per month | 100 | 200 | 500 | 1,000 |
 
 Signed webhooks, MCP, the REST API, the SDKs and the full history are on every plan, and so are the AI tools (the
-[assistant](/dashboard/assistant) and the [design editor's AI](/dashboard/design-editor#ai-tools)): no plan has a
-monthly AI allowance for now (`ai_monthly_cents` is `-1`). Every
+[assistant](/dashboard/assistant) and the [design editor's AI](/dashboard/design-editor#ai-tools)): the assistant, image and video generation share the monthly AI allowance above. New requests reserve their
+estimated cost before running and stop with `402 ai_limit_reached` if there is not enough left. The allowance
+renews on the 1st in UTC, does not roll over, and does not trigger automatic overage charges. Manual editing
+continues to work. Every
 plan can [export its data](/self-hosting/data-export) (**Settings → Data & privacy**): on
 Starter the workspace ZIP is data only (`includes_media: false`), with media files listed by id,
 name and type but not included. The ZIP with the media files, backups (**Settings → Backups**)
@@ -146,11 +149,43 @@ now an ended Starter period (read-only) until a plan is paid for.
   the video allowance. Comments don't count. The allowances reset every month and can't be bought
   on top. When one is used up, publishing to LinkedIn answers **402 `linkedin_posts_exhausted`** or
   **`linkedin_videos_exhausted`** (and a post scheduled for later fails with the reason).
-  `GET /v1/workspace/usage` shows both counts. Other platforms are not counted.
+  `GET /v1/workspace/usage` shows both counts. Daily shared-capacity safeguards also apply; see below.
 - Channels, alerts, webhooks, API keys and storage are counted from what currently exists; a
   disabled channel still counts.
-- **Posts / month** is unlimited on every plan; the count (every post created per calendar month,
-  UTC, by people, agents, duplicates or schedules) is still shown in usage.
+- **New posts / month** counts every created post, including drafts, duplicates and posts made by agents or
+  schedules, per calendar month in UTC. Editing an existing post does not count again; deleting one does not
+  refund its allowance. Publishing one post to several channels counts once here, but each X or LinkedIn
+  target consumes that platform's allowance. Thread replies consume X credits separately.
+
+## Shared platform capacity
+
+Monthly allowances are not a guarantee that everything can be sent on the same day. Cloud publishing,
+replies, reposts and statistics refreshes also share the operator's daily API capacity:
+
+- LinkedIn: by default, 400 API calls per day for the service, at most 40 per workspace. Video preparation and
+  polling count too; 40 calls is not 40 guaranteed posts. The counter resets at midnight UTC.
+- YouTube: by default, 90 upload starts per day for the service, at most 9 per workspace. It resets at midnight
+  Pacific Time, including daylight-saving changes. These are upload attempts, not successful videos.
+- X statistics: 100 / 200 / 500 / 1,000 fresh single-post reads per workspace per UTC calendar month.
+  Cached Analytics views do not consume reads. Extra X publishing bundles do not increase this allowance.
+
+No workspace may exceed its own daily cap; this is not a guaranteed reservation, and the shared pool can fill first. Failed calls and retries still consume daily
+capacity. Jobs report the reason when capacity is unavailable; monthly allowances never override provider
+restrictions. The operator must check the actual approved quotas and leave room for account connections,
+token refreshes and other activity. See [configuration](/self-hosting/configuration#shared-publishing-capacity).
+Local installs have no staqly capacity caps, but their providers' limits and bills still apply.
+
+## Available now and planned
+
+Every plan includes the design, video and audio editors, publishing analytics, top posts, posting-time insights,
+and the assistant when AI is configured. Platform statistics depend on the connected network and collected
+metrics; staqly does not promise continuous background refreshes on every network.
+
+<ComingSoon>
+Automatic AI performance summaries and recommendations (planned for Plus and above), scheduled reports
+(Pro and above), and client-ready report exports (Business). These are not available today, have no promised
+release date, and their plan allocation may change. Future AI insights are intended to use the same allowance.
+</ComingSoon>
 
 ## Checking usage
 

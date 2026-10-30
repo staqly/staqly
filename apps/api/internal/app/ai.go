@@ -43,8 +43,8 @@ type AIConfig struct {
 	// TokenPrices: the assistant's language models per million tokens (ai_prices.json + AI_PRICES_FILE).
 	TokenPrices map[string]TokenPrice
 	// Assistant: the language model of the dashboard's assistant (AI_ASSISTANT_*). AssistantFallback answers when
-	// it can't (AI_ASSISTANT_FALLBACK_*; optional): the workspace's allowance ran out, or the model refused the
-	// request before answering (its own quota, an outage).
+	// it can't (AI_ASSISTANT_FALLBACK_*; optional): the model refused the
+	// request before answering (its own quota, an outage). Both share the same allowance.
 	Assistant, AssistantFallback AIEndpoint
 	// AssistantBrowserModel: a WebLLM model the dashboard can run on the device, text only, when neither answers
 	// (AI_ASSISTANT_BROWSER_MODEL; "" = none).
@@ -67,7 +67,7 @@ type AIEndpoint struct {
 }
 
 // aiMonthlyLimit: what the workspace may spend on AI this month in USD (estimated), from its plan's
-// ai_monthly_cents; < 0 = no limit (local mode, and every plan for now: usage is recorded so limits can come).
+// ai_monthly_cents; < 0 = no limit (local mode).
 func (s *Service) aiMonthlyLimit(ctx context.Context, q *db.Queries, workspaceID string) (float64, error) {
 	if s.Cfg.Mode == ModeLocal {
 		return -1, nil
@@ -517,7 +517,10 @@ func (s *Service) CreateAIJob(ctx context.Context, p Principal, in AIJobInput) (
 		}
 		inputs = append(inputs, name)
 	}
-	estimate := s.estimateCost(chain[0].model, c)
+	var estimate int64
+	for _, cand := range chain {
+		estimate = max(estimate, s.estimateCost(cand.model, c))
+	}
 	var row db.AiJob
 	err = s.tx(ctx, func(q *db.Queries) error {
 		n, err := q.CountLiveAIJobs(ctx, p.WorkspaceID)
@@ -861,7 +864,7 @@ func (s *Service) runAIJob(ctx context.Context, workspaceID, id string) error {
 			}
 			cost := s.estimateCost(cand.model, c)
 			n, err := s.W.SetAIJobSubmitting(ctx, db.SetAIJobSubmittingParams{Provider: cand.prov.Name(), Model: cand.model.ID,
-				FallbackFrom: from, CostMicros: cost, ID: id})
+				FallbackFrom: from, CostMicros: max(row.CostMicros, cost), ID: id})
 			if err != nil {
 				return err
 			}

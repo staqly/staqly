@@ -41,9 +41,9 @@ func TestXPostsAreMetered(t *testing.T) {
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "x", "name": "Test X"}, 201, &ch)
 	target := []map[string]any{{"channel_id": ch.ID}}
 	period := time.Now().UTC().Format("2006-01")
-	// 247 of Starter's 250 already used this month.
+	// 47 of Starter's 50 already used this month.
 	if _, err := e.svc.DB.Exec(`INSERT INTO usage_events (workspace_id, provider, ref, period, units, included, credits, overage, created_at)
-		VALUES (?, 'x', 'seed', ?, 247, 247, 0, 0, ?)`, ws.ID, period, time.Now().UTC().Format("2006-01-02T15:04:05.000000Z")); err != nil {
+		VALUES (?, 'x', 'seed', ?, 47, 47, 0, 0, ?)`, ws.ID, period, time.Now().UTC().Format("2006-01-02T15:04:05.000000Z")); err != nil {
 		t.Fatal(err)
 	}
 	xposts := func() app.XPosts {
@@ -52,7 +52,7 @@ func TestXPostsAreMetered(t *testing.T) {
 		e.do(nil, "GET", "/v1/billing/x-posts", e.key, nil, 200, &x)
 		return x
 	}
-	if x := xposts(); x.Included != 250 || x.Used != 247 || x.IncludedLeft != 3 || x.Left != 3 || len(x.Bundles) != 3 || x.LinkPostWeight != 14 {
+	if x := xposts(); x.Included != 50 || x.Used != 47 || x.IncludedLeft != 3 || x.Left != 3 || len(x.Bundles) != 3 || x.LinkPostWeight != 14 {
 		t.Fatalf("before: %+v", x)
 	}
 
@@ -61,7 +61,7 @@ func TestXPostsAreMetered(t *testing.T) {
 	e.do(nil, "POST", "/v1/posts/"+p.ID+"/publish", e.key, nil, 202, nil)
 	e.svc.RunDueJobsOnce(ctx)
 	e.svc.RunDueJobsOnce(ctx)
-	if x := xposts(); x.Used != 249 || x.IncludedLeft != 1 {
+	if x := xposts(); x.Used != 49 || x.IncludedLeft != 1 {
 		t.Fatalf("after a post and a reply: %+v", x)
 	}
 	var rows int
@@ -133,7 +133,7 @@ func TestXPostsAreMetered(t *testing.T) {
 	e.do(nil, "POST", "/v1/posts/"+p.ID+"/duplicate", e.key, nil, 201, &p2)
 	e.do(nil, "POST", "/v1/posts/"+p2.ID+"/publish", e.key, nil, 202, nil)
 	e.svc.RunDueJobsOnce(ctx)
-	if x := xposts(); x.IncludedLeft != 0 || x.CreditsLeft != 199 || x.Used != 251 {
+	if x := xposts(); x.IncludedLeft != 0 || x.CreditsLeft != 199 || x.Used != 51 {
 		t.Fatalf("included first, then credits: %+v", x)
 	}
 
@@ -152,7 +152,7 @@ func TestXPostsAreMetered(t *testing.T) {
 	p4 := e.post(c.ID, map[string]any{"content": "elsewhere", "targets": []map[string]any{{"channel_id": other.ID}}})
 	e.do(nil, "POST", "/v1/posts/"+p4.ID+"/publish", e.key, nil, 202, nil)
 	e.svc.RunDueJobsOnce(ctx)
-	if x := xposts(); x.Used != 251 {
+	if x := xposts(); x.Used != 51 {
 		t.Fatalf("other platforms are not metered: %+v", x)
 	}
 
@@ -179,7 +179,7 @@ func TestXPostsCheckedAtPublishTime(t *testing.T) {
 	e.do(nil, "POST", "/v1/posts/"+p.ID+"/schedule", e.key, map[string]any{"publish_at": at}, 200, nil)
 	// Meanwhile the month's posts are used up.
 	e.svc.DB.Exec(`INSERT INTO usage_events (workspace_id, provider, ref, period, units, included, credits, overage, created_at)
-		VALUES (?, 'x', 'seed', ?, 250, 250, 0, 0, ?)`, ws.ID, time.Now().UTC().Format("2006-01"), time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"))
+		VALUES (?, 'x', 'seed', ?, 50, 50, 0, 0, ?)`, ws.ID, time.Now().UTC().Format("2006-01"), time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"))
 	deadline := time.Now().Add(15 * time.Second)
 	var got app.Post
 	for time.Now().Before(deadline) {

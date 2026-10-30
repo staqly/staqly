@@ -725,6 +725,10 @@ func (s *Service) PostMetrics(ctx context.Context, p Principal, postID string, r
 }
 
 func (s *Service) readMetrics(ctx context.Context, workspaceID, channelID string, e providers.Entry, r providers.MetricsReader, externalID string) (providers.Metrics, error) {
+	// Expired subscriptions can read cached reports, but cannot keep generating provider charges.
+	if err := s.CheckWritable(ctx, workspaceID); err != nil {
+		return providers.Metrics{}, err
+	}
 	ch, err := s.Q.GetChannelByID(ctx, channelID)
 	if err != nil || ch.WorkspaceID != workspaceID {
 		return providers.Metrics{}, errors.New("channel not found")
@@ -736,7 +740,7 @@ func (s *Service) readMetrics(ctx context.Context, workspaceID, channelID string
 	if creds, err = s.refreshIfDue(ctx, ch, e, creds); err != nil {
 		return providers.Metrics{}, err
 	}
-	pctx, cancel := context.WithTimeout(s.providerCtx(ctx), 15*time.Second)
+	pctx, cancel := context.WithTimeout(s.publishingCtx(ctx, workspaceID), 15*time.Second)
 	defer cancel()
 	return r.Metrics(pctx, creds, externalID)
 }

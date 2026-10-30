@@ -42,7 +42,7 @@ var runSystem = func(name string, args ...string) (string, error) {
 // reads (apps/api internal/config and Service.Env; TestServiceEnvCoversServerConfig compares), except the
 // ones serve sets from its flags (ADDR, DASHBOARD_ADDR, DASHBOARD_PORT, DASHBOARD_EXPOSED, DATA_DIR).
 var serviceEnvPrefixes = []string{"STAQLY_", "PUBLIC_", "NOTIFY_", "WEBHOOK_", "LOG_", "SENTRY_", "POSTHOG_", "MAIL_", "AI_",
-	"RETENTION_", "LOCAL_", "RATE_LIMIT_", "PROVIDER_", "STORAGE_", "S3_", "GOOGLE_", "STRIPE_", "MAX_UPLOAD_MB",
+	"LINKEDIN_DAILY_API_CALLS", "YOUTUBE_DAILY_UPLOADS", "RETENTION_", "LOCAL_", "RATE_LIMIT_", "PROVIDER_", "STORAGE_", "S3_", "GOOGLE_", "STRIPE_", "MAX_UPLOAD_MB",
 	"UPLOAD_DIR", "DATABASE_PATH", "DATABASE_URL", "JOB_CONCURRENCY", "PROCESSING_TIMEOUT", "CORS_ALLOWED_ORIGINS",
 	"TRUST_PROXY", "COOKIE_SECURE", "SESSION_TTL", "SETUP_TOKEN", "AUTH_DEV_SIGNIN", "TRIAL_PLAN", "PIXABAY_", "UNSPLASH_"}
 

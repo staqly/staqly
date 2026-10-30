@@ -9,7 +9,7 @@ import { wrap } from '@/lib/site'
 
 export const metadata: Metadata = pageMeta(
   'Compare plans',
-  'Starter, Plus, Pro and Business side by side, per user: channels, alerts, webhooks, API keys, storage, backups and support. Every plan has unlimited posts, MCP and the REST API; yearly billing saves 20 % or more.',
+  'Starter, Plus, Pro and Business side by side, per user: channels, alerts, webhooks, API keys, storage, backups and support. Every plan includes editors, analytics, MCP and the REST API; yearly billing saves 20 % or more.',
   '/pricing/compare',
 )
 
@@ -25,7 +25,7 @@ export default function ComparePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(faqLd) }} />
       <PageHero eyebrow={<Link href="/pricing">Pricing</Link>} title="Compare plans">
         <p className="mt-5 max-w-2xl text-lg text-muted-foreground">
-          Unlimited posts on every plan. The bigger ones add channels, automations and storage.
+          Editors, analytics and automation on every plan. Compare shared workspace limits and planned features below.
         </p>
         <CtaButtons />
       </PageHero>

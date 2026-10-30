@@ -59,7 +59,7 @@ The same integrations work against Staqly Community Edition on your own computer
 | Setup | `curl -fsSL https://raw.githubusercontent.com/staqly/staqly/main/scripts/install.sh \| sh` then `staqly serve`, or [Docker](/self-hosting/docker) | [Sign up](https://app.staqly.ai/signup) (Google, an email code or a passkey); create a scoped key (`stk_...`) for each tool under **Integrations → API keys** |
 | Credentials | `Authorization: Bearer` with the access token staqly prints at start (`staqly serve token`), full access | `Authorization: Bearer` API key with [scopes](/api/authentication) |
 | API surface | Full REST API, MCP at `/mcp`, webhooks | Same REST API, MCP at `/mcp`, webhooks |
-| Quota | None | Unlimited posts; channels and keys by plan, from 5 channels on Starter, priced per user ([plans](/plans)) |
+| Quota | None | Posts, channels and keys by plan, from 5 channels on Starter, priced per user ([plans](/plans)) |
 | OAuth platforms | Your own developer app per platform | Ours, ready to connect |
 | Reachable from SaaS tools | No, the API listens on `127.0.0.1` only | Yes |
 | Support | [GitHub issues](https://github.com/staqly/staqly/issues) | [support@staqly.ai](mailto:support@staqly.ai); GitHub issues for the software |

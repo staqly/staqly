@@ -667,10 +667,12 @@ describe('sessions and CSRF', () => {
     expect((await http(`${API}/v1/sessions/recover`, { method: 'POST', json: { recovery_key: fresh } })).status).toBe(
       401,
     )
-    // Recovery signs every other browser out (someone else may hold them); on Pro the API keys stay.
+    // Recovery signs every other browser out and replaces lost admin keys on plans with finite key limits.
     expect((await other.request('/v1/session')).status).toBe(401)
     expect((await a.session.request('/v1/session')).status).toBe(401)
     expect((await recovered.request('/v1/session')).status).toBe(200)
+    expect((await withKey(a.key, '/v1/posts')).status).toBe(401)
+    a.key = used.json<{ api_key: { key: string } }>().api_key.key
     expect((await withKey(a.key, '/v1/posts')).status).toBe(200)
     a.session = recovered
   })
