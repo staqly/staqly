@@ -228,24 +228,25 @@ func (s *Service) sendEmailCode(ctx context.Context, email, purpose, userID stri
 // emailCodeMessage: the code leads the subject ("123456 is your Staqly code", as Instagram and Google do), so it shows
 // in the inbox list and mail apps offer to copy or autofill it.
 func emailCodeMessage(purpose, code string) (string, string) {
+	const inSettings = "Enter it in **Settings → Account**. It works **once** and expires in **10 minutes**.\n\n"
 	switch purpose {
 	case purposeChangeCurrent:
-		return code + " is your Staqly code", fmt.Sprintf("Your code to change the address you sign in to Staqly with is %s.\n\n"+
-			"Enter it in Settings, Account. It works once, for 10 minutes.\n\n"+
-			"If you did not ask for it, someone may be signed in to your account: sign out other sessions in Settings.\n", code)
+		return code + " is your staqly code", fmt.Sprintf("Here is your code to confirm changing the email address you sign in to staqly with:\n\n%s\n\n"+
+			inSettings+
+			"Didn't ask to change your address? Someone may be signed in to your account: open **Settings** and sign out your other sessions.\n", code)
 	case purposeChangeNew:
-		return code + " is your Staqly code", fmt.Sprintf("Your code to sign in to Staqly with this address from now on is %s.\n\n"+
-			"Enter it in Settings, Account. It works once, for 10 minutes.\n\n"+
-			"If you did not ask for it, ignore this email.\n", code)
+		return code + " is your staqly code", fmt.Sprintf("Here is your code to make this the address you sign in to staqly with:\n\n%s\n\n"+
+			inSettings+
+			"Didn't ask for this? You can ignore this email: nothing changes without the code.\n", code)
 	}
 	if purpose == purposeLink {
-		return code + " is your Staqly code", fmt.Sprintf("Your code to sign in to Staqly with this address is %s.\n\n"+
-			"Enter it in Settings, Account. It works once, for 10 minutes.\n\n"+
-			"If you did not ask for it, ignore this email.\n", code)
+		return code + " is your staqly code", fmt.Sprintf("Here is your code to add this address as a way to sign in to staqly:\n\n%s\n\n"+
+			inSettings+
+			"Didn't ask for this? You can ignore this email: nothing changes without the code.\n", code)
 	}
-	return code + " is your Staqly sign-in code", fmt.Sprintf("Your sign-in code is %s.\n\n"+
-		"Enter it on the sign-in page. It works once, for 10 minutes.\n\n"+
-		"If you did not try to sign in to Staqly, ignore this email: nobody can sign in without the code.\n", code)
+	return code + " is your staqly sign-in code", fmt.Sprintf("Here is your code to sign in to staqly:\n\n%s\n\n"+
+		"Type it on the sign-in page you came from. It works **once** and expires in **10 minutes**.\n\n"+
+		"Didn't try to sign in? You can ignore this email: nobody can sign in without this code. **Never share it** with anyone.\n", code)
 }
 
 // checkEmailCode spends one try on the open code for the address and returns it when the code matches.

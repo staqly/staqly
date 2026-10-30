@@ -933,13 +933,7 @@ export function ChannelsPage() {
         <PageContainer>
           <PageHeader
             title={openGroup?.name ?? 'Channels'}
-            icon={
-              openGroup && (openGroup.icon || openGroup.default) ? (
-                <GroupIcon group={openGroup} className="size-4" />
-              ) : (
-                <Share2 className="size-4" />
-              )
-            }
+            icon={openGroup ? <GroupIcon group={openGroup} className="size-4" /> : <Share2 className="size-4" />}
             description="The accounts your posts go to: connect as many per platform as you need; every post picks its channels."
             actions={
               <>

@@ -128,11 +128,12 @@ const ICONS: Record<string, LucideIcon> = {
   bot: Bot,
 }
 
-/** A group's icon; without one, the Default group gets an inbox and the others nothing. */
+/** A group's icon; without one, the Default group gets an inbox and the others a folder. */
 export function GroupIcon({ group, className }: { group: ChannelGroup; className?: string }) {
-  const Icon = ICONS[group.icon] ?? (group.default ? Inbox : undefined)
+  // Without a picked icon: the Default group's inbox, any other group a folder.
+  const Icon = ICONS[group.icon] ?? (group.default ? Inbox : Folder)
 
-  return Icon ? <Icon aria-hidden className={className} /> : null
+  return <Icon aria-hidden className={className} />
 }
 
 /** A square button showing the group's icon; it opens the set to pick one from, or None. */

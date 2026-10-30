@@ -444,7 +444,12 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
         </div>
         {/* Only with posts: an empty collection says so in the list below. */}
         {Object.values(c.status_counts ?? {}).some((n) => n > 0) && (
-          <StatusSummary counts={c.status_counts ?? {}} className="mt-2" />
+          <StatusSummary
+            counts={c.status_counts ?? {}}
+            active={status}
+            onSelect={(v) => setParam('status', v)}
+            className="mt-2"
+          />
         )}
         {/* Filters in use, as chips under the title (each one comes off with its ×). */}
         {filtered && (
