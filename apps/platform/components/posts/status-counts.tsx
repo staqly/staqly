@@ -16,8 +16,7 @@ const CAPTION: Record<PostStatus, string> = {
 
 /**
  * A collection's posts by status, in a card under the title: one cell per status (Publishing only while a post
- * is going out), each a toggle that filters the list below to it, and a bar of the shares under them. Failed
- * posts turn their cell red.
+ * is going out), each a toggle that filters the list below to it. Failed posts turn their cell red.
  */
 export function StatusSummary({
   counts,
@@ -32,7 +31,6 @@ export function StatusSummary({
   className?: string
 }) {
   const shown = COUNT_ORDER.filter((s) => s !== 'publishing' || (counts[s] ?? 0) > 0)
-  const total = shown.reduce((n, s) => n + (counts[s] ?? 0), 0)
 
   return (
     <section aria-label="Posts by status" className={cn('overflow-hidden rounded-xl border', className)}>
@@ -67,13 +65,7 @@ export function StatusSummary({
               )}
             >
               <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <span
-                  aria-hidden
-                  className={cn(
-                    'grid size-6 place-items-center rounded-md',
-                    n > 0 ? TONES[meta.tone].chip : TONES.neutral.chip,
-                  )}
-                >
+                <span aria-hidden className={cn('grid size-6 place-items-center rounded-md', TONES[meta.tone].chip)}>
                   <meta.Icon className="size-3.5" />
                 </span>
                 {meta.label}
@@ -93,20 +85,6 @@ export function StatusSummary({
           )
         })}
       </div>
-      {/* The shares at a glance; the numbers above say the same in words. */}
-      {total > 0 && (
-        <div aria-hidden className="flex h-1.5 gap-px bg-muted">
-          {shown.map((s) =>
-            (counts[s] ?? 0) > 0 ? (
-              <span
-                key={s}
-                className={TONES[POST_STATUS_META[s].tone].fill}
-                style={{ width: `${((counts[s] ?? 0) / total) * 100}%` }}
-              />
-            ) : null,
-          )}
-        </div>
-      )}
     </section>
   )
 }

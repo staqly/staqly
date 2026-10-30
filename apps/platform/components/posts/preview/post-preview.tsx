@@ -77,9 +77,9 @@ function PreviewContent({ state, initialTab }: { state: PreviewState; initialTab
 }
 
 /**
- * The live preview: a second drawer from the right, over the composer's drawer like the design editor. Not modal,
- * so the composer's uncovered part stays usable and every keystroke shows here. On phones it covers the composer,
- * with a way back in its header.
+ * The preview: a second drawer from the right, over the composer's drawer and a few pixels narrower, so the
+ * composer's edge shows under it; its overlay dims everything behind, the composer included. A click on that
+ * edge, Esc or Back returns to the post. On phones it covers the composer.
  */
 export const PostPreviewSheet = memo(function PostPreviewSheet({
   open,
@@ -94,9 +94,11 @@ export const PostPreviewSheet = memo(function PostPreviewSheet({
   initialTab: string
 }) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
-        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md lg:data-[side=right]:max-w-lg"
+        closeOnOutsideClick
+        // The composer is max-w-2xl / lg:max-w-4xl: 1.5rem less leaves its edge in sight.
+        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[calc(42rem-1.5rem)] data-[side=right]:lg:max-w-[calc(56rem-1.5rem)]"
         data-testid="post-preview-sheet"
       >
         <SheetHeader className="flex-row items-center gap-2">
