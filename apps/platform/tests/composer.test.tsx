@@ -458,7 +458,7 @@ describe('composer', () => {
       new File(['a'], 'a.mp4', { type: 'video/mp4' }),
       new File(['b'], 'b.mp4', { type: 'video/mp4' }),
     ])
-    await waitFor(() => expect(within(part).getAllByText(/^clip-\d\.mp4$/)).toHaveLength(2))
+    await waitFor(() => expect(within(part).getAllByRole('img', { name: /^clip-\d\.mp4$/ })).toHaveLength(2))
     expect(within(part).getByTestId('thread-content-0')).toHaveValue('Doors at 9')
   })
 })

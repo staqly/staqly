@@ -130,7 +130,7 @@ function LibraryPicker({
               icon={<LibraryBig />}
               title={q ? 'No files match' : 'Nothing in the library yet'}
               description={
-                q ? 'Try another name.' : 'Upload pictures and videos on the Media page or with Insert media.'
+                q ? 'Try another name.' : 'Upload pictures and videos on the Media page or with Upload in a post.'
               }
             />
           ) : (

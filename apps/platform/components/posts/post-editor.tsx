@@ -62,7 +62,7 @@ export function PostEditor({
   hidden?: boolean
   /** Under the text, above the bar (media thumbnails). */
   below?: React.ReactNode
-  /** In the bottom bar before the formatting buttons (Insert media). */
+  /** In the bottom bar before the formatting buttons (Upload). */
   start?: React.ReactNode
   /** In the text's bottom right corner (the counter), above the media, with or without the bar. */
   end?: React.ReactNode
