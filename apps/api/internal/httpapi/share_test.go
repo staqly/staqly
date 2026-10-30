@@ -65,7 +65,7 @@ func TestPreviewLinksAndComments(t *testing.T) {
 	e.upload("/v1/media", e.key, nil, "launch.png", pngBytes, 201, &pic)
 	e.upload("/v1/media", e.key, nil, "unrelated.png", pngBytes, 201, &unrelated)
 	var post app.Post
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "v1.4 is out", "media": []string{pic.ID},
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "v1.4 is out", "media": []string{pic.ID},
 		"tags": []string{"launch"}, "targets": []map[string]any{{"channel_id": ch.ID, "content": "v1.4!"}}}, 201, &post)
 
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/previews", e.key, map[string]any{"expires_in_days": 400}, 422, nil)
@@ -152,7 +152,7 @@ func TestPreviewCommentThreads(t *testing.T) {
 	var ch app.Channel
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "fakemetrics", "fields": map[string]string{"token": "good"}}, 201, &ch)
 	var post app.Post
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "Our café opens Monday",
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "Our café opens Monday",
 		"thread":  []map[string]any{{"content": "Doors at 9, coffee on us"}},
 		"targets": []map[string]any{{"channel_id": ch.ID}}}, 201, &post)
 	var link app.PreviewLink
@@ -256,7 +256,7 @@ func TestPreviewCommentRateLimit(t *testing.T) {
 	e := newEnv(t)
 	c := e.collection("Limits")
 	var post app.Post
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "hello"}, 201, &post)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "hello"}, 201, &post)
 	var link app.PreviewLink
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/previews", e.key, nil, 201, &link)
 	limited := 0
@@ -281,7 +281,7 @@ func TestPostMetrics(t *testing.T) {
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "faketoken", "fields": map[string]string{"token": "good"}}, 201, &tok)
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "custom", "name": "My n8n"}, 201, &own)
 	var post app.Post
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "numbers",
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "numbers",
 		"targets": []map[string]any{{"channel_id": ch.ID}, {"channel_id": tok.ID}, {"channel_id": own.ID}}}, 201, &post)
 
 	byChannel := func(out []app.TargetMetrics) map[string]app.TargetMetrics {
@@ -338,7 +338,7 @@ func TestDuplicatePost(t *testing.T) {
 	var ch app.Channel
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "faketoken", "fields": map[string]string{"token": "good"}}, 201, &ch)
 	var post app.Post
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "original", "tags": []string{"launch"},
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "original", "tags": []string{"launch"},
 		"targets": []map[string]any{{"channel_id": ch.ID, "content": "short"}}, "publish_at": time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339), "status": "scheduled"}, 201, &post)
 	var cp app.Post
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/duplicate", e.key, nil, 201, &cp)

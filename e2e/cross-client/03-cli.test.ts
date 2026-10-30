@@ -279,6 +279,7 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
       ids.push(
         (
           await c.posts.create({
+            title: 'Post',
             collection: colId,
             content: `cli post ${i}`,
             tags: [tag],
@@ -361,6 +362,7 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
   it('publish, result, retry, work: the CLI as the automation', async () => {
     const c = sdk(url, key || null)
     const post = await c.posts.create({
+      title: 'Post',
       collection: colId,
       content: 'automation round trip',
       targets: [{ channel_id: channel.id }],
@@ -629,7 +631,7 @@ describe.each(['local', 'cloud'] as const)('%s: CLI commands', (name) => {
     expect((await cli(['schedules', 'create', colName, '--name', 'bad', '--every', '1m'])).code).not.toBe(0) // under 5 minutes
     expect((await cli(['schedules', 'create', colName, '--name', 'bad', '--at', '2020-01-01'])).code).toBe(1)
     // Run it: a waiting draft goes out on the channel.
-    const draft = await c.posts.create({ collection: colId, content: 'waiting for the schedule' })
+    const draft = await c.posts.create({ title: 'Post', collection: colId, content: 'waiting for the schedule' })
 
     // Older drafts of this collection (earlier tests) would go first with pick: next.
     await c.schedules.update(s.id, { pick: 'selected', post_ids: [draft.id] })

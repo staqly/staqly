@@ -87,7 +87,7 @@ describe.each(['local', 'cloud'] as const)('%s: method sweep', (name) => {
     const col = await c.collections.create({ name: `sweep ${Date.now()}`, processing_timeout_seconds: 7200 })
 
     expect(col.processing_timeout_seconds).toBe(7200)
-    await c.posts.create({ collection: col.id, content: 'one' })
+    await c.posts.create({ title: 'Post', collection: col.id, content: 'one' })
     expect((await c.collections.listPosts(col.name)).data).toHaveLength(1)
     // Python sets and clears the processing timeout the same way; 30 s is refused.
     expect(
@@ -117,7 +117,9 @@ describe.each(['local', 'cloud'] as const)('%s: method sweep', (name) => {
     expect((await errorOf(c.collections.archive(col.id))).status).toBe(409)
     expect((await py.fail('sync', pyc, 'collections.archive', [col.id])).type).toBe('ConflictError')
     // An archived collection takes no new posts.
-    expect(await errorOf(c.posts.create({ collection: col.id, content: 'x' }))).toBeInstanceOf(ConflictError)
+    expect(await errorOf(c.posts.create({ title: 'Post', collection: col.id, content: 'x' }))).toBeInstanceOf(
+      ConflictError,
+    )
     expect((await py.call<{ archived: boolean }>('async', pyc, 'collections.unarchive', [col.id])).archived).toBe(false)
     expect(
       (await py.call<{ description: string }>('sync', pyc, 'collections.update', [col.id], { description: 'py' }))
@@ -136,6 +138,7 @@ describe.each(['local', 'cloud'] as const)('%s: method sweep', (name) => {
     const b = await c.collections.create({ name: `sweep posts b ${Date.now()}` })
     const channel = await c.channels.connect({ provider: 'custom', name: `sweep channel ${Date.now()}` })
     const post = await c.posts.create({
+      title: 'Post',
       collection: a.id,
       content: 'Quokka avatar smiling',
       tags: ['sweep', 'quokka'],

@@ -5396,11 +5396,12 @@ components:
 
     Post:
       type: object
-      required: [id, collection_id, collection_name, content, media, media_items, status, publish_at, published_at, tags, metadata, source, external_ref, repeat_every, thread, version, targets, created_at, updated_at, created_by, open_comments]
+      required: [id, collection_id, collection_name, title, content, media, media_items, status, publish_at, published_at, tags, metadata, source, external_ref, repeat_every, thread, version, targets, created_at, updated_at, created_by, open_comments]
       properties:
         id: { type: string }
         collection_id: { type: string }
         collection_name: { type: string }
+        title: { type: string, description: "The post's title; empty on posts from before titles were required" }
         content: { type: string }
         media: { type: array, items: { type: string }, description: "Media ids, in order" }
         media_items: { type: array, items: { $ref: "#/components/schemas/Media" }, description: "The same media, resolved" }
@@ -5429,8 +5430,16 @@ components:
         clear repeat_every on the next scheduled copy, or delete it.
     PostInput:
       type: object
+      required: [title]
       properties:
         collection: { type: string, description: Collection id or exact name }
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+          description: >-
+            The post's title. Platforms with a title (YouTube, Reddit, Pinterest, blogs, newsletters) publish it
+            (a platform with a shorter limit refuses a longer one); the others only show it in staqly.
         content: { type: string, maxLength: 50000 }
         media: { type: array, maxItems: 20, items: { type: string }, description: Media ids from POST /v1/media }
         targets: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/PostTargetInput" } }
@@ -5449,6 +5458,7 @@ components:
       description: Fields left out stay as they are
       properties:
         collection: { type: string, description: Move the post to another collection (id or exact name) }
+        title: { type: string, minLength: 1, maxLength: 300, description: "The post's title; it can't be emptied" }
         content: { type: string, maxLength: 50000 }
         media: { type: array, maxItems: 20, items: { type: string } }
         targets: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/PostTargetInput" }, description: Replaces the whole list }
@@ -5949,6 +5959,7 @@ components:
         max_length: { type: integer, description: "At most this many characters (text, textarea, url)" }
         max_items: { type: integer, description: "At most this many values (list, channels, remote)" }
         prefer: { type: array, items: { type: string }, description: "remote: the option labels to pick while the field is empty, the first the list has (Slack: #random, then #general)" }
+        from_post: { type: boolean, description: "The value comes from the post (its title, its tags), not from the channel's settings: clients don't ask for it per channel" }
         options:
           type: array
           items:

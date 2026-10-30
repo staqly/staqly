@@ -1,7 +1,7 @@
 -- name: CreatePost :exec
-INSERT INTO posts (id, workspace_id, collection_id, content, media, status, publish_at, tags, metadata, source, external_ref,
+INSERT INTO posts (id, workspace_id, collection_id, title, content, media, status, publish_at, tags, metadata, source, external_ref,
     repeat_every, repeat_of, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetPost :one
 SELECT * FROM posts WHERE workspace_id = ? AND id = ?;
@@ -11,7 +11,7 @@ SELECT * FROM posts WHERE id = ?;
 
 -- name: UpdatePost :execrows
 UPDATE posts
-SET collection_id = ?, content = ?, media = ?, status = ?, publish_at = ?, published_at = ?, tags = ?, metadata = ?,
+SET collection_id = ?, title = ?, content = ?, media = ?, status = ?, publish_at = ?, published_at = ?, tags = ?, metadata = ?,
     source = ?, external_ref = ?, repeat_every = ?, version = version + 1, updated_at = ?
 WHERE workspace_id = ? AND id = ? AND version = ?;
 

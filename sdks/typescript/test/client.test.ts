@@ -226,7 +226,7 @@ describe('retries', () => {
   it('uses a caller-provided Idempotency-Key', async () => {
     const { c, calls } = client(json({}, 201))
 
-    await c.posts.create({ collection: 'Posts', content: 'x' }, { idempotencyKey: 'job-42' })
+    await c.posts.create({ title: 'Post', collection: 'Posts', content: 'x' }, { idempotencyKey: 'job-42' })
     expect(calls[0]!.headers.get('idempotency-key')).toBe('job-42')
   })
 

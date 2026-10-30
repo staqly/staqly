@@ -17,6 +17,8 @@ export interface PreviewState {
   /** The picked channels. */
   channels: Channel[]
   providers: Provider[]
+  /** The post's title (platforms with one show it). */
+  title: string
   /** The shared text. */
   content: string
   /** Each channel's own text (null: the shared one) and settings. */

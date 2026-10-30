@@ -37,7 +37,7 @@ func TestAnalytics(t *testing.T) {
 			targets = append(targets, map[string]any{"channel_id": ch})
 		}
 		var p app.Post
-		e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "Hi\n  there", "targets": targets}, 201, &p)
+		e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "Hi\n  there", "targets": targets}, 201, &p)
 		exec(`UPDATE posts SET source = ?, status = ?, publish_at = ?, created_at = ? WHERE id = ?`, source, status, nullable(publishAt), "2026-10-02T10:00:00.000000Z", p.ID)
 		return p.ID
 	}

@@ -218,7 +218,7 @@ func TestRequestSchemasMatchGoTypes(t *testing.T) {
 		t   reflect.Type
 	}{
 		{schemaPtr("components/schemas/CollectionInput"), reflect.TypeOf(app.CollectionInput{})},
-		{schemaPtr("components/schemas/PostInput"), reflect.TypeOf(app.PostInput{})},
+		{schemaPtr("components/schemas/PostInput"), reflect.TypeOf(app.PostInput{Title: "Post"})},
 		{schemaPtr("components/schemas/PostPatch"), reflect.TypeOf(app.PostPatch{})},
 		{schemaPtr("components/schemas/PostTargetInput"), reflect.TypeOf(app.PostTargetInput{})},
 		{schemaPtr("components/schemas/ChannelInput"), reflect.TypeOf(app.ChannelInput{})},

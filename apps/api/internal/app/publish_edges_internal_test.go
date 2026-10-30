@@ -272,7 +272,7 @@ func TestTargetsAndChannelsAcrossWorkspaces(t *testing.T) {
 	notFound("a result", err)
 	_, err = s.RetryTarget(ctx, other, post.ID, custom)
 	notFound("a retry", err)
-	_, err = s.CreatePost(ctx, other, PostInput{Collection: col.ID, Content: "x", Targets: []PostTargetInput{{ChannelID: custom}}})
+	_, err = s.CreatePost(ctx, other, PostInput{Title: "Post", Collection: col.ID, Content: "x", Targets: []PostTargetInput{{ChannelID: custom}}})
 	notFound("a post on its channel", err)
 	_, err = s.UpdateChannel(ctx, other, custom, ChannelPatch{Name: ptrTo("Taken")})
 	notFound("a channel rename", err)

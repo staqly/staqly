@@ -443,10 +443,15 @@
             "null",
             "array"
           ]
+        },
+        "title": {
+          "description": "the post's title (required): platforms with a title (YouTube, Reddit, blogs) publish it, the others show it in staqly's lists",
+          "type": "string"
         }
       },
       "required": [
-        "collection"
+        "collection",
+        "title"
       ],
       "type": "object"
     },
@@ -3246,6 +3251,13 @@
           "type": [
             "null",
             "array"
+          ]
+        },
+        "title": {
+          "description": "the post's title (can't be emptied)",
+          "type": [
+            "null",
+            "string"
           ]
         }
       },

@@ -176,14 +176,14 @@ func TestMCPRESTParityEndToEnd(t *testing.T) {
 	mcpResult(e, deleter, "delete_media", map[string]any{"media_id": m["id"]})
 	mcpResult(e, deleter, "delete_post", map[string]any{"post_id": b.ID})
 	// repeat_every over MCP: set on create, cleared with an empty string on update, refused when unknown.
-	rp := mcpResult(e, e.key, "create_post", map[string]any{"collection": "Deploys", "content": "weekly", "repeat_every": "1w"})
+	rp := mcpResult(e, e.key, "create_post", map[string]any{"title": "Post", "collection": "Deploys", "content": "weekly", "repeat_every": "1w"})
 	if rp["repeat_every"] != "1w" {
 		t.Fatalf("create_post repeat_every: %v", rp)
 	}
 	if got := mcpResult(e, e.key, "update_post", map[string]any{"post_id": rp["id"], "repeat_every": ""}); got["repeat_every"] != "" {
 		t.Fatalf("update_post clears repeat_every: %v", got)
 	}
-	if _, out := mcpCall(e, e.key, "create_post", map[string]any{"collection": "Deploys", "content": "x", "repeat_every": "1y"}); !isToolError(out) {
+	if _, out := mcpCall(e, e.key, "create_post", map[string]any{"title": "Post", "collection": "Deploys", "content": "x", "repeat_every": "1y"}); !isToolError(out) {
 		t.Fatal("create_post with an unknown repeat_every")
 	}
 	if got := mcpResult(e, e.key, "update_collection", map[string]any{"collection": "Deploys", "description": "prod"}); got["description"] != "prod" {

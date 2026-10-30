@@ -116,6 +116,7 @@ const cases: Case[] = [
     name: 'posts.create draft',
     call: (c) =>
       c.posts.create({
+        title: 'Post',
         collection: 'Posts',
         content: 'Hello',
         media: ['med_1'],
@@ -128,6 +129,7 @@ const cases: Case[] = [
     method: 'POST',
     path: '/v1/posts',
     body: {
+      title: 'Post',
       collection: 'Posts',
       content: 'Hello',
       media: ['med_1'],
@@ -141,6 +143,7 @@ const cases: Case[] = [
     name: 'posts.create scheduled',
     call: (c) =>
       c.posts.create({
+        title: 'Post',
         collection: 'col_1',
         content: 'x',
         targets: [{ channel_id: 'ch_1' }],
@@ -151,6 +154,7 @@ const cases: Case[] = [
     method: 'POST',
     path: '/v1/posts',
     body: {
+      title: 'Post',
       collection: 'col_1',
       content: 'x',
       targets: [{ channel_id: 'ch_1' }],
@@ -161,11 +165,17 @@ const cases: Case[] = [
   {
     name: 'posts.create publish now',
     call: (c) =>
-      c.posts.create({ collection: 'col_1', content: 'x', targets: [{ channel_id: 'ch_1' }], publish_now: true }),
+      c.posts.create({
+        title: 'Post',
+        collection: 'col_1',
+        content: 'x',
+        targets: [{ channel_id: 'ch_1' }],
+        publish_now: true,
+      }),
     reply: json(post({ status: 'publishing' }), 201),
     method: 'POST',
     path: '/v1/posts',
-    body: { collection: 'col_1', content: 'x', targets: [{ channel_id: 'ch_1' }], publish_now: true },
+    body: { title: 'Post', collection: 'col_1', content: 'x', targets: [{ channel_id: 'ch_1' }], publish_now: true },
   },
   {
     name: 'posts.update',
@@ -176,16 +186,17 @@ const cases: Case[] = [
   },
   {
     name: 'posts.create repeating',
-    call: (c) => c.posts.create({ collection: 'col_1', content: 'x', repeat_every: '1w' }),
+    call: (c) => c.posts.create({ title: 'Post', collection: 'col_1', content: 'x', repeat_every: '1w' }),
     reply: json(post({ repeat_every: '1w' }), 201),
     method: 'POST',
     path: '/v1/posts',
-    body: { collection: 'col_1', content: 'x', repeat_every: '1w' },
+    body: { title: 'Post', collection: 'col_1', content: 'x', repeat_every: '1w' },
   },
   {
     name: 'posts.create with a thread',
     call: (c) =>
       c.posts.create({
+        title: 'Post',
         collection: 'col_1',
         content: 'x',
         thread: [{ content: 'first reply' }, { content: 'second', delay_seconds: 300 }],
@@ -194,6 +205,7 @@ const cases: Case[] = [
     method: 'POST',
     path: '/v1/posts',
     body: {
+      title: 'Post',
       collection: 'col_1',
       content: 'x',
       thread: [{ content: 'first reply' }, { content: 'second', delay_seconds: 300 }],

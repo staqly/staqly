@@ -40,7 +40,7 @@ import { PostStats } from '@/components/posts/post-actions'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { FieldError } from '@/components/ui/field'
+import { FieldDescription, FieldError } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Label, RequiredMark } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -82,7 +82,7 @@ import {
 } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 import { dateFormats, formatSchedule, formatTime, nextFullHour } from '@/lib/schedule'
-import { appendHashtags, normalizeTag } from '@/lib/tags'
+import { appendHashtags, hashtagsFor, normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 import { xPostsWarning } from '@/lib/x-posts'
 import { displayZone } from '@/lib/zone'
@@ -127,11 +127,12 @@ interface Count {
 
 /**
  * A channel's count for this text, as the API will count it at publish time: with the post's tags as hashtags
- * at the end (not for your own automation, which gets them apart; comments get none).
+ * at the end (not for your own automation, which gets them apart, nor a platform with tags of its own; comments
+ * get none).
  */
 function countFor(channel: Channel, text: string, provider?: Provider, tags: readonly string[] = []): Count {
   const links = applyLinks(channel.links, text)
-  const out = { ...links, text: channel.provider === 'custom' ? links.text : appendHashtags(links.text, tags) }
+  const out = { ...links, text: hashtagsFor(channel, provider) ? appendHashtags(links.text, tags) : links.text }
 
   // X counts its own way (CJK and emoji 2, a link 23): the API checks that length, so the counter shows it.
   const n = channel.provider === 'x' ? xLength(out.text) : charCount(out.text)
@@ -1481,7 +1482,16 @@ export function ComposerForm({
   })
   const [errors, setErrors] = useState<Record<string, string | undefined>>({})
   const channelList = channels.data ?? NO_CHANNELS
-  const providerList = providers.data ?? NO_PROVIDERS
+  // A platform's title and tags come from the post's own fields: the channel settings leave them out.
+  const providerList = useMemo(
+    () =>
+      (providers.data ?? NO_PROVIDERS).map((pr) => ({
+        ...pr,
+        settings_fields: pr.settings_fields?.filter((f) => !f.from_post),
+      })),
+    [providers.data],
+  )
+  const [title, setTitle] = useState(post?.title ?? '')
   const picked = useMemo(() => channelList.filter((c) => selected.has(c.id)), [channelList, selected])
   const providerOf = (ch: Channel) => providerList.find((p) => p.id === ch.provider)
   const textFor = (ch: Channel) => overrides[ch.id]?.content ?? content
@@ -1528,6 +1538,7 @@ export function ComposerForm({
   function input(status: 'draft' | 'scheduled'): PostInput {
     return {
       collection,
+      title,
       content,
       media: media.map((m) => m.id),
       targets: picked.map((ch) => ({
@@ -1672,8 +1683,17 @@ export function ComposerForm({
   // The live preview: a second drawer beside this one, fed the same state (nothing is saved for it).
   const { open: previewOpen, used: previewUsed, setOpen: setPreviewOpen, toggle: togglePreview } = useLazyDialog()
   const previewState = useMemo(
-    () => ({ channels: picked, providers: providerList, content, overrides, media, thread, tags }),
-    [picked, providerList, content, overrides, media, thread, tags],
+    () => ({
+      channels: picked,
+      providers: providers.data ?? NO_PROVIDERS,
+      title,
+      content,
+      overrides,
+      media,
+      thread,
+      tags,
+    }),
+    [picked, providers.data, title, content, overrides, media, thread, tags],
   )
   const previewButton = (
     <Button
@@ -1794,6 +1814,27 @@ export function ComposerForm({
           {/* Every section stays mounted (hidden when inactive), so switching never loses what was typed. */}
           <div className="grid min-h-0 content-start overflow-y-auto overscroll-contain p-4">
             <TabsContent value="post" forceMount className="grid content-start gap-4 data-[state=inactive]:hidden">
+              <div className="grid gap-2">
+                <Label htmlFor="post-title" required>
+                  Title
+                </Label>
+                <Input
+                  id="post-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="What is this post about?"
+                  maxLength={300}
+                  disabled={locked}
+                  aria-required
+                  aria-invalid={!!errors.title}
+                  data-testid="post-title"
+                />
+                <FieldDescription>
+                  YouTube, Reddit, Pinterest and blogs publish it; the other platforms only show it in staqly.
+                </FieldDescription>
+                <FieldError>{errors.title}</FieldError>
+              </div>
+
               <div className="grid gap-2">
                 <Label htmlFor="post-channels" required>
                   Channels

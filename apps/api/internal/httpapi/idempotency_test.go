@@ -45,15 +45,15 @@ func TestIdempotencyAcrossJSONFormatting(t *testing.T) {
 		name, first, second string
 		replay              bool
 	}{
-		{"whitespace (Python vs TypeScript)", `{"collection": "` + c.ID + `", "content": "a", "metadata": {"n": 1, "tags": ["x", "y"]}}`,
-			`{"collection":"` + c.ID + `","content":"a","metadata":{"n":1,"tags":["x","y"]}}`, true},
-		{"key order, nested too", `{"collection":"` + c.ID + `","content":"b","metadata":{"a":1,"b":2}}`, `{"metadata":{"b":2,"a":1},"content":"b","collection":"` + c.ID + `"}`, true},
-		{"string escapes", `{"collection":"` + c.ID + `","content":"caf\u00e9 \u003cb\u003e"}`, `{"collection":"` + c.ID + `","content":"café <b>"}`, true},
-		{"different value", `{"collection":"` + c.ID + `","content":"c"}`, `{"collection":"` + c.ID + `","content":"c2"}`, false},
-		{"array order matters", `{"collection":"` + c.ID + `","content":"d","metadata":{"l":[1,2]}}`, `{"collection":"` + c.ID + `","content":"d","metadata":{"l":[2,1]}}`, false},
+		{"whitespace (Python vs TypeScript)", `{"title": "Post", "collection": "` + c.ID + `", "content": "a", "metadata": {"n": 1, "tags": ["x", "y"]}}`,
+			`{"title":"Post","collection":"` + c.ID + `","content":"a","metadata":{"n":1,"tags":["x","y"]}}`, true},
+		{"key order, nested too", `{"title":"Post","collection":"` + c.ID + `","content":"b","metadata":{"a":1,"b":2}}`, `{"metadata":{"b":2,"a":1},"content":"b","collection":"` + c.ID + `","title":"Post"}`, true},
+		{"string escapes", `{"title":"Post","collection":"` + c.ID + `","content":"caf\u00e9 \u003cb\u003e"}`, `{"title":"Post","collection":"` + c.ID + `","content":"café <b>"}`, true},
+		{"different value", `{"title":"Post","collection":"` + c.ID + `","content":"c"}`, `{"title":"Post","collection":"` + c.ID + `","content":"c2"}`, false},
+		{"array order matters", `{"title":"Post","collection":"` + c.ID + `","content":"d","metadata":{"l":[1,2]}}`, `{"title":"Post","collection":"` + c.ID + `","content":"d","metadata":{"l":[2,1]}}`, false},
 		// Numbers keep their literal text: an integer field accepts 1 and rejects 1.0, so they differ.
-		{"1 vs 1.0", `{"collection":"` + c.ID + `","content":"e","metadata":{"n":1}}`, `{"collection":"` + c.ID + `","content":"e","metadata":{"n":1.0}}`, false},
-		{"extra field", `{"collection":"` + c.ID + `","content":"f"}`, `{"collection":"` + c.ID + `","content":"f","external_ref":"s"}`, false},
+		{"1 vs 1.0", `{"title":"Post","collection":"` + c.ID + `","content":"e","metadata":{"n":1}}`, `{"title":"Post","collection":"` + c.ID + `","content":"e","metadata":{"n":1.0}}`, false},
+		{"extra field", `{"title":"Post","collection":"` + c.ID + `","content":"f"}`, `{"title":"Post","collection":"` + c.ID + `","content":"f","external_ref":"s"}`, false},
 	}
 	for i, tc := range cases {
 		key := "fmt-" + string(rune('a'+i))
@@ -81,7 +81,7 @@ func TestIdempotencyLegacyHashStillReplays(t *testing.T) {
 	e := newEnv(t)
 	c := e.collection("Idem legacy")
 	path := "/v1/posts"
-	body := `{"collection":"` + c.ID + `","content": "legacy"}`
+	body := `{"title":"Post","collection":"` + c.ID + `","content": "legacy"}`
 	ctx := context.Background()
 	p, err := e.svc.AuthenticateAPIKey(ctx, e.key)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestIdempotencyLegacyHashStillReplays(t *testing.T) {
 	if code, h, out := rawPost(e, path, "old", body); code != 201 || h.Get("Idempotent-Replayed") != "true" || out["id"] != it.ID {
 		t.Fatalf("legacy replay: %d %v", code, out)
 	}
-	if code, _, out := rawPost(e, path, "old", `{"collection":"`+c.ID+`","content":"legacy"}`); code != 422 {
+	if code, _, out := rawPost(e, path, "old", `{"title":"Post","collection":"`+c.ID+`","content":"legacy"}`); code != 422 {
 		t.Fatalf("legacy key, reformatted body: %d %v", code, out)
 	}
 }

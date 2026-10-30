@@ -51,7 +51,7 @@ func TestPersonalNotifications(t *testing.T) {
 	publish := func(content string) {
 		t.Helper()
 		var post app.Post
-		e.as(owner, "POST", "/v1/posts", map[string]any{"collection": "Default", "content": content,
+		e.as(owner, "POST", "/v1/posts", map[string]any{"title": "Post", "collection": "Default", "content": content,
 			"targets": []map[string]any{{"channel_id": ch.ID}}, "publish_now": true}, 201, &post)
 		e.svc.RunDueJobsOnce(ctx)
 		e.as(owner, "POST", "/v1/posts/"+post.ID+"/targets/"+ch.ID+"/result",

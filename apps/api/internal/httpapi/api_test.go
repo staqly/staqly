@@ -152,7 +152,7 @@ func (e *env) collection(name string) app.Collection {
 	return c
 }
 
-// post creates a draft post in a collection (content "hello" unless the body says otherwise).
+// post creates a draft post in a collection (title "Post" and content "hello" unless the body says otherwise).
 func (e *env) post(colID string, body map[string]any) app.Post {
 	if body == nil {
 		body = map[string]any{}
@@ -160,6 +160,9 @@ func (e *env) post(colID string, body map[string]any) app.Post {
 	body["collection"] = colID
 	if _, ok := body["content"]; !ok {
 		body["content"] = "hello"
+	}
+	if _, ok := body["title"]; !ok {
+		body["title"] = "Post"
 	}
 	var post app.Post
 	e.do(nil, "POST", "/v1/posts", e.key, body, 201, &post)
@@ -512,7 +515,7 @@ func TestCollectionCRUD(t *testing.T) {
 	if len(list.Data) != 2 {
 		t.Fatal("archived collection should be listed with include_archived")
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "x"}, 409, nil)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "x"}, 409, nil)
 	// Deleting needs collections:delete: collections:write (the default key) is not enough.
 	e.do(nil, "DELETE", "/v1/collections/"+c.ID+"?confirm=Renamed", e.key, nil, 403, nil)
 	e.do(nil, "DELETE", "/v1/collections/"+c.ID+"?confirm=Renamed", e.keyWith(app.ScopeCollectionsWrite), nil, 403, nil)
@@ -556,14 +559,14 @@ func TestDefaultCollection(t *testing.T) {
 func TestIdempotencyKeys(t *testing.T) {
 	e := newEnv(t)
 	c := e.collection("Idem")
-	body := map[string]any{"collection": c.ID, "content": "once"}
+	body := map[string]any{"title": "Post", "collection": c.ID, "content": "once"}
 	var a, b app.Post
 	r1 := e.do(nil, "POST", "/v1/posts", e.key, body, 201, &a, "Idempotency-Key", "k1")
 	r2 := e.do(nil, "POST", "/v1/posts", e.key, body, 201, &b, "Idempotency-Key", "k1")
 	if a.ID != b.ID || r1.Header.Get("Idempotent-Replayed") != "" || r2.Header.Get("Idempotent-Replayed") != "true" {
 		t.Fatalf("replay failed: %s vs %s", a.ID, b.ID)
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "other"}, 422, nil, "Idempotency-Key", "k1")
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "other"}, 422, nil, "Idempotency-Key", "k1")
 	var page app.PostPage
 	e.do(nil, "GET", "/v1/collections/"+c.ID+"/posts", e.key, nil, 200, &page)
 	if len(page.Data) != 1 {
@@ -668,7 +671,7 @@ func TestTenantIsolation(t *testing.T) {
 	if _, err := e.svc.PublishPost(ctx, other, it.ID); err == nil {
 		t.Fatal("cross-workspace publish")
 	}
-	if _, err := e.svc.CreatePost(ctx, other, app.PostInput{Collection: c.ID, Content: "x"}); err == nil {
+	if _, err := e.svc.CreatePost(ctx, other, app.PostInput{Title: "Post", Collection: c.ID, Content: "x"}); err == nil {
 		t.Fatal("cross-workspace create")
 	}
 	if _, _, err := e.svc.OpenMedia(ctx, other, med.ID); err == nil {
@@ -850,7 +853,7 @@ func isToolError(out map[string]any) bool {
 func TestMCPNullArgumentsAreOmitted(t *testing.T) {
 	e := newEnv(t)
 	e.collection("Drafts")
-	_, out := mcpCall(e, e.key, "create_post", map[string]any{"collection": "Drafts", "content": "from codex",
+	_, out := mcpCall(e, e.key, "create_post", map[string]any{"title": "Post", "collection": "Drafts", "content": "from codex",
 		"media": nil, "targets": nil, "publish_at": nil, "metadata": nil, "tags": nil, "external_ref": nil})
 	if isToolError(out) {
 		t.Fatalf("create_post with nulls: %v", out)
@@ -879,7 +882,7 @@ func TestMCPHTTPAuthorization(t *testing.T) {
 	if isToolError(out) {
 		t.Fatalf("read-only list failed: %v", out)
 	}
-	_, out = mcpCall(e, ro, "create_post", map[string]any{"collection": "Instagram Avatar", "content": "x"})
+	_, out = mcpCall(e, ro, "create_post", map[string]any{"title": "Post", "collection": "Instagram Avatar", "content": "x"})
 	if !isToolError(out) {
 		t.Fatal("read-only key created a post via MCP")
 	}
@@ -890,7 +893,7 @@ func TestMCPHTTPAuthorization(t *testing.T) {
 
 	ch := e.customChannel("Bot")
 	creator := e.keyWith(app.ScopeCollectionsRead, app.ScopePostsRead, app.ScopePostsWrite)
-	_, out = mcpCall(e, creator, "create_post", map[string]any{"collection": "Instagram Avatar", "content": "from agent",
+	_, out = mcpCall(e, creator, "create_post", map[string]any{"title": "Post", "collection": "Instagram Avatar", "content": "from agent",
 		"targets": []map[string]any{{"channel_id": ch.ID}}})
 	if isToolError(out) {
 		t.Fatalf("create_post: %v", out)
@@ -958,7 +961,7 @@ func TestMCPClientEndToEnd(t *testing.T) {
 	}
 	call("create_collection", map[string]any{"name": "Instagram Avatar"})
 	ch := e.customChannel("Bot")
-	it := call("create_post", map[string]any{"collection": "instagram avatar", "content": "caption", "tags": []string{"launch"},
+	it := call("create_post", map[string]any{"title": "Post", "collection": "instagram avatar", "content": "caption", "tags": []string{"launch"},
 		"targets": []map[string]any{{"channel_id": ch.ID}}})
 	drafts := call("list_posts", map[string]any{"status": "draft", "tag": "launch"})
 	if len(drafts["data"].([]any)) != 1 {
@@ -1101,7 +1104,7 @@ func TestCollectionByEscapedName(t *testing.T) {
 		if code, body := localReq(t, srv, "GET", "/v1/collections/"+c.path+"/posts", "", "", ""); code != 200 {
 			t.Fatalf("list posts of %q by %s: %d %s", c.name, c.path, code, body)
 		}
-		if code, body := localReq(t, srv, "POST", "/v1/posts", "", "", `{"collection":`+jsonString(c.name)+`,"content":"t"}`); code != 201 {
+		if code, body := localReq(t, srv, "POST", "/v1/posts", "", "", `{"title":"Post","collection":`+jsonString(c.name)+`,"content":"t"}`); code != 201 {
 			t.Fatalf("create post in %q by name: %d %s", c.name, code, body)
 		}
 	}
@@ -1143,7 +1146,7 @@ func TestLocalModeNeedsTheAccessToken(t *testing.T) {
 			t.Fatalf("token, host %q origin %q: %d %s", c.host, c.origin, code, body)
 		}
 	}
-	code, body = localReq(t, srv, "POST", "/mcp", "", "", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_post","arguments":{"collection":"Default","content":"with the token"}}}`)
+	code, body = localReq(t, srv, "POST", "/mcp", "", "", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_post","arguments":{"title":"Post","collection":"Default","content":"with the token"}}}`)
 	if code != 200 || !strings.Contains(body, `"status":"draft"`) || strings.Contains(body, "isError") {
 		t.Fatalf("local MCP: %d %s", code, body)
 	}
@@ -1299,7 +1302,7 @@ func TestLocalModeIsUnlocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range 120 {
-		if _, err := svc.CreatePost(context.Background(), p, app.PostInput{Collection: col.ID, Content: "x"}); err != nil {
+		if _, err := svc.CreatePost(context.Background(), p, app.PostInput{Title: "Post", Collection: col.ID, Content: "x"}); err != nil {
 			t.Fatalf("post %d: %v", i, err)
 		}
 	}

@@ -4739,6 +4739,8 @@ export interface components {
             id: string;
             collection_id: string;
             collection_name: string;
+            /** @description The post's title; empty on posts from before titles were required */
+            title: string;
             content: string;
             /** @description Media ids, in order */
             media: string[];
@@ -4784,6 +4786,8 @@ export interface components {
         PostInput: {
             /** @description Collection id or exact name */
             collection?: string;
+            /** @description The post's title. Platforms with a title (YouTube, Reddit, Pinterest, blogs, newsletters) publish it (a platform with a shorter limit refuses a longer one); the others only show it in staqly. */
+            title: string;
             content?: string;
             /** @description Media ids from POST /v1/media */
             media?: string[];
@@ -4814,6 +4818,8 @@ export interface components {
         PostPatch: {
             /** @description Move the post to another collection (id or exact name) */
             collection?: string;
+            /** @description The post's title; it can't be emptied */
+            title?: string;
             content?: string;
             media?: string[];
             /** @description Replaces the whole list */
@@ -5362,6 +5368,8 @@ export interface components {
             max_items?: number;
             /** @description remote: the option labels to pick while the field is empty, the first the list has (Slack: #random, then #general) */
             prefer?: string[];
+            /** @description The value comes from the post (its title, its tags), not from the channel's settings: clients don't ask for it per channel */
+            from_post?: boolean;
             options?: {
                 value: string;
                 label: string;

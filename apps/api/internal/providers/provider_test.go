@@ -98,3 +98,22 @@ func TestSoonSettings(t *testing.T) {
 		t.Fatalf("tiktok privacy is required: %v", err)
 	}
 }
+
+func TestWithPostFillsTitleAndTags(t *testing.T) {
+	fields := Base{}.WithSettings(Field{Key: "title"}, Field{Key: "tags", MaxItems: 2}, Field{Key: "privacy"}).SettingsFields()
+	if !fields[0].FromPost || !fields[1].FromPost || fields[2].FromPost || !NativeTags(fields) || NativeTags(fields[2:]) {
+		t.Fatalf("fields: %+v", fields)
+	}
+	s := WithPost(fields, Limits{}, "Launch", []string{"a", "b", "c"}, Settings{"title": "own", "privacy": "unlisted"})
+	if s["title"] != "Launch" || s["tags"] != "a, b" || s["privacy"] != "unlisted" {
+		t.Fatalf("settings: %v", s)
+	}
+	// A post from before shared titles and tags keeps the channel's own.
+	if s := WithPost(fields, Limits{}, "", nil, Settings{"title": "own", "tags": "x"}); s["title"] != "own" || s["tags"] != "x" {
+		t.Fatalf("old post: %v", s)
+	}
+	// A platform that needs a title but has no field for it still gets the post's.
+	if s := WithPost(nil, Limits{NeedsTitle: true}, "Launch", nil, nil); s["title"] != "Launch" {
+		t.Fatalf("needs title: %v", s)
+	}
+}

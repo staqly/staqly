@@ -87,7 +87,7 @@ func TestConcurrentItemWritesNeverBusy(t *testing.T) {
 				content := fmt.Sprintf("seed %d-%d body text", w, i)
 				switch (w + i) % 3 {
 				case 0: // JSON over HTTP
-					post(strings.NewReader(`{"collection":"`+col.ID+`","content":"`+content+`","tags":["seed"]}`), "application/json")
+					post(strings.NewReader(`{"title":"Post","collection":"`+col.ID+`","content":"`+content+`","tags":["seed"]}`), "application/json")
 				case 1: // a file uploaded over HTTP, then the post
 					body, ct := multipartBody(t, nil, "a.png", pngBytes)
 					req, _ := http.NewRequest("POST", srv.URL+"/v1/media", body)
@@ -104,14 +104,14 @@ func TestConcurrentItemWritesNeverBusy(t *testing.T) {
 						fail("upload: %d", resp.StatusCode)
 						continue
 					}
-					post(strings.NewReader(`{"collection":"`+col.ID+`","content":"`+content+`","media":["`+m.ID+`"]}`), "application/json")
+					post(strings.NewReader(`{"title":"Post","collection":"`+col.ID+`","content":"`+content+`","media":["`+m.ID+`"]}`), "application/json")
 				default: // service directly, with a separately uploaded file
 					m, err := svc.UploadMedia(ctx, p, "b.png", strings.NewReader(string(pngBytes)))
 					if err != nil {
 						fail("upload: %v", err)
 						continue
 					}
-					if _, err := svc.CreatePost(ctx, p, app.PostInput{Collection: col.ID, Content: content, Media: []string{m.ID}}); err != nil {
+					if _, err := svc.CreatePost(ctx, p, app.PostInput{Title: "Post", Collection: col.ID, Content: content, Media: []string{m.ID}}); err != nil {
 						fail("service create: %v", err)
 					}
 				}

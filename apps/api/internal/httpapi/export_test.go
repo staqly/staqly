@@ -93,7 +93,7 @@ func TestEventExportFormatsFiltersAndCSVEscaping(t *testing.T) {
 	e.do(e.browser, "POST", "/v1/api-keys", "", map[string]any{"name": "=HYPERLINK(\"http://x\")", "scopes": []string{app.ScopePostsWrite, app.ScopePostsRead, app.ScopeCollectionsRead}}, 201, &evil, "X-CSRF-Token", e.csrf)
 	e.post(c2.ID, map[string]any{"content": "by evil"}) // default key
 	var byEvil app.Post
-	e.do(nil, "POST", "/v1/posts", evil.Key, map[string]any{"collection": c2.ID, "content": "-1+1"}, 201, &byEvil)
+	e.do(nil, "POST", "/v1/posts", evil.Key, map[string]any{"title": "Post", "collection": c2.ID, "content": "-1+1"}, 201, &byEvil)
 
 	// NDJSON, everything, oldest first; streamed (no Content-Length).
 	resp := e.do(nil, "GET", "/v1/events/export", e.key, nil, 200, nil)

@@ -29,3 +29,14 @@ export function appendHashtags(text: string, tags: readonly string[]): string {
 
   return text.trim() ? `${text.replace(/[ \t\n]+$/, '')}\n\n${add.join(' ')}` : add.join(' ')
 }
+
+/**
+ * Whether a channel gets the post's tags as hashtags in its text: not your own automation (it gets them apart) nor a
+ * platform with tags of its own (YouTube, blogs), which gets them there (as the API does: providers.NativeTags).
+ */
+export function hashtagsFor(
+  channel: { provider: string },
+  provider?: { settings_fields?: { key: string }[] | null },
+): boolean {
+  return channel.provider !== 'custom' && !provider?.settings_fields?.some((f) => f.key === 'tags')
+}

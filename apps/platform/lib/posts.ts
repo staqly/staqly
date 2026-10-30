@@ -2,9 +2,10 @@ import { findLinks } from '@/lib/links'
 
 import type { Post, PostTarget } from './api'
 
-/** The first line of a post, shortened: the title a post does not have. */
-export function postTitle(post: Pick<Post, 'content'>, max = 80): string {
-  const line = post.content.trim().split('\n')[0] ?? ''
+/** A post's title (else its first line), shortened. */
+export function postTitle(post: Pick<Post, 'content'> & { title?: string }, max = 80): string {
+  // Its title; a post from before titles were required shows its first line.
+  const line = post.title?.trim() || (post.content.trim().split('\n')[0] ?? '')
 
   if (!line) {
     return 'Untitled post'

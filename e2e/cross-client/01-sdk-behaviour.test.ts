@@ -126,13 +126,18 @@ describe.each(['local', 'cloud'] as const)('%s: typed errors are the same in eve
   })
 
   it('409 ConflictError: publishing twice, cancelling a draft and a stale expected_version', async () => {
-    const post = await c.posts.create({ collection: col, content: 'publish twice', targets: [{ channel_id: channel }] })
+    const post = await c.posts.create({
+      title: 'Post',
+      collection: col,
+      content: 'publish twice',
+      targets: [{ channel_id: channel }],
+    })
 
     await c.posts.publish(post.id)
     const ts = await errorOf(c.posts.publish(post.id))
 
     expect(ts).toBeInstanceOf(ConflictError)
-    const fresh = await c.posts.create({ collection: col, content: 'stale' })
+    const fresh = await c.posts.create({ title: 'Post', collection: col, content: 'stale' })
     const stale = await errorOf(c.posts.update(fresh.id, { content: 'x', expected_version: 7 }))
 
     expect(stale).toBeInstanceOf(ConflictError)
@@ -153,6 +158,7 @@ describe.each(['local', 'cloud'] as const)('%s: typed errors are the same in eve
   it('422 ValidationError: a time in the past, a scheduled post without a channel, an unknown status', async () => {
     const ts = await errorOf(
       c.posts.create({
+        title: 'Post',
         collection: col,
         content: 'x',
         targets: [{ channel_id: channel }],
@@ -165,6 +171,7 @@ describe.each(['local', 'cloud'] as const)('%s: typed errors are the same in eve
     expect(
       await errorOf(
         c.posts.create({
+          title: 'Post',
           collection: col,
           content: 'x',
           publish_at: new Date(Date.now() + 3600_000).toISOString(),
@@ -238,6 +245,7 @@ describe('cloud: auth, scopes and plan limits', () => {
     const col = await admin.collections.create({ name: `scopes ${Date.now()}` })
     const channel = await admin.channels.connect({ provider: 'custom', name: `scopes channel ${Date.now()}` })
     const post = await w.posts.create({
+      title: 'Post',
       collection: col.id,
       content: 'written, not published',
       targets: [{ channel_id: channel.id }],
@@ -383,7 +391,7 @@ describe('429 and Retry-After (limited server: burst 3, then 1 request/s per key
 
     await Promise.all(
       Array.from({ length: 6 }, (_, i) =>
-        c.posts.create({ collection: col.id, content: `burst ${i}`, external_ref: `${ref}-${i}` }),
+        c.posts.create({ title: 'Post', collection: col.id, content: `burst ${i}`, external_ref: `${ref}-${i}` }),
       ),
     )
     await sleep(3000)
@@ -411,7 +419,7 @@ describe.each(['local', 'cloud'] as const)('%s: idempotency keys', (name) => {
     }
     const c = new Staqly({ baseUrl: t.url, apiKey: t.key || null, fetch: record })
 
-    await c.posts.create({ collection: col, content: 'key' })
+    await c.posts.create({ title: 'Post', collection: col, content: 'key' })
     await c.posts.list({ collection_id: col })
     await c.media.upload(PNG, { filename: 'a.png' })
     expect(seen[0]!.key).toMatch(/^sdk-[0-9a-f-]{36}$/)
@@ -450,7 +458,7 @@ describe.each(['local', 'cloud'] as const)('%s: idempotency keys', (name) => {
     }
     const c = new Staqly({ baseUrl: t.url, apiKey: t.key || null, fetch: lossy })
     const ref = `lost-ts-${Date.now()}`
-    const post = await c.posts.create({ collection: col, content: 'once', external_ref: ref })
+    const post = await c.posts.create({ title: 'Post', collection: col, content: 'once', external_ref: ref })
 
     expect(dropped).toBe(true)
     const found = await sdk(t.url, t.key || null).posts.list({ collection_id: col, q: 'once' })
@@ -478,13 +486,13 @@ describe.each(['local', 'cloud'] as const)('%s: idempotency keys', (name) => {
     }
     const c = new Staqly({ baseUrl: t.url, apiKey: t.key || null, fetch: record, maxRetries: 0 })
 
-    await c.posts.create({ collection: col, content: 'no key' })
+    await c.posts.create({ title: 'Post', collection: col, content: 'no key' })
     expect(seen).toEqual([null])
   })
 
   it('an explicit key replays across clients with the same principal (TS, curl, Python)', async () => {
     const key = `xc-${name}-${Date.now()}`
-    const body = { collection: col, content: 'replayed, same body' }
+    const body = { title: 'Post', collection: col, content: 'replayed, same body' }
     const c = sdk(t.url, t.key || null)
     const first = await c.posts.create(body, { idempotencyKey: key })
     const again = await c.posts.create(body, { idempotencyKey: key })
@@ -509,7 +517,9 @@ describe.each(['local', 'cloud'] as const)('%s: idempotency keys', (name) => {
     }
 
     // another body with the same key is refused, not applied
-    const ts = await errorOf(c.posts.create({ collection: col, content: 'other' }, { idempotencyKey: key }))
+    const ts = await errorOf(
+      c.posts.create({ title: 'Post', collection: col, content: 'other' }, { idempotencyKey: key }),
+    )
 
     expect(ts).toBeInstanceOf(ValidationError)
     expect(ts.code).toBe('idempotency_mismatch')
@@ -537,7 +547,9 @@ describe.each(['local', 'cloud'] as const)('%s: pagination, uploads, downloads',
     col = (await c.collections.create({ name: `pages ${Date.now()}` })).id
 
     for (let i = 0; i < 7; i++) {
-      made.push((await c.posts.create({ collection: col, content: `page post ${i}`, tags: ['pages'] })).id)
+      made.push(
+        (await c.posts.create({ title: 'Post', collection: col, content: `page post ${i}`, tags: ['pages'] })).id,
+      )
     }
   })
 
@@ -606,7 +618,12 @@ describe.each(['local', 'cloud'] as const)('%s: pagination, uploads, downloads',
     }
 
     expect(Buffer.from(await c.media.download(media.id)).equals(big)).toBe(true)
-    const post = await c.posts.create({ collection: col, content: 'with a recording', media: [media.id] })
+    const post = await c.posts.create({
+      title: 'Post',
+      collection: col,
+      content: 'with a recording',
+      media: [media.id],
+    })
 
     expect(post.media_items.map((m) => m.id)).toEqual([media.id])
   })
@@ -664,7 +681,12 @@ describe.each(['local', 'cloud'] as const)('%s: waiting for a post to be publish
   })
 
   const publishing = async () => {
-    const post = await c.posts.create({ collection: col, content: 'wait for me', targets: [{ channel_id: channel }] })
+    const post = await c.posts.create({
+      title: 'Post',
+      collection: col,
+      content: 'wait for me',
+      targets: [{ channel_id: channel }],
+    })
 
     await c.posts.publish(post.id)
 
@@ -762,6 +784,7 @@ describe.each(['local', 'cloud'] as const)('%s: webhook signatures of real deliv
         collection_ids: [col.id],
       })
       const post = await c.posts.create({
+        title: 'Post',
         collection: col.id,
         content: 'signed\nünïcödé ✓',
         targets: [{ channel_id: channel.id }],
@@ -838,7 +861,13 @@ describe('timeouts and network failures', () => {
       expect(Date.now() - started).toBeLessThan(3000)
       // a POST is retried too: it carries an Idempotency-Key
       expect(
-        await errorOf(sdk(url, null, { timeout: 300, maxRetries: 1 }).posts.create({ collection: 'x', content: 'x' })),
+        await errorOf(
+          sdk(url, null, { timeout: 300, maxRetries: 1 }).posts.create({
+            title: 'Post',
+            collection: 'x',
+            content: 'x',
+          }),
+        ),
       ).toBeInstanceOf(TimeoutError)
 
       for (const mode of MODES) {
@@ -878,6 +907,7 @@ describe('timeouts and network failures', () => {
       const col = await c.collections.create({ name: 'crash' })
       const channel = await c.channels.connect({ provider: 'custom', name: 'crash channel' })
       const post = await c.posts.create({
+        title: 'Post',
         collection: col.id,
         content: 'publishing forever',
         targets: [{ channel_id: channel.id }],

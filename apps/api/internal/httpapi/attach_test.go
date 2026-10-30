@@ -164,7 +164,7 @@ func TestImportThenAttach(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range 3 {
-		if _, err := local.CreatePost(ctx, lp, app.PostInput{Collection: "Default", Content: fmt.Sprintf("local post %d", i)}); err != nil {
+		if _, err := local.CreatePost(ctx, lp, app.PostInput{Title: "Post", Collection: "Default", Content: fmt.Sprintf("local post %d", i)}); err != nil {
 			t.Fatal(err)
 		}
 	}
