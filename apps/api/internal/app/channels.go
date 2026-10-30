@@ -266,7 +266,7 @@ func (s *Service) providerApp(ctx context.Context, workspaceID, providerID strin
 			return app, nil
 		}
 		return providers.App{}, &Error{Code: "app_not_configured", Status: 409,
-			Message: "signing in to this platform needs the dashboard on an https address (PUBLIC_DASHBOARD_URL)"}
+			Message: "this platform connects only when staqly runs on an https address; whoever runs this server can set one up"}
 	}
 	if needsBotToken(providerID) {
 		if app, ok := s.serverApp(providerID); ok {

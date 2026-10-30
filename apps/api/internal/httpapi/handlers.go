@@ -880,7 +880,11 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, s.oauthRedirect(provider)+"?"+params.Encode(), http.StatusFound)
 	}
 	if e := q.Get("error"); e != "" {
-		land(url.Values{"error": {firstNonEmptyStr(q.Get("error_description"), "The platform refused the connection ("+e+")")}})
+		land(url.Values{"error": {oauthRefusal(q)}})
+		return
+	}
+	if principal(r).WorkspaceID == "" {
+		land(url.Values{"error": {"You were signed out of staqly while connecting; sign in and connect again"}})
 		return
 	}
 	if c, err := r.Cookie(oauthCookie); err != nil || c.Value == "" || c.Value != q.Get("state") {
@@ -929,6 +933,17 @@ func (s *Server) finishPendingConnection(w http.ResponseWriter, r *http.Request)
 	}
 	out, err := s.svc.FinishPendingConnection(r.Context(), principal(r), chi.URLParam(r, "id"), in.AccountIDs)
 	respond(w, r, 201, map[string]any{"data": out}, err)
+}
+
+// oauthRefusal says why a platform sent the browser back without a code: the person cancelled (access_denied
+// from Google, X, Meta and most others; LinkedIn's user_cancelled_*), or the platform's own reason.
+func oauthRefusal(q url.Values) string {
+	switch e := q.Get("error"); e {
+	case "access_denied", "user_denied", "user_cancelled_login", "user_cancelled_authorize":
+		return "You cancelled the connection, so nothing was connected"
+	default:
+		return firstNonEmptyStr(q.Get("error_description"), "The platform refused the connection ("+e+")")
+	}
 }
 
 func firstNonEmptyStr(v ...string) string {

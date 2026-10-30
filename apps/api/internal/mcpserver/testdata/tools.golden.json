@@ -1109,13 +1109,19 @@
       "idempotentHint": false,
       "readOnlyHint": true
     },
-    "description": "The workspace's publishing analytics for a range of days (from and to, YYYY-MM-DD in the workspace's time zone, both included; default the last 30 days, at most 366): totals with the previous period of the same length (posts published, targets published and failed, success rate, retries, average and p90 delay after the publish time), what waits now, published and failed per day, per channel (with the most common failure and the platform numbers already cached: views, engagements, link clicks), per source (dashboard, each agent over MCP or the API, schedules, repeats), posting times by weekday and hour with average engagements (low_confidence under min_samples), top posts and failure reasons. Optional channel, collection and source filters. Never calls a platform. Requires posts:read.",
+    "description": "The workspace's publishing analytics for a range of days (from and to, YYYY-MM-DD in the workspace's time zone, both included; default the last 30 days, at most 366): totals with the previous period of the same length (posts published, targets published and failed, success rate, retries, average and p90 delay after the publish time), what waits now, published and failed per day, per channel (with the most common failure and the platform numbers already cached: views, engagements, link clicks), per source (dashboard, each agent over MCP or the API, schedules, repeats), posting times by weekday and hour with average engagements (low_confidence under min_samples), top posts and failure reasons. Optional channels, collection and sources filters. Never calls a platform. Requires posts:read.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
-        "channel": {
-          "description": "only this channel (channel ID)",
-          "type": "string"
+        "channels": {
+          "description": "only these channels (channel IDs)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
         },
         "collection": {
           "description": "only posts of this collection (collection ID)",
@@ -1129,9 +1135,15 @@
           "description": "first day, YYYY-MM-DD in the workspace's time zone",
           "type": "string"
         },
-        "source": {
-          "description": "only posts from this source, as sources[].source names it",
-          "type": "string"
+        "sources": {
+          "description": "only posts from these sources, as sources[].source names them (an empty one: posts with none recorded)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
         },
         "to": {
           "description": "last day (included), YYYY-MM-DD; default today",

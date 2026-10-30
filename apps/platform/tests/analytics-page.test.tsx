@@ -207,23 +207,28 @@ describe('analytics page', () => {
   it('keeps the range and filters in the URL', async () => {
     const api = setup()
 
-    nav.set('/analytics', 'days=7&channel=ch_x')
+    nav.set('/analytics', 'days=7&channel=ch_x&channel=ch_t')
     renderWithProviders(<AnalyticsPage />, { mode: 'local' })
 
     await screen.findAllByTestId('kpi-tile')
     const q = api.find('GET', '/v1/analytics')[0].query
 
     expect(q.get('days')).toBe('7')
-    expect(q.get('channel')).toBe('ch_x')
+    expect(q.getAll('channel')).toEqual(['ch_x', 'ch_t'])
     expect(screen.getByRole('radio', { name: 'Last 7 days' })).toHaveAttribute('aria-checked', 'true')
 
     await userEvent.click(screen.getByRole('radio', { name: 'Last 90 days' }))
-    expect(nav.replace).toHaveBeenLastCalledWith('/analytics?days=90&channel=ch_x', { scroll: false })
+    expect(nav.replace).toHaveBeenLastCalledWith('/analytics?days=90&channel=ch_x&channel=ch_t', { scroll: false })
 
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Source' }), 'Claude Code')
-    expect(nav.replace).toHaveBeenLastCalledWith('/analytics?days=7&channel=ch_x&source=Claude+Code', {
+    await userEvent.click(screen.getByRole('button', { name: /Sources:/ }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Claude Code' }))
+    expect(nav.replace).toHaveBeenLastCalledWith('/analytics?days=7&channel=ch_x&channel=ch_t&source=Claude+Code', {
       scroll: false,
     })
+
+    await userEvent.click(screen.getByRole('button', { name: /Channels:/ }))
+    await userEvent.click(await screen.findByRole('option', { name: /Brand on X/ }))
+    expect(nav.replace).toHaveBeenLastCalledWith('/analytics?days=7&channel=ch_t', { scroll: false })
   })
 
   it('reads custom ranges and ignores unknown presets', () => {
@@ -232,7 +237,8 @@ describe('analytics page', () => {
       to: '2026-10-10',
     })
     expect(readParams(new URLSearchParams('days=12'))).toEqual({ days: 30 })
-    expect(readParams(new URLSearchParams('source='))).toEqual({ days: 30, source: '' })
+    expect(readParams(new URLSearchParams('source='))).toEqual({ days: 30, sources: [''] })
+    expect(readParams(new URLSearchParams('channel=&channel=ch_x'))).toEqual({ days: 30, channels: ['ch_x'] })
   })
 
   it('says what to do when there is nothing yet', async () => {

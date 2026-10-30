@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 // The analytics page's queries (GET /v1/analytics), written by hand: the filters are optional and the
@@ -17,9 +18,9 @@ import (
 type AnalyticsFilter struct {
 	WorkspaceID string
 	Collection  string
-	// Channel and Source filter the post-level counts (created, queue), which have no channel or source column
-	// to group by.
-	Channel, Source string
+	// Channels and Sources filter the post-level counts (created, queue), which have no channel or source column
+	// to group by. nil is every one; a source may be "" (posts with none recorded).
+	Channels, Sources []string
 }
 
 // TargetBucket is one group of finished targets: a channel, the post's source, published or failed, and the
@@ -151,15 +152,30 @@ func postFilter(f AnalyticsFilter, args []any) (string, []any) {
 		query += ` AND p.collection_id = ?`
 		args = append(args, f.Collection)
 	}
-	if f.Source != "" {
-		query += ` AND p.source = ?`
-		args = append(args, f.Source)
+	if f.Sources != nil {
+		query += ` AND p.source IN (` + placeholders(len(f.Sources)) + `)`
+		args = appendAll(args, f.Sources)
 	}
-	if f.Channel != "" {
-		query += ` AND EXISTS (SELECT 1 FROM post_targets x WHERE x.post_id = p.id AND x.channel_id = ?)`
-		args = append(args, f.Channel)
+	if f.Channels != nil {
+		query += ` AND EXISTS (SELECT 1 FROM post_targets x WHERE x.post_id = p.id AND x.channel_id IN (` + placeholders(len(f.Channels)) + `))`
+		args = appendAll(args, f.Channels)
 	}
 	return query, args
+}
+
+// placeholders is "?, ?, ?" for n values (at least one: IN () is not SQL).
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?, ", max(n, 1)), ", ")
+}
+
+func appendAll(args []any, vals []string) []any {
+	if len(vals) == 0 {
+		return append(args, nil) // matches nothing
+	}
+	for _, v := range vals {
+		args = append(args, v)
+	}
+	return args
 }
 
 // SourceCount is how many posts one source created.
@@ -171,7 +187,7 @@ type SourceCount struct {
 // AnalyticsPostsCreated counts the posts created in [from, to) per source (the source filter is not applied:
 // the by-source view compares them).
 func (q *Queries) AnalyticsPostsCreated(ctx context.Context, f AnalyticsFilter, from, to string) ([]SourceCount, error) {
-	f.Source = ""
+	f.Sources = nil
 	tail, args := postFilter(f, []any{f.WorkspaceID, from, to})
 	rows, err := q.db.QueryContext(ctx, `SELECT p.source, COUNT(*) FROM posts p
 		WHERE p.workspace_id = ? AND p.created_at >= ? AND p.created_at < ?`+tail+` GROUP BY p.source`, args...)
@@ -215,7 +231,7 @@ type AnalyticsFeedback struct {
 }
 
 func (q *Queries) AnalyticsFeedback(ctx context.Context, f AnalyticsFilter, from, to string) (AnalyticsFeedback, error) {
-	f.Channel = "" // a thread is on the post (or one channel's version of it); the channel filter doesn't apply
+	f.Channels = nil // a thread is on the post (or one channel's version of it); the channel filter doesn't apply
 	tail, args := postFilter(f, []any{from, to, from, to, f.WorkspaceID})
 	// COUNT(CASE ...), not SUM(a comparison): the PostgreSQL rewrite turns SUM(x = y) into a CASE of its own.
 	var out AnalyticsFeedback

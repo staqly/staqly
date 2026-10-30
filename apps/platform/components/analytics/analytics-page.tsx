@@ -6,9 +6,10 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useMemo } from 'react'
 
+import { ChannelAvatar } from '@/components/channels/channel-avatars'
 import { DateRangePicker, formatDayRange } from '@/components/common/date-range-picker'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
-import { NativeSelect } from '@/components/common/native-select'
+import { MultiSelect } from '@/components/common/multi-select'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,9 +22,11 @@ import { fetchAnalytics, PRESETS, type Analytics, type AnalyticsParams } from '.
 import { ChannelsTable, FailuresList, Performance, SourcesTable, TopPosts } from './analytics-sections'
 import { KpiTiles } from './kpi-tiles'
 
+const NONE: string[] = []
+
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 
-/** The page's filters as the URL keeps them: ?days=7|30|90 or ?from=&to=, plus ?channel= and ?source=. */
+/** The page's filters as the URL keeps them: ?days=7|30|90 or ?from=&to=, plus ?channel= and ?source= (repeated). */
 export function readParams(sp: URLSearchParams): AnalyticsParams {
   const from = sp.get('from') ?? ''
   const to = sp.get('to') ?? ''
@@ -37,17 +40,17 @@ export function readParams(sp: URLSearchParams): AnalyticsParams {
     out.days = (PRESETS as readonly number[]).includes(days) ? days : 30
   }
 
-  const channel = sp.get('channel')
+  const channels = sp.getAll('channel').filter(Boolean)
 
-  if (channel) {
-    out.channel = channel
+  if (channels.length) {
+    out.channels = channels
   }
 
   // An empty source is a real one (posts with none recorded), so it is kept when present.
-  const source = sp.get('source')
+  const sources = sp.getAll('source')
 
-  if (source !== null) {
-    out.source = source
+  if (sources.length) {
+    out.sources = sources
   }
 
   return out
@@ -68,6 +71,21 @@ export function AnalyticsPage() {
 
   const set = (patch: Record<string, string | undefined>) =>
     router.replace(hrefWithParams('/analytics', sp, patch), { scroll: false })
+
+  // Repeated parameters (channel=a&channel=b), which hrefWithParams doesn't write.
+  const setList = (key: 'channel' | 'source', values: string[]) => {
+    const next = new URLSearchParams(sp.toString())
+
+    next.delete(key)
+
+    for (const v of values) {
+      next.append(key, v)
+    }
+
+    const s = next.toString()
+
+    router.replace(s ? `/analytics?${s}` : '/analytics', { scroll: false })
+  }
 
   const rangeValue = params.from && params.to ? 'custom' : String(params.days)
 
@@ -110,20 +128,20 @@ export function AnalyticsPage() {
         value={params.from && params.to ? { from: params.from, to: params.to } : null}
         onChange={(r) => set(r ? { from: r.from, to: r.to, days: undefined } : { from: undefined, to: undefined })}
       />
-      <NativeSelect
-        aria-label="Channel"
-        className="w-full sm:w-48"
-        value={params.channel ?? ''}
-        onChange={(e) => set({ channel: e.target.value || undefined })}
-      >
-        <option value="">All channels</option>
-        {(channels.data ?? []).map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </NativeSelect>
-      <SourceSelect data={data} value={params.source} onChange={(v) => set({ source: v })} />
+      <MultiSelect
+        label="Channels"
+        anyLabel="All channels"
+        size="sm"
+        className="w-full sm:w-52"
+        value={params.channels ?? NONE}
+        onChange={(v) => setList('channel', v)}
+        options={(channels.data ?? []).map((c) => ({
+          value: c.id,
+          label: c.name,
+          icon: <ChannelAvatar channel={c} className="size-5" />,
+        }))}
+      />
+      <SourceSelect data={data} value={params.sources} onChange={(v) => setList('source', v)} />
     </div>
   )
 
@@ -161,12 +179,12 @@ export function AnalyticsPage() {
     <PageContainer className="grid gap-6">
       {header}
       {filters}
-      <p className="-mt-3 text-sm text-muted-foreground" data-testid="analytics-range">
+      <p className="-mt-3 border-b pb-4 text-xs text-muted-foreground" data-testid="analytics-range">
         {formatDayRange({ from: data.range.from, to: data.range.to })} · {data.range.days} days · times in{' '}
         {data.range.timezone}
       </p>
       {empty ? (
-        <EmptyAnalytics hasChannels={hasChannels} filtered={!!params.channel || params.source !== undefined} />
+        <EmptyAnalytics hasChannels={hasChannels} filtered={!!params.channels || !!params.sources} />
       ) : (
         <div
           className={cn('grid gap-6 transition-opacity', isPlaceholderData && 'opacity-60')}
@@ -192,28 +210,26 @@ function SourceSelect({
   onChange,
 }: {
   data: Analytics | undefined
-  value: string | undefined
-  onChange: (v: string | undefined) => void
+  value: string[] | undefined
+  onChange: (v: string[]) => void
 }) {
   const sources = data?.sources ?? []
-  // The chosen source stays in the list even when it has nothing in the range.
-  const missing = value !== undefined && !sources.some((s) => s.source === value)
+  // Chosen sources stay in the list even when they have nothing in the range.
+  const missing = (value ?? []).filter((v) => !sources.some((s) => s.source === v))
 
   return (
-    <NativeSelect
-      aria-label="Source"
-      className="w-full sm:w-48"
-      value={value === undefined ? '*' : `=${value}`}
-      onChange={(e) => onChange(e.target.value === '*' ? undefined : e.target.value.slice(1))}
-    >
-      <option value="*">All sources</option>
-      {sources.map((s) => (
-        <option key={s.source} value={`=${s.source}`}>
-          {s.label}
-        </option>
-      ))}
-      {missing && <option value={`=${value}`}>{value || 'Not recorded'}</option>}
-    </NativeSelect>
+    <MultiSelect
+      label="Sources"
+      anyLabel="All sources"
+      size="sm"
+      className="w-full sm:w-52"
+      value={value ?? NONE}
+      onChange={onChange}
+      options={[
+        ...sources.map((s) => ({ value: s.source, label: s.label })),
+        ...missing.map((v) => ({ value: v, label: v || 'Not recorded' })),
+      ]}
+    />
   )
 }
 

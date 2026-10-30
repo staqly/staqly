@@ -263,9 +263,9 @@ The workspace's publishing analytics for a range of days: totals with the previo
 | `from` | string | | First day, YYYY-MM-DD in the workspace's time zone |
 | `to` | string | | Last day (included), YYYY-MM-DD; default today |
 | `days` | integer | | Instead of `from`: the last n days up to `to` (1 to 366) |
-| `channel` | string | | Only this channel (channel ID) |
+| `channels` | string[] | | Only these channels (channel IDs) |
 | `collection` | string | | Only posts of this collection (collection ID) |
-| `source` | string | | Only posts from this source, as `sources[].source` names it |
+| `sources` | string[] | | Only posts from these sources, as `sources[].source` names them (an empty one: posts with none recorded) |
 
 ### `get_post_metrics`
 A post's numbers per channel (views, likes, reposts, replies, quotes, bookmarks, link clicks where the platform gives them), read from the platform when older than ten minutes or with `refresh` true. `available` false: the platform reports none. *Read-only* · `posts:read`

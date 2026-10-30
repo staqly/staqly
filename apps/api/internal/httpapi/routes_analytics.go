@@ -27,6 +27,17 @@ func (s *Server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 		days = n
 	}
 	out, err := s.svc.Analytics(r.Context(), principal(r), app.AnalyticsQuery{From: q.Get("from"), To: q.Get("to"), Days: days,
-		Channel: q.Get("channel"), Collection: q.Get("collection"), Source: q.Get("source")})
+		Channels: nonEmpty(q["channel"]), Collection: q.Get("collection"), Sources: q["source"]})
 	respond(w, r, 200, out, err)
+}
+
+// nonEmpty drops blank values (channel= is no channel picked); nil when none is left.
+func nonEmpty(vals []string) []string {
+	var out []string
+	for _, v := range vals {
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

@@ -176,6 +176,25 @@ func TestAnalytics(t *testing.T) {
 	if r.Totals.TargetsPublished != 2 || r.Totals.TargetsFailed != 0 || len(r.Sources) != 3 || len(r.Failures) != 0 || r.Totals.PostsCreated != 5 {
 		t.Fatalf("source filter: %+v %+v", r.Totals, r.Sources)
 	}
+	// Several channels or sources add up; source= alone is the posts with none recorded, not every source.
+	total := func(q string) (int64, int64) {
+		var x app.AnalyticsReport
+		e.do(nil, "GET", "/v1/analytics?from=2026-10-01&to=2026-10-27&"+q, e.key, nil, 200, &x)
+		return x.Totals.TargetsPublished, x.Totals.TargetsFailed
+	}
+	n1, m1 := total("channel=" + tok.ID)
+	n2, m2 := total("channel=" + met.ID)
+	if p, f := total("channel=" + tok.ID + "&channel=" + met.ID); p != n1+n2 || f != m1+m2 {
+		t.Fatalf("two channels: %d %d, want %d %d", p, f, n1+n2, m1+m2)
+	}
+	n1, m1 = total("source=dashboard")
+	n2, m2 = total("source=Claude+Code")
+	if p, f := total("source=dashboard&source=Claude+Code"); p != n1+n2 || f != m1+m2 {
+		t.Fatalf("two sources: %d %d, want %d %d", p, f, n1+n2, m1+m2)
+	}
+	if p, f := total("source="); p != 0 || f != 0 {
+		t.Fatalf("no source recorded: %d %d", p, f)
+	}
 	e.do(nil, "GET", "/v1/analytics?from=2026-10-01&to=2026-10-27&collection="+other.ID, e.key, nil, 200, &r)
 	if r.Totals.TargetsPublished != 0 || r.Totals.SuccessRate != nil || r.Totals.DelayAvgSeconds != nil || len(r.Top.Posts) != 0 || r.Queue.Scheduled != 0 {
 		t.Fatalf("collection filter: %+v", r.Totals)

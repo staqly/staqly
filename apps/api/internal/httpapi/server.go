@@ -112,6 +112,8 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 		r.Post("/sessions/recover", s.recover)
 		r.Post("/sessions/api-key", s.signInWithAPIKey)
 		r.Post("/device-links/redeem", s.redeemDeviceLink)
+		// The platform's redirect: it lands with an error instead of a JSON 401 when the session is gone.
+		r.Get("/channels/oauth/{provider}/callback", s.oauthCallback)
 		for _, f := range publicRoutes {
 			f(s, r)
 		}
@@ -167,7 +169,6 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 			r.Get("/channels", s.listChannels)
 			r.Post("/channels", s.connectChannel)
 			r.Get("/channels/oauth/{provider}/start", s.oauthStart)
-			r.Get("/channels/oauth/{provider}/callback", s.oauthCallback)
 			r.Get("/pending-connections/{id}", s.getPendingConnection)
 			r.Post("/pending-connections/{id}", s.finishPendingConnection)
 			r.Get("/channels/{id}", s.getChannel)

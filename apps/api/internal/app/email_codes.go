@@ -51,7 +51,7 @@ type EmailCodeSent struct {
 var (
 	errCodeExpired  = &Error{Code: "code_expired", Status: 410, Message: "this code expired or was already used: send a new one"}
 	errCodeTooMany  = &Error{Code: "code_expired", Status: 410, Message: "too many wrong tries for this code: send a new one"}
-	errEmailSignOff = &Error{Code: "email_sign_in_disabled", Status: 409, Message: "sign-in with an email code is not set up on this server (MAIL_SMTP_HOST, MAIL_FROM)"}
+	errEmailSignOff = &Error{Code: "email_sign_in_disabled", Status: 409, Message: "sign-in with an email code is not set up on this server"}
 )
 
 // sixDigits: a uniformly random code from 000000 to 999999.
