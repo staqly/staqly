@@ -257,12 +257,25 @@ func (s *Service) assistantSystem(ctx context.Context, p Principal, page string)
 	return b.String()
 }
 
-// assistantWorkspace is what the model would otherwise look up at the start of almost every chat: the workspace's
-// channels and collections (ids, names, platforms), so a turn starts with it instead of a few tool calls. What the
-// person may not read is left out.
+// assistantWorkspace is what the model would otherwise look up at the start of almost every chat: who it talks to,
+// the workspace, its channels and collections (ids, names, platforms) and its posts by status, so a turn starts with
+// it instead of a few tool calls. What the person may not read is left out; no email address goes to the model.
 func (s *Service) assistantWorkspace(ctx context.Context, p Principal) string {
 	b := strings.Builder{}
-	b.WriteString("The workspace now:\n")
+	if ws, err := s.GetWorkspace(ctx, p); err == nil {
+		fmt.Fprintf(&b, "The workspace %q now:\n", ws.Name)
+	} else {
+		b.WriteString("The workspace now:\n")
+	}
+	if p.UserID != "" {
+		if u, err := s.Q.GetUser(ctx, p.UserID); err == nil && u.Name != "" {
+			fmt.Fprintf(&b, "You talk with %s", u.Name)
+			if p.Role != "" {
+				fmt.Fprintf(&b, " (role %s: what it can't do, the tools refuse)", p.Role)
+			}
+			b.WriteString(".\n")
+		}
+	}
 	if chans, err := s.ListChannels(ctx, p, ChannelFilter{}); err == nil {
 		fmt.Fprintf(&b, "Channels (%d):", len(chans))
 		for i, c := range chans {
@@ -284,6 +297,15 @@ func (s *Service) assistantWorkspace(ctx context.Context, p Principal) string {
 			fmt.Fprintf(&b, "\n- %s: %s", c.ID, c.Name)
 		}
 		b.WriteString("\n")
+		// Posts by status over every collection, from the counts the collections already carry.
+		total := map[string]int{}
+		for _, c := range cols {
+			for st, n := range c.StatusCounts {
+				total[st] += n
+			}
+		}
+		fmt.Fprintf(&b, "Posts: %d draft, %d scheduled, %d publishing, %d failed, %d published.\n",
+			total["draft"], total["scheduled"], total["publishing"], total["failed"], total["published"])
 	}
 	return b.String()
 }

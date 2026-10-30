@@ -4,23 +4,34 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import {
   AlertCircle,
   ArrowUp,
+  BarChart3,
+  CalendarClock,
   CalendarDays,
   Check,
+  Clock,
   FileText,
+  Film,
   FolderPlus,
   History,
+  ImagePlus,
   Loader2,
   Maximize2,
   Minimize2,
   Paperclip,
   PenLine,
+  Plug,
   Plus,
   RotateCcw,
   Search,
   SearchX,
+  Share2,
+  Sparkles,
   Square,
   Trash2,
+  TrendingUp,
+  Users,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
@@ -89,12 +100,87 @@ function newChatId() {
   return `ach_${Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => abc[b % abc.length]).join('')}`
 }
 
-const SUGGESTIONS = [
-  { icon: PenLine, text: 'Write a LinkedIn post about our newest feature' },
-  { icon: CalendarDays, text: 'What is scheduled for this week?' },
-  { icon: SearchX, text: 'Which posts failed, and why?' },
-  { icon: FolderPlus, text: 'Create a collection for Instagram that posts every weekday at 9:00' },
-]
+interface Suggestions {
+  subtitle: string
+  items: { icon: LucideIcon; text: string }[]
+}
+
+const DEFAULT_SUGGESTIONS: Suggestions = {
+  subtitle: 'Write and schedule posts, set up collections, find what failed. Changes wait for you to allow them.',
+  items: [
+    { icon: PenLine, text: 'Write a LinkedIn post about our newest feature' },
+    { icon: CalendarDays, text: 'What is scheduled for this week?' },
+    { icon: SearchX, text: 'Which posts failed, and why?' },
+    { icon: FolderPlus, text: 'Create a collection for Instagram that posts every weekday at 9:00' },
+  ],
+}
+
+/**
+ * What the empty chat offers on each part of the dashboard (by the path's first segment). The assistant itself
+ * knows the whole workspace wherever it is opened; these only start a chat about what is on screen.
+ */
+const PAGE_SUGGESTIONS: Record<string, Suggestions> = {
+  schedule: {
+    subtitle: 'Plan the week: find gaps, move posts, fill empty days. Changes wait for you to allow them.',
+    items: [
+      { icon: CalendarDays, text: 'What goes out this week, day by day?' },
+      { icon: Clock, text: 'Which days next week have nothing scheduled?' },
+      { icon: PenLine, text: 'Draft three posts to fill the empty days' },
+      { icon: CalendarClock, text: 'Move everything scheduled for Friday to Monday at 9:00' },
+    ],
+  },
+  posts: {
+    subtitle: 'Write, rewrite and organise posts in your collections. Changes wait for you to allow them.',
+    items: [
+      { icon: PenLine, text: 'Write a LinkedIn post about our newest feature' },
+      { icon: SearchX, text: 'Which posts failed, and why?' },
+      { icon: Sparkles, text: 'Rewrite my latest draft to be shorter and punchier' },
+      { icon: FolderPlus, text: 'Create a collection for Instagram that posts every weekday at 9:00' },
+    ],
+  },
+  channels: {
+    subtitle: 'Check the accounts posts go to and what they need. Changes wait for you to allow them.',
+    items: [
+      { icon: Plug, text: 'Which channels need reconnecting, and why?' },
+      { icon: Share2, text: 'Which channels have I not posted to this month?' },
+      { icon: FolderPlus, text: 'Group my channels by client' },
+      { icon: PenLine, text: 'Write one post for every channel I have' },
+    ],
+  },
+  analytics: {
+    subtitle: 'Understand what works: best times, top posts, what failed. Ask about any range or channel.',
+    items: [
+      { icon: BarChart3, text: 'Summarise how publishing went in the last 30 days' },
+      { icon: Clock, text: 'When do my posts get the most engagement?' },
+      { icon: TrendingUp, text: 'Which posts did best this month, and why?' },
+      { icon: SearchX, text: 'What fails most often, and how do I fix it?' },
+    ],
+  },
+  media: {
+    subtitle: 'Make and find pictures and videos for your posts. Changes wait for you to allow them.',
+    items: [
+      { icon: ImagePlus, text: 'Make a square picture for a product launch post' },
+      { icon: Search, text: 'Find the media I have not used in any post yet' },
+      { icon: Film, text: 'Make a short vertical video for a teaser' },
+      { icon: PenLine, text: 'Write a post around my latest upload' },
+    ],
+  },
+  activity: {
+    subtitle: 'Ask what happened in the workspace: who changed what, what went out, what failed.',
+    items: [
+      { icon: History, text: 'What happened in the workspace today?' },
+      { icon: SearchX, text: 'What failed in the last 24 hours?' },
+      { icon: Users, text: 'Which posts did my agents create this week?' },
+      { icon: CalendarDays, text: 'What went out yesterday?' },
+    ],
+  },
+}
+
+export function suggestionsFor(pathname: string): [string, Suggestions] {
+  const section = pathname.split('/').find(Boolean) ?? ''
+
+  return PAGE_SUGGESTIONS[section] ? [section, PAGE_SUGGESTIONS[section]] : ['', DEFAULT_SUGGESTIONS]
+}
 
 /** Tools that only read: the rest change something, so the pages refresh after them. */
 const READS = /^(list|get|search|preview)_/
@@ -519,6 +605,7 @@ function Chat({
 }) {
   const qc = useQueryClient()
   const pathname = usePathname()
+  const [pageKey, suggestions] = suggestionsFor(pathname)
   // The open chat: its id, and its conversation (loaded from the server when it is an old one).
   const [chatId, setChatId] = useState(() => loadCurrent(workspaceId) ?? newChatId())
   const [state, setState] = useState<Saved>(EMPTY)
@@ -796,34 +883,49 @@ function Chat({
           onRemoved={(id) => id === chatId && switchTo(newChatId(), true)}
         />
       )}
-      <div hidden={history} className="@container min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+      <div hidden={history} className="@container relative min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+        {/* An empty chat gets two soft lights drifting behind the greeting (globals.css, still under reduced motion). */}
+        {state.messages.length === 0 && (
+          <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="assistant-glow absolute top-1/4 -left-16 size-72 rounded-full bg-brand/15 blur-3xl" />
+            <div className="assistant-glow-2 absolute -right-16 bottom-1/4 size-72 rounded-full bg-violet-500/15 blur-3xl" />
+          </div>
+        )}
         <div
-          className={cn('mx-auto flex min-h-full w-full max-w-2xl flex-col gap-4 p-4', expanded && 'max-w-3xl py-8')}
+          className={cn(
+            'relative mx-auto flex min-h-full w-full max-w-2xl flex-col gap-4 p-4',
+            expanded && 'max-w-3xl py-8',
+          )}
         >
           {state.messages.length === 0 ? (
             <div className="my-auto grid justify-items-center gap-5 py-8 text-center">
-              <span className="grid size-12 place-items-center rounded-2xl bg-muted">
+              <span className="grid size-12 place-items-center rounded-2xl border bg-background/60 shadow-sm backdrop-blur">
                 <AssistantIcon className="size-6" />
               </span>
-              <div className="grid gap-1.5">
-                <p className="text-lg font-semibold">How can I help?</p>
-                <p className="max-w-sm text-sm text-muted-foreground">
-                  Write and schedule posts, set up collections, find what failed. Changes wait for you to allow them.
-                </p>
-              </div>
-              {/* Inset from the panel's edges, with room inside each option. */}
-              <div className="grid w-full gap-2 px-2 text-left sm:px-4 @xl:grid-cols-2">
-                {SUGGESTIONS.map(({ icon: Icon, text }) => (
-                  <button
-                    key={text}
-                    type="button"
-                    onClick={() => send(text)}
-                    className="flex items-start gap-2.5 rounded-xl border bg-card px-4 py-2.5 text-left text-sm transition-colors outline-none hover:border-brand/40 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:py-3"
-                  >
-                    <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                    {text}
-                  </button>
-                ))}
+              {/* A new page brings its own subtitle and suggestions; the key replays the entrance. */}
+              <div
+                key={pageKey}
+                className="grid w-full animate-in justify-items-center gap-5 duration-300 fade-in slide-in-from-bottom-2"
+                data-testid="assistant-suggestions"
+              >
+                <div className="grid gap-1.5">
+                  <p className="text-lg font-semibold">How can I help?</p>
+                  <p className="max-w-sm text-sm text-muted-foreground">{suggestions.subtitle}</p>
+                </div>
+                {/* Inset from the panel's edges, with room inside each option. */}
+                <div className="grid w-full gap-2 px-2 text-left sm:px-4 @xl:grid-cols-2">
+                  {suggestions.items.map(({ icon: Icon, text }) => (
+                    <button
+                      key={text}
+                      type="button"
+                      onClick={() => send(text)}
+                      className="flex items-start gap-2.5 rounded-xl border bg-card px-4 py-2.5 text-left text-sm transition-colors outline-none hover:border-brand/40 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:py-3"
+                    >
+                      <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                      {text}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
