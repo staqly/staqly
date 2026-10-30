@@ -332,8 +332,12 @@ describe('publishing schedules', () => {
       method: 'PUT',
       json: {
         posts: [
-          { content: 'From the endpoint, one', tags: ['auto'] },
-          { content: 'From the endpoint, two', targets: [{ channel_id: channel.id, content: 'short two' }] },
+          { title: 'One', content: 'From the endpoint, one', tags: ['auto'] },
+          {
+            title: 'Two',
+            content: 'From the endpoint, two',
+            targets: [{ channel_id: channel.id, content: 'short two' }],
+          },
         ],
       },
     })

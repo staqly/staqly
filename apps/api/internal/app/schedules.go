@@ -521,7 +521,7 @@ func (s *Service) RunScheduleNow(ctx context.Context, p Principal, id string) (S
 // ---- the run ----
 
 type incomingPost struct {
-	Title    string            `json:"title"` // optional here: the first line stands in
+	Title    string            `json:"title"` // required, as for every new post
 	Content  string            `json:"content"`
 	Media    []string          `json:"media"`
 	Targets  []PostTargetInput `json:"targets"`
@@ -773,7 +773,7 @@ func (s *Service) fetchPostsFromEndpoint(ctx context.Context, sys Principal, r d
 	}
 	var out []db.Post
 	for _, ip := range reply.Posts {
-		in := PostInput{Collection: r.CollectionID, Title: titleOr(ip.Title, ip.Content), Content: ip.Content, Media: ip.Media, Targets: ip.Targets, Tags: ip.Tags, Metadata: ip.Metadata,
+		in := PostInput{Collection: r.CollectionID, Title: ip.Title, Content: ip.Content, Media: ip.Media, Targets: ip.Targets, Tags: ip.Tags, Metadata: ip.Metadata,
 			Source: "schedule:" + r.Name}
 		if len(in.Targets) == 0 {
 			for _, ch := range channels {

@@ -167,7 +167,7 @@ Answer within 60 seconds with `2xx` and a JSON body:
 ```
 
 - Each entry takes `title`, `content`, `media` (ids from `POST /v1/media`), `targets`, `tags` and
-  `metadata`; a post without `title` is titled with the first line of its `content`, a post without
+  `metadata`; `title` is required, as for every post (one without it fails the run), a post without
   `targets` gets one per schedule channel. At most 50 posts per
   answer are used.
 - The posts are created in the schedule's collection with `source` `schedule:<name>` and
