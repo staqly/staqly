@@ -4,13 +4,14 @@ import {
   replaceEqualDeep,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type InfiniteData,
   type QueryClient,
   keepPreviousData,
 } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   api,
@@ -391,6 +392,55 @@ export function useRefetchOnForeignChange(
       void refetch()
     }
   }, [recentEvents.data, refetch, isLocal])
+}
+
+/**
+ * The queue moves a due post to publishing without an event, so a list would keep saying Scheduled until the
+ * outcome arrives. While a loaded post is past its time but still scheduled, read it again every few seconds
+ * and write what came back into the lists.
+ */
+export function useRefreshDuePosts(posts: Post[]) {
+  const qc = useQueryClient()
+  // Re-render when the next post falls due, not on a ticking clock (it would re-render the whole calendar).
+  const [now, setNow] = useState(() => Date.now())
+  const times = posts.flatMap((p) => (p.status === 'scheduled' && p.publish_at ? [Date.parse(p.publish_at)] : []))
+  const next = Math.min(...times.filter((t) => t > now))
+  const due = posts.filter((p) => p.status === 'scheduled' && p.publish_at && Date.parse(p.publish_at) <= now)
+
+  useEffect(() => {
+    if (!Number.isFinite(next)) {
+      return
+    }
+
+    // setTimeout overflows past ~24.8 days: a later post wakes it early, and it arms again.
+    const t = setTimeout(() => setNow(Date.now()), Math.min(next - Date.now(), 2 ** 31 - 1) + 50)
+
+    return () => clearTimeout(t)
+  }, [next])
+  const results = useQueries({
+    queries: due.map((p) => ({
+      queryKey: qk.post(p.id),
+      queryFn: () => api.post(p.id),
+      refetchInterval: 3000,
+      staleTime: 0,
+    })),
+  })
+
+  useEffect(() => {
+    for (const post of results.map((r) => r.data)) {
+      if (post && post.status !== 'scheduled') {
+        // Not syncPostInCache: this change is the queue's, so later events about the post still count.
+        qc.setQueriesData<InfiniteData<PostPage>>({ queryKey: qk.postsAll }, (old) =>
+          old?.pages.some((p) => p.data.some((it) => it.id === post.id && it.status !== post.status))
+            ? {
+                ...old,
+                pages: old.pages.map((p) => ({ ...p, data: p.data.map((it) => (it.id === post.id ? post : it)) })),
+              }
+            : old,
+        )
+      }
+    }
+  }, [results, qc])
 }
 
 export function usePost(id: string) {

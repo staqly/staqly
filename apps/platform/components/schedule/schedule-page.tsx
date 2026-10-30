@@ -28,7 +28,13 @@ import type { Collection, Post, PostTarget } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { postTitle } from '@/lib/posts'
 import { ProviderTile } from '@/lib/providers'
-import { useCollections, usePostsInfinite, useRefetchOnForeignChange, useSchedules } from '@/lib/queries'
+import {
+  useCollections,
+  usePostsInfinite,
+  useRefetchOnForeignChange,
+  useRefreshDuePosts,
+  useSchedules,
+} from '@/lib/queries'
 import { safeCssColor } from '@/lib/safe'
 import {
   type CalendarView,
@@ -470,6 +476,8 @@ export function SchedulePage() {
   }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage])
 
   const items = useMemo(() => data?.pages.flatMap((p) => p.data) ?? NO_POSTS, [data])
+
+  useRefreshDuePosts(items)
   // By local day (month, list) and by day and hour (day, week), each publish time parsed once.
   const { byDay, byHour } = useMemo(() => {
     const days = new Map<string, Post[]>()
