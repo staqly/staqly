@@ -110,10 +110,9 @@ function PostSection({
 
   return (
     <section aria-labelledby={`${testId}-title`} data-testid={testId} className="@container">
-      <div className="flex items-start gap-3 px-4 pt-4 pb-3 sm:px-6 lg:px-8">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <Icon className="size-4" />
-        </span>
+      <div className="flex items-start gap-2 px-4 pt-4 pb-3 sm:px-6 lg:px-8">
+        {/* Just the icon, on the title's line. */}
+        <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
           <h2 id={`${testId}-title`} className="flex items-center gap-2 text-sm font-semibold">
             {title}{' '}
