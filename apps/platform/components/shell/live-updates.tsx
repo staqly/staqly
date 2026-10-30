@@ -88,8 +88,10 @@ export function LiveUpdates() {
 
     const fresh = list.filter((e) => e.seq > previous)
     const others = fresh.filter((e) => isForeignEvent(e))
+    // A full window of new events can hide earlier changes, including posts absent from this window.
+    const missed = fresh.length > 0 && fresh.length === list.length
 
-    if (others.some((e) => e.type.startsWith('collection.') || COUNT_EVENTS.has(e.type))) {
+    if (missed || others.some((e) => e.type.startsWith('collection.') || COUNT_EVENTS.has(e.type))) {
       void qc.invalidateQueries({ queryKey: qk.collectionsAll })
       void qc.invalidateQueries({ queryKey: ['collection'] })
     }
@@ -100,16 +102,28 @@ export function LiveUpdates() {
     // refetches; the others are just marked stale.
     void qc.invalidateQueries({ queryKey: ['deliveries'] })
 
-    if (others.some((e) => e.type.startsWith('channel.'))) {
+    if (missed || others.some((e) => e.type.startsWith('channel.'))) {
       void qc.invalidateQueries({ queryKey: qk.channels })
     }
 
-    if (others.some((e) => e.type.startsWith('schedule.'))) {
+    if (missed || others.some((e) => e.type.startsWith('schedule.'))) {
       void qc.invalidateQueries({ queryKey: qk.schedulesAll })
     }
 
-    for (const id of new Set(others.map((e) => e.post_id).filter(Boolean))) {
-      void qc.invalidateQueries({ queryKey: ['post', id] })
+    if (missed || others.some((e) => e.type.startsWith('webhook.') && e.type !== 'webhook.test')) {
+      void qc.invalidateQueries({ queryKey: qk.webhooks })
+    }
+
+    if (missed || others.some((e) => e.type.startsWith('alert.'))) {
+      void qc.invalidateQueries({ queryKey: qk.alerts })
+    }
+
+    if (missed) {
+      void qc.invalidateQueries({ queryKey: ['post'] })
+    } else {
+      for (const id of new Set(others.map((e) => e.post_id).filter(Boolean))) {
+        void qc.invalidateQueries({ queryKey: ['post', id] })
+      }
     }
   }, [events.data, qc])
 

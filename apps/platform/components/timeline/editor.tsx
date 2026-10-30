@@ -394,7 +394,11 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
       return
     }
 
-    const ctx = (audio.current ??= new AudioContext())
+    if (!audio.current) {
+      audio.current = new AudioContext()
+    }
+
+    const ctx = audio.current
     const from = time >= total - 0.05 ? 0 : time
 
     void ctx.resume().then(() =>

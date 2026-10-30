@@ -36,6 +36,9 @@ import type { Selection } from './tracks'
 
 type Update = (fn: (t: Timeline) => void, coalesce?: string) => void
 
+// Keep the lazy import outside the component so the React Compiler can memoise it.
+const loadSpeech = () => import('./speech')
+
 export interface Ctx {
   doc: Timeline
   update: Update
@@ -240,7 +243,7 @@ function SpeechButton({ ctx }: { ctx: Ctx }) {
         disabled={!!busy || !sounds}
         onClick={() => {
           setBusy('Getting the speech model ready')
-          void Promise.all([mix(ctx.doc), import('./speech')])
+          void Promise.all([mix(ctx.doc), loadSpeech()])
             .then(([buf, speech]) =>
               speech
                 .transcribe(buf, (share) => setBusy(`Downloading the speech model ${Math.round(share * 100)}%`))

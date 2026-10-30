@@ -1,7 +1,7 @@
 -- name: RepointDraftMedia :exec
 -- The design editor's "Replace the original": drafts that carry the file carry the edited one instead.
 UPDATE posts SET media = replace(media, @from_quoted, @to_quoted), thread = replace(thread, @from_quoted, @to_quoted),
-  updated_at = @updated_at
+  version = version + 1, updated_at = @updated_at
 WHERE workspace_id = @workspace_id AND status = 'draft' AND (instr(media, @from_quoted) > 0 OR instr(thread, @from_quoted) > 0);
 
 -- name: MediaUsedOutsideDrafts :one

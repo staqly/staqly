@@ -209,14 +209,15 @@ func TestJobsRetryBackoffThenFail(t *testing.T) {
 	if _, err := s.GetJob(ctx, other, pub.ID); err == nil {
 		t.Fatal("another workspace sees the job")
 	}
-	again, err := s.RetryJob(ctx, p, pub.ID)
+	publisher := Principal{WorkspaceID: "ws_test", Kind: PrincipalAPIKey, Scopes: []string{ScopePostsPublish}}
+	again, err := s.RetryJob(ctx, publisher, pub.ID)
 	if err != nil || again.Status != "queued" {
 		t.Fatalf("retried: %+v %v", again, err)
 	}
 	if _, err := s.RetryJob(ctx, p, pub.ID); err == nil {
 		t.Fatal("only a failed job can be retried")
 	}
-	if c, err := s.CancelJob(ctx, p, pub.ID); err != nil || c.Status != "cancelled" {
+	if c, err := s.CancelJob(ctx, publisher, pub.ID); err != nil || c.Status != "cancelled" {
 		t.Fatalf("cancelled: %+v %v", c, err)
 	}
 	st, err := s.JobStats(ctx, p)

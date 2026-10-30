@@ -93,6 +93,21 @@ const summary = (seq: number, type = 'post.published') =>
 beforeEach(() => localStorage.clear())
 
 describe('notifications', () => {
+  it.each([true, false])('fetches the bell once after live events arrive (nonempty: %s)', async (nonempty) => {
+    const events = nonempty ? [published] : []
+    const calls = mockApi({ 'GET /v1/events': { data: events } })
+
+    renderWithProviders(<NotificationsBell />, { mode: 'local' })
+    await waitFor(() => expect(calls.find('GET', '/v1/events').some((c) => c.query.has('types'))).toBe(true))
+    // Both queries have settled before counting: the live sequence must not trigger a second bell request.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: events.length ? 'Notifications, 1 unread' : 'Notifications' }),
+      ).toBeVisible(),
+    )
+    expect(calls.find('GET', '/v1/events').filter((c) => c.query.has('types'))).toHaveLength(1)
+  })
+
   it('turns the events worth telling into sentences with a place to go', () => {
     expect(notificationFor(published)).toMatchObject({
       tone: 'success',

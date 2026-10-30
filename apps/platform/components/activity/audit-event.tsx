@@ -260,7 +260,9 @@ function AuditEntity({
             {name}
           </Link>
         ) : (
-          <span className="max-w-64 truncate font-medium text-foreground/90">{name}</span>
+          <span className="max-w-64 truncate font-medium text-foreground/90" title={name}>
+            {name}
+          </span>
         ))}
       {entity.id && <IdChip id={entity.id} label={entity.kind} />}
       {collection && (

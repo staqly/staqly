@@ -377,12 +377,13 @@ func TestAIFalOnly(t *testing.T) {
 		t.Fatalf("result: %d %v", res.StatusCode, res.Header)
 	}
 
+	writer := e.keyWith(app.ScopeMediaWrite)
 	var m, again app.Media
-	e.do(nil, "POST", "/v1/ai/jobs/"+job.ID+"/accept", e.key, nil, 201, &m)
+	e.do(nil, "POST", "/v1/ai/jobs/"+job.ID+"/accept", writer, nil, 201, &m)
 	if m.ID == "" || m.MimeType != "image/png" || !strings.HasPrefix(m.OriginalName, "AI generate a cat") {
 		t.Fatalf("kept: %+v", m)
 	}
-	e.do(nil, "POST", "/v1/ai/jobs/"+job.ID+"/accept", e.key, nil, 201, &again)
+	e.do(nil, "POST", "/v1/ai/jobs/"+job.ID+"/accept", writer, nil, 201, &again)
 	if again.ID != m.ID {
 		t.Fatalf("accepted twice: %s %s", m.ID, again.ID)
 	}

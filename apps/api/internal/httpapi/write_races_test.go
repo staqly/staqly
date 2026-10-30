@@ -1,12 +1,94 @@
 package httpapi_test
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/staqly/staqly/apps/api/internal/app"
 )
+
+// PATCH changes only the supplied fields, even when another writer changes a different field at once.
+func TestParallelWebhookPatchesPreserveIndependentFields(t *testing.T) {
+	e := newEnv(t)
+	for range 5 {
+		var hook app.Webhook
+		e.do(nil, "POST", "/v1/webhooks", e.key, map[string]any{"url": "https://example.com/before"}, 201, &hook)
+		patches := []map[string]any{
+			{"url": "https://example.com/after"},
+			{"description": "updated"},
+			{"events": []string{"post.created"}},
+			{"active": false},
+			{"timeout_ms": 20000},
+			{"max_attempts": 3},
+		}
+		parallelPatches(t, e, "/v1/webhooks/"+hook.ID, e.key, patches)
+		var got app.Webhook
+		e.do(nil, "GET", "/v1/webhooks/"+hook.ID, e.key, nil, 200, &got)
+		if got.URL != "https://example.com/after" || got.Description != "updated" ||
+			!slices.Equal(got.Events, []string{"post.created"}) || got.Active || got.TimeoutMS != 20000 || got.MaxAttempts != 3 {
+			t.Fatalf("a concurrent patch reverted another field: %+v", got)
+		}
+	}
+}
+
+func parallelPatches(t *testing.T, e *env, path, key string, patches []map[string]any) {
+	t.Helper()
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	var failed atomic.Int64
+	for _, patch := range patches {
+		wg.Go(func() {
+			<-start
+			if e.do(nil, "PATCH", path, key, patch, 0, nil).StatusCode != 200 {
+				failed.Add(1)
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+	if failed.Load() != 0 {
+		t.Fatalf("%d patches failed", failed.Load())
+	}
+}
+
+func TestParallelAlertPatchesPreserveIndependentFields(t *testing.T) {
+	e := newEnv(t)
+	for range 5 {
+		var alert app.Alert
+		e.do(nil, "POST", "/v1/alerts", e.admin, map[string]any{
+			"name": "Before", "type": "ntfy", "config": map[string]any{"topic": "before"},
+		}, 201, &alert)
+		parallelPatches(t, e, "/v1/alerts/"+alert.ID, e.admin, []map[string]any{
+			{"name": "After"}, {"enabled": false}, {"events": []string{"post.created"}},
+			{"digest_window_seconds": 120}, {"config": map[string]any{"topic": "after"}},
+			{"config": map[string]any{"priority": 4}},
+		})
+		var got app.Alert
+		e.do(nil, "GET", "/v1/alerts/"+alert.ID, e.admin, nil, 200, &got)
+		if got.Name != "After" || got.Enabled || !slices.Equal(got.Events, []string{"post.created"}) ||
+			got.DigestWindowSeconds != 120 || got.Config["topic"] != "after" || got.Config["priority"] != float64(4) {
+			t.Fatalf("a concurrent patch reverted another alert field: %+v", got)
+		}
+	}
+}
+
+func TestParallelMediaPatchesPreserveIndependentFields(t *testing.T) {
+	e := newEnv(t)
+	for range 5 {
+		var media app.Media
+		e.upload("/v1/media", e.key, nil, "before.png", realPNG(t, 2, 2), 201, &media)
+		parallelPatches(t, e, "/v1/media/"+media.ID, e.key, []map[string]any{
+			{"name": "after.png"}, {"alt_text": "A description"}, {"width": 100}, {"height": 200}, {"duration_ms": 300},
+		})
+		var got app.Media
+		e.do(nil, "GET", "/v1/media/"+media.ID+"/info", e.key, nil, 200, &got)
+		if got.OriginalName != "after.png" || got.AltText != "A description" || got.Width != 100 || got.Height != 200 || got.DurationMs != 300 {
+			t.Fatalf("a concurrent patch reverted another media field: %+v", got)
+		}
+	}
+}
 
 // Parallel creates against the Free plan's monthly post limit: exactly the limit gets through, the rest
 // get 402, and the usage counter matches. On SQLite the single writer serialises them; on PostgreSQL the

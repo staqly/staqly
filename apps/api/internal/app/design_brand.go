@@ -24,6 +24,10 @@ func (s *Service) GetDesignBrand(ctx context.Context, p Principal) (DesignBrand,
 	if err := p.require(ScopeMediaRead); err != nil {
 		return DesignBrand{}, err
 	}
+	return s.getDesignBrand(ctx, p)
+}
+
+func (s *Service) getDesignBrand(ctx context.Context, p Principal) (DesignBrand, error) {
 	raw, err := s.Q.GetWorkspaceDesignBrand(ctx, p.WorkspaceID)
 	if err != nil {
 		return DesignBrand{}, err
@@ -82,5 +86,5 @@ func (s *Service) SetDesignBrand(ctx context.Context, p Principal, in DesignBran
 	if err := s.W.UpdateWorkspaceDesignBrand(ctx, db.UpdateWorkspaceDesignBrandParams{DesignBrand: string(raw), UpdatedAt: s.now(), ID: p.WorkspaceID}); err != nil {
 		return DesignBrand{}, err
 	}
-	return s.GetDesignBrand(ctx, p)
+	return s.getDesignBrand(ctx, p)
 }

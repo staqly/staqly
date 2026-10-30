@@ -153,7 +153,7 @@ func validateWebhookURL(raw string) error {
 	return nil
 }
 
-func (s *Service) applyWebhookInput(ctx context.Context, p Principal, w *db.Webhook, in WebhookInput) error {
+func (s *Service) applyWebhookInput(ctx context.Context, q *db.Queries, p Principal, w *db.Webhook, in WebhookInput) error {
 	if in.URL != nil {
 		if err := validateWebhookURL(*in.URL); err != nil {
 			return err
@@ -175,7 +175,7 @@ func (s *Service) applyWebhookInput(ctx context.Context, p Principal, w *db.Webh
 	}
 	if in.CollectionIDs != nil {
 		for _, id := range *in.CollectionIDs {
-			if _, err := s.Q.GetCollection(ctx, db.GetCollectionParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+			if _, err := q.GetCollection(ctx, db.GetCollectionParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 				return invalid("collection_ids", "unknown collection "+id)
 			}
 		}
@@ -216,7 +216,7 @@ func (s *Service) CreateWebhook(ctx context.Context, p Principal, in WebhookInpu
 	w := db.Webhook{ID: newID("wh"), WorkspaceID: p.WorkspaceID, Events: `["*"]`, CollectionIds: "[]", Active: 1,
 		TimeoutMs: 10000, MaxAttempts: 8, CreatedAt: now, UpdatedAt: now}
 	in.RotateSecret = true
-	if err := s.applyWebhookInput(ctx, p, &w, in); err != nil {
+	if err := s.applyWebhookInput(ctx, s.Q, p, &w, in); err != nil {
 		return Webhook{}, err
 	}
 	err := s.tx(ctx, func(q *db.Queries) error {
@@ -271,27 +271,36 @@ func (s *Service) ListWebhooks(ctx context.Context, p Principal) ([]Webhook, err
 }
 
 func (s *Service) UpdateWebhook(ctx context.Context, p Principal, id string, in WebhookInput) (Webhook, error) {
-	w, err := s.getWebhook(ctx, p, id)
-	if err != nil {
+	if err := p.require(ScopeWebhooksManage); err != nil {
 		return Webhook{}, err
 	}
-	if in.Active != nil && *in.Active == (w.Active == 1) && onlyChange(in, "Active") {
-		if *in.Active {
-			return Webhook{}, alreadyErr("webhook", "active")
+	var w db.Webhook
+	err := s.tx(ctx, func(q *db.Queries) error {
+		// Read the current row inside the write: a concurrent PATCH must not revert fields it omitted.
+		var err error
+		w, err = q.GetWebhook(ctx, db.GetWebhookParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if isNoRows(err) {
+			return notFound("webhook")
 		}
-		return Webhook{}, alreadyErr("webhook", "inactive")
-	}
-	if err := s.applyWebhookInput(ctx, p, &w, in); err != nil {
-		return Webhook{}, err
-	}
-	w.UpdatedAt = s.now()
-	err = s.tx(ctx, func(q *db.Queries) error {
+		if err != nil {
+			return err
+		}
+		if in.Active != nil && *in.Active == (w.Active == 1) && onlyChange(in, "Active") {
+			if *in.Active {
+				return alreadyErr("webhook", "active")
+			}
+			return alreadyErr("webhook", "inactive")
+		}
+		if err := s.applyWebhookInput(ctx, q, p, &w, in); err != nil {
+			return err
+		}
+		w.UpdatedAt = s.now()
 		if err := q.UpdateWebhook(ctx, db.UpdateWebhookParams{Url: w.Url, Description: w.Description, Secret: w.Secret,
 			Events: w.Events, CollectionIds: w.CollectionIds, Active: w.Active, TimeoutMs: w.TimeoutMs,
 			MaxAttempts: w.MaxAttempts, UpdatedAt: w.UpdatedAt, WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 			return err
 		}
-		_, err := s.emit(ctx, q, p, "webhook.updated", "", "", map[string]any{"webhook": toMaskedWebhook(w),
+		_, err = s.emit(ctx, q, p, "webhook.updated", "", "", map[string]any{"webhook": toMaskedWebhook(w),
 			"secret_rotated": in.RotateSecret})
 		return err
 	})

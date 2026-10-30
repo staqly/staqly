@@ -502,7 +502,7 @@ func checkRetarget(typ string, old, next AlertConfig, in map[string]json.RawMess
 
 // applyChannelInput merges input onto ch (config keys merge; masked secret
 // values are ignored so a client can echo back what it read).
-func (s *Service) applyChannelInput(ctx context.Context, p Principal, ch *notifyChannel, in AlertInput) error {
+func (s *Service) applyChannelInput(ctx context.Context, q *db.Queries, p Principal, ch *notifyChannel, in AlertInput) error {
 	if in.Name != nil {
 		n, err := trimmed(*in.Name, "name", 100, true)
 		if err != nil {
@@ -554,7 +554,7 @@ func (s *Service) applyChannelInput(ctx context.Context, p Principal, ch *notify
 	}
 	if in.CollectionIDs != nil {
 		for _, id := range *in.CollectionIDs {
-			if _, err := s.Q.GetCollection(ctx, db.GetCollectionParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+			if _, err := q.GetCollection(ctx, db.GetCollectionParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 				return invalid("collection_ids", "unknown collection "+id)
 			}
 		}
@@ -596,7 +596,7 @@ func (s *Service) CreateAlert(ctx context.Context, p Principal, in AlertInput) (
 	now := s.now()
 	ch := &notifyChannel{row: db.NotificationChannel{ID: newID("nch"), WorkspaceID: p.WorkspaceID, Type: in.Type, Enabled: 1,
 		CreatedAt: now, UpdatedAt: now}, events: DefaultAlertEvents, collections: []string{}}
-	if err := s.applyChannelInput(ctx, p, ch, in); err != nil {
+	if err := s.applyChannelInput(ctx, s.Q, p, ch, in); err != nil {
 		return Alert{}, err
 	}
 	err := s.tx(ctx, func(q *db.Queries) error {
@@ -673,38 +673,53 @@ func (s *Service) ListAlerts(ctx context.Context, p Principal) ([]Alert, error) 
 }
 
 func (s *Service) UpdateAlert(ctx context.Context, p Principal, id string, in AlertInput) (Alert, error) {
-	ch, err := s.getChannel(ctx, p, id)
-	if err != nil {
+	if err := p.require(ScopeAlertsManage); err != nil {
 		return Alert{}, err
 	}
-	if in.Type != "" && in.Type != ch.row.Type {
-		return Alert{}, invalid("type", "cannot be changed; create a new channel")
+	// Load the encryption key before taking the write transaction.
+	if _, err := s.notifyKey(); err != nil {
+		return Alert{}, err
 	}
-	if in.Enabled != nil && *in.Enabled == (ch.row.Enabled == 1) && in.Name == nil && in.Config == nil && in.Events == nil && in.CollectionIDs == nil && in.DigestWindowSeconds == nil {
-		if *in.Enabled {
-			return Alert{}, alreadyErr("alert", "enabled")
+	var ch *notifyChannel
+	err := s.tx(ctx, func(q *db.Queries) error {
+		row, err := q.GetNotifyChannel(ctx, db.GetNotifyChannelParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if isNoRows(err) {
+			return notFound("alert")
 		}
-		return Alert{}, alreadyErr("alert", "disabled")
-	}
-	if err := s.applyChannelInput(ctx, p, ch, in); err != nil {
-		return Alert{}, err
-	}
-	r := &ch.row
-	r.UpdatedAt = s.now()
-	// disabled_at starts the NOTIFY_DISABLED_GRACE clock for queued rows.
-	if r.Enabled == 1 {
-		r.DisabledAt = sql.NullString{}
-	} else if !r.DisabledAt.Valid {
-		r.DisabledAt = nullStr(r.UpdatedAt)
-	}
-	err = s.tx(ctx, func(q *db.Queries) error {
+		if err != nil {
+			return err
+		}
+		ch, err = s.loadChannel(row)
+		if err != nil {
+			return err
+		}
+		if in.Type != "" && in.Type != ch.row.Type {
+			return invalid("type", "cannot be changed; create a new channel")
+		}
+		if in.Enabled != nil && *in.Enabled == (ch.row.Enabled == 1) && in.Name == nil && in.Config == nil && in.Events == nil && in.CollectionIDs == nil && in.DigestWindowSeconds == nil {
+			if *in.Enabled {
+				return alreadyErr("alert", "enabled")
+			}
+			return alreadyErr("alert", "disabled")
+		}
+		if err := s.applyChannelInput(ctx, q, p, ch, in); err != nil {
+			return err
+		}
+		r := &ch.row
+		r.UpdatedAt = s.now()
+		// disabled_at starts the NOTIFY_DISABLED_GRACE clock for queued rows.
+		if r.Enabled == 1 {
+			r.DisabledAt = sql.NullString{}
+		} else if !r.DisabledAt.Valid {
+			r.DisabledAt = nullStr(r.UpdatedAt)
+		}
 		if err := q.UpdateNotifyChannel(ctx, db.UpdateNotifyChannelParams{Name: r.Name, Enabled: r.Enabled, Config: r.Config,
 			Secrets: r.Secrets, Events: r.Events, CollectionIds: r.CollectionIds, DigestWindowSeconds: r.DigestWindowSeconds,
 			FailCount: r.FailCount, LastError: r.LastError, DisabledReason: r.DisabledReason, DisabledAt: r.DisabledAt,
 			UpdatedAt: r.UpdatedAt, WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 			return err
 		}
-		_, err := s.emit(ctx, q, p, "alert.updated", "", "", map[string]any{"channel": s.toChannel(ch)})
+		_, err = s.emit(ctx, q, p, "alert.updated", "", "", map[string]any{"channel": s.toChannel(ch)})
 		return err
 	})
 	if err != nil {

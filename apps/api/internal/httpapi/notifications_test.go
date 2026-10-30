@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -191,4 +192,34 @@ func decodeQP(raw string) string {
 func readAllQP(s string) (string, error) {
 	b, err := io.ReadAll(quotedprintable.NewReader(strings.NewReader(s)))
 	return string(b), err
+}
+
+// Independent partial updates must merge, including when two settings tabs save at once.
+func TestConcurrentNotificationPrefs(t *testing.T) {
+	e := newAccountsEnv(t, "")
+	owner := e.mustSignIn(ana, "")
+	for range 10 {
+		reset := []app.NotificationChoice{}
+		for _, event := range app.PersonalEvents {
+			reset = append(reset, app.NotificationChoice{Event: event, Email: true, InApp: true})
+		}
+		e.as(owner, "PUT", "/v1/account/notifications", map[string]any{"scope": "mine", "events": reset}, 200, nil)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for _, event := range app.PersonalEvents {
+			wg.Go(func() {
+				<-start
+				e.as(owner, "PUT", "/v1/account/notifications", map[string]any{"events": []app.NotificationChoice{{Event: event, Email: false, InApp: true}}}, 200, nil)
+			})
+		}
+		close(start)
+		wg.Wait()
+		var prefs app.NotificationPrefs
+		e.as(owner, "GET", "/v1/account/notifications", nil, 200, &prefs)
+		for _, c := range prefs.Events {
+			if c.Email {
+				t.Fatalf("concurrent preference lost: %+v", prefs)
+			}
+		}
+	}
 }

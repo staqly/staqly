@@ -279,7 +279,7 @@ func (q *Queries) SetMediaSize(ctx context.Context, arg SetMediaSizeParams) (int
 }
 
 const setPostThreadMedia = `-- name: SetPostThreadMedia :exec
-UPDATE posts SET thread = ?1, updated_at = ?2 WHERE workspace_id = ?3 AND id = ?4
+UPDATE posts SET thread = ?1, version = version + 1, updated_at = ?2 WHERE workspace_id = ?3 AND id = ?4
 `
 
 type SetPostThreadMediaParams struct {

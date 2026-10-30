@@ -656,14 +656,20 @@ export function MediaPage() {
   )
 
   const header = (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       {/* The title is where you are: All files, a library view or the folder's own name (its parents below). */}
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-xl font-semibold tracking-tight" data-testid="media-place">
+      <div className="min-w-0 flex-1 basis-full sm:basis-auto">
+        <h1
+          className="truncate text-xl font-semibold tracking-tight"
+          data-testid="media-place"
+          title={folder ? folder.name : placeLabel(folders, place)}
+        >
           {folder ? folder.name : placeLabel(folders, place)}
         </h1>
         {!folder && VIEWS[place] ? (
-          <p className="truncate text-sm text-muted-foreground">{VIEWS[place].about}</p>
+          <p className="text-sm wrap-anywhere text-muted-foreground sm:truncate" title={VIEWS[place].about}>
+            {VIEWS[place].about}
+          </p>
         ) : (
           folder && (
             // Where the folder sits: All files / parent / ... / this one; every step but the current one opens it.

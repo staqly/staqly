@@ -77,13 +77,16 @@ func (s *Service) KeepMedia(ctx context.Context, p Principal, id string) ([]stri
 	if err := p.require(ScopePostsWrite); err != nil {
 		return nil, err
 	}
-	keep, err := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
-	if err != nil || keep.DeletedAt.Valid {
-		return nil, notFound("media")
-	}
 	var trashed []string
-	err = s.tx(ctx, func(q *db.Queries) error {
+	err := s.tx(ctx, func(q *db.Queries) error {
 		trashed = []string{} // fn reruns on a PostgreSQL serialization retry
+		keep, err := q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if isNoRows(err) || err == nil && keep.DeletedAt.Valid {
+			return notFound("media")
+		}
+		if err != nil {
+			return err
+		}
 		now := s.now()
 		for {
 			twin, err := q.OldestTwin(ctx, db.OldestTwinParams{WorkspaceID: p.WorkspaceID, Sha256: keep.Sha256, ID: keep.ID})

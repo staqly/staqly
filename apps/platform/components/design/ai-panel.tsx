@@ -48,6 +48,9 @@ import { Elapsed, swapPicture, type PanelCtx } from './panels'
 import { downscale } from './raster'
 
 const MaskDialog = dynamic(() => import('./mask-dialog').then((m) => m.MaskDialog), { ssr: false })
+// Keep lazy imports outside components: the React Compiler cannot lower import expressions.
+const loadBackground = () => import('./background')
+const loadLocalAi = () => import('./local-ai')
 
 // The design editor's AI panel. A request runs on the server (GET /v1/ai says which operations it offers); its
 // result waits as a preview until the person keeps it (it becomes a library file and goes on the page as one undo
@@ -736,12 +739,12 @@ function LocalForm({ ctx, op, picture }: { ctx: PanelCtx; op: LocalOp; picture: 
 
     const made = async () => {
       if (op === 'cutout') {
-        const { removeBackground } = await import('./background')
+        const { removeBackground } = await loadBackground()
 
         return removeBackground(await (await fetch(picture.src)).blob(), progress)
       }
 
-      const m = await import('./local-ai')
+      const m = await loadLocalAi()
 
       return op === 'erase'
         ? m.eraseOnDevice(source!.blob, mask!, progress)

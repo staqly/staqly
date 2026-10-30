@@ -189,6 +189,9 @@ must re-render only the component it concerns.
   component, check that it compiles: run babel with
   `babel-plugin-react-compiler` and a `logger` that prints `CompileError`
   events.
+  `pnpm lint` also runs `scripts/check-react-compiler.mjs` over every app,
+  component, hook and library module and fails on compiler errors, including
+  silent optimisation bailouts.
 * Patterns that silently un-memoise a whole page (no CompileError, the
   compiler just drops the scopes): a fresh `?? []` or a bare `.filter()`
   result that lives until the JSX (the compiler can't tell it's an array, so

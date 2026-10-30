@@ -319,7 +319,7 @@ func (s *Service) UpdateCollection(ctx context.Context, p Principal, id string, 
 	if err != nil {
 		return Collection{}, err
 	}
-	return s.GetCollection(ctx, p, id)
+	return s.getCollection(ctx, p, id)
 }
 
 // DeleteCollection permanently removes a collection and its schedules. Its posts are kept: every one moves to the

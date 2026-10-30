@@ -937,9 +937,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const openAssistant = (open: boolean) => {
     setAssistantOpen(open)
     setAssistantUsed(true)
+    const saved = open ? '1' : '0'
 
     try {
-      localStorage.setItem('staqly.assistant.open', open ? '1' : '0')
+      localStorage.setItem('staqly.assistant.open', saved)
     } catch {
       // Remembered for this page only.
     }
@@ -961,8 +962,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (e.key.toLowerCase() === 'j' && (e.metaKey || e.ctrlKey) && hasAssistant) {
         e.preventDefault()
         setAssistantOpen((o) => {
+          const saved = o ? '0' : '1'
+
           try {
-            localStorage.setItem('staqly.assistant.open', o ? '0' : '1')
+            localStorage.setItem('staqly.assistant.open', saved)
           } catch {
             // Remembered for this page only.
           }

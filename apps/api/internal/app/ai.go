@@ -624,7 +624,7 @@ func (s *Service) AcceptAIJob(ctx context.Context, p Principal, id string) (Medi
 		return Media{}, err
 	}
 	if row.MediaID != "" {
-		return s.GetMediaInfo(ctx, p, row.MediaID)
+		return s.getMediaInfo(ctx, p, row.MediaID)
 	}
 	if row.Status != "succeeded" || row.ResultKey == "" {
 		return Media{}, conflict("this AI job has no result to keep")
