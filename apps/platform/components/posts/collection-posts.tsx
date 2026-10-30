@@ -26,6 +26,7 @@ import {
   useCollections,
   usePostsInfinite,
   useRefetchOnForeignChange,
+  useRefreshDuePosts,
   useRole,
 } from '@/lib/queries'
 import { POST_STATUS_META } from '@/lib/status'
@@ -101,6 +102,8 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
   const rowActions = usePostRowActions(linkQuery)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const list = flattenPosts(posts.data)
+
+  useRefreshDuePosts(list)
   // Rows get one stable toggle; it reads the current list and the last clicked row from refs (Shift+click ranges).
   const listRef = useRef(list)
   const anchor = useRef<string | null>(null)
