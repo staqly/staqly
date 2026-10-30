@@ -175,6 +175,20 @@ export function MultiSelect({
               placeholder={creatable ? 'Search or add...' : 'Search...'}
               value={search}
               onValueChange={setSearch}
+              // Tab adds what was typed (or picks the tag of that name), like Enter on "Add"; empty, it moves on.
+              onKeyDown={(e) => {
+                if (e.key !== 'Tab' || e.shiftKey || !typed) {
+                  return
+                }
+
+                e.preventDefault()
+
+                if (!value.includes(typed)) {
+                  onChange([...value, typed])
+                }
+
+                setSearch('')
+              }}
             />
           )}
           <CommandList>

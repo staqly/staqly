@@ -353,10 +353,16 @@ describe('composer', () => {
     await user.click(await screen.findByRole('option', { name: '#launch' }))
     await user.type(screen.getByPlaceholderText('Search or add...'), '#Spring Sale')
     await user.click(await screen.findByRole('option', { name: 'Add “spring-sale”' }))
+    // Tab adds what was typed too, and clears the box for the next one.
+    const box = screen.getByPlaceholderText('Search or add...')
+
+    await user.type(box, 'promo')
+    await user.keyboard('{Tab}')
+    expect(box).toHaveValue('')
     await user.keyboard('{Escape}')
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
     await waitFor(() => expect(api.find('POST', '/v1/posts')).toHaveLength(1))
-    expect(api.find('POST', '/v1/posts')[0].body).toMatchObject({ tags: ['launch', 'spring-sale'] })
+    expect(api.find('POST', '/v1/posts')[0].body).toMatchObject({ tags: ['launch', 'spring-sale', 'promo'] })
   })
 
   it('adds comments under the post with their delay and sends them as its thread', async () => {
