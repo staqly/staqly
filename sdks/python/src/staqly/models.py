@@ -968,6 +968,11 @@ class PostMetrics(StaqlyModel):
     quotes: int | None = None
     bookmarks: int | None = None
     link_clicks: int | None = None
+    shares: int | None = None
+    #: Video: minutes watched in all, the average view in seconds, subscribers it brought (YouTube).
+    watch_minutes: int | None = None
+    avg_view_seconds: int | None = None
+    subscribers_gained: int | None = None
     #: Reactions by emoji (Slack).
     reactions: list[PostReaction] = Field(default_factory=list)
 

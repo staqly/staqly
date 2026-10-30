@@ -4854,6 +4854,13 @@ export interface components {
             quotes?: number;
             bookmarks?: number;
             link_clicks?: number;
+            shares?: number;
+            /** @description Minutes watched in all (video) */
+            watch_minutes?: number;
+            /** @description How long a view lasts on average, in seconds (video) */
+            avg_view_seconds?: number;
+            /** @description Subscribers the video brought (YouTube) */
+            subscribers_gained?: number;
             /** @description Reactions by emoji (Slack), with the names of who reacted when the platform gives them (at most 20 per emoji) */
             reactions?: {
                 /** @description The platform's name for it, e.g. thumbsup */

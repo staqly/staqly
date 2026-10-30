@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -23,7 +25,8 @@ type YouTube struct{ Base }
 
 // Endpoints, variables so tests point them at httptest.
 var (
-	youtubeAPI = "https://www.googleapis.com" // /youtube/v3 and /upload/youtube/v3
+	youtubeAPI          = "https://www.googleapis.com" // /youtube/v3 and /upload/youtube/v3
+	youtubeAnalyticsAPI = "https://youtubeanalytics.googleapis.com"
 	// youtubeChunk is how many bytes one upload request carries; YouTube wants a multiple of 256 KiB.
 	youtubeChunk = 8 << 20
 )
@@ -31,7 +34,8 @@ var (
 const youtubeScopes = googleIdentity +
 	" https://www.googleapis.com/auth/youtube.upload" + // the video itself
 	" https://www.googleapis.com/auth/youtube.readonly" + // the channels the sign-in owns
-	" https://www.googleapis.com/auth/youtube.force-ssl" // comments and playlists
+	" https://www.googleapis.com/auth/youtube.force-ssl" + // comments and playlists
+	" https://www.googleapis.com/auth/yt-analytics.readonly" // watch time, shares, subscribers gained
 
 func init() {
 	limits := Limits{MaxChars: 5000, MaxMedia: 1, MediaKinds: []string{"video"}, NeedsTitle: true, NeedsMedia: true}
@@ -381,7 +385,8 @@ func (YouTube) Reply(ctx context.Context, c Credentials, parentExternalID string
 	return Result{ExternalID: "comment:" + video + ":" + out.ID, URL: "https://www.youtube.com/watch?v=" + video + "&lc=" + out.ID}, nil
 }
 
-// Metrics reads the video's public numbers: views (as impressions), likes and comments.
+// Metrics reads the video's public numbers (views as impressions, likes, comments) and, when the connection may read
+// YouTube Analytics, its watch time, average view, shares and subscribers gained.
 func (YouTube) Metrics(ctx context.Context, c Credentials, externalID string) (Metrics, error) {
 	var out struct {
 		Items []struct {
@@ -407,5 +412,40 @@ func (YouTube) Metrics(ctx context.Context, c Credentials, externalID string) (M
 		}
 		return &n
 	}
-	return Metrics{Impressions: num(st.ViewCount), Likes: num(st.LikeCount), Replies: num(st.CommentCount)}, nil
+	m := Metrics{Impressions: num(st.ViewCount), Likes: num(st.LikeCount), Replies: num(st.CommentCount)}
+	youtubeAnalytics(ctx, c["access_token"], externalID, &m)
+	return m, nil
+}
+
+// youtubeAnalytics adds the video's YouTube Analytics numbers to m. A connection made before staqly asked for
+// yt-analytics.readonly (or without it ticked) is refused: the public numbers stay, the rest stays unknown.
+// YouTube Analytics lags a day or two, so a new video has no row yet.
+func youtubeAnalytics(ctx context.Context, token, videoID string, m *Metrics) {
+	var out struct {
+		ColumnHeaders []struct {
+			Name string `json:"name"`
+		} `json:"columnHeaders"`
+		Rows [][]float64 `json:"rows"`
+	}
+	q := url.Values{"ids": {"channel==MINE"}, "startDate": {"2005-02-14"}, "endDate": {time.Now().UTC().Format("2006-01-02")},
+		"metrics": {"estimatedMinutesWatched,averageViewDuration,shares,subscribersGained"}, "filters": {"video==" + videoID}}
+	if err := googleGet(ctx, "YouTube", token, youtubeAnalyticsAPI+"/v2/reports?"+q.Encode(), &out); err != nil || len(out.Rows) == 0 {
+		return
+	}
+	for i, h := range out.ColumnHeaders {
+		if i >= len(out.Rows[0]) {
+			break
+		}
+		n := int64(math.Round(out.Rows[0][i]))
+		switch h.Name {
+		case "estimatedMinutesWatched":
+			m.WatchMinutes = &n
+		case "averageViewDuration":
+			m.AvgViewSeconds = &n
+		case "shares":
+			m.Shares = &n
+		case "subscribersGained":
+			m.SubscribersGained = &n
+		}
+	}
 }

@@ -2175,6 +2175,12 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "avg_view_seconds": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
         "bookmarks": {
           "type": [
             "null",
@@ -2251,6 +2257,24 @@
           ]
         },
         "reposts": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "shares": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "subscribers_gained": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "watch_minutes": {
           "type": [
             "null",
             "integer"

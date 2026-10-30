@@ -23,7 +23,7 @@ In the [Google Cloud console](https://console.cloud.google.com/):
 
 | Where | What |
 |---|---|
-| **APIs & Services → Library** | Enable **YouTube Data API v3** |
+| **APIs & Services → Library** | Enable **YouTube Data API v3** and **YouTube Analytics API** |
 | **Google Auth Platform → Branding / Audience** | Fill in the app's name and support address; while the app is in **Testing**, add the Google accounts that may connect as **Test users** |
 | **Google Auth Platform → Data access** | Add the scopes listed below |
 | **Google Auth Platform → Clients → Create client** | Type **Web application**; under **Authorized redirect URIs** add your dashboard's `/channels/callback/youtube`, for example `http://localhost:8080/channels/callback/youtube` locally or `https://staqly.example.com/channels/callback/youtube` |
@@ -64,6 +64,7 @@ takes the keys, without connecting an account.
 | `youtube.upload` | Upload videos |
 | `youtube.readonly` | List the channels the account owns |
 | `youtube.force-ssl` | Post comments and add videos to playlists |
+| `yt-analytics.readonly` | Read the video's watch time, average view, shares and subscribers gained |
 
 Leave every permission ticked: without `youtube.upload` the connection fails, without
 `youtube.force-ssl` the channel connects without comments.
@@ -130,6 +131,12 @@ in order and after their delays. Comments take text only.
 
 A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show the video's views, likes and comments. A
 count the channel hides (such as likes) stays empty rather than zero.
+
+With `yt-analytics.readonly` they also show the **watch time**, the **average view**, **shares** and
+**subscribers gained** (`watch_minutes`, `avg_view_seconds`, `shares`, `subscribers_gained`). Enable the
+**YouTube Analytics API** in the Cloud project (**APIs & Services → Library**) and add the scope under **Data
+access**. YouTube Analytics runs a day or two behind, so a new video shows them later. A channel connected
+before staqly asked for this scope keeps its views, likes and comments; reconnect it to get the rest.
 
 ## When publishing fails
 
