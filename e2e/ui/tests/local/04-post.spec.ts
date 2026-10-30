@@ -68,7 +68,8 @@ test.describe('the post', () => {
     const s = sheet(page)
 
     await expect(s.getByText('Failed', { exact: true }).first()).toBeVisible()
-    const target = (await channelList(page)).getByTestId('post-target').first()
+    // The channel's card: its state, and Retry in the corner.
+    const target = (await channelList(page)).getByRole('listitem').first()
 
     await expect(target).toContainText('Instagram API: 503 Service Unavailable')
     await target.getByRole('button', { name: 'Retry' }).click()
@@ -200,7 +201,9 @@ test.describe('the post', () => {
     const copyId = (await others())[0]!.id
 
     await page.goto(`/posts/${copyId}`)
-    await expect(sheet(page).getByRole('heading', { name: 'Edited in the UI, second try' })).toBeVisible()
+    // The copy keeps the title and the edited text.
+    await expect(sheet(page).getByRole('heading', { name: titleOf(post.content) })).toBeVisible()
+    await expect(sheet(page).getByTestId('post-content')).toContainText('Edited in the UI, second try')
     await expect(sheet(page).getByText('Draft', { exact: true }).first()).toBeVisible()
 
     // Delete the copy.

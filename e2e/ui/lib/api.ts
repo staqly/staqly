@@ -67,8 +67,14 @@ export class Api {
     return this.post<Channel>('/v1/channels', { provider: 'custom', name })
   }
 
+  /** Titled with the content's first line unless the body names one, so tests find posts by that line. */
   createPost(collection: string, body: Record<string, unknown>): Promise<Post> {
-    return this.post<Post>('/v1/posts', { collection, title: 'Post', ...body })
+    const title =
+      String(body.content ?? '')
+        .split('\n')[0]!
+        .trim() || 'Post'
+
+    return this.post<Post>('/v1/posts', { collection, title, ...body })
   }
 
   getPost(id: string): Promise<Post> {

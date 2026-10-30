@@ -48,17 +48,18 @@ test('welcome: a new account goes through the wizard once', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Your own automation' })).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: /Continue/ }).click()
 
-  // The agents goal puts the agent first; its key is made at the end.
+  // The agents goal puts the agent first; a workspace that can write gets its key here, in the command to paste.
   await ready(page, 'Connect an agent')
+  await page.getByRole('button', { name: 'Make a key for Claude Code' }).click()
+  await expect(page.getByText(/Bearer stk_/)).toBeVisible()
   await page.getByRole('button', { name: /Continue/ }).click()
 
   // Inviting the team is its own step after the agent, and can be skipped.
   await ready(page, 'Invite your team')
   await page.getByRole('button', { name: 'Skip', exact: true }).click()
 
-  // Set up at the end: the agent's key in its command, then the picked platform connected inline.
+  // Set up at the end: the picked platform connected inline.
   await ready(page, 'You are all set')
-  await expect(page.getByText(/Bearer stk_/)).toBeVisible()
   await page.getByRole('list', { name: 'Platforms to connect' }).getByRole('button', { name: 'Connect' }).click()
   await page.getByRole('textbox', { name: /^Name/ }).fill('My n8n')
   await page.getByPlaceholder('https://n8n.example.com/webhook/staqly').fill('https://n8n.example.com/webhook/staqly')

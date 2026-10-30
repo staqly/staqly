@@ -30,6 +30,9 @@ test.describe('assistant', () => {
     await page.reload()
     await expect(page.getByTestId('assistant').getByText('the draft is in your collection')).toBeVisible()
     await page.getByTestId('assistant').getByRole('button', { name: 'New chat' }).click()
-    await expect(page.getByTestId('assistant').getByText('What is scheduled for this week?')).toBeVisible()
+    // An empty chat offers what fits the page: here the posts.
+    await expect(
+      page.getByTestId('assistant').getByText('Rewrite my latest draft to be shorter and punchier'),
+    ).toBeVisible()
   })
 })

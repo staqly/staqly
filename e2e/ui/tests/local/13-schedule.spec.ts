@@ -199,7 +199,7 @@ test.describe('the schedule', () => {
     await composer.getByTestId('date-time-picker').click()
     await page.getByRole('dialog', { name: 'Pick a date and time' }).getByRole('button', { name: 'Schedule' }).click()
     await expect(composer).toBeHidden()
-    await expect(slot2.getByTestId('schedule-entry').filter({ hasText: 'Written from the calendar' })).toBeVisible()
+    await expect(slot2.getByTestId('schedule-entry').filter({ hasText: 'From the calendar' })).toBeVisible()
     expect(written.id).toBeTruthy()
   })
 
