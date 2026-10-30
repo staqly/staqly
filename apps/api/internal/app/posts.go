@@ -887,19 +887,29 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 		if err != nil {
 			return err
 		}
+		// A target on a removed channel is history (only published ones stay): kept as it is, never re-validated,
+		// and an edit that leaves it out (the dashboard no longer lists that channel) doesn't drop it.
 		targets := make([]PostTargetInput, 0, len(current))
+		var history []PostTargetInput
 		for _, t := range current {
 			settings := map[string]string{}
 			_ = json.Unmarshal([]byte(t.Settings), &settings)
-			targets = append(targets, PostTargetInput{ChannelID: t.ChannelID, Content: ptr(t.Content), Settings: settings})
+			ti := PostTargetInput{ChannelID: t.ChannelID, Content: ptr(t.Content), Settings: settings}
+			if t.ChannelDeletedAt.Valid {
+				history = append(history, ti)
+				continue
+			}
+			targets = append(targets, ti)
 		}
 		if in.Targets != nil {
 			for _, t := range current {
-				if t.Status == "published" && !slices.ContainsFunc(*in.Targets, func(n PostTargetInput) bool { return n.ChannelID == t.ChannelID }) {
+				if t.Status == "published" && !t.ChannelDeletedAt.Valid && !slices.ContainsFunc(*in.Targets, func(n PostTargetInput) bool { return n.ChannelID == t.ChannelID }) {
 					return conflict("a channel this post is already published on cannot be removed")
 				}
 			}
-			targets = *in.Targets
+			targets = slices.DeleteFunc(slices.Clone(*in.Targets), func(n PostTargetInput) bool {
+				return slices.ContainsFunc(history, func(h PostTargetInput) bool { return h.ChannelID == n.ChannelID })
+			})
 		}
 		kept := map[string]bool{}
 		for _, t := range current {
@@ -950,7 +960,7 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 			}
 		}
 		if in.Targets != nil {
-			if err := s.writeTargets(ctx, q, id, targets, row.UpdatedAt); err != nil {
+			if err := s.writeTargets(ctx, q, id, append(slices.Clone(targets), history...), row.UpdatedAt); err != nil {
 				return err
 			}
 		}

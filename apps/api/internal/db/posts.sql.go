@@ -341,7 +341,7 @@ func (q *Queries) GetTarget(ctx context.Context, arg GetTargetParams) (PostTarge
 }
 
 const listTargets = `-- name: ListTargets :many
-SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url FROM post_targets t
+SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
 JOIN channels c ON c.id = t.channel_id WHERE t.post_id = ? ORDER BY c.name COLLATE NOCASE, c.id
 `
 
@@ -364,6 +364,7 @@ type ListTargetsRow struct {
 	Provider         string         `json:"provider"`
 	ChannelStatus    string         `json:"channel_status"`
 	ChannelAvatarUrl string         `json:"channel_avatar_url"`
+	ChannelDeletedAt sql.NullString `json:"channel_deleted_at"`
 }
 
 func (q *Queries) ListTargets(ctx context.Context, postID string) ([]ListTargetsRow, error) {
@@ -394,6 +395,7 @@ func (q *Queries) ListTargets(ctx context.Context, postID string) ([]ListTargets
 			&i.Provider,
 			&i.ChannelStatus,
 			&i.ChannelAvatarUrl,
+			&i.ChannelDeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -409,7 +411,7 @@ func (q *Queries) ListTargets(ctx context.Context, postID string) ([]ListTargets
 }
 
 const listTargetsForPosts = `-- name: ListTargetsForPosts :many
-SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url FROM post_targets t
+SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
 JOIN channels c ON c.id = t.channel_id WHERE t.post_id IN (SELECT value FROM json_each(?1)) ORDER BY t.post_id, c.name COLLATE NOCASE, c.id
 `
 
@@ -432,6 +434,7 @@ type ListTargetsForPostsRow struct {
 	Provider         string         `json:"provider"`
 	ChannelStatus    string         `json:"channel_status"`
 	ChannelAvatarUrl string         `json:"channel_avatar_url"`
+	ChannelDeletedAt sql.NullString `json:"channel_deleted_at"`
 }
 
 func (q *Queries) ListTargetsForPosts(ctx context.Context, ids interface{}) ([]ListTargetsForPostsRow, error) {
@@ -462,6 +465,7 @@ func (q *Queries) ListTargetsForPosts(ctx context.Context, ids interface{}) ([]L
 			&i.Provider,
 			&i.ChannelStatus,
 			&i.ChannelAvatarUrl,
+			&i.ChannelDeletedAt,
 		); err != nil {
 			return nil, err
 		}

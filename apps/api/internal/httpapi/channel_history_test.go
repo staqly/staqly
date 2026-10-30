@@ -47,3 +47,31 @@ func TestRemovedChannelKeepsWhatItPublished(t *testing.T) {
 		t.Fatalf("credentials: %q %v", creds, err)
 	}
 }
+
+// A partly published post whose published channel was removed can still be edited: the dashboard sends the
+// channels it lists (not the removed one), and the removed channel's published target stays.
+func TestEditingAPostOfARemovedChannel(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c := e.collection("Partly")
+	gone, kept := e.customChannel("Gone"), e.customChannel("Kept")
+	post := e.post(c.ID, map[string]any{"targets": []map[string]any{{"channel_id": gone.ID}, {"channel_id": kept.ID}}})
+	e.do(nil, "POST", "/v1/posts/"+post.ID+"/publish", e.key, nil, 202, nil)
+	e.svc.RunDueJobsOnce(ctx)
+	e.do(nil, "POST", "/v1/posts/"+post.ID+"/targets/"+gone.ID+"/result", e.key, map[string]any{"status": "published"}, 200, nil)
+	e.do(nil, "POST", "/v1/posts/"+post.ID+"/targets/"+kept.ID+"/result", e.key, map[string]any{"status": "failed"}, 200, nil)
+	e.do(nil, "DELETE", "/v1/channels/"+gone.ID, e.admin, nil, 204, nil)
+
+	var got app.Post
+	e.do(nil, "PATCH", "/v1/posts/"+post.ID, e.key, map[string]any{"content": "edited", "targets": []map[string]any{{"channel_id": kept.ID}}}, 200, &got)
+	if len(got.Targets) != 2 {
+		t.Fatalf("targets after the edit: %+v", got.Targets)
+	}
+	for _, tg := range got.Targets {
+		if tg.ChannelID == gone.ID && tg.Status != "published" {
+			t.Fatalf("removed channel's target: %+v", tg)
+		}
+	}
+	// Naming the removed channel (an API client that still has its id) is not an error either.
+	e.do(nil, "PATCH", "/v1/posts/"+post.ID, e.key, map[string]any{"targets": []map[string]any{{"channel_id": gone.ID}, {"channel_id": kept.ID}}}, 200, &got)
+}
