@@ -187,13 +187,13 @@ func TestChannelsTokenProvider(t *testing.T) {
 	e.do(nil, "GET", "/v1/channels/telegram/connect/ABC234", e.key, nil, 404, nil)
 
 	// The provider's limit is applied per target when the post is written.
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "this text is far longer than twenty characters",
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "this text is far longer than twenty characters",
 		"targets": []map[string]any{{"channel_id": ch.ID}}}, 422, &errBody)
 	if errBody.Error.Fields["targets."+ch.ID+".content"] == "" {
 		t.Fatalf("limit: %+v", errBody.Error)
 	}
 	var post app.Post
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "this text is far longer than twenty characters",
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "this text is far longer than twenty characters",
 		"targets": []map[string]any{{"channel_id": ch.ID, "content": "short version"}}}, 201, &post)
 	var preview app.PostPreview
 	e.do(nil, "GET", "/v1/posts/"+post.ID+"/preview", e.key, nil, 200, &preview)
@@ -295,7 +295,7 @@ func TestChannelsTokenProvider(t *testing.T) {
 	if ch.Name != "Main" || ch.Status != "disabled" {
 		t.Fatalf("patched: %+v", ch)
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "new", "targets": []map[string]any{{"channel_id": ch.ID}}}, 422, nil)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "new", "targets": []map[string]any{{"channel_id": ch.ID}}}, 422, nil)
 	e.do(nil, "POST", "/v1/posts/"+off.ID+"/publish", e.key, nil, 202, nil)
 	e.svc.RunDueJobsOnce(ctx)
 	e.do(nil, "GET", "/v1/posts/"+off.ID, e.key, nil, 200, &post)
@@ -474,7 +474,7 @@ func TestProviderDisabled(t *testing.T) {
 	var ch app.Channel
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "faketoken", "fields": map[string]string{"token": "good"}}, 201, &ch)
 	var post app.Post
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "scheduled",
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "scheduled",
 		"targets": []map[string]any{{"channel_id": ch.ID}}}, 201, &post)
 
 	disabled := func(k string) string {
@@ -505,7 +505,7 @@ func TestProviderDisabled(t *testing.T) {
 	if errBody.Error.Code != "provider_disabled" {
 		t.Fatalf("connect a disabled provider: %+v", errBody.Error)
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "new",
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "new",
 		"targets": []map[string]any{{"channel_id": ch.ID}}}, 409, &errBody)
 	if errBody.Error.Code != "provider_disabled" {
 		t.Fatalf("new post to a disabled provider: %+v", errBody.Error)

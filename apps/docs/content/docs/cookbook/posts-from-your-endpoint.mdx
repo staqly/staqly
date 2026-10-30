@@ -46,12 +46,12 @@ createServer((req, res) => {
     const { slot } = JSON.parse(raw) // also: schedule, collection_id, channels
     const tip = tips[new Date(slot).getDate() % tips.length]
     res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ posts: [{ content: `Tip of the day: ${tip}`, tags: ['tips'] }] }))
+    res.end(JSON.stringify({ posts: [{ title: 'Tip of the day', content: `Tip of the day: ${tip}`, tags: ['tips'] }] }))
   })
 }).listen(8787)
 ```
 
-A post without `targets` goes to the schedule's channels; add `targets`, `media` (ids from
+Every post needs a `title`. One without `targets` goes to the schedule's channels; add `targets`, `media` (ids from
 `POST /v1/media`) or `metadata` when you need them. Up to 50 posts per answer are used.
 
 </Step>

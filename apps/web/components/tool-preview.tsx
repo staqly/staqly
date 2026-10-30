@@ -72,7 +72,7 @@ import { Staqly } from '@staqly/sdk'
 
 const staqly = new Staqly({ baseUrl: '${APP}', apiKey: process.env.STAQLY_API_KEY })
 await staqly.posts.create({
-  collection: 'Reels', content: 'New video tonight',
+  collection: 'Reels', title: 'New video', content: 'New video tonight',
   targets: [{ channel_id: 'ch_...' }], publish_at: '2026-11-03T18:00:00Z', status: 'scheduled',
 })`,
   },
@@ -84,14 +84,14 @@ import os
 from staqly import Staqly
 
 staqly = Staqly(base_url="${APP}", api_key=os.environ["STAQLY_API_KEY"])
-staqly.posts.create("Reels", content="New video tonight",
+staqly.posts.create("Reels", title="New video", content="New video tonight",
     targets=[{"channel_id": "ch_..."}], publish_at="2026-11-03T18:00:00Z", status="scheduled")`,
   },
   {
     name: 'CLI',
     title: 'Terminal',
     code: `# cloud: export STAQLY_API_URL=${APP} STAQLY_API_KEY=stk_...
-$ staqly posts create Reels --content "New video tonight" \\
+$ staqly posts create Reels --title "New video" --content "New video tonight" \\
     --channel X --publish-at 2026-11-03T18:00
 $ staqly posts list --status scheduled`,
   },

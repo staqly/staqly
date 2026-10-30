@@ -443,10 +443,15 @@
             "null",
             "array"
           ]
+        },
+        "title": {
+          "description": "the post's title (required): platforms with a title (YouTube, Reddit, blogs) publish it, the others show it in staqly's lists",
+          "type": "string"
         }
       },
       "required": [
-        "collection"
+        "collection",
+        "title"
       ],
       "type": "object"
     },
@@ -2170,6 +2175,12 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "avg_view_seconds": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
         "bookmarks": {
           "type": [
             "null",
@@ -2246,6 +2257,24 @@
           ]
         },
         "reposts": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "shares": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "subscribers_gained": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "watch_minutes": {
           "type": [
             "null",
             "integer"
@@ -3246,6 +3275,13 @@
           "type": [
             "null",
             "array"
+          ]
+        },
+        "title": {
+          "description": "the post's title (can't be emptied)",
+          "type": [
+            "null",
+            "string"
           ]
         }
       },

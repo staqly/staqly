@@ -74,7 +74,7 @@ func TestThreadValidation(t *testing.T) {
 		var out struct {
 			Error struct{ Fields map[string]string }
 		}
-		e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "hi", "targets": targets, "thread": tc.thread}, 422, &out)
+		e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "hi", "targets": targets, "thread": tc.thread}, 422, &out)
 		if out.Error.Fields[tc.field] == "" {
 			t.Errorf("want an error on %s, got %v", tc.field, out.Error.Fields)
 		}
@@ -230,7 +230,7 @@ func TestThreadFinisherAndReposts(t *testing.T) {
 		var out struct {
 			Error struct{ Fields map[string]string }
 		}
-		e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "hi",
+		e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "hi",
 			"targets": []map[string]any{{"channel_id": main.ID, "settings": map[string]string{"reposters": by}}}}, 422, &out)
 		if out.Error.Fields["targets."+main.ID+".settings.reposters"] == "" {
 			t.Errorf("reposter %s: want an error, got %v", by, out.Error.Fields)

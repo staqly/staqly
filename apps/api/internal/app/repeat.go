@@ -103,7 +103,7 @@ func (s *Service) runRepeatPost(ctx context.Context, workspaceID, postID string)
 		return err
 	}
 	at := next.UTC().Format(time.RFC3339Nano)
-	in := PostInput{Collection: row.CollectionID, Content: src.Content, Media: src.Media, Tags: src.Tags, Metadata: src.Metadata,
+	in := PostInput{Collection: row.CollectionID, Title: titleOr(src.Title, src.Content), Content: src.Content, Media: src.Media, Tags: src.Tags, Metadata: src.Metadata,
 		ExternalRef: src.ExternalRef, Status: "scheduled", PublishAt: &at, Source: "repeat", RepeatEvery: row.RepeatEvery, Thread: parseThread(row.Thread), repeatOf: postID}
 	for _, t := range src.Targets {
 		in.Targets = append(in.Targets, PostTargetInput{ChannelID: t.ChannelID, Content: t.Content, Settings: t.Settings})

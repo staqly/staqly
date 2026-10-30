@@ -378,6 +378,7 @@ type Post struct {
 	RepeatOf      string         `json:"repeat_of"`
 	Thread        string         `json:"thread"`
 	CreatedByUser string         `json:"created_by_user"`
+	Title         string         `json:"title"`
 }
 
 type PostComment struct {

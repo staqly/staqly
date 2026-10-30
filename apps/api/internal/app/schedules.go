@@ -521,6 +521,7 @@ func (s *Service) RunScheduleNow(ctx context.Context, p Principal, id string) (S
 // ---- the run ----
 
 type incomingPost struct {
+	Title    string            `json:"title"` // required, as for every new post
 	Content  string            `json:"content"`
 	Media    []string          `json:"media"`
 	Targets  []PostTargetInput `json:"targets"`
@@ -647,7 +648,9 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 				}
 				var media []string
 				_ = json.Unmarshal([]byte(cur.Media), &media)
-				if _, err := s.resolveTargets(ctx, q, r.WorkspaceID, cur.Content, media, in, nil); err != nil {
+				var tags []string
+				_ = json.Unmarshal([]byte(cur.Tags), &tags)
+				if _, err := s.resolveTargets(ctx, q, r.WorkspaceID, cur.Title, tags, cur.Content, media, in, nil); err != nil {
 					return err
 				}
 				if err := s.writeTargets(ctx, q, p.ID, in, s.now()); err != nil {
@@ -770,7 +773,7 @@ func (s *Service) fetchPostsFromEndpoint(ctx context.Context, sys Principal, r d
 	}
 	var out []db.Post
 	for _, ip := range reply.Posts {
-		in := PostInput{Collection: r.CollectionID, Content: ip.Content, Media: ip.Media, Targets: ip.Targets, Tags: ip.Tags, Metadata: ip.Metadata,
+		in := PostInput{Collection: r.CollectionID, Title: ip.Title, Content: ip.Content, Media: ip.Media, Targets: ip.Targets, Tags: ip.Tags, Metadata: ip.Metadata,
 			Source: "schedule:" + r.Name}
 		if len(in.Targets) == 0 {
 			for _, ch := range channels {

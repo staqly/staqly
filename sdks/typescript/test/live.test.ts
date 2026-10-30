@@ -134,6 +134,7 @@ describe.skipIf(!live)('live', () => {
   it('draft → schedule → cancel, then publish and report the result', async () => {
     const media = await c.media.upload(PNG, { filename: 'a.png', contentType: 'image/png' })
     const draft = await c.posts.create({
+      title: 'Post',
       collection: name,
       content: 'Hello from the SDK',
       media: [media.id],
@@ -184,6 +185,7 @@ describe.skipIf(!live)('live', () => {
 
   it('failed target, retry, iterate and tags', async () => {
     const p = await c.posts.create({
+      title: 'Post',
       collection: colId,
       content: 'will fail',
       targets: [{ channel_id: channelId }],
@@ -313,7 +315,7 @@ describe.skipIf(!live)('live', () => {
     const zip = await owner.exports.downloadWorkspaceExport(job.id)
 
     expect([zip[0], zip[1]]).toEqual([0x50, 0x4b]) // "PK"
-    const doomed = await c.posts.create({ collection: colId, content: 'to purge' })
+    const doomed = await c.posts.create({ title: 'Post', collection: colId, content: 'to purge' })
     const purged = await owner.posts.purge(doomed.id)
 
     expect(purged.post_id).toBe(doomed.id)
@@ -332,7 +334,7 @@ describe.skipIf(!live)('live', () => {
       const extra = await admin.apiKeys.create({ name: 'temp', scopes: ['posts:read'], expires_at: '2099-01-01' })
       const ro = new Staqly({ apiKey: extra.key! })
 
-      await expect(ro.posts.create({ collection: colId, content: 'nope' })).rejects.toBeInstanceOf(
+      await expect(ro.posts.create({ title: 'Post', collection: colId, content: 'nope' })).rejects.toBeInstanceOf(
         PermissionDeniedError,
       )
       await admin.apiKeys.revoke(extra.id)

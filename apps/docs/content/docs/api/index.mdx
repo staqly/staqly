@@ -10,7 +10,7 @@ the SDKs and the MCP server all go through the same services and permission chec
 | You are | Use this |
 |---|---|
 | An AI agent in Claude Code, Codex, OpenCode or another MCP client | [MCP](/mcp), no HTTP code needed |
-| A person or shell script in a terminal | The [CLI](/cli) (`staqly posts create "Product updates" --content "Hello"`) |
+| A person or shell script in a terminal | The [CLI](/cli) (`staqly posts create "Product updates" --title "Hello" --content "Hello"`) |
 | A TypeScript / JavaScript app | The [TypeScript SDK](/sdk/typescript), typed, with paging helpers |
 | A Python app | The [Python SDK](/sdk/python), sync and async |
 | Anything else: n8n, Go, CI, curl | **This REST API** |
@@ -67,7 +67,7 @@ makes a retry safe:
 ```bash
 curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST $API/v1/posts \
   -H 'Content-Type: application/json' -H 'Idempotency-Key: gen-42' \
-  -d '{"collection":"Default","content":"v1.4 is out.","targets":[{"channel_id":"ch_7h2kq9xw3nbvd5yhzm6a"}],"publish_at":"2026-11-03T09:00:00Z","status":"scheduled","source":"n8n"}'
+  -d '{"collection":"Default","title":"v1.4 is out","content":"v1.4 is out.","targets":[{"channel_id":"ch_7h2kq9xw3nbvd5yhzm6a"}],"publish_at":"2026-11-03T09:00:00Z","status":"scheduled","source":"n8n"}'
 # → {"id":"post_oalirbz67y4m4cqxq5dw","status":"scheduled","version":1, ...}
 ```
 

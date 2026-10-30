@@ -41,6 +41,7 @@ const CLIENTS = ['ts', 'py', 'pyasync', 'cli', 'curl', 'mcp'] as const
 type ClientName = (typeof CLIENTS)[number]
 
 const INPUT = {
+  title: 'Same operation',
   content: 'Same operation\nBody text: ünïcödé ✓',
   metadata: { n: 1, nested: { a: [1, 2], ok: true } },
   source: 'xc',
@@ -105,6 +106,8 @@ describe.each(['local', 'cloud'] as const)('%s: one operation, six clients', (na
           'posts',
           'create',
           col,
+          '--title',
+          INPUT.title,
           '--content',
           INPUT.content,
           '--metadata',
@@ -328,6 +331,7 @@ describe.each(['local', 'cloud'] as const)('%s: workflows across clients', (name
     expect(connected).toMatchObject({ code: 0 })
     const channel = connected.json<{ id: string; name: string }>()
     const post = await py.call<Post>('sync', pyc, 'posts.create', [colName], {
+      title: 'Post',
       content: 'Launch post\nv1',
       targets: [{ channel_id: channel.id }],
     })
@@ -393,6 +397,7 @@ describe.each(['local', 'cloud'] as const)('%s: workflows across clients', (name
     const col = (await c.collections.create({ name: `Rewrite ${name} ${Date.now()}` })).id
     const channel = await c.channels.connect({ provider: 'custom', name: `Rewrite channel ${name} ${Date.now()}` })
     const original = await c.posts.create({
+      title: 'Post',
       collection: col,
       content: 'Draft\nv1',
       targets: [{ channel_id: channel.id }],
@@ -490,6 +495,7 @@ describe.each(['local', 'cloud'] as const)('%s: clients racing on the same post'
   it('twelve publishes at once (TS, Python, curl, MCP): exactly one starts the run', async () => {
     for (let round = 0; round < 3; round++) {
       const post = await c.posts.create({
+        title: 'Post',
         collection: col,
         content: `race ${round}`,
         targets: [{ channel_id: channel }],
@@ -522,7 +528,7 @@ describe.each(['local', 'cloud'] as const)('%s: clients racing on the same post'
   })
 
   it('concurrent metadata patches from every client: no lost update; one winner among equal expected_versions', async () => {
-    const post = await c.posts.create({ collection: col, content: 'patch me', metadata: { base: true } })
+    const post = await c.posts.create({ title: 'Post', collection: col, content: 'patch me', metadata: { base: true } })
     const patches = [
       c.posts.update(post.id, { metadata: { base: true, ts: 1 } }),
       py.call('sync', pyc, 'posts.update', [post.id], { metadata: { base: true, py: 1 } }),
@@ -565,14 +571,16 @@ describe.each(['local', 'cloud'] as const)('%s: clients racing on the same post'
 
   it('one Idempotency-Key repeated at once from every client makes one post', async () => {
     const k = `race-${name}-${Date.now()}`
-    const body = { collection: col, content: 'only one of me' }
+    const body = { title: 'Post', collection: col, content: 'only one of me' }
     const results = await Promise.allSettled([
       c.posts.create(body, { idempotencyKey: k }),
       py.call<Post>('sync', pyc, 'posts.create', [col], {
+        title: 'Post',
         content: body.content,
         request_options: { idempotency_key: k },
       }),
       py.call<Post>('async', pyc, 'posts.create', [col], {
+        title: 'Post',
         content: body.content,
         request_options: { idempotency_key: k },
       }),

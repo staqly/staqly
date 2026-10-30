@@ -36,7 +36,7 @@ func TestDeletePosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	theirs, err := e.svc.CreatePost(ctx, other, app.PostInput{Collection: oc.ID, Content: "theirs", Status: "draft"})
+	theirs, err := e.svc.CreatePost(ctx, other, app.PostInput{Title: "Post", Collection: oc.ID, Content: "theirs", Status: "draft"})
 	if err != nil {
 		t.Fatal(err)
 	}

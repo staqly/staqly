@@ -25,7 +25,7 @@ const headerCases: HeaderCase[] = [
   { name: 'posts.get', call: (c) => c.posts.get('pst_1'), auth: true, idempotent: false, jsonBody: false },
   {
     name: 'posts.create',
-    call: (c) => c.posts.create({ collection: 'col_1', content: 't' }),
+    call: (c) => c.posts.create({ title: 'Post', collection: 'col_1', content: 't' }),
     auth: true,
     idempotent: true,
     jsonBody: true,
@@ -221,7 +221,7 @@ describe('request shape gaps', () => {
 describe('error mapping gaps', () => {
   it('402 without the plan_limit code still maps to PlanLimitError', async () => {
     const { c } = client(apiError(402, 'payment_required', 'pay'))
-    const err = await c.posts.create({ collection: 'col_1', content: 't' }).catch((e: unknown) => e)
+    const err = await c.posts.create({ title: 'Post', collection: 'col_1', content: 't' }).catch((e: unknown) => e)
 
     expect(err).toBeInstanceOf(PlanLimitError)
   })

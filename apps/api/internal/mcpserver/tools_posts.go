@@ -212,6 +212,7 @@ func thread(in []threadIn) []app.ThreadPart {
 
 type createPostIn struct {
 	Collection  string         `json:"collection" jsonschema:"collection ID (col_...) or exact name"`
+	Title       string         `json:"title" jsonschema:"the post's title (required): platforms with a title (YouTube, Reddit, blogs) publish it, the others show it in staqly's lists"`
 	Content     string         `json:"content,omitempty" jsonschema:"the post's text"`
 	Media       []string       `json:"media,omitempty" jsonschema:"media IDs (med_...) in order"`
 	Targets     []targetIn     `json:"targets,omitempty"`
@@ -226,7 +227,7 @@ type createPostIn struct {
 }
 
 func (t *tools) createPost(ctx context.Context, _ *mcp.CallToolRequest, in createPostIn) (*mcp.CallToolResult, any, error) {
-	pi := app.PostInput{Collection: in.Collection, Content: in.Content, Media: in.Media, Targets: targets(in.Targets), Status: in.Status,
+	pi := app.PostInput{Collection: in.Collection, Title: in.Title, Content: in.Content, Media: in.Media, Targets: targets(in.Targets), Status: in.Status,
 		PublishNow: in.PublishNow, Tags: in.Tags, ExternalRef: in.ExternalRef, RepeatEvery: in.RepeatEvery, Thread: thread(in.Thread)}
 	if in.PublishAt != "" {
 		pi.PublishAt = &in.PublishAt
@@ -291,6 +292,7 @@ func (t *tools) searchPosts(ctx context.Context, _ *mcp.CallToolRequest, in sear
 type updatePostIn struct {
 	PostID          string         `json:"post_id" jsonschema:"post ID (post_...)"`
 	Collection      *string        `json:"collection,omitempty"`
+	Title           *string        `json:"title,omitempty" jsonschema:"the post's title (can't be emptied)"`
 	Content         *string        `json:"content,omitempty"`
 	Media           *[]string      `json:"media,omitempty"`
 	Targets         *[]targetIn    `json:"targets,omitempty" jsonschema:"replaces the whole list"`
@@ -304,7 +306,7 @@ type updatePostIn struct {
 }
 
 func (t *tools) updatePost(ctx context.Context, _ *mcp.CallToolRequest, in updatePostIn) (*mcp.CallToolResult, any, error) {
-	pp := app.PostPatch{Collection: in.Collection, Content: in.Content, Media: in.Media, Tags: in.Tags, ExternalRef: in.ExternalRef, ExpectedVersion: in.ExpectedVersion}
+	pp := app.PostPatch{Collection: in.Collection, Title: in.Title, Content: in.Content, Media: in.Media, Tags: in.Tags, ExternalRef: in.ExternalRef, ExpectedVersion: in.ExpectedVersion}
 	if in.Targets != nil {
 		tg := targets(*in.Targets)
 		pp.Targets = &tg

@@ -216,7 +216,7 @@ describe('races', () => {
     const send = (content: string) =>
       withKey(ws.key, '/v1/posts', {
         method: 'POST',
-        json: { collection: collection.id, content },
+        json: { collection: collection.id, title: 'Post', content },
         headers: { 'Idempotency-Key': key },
       })
 

@@ -25,7 +25,7 @@ func TestPurgePostCountsOnlyTheCommittedRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	withMedia, err := s.CreatePost(ctx, p, PostInput{Collection: post.CollectionID, Content: "with a file", Media: []string{m.ID}})
+	withMedia, err := s.CreatePost(ctx, p, PostInput{Title: "Post", Collection: post.CollectionID, Content: "with a file", Media: []string{m.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}

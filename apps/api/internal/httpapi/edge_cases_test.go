@@ -149,7 +149,7 @@ func TestCollectionNameExactMatchFirst(t *testing.T) {
 	st, _, b := e.raw(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "col_news"})
 	t.Logf("create col_news: %d %s", st, b)
 	if st == 201 {
-		if st, _, b = e.raw(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": "col_news", "content": "x"}); st != 201 {
+		if st, _, b = e.raw(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": "col_news", "content": "x"}); st != 201 {
 			t.Errorf("post to the collection named col_news: %d %s", st, b)
 		}
 	}
@@ -300,7 +300,7 @@ func TestPaginationEdgeCases(t *testing.T) {
 func TestIdempotencyKeyEdgeCases(t *testing.T) {
 	e := newEnv(t)
 	c := e.collection("Idem")
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "once"}, 201, nil, "Idempotency-Key", "k-path")
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "once"}, 201, nil, "Idempotency-Key", "k-path")
 	e.do(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "Other"}, 422, nil, "Idempotency-Key", "k-path")
 	e.do(nil, "POST", "/v1/collections", e.key, map[string]any{"name": "Long"}, 422, nil, "Idempotency-Key", strings.Repeat("k", 201))
 	var page struct{ Data []app.Collection }

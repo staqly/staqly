@@ -57,7 +57,12 @@ describe('MCP', () => {
   })
 
   it('creates a post over HTTP', async () => {
-    const result = await callTool<Post>('create_post', { collection, content: 'via MCP HTTP', tags: ['mcp'] })
+    const result = await callTool<Post>('create_post', {
+      collection,
+      title: 'Post',
+      content: 'via MCP HTTP',
+      tags: ['mcp'],
+    })
 
     expect(result.isError).toBeFalsy()
     expect(result.structuredContent).toMatchObject({ status: 'draft', content: 'via MCP HTTP', tags: ['mcp'] })
@@ -65,7 +70,7 @@ describe('MCP', () => {
 
   it('creates a post over STDIO', async () => {
     const answers = await mcpStdio(
-      [INITIALIZE, INITIALIZED, toolCall(2, 'create_post', { collection, content: 'via MCP stdio' })],
+      [INITIALIZE, INITIALIZED, toolCall(2, 'create_post', { collection, title: 'Post', content: 'via MCP stdio' })],
       2,
     )
     const init = answers.find((a) => a.id === 1)
@@ -107,6 +112,7 @@ describe('MCP', () => {
     const post = (
       await callTool<Post>('create_post', {
         collection,
+        title: 'Post',
         content: 'Round trip\nvia MCP',
         targets: [{ channel_id: channel.id }],
       })
@@ -201,7 +207,7 @@ describe('MCP', () => {
     ).structuredContent
 
     expect(work.work.find((w) => w.kind === 'posts' && w.schedule?.id === schedule.id)?.collection.id).toBe(empty.id)
-    await callTool('create_post', { collection: empty.id, content: 'the agent answers' })
+    await callTool('create_post', { collection: empty.id, title: 'Post', content: 'the agent answers' })
     expect(
       (await callTool<{ last_result: string }>('run_schedule', { schedule_id: schedule.id })).structuredContent
         .last_result,

@@ -22,7 +22,7 @@ func TestParallelCreatesStopAtThePlanLimit(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resp := e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "race " + string(rune('a'+i%26))}, 0, nil)
+			resp := e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "race " + string(rune('a'+i%26))}, 0, nil)
 			switch resp.StatusCode {
 			case 201:
 				created.Add(1)
@@ -83,7 +83,7 @@ func TestParallelEditsWithExpectedVersion(t *testing.T) {
 func TestNULInTextIsNot500(t *testing.T) {
 	e := newEnv(t)
 	c := e.collection("NUL")
-	resp := e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "nul\x00byte"}, 0, nil)
+	resp := e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "nul\x00byte"}, 0, nil)
 	if resp.StatusCode >= 500 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}

@@ -4,7 +4,7 @@ import { Info } from 'lucide-react'
 
 import { applyLinks, linksNotice } from '@/lib/links'
 import { charCount, xLength } from '@/lib/posts'
-import { appendHashtags } from '@/lib/tags'
+import { appendHashtags, hashtagsFor } from '@/lib/tags'
 
 import type { PreviewComment } from './parts'
 import type { PreviewState } from './post-preview'
@@ -42,7 +42,7 @@ export function PreviewBody({ state, tab }: { state: PreviewState; tab: string }
   const provider = state.providers.find((p) => p.id === channel.provider)
   const custom = channel.provider === 'custom'
   const links = applyLinks(channel.links, state.overrides[channel.id]?.content ?? state.content)
-  const text = custom ? links.text : appendHashtags(links.text, state.tags)
+  const text = hashtagsFor(channel, provider) ? appendHashtags(links.text, state.tags) : links.text
   const parts = written(state.thread)
   const takesComments = custom || !!channel.comments
   const comments: PreviewComment[] = takesComments
@@ -61,7 +61,7 @@ export function PreviewBody({ state, tab }: { state: PreviewState; tab: string }
         comments={comments}
         maxChars={provider?.limits?.max_chars ?? 0}
         count={channel.provider === 'x' ? xLength : charCount}
-        settings={state.overrides[channel.id]?.settings ?? {}}
+        settings={{ ...state.overrides[channel.id]?.settings, ...(state.title.trim() ? { title: state.title } : {}) }}
       />
       {links.found.length > 0 && <Note>{linksNotice(channel.links, channel.name)}</Note>}
       {!takesComments && parts.length > 0 && (

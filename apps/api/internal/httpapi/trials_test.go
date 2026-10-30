@@ -261,9 +261,9 @@ func TestRepeatedTrialChannels(t *testing.T) {
 	e.connectAccount(keyC, "brand-new", 402)
 	col := e.collectionFor(keyC)
 	var post app.Post
-	e.do(nil, "POST", "/v1/posts", keyC, map[string]any{"collection": col, "content": "hello"}, 201, &post)
+	e.do(nil, "POST", "/v1/posts", keyC, map[string]any{"title": "Post", "collection": col, "content": "hello"}, 201, &post)
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/publish", keyC, nil, 402, nil)
-	e.do(nil, "POST", "/v1/posts", keyC, map[string]any{"collection": col, "content": "later", "status": "scheduled",
+	e.do(nil, "POST", "/v1/posts", keyC, map[string]any{"title": "Post", "collection": col, "content": "later", "status": "scheduled",
 		"publish_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}, 402, nil)
 
 	// C starts the paid plan: the trial ends now and the card is charged; everything works again.

@@ -173,11 +173,11 @@ func TestDeletedMediaCannotBeAttached(t *testing.T) {
 			Fields map[string]string `json:"fields"`
 		} `json:"error"`
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "x", "media": []string{m.ID}}, 422, &verr)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "x", "media": []string{m.ID}}, 422, &verr)
 	if verr.Error.Code != "validation_failed" || !strings.Contains(verr.Error.Fields["media"], "Deleted") {
 		t.Fatalf("error: %+v", verr)
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "x",
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "x",
 		"thread": []map[string]any{{"content": "y", "media": []string{m.ID}}}}, 422, nil)
 	// The draft that kept it can't be scheduled with it (the sweep would take it away before it goes out).
 	e.do(nil, "POST", "/v1/posts/"+draft.ID+"/schedule", e.key, map[string]any{"publish_at": future(time.Hour)}, 422, nil)

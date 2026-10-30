@@ -154,6 +154,7 @@ def test_publish_flow(c: Staqly, env: Env) -> None:
     media = c.media.upload(PNG, filename="a.png", content_type="image/png")
     draft = c.posts.create(
         env.name,
+        title="Post",
         content="Hello from the SDK",
         media=[media.id],
         targets=[{"channel_id": env.channel_id}],
@@ -189,6 +190,7 @@ def test_publish_flow(c: Staqly, env: Env) -> None:
 def test_failed_target_retry_iterate_tags(c: Staqly, env: Env) -> None:
     p = c.posts.create(
         env.col_id,
+        title="Post",
         content="will fail",
         targets=[{"channel_id": env.channel_id}],
         publish_now=True,
@@ -286,7 +288,7 @@ def test_exports_and_purge(c: Staqly, env: Env, tmp_path: Path) -> None:
     job = owner.exports.export_workspace(tmp_path / "ws.zip", timeout=60, poll_interval=0.25)
     assert job.status == "ready"
     assert zipfile.is_zipfile(tmp_path / "ws.zip")
-    doomed = c.posts.create(env.col_id, content="to purge")
+    doomed = c.posts.create(env.col_id, title="Post", content="to purge")
     assert owner.posts.purge(doomed.id).post_id == doomed.id
     with pytest.raises(NotFoundError):
         c.posts.get(doomed.id)
@@ -296,7 +298,11 @@ def test_exports_and_purge(c: Staqly, env: Env, tmp_path: Path) -> None:
 async def test_async_client(env: Env) -> None:
     async with AsyncStaqly(api_key=env.api_key or "") as ac:
         p = await ac.posts.create(
-            env.col_id, content="async", targets=[{"channel_id": env.channel_id}], publish_now=True
+            env.col_id,
+            title="Post",
+            content="async",
+            targets=[{"channel_id": env.channel_id}],
+            publish_now=True,
         )
         await ac.posts.report_result(p.id, env.channel_id, status="published")
         assert (await ac.posts.wait_for_published(p.id, timeout=5)).is_published
@@ -315,7 +321,7 @@ def test_cloud_plan_limits_and_scopes(c: Staqly, env: Env) -> None:
     if env.admin is not None:
         extra = env.admin.api_keys.create("temp", scopes=["posts:read"], expires_at="2099-01-01")
         with Staqly(api_key=extra.key) as ro, pytest.raises(PermissionDeniedError):
-            ro.posts.create(env.col_id, content="nope")
+            ro.posts.create(env.col_id, title="Post", content="nope")
         env.admin.api_keys.revoke(extra.id)
     # The webhooks limit, where the plan has one (the trial's Pro plan has none).
     if c.workspace.usage().plan.limits.webhooks < 0:

@@ -74,6 +74,7 @@ function fakeAssistant(body: string): { status: number; type: string; body: stri
 
     call('c2', 'create_post', {
       collection: collections[0]!.id,
+      title: 'Post',
       content: 'Fresh coffee, fresh week. See you at the cafe!',
     })
   } else if (last.content.startsWith('The person declined')) {

@@ -168,7 +168,7 @@ func TestImportSQLite(t *testing.T) {
 	}
 	var first app.Post
 	for i := range 5 {
-		post, err := svc.CreatePost(ctx, p, app.PostInput{Collection: "Default", Content: fmt.Sprintf("post %d", i)})
+		post, err := svc.CreatePost(ctx, p, app.PostInput{Title: "Post", Collection: "Default", Content: fmt.Sprintf("post %d", i)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -182,7 +182,7 @@ func TestImportSQLite(t *testing.T) {
 		t.Fatal(err)
 	}
 	// SQLite keeps a NUL character; PostgreSQL text cannot, so the import replaces it.
-	if _, err := svc.CreatePost(ctx, p, app.PostInput{Collection: "Default", Content: "nul\x00byte"}); err != nil {
+	if _, err := svc.CreatePost(ctx, p, app.PostInput{Title: "Post", Collection: "Default", Content: "nul\x00byte"}); err != nil {
 		t.Fatal(err)
 	}
 	lite.Close()
@@ -225,7 +225,7 @@ func TestImportSQLite(t *testing.T) {
 	}
 	stop()
 	<-stopped
-	if _, err := moved.CreatePost(ctx, mp, app.PostInput{Collection: "Default", Content: "after the move"}); err != nil {
+	if _, err := moved.CreatePost(ctx, mp, app.PostInput{Title: "Post", Collection: "Default", Content: "after the move"}); err != nil {
 		t.Fatalf("a new post (and its event, after the imported sequence): %v", err)
 	}
 	if _, err := store.ImportSQLite(ctx, pg, path); err == nil || !strings.Contains(err.Error(), "not empty") {

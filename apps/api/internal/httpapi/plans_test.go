@@ -95,7 +95,7 @@ func TestProTrialAndSuspension(t *testing.T) {
 		t.Fatalf("not suspended after the trial: %+v", u)
 	}
 	var errBody struct{ Error app.Error }
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "x"}, 402, &errBody)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "x"}, 402, &errBody)
 	if errBody.Error.Code != "plan_expired" {
 		t.Fatalf("error: %+v", errBody.Error)
 	}
@@ -109,7 +109,7 @@ func TestProTrialAndSuspension(t *testing.T) {
 	if _, out := mcpCall(e, e.key, "list_collections", nil); isToolError(out) {
 		t.Fatalf("read-only MCP tool refused while suspended: %v", out)
 	}
-	if _, out := mcpCall(e, e.key, "create_post", map[string]any{"collection": "Trial", "content": "x"}); !isToolError(out) ||
+	if _, out := mcpCall(e, e.key, "create_post", map[string]any{"title": "Post", "collection": "Trial", "content": "x"}); !isToolError(out) ||
 		!strings.Contains(fmt.Sprint(out), "read-only") {
 		t.Fatalf("MCP write allowed while suspended: %v", out)
 	}
@@ -126,7 +126,7 @@ func TestProTrialAndSuspension(t *testing.T) {
 	if u.Plan.ID != "starter" || u.Suspended || u.PlanExpiresAt != nil {
 		t.Fatalf("after the operator set Starter: %+v", u)
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "on starter"}, 201, nil)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "on starter"}, 201, nil)
 }
 
 // The activity log export needs Plus or above (402 below); the workspace export works on every plan, data only

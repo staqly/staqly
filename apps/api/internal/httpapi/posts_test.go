@@ -27,15 +27,29 @@ func TestPostLifecycleREST(t *testing.T) {
 	if errBody.Error.Fields["collection"] == "" {
 		t.Fatalf("missing collection: %+v", errBody.Error)
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "x", "publish_at": "2001-01-01T00:00:00Z"}, 422, &errBody)
+	// A title is required, kept trimmed, and can't be emptied later.
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "x", "title": "  "}, 422, &errBody)
+	if errBody.Error.Fields["title"] == "" {
+		t.Fatalf("missing title: %+v", errBody.Error)
+	}
+	titled := e.post(c.ID, map[string]any{"title": "  Launch day  "})
+	if titled.Title != "Launch day" {
+		t.Fatalf("title: %q", titled.Title)
+	}
+	e.do(nil, "PATCH", "/v1/posts/"+titled.ID, e.key, map[string]any{"title": ""}, 422, &errBody)
+	if errBody.Error.Fields["title"] == "" {
+		t.Fatalf("emptied title: %+v", errBody.Error)
+	}
+	e.do(nil, "DELETE", "/v1/posts/"+titled.ID, e.admin, nil, 204, nil)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "x", "publish_at": "2001-01-01T00:00:00Z"}, 422, &errBody)
 	if errBody.Error.Fields["publish_at"] == "" {
 		t.Fatalf("past publish_at: %+v", errBody.Error)
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "x", "status": "scheduled", "publish_at": future(time.Hour)}, 422, &errBody)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "x", "status": "scheduled", "publish_at": future(time.Hour)}, 422, &errBody)
 	if errBody.Error.Fields["targets"] == "" {
 		t.Fatalf("scheduled without a target: %+v", errBody.Error)
 	}
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "x", "targets": []map[string]any{{"channel_id": "ch_nope"}}}, 422, &errBody)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "x", "targets": []map[string]any{{"channel_id": "ch_nope"}}}, 422, &errBody)
 	if errBody.Error.Fields["targets.ch_nope.channel_id"] == "" && errBody.Error.Fields["targets"] == "" {
 		t.Fatalf("unknown channel: %+v", errBody.Error)
 	}
@@ -312,7 +326,7 @@ func TestWebhookCRUDREST(t *testing.T) {
 func TestAgentsAndWorkspaceRenameREST(t *testing.T) {
 	e := newEnv(t)
 	c := e.collection("Agents")
-	req, _ := http.NewRequest("POST", e.srv.URL+"/v1/posts", strings.NewReader(`{"collection":"`+c.ID+`","content":"from a script"}`))
+	req, _ := http.NewRequest("POST", e.srv.URL+"/v1/posts", strings.NewReader(`{"title":"Post","collection":"`+c.ID+`","content":"from a script"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+e.key)
 	req.Header.Set("User-Agent", "my-agent/2.0")
@@ -355,7 +369,7 @@ func TestRepeatPostREST(t *testing.T) {
 	worker := e.keyWith(app.ScopePostsRead, app.ScopePostsPublish)
 
 	var errBody struct{ Error app.Error }
-	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"collection": c.ID, "content": "x", "repeat_every": "weekly"}, 422, &errBody)
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "x", "repeat_every": "weekly"}, 422, &errBody)
 	if !strings.Contains(errBody.Error.Fields["repeat_every"], "1w") {
 		t.Fatalf("bad repeat_every: %+v", errBody.Error)
 	}

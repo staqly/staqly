@@ -227,7 +227,7 @@ func mediaCommand() *Command {
 						return jsonOr(c, raw, err)
 					}
 					fmt.Fprintf(c.Out, "Uploaded %s (%s, %s)\n", c.paint(bold, m.ID), m.MimeType, humanBytes(m.SizeBytes))
-					fmt.Fprintf(c.Out, "Attach it to a post with: staqly posts create <collection> --media %s or staqly posts update <post-id> --media %s\n", m.ID, m.ID)
+					fmt.Fprintf(c.Out, "Attach it to a post with: staqly posts create <collection> --title ... --media %s or staqly posts update <post-id> --media %s\n", m.ID, m.ID)
 					return nil
 				}
 			}, "staqly media upload cover.png", "staqly media upload report.pdf --json | jq -r .id"),

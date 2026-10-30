@@ -36,7 +36,7 @@ create_schedule {"collection":"Daily tips","name":"Weekday mornings",
   "channels":["ch_x...","ch_n8n..."],"pick":"next","source":"agent"}
 
 # every night
-create_post {"collection":"Daily tips","content":"Tip: drag a post on the calendar to move it.",
+create_post {"collection":"Daily tips","title":"Drag to move","content":"Tip: drag a post on the calendar to move it.",
   "targets":[{"channel_id":"ch_n8n..."},{"channel_id":"ch_x...","content":"Drag a post to move it."}]}
 
 # when the collection runs dry

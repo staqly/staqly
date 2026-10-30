@@ -74,7 +74,7 @@ func TestLive(t *testing.T) {
 
 	t.Run("draft, schedule, cancel", func(t *testing.T) {
 		var p Post
-		json.Unmarshal([]byte(must(0, "posts", "create", col, "--content", "live draft", "--channel", ch.ID, "--tag", "live", "--json")), &p)
+		json.Unmarshal([]byte(must(0, "posts", "create", col, "--title", "Post", "--content", "live draft", "--channel", ch.ID, "--tag", "live", "--json")), &p)
 		if p.Status != "draft" || len(p.Targets) != 1 {
 			t.Fatalf("post = %+v", p)
 		}
@@ -91,7 +91,7 @@ func TestLive(t *testing.T) {
 
 	t.Run("publish on your own automation and report", func(t *testing.T) {
 		var p Post
-		json.Unmarshal([]byte(must(0, "posts", "create", col, "--content", "live publish", "--channel", ch.ID, "--now", "--json")), &p)
+		json.Unmarshal([]byte(must(0, "posts", "create", col, "--title", "Post", "--content", "live publish", "--channel", ch.ID, "--now", "--json")), &p)
 		mustContain(t, must(0, "work"), p.ID)
 		must(0, "posts", "result", p.ID, ch.ID, "--status", "published", "--url", "https://example.com/p/1")
 		json.Unmarshal([]byte(must(0, "posts", "get", p.ID, "--json")), &p)
@@ -103,7 +103,7 @@ func TestLive(t *testing.T) {
 
 	t.Run("failed target exits 2 and can be retried", func(t *testing.T) {
 		var p Post
-		json.Unmarshal([]byte(must(0, "posts", "create", col, "--content", "live fail", "--channel", ch.ID, "--now", "--json")), &p)
+		json.Unmarshal([]byte(must(0, "posts", "create", col, "--title", "Post", "--content", "live fail", "--channel", ch.ID, "--now", "--json")), &p)
 		must(0, "posts", "result", p.ID, ch.ID, "--status", "failed", "--error", "nope")
 		_, errOut, code := run("posts", "publish", p.ID, "--wait", "--timeout", "2s")
 		if code != ExitTimeout && code != ExitFailed {

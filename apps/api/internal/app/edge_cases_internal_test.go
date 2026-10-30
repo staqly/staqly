@@ -210,12 +210,12 @@ func TestScheduleNextPassesOverADraftItCantPublish(t *testing.T) {
 	s, p, post := publishTest(t)
 	ctx := context.Background()
 	ch := post.Targets[0].ChannelID
-	stuck, err := s.CreatePost(ctx, p, PostInput{Collection: post.CollectionID, Content: "no channels yet"})
+	stuck, err := s.CreatePost(ctx, p, PostInput{Title: "Post", Collection: post.CollectionID, Content: "no channels yet"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.Now = func() time.Time { return time.Now().Add(time.Second) }
-	ready, err := s.CreatePost(ctx, p, PostInput{Collection: post.CollectionID, Content: "ready", Targets: []PostTargetInput{{ChannelID: ch}}})
+	ready, err := s.CreatePost(ctx, p, PostInput{Title: "Post", Collection: post.CollectionID, Content: "ready", Targets: []PostTargetInput{{ChannelID: ch}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestScheduleIgnoresARemovedChannel(t *testing.T) {
 	ctx := context.Background()
 	keep := post.Targets[0].ChannelID
 	gone := customChannelFor(t, s, p, "Gone")
-	d, err := s.CreatePost(ctx, p, PostInput{Collection: post.CollectionID, Content: "draft"})
+	d, err := s.CreatePost(ctx, p, PostInput{Title: "Post", Collection: post.CollectionID, Content: "draft"})
 	if err != nil {
 		t.Fatal(err)
 	}

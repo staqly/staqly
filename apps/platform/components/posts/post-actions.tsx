@@ -2,10 +2,30 @@
 
 import { ProviderIcon } from '@staqly/brand/providers'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, ExternalLink, Eye, Globe, Link2, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  Bookmark,
+  Clock,
+  Copy,
+  ExternalLink,
+  Eye,
+  Globe,
+  Heart,
+  Link2,
+  type LucideIcon,
+  MessageCircle,
+  MousePointerClick,
+  Quote,
+  RefreshCw,
+  Repeat2,
+  Share2,
+  Timer,
+  Trash2,
+  UserPlus,
+} from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
+import { Callout } from '@/components/common/callout'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { CopyButton } from '@/components/common/copy-button'
 import { ErrorState } from '@/components/common/error-state'
@@ -31,15 +51,32 @@ import { safeHttpUrl } from '@/lib/safe'
 
 import { postHref } from './post-href'
 
-const METRIC_LABELS: [keyof NonNullable<TargetMetrics['metrics']>, string][] = [
-  ['impressions', 'Views'],
-  ['likes', 'Likes'],
-  ['reposts', 'Reposts'],
-  ['replies', 'Replies'],
-  ['quotes', 'Quotes'],
-  ['bookmarks', 'Bookmarks'],
-  ['link_clicks', 'Link clicks'],
+const METRIC_LABELS: [Exclude<keyof NonNullable<TargetMetrics['metrics']>, 'reactions'>, string, LucideIcon][] = [
+  ['impressions', 'Views', Eye],
+  ['likes', 'Likes', Heart],
+  ['replies', 'Replies', MessageCircle],
+  ['reposts', 'Reposts', Repeat2],
+  ['shares', 'Shares', Share2],
+  ['quotes', 'Quotes', Quote],
+  ['bookmarks', 'Bookmarks', Bookmark],
+  ['link_clicks', 'Link clicks', MousePointerClick],
+  ['watch_minutes', 'Watch time', Clock],
+  ['avg_view_seconds', 'Average view', Timer],
+  ['subscribers_gained', 'Subscribers gained', UserPlus],
 ]
+
+/** Durations read as time: 1,284 min watched becomes 21 h 24 min, a 72 s average view 1:12. */
+function metricValue(key: string, n: number) {
+  if (key === 'watch_minutes') {
+    return n >= 60 ? `${Math.floor(n / 60).toLocaleString('en-US')} h ${n % 60} min` : `${n} min`
+  }
+
+  if (key === 'avg_view_seconds') {
+    return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
+  }
+
+  return n.toLocaleString('en-US')
+}
 
 /** What a platform calls a number when it isn't the usual word (Slack has reactions, not likes). */
 function metricLabel(provider: string, key: string, label: string) {
@@ -161,11 +198,17 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
               ) : t.status !== 'published' && !t.metrics ? (
                 <p className="mt-2 text-sm text-muted-foreground">Numbers appear once the post is published.</p>
               ) : t.metrics && METRIC_LABELS.some(([k]) => t.metrics?.[k] != null) ? (
-                <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {METRIC_LABELS.filter(([k]) => t.metrics?.[k] != null).map(([k, label]) => (
-                    <div key={k} className="flex flex-col-reverse rounded-lg bg-muted/50 px-2.5 py-2">
-                      <dt className="text-xs text-muted-foreground">{metricLabel(t.provider, k, label)}</dt>
-                      <dd className="text-lg font-semibold tabular-nums">{t.metrics![k]!.toLocaleString('en-US')}</dd>
+                <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {METRIC_LABELS.filter(([k]) => t.metrics?.[k] != null).map(([k, label, Icon]) => (
+                    // The label with its icon on top, the number under it, large: each one reads at a glance.
+                    <div key={k} className="grid gap-1 rounded-lg border bg-muted/30 px-3 py-2.5">
+                      <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Icon aria-hidden className="size-3.5" />
+                        {metricLabel(t.provider, k, label)}
+                      </dt>
+                      <dd className="text-2xl font-semibold tracking-tight tabular-nums">
+                        {metricValue(k, t.metrics![k]!)}
+                      </dd>
                     </div>
                   ))}
                   {(t.metrics.reactions?.length ?? 0) > 0 && (
@@ -193,7 +236,15 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
                   {t.provider === 'custom' ? 'Your automation has not sent numbers yet.' : 'No numbers yet.'}
                 </p>
               )}
-              {t.error && <p className="mt-2 text-xs text-destructive">Could not read new numbers: {t.error}</p>}
+              {t.error && (
+                <Callout tone="danger" size="xs" className="mt-3" data-testid="metrics-error">
+                  <p className="font-medium">Couldn&apos;t read the latest numbers</p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {t.error}
+                    {t.metrics ? '. These are the last ones read.' : ''}
+                  </p>
+                </Callout>
+              )}
             </li>
           ))}
         </ul>

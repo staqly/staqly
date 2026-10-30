@@ -47,7 +47,7 @@ The type is detected from the content, not the file name. The `url` is absolute 
 
 ```bash
 curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST http://localhost:3333/v1/posts -H 'Content-Type: application/json' \
-  -d '{"collection":"Instagram Avatar","content":"Golden hour","media":["med_t4w6pz2kqm7xr3nb5vya"],"targets":[{"channel_id":"ch_7h2kq9xw3nbvd5yhzm6a"}]}'
+  -d '{"collection":"Instagram Avatar","title":"Golden hour","content":"Golden hour","media":["med_t4w6pz2kqm7xr3nb5vya"],"targets":[{"channel_id":"ch_7h2kq9xw3nbvd5yhzm6a"}]}'
 ```
 
 `media` is ordered; the post's `media_items` returns the same files resolved. A `PATCH` with
@@ -62,14 +62,14 @@ From an SDK:
 import { fileFromPath } from '@staqly/sdk/node' // Node, Bun, Deno only
 
 const media = await staqly.media.upload(await fileFromPath('avatar.png'))
-await staqly.posts.create({ collection: 'Instagram Avatar', content: 'Golden hour', media: [media.id], targets: [{ channel_id: channelId }] })
+await staqly.posts.create({ collection: 'Instagram Avatar', title: 'Golden hour', content: 'Golden hour', media: [media.id], targets: [{ channel_id: channelId }] })
 ```
 
 ```python tab="Python"
 with open("avatar.png", "rb") as f:
     media = staqly.media.upload(f, filename="avatar.png")
 
-staqly.posts.create("Instagram Avatar", content="Golden hour", media=[media.id], targets=[{"channel_id": channel_id}])
+staqly.posts.create("Instagram Avatar", title="Golden hour", content="Golden hour", media=[media.id], targets=[{"channel_id": channel_id}])
 ```
 
 ## Upload from an agent (MCP)

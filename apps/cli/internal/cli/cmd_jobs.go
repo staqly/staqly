@@ -153,7 +153,7 @@ func workCommand() *Command {
 						sched = w.Schedule.Name + " (" + w.Schedule.ID + ")"
 					}
 					t.row("new posts", fmtTime(w.RequestedAt), truncate(coll, 20), truncate(sched, 40),
-						fmt.Sprintf("staqly posts create %q --content ...", coll))
+						fmt.Sprintf("staqly posts create %q --title ... --content ...", coll))
 				}
 			}
 			t.flush("Nothing is waiting for you.")

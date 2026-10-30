@@ -54,6 +54,7 @@ staqly = Staqly()  # STAQLY_API_URL (Cloud: https://api.staqly.ai) and STAQLY_AP
 channel = staqly.channels.list()[0]  # connected in the dashboard
 post = staqly.posts.create(
     "Blog posts",
+    title="Launch day",
     content="Launch day! Three things we shipped this week...",
     targets=[{"channel_id": channel.id}],
     publish_at="2026-11-03T09:00:00Z",
@@ -62,7 +63,7 @@ post = staqly.posts.create(
 
 # or publish right away and wait for the platform's answer
 now = staqly.posts.create(
-    "Blog posts", content="Hello", targets=[{"channel_id": channel.id}], publish_now=True
+    "Blog posts", title="Launch day", content="Hello", targets=[{"channel_id": channel.id}], publish_now=True
 )
 done = staqly.posts.wait_for_published(now.id)
 print(done.status, done.targets[0].external_url)
@@ -104,7 +105,9 @@ Every method accepts `request_options=` for per-request overrides:
 
 ```python
 staqly.posts.list(status="scheduled", request_options={"timeout": 5, "max_retries": 0, "headers": {...}})
-staqly.posts.create("Posts", content="x", request_options={"idempotency_key": f"job-{job_id}"})
+staqly.posts.create(
+    "Posts", title="Launch day", content="x", request_options={"idempotency_key": f"job-{job_id}"}
+)
 ```
 
 `staqly.health()` checks liveness and `staqly.ready()` checks readiness (database, migrations and
@@ -179,6 +182,7 @@ from staqly.models import PostTargetInput
 media = staqly.media.upload("cover.png")
 post = staqly.posts.create(
     "Blog posts",  # id or exact name
+    title="Launch day",
     content="Launch day!",
     media=[media.id],
     targets=[
@@ -619,7 +623,7 @@ from staqly import AsyncStaqly
 async def main() -> None:
     async with AsyncStaqly() as staqly:
         post = await staqly.posts.create(
-            "Drafts", content="Hello", targets=[{"channel_id": "ch_1"}], publish_now=True
+            "Drafts", title="Launch day", content="Hello", targets=[{"channel_id": "ch_1"}], publish_now=True
         )
         done = await staqly.posts.wait_for_published(post.id)
         async for p in staqly.posts.iterate(status="published"):
@@ -645,6 +649,7 @@ with Staqly() as staqly:  # or Staqly(base_url=..., api_key=...) in cloud mode
     cover = staqly.media.upload("out/cover.png")
     post = staqly.posts.create(
         "Blog posts",
+        title="Launch day",
         content="Fresh look for autumn 🍂 Three things we changed and why.",
         media=[cover.id],
         targets=[{"channel_id": c.id} for c in channels],

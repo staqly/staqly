@@ -40,6 +40,7 @@ type fakeGoogle struct {
 	playlist  map[string]any
 	plOwner   string // the channel the playlist belongs to ("" = none found)
 	comment   map[string]any
+	noYTA     bool // YouTube Analytics refuses (a connection without yt-analytics.readonly)
 
 	// Google Business Profile
 	post     map[string]any
@@ -145,9 +146,21 @@ func (f *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"error":{"code":403,"message":"The video identified by the <code>videoId</code> parameter has disabled comments.","errors":[{"reason":"commentsDisabled"}]}}`))
 			return
 		}
+		if strings.Contains(string(raw), "private video") {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":403,"message":"The comment thread could not be created due to insufficient permissions. The request might not be properly authorized.","errors":[{"reason":"forbidden"}]}}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"id":"Ugz1"}`))
 	case r.URL.Path == "/youtube/v3/videos":
 		_, _ = w.Write([]byte(`{"items":[{"id":"vid1","statistics":{"viewCount":"1200","likeCount":"30","commentCount":"4"}}]}`))
+	case r.URL.Path == "/v2/reports":
+		if f.noYTA || r.URL.Query().Get("filters") != "video==vid1" || r.URL.Query().Get("ids") != "channel==MINE" {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":403,"message":"Insufficient permission","status":"PERMISSION_DENIED"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"columnHeaders":[{"name":"estimatedMinutesWatched"},{"name":"averageViewDuration"},{"name":"shares"},{"name":"subscribersGained"}],"rows":[[340,71.6,5,2]]}`))
 
 	// Google Business Profile
 	case r.URL.Path == "/v1/accounts":
@@ -205,15 +218,15 @@ func useFakeGoogle(t *testing.T) *fakeGoogle {
 	t.Helper()
 	f := &fakeGoogle{channels: `[{"id":"UC1","snippet":{"title":"Jane Runs","customUrl":"@janeruns","thumbnails":{"default":{"url":"https://example.com/c.jpg"}}}}]`}
 	f.srv = httptest.NewServer(f)
-	old := []string{googleAuthorize, googleTokenURL, googleUserinfo, youtubeAPI, gbpAccountsAPI, gbpInfoAPI, gbpPostsAPI}
+	old := []string{googleAuthorize, googleTokenURL, googleUserinfo, youtubeAPI, gbpAccountsAPI, gbpInfoAPI, gbpPostsAPI, youtubeAnalyticsAPI}
 	chunk := youtubeChunk
 	googleAuthorize, googleTokenURL, googleUserinfo = f.srv.URL+"/auth", f.srv.URL+"/token", f.srv.URL+"/v1/userinfo"
-	youtubeAPI, gbpAccountsAPI, gbpInfoAPI, gbpPostsAPI = f.srv.URL, f.srv.URL, f.srv.URL, f.srv.URL
+	youtubeAPI, gbpAccountsAPI, gbpInfoAPI, gbpPostsAPI, youtubeAnalyticsAPI = f.srv.URL, f.srv.URL, f.srv.URL, f.srv.URL, f.srv.URL
 	youtubeChunk = 4
 	t.Cleanup(func() {
 		f.srv.Close()
 		googleAuthorize, googleTokenURL, googleUserinfo, youtubeAPI = old[0], old[1], old[2], old[3]
-		gbpAccountsAPI, gbpInfoAPI, gbpPostsAPI = old[4], old[5], old[6]
+		gbpAccountsAPI, gbpInfoAPI, gbpPostsAPI, youtubeAnalyticsAPI = old[4], old[5], old[6], old[7]
 		youtubeChunk = chunk
 	})
 	return f
@@ -422,14 +435,27 @@ func TestYouTubeReplyAndMetrics(t *testing.T) {
 	if sn, _ := f.comment["snippet"].(map[string]any); sn["videoId"] != "vid1" {
 		t.Fatalf("second comment %v", f.comment)
 	}
+	if _, err := r.Reply(context.Background(), youtubeCreds(), "vid1", PostContent{Text: "private video"}, nil); failureKind(t, err) != ErrRejected ||
+		!strings.Contains(err.Error(), "usually because it is private") {
+		t.Fatalf("private video: %v", err)
+	}
 	if _, err := r.Reply(context.Background(), youtubeCreds(), "vid1", PostContent{Text: "made for kids"}, nil); failureKind(t, err) != ErrRejected ||
 		!strings.Contains(err.Error(), "comments turned off") {
 		t.Fatalf("comments off: %v", err)
 	}
 
 	m, err := yt.Provider.(MetricsReader).Metrics(context.Background(), youtubeCreds(), "vid1")
-	if err != nil || *m.Impressions != 1200 || *m.Likes != 30 || *m.Replies != 4 || m.Reposts != nil {
+	if err != nil || *m.Impressions != 1200 || *m.Likes != 30 || *m.Replies != 4 || m.Reposts != nil ||
+		*m.WatchMinutes != 340 || *m.AvgViewSeconds != 72 || *m.Shares != 5 || *m.SubscribersGained != 2 {
 		t.Fatalf("metrics %+v %v", m, err)
+	}
+	// Connected before staqly asked for YouTube Analytics: the public numbers alone.
+	f.mu.Lock()
+	f.noYTA = true
+	f.mu.Unlock()
+	m, err = yt.Provider.(MetricsReader).Metrics(context.Background(), youtubeCreds(), "vid1")
+	if err != nil || *m.Impressions != 1200 || m.WatchMinutes != nil || m.Shares != nil {
+		t.Fatalf("metrics without analytics %+v %v", m, err)
 	}
 }
 

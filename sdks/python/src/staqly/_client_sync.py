@@ -451,6 +451,7 @@ class Posts(_Resource):
         self,
         collection: str,
         *,
+        title: str,
         content: str | None = None,
         media: Sequence[str] | None = None,
         targets: Sequence[PostTargetInput | JSONMapping] | None = None,
@@ -465,7 +466,8 @@ class Posts(_Resource):
         thread: Sequence[ThreadPart | JSONMapping] | None = None,
         request_options: RequestOptions | None = None,
     ) -> Post:
-        """Creates a post in a collection (id or exact name): a draft unless ``status="scheduled"``
+        """Creates a post in a collection (id or exact name) with a ``title`` (required; platforms
+        with a title publish it, the others show it in staqly): a draft unless ``status="scheduled"``
         (needs ``publish_at`` in the future and a target) or ``publish_now=True``.
         ``repeat_every`` (``1d``..``6d``, ``1w``, ``2w``, ``1mo``) schedules a copy that much later
         each time the post is published. ``thread`` holds replies published under the post (each
@@ -479,6 +481,7 @@ class Posts(_Resource):
         body = clean(
             {
                 "collection": collection,
+                "title": title,
                 "content": content,
                 "media": list(media) if media is not None else None,
                 "targets": _targets(targets),
@@ -501,6 +504,7 @@ class Posts(_Resource):
         post_id: str,
         *,
         collection: str | None = None,
+        title: str | None = None,
         content: str | None = None,
         media: Sequence[str] | None = None,
         targets: Sequence[PostTargetInput | JSONMapping] | None = None,
@@ -523,6 +527,7 @@ class Posts(_Resource):
         body = clean(
             {
                 "collection": collection,
+                "title": title,
                 "content": content,
                 "media": list(media) if media is not None else None,
                 "targets": _targets(targets),

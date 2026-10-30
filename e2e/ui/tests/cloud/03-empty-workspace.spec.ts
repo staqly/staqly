@@ -48,7 +48,12 @@ test('empty states of a new workspace, then the first post arrives live', async 
   const agent = await fetch(`${s.api}/v1/posts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ws.api_key.key}` },
-    body: JSON.stringify({ collection: 'Default', content: 'First post from an agent', source: 'claude-code' }),
+    body: JSON.stringify({
+      collection: 'Default',
+      title: 'Post',
+      content: 'First post from an agent',
+      source: 'claude-code',
+    }),
   })
 
   expect(agent.status).toBe(201)

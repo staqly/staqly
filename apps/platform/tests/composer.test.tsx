@@ -96,6 +96,7 @@ describe('composer', () => {
 
     renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
     await pickChannels(user, 'ch_1')
+    await user.type(screen.getByTestId('post-title'), 'Launch day')
     await user.type(screen.getByTestId('post-content'), 'Later')
     // A new post offers both ways out side by side.
     expect(screen.getByTestId('publish-now')).toBeEnabled()
@@ -105,9 +106,10 @@ describe('composer', () => {
     await user.click(within(picker).getByRole('button', { name: 'Tomorrow 09:00' }))
     await user.click(within(picker).getByRole('button', { name: 'Schedule' }))
     await waitFor(() => expect(api.find('POST', '/v1/posts')).toHaveLength(1))
-    const body = api.find('POST', '/v1/posts')[0].body as { status: string; publish_at: string }
+    const body = api.find('POST', '/v1/posts')[0].body as { status: string; publish_at: string; title: string }
     const at = new Date(body.publish_at)
 
+    expect(body.title).toBe('Launch day')
     expect(body.status).toBe('scheduled')
     expect([at.getHours(), at.getMinutes()]).toEqual([9, 0])
   })

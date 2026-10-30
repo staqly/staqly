@@ -58,7 +58,7 @@ func TestAnalyticsPostEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := s.Now().Add(time.Hour).UTC().Format(time.RFC3339)
-	created, err := s.CreatePost(ctx, p, PostInput{Collection: post.CollectionID, Content: "secret launch text", Status: "scheduled",
+	created, err := s.CreatePost(ctx, p, PostInput{Title: "Post", Collection: post.CollectionID, Content: "secret launch text", Status: "scheduled",
 		PublishAt: &at, Targets: []PostTargetInput{{ChannelID: ch.ID}}})
 	if err != nil {
 		t.Fatal(err)

@@ -131,6 +131,7 @@ await pool(nPosts, async (i) => {
   const scheduled = i < nScheduled
   const p = await call('POST', '/v1/posts', {
     collection: col,
+    title: 'Post',
     content: `${pick(i, 5)} ${pick(i, 6)} #${i}\n${lorem(i)}`,
     tags: [pick(i, 7), pick(i, 8)],
     metadata: { model: `model-${i % 4}`, prompt: `prompt ${i}`, seed: i },

@@ -189,7 +189,7 @@ func TestLinkedInUnlimitedLocally(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 3 {
-		if _, err := svc.CreatePost(ctx, p, app.PostInput{Collection: col.ID, Content: "hello", PublishNow: true,
+		if _, err := svc.CreatePost(ctx, p, app.PostInput{Title: "Post", Collection: col.ID, Content: "hello", PublishNow: true,
 			Targets: []app.PostTargetInput{{ChannelID: ch.ID}}}); err != nil {
 			t.Fatal(err)
 		}

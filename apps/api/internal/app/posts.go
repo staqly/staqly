@@ -21,6 +21,7 @@ var PostStatuses = []string{"draft", "scheduled", "publishing", "published", "fa
 
 const (
 	maxPostContent = 50_000
+	maxPostTitle   = 300 // Reddit's limit, the longest; a platform with a shorter one refuses a longer title per channel
 	maxPostMedia   = 20
 	maxTags        = 20
 	maxTagLen      = 40
@@ -48,6 +49,7 @@ type Post struct {
 	ID             string          `json:"id"`
 	CollectionID   string          `json:"collection_id"`
 	CollectionName string          `json:"collection_name"`
+	Title          string          `json:"title"`
 	Content        string          `json:"content"`
 	Media          []string        `json:"media"`
 	MediaItems     []Media         `json:"media_items"`
@@ -78,6 +80,7 @@ type PostTargetInput struct {
 
 type PostInput struct {
 	Collection  string            `json:"collection"`
+	Title       string            `json:"title"` // required; platforms with a title publish it, the rest show it in lists
 	Content     string            `json:"content"`
 	Media       []string          `json:"media"`
 	Targets     []PostTargetInput `json:"targets"`
@@ -95,6 +98,7 @@ type PostInput struct {
 
 type PostPatch struct {
 	Collection      *string            `json:"collection"`
+	Title           *string            `json:"title"`
 	Content         *string            `json:"content"`
 	Media           *[]string          `json:"media"`
 	Targets         *[]PostTargetInput `json:"targets"`
@@ -131,7 +135,7 @@ func targetOut(t db.ListTargetsRow) PostTarget {
 
 // toPost builds a post for the API; media holds its files and its thread's (postsMedia), an id missing there is left out.
 func (s *Service) toPost(p db.Post, targets []db.ListTargetsRow, collectionName string, media map[string]db.Medium) Post {
-	out := Post{ID: p.ID, CollectionID: p.CollectionID, CollectionName: collectionName, Content: p.Content, Media: []string{}, MediaItems: []Media{},
+	out := Post{ID: p.ID, CollectionID: p.CollectionID, CollectionName: collectionName, Title: p.Title, Content: p.Content, Media: []string{}, MediaItems: []Media{},
 		Status: p.Status, PublishAt: ptr(p.PublishAt), PublishedAt: ptr(p.PublishedAt), Tags: []string{},
 		Metadata: json.RawMessage(p.Metadata), Source: p.Source, ExternalRef: p.ExternalRef, RepeatEvery: p.RepeatEvery, Version: p.Version,
 		Thread: s.threadPartsOut(parseThread(p.Thread), media), Targets: []PostTarget{}, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
@@ -365,7 +369,8 @@ func checkNoDeletedMedia(ctx context.Context, q *db.Queries, workspaceID string,
 // resolveTargets checks the channels exist, are usable and accept the post (provider limits and settings).
 // resolveTargets checks the targets of a post. `kept` are channels the post already had: they stay allowed when
 // their platform was turned off since (PROVIDER_<ID>_ENABLED=false), so what was scheduled still goes out.
-func (s *Service) resolveTargets(ctx context.Context, q *db.Queries, workspaceID, content string, media []string, in []PostTargetInput, kept map[string]bool) (map[string]db.Channel, error) {
+func (s *Service) resolveTargets(ctx context.Context, q *db.Queries, workspaceID, title string, tags []string, content string, media []string,
+	in []PostTargetInput, kept map[string]bool) (map[string]db.Channel, error) {
 	if len(in) > maxTargets {
 		return nil, invalid("targets", fmt.Sprintf("at most %d channels", maxTargets))
 	}
@@ -414,7 +419,8 @@ func (s *Service) resolveTargets(ctx context.Context, q *db.Queries, workspaceID
 			text = *t.Content
 		}
 		text, _ = providers.ApplyLinks(channelLinks(ch), text)
-		if err := e.Validate(providers.PostContent{Text: text, Media: files}, providers.Settings(t.Settings)); err != nil {
+		settings := providers.WithPost(e.SettingsFields(), e.Limits(), title, tags, t.Settings)
+		if err := e.Validate(providers.PostContent{Text: text, Media: files}, settings); err != nil {
 			return nil, targetError(t.ChannelID, err)
 		}
 		if err := s.checkChannelSettings(ctx, q, workspaceID, ch, e.SettingsFields(), t.Settings); err != nil {
@@ -522,6 +528,10 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 	if in.Status != "draft" && in.Status != "scheduled" {
 		return Post{}, invalid("status", "a new post is draft or scheduled")
 	}
+	title, err := trimmed(in.Title, "title", maxPostTitle, true)
+	if err != nil {
+		return Post{}, err
+	}
 	if len([]rune(in.Content)) > maxPostContent {
 		return Post{}, invalid("content", fmt.Sprintf("at most %d characters", maxPostContent))
 	}
@@ -584,14 +594,14 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 		in.Media = []string{}
 	}
 	now := s.now()
-	row := db.Post{ID: newID("post"), WorkspaceID: p.WorkspaceID, CollectionID: col.ID, Content: in.Content, Media: mustJSON(in.Media),
+	row := db.Post{ID: newID("post"), WorkspaceID: p.WorkspaceID, CollectionID: col.ID, Title: title, Content: in.Content, Media: mustJSON(in.Media),
 		Status: in.Status, PublishAt: nullStr(publishAt), Tags: mustJSON(tags), Metadata: metadata, Source: source,
 		ExternalRef: externalRef, RepeatEvery: repeatEvery, RepeatOf: in.repeatOf, Version: 1, CreatedAt: now, UpdatedAt: now}
 	err = s.tx(ctx, func(q *db.Queries) error {
 		if err := s.checkMedia(ctx, q, p.WorkspaceID, in.Media, nil); err != nil {
 			return err
 		}
-		chans, err := s.resolveTargets(ctx, q, p.WorkspaceID, in.Content, in.Media, in.Targets, nil)
+		chans, err := s.resolveTargets(ctx, q, p.WorkspaceID, title, tags, in.Content, in.Media, in.Targets, nil)
 		if err != nil {
 			return err
 		}
@@ -606,7 +616,7 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 			return err
 		}
 		if err := q.CreatePost(ctx, db.CreatePostParams{ID: row.ID, WorkspaceID: row.WorkspaceID, CollectionID: row.CollectionID,
-			Content: row.Content, Media: row.Media, Status: row.Status, PublishAt: row.PublishAt, Tags: row.Tags, Metadata: row.Metadata,
+			Title: row.Title, Content: row.Content, Media: row.Media, Status: row.Status, PublishAt: row.PublishAt, Tags: row.Tags, Metadata: row.Metadata,
 			Source: row.Source, ExternalRef: row.ExternalRef, RepeatEvery: row.RepeatEvery, RepeatOf: row.RepeatOf,
 			CreatedAt: now, UpdatedAt: now}); err != nil {
 			return err
@@ -792,6 +802,11 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 			}
 			row.CollectionID = col.ID
 		}
+		if in.Title != nil {
+			if row.Title, err = trimmed(*in.Title, "title", maxPostTitle, true); err != nil {
+				return err
+			}
+		}
 		if in.Content != nil {
 			if len([]rune(*in.Content)) > maxPostContent {
 				return invalid("content", fmt.Sprintf("at most %d characters", maxPostContent))
@@ -887,7 +902,9 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 		for _, t := range current {
 			kept[t.ChannelID] = true
 		}
-		chans, err := s.resolveTargets(ctx, q, p.WorkspaceID, row.Content, media, targets, kept)
+		var tags []string
+		_ = json.Unmarshal([]byte(row.Tags), &tags)
+		chans, err := s.resolveTargets(ctx, q, p.WorkspaceID, row.Title, tags, row.Content, media, targets, kept)
 		if err != nil {
 			return err
 		}
@@ -915,7 +932,7 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 			}
 		}
 		row.UpdatedAt = s.now()
-		n, err := q.UpdatePost(ctx, db.UpdatePostParams{CollectionID: row.CollectionID, Content: row.Content, Media: row.Media,
+		n, err := q.UpdatePost(ctx, db.UpdatePostParams{CollectionID: row.CollectionID, Title: row.Title, Content: row.Content, Media: row.Media,
 			Status: row.Status, PublishAt: row.PublishAt, PublishedAt: row.PublishedAt, Tags: row.Tags, Metadata: row.Metadata,
 			Source: row.Source, ExternalRef: row.ExternalRef, RepeatEvery: row.RepeatEvery, UpdatedAt: row.UpdatedAt, WorkspaceID: p.WorkspaceID, ID: id, Version: before.Version})
 		if err != nil {
@@ -999,7 +1016,7 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 				return err
 			}
 		}
-		if n, err := q.UpdatePost(ctx, db.UpdatePostParams{CollectionID: row.CollectionID, Content: row.Content, Media: row.Media,
+		if n, err := q.UpdatePost(ctx, db.UpdatePostParams{CollectionID: row.CollectionID, Title: row.Title, Content: row.Content, Media: row.Media,
 			Status: "scheduled", PublishAt: nullStr(at), PublishedAt: row.PublishedAt, Tags: row.Tags, Metadata: row.Metadata,
 			Source: row.Source, ExternalRef: row.ExternalRef, RepeatEvery: row.RepeatEvery, UpdatedAt: now, WorkspaceID: p.WorkspaceID, ID: id, Version: row.Version}); err != nil || n == 0 {
 			if err == nil {
@@ -1090,6 +1107,19 @@ func (s *Service) CancelPost(ctx context.Context, p Principal, id string) (Post,
 	return s.GetPost(ctx, p, id)
 }
 
+// titleOr is the post's title, or for a post from before titles were required its first line (at most 100
+// characters, YouTube's limit), else "Untitled".
+func titleOr(title, content string) string {
+	if t := strings.TrimSpace(title); t != "" {
+		return t
+	}
+	line, _, _ := strings.Cut(strings.TrimSpace(content), "\n")
+	if line = strings.TrimSpace(line); line != "" {
+		return truncateRunes(line, 100)
+	}
+	return "Untitled"
+}
+
 // DuplicatePost copies content, media, tags, metadata and targets into a new draft.
 func (s *Service) DuplicatePost(ctx context.Context, p Principal, id string) (Post, error) {
 	if err := p.require(ScopePostsWrite); err != nil {
@@ -1099,8 +1129,8 @@ func (s *Service) DuplicatePost(ctx context.Context, p Principal, id string) (Po
 	if err != nil {
 		return Post{}, err
 	}
-	in := PostInput{Collection: row.CollectionID, Content: src.Content, Media: src.Media, Tags: src.Tags, Metadata: src.Metadata,
-		ExternalRef: src.ExternalRef, RepeatEvery: src.RepeatEvery, Thread: parseThread(row.Thread), Status: "draft"}
+	in := PostInput{Collection: row.CollectionID, Title: titleOr(src.Title, src.Content), Content: src.Content, Media: src.Media, Tags: src.Tags,
+		Metadata: src.Metadata, ExternalRef: src.ExternalRef, RepeatEvery: src.RepeatEvery, Thread: parseThread(row.Thread), Status: "draft"}
 	for _, t := range src.Targets {
 		in.Targets = append(in.Targets, PostTargetInput{ChannelID: t.ChannelID, Content: t.Content, Settings: t.Settings})
 	}
@@ -1277,7 +1307,8 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	// The channel's links mode applies to what it receives; the post keeps its text as written.
 	links := channelLinks(ch)
 	text, _ = providers.ApplyLinks(links, text)
-	if ch.Provider != "custom" { // your own automation gets the tags as they are, in "tags"
+	// Your own automation gets the tags as they are, in "tags"; a platform with tags of its own gets them there.
+	if ch.Provider != "custom" && !providers.NativeTags(e.SettingsFields()) {
 		text = providers.AppendHashtags(text, tags)
 	}
 	for i := range thread {
@@ -1286,6 +1317,7 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	content := providers.PostContent{PostID: postID, ChannelID: channelID, Text: text, Media: files, Tags: tags, Thread: thread}
 	settings := providers.Settings{}
 	_ = json.Unmarshal([]byte(target.Settings), &settings)
+	settings = providers.WithPost(e.SettingsFields(), e.Limits(), row.Title, tags, settings)
 	if err := e.Validate(content, settings); err != nil {
 		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, err.Error())
 	}
@@ -1657,7 +1689,7 @@ func (s *Service) PreviewPost(ctx context.Context, p Principal, id string) (Post
 			tp.Links = channelLinks(ch)
 			var found []string
 			tp.Text, found = providers.ApplyLinks(tp.Links, text)
-			if ch.Provider != "custom" {
+			if e, ok := providers.Get(ch.Provider); ch.Provider != "custom" && (!ok || !providers.NativeTags(e.SettingsFields())) {
 				tp.Text = providers.AppendHashtags(tp.Text, post.Tags)
 			}
 			text = tp.Text
@@ -1667,7 +1699,8 @@ func (s *Service) PreviewPost(ctx context.Context, p Principal, id string) (Post
 			}
 		}
 		if e, ok := providers.Get(t.Provider); ok {
-			if err := e.Validate(providers.PostContent{Text: text, Media: files}, providers.Settings(t.Settings)); err != nil {
+			settings := providers.WithPost(e.SettingsFields(), e.Limits(), post.Title, post.Tags, t.Settings)
+			if err := e.Validate(providers.PostContent{Text: text, Media: files}, settings); err != nil {
 				tp.Warnings, tp.OK = append(tp.Warnings, err.Error()), false
 			}
 		}

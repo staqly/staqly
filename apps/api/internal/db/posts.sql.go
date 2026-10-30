@@ -109,15 +109,16 @@ func (q *Queries) CountTargetsByStatus(ctx context.Context, postID string) ([]Co
 }
 
 const createPost = `-- name: CreatePost :exec
-INSERT INTO posts (id, workspace_id, collection_id, content, media, status, publish_at, tags, metadata, source, external_ref,
+INSERT INTO posts (id, workspace_id, collection_id, title, content, media, status, publish_at, tags, metadata, source, external_ref,
     repeat_every, repeat_of, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreatePostParams struct {
 	ID           string         `json:"id"`
 	WorkspaceID  string         `json:"workspace_id"`
 	CollectionID string         `json:"collection_id"`
+	Title        string         `json:"title"`
 	Content      string         `json:"content"`
 	Media        string         `json:"media"`
 	Status       string         `json:"status"`
@@ -137,6 +138,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) error {
 		arg.ID,
 		arg.WorkspaceID,
 		arg.CollectionID,
+		arg.Title,
 		arg.Content,
 		arg.Media,
 		arg.Status,
@@ -185,7 +187,7 @@ func (q *Queries) DeleteTargetsNotIn(ctx context.Context, arg DeleteTargetsNotIn
 }
 
 const exportPostsPage = `-- name: ExportPostsPage :many
-SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user FROM posts WHERE workspace_id = ?1 AND id > ?2 ORDER BY id LIMIT ?3
+SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title FROM posts WHERE workspace_id = ?1 AND id > ?2 ORDER BY id LIMIT ?3
 `
 
 type ExportPostsPageParams struct {
@@ -223,6 +225,7 @@ func (q *Queries) ExportPostsPage(ctx context.Context, arg ExportPostsPageParams
 			&i.RepeatOf,
 			&i.Thread,
 			&i.CreatedByUser,
+			&i.Title,
 		); err != nil {
 			return nil, err
 		}
@@ -238,7 +241,7 @@ func (q *Queries) ExportPostsPage(ctx context.Context, arg ExportPostsPageParams
 }
 
 const getPost = `-- name: GetPost :one
-SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user FROM posts WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title FROM posts WHERE workspace_id = ? AND id = ?
 `
 
 type GetPostParams struct {
@@ -269,12 +272,13 @@ func (q *Queries) GetPost(ctx context.Context, arg GetPostParams) (Post, error) 
 		&i.RepeatOf,
 		&i.Thread,
 		&i.CreatedByUser,
+		&i.Title,
 	)
 	return i, err
 }
 
 const getPostByID = `-- name: GetPostByID :one
-SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user FROM posts WHERE id = ?
+SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title FROM posts WHERE id = ?
 `
 
 func (q *Queries) GetPostByID(ctx context.Context, id string) (Post, error) {
@@ -300,6 +304,7 @@ func (q *Queries) GetPostByID(ctx context.Context, id string) (Post, error) {
 		&i.RepeatOf,
 		&i.Thread,
 		&i.CreatedByUser,
+		&i.Title,
 	)
 	return i, err
 }
@@ -535,7 +540,7 @@ func (q *Queries) PostStatusCountsSince(ctx context.Context, arg PostStatusCount
 }
 
 const postsByIDs = `-- name: PostsByIDs :many
-SELECT posts.id, posts.workspace_id, posts.collection_id, posts.content, posts.media, posts.status, posts.publish_at, posts.published_at, posts.tags, posts.metadata, posts.source, posts.external_ref, posts.version, posts.created_at, posts.updated_at, posts.repeat_every, posts.repeat_of, posts.thread, posts.created_by_user FROM json_each(?1) AS j CROSS JOIN posts WHERE posts.id = j.value AND posts.workspace_id = ?2
+SELECT posts.id, posts.workspace_id, posts.collection_id, posts.content, posts.media, posts.status, posts.publish_at, posts.published_at, posts.tags, posts.metadata, posts.source, posts.external_ref, posts.version, posts.created_at, posts.updated_at, posts.repeat_every, posts.repeat_of, posts.thread, posts.created_by_user, posts.title FROM json_each(?1) AS j CROSS JOIN posts WHERE posts.id = j.value AND posts.workspace_id = ?2
 ORDER BY posts.created_at, posts.id
 `
 
@@ -574,6 +579,7 @@ func (q *Queries) PostsByIDs(ctx context.Context, arg PostsByIDsParams) ([]Post,
 			&i.RepeatOf,
 			&i.Thread,
 			&i.CreatedByUser,
+			&i.Title,
 		); err != nil {
 			return nil, err
 		}
@@ -791,13 +797,14 @@ func (q *Queries) StripMediaFromPosts(ctx context.Context, arg StripMediaFromPos
 
 const updatePost = `-- name: UpdatePost :execrows
 UPDATE posts
-SET collection_id = ?, content = ?, media = ?, status = ?, publish_at = ?, published_at = ?, tags = ?, metadata = ?,
+SET collection_id = ?, title = ?, content = ?, media = ?, status = ?, publish_at = ?, published_at = ?, tags = ?, metadata = ?,
     source = ?, external_ref = ?, repeat_every = ?, version = version + 1, updated_at = ?
 WHERE workspace_id = ? AND id = ? AND version = ?
 `
 
 type UpdatePostParams struct {
 	CollectionID string         `json:"collection_id"`
+	Title        string         `json:"title"`
 	Content      string         `json:"content"`
 	Media        string         `json:"media"`
 	Status       string         `json:"status"`
@@ -817,6 +824,7 @@ type UpdatePostParams struct {
 func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, updatePost,
 		arg.CollectionID,
+		arg.Title,
 		arg.Content,
 		arg.Media,
 		arg.Status,
@@ -915,7 +923,7 @@ func (q *Queries) WaitingCustomTargets(ctx context.Context, arg WaitingCustomTar
 }
 
 const waitingPosts = `-- name: WaitingPosts :many
-SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user FROM posts WHERE workspace_id = ? AND collection_id = ? AND status = 'draft' AND publish_at IS NULL
+SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title FROM posts WHERE workspace_id = ? AND collection_id = ? AND status = 'draft' AND publish_at IS NULL
 ORDER BY created_at, id LIMIT ?
 `
 
@@ -955,6 +963,7 @@ func (q *Queries) WaitingPosts(ctx context.Context, arg WaitingPostsParams) ([]P
 			&i.RepeatOf,
 			&i.Thread,
 			&i.CreatedByUser,
+			&i.Title,
 		); err != nil {
 			return nil, err
 		}

@@ -179,6 +179,7 @@ func TestScheduleSources(t *testing.T) {
 	empty := e.collection("Empty")
 	var calls atomic.Int32
 	var fail atomic.Bool
+	var untitled atomic.Bool
 	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		body, _ := io.ReadAll(r.Body)
@@ -191,7 +192,11 @@ func TestScheduleSources(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"posts":[{"content":"fetched one","tags":["feed"]},{"content":"fetched two"}]}`))
+		if untitled.Load() {
+			w.Write([]byte(`{"posts":[{"content":"no title"}]}`))
+			return
+		}
+		w.Write([]byte(`{"posts":[{"title":"One","content":"fetched one","tags":["feed"]},{"title":"Two","content":"fetched two"}]}`))
 	}))
 	defer endpoint.Close()
 	e.do(nil, "POST", "/v1/schedules", e.key, map[string]any{"collection": empty.ID, "name": "Feed", "kind": "recurring", "channels": []string{ch.ID},
@@ -210,13 +215,20 @@ func TestScheduleSources(t *testing.T) {
 			t.Fatalf("fetched post: %+v", p)
 		}
 	}
+	// A title is required here as for every post: an untitled one fails the run.
+	untitled.Store(true)
+	e.do(nil, "POST", "/v1/schedules/"+sc.ID+"/run", e.key, nil, 202, &sc)
+	if !strings.Contains(sc.LastResult, "title") {
+		t.Fatalf("untitled endpoint post: %+v", sc)
+	}
+	untitled.Store(false)
 	fail.Store(true)
 	e.do(nil, "POST", "/v1/schedules/"+sc.ID+"/run", e.key, nil, 202, &sc)
 	if !strings.HasPrefix(sc.LastResult, "endpoint failed") {
 		t.Fatalf("failing endpoint: %+v", sc)
 	}
 	e.do(nil, "GET", "/v1/events?type=schedule.failed&schedule_id="+sc.ID, e.key, nil, 200, &evs)
-	if len(evs.Data) != 1 {
+	if len(evs.Data) != 2 { // the untitled post's run and this one
 		t.Fatalf("schedule.failed: %+v", evs.Data)
 	}
 }

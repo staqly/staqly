@@ -56,6 +56,7 @@ const staqly = new Staqly(); // STAQLY_API_URL (Cloud: https://api.staqly.ai) an
 const [channel] = await staqly.channels.list(); // connected in the dashboard
 const post = await staqly.posts.create({
   collection: "Blog posts",
+  title: "Launch day",
   content: "Launch day! Three things we shipped this week...",
   targets: [{ channel_id: channel.id }],
   publish_at: "2026-11-03T09:00:00Z",
@@ -63,7 +64,7 @@ const post = await staqly.posts.create({
 });
 
 // or publish right away and wait for the platform's answer
-const now = await staqly.posts.create({ collection: "Blog posts", content: "Hello", targets: [{ channel_id: channel.id }], publish_now: true });
+const now = await staqly.posts.create({ collection: "Blog posts", title: "Hello", content: "Hello", targets: [{ channel_id: channel.id }], publish_now: true });
 const done = await staqly.posts.waitForPublished(now.id);
 console.log(done.status, done.targets[0].external_url);
 ```
@@ -105,7 +106,7 @@ Every method takes an optional last argument with per-request overrides:
 
 ```ts
 await staqly.posts.list({ status: "scheduled" }, { timeout: 5_000, maxRetries: 0, signal, headers: { ... } });
-await staqly.posts.create({ collection: "Posts", content: "x" }, { idempotencyKey: `job-${jobId}` });
+await staqly.posts.create({ collection: "Posts", title: "x", content: "x" }, { idempotencyKey: `job-${jobId}` });
 ```
 
 `staqly.health()` checks liveness and the database, `staqly.live()` is the bare liveness probe
@@ -181,6 +182,7 @@ alert and the `channel.needs_reconnect` event tell you) or `disabled`.
 const media = await staqly.media.upload(await fileFromPath("cover.png"));
 const post = await staqly.posts.create({
   collection: "Blog posts",           // id or exact name
+  title: "Launch day",
   content: "Launch day!",
   media: [media.id],
   targets: [
@@ -595,6 +597,7 @@ const channels = await staqly.channels.list();
 const cover = await staqly.media.upload(await fileFromPath("out/cover.png"));
 const post = await staqly.posts.create({
   collection: "Blog posts",
+  title: "Launch day",
   content: "Fresh look for autumn 🍂 Three things we changed and why.",
   media: [cover.id],
   targets: channels.filter((c) => c.status === "connected").map((c) => ({ channel_id: c.id })),

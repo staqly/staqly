@@ -55,6 +55,9 @@ type Field struct {
 	// Prefer: for a remote field, the option labels a client picks while it is empty, the first the list has
 	// (Slack: #random, else #general); none there, the person picks.
 	Prefer []string `json:"prefer,omitempty"`
+	// FromPost: the value is the post's own (its title, its tags), filled in at publish time; clients don't ask
+	// for it per channel.
+	FromPost bool `json:"from_post,omitempty"`
 }
 
 // ListValues splits a list or channels value: comma-separated, trimmed, empty items dropped.
@@ -329,6 +332,11 @@ type Metrics struct {
 	Quotes      *int64 `json:"quotes,omitempty"`
 	Bookmarks   *int64 `json:"bookmarks,omitempty"`
 	LinkClicks  *int64 `json:"link_clicks,omitempty"`
+	Shares      *int64 `json:"shares,omitempty"`
+	// Video: minutes watched in all, the average view in seconds, subscribers the video brought (YouTube Analytics).
+	WatchMinutes      *int64 `json:"watch_minutes,omitempty"`
+	AvgViewSeconds    *int64 `json:"avg_view_seconds,omitempty"`
+	SubscribersGained *int64 `json:"subscribers_gained,omitempty"`
 	// Reactions by emoji, with who reacted where the platform says (Slack).
 	Reactions []Reaction `json:"reactions,omitempty"`
 }
@@ -527,8 +535,41 @@ func (b Base) Validate(p PostContent, s Settings) error {
 
 // WithSettings gives a provider its per-post settings (the composer renders them, Validate checks them).
 func (b Base) WithSettings(fields ...Field) Base {
+	for i := range fields {
+		fields[i].FromPost = fields[i].Key == "title" || fields[i].Key == "tags"
+	}
 	b.settings = fields
 	return b
+}
+
+// NativeTags: the platform has tags of its own, so the post's tags go there instead of hashtags in the text.
+func NativeTags(fields []Field) bool {
+	return slices.ContainsFunc(fields, func(f Field) bool { return f.Key == "tags" })
+}
+
+// WithPost fills a channel's settings with what comes from the post: its title where the platform has one, its
+// tags where the platform has tags (the first MaxItems). A post from before titles were shared has none: the title
+// the channel had of its own stays.
+func WithPost(fields []Field, l Limits, title string, tags []string, s Settings) Settings {
+	out := Settings{}
+	for k, v := range s {
+		out[k] = v
+	}
+	if title != "" && l.NeedsTitle {
+		out["title"] = title
+	}
+	for _, f := range fields {
+		switch {
+		case f.Key == "title" && title != "":
+			out["title"] = title
+		case f.Key == "tags" && len(tags) > 0:
+			if f.MaxItems > 0 && len(tags) > f.MaxItems {
+				tags = tags[:f.MaxItems]
+			}
+			out["tags"] = strings.Join(tags, ", ")
+		}
+	}
+	return out
 }
 
 var errNotSupported = errors.New("not supported by this provider")

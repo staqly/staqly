@@ -739,7 +739,7 @@ func fakeAssistant(w http.ResponseWriter, r *http.Request) {
 			} `json:"collections"`
 		}
 		_ = json.Unmarshal([]byte(last.Content), &out)
-		call("c2", "create_post", fmt.Sprintf(`{"collection":%q,"content":"Hello from the assistant"}`, out.Collections[0].ID))
+		call("c2", "create_post", fmt.Sprintf(`{"title":"Post","collection":%q,"content":"Hello from the assistant"}`, out.Collections[0].ID))
 	case strings.HasPrefix(last.Content, "The person declined"):
 		chunk(`{"choices":[{"delta":{"content":"Okay, I left it."}}]}`)
 	default:

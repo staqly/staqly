@@ -41,7 +41,7 @@ func publishTest(t testing.TB) (*Service, Principal, Post) {
 		t.Fatal(err)
 	}
 	at := s.Now().Add(time.Hour).UTC().Format(time.RFC3339)
-	post, err := s.CreatePost(ctx, p, PostInput{Collection: col.ID, Content: "later", Status: "scheduled", PublishAt: &at,
+	post, err := s.CreatePost(ctx, p, PostInput{Title: "Post", Collection: col.ID, Content: "later", Status: "scheduled", PublishAt: &at,
 		Targets: []PostTargetInput{{ChannelID: ch.ID}}})
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func TestConcurrentTokenRefreshesRefreshOnce(t *testing.T) {
 func TestScheduleRunCountsPostsOnceAcrossTxReruns(t *testing.T) {
 	s, p, scheduled := publishTest(t)
 	ctx := context.Background()
-	draft, err := s.CreatePost(ctx, p, PostInput{Collection: scheduled.CollectionID, Content: "next up",
+	draft, err := s.CreatePost(ctx, p, PostInput{Title: "Post", Collection: scheduled.CollectionID, Content: "next up",
 		Targets: []PostTargetInput{{ChannelID: scheduled.Targets[0].ChannelID}}})
 	if err != nil {
 		t.Fatal(err)

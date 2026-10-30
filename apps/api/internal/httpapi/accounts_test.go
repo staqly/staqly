@@ -777,7 +777,7 @@ func TestRoleMatrix(t *testing.T) {
 	}
 	newPost := func() string {
 		var p app.Post
-		e.as(owner, "POST", "/v1/posts", map[string]any{"collection": col.ID, "content": "x"}, 201, &p)
+		e.as(owner, "POST", "/v1/posts", map[string]any{"title": "Post", "collection": col.ID, "content": "x"}, 201, &p)
 		return p.ID
 	}
 	static := func(p string) func() string { return func() string { return p } }
@@ -787,7 +787,7 @@ func TestRoleMatrix(t *testing.T) {
 		{"read channels", "GET", static("/v1/channels"), nil, app.RoleViewer, 200},
 		{"read events", "GET", static("/v1/events"), nil, app.RoleViewer, 200},
 		{"read workspace", "GET", static("/v1/workspace"), nil, app.RoleViewer, 200},
-		{"write post", "POST", static("/v1/posts"), func() any { return map[string]any{"collection": col.ID, "content": "hi"} }, app.RoleEditor, 201},
+		{"write post", "POST", static("/v1/posts"), func() any { return map[string]any{"title": "Post", "collection": col.ID, "content": "hi"} }, app.RoleEditor, 201},
 		{"create collection", "POST", static("/v1/collections"), func() any { return map[string]any{"name": uniq()} }, app.RoleEditor, 201},
 		{"delete post", "DELETE", func() string { return "/v1/posts/" + newPost() }, nil, app.RoleEditor, 204},
 		{"delete collection", "DELETE", func() string { id := newCol(); return "/v1/collections/" + id + "?confirm=" + lastCol }, nil, app.RoleAdmin, 204},
@@ -893,7 +893,7 @@ func TestRoleRules(t *testing.T) {
 	var post app.Post
 	var col app.Collection
 	e.as(owner, "POST", "/v1/collections", map[string]any{"name": "Private"}, 201, &col)
-	e.as(owner, "POST", "/v1/posts", map[string]any{"collection": col.ID, "content": "secret"}, 201, &post)
+	e.as(owner, "POST", "/v1/posts", map[string]any{"title": "Post", "collection": col.ID, "content": "secret"}, 201, &post)
 	e.as(outsider, "GET", "/v1/posts/"+post.ID, nil, 404, nil)
 	e.as(outsider, "DELETE", "/v1/posts/"+post.ID, nil, 404, nil)
 	e.as(outsider, "GET", "/v1/collections/"+col.ID, nil, 404, nil)
