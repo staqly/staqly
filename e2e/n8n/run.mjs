@@ -578,8 +578,8 @@ function sourceWorkflow(secret) {
       'Write posts',
       `const req = $input.first().json.event
 return [{ json: { posts: [
-  { content: 'From the n8n endpoint, one (' + req.slot + ')', tags: ['endpoint'] },
-  { content: 'From the n8n endpoint, two', targets: req.channels.map((c) => ({ channel_id: c, content: 'short two' })) },
+  { title: 'n8n one', content: 'From the n8n endpoint, one (' + req.slot + ')', tags: ['endpoint'] },
+  { title: 'n8n two', content: 'From the n8n endpoint, two', targets: req.channels.map((c) => ({ channel_id: c, content: 'short two' })) },
 ] } }]`,
     ),
   )

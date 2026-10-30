@@ -71,11 +71,11 @@ ON CONFLICT (post_id, channel_id) DO UPDATE SET content = excluded.content, sett
 DELETE FROM post_targets WHERE post_id = @post_id AND channel_id NOT IN (SELECT value FROM json_each(@keep));
 
 -- name: ListTargets :many
-SELECT t.*, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url FROM post_targets t
+SELECT t.*, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
 JOIN channels c ON c.id = t.channel_id WHERE t.post_id = ? ORDER BY c.name COLLATE NOCASE, c.id;
 
 -- name: ListTargetsForPosts :many
-SELECT t.*, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url FROM post_targets t
+SELECT t.*, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
 JOIN channels c ON c.id = t.channel_id WHERE t.post_id IN (SELECT value FROM json_each(@ids)) ORDER BY t.post_id, c.name COLLATE NOCASE, c.id;
 
 -- name: GetTarget :one

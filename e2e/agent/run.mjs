@@ -85,7 +85,10 @@ const recv = createServer((req, res) => {
       res.setHeader('content-type', 'application/json')
       res.end(
         JSON.stringify({
-          posts: [{ content: `${RUN} endpoint post one`, tags: ['endpoint'] }, { content: `${RUN} endpoint post two` }],
+          posts: [
+            { title: 'One', content: `${RUN} endpoint post one`, tags: ['endpoint'] },
+            { title: 'Two', content: `${RUN} endpoint post two` },
+          ],
         }),
       )
 
