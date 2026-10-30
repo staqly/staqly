@@ -1244,10 +1244,12 @@ function DockedPanel({
       >
         {children}
       </div>
+      {/* About to close: the squeezed chat hides behind the assistant's mark and the hint, both centred. */}
       {!expanded && width < MIN_WIDTH && (
-        <p className="absolute inset-0 z-10 grid place-items-center bg-sidebar/90 px-4 text-center text-sm text-muted-foreground">
-          Release to close
-        </p>
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-sidebar px-4 text-center text-sm text-muted-foreground">
+          <AssistantIcon className="size-6" />
+          <p>Release to close</p>
+        </div>
       )}
     </aside>
   )
