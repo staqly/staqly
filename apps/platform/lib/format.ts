@@ -1,3 +1,5 @@
+import { displayZone } from './zone'
+
 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -11,13 +13,23 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 
 /**
  * A date format built on first use and reused: `new Intl.DateTimeFormat` costs far more than `format()`, and
- * `toLocaleString(undefined, opts)` builds one per call (hundreds per calendar or feed render). Same output: the
- * viewer's locale and time zone, read when the format is first needed.
+ * `toLocaleString(undefined, opts)` builds one per call (hundreds per calendar or feed render). The viewer's locale,
+ * the workspace's time zone (`displayZone`, rebuilt when it changes) unless `opts` names one.
  */
 export function lazyDateFormat(opts: Intl.DateTimeFormatOptions) {
   let f: Intl.DateTimeFormat | undefined
+  let fz = ''
 
-  return () => (f ??= new Intl.DateTimeFormat(undefined, opts))
+  return () => {
+    const tz = opts.timeZone ?? displayZone()
+
+    if (!f || fz !== tz) {
+      f = new Intl.DateTimeFormat(undefined, { ...opts, timeZone: tz })
+      fz = tz
+    }
+
+    return f
+  }
 }
 
 const dateTimeFormat = lazyDateFormat({

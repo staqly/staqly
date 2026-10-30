@@ -5,8 +5,9 @@ import { useLayoutEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { useNow } from '@/hooks/use-now'
-import { addDays, dayKey, monthGrid, sameDay } from '@/lib/schedule'
+import { addDays, addMonths, dateFormats, dayKey, monthGrid, sameDay } from '@/lib/schedule'
 import { cn } from '@/lib/utils'
+import { wallOf } from '@/lib/zone'
 
 export interface DateRange {
   from: Date | null
@@ -34,7 +35,7 @@ export function Calendar({
   id?: string
   mode: 'single' | 'range'
   selected: Date | DateRange | null
-  /** The day clicked or picked with Enter (local midnight). */
+  /** The day clicked or picked with Enter (midnight in the workspace's zone). */
   onSelect: (day: Date) => void
   /** The first month on show (any day of it). */
   month: Date
@@ -62,12 +63,9 @@ export function Calendar({
     }
   })
 
-  const months = Array.from(
-    { length: numberOfMonths },
-    (_, i) => new Date(month.getFullYear(), month.getMonth() + i, 1),
-  )
+  const months = Array.from({ length: numberOfMonths }, (_, i) => addMonths(month, i))
   const disabledKey = (k: string) => (!!minKey && k < minKey) || (!!maxKey && k > maxKey)
-  const shift = (n: number) => onMonthChange(new Date(month.getFullYear(), month.getMonth() + n, 1))
+  const shift = (n: number) => onMonthChange(addMonths(month, n))
 
   // The range as shown: a chosen pair, or the first end plus the day under the pointer.
   const fromKey = range?.from ? dayKey(range.from) : ''
@@ -91,14 +89,13 @@ export function Calendar({
     }
 
     setFocus(k)
-    const lastShown = new Date(month.getFullYear(), month.getMonth() + numberOfMonths, 0)
 
-    if (next < new Date(month.getFullYear(), month.getMonth(), 1)) {
+    if (next < addMonths(month, 0)) {
       pendingFocus.current = true
-      onMonthChange(new Date(next.getFullYear(), next.getMonth(), 1))
-    } else if (next > lastShown) {
+      onMonthChange(addMonths(next, 0))
+    } else if (next >= addMonths(month, numberOfMonths)) {
       pendingFocus.current = true
-      onMonthChange(new Date(next.getFullYear(), next.getMonth() - numberOfMonths + 1, 1))
+      onMonthChange(addMonths(next, 1 - numberOfMonths))
     } else {
       document.getElementById(`${id}-day-${k}`)?.focus()
     }
@@ -108,7 +105,8 @@ export function Calendar({
     <div className={cn('flex flex-col gap-3 sm:flex-row sm:gap-5', className)} data-testid={`${id}-calendar`}>
       {months.map((m, i) => {
         const days = monthGrid(m)
-        const label = m.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+        const label = dateFormats.monthYear().format(m)
+        const shownMonth = wallOf(m).month
 
         return (
           <div key={dayKey(m)} className="w-[17.5rem] max-w-full">
@@ -148,12 +146,12 @@ export function Calendar({
               <div role="row" className="contents">
                 {days.slice(0, 7).map((d) => (
                   <div
-                    key={d.getDay()}
+                    key={dayKey(d)}
                     role="columnheader"
                     className="py-1 text-[11px] font-medium text-muted-foreground"
-                    aria-label={d.toLocaleDateString(undefined, { weekday: 'long' })}
+                    aria-label={dateFormats.longWeekday().format(d)}
                   >
-                    {d.toLocaleDateString(undefined, { weekday: 'narrow' })}
+                    {dateFormats.narrowWeekday().format(d)}
                   </div>
                 ))}
               </div>
@@ -162,7 +160,7 @@ export function Calendar({
                   {days.slice(r * 7, r * 7 + 7).map((d) => {
                     const k = dayKey(d)
                     const disabled = disabledKey(k)
-                    const outside = d.getMonth() !== m.getMonth()
+                    const outside = Number(k.slice(5, 7)) !== shownMonth
                     const isEnd = mode === 'range' ? k === fromKey || (!!range?.to && k === toKey) : false
                     const inRange = mode === 'range' && !!lo && k > lo && k < hi
                     const selectedDay = mode === 'single' ? !!single && sameDay(d, single) : isEnd
@@ -190,15 +188,11 @@ export function Calendar({
                           id={`${id}-day-${k}`}
                           tabIndex={focus === k ? 0 : -1}
                           disabled={disabled}
-                          aria-label={d.toLocaleDateString(undefined, {
-                            weekday: 'long',
-                            day: 'numeric',
-                            month: 'long',
-                          })}
+                          aria-label={dateFormats.longDay().format(d)}
                           aria-current={k === todayKey ? 'date' : undefined}
                           onClick={() => {
                             setFocus(k)
-                            onSelect(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+                            onSelect(d)
                           }}
                           onKeyDown={(e) => moveFocus(e, d)}
                           onMouseEnter={() => mode === 'range' && setHover(k)}
@@ -213,7 +207,7 @@ export function Calendar({
                             selectedDay && 'bg-brand font-semibold text-brand-foreground hover:bg-brand',
                           )}
                         >
-                          {d.getDate()}
+                          {Number(k.slice(8))}
                         </button>
                       </div>
                     )

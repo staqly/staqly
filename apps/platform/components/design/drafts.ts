@@ -2,6 +2,8 @@
 // it back when the same document opens again. ponytail: this browser only; a server-side draft if people ask.
 import { toast } from 'sonner'
 
+import { formatDateTime } from '@/lib/format'
+
 /** The key of a document's draft: its project, the files it opened with, or a new one. */
 export const draftKey = (prefix: string, p: { project: string; ids: string[] }) =>
   `${prefix}${p.project || p.ids.join(',') || 'new'}`
@@ -42,7 +44,7 @@ export function offerDraft<T>(key: string, parse: (text: string) => T | null, re
     return
   }
 
-  toast(`Unsaved changes from ${new Date(d.at).toLocaleString()}`, {
+  toast(`Unsaved changes from ${formatDateTime(new Date(d.at).toJSON())}`, {
     description: 'The editor kept them when it was closed.',
     duration: 30_000,
     action: { label: 'Restore', onClick: () => restore(d.doc) },

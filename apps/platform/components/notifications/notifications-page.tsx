@@ -14,6 +14,7 @@ import { formatDateTimeIn, lazyDateFormat, timeAgo } from '@/lib/format'
 import { channelLabel, notificationsFor, type Notification } from '@/lib/notifications'
 import { useEventsInfinite, useSession } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
+import { addDays, dayKey } from '@/lib/schedule'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
@@ -28,16 +29,11 @@ const PublishChannels = dynamic(() => import('./publish-channels').then((m) => m
 const dayFormat = lazyDateFormat({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
 /** "Today", "Yesterday", or the date: the heading of a day's notifications. */
-const dayKey = (x: Date) => x.toDateString()
-
 function dayLabel(at: string, now = new Date()) {
   const d = new Date(at)
-  const key = dayKey
-  const yesterday = new Date(now)
+  const key = dayKey(d)
 
-  yesterday.setDate(now.getDate() - 1)
-
-  return key(d) === key(now) ? 'Today' : key(d) === key(yesterday) ? 'Yesterday' : dayFormat().format(d)
+  return key === dayKey(now) ? 'Today' : key === dayKey(addDays(now, -1)) ? 'Yesterday' : dayFormat().format(d)
 }
 
 /**

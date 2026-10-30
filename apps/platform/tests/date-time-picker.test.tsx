@@ -35,7 +35,7 @@ describe('date and time picker', () => {
     await user.keyboard('{ArrowDown}')
     expect((onChange.mock.calls.at(-1)![0] as Date).getHours()).toBe(10)
     // The footer says it in words, with the time zone.
-    expect(screen.getByTestId('date-time-summary')).toHaveTextContent(/, 09:00$/)
+    expect(screen.getByTestId('date-time-summary')).toHaveTextContent(/, 09:00 \S+$/)
   })
 
   it('reads the chosen time on the trigger and opens a calendar where past days cannot be picked', async () => {

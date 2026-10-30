@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useNow } from '@/hooks/use-now'
-import { dayFromKey, dayKey } from '@/lib/schedule'
+import { dateFormats, dayFromKey, dayKey } from '@/lib/schedule'
 import { cn } from '@/lib/utils'
 
 const Calendar = dynamic(() => import('@/components/ui/calendar').then((m) => m.Calendar), { ssr: false })
 
-/** One local day, picked on a calendar. The value is "YYYY-MM-DD" or "" (none). */
+/** One day in the workspace's zone, picked on a calendar. The value is "YYYY-MM-DD" or "" (none). */
 export function DatePicker({
   id,
   value,
@@ -64,16 +64,7 @@ export function DatePicker({
             className={cn('min-w-0 justify-start font-normal', !value && 'text-muted-foreground')}
           >
             <CalendarIcon className="text-muted-foreground" />
-            <span className="truncate">
-              {selected
-                ? selected.toLocaleDateString(undefined, {
-                    weekday: 'short',
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })
-                : placeholder}
-            </span>
+            <span className="truncate">{selected ? dateFormats.shortDayYear().format(selected) : placeholder}</span>
           </Button>
         </PopoverTrigger>
         {value && (

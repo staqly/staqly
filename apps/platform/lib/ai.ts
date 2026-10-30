@@ -83,7 +83,7 @@ export function allowanceUsedUp(st: AIStatus | undefined) {
   const [y, m] = st.usage.period.split('-').map(Number)
   const renews = new Date(Date.UTC(y!, m!, 1))
 
-  return { renews: renews.toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) }
+  return { renews: renews.toLocaleDateString(undefined, { day: 'numeric', month: 'long', timeZone: 'UTC' }) }
 }
 
 /** A key that makes a repeated send of the same request answer the same job (no secure context needed). */

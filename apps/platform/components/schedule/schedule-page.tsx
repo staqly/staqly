@@ -40,6 +40,8 @@ import {
   type CalendarView,
   SCHEDULE_LABELS,
   type ScheduleState,
+  addDays,
+  addMonths,
   canReschedule,
   dateFormats,
   dayFromKey,
@@ -55,9 +57,11 @@ import {
   type ScheduleSlot,
   scheduleSlots,
   scheduleState,
+  wallKey,
 } from '@/lib/schedule'
 import { TONES, type Tone } from '@/lib/tones'
 import { cn } from '@/lib/utils'
+import { fromWall, wallOf } from '@/lib/zone'
 
 import { useSetSchedule } from './use-schedule'
 
@@ -401,7 +405,7 @@ function DayHeader({
           today ? 'bg-primary text-primary-foreground' : 'text-foreground',
         )}
       >
-        {day.getDate()}
+        {wallOf(day).day}
       </span>
     </div>
   )
@@ -409,12 +413,14 @@ function DayHeader({
 
 /** "Oct 12 to 18, 2026" when both ends share the month, else "Sep 28 to Oct 4, 2026" (years named when they differ). */
 function rangeTitle(first: Date, last: Date) {
-  const sameYear = first.getFullYear() === last.getFullYear()
-  const sameMonth = sameYear && first.getMonth() === last.getMonth()
+  const a = wallOf(first)
+  const b = wallOf(last)
+  const sameYear = a.year === b.year
+  const sameMonth = sameYear && a.month === b.month
   const year = dateFormats.year().format(last)
 
   if (sameMonth) {
-    return `${dateFormats.monthDay().format(first)} to ${last.getDate()}, ${year}`
+    return `${dateFormats.monthDay().format(first)} to ${b.day}, ${year}`
   }
 
   if (sameYear) {
@@ -439,7 +445,7 @@ export function SchedulePage() {
   // The page renders once an hour (past hours, the queue's runs ahead); the minute clock is NowText's and NowLine's.
   const hourStart = useClock('hour')
   const today = dayKey(new Date(hourStart))
-  const currentHour = new Date(hourStart).getHours()
+  const currentHour = wallOf(hourStart).hour
   const view: CalendarView = params.get('view') === 'month' ? 'month' : params.get('view') === 'day' ? 'day' : 'week'
   // Phones read a week or a day as a list (the hour grid needs ~720px); a month stays a calendar on every screen.
   const narrow = useIsMobile(640)
@@ -488,11 +494,11 @@ export function SchedulePage() {
         continue
       }
 
-      const d = new Date(it.publish_at)
-      const k = dayKey(d)
+      const w = wallOf(new Date(it.publish_at))
+      const k = wallKey(w)
 
       push(days, k, it)
-      push(hours, `${k}:${d.getHours()}`, it)
+      push(hours, `${k}:${w.hour}`, it)
     }
 
     return { byDay: days, byHour: hours }
@@ -506,10 +512,11 @@ export function SchedulePage() {
     const hours = new Map<string, ScheduleSlot[]>()
 
     for (const slot of scheduleSlots(schedules.data, range.days, hourStart)) {
-      const k = dayKey(slot.at)
+      const w = wallOf(slot.at)
+      const k = wallKey(w)
 
       push(days, k, slot)
-      push(hours, `${k}:${slot.at.getHours()}`, slot)
+      push(hours, `${k}:${w.hour}`, slot)
     }
 
     return { slotsByDay: days, slotsByHour: hours }
@@ -526,10 +533,9 @@ export function SchedulePage() {
   // "+" on a future slot: the time to schedule for (an hour of the grid, or 09:00 / the next full hour of a day).
   const [slot, setSlot] = useState<Date | null>(null)
   const addAtHour = useCallback((day: string, hour: number) => {
-    const d = dayFromKey(day)
+    const [y, m, dd] = day.split('-').map(Number)
+    const d = fromWall(y, m, dd, hour)
     const current = new Date()
-
-    d.setHours(hour, 0, 0, 0)
 
     if (d.getTime() <= current.getTime()) {
       // The hour that is running now: the next five-minute mark, never a time that has passed.
@@ -541,10 +547,10 @@ export function SchedulePage() {
     setSlot(d)
   }, [])
   const addOnDay = useCallback((day: string) => {
-    const d = dayFromKey(day)
+    const [y, m, dd] = day.split('-').map(Number)
+    const d = fromWall(y, m, dd, 9)
     const current = new Date()
 
-    d.setHours(9, 0, 0, 0)
     setSlot(d.getTime() > current.getTime() ? d : nextFullHour(current.getTime()))
   }, [])
 
@@ -578,18 +584,7 @@ export function SchedulePage() {
     [params, pathname, router, view],
   )
   const step = (n: number) => {
-    const d = new Date(anchor)
-
-    if (view === 'day') {
-      d.setDate(d.getDate() + n)
-    } else if (view === 'week') {
-      d.setDate(d.getDate() + 7 * n)
-    } else {
-      d.setDate(1)
-      d.setMonth(d.getMonth() + n)
-    }
-
-    navigate({ at: d })
+    navigate({ at: view === 'month' ? addMonths(anchor, n) : addDays(anchor, view === 'week' ? 7 * n : n) })
   }
 
   // The drop handlers read the posts from a ref: depending on them would hand every cell new handlers (and a
@@ -792,7 +787,7 @@ export function SchedulePage() {
     body = (
       <MonthGrid
         days={range.days}
-        month={anchor.getMonth()}
+        month={dayKey(anchor).slice(0, 7)}
         byDay={byDay}
         slotsByDay={slotsByDay}
         today={today}
@@ -851,18 +846,19 @@ function columnStyle(i: number, cols: number) {
  */
 function NowLine({ todayIndex, cols }: { todayIndex: number; cols: number }) {
   const now = new Date(useClock('minute'))
+  const clock = wallOf(now)
   const y = HEADER_PX + (minutesOfDay(now) / 60) * ROW_PX
 
   return (
     <>
-      {todayIndex >= 0 && now.getMinutes() > 0 && (
+      {todayIndex >= 0 && clock.minute > 0 && (
         <div
           aria-hidden
           // Lines only, over the cell's padding box (not its left border); the hour's cards stay above it.
           className={cn('pointer-events-none absolute z-0 border-l border-transparent bg-clip-padding', HATCH_LINES)}
           style={{
-            top: HEADER_PX + now.getHours() * ROW_PX,
-            height: (now.getMinutes() / 60) * ROW_PX,
+            top: HEADER_PX + clock.hour * ROW_PX,
+            height: (clock.minute / 60) * ROW_PX,
             ...columnStyle(todayIndex, cols),
           }}
         />
@@ -1301,7 +1297,7 @@ const MonthCell = memo(function MonthCell({
 }: MonthCellProps) {
   const k = day.key
   const isToday = k === today
-  const date = day.day.getDate()
+  const date = Number(k.slice(8))
 
   return (
     <Slot
@@ -1350,7 +1346,8 @@ function MonthGrid({
   onAdd,
 }: {
   days: Date[]
-  month: number
+  /** "2026-10" */
+  month: string
   byDay: Map<string, Post[]>
   slotsByDay: Map<string, ScheduleSlot[]>
   today: string
@@ -1380,7 +1377,7 @@ function MonthGrid({
           <MonthCell
             key={d.key}
             day={d}
-            inMonth={d.day.getMonth() === month}
+            inMonth={d.key.startsWith(month)}
             posts={byDay.get(d.key) ?? NO_POSTS}
             slots={slotsByDay.get(d.key) ?? NO_SLOTS}
             today={today}

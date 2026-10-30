@@ -81,10 +81,11 @@ import {
   useXPosts,
 } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
-import { formatSchedule, formatTime, nextFullHour } from '@/lib/schedule'
+import { dateFormats, formatSchedule, formatTime, nextFullHour } from '@/lib/schedule'
 import { appendHashtags, normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 import { xPostsWarning } from '@/lib/x-posts'
+import { displayZone } from '@/lib/zone'
 
 import { AllChannelsTab, ChannelTab } from './channel-tab'
 import { PostEditor } from './post-editor'
@@ -898,7 +899,7 @@ function ThreadEditor({
 
 /** "Wed 21 Oct, 16:00": the picked time on the footer's chip. */
 function chipLabel(d: Date) {
-  return `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, ${formatTime(d)}`
+  return `${dateFormats.shortDay().format(d)}, ${formatTime(d)}`
 }
 
 /**
@@ -922,7 +923,7 @@ function ScheduleMenu({
   const [opening, setOpening] = useState(0)
   // One timer to the picked time, not a clock: the summary turns red the moment it passes.
   const past = useIsPast(at)
-  const tz = new Intl.DateTimeFormat().resolvedOptions().timeZone
+  const tz = displayZone()
 
   return (
     <Popover
