@@ -18,7 +18,6 @@ import { useScrollFade } from '@/hooks/use-scroll-fade'
 import type { Collection } from '@/lib/api'
 import { useCollections, usePost } from '@/lib/queries'
 import { safeCssColor } from '@/lib/safe'
-import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 import { CollectionPosts } from './collection-posts'
@@ -41,21 +40,24 @@ function Dot({ color, className }: { color?: string; className?: string }) {
 }
 
 /** How many posts of a collection are scheduled, as a small count next to its name. */
-function ScheduledBadge({ n, className }: { n: number; className?: string }) {
-  return n > 0 ? (
+/** How many posts a collection holds, muted on the right; the hover names how many of them are scheduled. */
+function PostCount({ c, className }: { c: Collection; className?: string }) {
+  const scheduled = c.status_counts?.scheduled ?? 0
+
+  return (
     <span
-      className={cn('shrink-0 rounded-full px-1.5 text-[11px] font-semibold tabular-nums', TONES.info.badge, className)}
-      title={`${n} scheduled`}
+      className={cn('shrink-0 text-xs tabular-nums', className ?? 'text-muted-foreground')}
+      title={`${c.post_count} ${c.post_count === 1 ? 'post' : 'posts'}${scheduled ? `, ${scheduled} scheduled` : ''}`}
     >
-      {n}
+      {c.post_count}
     </span>
-  ) : null
+  )
 }
 
 const hrefOf = (id: string, archived: boolean) => `/posts?collection=${id}${archived ? '&archived=1' : ''}`
 
 /**
- * One collection in the pane: colour, name, archived mark and how many posts wait. Post rows dragged onto it move
+ * One collection in the pane: colour, name, archived mark and how many posts it holds. Post rows dragged onto it move
  * here (not onto the open one or an archived one).
  */
 function CollectionRow({
@@ -88,7 +90,7 @@ function CollectionRow({
         <Dot color={c.color} />
         <span className="min-w-0 flex-1 truncate">{c.name}</span>
         {c.archived && <Archive className="size-3.5 shrink-0 text-muted-foreground" aria-label="Archived" />}
-        <ScheduledBadge n={c.status_counts?.scheduled ?? 0} />
+        <PostCount c={c} />
       </Link>
     </li>
   )
@@ -248,7 +250,7 @@ function CollectionsStrip({
             >
               <Dot color={c.color} className={cn(active && 'ring-1 ring-background')} />
               <span className="truncate">{c.name}</span>
-              <ScheduledBadge n={c.status_counts?.scheduled ?? 0} />
+              <PostCount c={c} className={active ? 'text-background' : undefined} />
             </Link>
           )
         })}

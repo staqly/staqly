@@ -59,6 +59,7 @@ func (s *Service) sendSystemEmailDoc(ctx context.Context, to, subject string, d 
 	if err != nil {
 		return errors.New("invalid MAIL_FROM address")
 	}
+	d.To = to
 	htmlBody, text := renderEmail(d, s.emailLogoURL())
 	raw := buildEmail(from, c.To, subject, text, htmlBody, extra)
 	return smtpDeliver(ctx, c, from, raw, WebhookConfig{AllowPrivate: true, AllowLoopback: true})

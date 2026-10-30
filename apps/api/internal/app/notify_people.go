@@ -372,8 +372,10 @@ func (s *Service) personalEmail(ctx context.Context, ev db.Event, u db.User) (st
 	case "channel.needs_reconnect":
 		ch, _ := data["channel"].(map[string]any)
 		d.Title = firstNonEmpty(str(ch, "name"), "A channel") + " needs reconnecting"
-		d.Paragraphs = []string{"Staqly can't publish to this channel until someone signs in to it again. Posts for it wait meanwhile.",
-			truncateRunes(str(data, "error"), 300)}
+		d.Channel = &emailChannel{Name: firstNonEmpty(str(ch, "name"), "A channel"), AvatarURL: str(ch, "avatar_url"),
+			Detail: strings.Join(slices.DeleteFunc([]string{providerName(str(ch, "provider")), str(ch, "handle")}, func(v string) bool { return v == "" }), " · ")}
+		d.Paragraphs = []string{"Staqly can't publish to this channel until someone signs in to it again. Posts for it wait meanwhile."}
+		d.Error = truncateRunes(str(data, "error"), 300)
 		d.Button = &emailLink{Text: "Reconnect the channel", URL: s.webURL() + "/channels"}
 	case "schedule.posts_requested":
 		sch, _ := data["schedule"].(map[string]any)
@@ -420,4 +422,12 @@ func joinAnd(list []string) string {
 		return list[0]
 	}
 	return strings.Join(list[:len(list)-1], ", ") + " and " + list[len(list)-1]
+}
+
+// providerName is a platform's name as people know it ("Bluesky"), or its id when the catalog has none.
+func providerName(id string) string {
+	if e, ok := providers.Get(id); ok {
+		return e.Name()
+	}
+	return id
 }

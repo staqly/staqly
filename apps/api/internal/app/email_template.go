@@ -14,17 +14,21 @@ import (
 // Every message has a plain-text twin.
 
 type emailDoc struct {
-	Preheader  string      // the line inboxes show after the subject
-	Title      string      // the big heading
-	Paragraphs []string    // plain text, one <p> each
-	Code       string      // a sign-in code, shown large
-	Quote      string      // the post's first line
-	Rows       []emailRow  // one per channel (or alert entry)
-	Button     *emailLink  // the main action
-	Footer     []string    // why they get it
-	Prefs      *emailLink  // change notification preferences
-	Unsub      *emailLink  // one-click unsubscribe from this kind of email
-	Links      []emailLink // secondary links under the button
+	Preheader  string        // the line inboxes show after the subject
+	Title      string        // the big heading
+	Paragraphs []string      // plain text, one <p> each; **words** show bold
+	Code       string        // a sign-in code, shown large
+	CodeAfter  int           // the paragraph the code follows (0: the first)
+	To         string        // the address it goes to, named in the footer
+	Channel    *emailChannel // the channel it is about, under the title
+	Error      string        // what went wrong, in a red box
+	Quote      string        // the post's first line
+	Rows       []emailRow    // one per channel (or alert entry)
+	Button     *emailLink    // the main action
+	Footer     []string      // why they get it
+	Prefs      *emailLink    // change notification preferences
+	Unsub      *emailLink    // one-click unsubscribe from this kind of email
+	Links      []emailLink   // secondary links under the button
 }
 
 type emailRow struct {
@@ -35,6 +39,9 @@ type emailRow struct {
 }
 
 type emailLink struct{ Text, URL string }
+
+// emailChannel is a channel as the dashboard shows it: picture, name, platform and handle.
+type emailChannel struct{ Name, Detail, AvatarURL string }
 
 const (
 	emailBrand  = "#16a34a"
@@ -66,14 +73,30 @@ func renderEmail(d emailDoc, logoURL string) (string, string) {
 	// Card
 	w(`<tr><td style="background:#ffffff;border:1px solid %s;border-radius:16px;padding:32px 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:%s">`, emailBorder, emailInk)
 	w(`<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;font-weight:700;color:%s">%s</h1>`, emailInk, esc(d.Title))
+	if c := d.Channel; c != nil {
+		w(`<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px"><tr>`)
+		if strings.HasPrefix(c.AvatarURL, "https://") || strings.HasPrefix(c.AvatarURL, "http://") {
+			w(`<td style="padding-right:12px;vertical-align:middle"><img src="%s" width="40" height="40" alt="" style="display:block;border:0;border-radius:20px;background:#f3f4f6"></td>`, esc(c.AvatarURL))
+		}
+		w(`<td style="vertical-align:middle;font-size:14px;line-height:1.4"><strong style="color:%s">%s</strong>`, emailInk, esc(c.Name))
+		if c.Detail != "" {
+			w(`<br><span style="color:%s">%s</span>`, emailMuted, esc(c.Detail))
+		}
+		w(`</td></tr></table>`)
+	}
 	for i, p := range d.Paragraphs {
-		w(`<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#374151">%s</p>`, esc(p))
+		w(`<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#374151">%s</p>`, emailBold(esc(p)))
 		// The code right under the line that introduces it: large, centred on a neutral panel, digits evenly spaced.
-		if i == 0 && d.Code != "" {
+		if i == d.CodeAfter && d.Code != "" {
 			w(`<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:6px 0 22px"><tr>`)
 			w(`<td align="center" style="padding:20px 12px;background:#f9fafb;border:1px solid %s;border-radius:12px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:36px;line-height:1;font-weight:700;letter-spacing:0.3em;font-variant-numeric:tabular-nums;color:%s">%s</td>`, emailBorder, emailInk, esc(d.Code))
 			w(`</tr></table>`)
 		}
+	}
+	if d.Error != "" {
+		w(`<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border-collapse:separate"><tr>`)
+		w(`<td style="padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;font-size:14px;line-height:1.55;color:#7f1d1d">`)
+		w(`<strong style="display:block;margin-bottom:2px;color:#b91c1c">What went wrong</strong>%s</td></tr></table>`, esc(d.Error))
 	}
 	if d.Quote != "" {
 		w(`<p style="margin:0 0 20px;padding:12px 16px;border-left:3px solid %s;background:#f9fafb;border-radius:0 8px 8px 0;font-size:15px;line-height:1.55;color:%s">%s</p>`, emailBrand, emailInk, esc(d.Quote))
@@ -116,6 +139,11 @@ func renderEmail(d emailDoc, logoURL string) (string, string) {
 	w(`</td></tr>`)
 	// Footer
 	w(`<tr><td style="padding:20px 8px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:%s">`, emailMuted)
+	w(`<p style="margin:0 0 14px;font-size:13px;color:%s">Need help? Read the <a href="%s" style="color:%s;font-weight:600;text-decoration:none">staqly docs</a>.</p>`, emailMuted, emailDocsURL, emailBrand)
+	w(`<div style="border-top:1px solid %s;padding-top:14px">`, emailBorder)
+	if d.To != "" {
+		w(`This email was sent to <span style="color:%s">%s</span>.<br>`, emailInk, esc(d.To))
+	}
 	for _, f := range d.Footer {
 		w(`%s<br>`, esc(f))
 	}
@@ -127,17 +155,28 @@ func renderEmail(d emailDoc, logoURL string) (string, string) {
 		links = append(links, fmt.Sprintf(`<a href="%s" style="color:%s">%s</a>`, esc(d.Unsub.URL), emailMuted, esc(d.Unsub.Text)))
 	}
 	if len(links) > 0 {
-		w(`%s`, strings.Join(links, " &middot; "))
+		w(`%s<br>`, strings.Join(links, " &middot; "))
 	}
-	w(`</td></tr></table></td></tr></table></body></html>`)
+	w(`<span style="display:inline-block;margin-top:10px"><strong style="color:%s">staqly</strong> &middot; write, schedule and publish posts with your team and AI agents &middot; <a href="%s" style="color:%s">staqly.ai</a></span>`,
+		emailInk, emailSiteURL, emailMuted)
+	w(`</div></td></tr></table></td></tr></table></body></html>`)
 
 	// Plain text
 	var t strings.Builder
 	t.WriteString(d.Title + "\n\n")
-	for _, p := range d.Paragraphs {
-		t.WriteString(p + "\n\n")
+	if c := d.Channel; c != nil {
+		t.WriteString(strings.TrimSuffix(c.Name+" ("+c.Detail+")", " ()") + "\n\n")
 	}
-	if d.Code != "" {
+	for i, p := range d.Paragraphs {
+		t.WriteString(strings.ReplaceAll(p, "**", "") + "\n\n")
+		if i == d.CodeAfter && d.Code != "" {
+			t.WriteString("    " + d.Code + "\n\n")
+		}
+	}
+	if d.Error != "" {
+		t.WriteString("What went wrong: " + d.Error + "\n\n")
+	}
+	if d.Code != "" && d.CodeAfter >= len(d.Paragraphs) {
 		t.WriteString("    " + d.Code + "\n\n")
 	}
 	if d.Quote != "" {
@@ -165,8 +204,9 @@ func renderEmail(d emailDoc, logoURL string) (string, string) {
 	if len(d.Links) > 0 {
 		t.WriteString("\n")
 	}
-	if len(d.Footer) > 0 || d.Prefs != nil || d.Unsub != nil {
-		t.WriteString("--\n")
+	t.WriteString("Need help? Read the staqly docs: " + emailDocsURL + "\n\n--\n")
+	if d.To != "" {
+		t.WriteString("This email was sent to " + d.To + ".\n")
 	}
 	for _, f := range d.Footer {
 		t.WriteString(f + "\n")
@@ -177,11 +217,24 @@ func renderEmail(d emailDoc, logoURL string) (string, string) {
 	if d.Unsub != nil {
 		t.WriteString(d.Unsub.Text + ": " + d.Unsub.URL + "\n")
 	}
+	t.WriteString("staqly · write, schedule and publish posts with your team and AI agents · " + emailSiteURL + "\n")
 	return h.String(), t.String()
 }
 
+const (
+	emailDocsURL = "https://docs.staqly.ai"
+	emailSiteURL = "https://staqly.ai"
+)
+
+// emailBold turns **words** (in already escaped text) into bold ones.
+func emailBold(escaped string) string {
+	return emailBoldRe.ReplaceAllString(escaped, `<strong style="color:`+emailInk+`;font-weight:600">$1</strong>`)
+}
+
 var (
+	emailBoldRe = regexp.MustCompile(`\*\*(.+?)\*\*`)
 	emailCodeRe = regexp.MustCompile(`\b\d{6}\b`)
+	codeOnlyRe  = regexp.MustCompile(`^\d{6}$`)
 	urlLineRe   = regexp.MustCompile(`^https?://\S+$`)
 )
 
@@ -189,7 +242,7 @@ var (
 // look: paragraphs stay paragraphs, a line that is only a link becomes the button, a 6-digit code is shown
 // large.
 func textEmailDoc(subject, text string) emailDoc {
-	d := emailDoc{Title: subject, Preheader: firstLine(text)}
+	d := emailDoc{Title: subject, Preheader: strings.ReplaceAll(firstLine(text), "**", "")}
 	for _, para := range strings.Split(strings.TrimSpace(text), "\n\n") {
 		var keep []string
 		for _, line := range strings.Split(para, "\n") {
@@ -202,12 +255,21 @@ func textEmailDoc(subject, text string) emailDoc {
 				keep = append(keep, line)
 			}
 		}
+		// A paragraph that is only the code becomes the panel, under the paragraph before it.
+		if len(keep) == 1 && codeOnlyRe.MatchString(keep[0]) && d.Code == "" && len(d.Paragraphs) > 0 {
+			d.Code, d.CodeAfter = keep[0], len(d.Paragraphs)-1
+			continue
+		}
 		if len(keep) > 0 {
 			d.Paragraphs = append(d.Paragraphs, strings.Join(keep, " "))
 		}
 	}
-	if d.Code == "" && len(d.Paragraphs) > 0 {
-		if code := emailCodeRe.FindString(d.Paragraphs[0]); code != "" {
+	if len(d.Paragraphs) > 0 {
+		code := d.Code
+		if code == "" {
+			code = emailCodeRe.FindString(d.Paragraphs[0])
+		}
+		if code != "" {
 			d.Code = code
 			// "123456 is your Staqly code" leads with the code for the inbox; the heading needn't repeat what the panel shows.
 			if rest, ok := strings.CutPrefix(subject, code+" is your "); ok {
@@ -222,7 +284,7 @@ func buttonText(subject string) string {
 	if strings.Contains(strings.ToLower(subject), "invited") {
 		return "Accept the invitation"
 	}
-	return "Open Staqly"
+	return "Open staqly"
 }
 
 func firstLine(s string) string {

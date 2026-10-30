@@ -382,7 +382,7 @@ func TestEmailCodeIsMailed(t *testing.T) {
 	var code string
 	select {
 	case m := <-inbox:
-		found := regexp.MustCompile(`sign-in code is (\d{6})`).FindStringSubmatch(m.Data)
+		found := regexp.MustCompile(`(\d{6}) is your staqly sign-in code`).FindStringSubmatch(m.Data)
 		if len(m.To) != 1 || !strings.Contains(m.To[0], "mail@example.com") || found == nil {
 			t.Fatalf("mail: %+v", m)
 		}
