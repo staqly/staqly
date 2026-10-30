@@ -2199,7 +2199,9 @@ export interface paths {
          *     existing one for the same account) and redirects the browser to the dashboard's
          *     `/channels/callback/{provider}` page with `?channel=<id>`, `?pending=<id>` when the sign-in may
          *     publish as several accounts (see getPendingConnection), or `?error=<message>` (plus `&code=trial_already_used`
-         *     when the account was used in an earlier free trial that ended unpaid; see PaymentRequired).
+         *     when the account was used in an earlier free trial that ended unpaid; see PaymentRequired). Without a
+         *     session (signed out meanwhile) or when the person cancelled on the platform's page it redirects with
+         *     `?error=` too, never a 401.
          */
         get: operations["finishChannelOAuth"];
         put?: never;
@@ -9336,12 +9338,12 @@ export interface operations {
                 to?: string;
                 /** @description Instead of from: the last n days up to to (7, 30, 90...) */
                 days?: number;
-                /** @description Only this channel's targets */
-                channel?: string;
+                /** @description Only these channels' targets; repeat it for several (channel=a&channel=b) */
+                channel?: string[];
                 /** @description Only posts of this collection */
                 collection?: string;
-                /** @description Only posts from this source, as `sources[].source` names it (dashboard, an agent's name, schedule:<name>, repeat) */
-                source?: string;
+                /** @description Only posts from these sources, as `sources[].source` names them (dashboard, an agent's name, schedule:<name>, repeat); repeat it for several. An empty one is the posts with none recorded */
+                source?: string[];
             };
             header?: never;
             path?: never;
@@ -10487,7 +10489,6 @@ export interface operations {
                     "text/html": string;
                 };
             };
-            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
         };

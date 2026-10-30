@@ -141,7 +141,7 @@ func (s *Server) connectLinkOAuthCallback(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, dest, http.StatusFound)
 	}
 	if e := q.Get("error"); e != "" {
-		land(url.Values{"error": {firstNonEmptyStr(q.Get("error_description"), "The platform refused the connection ("+e+")")}})
+		land(url.Values{"error": {oauthRefusal(q)}})
 		return
 	}
 	if c, err := r.Cookie(oauthCookie); err != nil || c.Value == "" || c.Value != q.Get("state") {

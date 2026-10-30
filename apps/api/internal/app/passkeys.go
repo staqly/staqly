@@ -30,7 +30,7 @@ const (
 )
 
 var (
-	errPasskeyOff     = &Error{Code: "passkeys_disabled", Status: 409, Message: "passkeys need the dashboard's public address on this server (PUBLIC_DASHBOARD_URL)"}
+	errPasskeyOff     = &Error{Code: "passkeys_disabled", Status: 409, Message: "passkeys need this server's public address, which is not set up yet"}
 	errPasskeyExpired = &Error{Code: "passkey_expired", Status: 410, Message: "this passkey prompt expired: try again"}
 	errPasskeyInvalid = &Error{Code: "passkey_invalid", Status: 401, Message: "this passkey could not be checked: try again or sign in another way"}
 )

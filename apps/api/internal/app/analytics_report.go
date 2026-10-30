@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"regexp"
 	"slices"
@@ -26,6 +27,7 @@ const (
 	analyticsMinSamples = 5
 	analyticsTopPosts   = 10
 	analyticsFailures   = 10
+	analyticsMaxFilter  = 100 // channels or sources in one filter
 )
 
 // AnalyticsQuery: from and to are days (YYYY-MM-DD) in the workspace's time zone, both included; Days instead of
@@ -33,9 +35,9 @@ const (
 type AnalyticsQuery struct {
 	From, To   string
 	Days       int
-	Channel    string
+	Channels   []string // nil: every channel
 	Collection string
-	Source     string
+	Sources    []string // nil: every source; "" is posts with none recorded
 }
 
 type AnalyticsReport struct {
@@ -301,8 +303,13 @@ func (s *Service) Analytics(ctx context.Context, p Principal, in AnalyticsQuery)
 	if err != nil {
 		return AnalyticsReport{}, err
 	}
-	if in.Channel != "" && !slices.ContainsFunc(channels, func(c db.Channel) bool { return c.ID == in.Channel }) {
-		return AnalyticsReport{}, invalid("channel", "no such channel in this workspace")
+	if len(in.Channels) > analyticsMaxFilter || len(in.Sources) > analyticsMaxFilter {
+		return AnalyticsReport{}, invalid("channel", fmt.Sprintf("at most %d channels and %d sources", analyticsMaxFilter, analyticsMaxFilter))
+	}
+	for _, id := range in.Channels {
+		if !slices.ContainsFunc(channels, func(c db.Channel) bool { return c.ID == id }) {
+			return AnalyticsReport{}, invalid("channel", "no such channel in this workspace")
+		}
 	}
 	if in.Collection != "" {
 		if _, err := s.Q.GetCollection(ctx, db.GetCollectionParams{WorkspaceID: p.WorkspaceID, ID: in.Collection}); isNoRows(err) {
@@ -311,10 +318,12 @@ func (s *Service) Analytics(ctx context.Context, p Principal, in AnalyticsQuery)
 			return AnalyticsReport{}, err
 		}
 	}
-	if utf8.RuneCountInString(in.Source) > 200 {
-		return AnalyticsReport{}, invalid("source", "must be at most 200 characters")
+	for _, src := range in.Sources {
+		if utf8.RuneCountInString(src) > 200 {
+			return AnalyticsReport{}, invalid("source", "must be at most 200 characters")
+		}
 	}
-	f.Collection, f.Channel, f.Source = in.Collection, in.Channel, in.Source
+	f.Collection, f.Channels, f.Sources = in.Collection, in.Channels, in.Sources
 
 	from, to, prevFrom := formatTime(start), formatTime(end), formatTime(prevStart)
 	buckets, err := s.Q.AnalyticsTargetBuckets(ctx, f, prevFrom, to)
@@ -361,8 +370,8 @@ func (s *Service) Analytics(ctx context.Context, p Principal, in AnalyticsQuery)
 		out.Queue.NextPublishAt = &queue.NextPublishAt.String
 	}
 
-	matchChannel := func(id string) bool { return in.Channel == "" || id == in.Channel }
-	matchSource := func(src string) bool { return in.Source == "" || src == in.Source }
+	matchChannel := func(id string) bool { return in.Channels == nil || slices.Contains(in.Channels, id) }
+	matchSource := func(src string) bool { return in.Sources == nil || slices.Contains(in.Sources, src) }
 	inPeriod := func(ts string) bool { return ts >= from }
 
 	// Channels: every channel of the workspace (one without posts in the range shows zeros).
@@ -405,7 +414,7 @@ func (s *Service) Analytics(ctx context.Context, p Principal, in AnalyticsQuery)
 	for _, c := range createdNow {
 		source(c.Source).PostsCreated += c.N
 	}
-	out.Totals.PostsCreated, out.Previous.PostsCreated = sumCreated(createdNow, in.Source), sumCreated(createdPrev, in.Source)
+	out.Totals.PostsCreated, out.Previous.PostsCreated = sumCreated(createdNow, in.Sources), sumCreated(createdPrev, in.Sources)
 
 	// Daily series and posting times from the grouped targets.
 	dayIndex := map[string]int{}
@@ -757,10 +766,10 @@ func (s *Service) Analytics(ctx context.Context, p Principal, in AnalyticsQuery)
 	return out, nil
 }
 
-func sumCreated(rows []db.SourceCount, source string) int64 {
+func sumCreated(rows []db.SourceCount, sources []string) int64 {
 	var n int64
 	for _, c := range rows {
-		if source == "" || c.Source == source {
+		if sources == nil || slices.Contains(sources, c.Source) {
 			n += c.N
 		}
 	}

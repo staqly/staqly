@@ -2056,9 +2056,9 @@ paths:
         - { name: from, in: query, description: "First day, YYYY-MM-DD in the workspace's time zone", schema: { type: string, format: date } }
         - { name: to, in: query, description: "Last day (included), YYYY-MM-DD; default today", schema: { type: string, format: date } }
         - { name: days, in: query, description: "Instead of from: the last n days up to to (7, 30, 90...)", schema: { type: integer, minimum: 1, maximum: 366 } }
-        - { name: channel, in: query, description: "Only this channel's targets", schema: { type: string } }
+        - { name: channel, in: query, description: "Only these channels' targets; repeat it for several (channel=a&channel=b)", schema: { type: array, maxItems: 100, items: { type: string } } }
         - { name: collection, in: query, description: "Only posts of this collection", schema: { type: string } }
-        - { name: source, in: query, description: "Only posts from this source, as `sources[].source` names it (dashboard, an agent's name, schedule:<name>, repeat)", schema: { type: string } }
+        - { name: source, in: query, description: "Only posts from these sources, as `sources[].source` names them (dashboard, an agent's name, schedule:<name>, repeat); repeat it for several. An empty one is the posts with none recorded", schema: { type: array, maxItems: 100, items: { type: string } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Analytics" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -2647,7 +2647,9 @@ paths:
         existing one for the same account) and redirects the browser to the dashboard's
         `/channels/callback/{provider}` page with `?channel=<id>`, `?pending=<id>` when the sign-in may
         publish as several accounts (see getPendingConnection), or `?error=<message>` (plus `&code=trial_already_used`
-        when the account was used in an earlier free trial that ended unpaid; see PaymentRequired).
+        when the account was used in an earlier free trial that ended unpaid; see PaymentRequired). Without a
+        session (signed out meanwhile) or when the person cancelled on the platform's page it redirects with
+        `?error=` too, never a 401.
       parameters:
         - { name: code, in: query, schema: { type: string } }
         - { name: state, in: query, schema: { type: string } }
@@ -2658,7 +2660,6 @@ paths:
           description: "Redirect to the dashboard's callback page (?channel=<id>, ?pending=<id> or ?error=<message>)"
           headers: { Location: { schema: { type: string } } }
           content: { text/html: { schema: { type: string } } }
-        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/pending-connections/{id}:

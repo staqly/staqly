@@ -17,8 +17,9 @@ export interface AnalyticsParams {
   days?: number
   from?: string
   to?: string
-  channel?: string
-  source?: string
+  channels?: string[]
+  /** Absent is every source; '' is the posts with none recorded. */
+  sources?: string[]
 }
 
 /** The two series colours (data-viz palette: categorical slot 1, status critical), light and dark steps. */
@@ -37,12 +38,12 @@ export function analyticsQueryString(p: AnalyticsParams): string {
     sp.set('days', String(p.days ?? 30))
   }
 
-  if (p.channel) {
-    sp.set('channel', p.channel)
+  for (const c of p.channels ?? []) {
+    sp.append('channel', c)
   }
 
-  if (p.source !== undefined) {
-    sp.set('source', p.source)
+  for (const s of p.sources ?? []) {
+    sp.append('source', s)
   }
 
   return sp.toString()

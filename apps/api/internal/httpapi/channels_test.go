@@ -381,11 +381,28 @@ func TestChannelsOAuthFlow(t *testing.T) {
 	state := u.Query().Get("state")
 
 	// The platform refused; a state from another browser; a bad code: all land with an error.
-	for _, q := range []string{"error=access_denied&error_description=Nope", "code=ok&state=forged", "code=bad&state=" + state} {
+	for _, q := range []string{"error=server_error&error_description=Nope", "code=ok&state=forged", "code=bad&state=" + state} {
 		resp := e.do(noRedirect, "GET", "/v1/channels/oauth/fakeoauth/callback?"+q, "", nil, 302, nil)
 		loc, _ := url.Parse(resp.Header.Get("Location"))
 		if !strings.HasSuffix(loc.Path, "/channels/callback/fakeoauth") || loc.Query().Get("error") == "" || loc.Query().Get("channel") != "" {
 			t.Fatalf("%s: landed on %s", q, resp.Header.Get("Location"))
+		}
+	}
+	// Cancelled on the platform's page, or back without a staqly session: a message, never a JSON 401.
+	for q, want := range map[string]string{"error=access_denied&state=" + state: "You cancelled", "code=ok&state=" + state: "signed out"} {
+		req, _ := http.NewRequest("GET", e.srv.URL+"/v1/channels/oauth/fakeoauth/callback?"+q, nil)
+		client := noRedirects(nil)
+		if want == "You cancelled" {
+			client = noRedirect
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		loc, _ := url.Parse(resp.Header.Get("Location"))
+		if resp.StatusCode != 302 || !strings.Contains(loc.Query().Get("error"), want) {
+			t.Fatalf("%s: %d %s", q, resp.StatusCode, resp.Header.Get("Location"))
 		}
 	}
 	if _, err := e.svc.DB.Exec(`SELECT 1`); err != nil {

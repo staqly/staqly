@@ -91,7 +91,7 @@ func accountsOnly(s *Service) error {
 
 func googleOnly(s *Service) error {
 	if !s.GoogleSignIn() {
-		return &Error{Code: "google_disabled", Status: 409, Message: "sign-in with Google is not set up on this server (GOOGLE_CLIENT_ID)"}
+		return &Error{Code: "google_disabled", Status: 409, Message: "sign-in with Google is not set up on this server"}
 	}
 	return nil
 }
