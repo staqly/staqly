@@ -3,7 +3,7 @@
 import { Bell, ExternalLink, History } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { IdChip } from '@/components/common/id-chip'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
@@ -25,6 +25,9 @@ const PublishChannels = dynamic(() => import('./publish-channels').then((m) => m
   ssr: false,
   loading: () => <span className="mt-1 block h-5" aria-hidden />,
 })
+
+/** Notifications shown at first and added by each "Load more", whatever their day. */
+const PAGE = 15
 
 const dayFormat = lazyDateFormat({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
@@ -49,10 +52,20 @@ export function NotificationsPage() {
   const zone = session.data?.workspace?.timezone
   // Grouped over every loaded page: a publish split by a page boundary joins up once the older page loads.
   const rows = useMemo(() => notificationsFor(events.data?.pages.flatMap((p) => p.data)), [events.data])
+  const [shown, setShown] = useState(PAGE)
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = events
+
+  // A page of events groups into fewer notifications: keep fetching until there are enough to show.
+  useEffect(() => {
+    if (rows.length < shown && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage()
+    }
+  }, [rows.length, shown, hasNextPage, isFetchingNextPage, fetchNextPage])
+
   const days = useMemo(() => {
     const out: { label: string; rows: typeof rows }[] = []
 
-    for (const r of rows) {
+    for (const r of rows.slice(0, shown)) {
       const label = dayLabel(r.at)
 
       if (out.at(-1)?.label !== label) {
@@ -63,7 +76,7 @@ export function NotificationsPage() {
     }
 
     return out
-  }, [rows])
+  }, [rows, shown])
 
   return (
     <PageContainer className="max-w-4xl">
@@ -104,14 +117,14 @@ export function NotificationsPage() {
             </section>
           ))
         )}
-        {events.hasNextPage && (
+        {(rows.length > shown || hasNextPage) && (
           <Button
             variant="outline"
             className="justify-self-center"
-            onClick={() => void events.fetchNextPage()}
-            disabled={events.isFetchingNextPage}
+            onClick={() => setShown((n) => n + PAGE)}
+            disabled={rows.length < shown && isFetchingNextPage}
           >
-            {events.isFetchingNextPage ? 'Loading...' : 'Load older'}
+            {rows.length < shown && isFetchingNextPage ? 'Loading...' : 'Load more'}
           </Button>
         )}
       </div>

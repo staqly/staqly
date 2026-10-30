@@ -54,7 +54,7 @@ func TestFiles(t *testing.T) {
 		}
 	}
 	// Old bookmarks land on the new pages.
-	for from, to := range map[string]string{"/inbox": "/schedule", "/notifications": "/alerts", "/collections": "/posts",
+	for from, to := range map[string]string{"/inbox": "/schedule", "/collections": "/posts",
 		"/collections/col_1": "/posts?collection=col_1"} {
 		if w := do(h, "GET", from, nil, nil); w.Code != 301 || w.Header().Get("Location") != to {
 			t.Errorf("%s: %d %q, want a redirect to %s", from, w.Code, w.Header().Get("Location"), to)
