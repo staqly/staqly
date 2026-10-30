@@ -80,21 +80,22 @@ type AssistantChat struct {
 }
 
 type Channel struct {
-	ID          string `json:"id"`
-	WorkspaceID string `json:"workspace_id"`
-	Provider    string `json:"provider"`
-	Name        string `json:"name"`
-	Handle      string `json:"handle"`
-	AvatarUrl   string `json:"avatar_url"`
-	ProfileUrl  string `json:"profile_url"`
-	Status      string `json:"status"`
-	Credentials string `json:"credentials"`
-	Settings    string `json:"settings"`
-	LastError   string `json:"last_error"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-	GroupID     string `json:"group_id"`
-	Comments    int64  `json:"comments"`
+	ID          string         `json:"id"`
+	WorkspaceID string         `json:"workspace_id"`
+	Provider    string         `json:"provider"`
+	Name        string         `json:"name"`
+	Handle      string         `json:"handle"`
+	AvatarUrl   string         `json:"avatar_url"`
+	ProfileUrl  string         `json:"profile_url"`
+	Status      string         `json:"status"`
+	Credentials string         `json:"credentials"`
+	Settings    string         `json:"settings"`
+	LastError   string         `json:"last_error"`
+	CreatedAt   string         `json:"created_at"`
+	UpdatedAt   string         `json:"updated_at"`
+	GroupID     string         `json:"group_id"`
+	Comments    int64          `json:"comments"`
+	DeletedAt   sql.NullString `json:"deleted_at"`
 }
 
 type ChannelGroup struct {

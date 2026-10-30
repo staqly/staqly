@@ -19,7 +19,7 @@ SELECT c.id AS channel_id,
     WHERE t.channel_id = c.id AND t.status = 'pending' AND p.status = 'scheduled'), '') AS TEXT) AS next_publish_at,
   CAST((SELECT COUNT(*) FROM post_targets t WHERE t.channel_id = c.id AND t.status = 'published' AND t.published_at >= ?1) AS INTEGER) AS published_since
 FROM channels c
-WHERE c.workspace_id = ?2
+WHERE c.workspace_id = ?2 AND c.deleted_at IS NULL
 `
 
 type ChannelActivityParams struct {
@@ -68,7 +68,7 @@ func (q *Queries) ChannelActivity(ctx context.Context, arg ChannelActivityParams
 }
 
 const channelsByIDs = `-- name: ChannelsByIDs :many
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments FROM channels WHERE workspace_id = ? AND id IN (SELECT value FROM json_each(?))
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE workspace_id = ? AND deleted_at IS NULL AND id IN (SELECT value FROM json_each(?))
 `
 
 type ChannelsByIDsParams struct {
@@ -101,6 +101,7 @@ func (q *Queries) ChannelsByIDs(ctx context.Context, arg ChannelsByIDsParams) ([
 			&i.UpdatedAt,
 			&i.GroupID,
 			&i.Comments,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -116,7 +117,7 @@ func (q *Queries) ChannelsByIDs(ctx context.Context, arg ChannelsByIDsParams) ([
 }
 
 const countChannels = `-- name: CountChannels :one
-SELECT COUNT(*) FROM channels WHERE workspace_id = ?
+SELECT COUNT(*) FROM channels WHERE workspace_id = ? AND deleted_at IS NULL
 `
 
 func (q *Queries) CountChannels(ctx context.Context, workspaceID string) (int64, error) {
@@ -167,16 +168,19 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) er
 }
 
 const deleteChannel = `-- name: DeleteChannel :execrows
-DELETE FROM channels WHERE workspace_id = ? AND id = ?
+UPDATE channels SET deleted_at = ?1, credentials = '', status = 'disabled', last_error = '', updated_at = ?1
+WHERE workspace_id = ?2 AND id = ?3 AND deleted_at IS NULL
 `
 
 type DeleteChannelParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	ID          string `json:"id"`
+	DeletedAt   sql.NullString `json:"deleted_at"`
+	WorkspaceID string         `json:"workspace_id"`
+	ID          string         `json:"id"`
 }
 
+// Kept as a row for the posts it published (their targets stay); its credentials go.
 func (q *Queries) DeleteChannel(ctx context.Context, arg DeleteChannelParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteChannel, arg.WorkspaceID, arg.ID)
+	result, err := q.db.ExecContext(ctx, deleteChannel, arg.DeletedAt, arg.WorkspaceID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -200,9 +204,19 @@ func (q *Queries) DeleteProviderApp(ctx context.Context, arg DeleteProviderAppPa
 	return result.RowsAffected()
 }
 
+const deleteUnpublishedTargetsOfChannel = `-- name: DeleteUnpublishedTargetsOfChannel :exec
+DELETE FROM post_targets WHERE channel_id = ? AND status <> 'published'
+`
+
+// A removed channel takes the targets that never went out with it; the published ones stay as history.
+func (q *Queries) DeleteUnpublishedTargetsOfChannel(ctx context.Context, channelID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUnpublishedTargetsOfChannel, channelID)
+	return err
+}
+
 const exportAllChannels = `-- name: ExportAllChannels :many
 SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, settings, last_error, created_at, updated_at
-FROM channels WHERE workspace_id = ? ORDER BY created_at, id
+FROM channels WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY created_at, id
 `
 
 type ExportAllChannelsRow struct {
@@ -257,7 +271,7 @@ func (q *Queries) ExportAllChannels(ctx context.Context, workspaceID string) ([]
 }
 
 const getChannel = `-- name: GetChannel :one
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments FROM channels WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL
 `
 
 type GetChannelParams struct {
@@ -284,12 +298,13 @@ func (q *Queries) GetChannel(ctx context.Context, arg GetChannelParams) (Channel
 		&i.UpdatedAt,
 		&i.GroupID,
 		&i.Comments,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getChannelByID = `-- name: GetChannelByID :one
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments FROM channels WHERE id = ?
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE id = ?
 `
 
 func (q *Queries) GetChannelByID(ctx context.Context, id string) (Channel, error) {
@@ -311,6 +326,7 @@ func (q *Queries) GetChannelByID(ctx context.Context, id string) (Channel, error
 		&i.UpdatedAt,
 		&i.GroupID,
 		&i.Comments,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -337,7 +353,7 @@ func (q *Queries) GetProviderApp(ctx context.Context, arg GetProviderAppParams) 
 }
 
 const listChannels = `-- name: ListChannels :many
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments FROM channels WHERE workspace_id = ? ORDER BY provider, name COLLATE NOCASE, id
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY provider, name COLLATE NOCASE, id
 `
 
 func (q *Queries) ListChannels(ctx context.Context, workspaceID string) ([]Channel, error) {
@@ -365,6 +381,7 @@ func (q *Queries) ListChannels(ctx context.Context, workspaceID string) ([]Chann
 			&i.UpdatedAt,
 			&i.GroupID,
 			&i.Comments,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}

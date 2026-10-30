@@ -9,5 +9,5 @@ UPDATE users SET name = ?, updated_at = ? WHERE id = ?;
 
 -- name: WorkspaceContentCount :one
 -- A local install that already has channels or posts is past the welcome.
-SELECT (SELECT COUNT(*) FROM channels c WHERE c.workspace_id = @workspace_id)
+SELECT (SELECT COUNT(*) FROM channels c WHERE c.workspace_id = @workspace_id AND c.deleted_at IS NULL)
      + (SELECT COUNT(*) FROM posts p WHERE p.workspace_id = @workspace_id);

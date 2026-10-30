@@ -56,7 +56,7 @@ func (q *Queries) SetWorkspaceOnboarded(ctx context.Context, arg SetWorkspaceOnb
 }
 
 const workspaceContentCount = `-- name: WorkspaceContentCount :one
-SELECT (SELECT COUNT(*) FROM channels c WHERE c.workspace_id = ?1)
+SELECT (SELECT COUNT(*) FROM channels c WHERE c.workspace_id = ?1 AND c.deleted_at IS NULL)
      + (SELECT COUNT(*) FROM posts p WHERE p.workspace_id = ?1)
 `
 

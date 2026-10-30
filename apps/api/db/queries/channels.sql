@@ -3,16 +3,16 @@ INSERT INTO channels (id, workspace_id, provider, name, handle, avatar_url, prof
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetChannel :one
-SELECT * FROM channels WHERE workspace_id = ? AND id = ?;
+SELECT * FROM channels WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL;
 
 -- name: GetChannelByID :one
 SELECT * FROM channels WHERE id = ?;
 
 -- name: ListChannels :many
-SELECT * FROM channels WHERE workspace_id = ? ORDER BY provider, name COLLATE NOCASE, id;
+SELECT * FROM channels WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY provider, name COLLATE NOCASE, id;
 
 -- name: ChannelsByIDs :many
-SELECT * FROM channels WHERE workspace_id = ? AND id IN (SELECT value FROM json_each(@ids));
+SELECT * FROM channels WHERE workspace_id = ? AND deleted_at IS NULL AND id IN (SELECT value FROM json_each(@ids));
 
 -- name: UpdateChannel :exec
 UPDATE channels SET name = ?, handle = ?, avatar_url = ?, profile_url = ?, status = ?, credentials = ?, settings = ?, last_error = ?, updated_at = ?
@@ -30,7 +30,7 @@ SELECT c.id AS channel_id,
     WHERE t.channel_id = c.id AND t.status = 'pending' AND p.status = 'scheduled'), '') AS TEXT) AS next_publish_at,
   CAST((SELECT COUNT(*) FROM post_targets t WHERE t.channel_id = c.id AND t.status = 'published' AND t.published_at >= @since) AS INTEGER) AS published_since
 FROM channels c
-WHERE c.workspace_id = @workspace_id;
+WHERE c.workspace_id = @workspace_id AND c.deleted_at IS NULL;
 
 -- name: SetChannelHealth :exec
 UPDATE channels SET status = ?, last_error = ?, updated_at = ? WHERE id = ?;
@@ -42,14 +42,20 @@ UPDATE channels SET status = 'needs_reconnect', last_error = ?, updated_at = ? W
 UPDATE channels SET credentials = ?, updated_at = ? WHERE id = ?;
 
 -- name: DeleteChannel :execrows
-DELETE FROM channels WHERE workspace_id = ? AND id = ?;
+-- Kept as a row for the posts it published (their targets stay); its credentials go.
+UPDATE channels SET deleted_at = @deleted_at, credentials = '', status = 'disabled', last_error = '', updated_at = @deleted_at
+WHERE workspace_id = @workspace_id AND id = @id AND deleted_at IS NULL;
+
+-- name: DeleteUnpublishedTargetsOfChannel :exec
+-- A removed channel takes the targets that never went out with it; the published ones stay as history.
+DELETE FROM post_targets WHERE channel_id = ? AND status <> 'published';
 
 -- name: CountChannels :one
-SELECT COUNT(*) FROM channels WHERE workspace_id = ?;
+SELECT COUNT(*) FROM channels WHERE workspace_id = ? AND deleted_at IS NULL;
 
 -- name: ExportAllChannels :many
 SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, settings, last_error, created_at, updated_at
-FROM channels WHERE workspace_id = ? ORDER BY created_at, id;
+FROM channels WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY created_at, id;
 
 -- name: GetProviderApp :one
 SELECT * FROM provider_apps WHERE workspace_id = ? AND provider = ?;

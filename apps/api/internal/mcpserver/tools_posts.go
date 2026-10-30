@@ -29,7 +29,7 @@ func (t *tools) addPostTools(s *mcp.Server) {
 		Annotations: wr()}, t.createChannelLink)
 	add(s, t, &mcp.Tool{Name: "list_channel_links", Description: "The workspace's connect links (status open, used, expired or revoked; uses; expiry); the links themselves are not shown again. Requires channels:manage.", Annotations: ro()}, t.listChannelLinks)
 	add(s, t, &mcp.Tool{Name: "revoke_channel_link", Description: "Stop a connect link from working; channels already connected through it stay. Requires channels:manage.", Annotations: destructive()}, t.revokeChannelLink)
-	add(s, t, &mcp.Tool{Name: "delete_channel", Description: "Remove a channel; targets on it go with it. Requires channels:manage.", Annotations: destructive()}, t.deleteChannel)
+	add(s, t, &mcp.Tool{Name: "delete_channel", Description: "Remove a channel; its targets that have not gone out go with it, the published ones stay on their posts. Requires channels:manage.", Annotations: destructive()}, t.deleteChannel)
 	add(s, t, &mcp.Tool{Name: "test_channel", Description: "Check a channel's stored credentials against its platform. Rate-limited. Requires channels:manage.", Annotations: wr()}, t.testChannel)
 	add(s, t, &mcp.Tool{Name: "list_channel_options", Description: "The choices of a channel's remote setting (a settings_fields entry of kind remote), from its platform right now: for Slack, key channel lists the workspace's channels a post can go to. Requires channels:read.", Annotations: ro()}, t.listChannelOptions)
 

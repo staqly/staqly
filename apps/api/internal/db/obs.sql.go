@@ -10,7 +10,7 @@ import (
 )
 
 const obsChannelCounts = `-- name: ObsChannelCounts :many
-SELECT status, COUNT(*) AS n FROM channels GROUP BY status
+SELECT status, COUNT(*) AS n FROM channels WHERE deleted_at IS NULL GROUP BY status
 `
 
 type ObsChannelCountsRow struct {

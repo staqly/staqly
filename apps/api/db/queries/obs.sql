@@ -9,7 +9,7 @@ SELECT status, COUNT(*) AS n FROM webhook_deliveries GROUP BY status;
 SELECT status, COUNT(*) AS n FROM posts GROUP BY status;
 
 -- name: ObsChannelCounts :many
-SELECT status, COUNT(*) AS n FROM channels GROUP BY status;
+SELECT status, COUNT(*) AS n FROM channels WHERE deleted_at IS NULL GROUP BY status;
 
 -- name: ObsOldestPendingDelivery :one
 SELECT CAST(COALESCE(MIN(created_at), '') AS TEXT) AS oldest FROM webhook_deliveries WHERE status = 'pending';
