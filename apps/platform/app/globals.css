@@ -248,6 +248,11 @@
   max-height: 30vh;
 }
 
+/* With pictures or a video under the text, the strip takes room of its own: the text field needs less. */
+.post-editor:has(.media-strip) .rte-content .ProseMirror {
+  min-height: 5rem;
+}
+
 .post-editor:focus-within {
   border-color: var(--ring);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
