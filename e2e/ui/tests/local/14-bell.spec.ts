@@ -20,7 +20,7 @@ test.describe('notification bell', () => {
     await expect(bell).toHaveAttribute('aria-label', /\d+ unread/)
     await openNotifications(page)
     const list = page.getByTestId('notifications-list')
-    const row = list.getByRole('listitem').filter({ hasText: `“${title}” was published` })
+    const row = list.getByRole('listitem').filter({ hasText: `“${title}” is out on ${col.channel.name}` })
 
     await expect(row).toBeVisible()
     // Still unread while the list is open (the row carries a dot); Mark all as read clears the count, also after a
@@ -40,7 +40,7 @@ test.describe('notification bell', () => {
     await expect(page).toHaveURL(/\/notifications/)
     await page
       .getByTestId('notifications-page-list')
-      .getByRole('link', { name: `“${title}” was published` })
+      .getByRole('link', { name: `“${title}” is out on ${col.channel.name}` })
       .click()
     await expect(page).toHaveURL(new RegExp(`/posts/${post.id}`))
     await expect(page.getByRole('dialog').getByRole('heading', { name: title })).toBeVisible()
@@ -56,7 +56,9 @@ test.describe('notification bell', () => {
     const list = page.getByTestId('notifications-list')
 
     await expect(
-      list.getByRole('listitem').filter({ hasText: `Publishing “${titleOf(post.content)}” failed` }),
+      list
+        .getByRole('listitem')
+        .filter({ hasText: `“${titleOf(post.content)}” did not go out on ${col.channel.name}: Mock API: 503` }),
     ).toBeVisible()
     await expect(
       list.getByRole('listitem').filter({ hasText: `“${titleOf(post.content)}” is waiting for your automation` }),

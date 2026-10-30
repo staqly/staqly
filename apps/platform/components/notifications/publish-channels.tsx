@@ -32,7 +32,7 @@ export function PublishChannels({ channels }: { channels: NotificationChannel[] 
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex w-fit max-w-full items-center gap-2 rounded-sm text-xs text-muted-foreground hover:text-foreground pointer-coarse:py-1"
+        className="inline-flex w-fit max-w-full items-center gap-2 rounded-sm text-xs text-muted-foreground hover:text-foreground pointer-coarse:min-h-10"
       >
         <ChannelStack channels={channels.map(like)} max={4} size="size-5" />
         <span>{open ? 'Hide channels' : `Show ${channels.length} channels`}</span>

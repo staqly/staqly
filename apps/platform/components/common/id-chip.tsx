@@ -14,7 +14,8 @@ export function IdChip({
   className?: string
 }) {
   return (
-    <span className={cn('inline-flex max-w-full min-w-0 items-center gap-0.5', className)}>
+    // With a copy button it never shrinks below the button and a bit of the ID (it would stick out of the row).
+    <span className={cn('inline-flex max-w-full min-w-0 items-center gap-0.5', copy && 'min-w-16', className)}>
       <code
         className="truncate rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground/80 ring-1 ring-border/60 ring-inset"
         title={id}

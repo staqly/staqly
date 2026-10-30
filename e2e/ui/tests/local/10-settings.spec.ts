@@ -172,7 +172,8 @@ test.describe('settings', () => {
 
     await page.goto('/settings/system')
     await expect(page.getByRole('region', { name: 'Health' })).toContainText('Ready')
-    await page.getByRole('button', { name: 'Check now' }).click()
+    // Health has its own Check now (the platforms card has another).
+    await page.getByRole('region', { name: 'Health' }).getByRole('button', { name: 'Check now' }).click()
     await expect(page.getByRole('listitem').filter({ hasText: 'SQLite answers a ping' })).toContainText('ok')
   })
 

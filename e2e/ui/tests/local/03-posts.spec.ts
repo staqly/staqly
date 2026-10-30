@@ -81,8 +81,10 @@ test.describe('posts', () => {
     srv,
   }) => {
     await page.goto(`/posts?collection=${srv.seed.collections.instagram}`)
-    // A published post, in the Published section.
-    await rows(page).filter({ hasText: 'Posted yesterday' }).click()
+    await ready(page, 'Instagram posts')
+    // A published post, in the Published section. (Its title link: rows below the fold skip rendering until
+    // scrolled to, so a click in the same frame as the scroll would land on the bare row.)
+    await rows(page).filter({ hasText: 'Posted yesterday' }).getByTestId('post-link').click()
     await expect(page).toHaveURL(new RegExp(`/posts/${srv.seed.posts.published}`))
     const sheet = page.getByRole('dialog')
 
@@ -110,7 +112,7 @@ test.describe('posts', () => {
     await expect(sheet.getByRole('combobox', { name: 'Collection' })).toContainText(col.name)
     await expect(sheet.getByRole('button', { name: 'Save draft' })).toBeDisabled()
     await expect(sheet.getByTestId('publish-now')).toBeDisabled()
-    await sheet.getByTestId('post-title').fill('Hello')
+    await sheet.getByTestId('post-title').fill('Composer draft')
     await sheet.getByTestId('post-content').fill('Hello from the composer')
     await expect(sheet.getByRole('button', { name: 'Save draft' })).toBeEnabled()
     // No channel yet: publishing is not offered, a draft is.
@@ -126,7 +128,7 @@ test.describe('posts', () => {
     await expect(sheet.getByRole('tab', { name: `Text for ${col.channel.name}` })).toHaveCount(0)
     await sheet.getByRole('button', { name: 'Save draft' }).click()
     await expect(sheet).toBeHidden()
-    const row = rows(page).filter({ hasText: 'Hello from the composer' })
+    const row = rows(page).filter({ hasText: 'Composer draft' })
 
     await expect(row).toContainText('Draft')
     const created = (
@@ -138,14 +140,14 @@ test.describe('posts', () => {
 
     // Schedule one: Schedule in the calendar popover sends it.
     await page.getByTestId('new-post').click()
-    await sheet.getByTestId('post-title').fill('Scheduled')
+    await sheet.getByTestId('post-title').fill('Composer scheduled')
     await sheet.getByTestId('post-content').fill('Scheduled from the composer')
     await pickChannels(page, sheet, col.channel.name)
     const when = daysAhead(2, 11)
 
     await pickDateTime(page, sheet, when, 'Schedule')
     await expect(sheet).toBeHidden()
-    await expect(rows(page).filter({ hasText: 'Scheduled from the composer' })).toContainText('Scheduled')
+    await expect(rows(page).filter({ hasText: 'Composer scheduled' })).toContainText('Scheduled')
     const scheduled = (
       await api.get<{ data: { content: string; status: string; publish_at: string }[] }>(
         `/v1/collections/${col.id}/posts?status=scheduled`,
@@ -157,7 +159,7 @@ test.describe('posts', () => {
 
     // Publish now: the post goes to the automation.
     await page.getByTestId('new-post').click()
-    await sheet.getByTestId('post-title').fill('Published')
+    await sheet.getByTestId('post-title').fill('Composer publish')
     await sheet.getByTestId('post-content').fill('Published from the composer')
     await pickChannels(page, sheet, col.channel.name)
     await sheet.getByTestId('publish-now').click()
@@ -180,7 +182,7 @@ test.describe('posts', () => {
     await api.waitRequested(publishing.id)
     await api.result(publishing.id, col.channel.id, { status: 'published', url: 'https://example.com/ui/1' })
     // The list updates on its own.
-    await expect(rows(page).filter({ hasText: 'Published from the composer' })).toContainText('Published', {
+    await expect(rows(page).filter({ hasText: 'Composer publish' })).toContainText('Published', {
       timeout: 20_000,
     })
   })
@@ -229,9 +231,11 @@ test.describe('posts', () => {
     await api.createPost(col.id, { content: 'Arrived while you looked', targets: [{ channel_id: col.channel.id }] })
     await expect(rows(page).filter({ hasText: 'Arrived while you looked' })).toBeVisible({ timeout: 20_000 })
     await api.schedule(col.posts[0]!.id, daysAhead(1, 12).toISOString())
-    await expect(
-      page.getByRole('navigation', { name: 'Collections' }).getByRole('link', { name: new RegExp(col.name) }),
-    ).toContainText('1', { timeout: 20_000 })
+    // The pane counts every post; its hover names the scheduled ones.
+    const pane = page.getByRole('navigation', { name: 'Collections' }).getByRole('link', { name: new RegExp(col.name) })
+
+    await expect(pane).toContainText('2', { timeout: 20_000 })
+    await expect(pane.locator('[title$="1 scheduled"]')).toBeAttached({ timeout: 20_000 })
     expect((await getPost(api, col.posts[0]!.id)).status).toBe('scheduled')
     expect(titleOf(col.posts[0]!.content)).toBe(`${col.name} post 1`)
   })

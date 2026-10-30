@@ -120,10 +120,11 @@ export async function seed(t: SeedTarget, media: SeedMedia): Promise<SeedResult>
     collections.push(
       await post<{ id: string; name: string }>('/v1/collections', {
         name: name.slice(0, 100),
-        description:
-          i === 0
-            ? `A very long description that goes on and on to see how the header wraps on small phones. ${LONG_WORD} ${LONG_URL}`
-            : `Description of ${name}`,
+        // the API caps a description at 180 characters
+        description: (i === 0
+          ? `A very long description that goes on and on to see how the header wraps on small phones. ${LONG_WORD} ${LONG_URL}`
+          : `Description of ${name}`
+        ).slice(0, 180),
         color: ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#7c3aed'][i % 5],
       }),
     )

@@ -100,7 +100,7 @@ test('email codes: sign-up, workspaces, invitations, roles and isolation', async
   const wsA = me.session.workspace
 
   // A post in the first workspace.
-  const postA = await me.post('/posts', { collection: 'Default', content: `Only in A ${run}` })
+  const postA = await me.post('/posts', { collection: 'Default', title: 'Only in A', content: `Only in A ${run}` })
 
   expect(postA.status()).toBe(201)
   const postAId = ((await postA.json()) as { id: string }).id
@@ -108,7 +108,8 @@ test('email codes: sign-up, workspaces, invitations, roles and isolation', async
   // 2. The account page lists the sign-in method.
   await page.goto('/settings/account')
   await expect(page.getByTestId('sign-in-methods')).toContainText(owner)
-  await expect(page.getByTestId('sign-in-methods').getByRole('button', { name: 'Remove' })).toBeDisabled()
+  // The only way to sign in cannot be removed: no Remove until there is another.
+  await expect(page.getByTestId('sign-in-methods').getByRole('button', { name: 'Remove' })).toHaveCount(0)
 
   // 3. Invite an editor and a viewer to the first workspace (Members page).
   const links: Record<string, string> = {}
@@ -160,7 +161,11 @@ test('email codes: sign-up, workspaces, invitations, roles and isolation', async
   expect(edApi.session.role).toBe('editor')
   // Sees the workspace's posts, writes and publishes; cannot manage people.
   expect(JSON.stringify(await (await edApi.get('/posts?limit=100')).json())).toContain(`Only in A ${run}`)
-  expect((await edApi.post('/posts', { collection: 'Default', content: `By the editor ${run}` })).status()).toBe(201)
+  expect(
+    (
+      await edApi.post('/posts', { collection: 'Default', title: 'By the editor', content: `By the editor ${run}` })
+    ).status(),
+  ).toBe(201)
   expect((await edApi.get('/members')).status()).toBe(403)
   expect((await edApi.post('/invitations', { email: addr('x'), role: 'viewer' })).status()).toBe(403)
   await ed.page.goto('/settings')
@@ -181,7 +186,7 @@ test('email codes: sign-up, workspaces, invitations, roles and isolation', async
 
   expect(vwApi.session.role).toBe('viewer')
   expect((await vwApi.get(`/posts/${postAId}`)).status()).toBe(200)
-  expect((await vwApi.post('/posts', { collection: 'Default', content: 'nope' })).status()).toBe(403)
+  expect((await vwApi.post('/posts', { collection: 'Default', title: 'Nope', content: 'nope' })).status()).toBe(403)
   expect((await vwApi.post(`/posts/${postAId}/publish`, {})).status()).toBe(403)
   await vw.ctx.close()
 

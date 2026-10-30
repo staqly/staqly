@@ -58,7 +58,7 @@ export function NotificationList({
                 type="button"
                 onClick={() => onGo(n)}
                 className={cn(
-                  'block w-full text-left text-sm leading-snug wrap-anywhere hover:underline pointer-coarse:py-1',
+                  'block min-h-6 w-full text-left text-sm leading-snug wrap-anywhere hover:underline pointer-coarse:min-h-10 pointer-coarse:py-1',
                   isNew && 'font-medium',
                 )}
               >
@@ -70,7 +70,7 @@ export function NotificationList({
                   href={link}
                   target="_blank"
                   rel="noopener noreferrer nofollow"
-                  className="mt-0.5 inline-flex max-w-full items-center gap-1 text-xs text-brand underline underline-offset-2 pointer-coarse:py-1"
+                  className="inline-flex min-h-6 max-w-full items-center gap-1 text-xs text-brand underline underline-offset-2 pointer-coarse:min-h-10"
                 >
                   <span className="truncate">{link}</span>
                   <ExternalLink className="size-3 shrink-0" aria-hidden />

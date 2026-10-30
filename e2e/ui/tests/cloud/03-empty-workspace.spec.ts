@@ -50,8 +50,8 @@ test('empty states of a new workspace, then the first post arrives live', async 
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ws.api_key.key}` },
     body: JSON.stringify({
       collection: 'Default',
-      title: 'Post',
-      content: 'First post from an agent',
+      title: 'First post from an agent',
+      content: 'Written by an agent over the API.',
       source: 'claude-code',
     }),
   })

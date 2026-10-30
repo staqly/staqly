@@ -214,7 +214,7 @@ test.describe('accessibility', () => {
     await page.keyboard.press('Enter')
     await expect(sheet).toBeHidden()
     await expect(
-      page.getByTestId('posts-list').getByTestId('post-row').filter({ hasText: 'Typed without a mouse' }),
+      page.getByTestId('posts-list').getByTestId('post-row').filter({ hasText: 'Keyboard post' }),
     ).toBeVisible()
     // Focus went back to the button that opened the sheet.
     await expect(newPost).toBeFocused()
