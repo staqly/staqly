@@ -173,18 +173,13 @@ export const PostRow = memo(function PostRow({
         dragging && 'opacity-40',
       )}
     >
-      {/* The list carries data-selecting while anything is selected (group/list): the boxes show without the rows
-          re-rendering when the first one is picked or the last one dropped. */}
+      {/* Always shown: a box that appears only on hover is easy to miss. */}
       {onToggle && (
         <SelectBox
           checked={selected}
           label={`Select ${postTitle(post, 60)}`}
           onClick={(e) => onToggle(post.id, e.shiftKey)}
           data-testid="post-select"
-          className={cn(
-            !selected &&
-              'opacity-0 group-hover:opacity-100 group-data-selecting/list:opacity-100 pointer-coarse:opacity-100',
-          )}
         />
       )}
 

@@ -45,7 +45,7 @@ import { cn, hrefWithParams } from '@/lib/utils'
 
 import { PostsQueryContext, postsQuery } from './post-href'
 import { POST_DRAG, PostRow, PostSelectionBar, SelectBox, usePostRowActions, type PostAction } from './post-list'
-import { StatusCounts } from './status-counts'
+import { StatusSummary } from './status-counts'
 
 const Composer = dynamic(() => import('./composer').then((m) => m.Composer), { ssr: false })
 const CollectionSettingsSheet = dynamic(
@@ -77,7 +77,6 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 function PostSection({
   icon: Icon,
   title,
-  description,
   count,
   posts,
   list,
@@ -92,7 +91,6 @@ function PostSection({
 }: {
   icon: LucideIcon
   title: string
-  description: string
   count?: number
   posts: ReturnType<typeof usePostsInfinite>
   list: Post[]
@@ -122,7 +120,6 @@ function PostSection({
               </span>
             )}
           </h2>
-          <p className="text-xs text-muted-foreground">{description}</p>
         </div>
         {/* Selects (or clears) the section's loaded posts; Shift+click on rows selects a range. */}
         {onSelect && list.length > 0 && (
@@ -382,10 +379,6 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
               <IdChip id={c.id} label="collection" className="shrink-[3]" />
             </div>
             {c.description && <p className="mt-0.5 text-sm wrap-anywhere text-muted-foreground">{c.description}</p>}
-            {/* Only with posts: an empty collection says so in the list below. */}
-            {Object.values(c.status_counts ?? {}).some((n) => n > 0) && (
-              <StatusCounts counts={c.status_counts ?? {}} className="mt-1.5" />
-            )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {/* The only collection: the collections pane is hidden, so its New lives here. */}
@@ -449,6 +442,10 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
             </Button>
           </div>
         </div>
+        {/* Only with posts: an empty collection says so in the list below. */}
+        {Object.values(c.status_counts ?? {}).some((n) => n > 0) && (
+          <StatusSummary counts={c.status_counts ?? {}} className="mt-2" />
+        )}
         {/* Filters in use, as chips under the title (each one comes off with its ×). */}
         {filtered && (
           <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="post-filters">
@@ -504,7 +501,6 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
               <PostSection
                 icon={CalendarClock}
                 title="Upcoming"
-                description="Drafts, scheduled posts and the ones to retry"
                 count={upcomingCount}
                 posts={upcoming}
                 list={upcomingList}
@@ -525,7 +521,6 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
               <PostSection
                 icon={BadgeCheck}
                 title="Published"
-                description="Out on their channels, the latest first"
                 count={publishedCount}
                 posts={published}
                 list={publishedList}
