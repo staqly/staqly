@@ -209,3 +209,10 @@ export function queryRow(name: RegExp) {
       .find((li) => li.querySelector('[data-item-id]') && name.test(li.textContent ?? '')) ?? null
   )
 }
+
+/** The posts a list request asks for by its status filter (one status or several, comma-separated). */
+export function byStatus<T extends { status: string }>(posts: T[], call: Call): T[] {
+  const want = call.query.get('status')
+
+  return want ? posts.filter((p) => want.split(',').includes(p.status)) : posts
+}

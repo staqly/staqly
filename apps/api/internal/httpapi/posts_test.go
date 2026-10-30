@@ -95,6 +95,12 @@ func TestPostLifecycleREST(t *testing.T) {
 	if len(page.Data) != 0 {
 		t.Fatalf("draft listing while scheduled: %d", len(page.Data))
 	}
+	// Several statuses at once (comma-separated); an unknown one is refused.
+	e.do(nil, "GET", "/v1/collections/"+c.ID+"/posts?status=draft,scheduled", e.key, nil, 200, &page)
+	if len(page.Data) != 1 {
+		t.Fatalf("draft or scheduled listing: %d", len(page.Data))
+	}
+	e.do(nil, "GET", "/v1/collections/"+c.ID+"/posts?status=draft,nope", e.key, nil, 422, nil)
 	// Cancel: back to draft, the job is gone.
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/cancel", e.key, nil, 200, &got)
 	if got.Status != "draft" {

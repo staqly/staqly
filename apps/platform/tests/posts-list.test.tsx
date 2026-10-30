@@ -6,7 +6,7 @@ import { PostsWorkspace } from '@/components/posts/posts-workspace'
 
 import { channel, collection, post, target } from './fixtures'
 import { nav } from './navigation'
-import { mockApi, renderWithProviders } from './utils'
+import { byStatus, mockApi, renderWithProviders, type Call } from './utils'
 
 beforeEach(() => nav.reset())
 
@@ -25,7 +25,8 @@ function setup(extra: Record<string, unknown> = {}) {
     'GET /v1/channels': { data: [channel()] },
     'GET /v1/tags': { data: [] },
     'GET /v1/events': { data: [] },
-    'GET /v1/posts': { data: three, next_cursor: null },
+    // Each section asks for its statuses (failed; draft,scheduled,publishing; published).
+    'GET /v1/posts': (call: Call) => ({ data: byStatus(three, call), next_cursor: null }),
     ...extra,
   })
 }
@@ -117,7 +118,7 @@ describe('posts list', () => {
       post({ id: 'pst_3', content: 'Never out' }),
     ]
     const api = setup({
-      'GET /v1/posts': { data: out, next_cursor: null },
+      'GET /v1/posts': (call: Call) => ({ data: byStatus(out, call), next_cursor: null }),
       'POST /v1/posts/delete': { deleted: ['pst_3'], missing: [], kept: [] },
     })
     const user = userEvent.setup()
@@ -172,13 +173,16 @@ describe('posts list', () => {
     const went = target({ channel_id: 'ch_1', status: 'published', external_url: 'https://bsky.app/p/1' })
 
     setup({
-      'GET /v1/posts': {
-        data: [
-          post({ id: 'pst_1', content: 'Again later', status: 'scheduled', targets: [went] }),
-          post({ id: 'pst_2', content: 'Out now', status: 'published', targets: [went] }),
-        ],
+      'GET /v1/posts': (call: Call) => ({
+        data: byStatus(
+          [
+            post({ id: 'pst_1', content: 'Again later', status: 'scheduled', targets: [went] }),
+            post({ id: 'pst_2', content: 'Out now', status: 'published', targets: [went] }),
+          ],
+          call,
+        ),
         next_cursor: null,
-      },
+      }),
     })
     const user = userEvent.setup()
 

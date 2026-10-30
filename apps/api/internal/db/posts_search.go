@@ -81,7 +81,12 @@ func (q *Queries) SearchPosts(ctx context.Context, s PostSearch) ([]Post, string
 		add("p.collection_id = ?", s.CollectionID)
 	}
 	if s.Status != "" {
-		add("p.status = ?", s.Status)
+		list := strings.Split(s.Status, ",")
+		vals := make([]any, len(list))
+		for i, v := range list {
+			vals[i] = v
+		}
+		add("p.status IN ("+strings.TrimSuffix(strings.Repeat("?, ", len(list)), ", ")+")", vals...)
 	}
 	if s.ChannelID != "" {
 		add("EXISTS (SELECT 1 FROM post_targets t WHERE t.post_id = p.id AND t.channel_id = ?)", s.ChannelID)

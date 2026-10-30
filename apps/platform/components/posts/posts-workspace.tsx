@@ -39,7 +39,6 @@ function Dot({ color, className }: { color?: string; className?: string }) {
   )
 }
 
-/** How many posts of a collection are scheduled, as a small count next to its name. */
 /** How many posts a collection holds, muted on the right; the hover names how many of them are scheduled. */
 function PostCount({ c, className }: { c: Collection; className?: string }) {
   const scheduled = c.status_counts?.scheduled ?? 0
