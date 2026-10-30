@@ -159,7 +159,8 @@ describe('post sheet', () => {
     await user.click(screen.getByTestId('publish-now'))
     // It saves, then schedules for a few seconds from now (the Undo window).
     await waitFor(() => expect(api.find('POST', '/v1/posts/pst_1/schedule')).toHaveLength(1))
-    await user.click(within(rows[1]!).getByRole('button', { name: 'Retry' }))
+    // Retry sits in the failed channel's card header, beside its name.
+    await user.click(within(within(list).getAllByRole('listitem')[1]!).getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(api.find('POST', '/v1/posts/pst_1/targets/ch_2/retry')).toHaveLength(1))
   })
 
