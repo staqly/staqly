@@ -1,4 +1,5 @@
 import type { components, operations, paths } from './api-types'
+import { browserTimeZone } from './time-zone'
 
 type Schemas = components['schemas']
 
@@ -750,10 +751,11 @@ export const api = {
   // Sign-in with an email code, and the signed-in person's sign-in methods.
   startEmailSignIn: (email: string) =>
     request<EmailCodeSent>('/v1/auth/email/start', { method: 'POST', json: { email }, public: true }),
+  // timezone: a new person's first workspace starts in the browser's zone.
   verifyEmailSignIn: (body: { email: string; code: string; next?: string; invite?: string; setup_token?: string }) =>
     request<{ csrf_token: string; next: string }>('/v1/auth/email/verify', {
       method: 'POST',
-      json: body,
+      json: { ...body, timezone: browserTimeZone() },
       public: true,
     }),
   signInMethods: () => request<{ data: SignInMethod[] }>('/v1/account/sign-in-methods'),

@@ -24,6 +24,12 @@ func checkTimezone(v string) (string, error) {
 	return v, nil
 }
 
+// signInZone is the browser's zone sent with a sign-in, or "" (UTC) when it isn't one: a bad zone never fails a sign-in.
+func signInZone(v string) string {
+	tz, _ := checkTimezone(v)
+	return tz
+}
+
 // localZoneName is this machine's zone as an IANA name, for the local workspace: TZ when set (empty = UTC,
 // as Go reads it), else the /etc/localtime link; UTC when neither gives a name the server knows.
 func localZoneName() string {

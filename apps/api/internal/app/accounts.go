@@ -145,6 +145,8 @@ type loginState struct {
 	Next       string `json:"x,omitempty"`
 	Invite     string `json:"i,omitempty"`
 	SetupToken string `json:"t,omitempty"`
+	// Timezone: the browser's IANA zone, for the first workspace of a new person ("" = UTC).
+	Timezone string `json:"z,omitempty"`
 	// Link: the signed-in person adding Google to their sign-in methods (no new session).
 	Link    string `json:"l,omitempty"`
 	Expires int64  `json:"e"`
@@ -165,9 +167,11 @@ func SafeNext(next string) string {
 	return next
 }
 
-// StartGoogleLogin returns the Google URL to send the browser to and the sealed state for its cookie.
-func (s *Service) StartGoogleLogin(ctx context.Context, next, invite, setupToken string) (string, string, error) {
-	return s.startGoogle(ctx, loginState{Next: SafeNext(next), Invite: strings.TrimSpace(invite), SetupToken: setupToken})
+// StartGoogleLogin returns the Google URL to send the browser to and the sealed state for its cookie. tz is the
+// browser's zone for a new person's first workspace.
+func (s *Service) StartGoogleLogin(ctx context.Context, next, invite, setupToken, tz string) (string, string, error) {
+	return s.startGoogle(ctx, loginState{Next: SafeNext(next), Invite: strings.TrimSpace(invite), SetupToken: setupToken,
+		Timezone: signInZone(tz)})
 }
 
 // StartGoogleLink: a signed-in person adds Google to their sign-in methods (Settings, Account).
@@ -323,7 +327,7 @@ func (s *Service) signInUserTx(ctx context.Context, q *db.Queries, user db.User,
 				return LoginResult{}, &Error{Code: "signup_closed", Status: 403,
 					Message: "this staqly accepts new people by invitation: ask a workspace admin to invite " + user.Email}
 			}
-			if wsID, err = s.createFirstWorkspace(ctx, q, user); err != nil {
+			if wsID, err = s.createFirstWorkspace(ctx, q, user, st.Timezone); err != nil {
 				return LoginResult{}, err
 			}
 		}
@@ -452,10 +456,11 @@ func (s *Service) homeWorkspace(ctx context.Context, q *db.Queries, userID strin
 	return rows[0].ID, nil
 }
 
-// createFirstWorkspace: a person without a workspace gets one, which they own.
-func (s *Service) createFirstWorkspace(ctx context.Context, q *db.Queries, user db.User) (string, error) {
+// createFirstWorkspace: a person without a workspace gets one, which they own, in their browser's zone tz
+// (checked by signInZone; "" = UTC).
+func (s *Service) createFirstWorkspace(ctx context.Context, q *db.Queries, user db.User, tz string) (string, error) {
 	now := s.now()
-	ws, err := s.createCloudWorkspace(ctx, q, "My workspace", "")
+	ws, err := s.createCloudWorkspace(ctx, q, "My workspace", tz)
 	if err != nil {
 		return "", err
 	}

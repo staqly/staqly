@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NewWorkspaceDialog } from '@/components/settings/new-workspace-dialog'
+import { browserTimeZone } from '@/lib/time-zone'
 
 import { mockApi, renderWithProviders } from './utils'
 
@@ -50,6 +51,10 @@ describe('new workspace', () => {
     await user.type(screen.getByLabelText(/Name/), 'Client work')
     await user.click(screen.getByRole('button', { name: 'Create workspace' }))
     await waitFor(() => expect(api.find('POST', '/v1/session/workspace')).toHaveLength(1))
+    expect(api.find('POST', '/v1/account/workspaces')[0].body).toEqual({
+      name: 'Client work',
+      timezone: browserTimeZone(),
+    })
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/schedule'))
   })
 })

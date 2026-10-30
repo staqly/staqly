@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { AcceptInvitation } from '@/components/auth/accept-invitation'
 import { SignIn } from '@/components/auth/sign-in'
 import { SignInMethodsCard } from '@/components/settings/sign-in-methods'
+import { browserTimeZone } from '@/lib/time-zone'
 
 import { nav } from './navigation'
 import { mockApi, renderWithProviders } from './utils'
@@ -28,7 +29,10 @@ describe('sign-in with an email code', () => {
     nav.set('/login', 'next=%2Fposts')
     renderWithProviders(<SignIn />)
 
-    expect(await screen.findByTestId('google-sign-in')).toBeInTheDocument()
+    // A new person's first workspace starts in the browser's zone, whichever way they sign in.
+    const google = new URL((await screen.findByTestId('google-sign-in')).getAttribute('href') ?? '', 'http://x')
+
+    expect(google.searchParams.get('timezone')).toBe(browserTimeZone())
     await user.click(screen.getByTestId('send-code'))
     expect(screen.getByText(/enter an email address/i)).toBeInTheDocument()
     await user.type(screen.getByLabelText(/email address/i), 'Zoe@Example.com')
@@ -50,6 +54,7 @@ describe('sign-in with an email code', () => {
       email: 'zoe@example.com',
       code: '123456',
       next: '/posts',
+      timezone: browserTimeZone(),
     })
   })
 
@@ -103,6 +108,7 @@ describe('accepting an invitation with a code', () => {
       email: 'zoe@example.com',
       code: '654321',
       invite: 'staqly-invite-abc',
+      timezone: browserTimeZone(),
     })
     expect(screen.queryByTestId('accept-invitation')).not.toBeInTheDocument()
   })
