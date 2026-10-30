@@ -52,6 +52,7 @@ import {
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useDropTarget } from '@/hooks/use-drop-target'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useScrollFade } from '@/hooks/use-scroll-fade'
 import { api, errorMessage, type Channel, type ChannelGroup, type Provider } from '@/lib/api'
@@ -572,39 +573,6 @@ function GroupNameDialog({
 
 const groupHref = (g: ChannelGroup) => (g.default ? '/channels' : `/channels?group=${g.id}`)
 
-/** Accepts channel rows dragged onto a group (a mouse extra; Move to group in the row menu does the same). */
-function useChannelDrop(onDrop: (channelId: string) => void) {
-  const [over, setOver] = useState(false)
-
-  return {
-    over,
-    props: {
-      onDragOver: (e: React.DragEvent) => {
-        if (e.dataTransfer.types.includes(CHANNEL_DRAG)) {
-          e.preventDefault()
-          e.dataTransfer.dropEffect = 'move'
-          setOver(true)
-        }
-      },
-      onDragLeave: (e: React.DragEvent) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-          setOver(false)
-        }
-      },
-      onDrop: (e: React.DragEvent) => {
-        const id = e.dataTransfer.getData(CHANNEL_DRAG)
-
-        setOver(false)
-
-        if (id) {
-          e.preventDefault()
-          onDrop(id)
-        }
-      },
-    },
-  }
-}
-
 // The count sits at the right edge; on hover (or with the keyboard in the row) the menu takes its place.
 const paneRow =
   'flex min-h-9 items-center gap-2 rounded-lg py-1.5 pr-2.5 pl-2 text-sm transition-colors hover:bg-muted pointer-coarse:min-h-10 pointer-coarse:pr-10'
@@ -625,7 +593,7 @@ function GroupRow({
   onDelete: () => void
   onDropChannel: (channelId: string) => void
 }) {
-  const drop = useChannelDrop(onDropChannel)
+  const drop = useDropTarget(CHANNEL_DRAG, onDropChannel)
 
   return (
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions

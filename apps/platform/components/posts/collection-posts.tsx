@@ -29,6 +29,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useDebounced } from '@/hooks/use-debounced'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { POST_STATUSES, type Collection, type Post, type PostQuery, type PostStatus } from '@/lib/api'
+import { setDragChip } from '@/lib/drag-chip'
+import { isLocked, postTitle } from '@/lib/posts'
 import {
   flattenPosts,
   useChannels,
@@ -42,7 +44,7 @@ import { POST_STATUS_META } from '@/lib/status'
 import { cn, hrefWithParams } from '@/lib/utils'
 
 import { PostsQueryContext, postsQuery } from './post-href'
-import { PostListHeader, PostRow, PostSelectionBar, usePostRowActions, type PostAction } from './post-list'
+import { POST_DRAG, PostRow, PostSelectionBar, SelectBox, usePostRowActions, type PostAction } from './post-list'
 import { StatusCounts } from './status-counts'
 
 const Composer = dynamic(() => import('./composer').then((m) => m.Composer), { ssr: false })
@@ -80,8 +82,10 @@ function PostSection({
   posts,
   list,
   selected,
+  selecting,
   onToggle,
   onSelect,
+  onDrag,
   onAction,
   empty,
   testId,
@@ -93,8 +97,11 @@ function PostSection({
   posts: ReturnType<typeof usePostsInfinite>
   list: Post[]
   selected: Set<string>
+  /** Anything is selected (in either section): every row shows its box. */
+  selecting: boolean
   onToggle?: (postId: string, range: boolean) => void
   onSelect?: (ids: string[]) => void
+  onDrag?: (e: React.DragEvent, post: Post) => void
   onAction: (action: PostAction, post: Post) => void
   empty: string
   testId: string
@@ -103,7 +110,7 @@ function PostSection({
 
   return (
     <section aria-labelledby={`${testId}-title`} data-testid={testId} className="@container">
-      <div className="flex items-start gap-3 border-t px-4 pt-4 pb-3 sm:px-6 lg:px-8">
+      <div className="flex items-start gap-3 px-4 pt-4 pb-3 sm:px-6 lg:px-8">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <Icon className="size-4" />
         </span>
@@ -118,6 +125,15 @@ function PostSection({
           </h2>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
+        {/* Selects (or clears) the section's loaded posts; Shift+click on rows selects a range. */}
+        {onSelect && list.length > 0 && (
+          <SelectBox
+            checked={all}
+            label={`Select all ${title.toLowerCase()} posts`}
+            onClick={() => onSelect(list.map((p) => p.id))}
+            className="mt-2 mr-3 ml-auto"
+          />
+        )}
       </div>
       {posts.isLoading ? (
         <div className="grid gap-2 px-4 pb-4 sm:px-6 lg:px-8">
@@ -130,12 +146,22 @@ function PostSection({
       ) : list.length === 0 ? (
         <p className="px-4 pb-4 text-sm text-muted-foreground sm:px-6 lg:px-8">{empty}</p>
       ) : (
-        <>
-          <PostListHeader allSelected={all} onSelectAll={onSelect && (() => onSelect(list.map((p) => p.id)))} />
+        <div className="px-4 pb-2 sm:px-6 lg:px-8">
           {/* data-selecting: every row's box shows while anything is selected, by CSS (no row renders for it). */}
-          <ul className="group/list divide-y" data-testid="posts-list" data-selecting={selected.size > 0 || undefined}>
+          <ul
+            className="group/list divide-y overflow-hidden rounded-xl border"
+            data-testid="posts-list"
+            data-selecting={selecting || undefined}
+          >
             {list.map((p) => (
-              <PostRow key={p.id} post={p} selected={selected.has(p.id)} onToggle={onToggle} onAction={onAction} />
+              <PostRow
+                key={p.id}
+                post={p}
+                selected={selected.has(p.id)}
+                onToggle={onToggle}
+                onDrag={onDrag}
+                onAction={onAction}
+              />
             ))}
           </ul>
           {posts.hasNextPage && (
@@ -147,7 +173,7 @@ function PostSection({
               failed={posts.isFetchNextPageError}
             />
           )}
-        </>
+        </div>
       )}
     </section>
   )
@@ -242,8 +268,22 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
     })
   })
 
+  // Dragging a selected row takes the selection along (the posts that can move); any other row goes alone.
+  const selectedRef = useRef(selected)
+  const [drag] = useState(() => (e: React.DragEvent, post: Post) => {
+    const sel = selectedRef.current
+    const ids = sel.has(post.id)
+      ? listRef.current.filter((p) => sel.has(p.id) && !isLocked(p)).map((p) => p.id)
+      : [post.id]
+
+    e.dataTransfer.setData(POST_DRAG, ids.join(','))
+    e.dataTransfer.effectAllowed = 'move'
+    setDragChip(e, ids.length > 1 ? `${ids.length} posts` : postTitle(post, 40), 'round')
+  })
+
   useEffect(() => {
     listRef.current = list
+    selectedRef.current = selected
   })
 
   // Esc clears the selection (unless a dialog or menu took the key); Cmd/Ctrl+A selects every loaded post.
@@ -470,8 +510,10 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                 posts={upcoming}
                 list={upcomingList}
                 selected={selected}
+                selecting={picked.length > 0}
                 onToggle={canWrite ? toggle : undefined}
                 onSelect={canWrite ? selectSection : undefined}
+                onDrag={canWrite ? drag : undefined}
                 onAction={rowActions.onAction}
                 empty={
                   filtered ? 'No upcoming posts match.' : 'Nothing coming up: new drafts and scheduled posts show here.'
@@ -489,8 +531,10 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                 posts={published}
                 list={publishedList}
                 selected={selected}
+                selecting={picked.length > 0}
                 onToggle={canWrite ? toggle : undefined}
                 onSelect={canWrite ? selectSection : undefined}
+                onDrag={canWrite ? drag : undefined}
                 onAction={rowActions.onAction}
                 empty="No published posts match."
                 testId="posts-published"

@@ -47,7 +47,7 @@ import {
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { api, type Post, type PostQuery, type PostPage } from '@/lib/api'
+import { api, type Collection, type Post, type PostQuery, type PostPage } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
 import { canReschedule, isLocked, postTitle, publishedTargets, wentOut } from '@/lib/posts'
@@ -69,54 +69,10 @@ import { cn } from '@/lib/utils'
 import { PostStats, ShareDialog } from './post-actions'
 import { postHref, PostsQueryContext } from './post-href'
 
-/**
- * The columns of a post row, shared by the header. Wide lists (the list's container from 48rem) get every column:
- * checkbox, post, status, when, channels, created, feedback, actions. Narrower ones keep a compact row (channels
- * or the checkbox, the post with its time under it, the status, the actions menu).
- */
-const COLUMNS =
-  'grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 @3xl:grid-cols-[1.25rem_minmax(0,1fr)_7.5rem_8.5rem_7.5rem_9rem_2.5rem_auto]'
+/** Drag data of post rows: the ids being dragged, so a collection in the pane only accepts posts. */
+export const POST_DRAG = 'application/x-staqly-posts'
 
 export type PostAction = 'preview' | 'duplicate' | 'delete' | 'publish' | 'unschedule' | 'stats' | 'copy-link'
-
-/** The column titles above the rows (wide lists only). */
-export function PostListHeader({ allSelected, onSelectAll }: { allSelected: boolean; onSelectAll?: () => void }) {
-  return (
-    <div
-      aria-hidden
-      className={cn(
-        COLUMNS,
-        'sticky top-0 z-10 hidden border-b bg-background/95 px-4 py-1.5 text-xs text-muted-foreground backdrop-blur @3xl:grid',
-      )}
-    >
-      <span>
-        {onSelectAll && (
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={onSelectAll}
-            className={cn(
-              'flex size-4 items-center justify-center rounded border border-input',
-              allSelected && 'border-primary bg-primary text-primary-foreground',
-            )}
-          >
-            {allSelected && <CheckMark />}
-          </button>
-        )}
-      </span>
-      <span>Post</span>
-      <span className="text-center">Status</span>
-      <span>When</span>
-      <span>Channels</span>
-      <span>Created</span>
-      {/* sr-only is absolutely positioned and would leave the grid: its own cell keeps the columns in step. */}
-      <span>
-        <span className="sr-only">Feedback</span>
-      </span>
-      <span className="w-[8.5rem]" />
-    </div>
-  )
-}
 
 function CheckMark() {
   return (
@@ -126,19 +82,60 @@ function CheckMark() {
   )
 }
 
-/** One post as a row. A memo row: it takes the post, plain flags and stable callbacks only. */
+/** A light checkbox (a button with checkbox semantics): one per row, so no Radix Checkbox. */
+export function SelectBox({
+  checked,
+  label,
+  onClick,
+  className,
+  ...props
+}: {
+  checked: boolean
+  label: string
+  onClick: (e: React.MouseEvent) => void
+  className?: string
+  'data-testid'?: string
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        'relative z-10 flex size-4 shrink-0 items-center justify-center rounded border border-input bg-background transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring',
+        'after:absolute after:-inset-3 pointer-coarse:after:-inset-4',
+        checked && 'border-primary bg-primary text-primary-foreground',
+        className,
+      )}
+      {...props}
+    >
+      {checked && <CheckMark />}
+    </button>
+  )
+}
+
+/**
+ * One post as a row, like a channel row: its channels, the title with the status, when it goes out and who made it
+ * under it, then the actions. A memo row: it takes the post, plain flags and stable callbacks only.
+ */
 export const PostRow = memo(function PostRow({
   post,
   selected,
   onToggle,
+  onDrag,
   onAction,
 }: {
   post: Post
   selected: boolean
   /** Undefined: this person cannot change posts (no checkbox, no write actions). */
   onToggle?: (id: string, range: boolean) => void
+  /** Starts dragging the row (with the rest of the selection) onto a collection; undefined: not draggable. */
+  onDrag?: (e: React.DragEvent, post: Post) => void
   onAction: (action: PostAction, post: Post) => void
 }) {
+  const [dragging, setDragging] = useState(false)
   const href = postHref(post.id, useContext(PostsQueryContext))
   const targets = (post.targets ?? []).map((t) => ({
     id: t.channel_id,
@@ -147,104 +144,59 @@ export const PostRow = memo(function PostRow({
     avatar_url: t.avatar_url,
   }))
   const at = post.published_at ?? post.publish_at
-  const when = at ? formatSchedule(at) : null
-  const excerpt = post.content.split('\n').slice(1).join(' ').trim()
-  // The list carries data-selecting while anything is selected (group/list): the boxes show without the rows
-  // re-rendering when the first one is picked or the last one dropped.
-  const box = onToggle && (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={selected}
-      aria-label={`Select ${postTitle(post, 60)}`}
-      onClick={(e) => onToggle(post.id, e.shiftKey)}
-      data-testid="post-select"
-      className={cn(
-        'relative z-10 flex size-4 shrink-0 items-center justify-center rounded border border-input bg-background transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring',
-        'after:absolute after:-inset-3 pointer-coarse:after:-inset-4',
-        selected
-          ? 'border-primary bg-primary text-primary-foreground'
-          : 'opacity-0 group-hover:opacity-100 group-data-selecting/list:opacity-100 pointer-coarse:opacity-100',
-      )}
-    >
-      {selected && <CheckMark />}
-    </button>
-  )
+  // Published and publishing posts can't move (the selection bar's Move skips them too).
+  const draggable = !!onDrag && !isLocked(post)
 
   return (
+    // Dragging is a mouse extra; keyboards and touch use Move in the selection bar.
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <li
       data-testid="post-row"
       data-selected={selected || undefined}
+      draggable={draggable}
+      onDragStart={
+        draggable
+          ? (e) => {
+              onDrag(e, post)
+              setDragging(true)
+            }
+          : undefined
+      }
+      onDragEnd={() => setDragging(false)}
       className={cn(
-        COLUMNS,
-        // Off-screen rows skip layout and paint; a row is ~52 px (taller on touch, remembered once shown).
-        'group relative px-4 py-2 transition-colors [contain-intrinsic-size:auto_3.25rem] [content-visibility:auto] hover:bg-muted/60 pointer-coarse:min-h-12',
+        'group relative grid items-center gap-x-3 px-3 py-2.5 transition-colors hover:bg-muted/60',
+        onToggle ? 'grid-cols-[auto_auto_minmax(0,1fr)_auto]' : 'grid-cols-[auto_minmax(0,1fr)_auto]',
+        // Off-screen rows skip layout and paint; a row is ~60 px (remembered once shown).
+        '[contain-intrinsic-size:auto_3.75rem] [content-visibility:auto]',
         selected && 'bg-brand-soft/40 hover:bg-brand-soft/60',
+        draggable && 'cursor-grab active:cursor-grabbing',
+        dragging && 'opacity-40',
       )}
     >
-      {/* Narrow: the checkbox over the channels (shown on hover or while selecting). Wide: the checkbox column. */}
-      {box && (
-        <span className="relative col-start-1 row-start-1 flex h-8 min-w-8 items-center justify-center @3xl:h-auto @3xl:min-w-0 @3xl:justify-start">
-          {box}
-        </span>
+      {/* The list carries data-selecting while anything is selected (group/list): the boxes show without the rows
+          re-rendering when the first one is picked or the last one dropped. */}
+      {onToggle && (
+        <SelectBox
+          checked={selected}
+          label={`Select ${postTitle(post, 60)}`}
+          onClick={(e) => onToggle(post.id, e.shiftKey)}
+          data-testid="post-select"
+          className={cn(
+            !selected &&
+              'opacity-0 group-hover:opacity-100 group-data-selecting/list:opacity-100 pointer-coarse:opacity-100',
+          )}
+        />
       )}
 
-      <span className="min-w-0">
-        {/* The whole row opens the post (the link stretches over it); buttons sit above it. */}
-        <Link
-          prefetch={false}
-          scroll={false}
-          href={href}
-          className="block truncate text-sm font-medium outline-none after:absolute after:inset-0 focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
-          data-testid="post-link"
-        >
-          {postTitle(post)}
-        </Link>
-        {excerpt && (
-          <span className="hidden truncate text-xs text-muted-foreground @3xl:block" title={excerpt}>
-            {excerpt}
-          </span>
-        )}
-        {/* Narrow rows put the time under the title. */}
-        <span
-          className="mt-0.5 block truncate text-xs text-muted-foreground @3xl:hidden"
-          title={formatDateTime(at ?? post.created_at)}
-        >
-          {when ?? `Created ${timeAgo(post.created_at)}`}
-        </span>
-      </span>
-
-      <span className="flex @3xl:justify-center">
-        <PostStatusBadge status={post.status} />
-      </span>
-      <span
-        className={cn(
-          'hidden truncate text-xs tabular-nums @3xl:block',
-          post.status === 'scheduled' ? 'font-medium text-foreground' : 'text-muted-foreground',
-        )}
-        title={at ? `${formatDateTime(at)} (${timeAgo(at)})` : undefined}
-      >
-        {when ?? '-'}
-      </span>
-      {/* One stack for both layouts: under the checkbox in the first column when narrow (hidden while the box
-          shows), in the Channels column when wide. */}
-      <span
-        className={cn(
-          'col-start-1 row-start-1 flex h-8 min-w-8 items-center justify-center @3xl:col-start-5 @3xl:h-auto @3xl:min-w-0 @3xl:justify-start',
-          onToggle &&
-            (selected
-              ? '@max-3xl:invisible'
-              : '@max-3xl:group-hover:invisible @max-3xl:group-data-selecting/list:invisible'),
-        )}
-      >
-        {/* Hover or focus names every channel: the stack shows a few. */}
+      {/* Hover or focus names every channel: the stack shows a few. */}
+      <span className="flex min-w-10 justify-center">
         <Tooltip>
           <TooltipTrigger asChild>
             <span
               className="relative z-10 inline-flex rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
               tabIndex={targets.length ? 0 : -1}
             >
-              <ChannelStack channels={targets} max={4} size="size-7 @3xl:size-6" />
+              <ChannelStack channels={targets} max={3} size="size-8" />
             </span>
           </TooltipTrigger>
           {targets.length > 0 && (
@@ -261,27 +213,55 @@ export const PostRow = memo(function PostRow({
           )}
         </Tooltip>
       </span>
-      <span
-        className="hidden min-w-0 truncate text-xs text-muted-foreground @3xl:block"
-        title={formatDateTime(post.created_at)}
-      >
-        {timeAgo(post.created_at)}
-        {post.created_by && <span className="block truncate">by {post.created_by}</span>}
+
+      <span className="min-w-0">
+        <span className="flex min-w-0 items-center gap-2">
+          {/* The whole row opens the post (the link stretches over it); buttons sit above it. Not draggable itself:
+              the row is. */}
+          <Link
+            prefetch={false}
+            scroll={false}
+            href={href}
+            draggable={false}
+            className="min-w-0 truncate text-sm font-medium outline-none after:absolute after:inset-0 focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+            data-testid="post-link"
+          >
+            {postTitle(post)}
+          </Link>
+          <PostStatusBadge status={post.status} />
+        </span>
+        <span className="mt-0.5 flex min-w-0 items-center gap-x-1.5 text-xs text-muted-foreground">
+          {at && (
+            <>
+              <span
+                className={cn('shrink-0 tabular-nums', post.status === 'scheduled' && 'font-medium text-foreground')}
+                title={`${formatDateTime(at)} (${timeAgo(at)})`}
+              >
+                {formatSchedule(at)}
+              </span>
+              <span aria-hidden>·</span>
+            </>
+          )}
+          <span className="truncate" title={formatDateTime(post.created_at)}>
+            Created {timeAgo(post.created_at)}
+            {post.created_by && ` by ${post.created_by}`}
+          </span>
+        </span>
       </span>
-      <span className="hidden @3xl:block">
+
+      <span className="relative z-10 flex items-center gap-0.5">
         {post.open_comments > 0 && (
           <button
             type="button"
             onClick={() => onAction('preview', post)}
             aria-label={`${post.open_comments} open ${post.open_comments === 1 ? 'comment' : 'comments'}`}
-            className="relative z-10 inline-flex items-center gap-1 rounded-md px-1 text-xs font-medium text-foreground tabular-nums outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-8 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-foreground tabular-nums outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
           >
             <MessageSquare className="size-3.5" /> {post.open_comments}
           </button>
         )}
+        <RowActions post={post} href={href} canWrite={!!onToggle} onAction={onAction} />
       </span>
-
-      <RowActions post={post} href={href} canWrite={!!onToggle} onAction={onAction} />
     </li>
   )
 })
@@ -453,7 +433,7 @@ function RowActions({
     'hidden @3xl:inline-flex opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100'
 
   return (
-    <span className="relative z-10 flex items-center justify-end gap-0.5 @3xl:w-[8.5rem]">
+    <span className="flex items-center justify-end gap-0.5">
       <Button
         type="button"
         size="icon"
@@ -642,23 +622,38 @@ export function usePostRowActions(query = '') {
   return { onAction, dialogs }
 }
 
-/** Runs one call per post and reports how many worked; the rest are toasted once. */
-async function eachPost(list: Post[], run: (p: Post) => Promise<Post | void>) {
+/** Runs one call per post (or post id) and reports how many worked; the rest are toasted once. */
+async function eachPost<T>(list: T[], run: (p: T) => Promise<Post>) {
   const done: Post[] = []
   let failed = 0
 
   for (const p of list) {
     try {
       // One at a time on purpose: a long selection shouldn't burst into the per-minute request limit.
-      const out = await run(p)
-
-      done.push(out ?? p)
+      done.push(await run(p))
     } catch {
       failed++
     }
   }
 
   return { done, failed }
+}
+
+/** Posts dragged onto a collection in the pane: moved one at a time, one toast for all of them. */
+export function useMovePosts() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ ids, to }: { ids: string[]; to: Collection }) =>
+      eachPost(ids, (id) => api.updatePost(id, { collection: to.id })),
+    onSuccess: ({ done, failed }, { to }) => {
+      done.forEach((p) => syncMovedPost(qc, p))
+      invalidateAfterPostChange(qc)
+      toast.success(`${posts(done.length)} moved to ${to.name}`, {
+        description: failed > 0 ? `${failed} failed` : undefined,
+      })
+    },
+  })
 }
 
 /**

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -59,6 +59,50 @@ describe('posts list', () => {
     await waitFor(() => expect(api.find('POST', '/v1/posts/delete')).toHaveLength(1))
     expect(api.find('POST', '/v1/posts/delete')[0]!.body).toEqual({ ids: ['pst_1', 'pst_2', 'pst_3'] })
     await waitFor(() => expect(screen.queryByRole('toolbar', { name: 'Selected posts' })).not.toBeInTheDocument())
+  })
+
+  it('drags the selected posts onto another collection in the pane', async () => {
+    const api = setup({
+      'GET /v1/collections': { data: [collection(), collection({ id: 'col_2', name: 'Blog' })] },
+      'PATCH /v1/posts/pst_1': { ...three[0], collection_id: 'col_2' },
+      'PATCH /v1/posts/pst_2': { ...three[1], collection_id: 'col_2' },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<PostsWorkspace />, { mode: 'local' })
+    await screen.findAllByTestId('post-row')
+    await user.click(screen.getByRole('checkbox', { name: 'Select First post' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Select Second post' }))
+
+    // jsdom has no DataTransfer: a small stand-in carries the drag data from the row to the collection.
+    const data = new Map<string, string>()
+    const dataTransfer = {
+      setData: (t: string, v: string) => data.set(t, v),
+      getData: (t: string) => data.get(t) ?? '',
+      get types() {
+        return [...data.keys()]
+      },
+      setDragImage: () => {},
+    }
+    const blog = screen
+      .getAllByTestId('collection-row')
+      .find((r) => r.textContent?.includes('Blog'))!
+      .closest('li')!
+    const open = screen
+      .getAllByTestId('collection-row')
+      .find((r) => r.getAttribute('aria-current'))!
+      .closest('li')!
+
+    fireEvent.dragStart(row('First post'), { dataTransfer })
+    // The open collection is no drop target.
+    expect(fireEvent.dragOver(open, { dataTransfer })).toBe(true)
+    expect(fireEvent.dragOver(blog, { dataTransfer })).toBe(false)
+    fireEvent.drop(blog, { dataTransfer })
+
+    await waitFor(() => expect(api.find('PATCH', '/v1/posts/pst_2')).toHaveLength(1))
+    expect(api.find('PATCH', '/v1/posts/pst_1')[0]!.body).toEqual({ collection: 'col_2' })
+    expect(api.find('PATCH', '/v1/posts/pst_3')).toHaveLength(0)
+    await waitFor(() => expect(screen.getAllByTestId('post-row')).toHaveLength(1))
   })
 
   it('posts that went out have no row Delete, and the bar deletes only the others', async () => {
