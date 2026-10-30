@@ -277,7 +277,7 @@ function setChannelDragImage(e: React.DragEvent, channel: Channel) {
 }
 
 /**
- * Why a channel needs reconnecting: a small muted note with a warning icon, two lines at most. The full text shows
+ * Why a channel needs reconnecting: a small red note with a warning icon, two lines at most. The full text shows
  * on hover (title) and with More when it is cut; the status badge names it as its description, so a screen reader
  * reads it with the status.
  */
@@ -306,9 +306,9 @@ function ChannelErrorNote({ id, message }: { id: string; message: string }) {
     <span
       title={message}
       data-testid="channel-error"
-      className="mt-1.5 flex items-start gap-1.5 rounded-md border bg-muted/50 px-2 py-1 text-xs text-muted-foreground"
+      className={cn('mt-1.5 flex items-start gap-1.5 rounded-md border px-2 py-1 text-xs', TONES.danger.callout)}
     >
-      <TriangleAlert aria-hidden className={cn('mt-px size-3.5 shrink-0', TONES.warning.text)} />
+      <TriangleAlert aria-hidden className={cn('mt-px size-3.5 shrink-0', TONES.danger.text)} />
       <span id={id} ref={text} className={cn('min-w-0 flex-1 wrap-anywhere', !open && 'line-clamp-2')}>
         {message}
       </span>
@@ -326,6 +326,8 @@ function ChannelErrorNote({ id, message }: { id: string; message: string }) {
     </span>
   )
 }
+
+const broken = (c: Channel) => c.status === 'needs_reconnect'
 
 /** What a row can ask the page for; one stable object for every row. */
 interface RowActions {
@@ -884,11 +886,14 @@ export function ChannelsPage() {
   )
   const byProvider = new Map<string, Channel[]>()
 
-  for (const c of shown) {
+  // Channels that need reconnecting come first, and so do their platforms' sections.
+  for (const c of shown.toSorted((a, b) => Number(broken(b)) - Number(broken(a)))) {
     byProvider.set(c.provider, [...(byProvider.get(c.provider) ?? []), c])
   }
 
-  const groups = [...byProvider.entries()].toSorted(([a], [b]) => a.localeCompare(b))
+  const groups = [...byProvider.entries()].toSorted(
+    ([a, ca], [b, cb]) => Number(cb.some(broken)) - Number(ca.some(broken)) || a.localeCompare(b),
+  )
   const counts = new Map<string, number>()
 
   for (const c of all ?? []) {

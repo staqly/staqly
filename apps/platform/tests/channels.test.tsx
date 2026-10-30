@@ -48,6 +48,7 @@ describe('channels', () => {
       'GET /v1/channels': {
         data: [
           channel(),
+          channel({ id: 'ch_3', name: 'Alerts bot', provider: 'telegram' }),
           channel({
             id: 'ch_2',
             name: 'News bot',
@@ -71,6 +72,9 @@ describe('channels', () => {
     expect(within(tg).getByText('Needs reconnect')).toBeInTheDocument()
     expect(within(tg).getByText('Token revoked')).toBeInTheDocument()
     expect(within(tg).getByRole('button', { name: 'Reconnect' })).toBeInTheDocument()
+    // What needs reconnecting comes first: its platform above Mastodon, the channel above its platform's others.
+    expect(tg.compareDocumentPosition(mastodon) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(tg).getAllByTestId('channel-row')[0]).toHaveTextContent('News bot')
   })
 
   it('why a channel needs reconnecting is a short note read with its status, the whole text on hover or with More', async () => {
