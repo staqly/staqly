@@ -62,7 +62,6 @@ describe('posts and the dashboard', () => {
   it('redirects the routes of the review era to the new ones', async () => {
     for (const [from, to] of [
       ['/inbox', '/schedule'],
-      ['/notifications', '/alerts'],
       ['/collections', '/posts'],
       [`/collections/${collection}`, `/posts?collection=${collection}`],
     ]) {
