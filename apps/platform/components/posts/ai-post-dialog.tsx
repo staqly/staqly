@@ -1,23 +1,34 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlignLeft, Check, ImageIcon, ListTree, Loader2, RotateCcw, Sparkles, Zap } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import {
+  AlignLeft,
+  ArrowLeft,
+  BookOpen,
+  CalendarDays,
+  Check,
+  Film,
+  ImageIcon,
+  Lightbulb,
+  ListTree,
+  Loader2,
+  MessageCircleQuestion,
+  Rocket,
+  RotateCcw,
+  Sparkles,
+  Trophy,
+  X,
+  Zap,
+} from 'lucide-react'
+import { useState } from 'react'
 
 import { Callout } from '@/components/common/callout'
 import { insertMedia } from '@/components/media/media-cache'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { FieldError } from '@/components/ui/field'
 import { Kbd } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { allowanceNote, allowanceUsedUp, requestKey } from '@/lib/ai'
 import { isLive, useAiJob, useAiStatus } from '@/lib/ai-status'
@@ -50,16 +61,31 @@ const TONES: { id: Tone; label: string }[] = [
 
 // A start for the brief, so an empty box isn't the first thing asked of anyone.
 const STARTERS = [
-  'Announce our newest feature: ',
-  'Share a practical tip about ',
-  'Invite people to our event on ',
-  'Tell the story behind ',
+  { label: 'Announce a feature', text: 'Announce our newest feature: ', icon: Rocket },
+  { label: 'Share a tip', text: 'Share a practical tip about ', icon: Lightbulb },
+  { label: 'Invite to an event', text: 'Invite people to our event on ', icon: CalendarDays },
+  { label: 'Tell a story', text: 'Tell the story behind ', icon: BookOpen },
+  { label: 'Celebrate a milestone', text: 'Celebrate our milestone: ', icon: Trophy },
+  { label: 'Ask your audience', text: 'Ask our audience what they think about ', icon: MessageCircleQuestion },
 ]
 
-// Square: what fits every platform's feed.
-const PICTURE = { width: 1024, height: 1024 }
+type MediaKind = 'none' | 'image' | 'video'
+type Shape = '1:1' | '9:16' | '16:9'
 
-/** What the dialog hands the composer: the draft and, if one was made, its picture (already in the library). */
+const SHAPES: { id: Shape; label: string }[] = [
+  { id: '1:1', label: 'Square' },
+  { id: '9:16', label: 'Portrait' },
+  { id: '16:9', label: 'Landscape' },
+]
+
+// A picture's size per shape (1344 px on the long side, like the design editor's pictures).
+const PICTURE_SIZE: Record<Shape, { width: number; height: number }> = {
+  '1:1': { width: 1024, height: 1024 },
+  '9:16': { width: 768, height: 1344 },
+  '16:9': { width: 1344, height: 768 },
+}
+
+/** What the dialog hands the composer: the draft and, if one was made, its picture or video (in the library). */
 export interface AiPostResult {
   draft: AIPostDraft
   picture?: Media
@@ -67,18 +93,20 @@ export interface AiPostResult {
 
 function Chips<T extends string>({
   label,
+  required,
   options,
   value,
   onChange,
 }: {
   label: string
+  required?: boolean
   options: readonly { id: T; label: string }[]
   value: T
   onChange: (v: T) => void
 }) {
   return (
     <div className="grid gap-2">
-      <Label>{label}</Label>
+      <Label required={required}>{label}</Label>
       <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
         {options.map((o) => (
           <button
@@ -101,7 +129,7 @@ function Chips<T extends string>({
 }
 
 /**
- * Write with AI: a brief and how the post should read (format, voice, tone, a picture or not) become a draft to
+ * Write with AI, a second drawer over the composer: a brief and how the post should read (format, voice, tone, a picture or not) become a draft to
  * look over, then "Use this" puts its title, text and comments into the composer (and the picture into its
  * media). Nothing is saved or published here.
  */
@@ -123,25 +151,42 @@ export function AiPostDialog({
   const qc = useQueryClient()
   const status = useAiStatus()
   const canPicture = !!status.data?.operations.some((o) => o.id === 'generate')
+  const canVideo = !!status.data?.operations.some((o) => o.id === 'text_to_video')
   const [brief, setBrief] = useState('')
   const [format, setFormat] = useState<Format>('short')
   const [voice, setVoice] = useState<Voice>('personal')
   const [tone, setTone] = useState<Tone>('friendly')
-  const [picture, setPicture] = useState(false)
+  const [mediaKind, setMediaKind] = useState<MediaKind>('none')
+  const [shape, setShape] = useState<Shape>('1:1')
   const [jobId, setJobId] = useState<string | null>(null)
   const [pictureError, setPictureError] = useState('')
   const job = useAiJob(jobId)
   const j = job.data
-  const withPicture = picture && canPicture
+  // What the server can make; a choice it no longer offers counts as none.
+  const media = (mediaKind === 'image' && canPicture) || (mediaKind === 'video' && canVideo) ? mediaKind : 'none'
+  const mediaWord = media === 'video' ? 'video' : 'picture'
 
   const write = useMutation({
-    mutationFn: () => api.aiPost({ brief: brief.trim(), format, voice, tone, max_chars: maxChars, image: withPicture }),
+    mutationFn: () =>
+      api.aiPost({
+        brief: brief.trim(),
+        format,
+        voice,
+        tone,
+        max_chars: maxChars,
+        media: media === 'none' ? undefined : media,
+      }),
     onSuccess: (draft) => {
       setPictureError('')
 
-      if (withPicture && draft.image_prompt) {
+      if (media !== 'none' && draft.media_prompt) {
+        const body =
+          media === 'video'
+            ? { operation: 'text_to_video' as const, fields: { duration: 5, aspect_ratio: shape } }
+            : { operation: 'generate' as const, fields: PICTURE_SIZE[shape] }
+
         api
-          .startAiJob({ operation: 'generate', prompt: draft.image_prompt, fields: PICTURE }, requestKey())
+          .startAiJob({ ...body, prompt: draft.media_prompt }, requestKey())
           .then((started) => setJobId(started.id))
           .catch((e: unknown) => setPictureError(errorMessage(e)))
       }
@@ -191,43 +236,58 @@ export function AiPostDialog({
 
   const picturePending = !!jobId && (!j || isLive(j))
   const pictureFailed = !!jobId && !!j && !isLive(j) && j.status !== 'succeeded'
-  const canWrite = brief.trim().length > 0 && !write.isPending
+  // Like every form here: the button stays on, an empty brief says so under the field once tried.
+  const [tried, setTried] = useState(false)
+  const briefError = tried && !brief.trim() ? 'Say what the post is about.' : undefined
+  const submit = () => {
+    setTried(true)
+
+    if (brief.trim() && !write.isPending) {
+      write.mutate()
+    }
+  }
   const note = allowanceNote(status.data)
 
-  // ⌘/Ctrl+Enter writes from anywhere in the form.
-  useEffect(() => {
-    if (!open || draft) {
-      return
-    }
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canWrite) {
-        e.preventDefault()
-        write.mutate()
-      }
-    }
-
-    window.addEventListener('keydown', onKey)
-
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, draft, canWrite, write])
-
   return (
-    <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl" data-testid="ai-post-dialog">
-        <DialogHeader className="relative gap-1 border-b bg-gradient-to-br from-brand-soft/70 via-transparent to-transparent px-6 pt-6 pb-4">
-          <span className="mb-2 flex size-10 items-center justify-center rounded-xl bg-brand text-brand-foreground shadow-sm">
-            <Sparkles className="size-5" />
-          </span>
-          <DialogTitle className="text-lg">Write with AI</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={close}>
+      <SheetContent
+        // A second drawer over the composer, a little narrower so the composer's edge shows (like the preview).
+        className="gap-0 overflow-hidden p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[calc(42rem-1.5rem)]"
+        data-testid="ai-post-dialog"
+        // ⌘/Ctrl+Enter writes from anywhere in the form.
+        onKeyDown={(e) => {
+          if (!draft && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault()
+            submit()
+          }
+        }}
+      >
+        <SheetHeader className="relative gap-1 border-b bg-gradient-to-br from-brand-soft/70 via-transparent to-transparent px-6 pb-4">
+          <div className="mb-2 flex items-center gap-2">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Back to the post"
+              tooltip="Back to the post"
+              onClick={() => close(false)}
+              className="-ml-1.5"
+            >
+              <ArrowLeft />
+            </Button>
+            <span className="flex size-10 items-center justify-center rounded-xl bg-brand text-brand-foreground shadow-sm">
+              <Sparkles className="size-5" />
+            </span>
+          </div>
+          <SheetTitle className="text-lg">Write with AI</SheetTitle>
+          <SheetDescription>
             {draft
               ? 'Look it over. Use it and change anything in the post before it goes out.'
               : 'Say what the post is about. AI drafts the title and the text; nothing is published.'}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="grid max-h-[65svh] gap-5 overflow-y-auto overscroll-contain px-6 py-5">
+        <div className="grid min-h-0 flex-1 content-start gap-5 overflow-y-auto overscroll-contain px-6 py-5 max-sm:px-5">
           {draft ? (
             <div className="grid gap-3" data-testid="ai-post-draft">
               <div className="grid gap-1 rounded-xl border bg-card p-4">
@@ -246,32 +306,49 @@ export function AiPostDialog({
               ))}
               {jobId && (
                 <div className="grid gap-2 rounded-xl border bg-card p-4">
-                  <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Picture</p>
+                  <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{mediaWord}</p>
                   {j?.status === 'succeeded' ? (
-                    <img
-                      src={aiResultUrl(j.id)}
-                      alt={draft.image_prompt ?? ''}
-                      className="max-h-64 w-auto self-start rounded-lg border"
-                    />
+                    j.kind === 'video' ? (
+                      <video
+                        src={aiResultUrl(j.id)}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="max-h-64 w-auto self-start rounded-lg border bg-black"
+                      >
+                        <track kind="captions" />
+                      </video>
+                    ) : (
+                      <img
+                        src={aiResultUrl(j.id)}
+                        alt={draft.media_prompt ?? ''}
+                        className="max-h-64 w-auto self-start rounded-lg border"
+                      />
+                    )
                   ) : pictureFailed ? (
-                    <p className="text-sm text-destructive">The picture could not be made. Use the post without it.</p>
+                    <p className="text-sm text-destructive">
+                      The {mediaWord} could not be made. Use the post without it.
+                    </p>
                   ) : (
-                    <div className="flex aspect-square max-h-64 animate-pulse items-center justify-center rounded-lg bg-muted text-sm text-muted-foreground">
-                      <Loader2 className="mr-2 size-4 animate-spin" /> Making the picture...
+                    <div className="flex h-40 animate-pulse items-center justify-center rounded-lg bg-muted text-sm text-muted-foreground">
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      {media === 'video' ? 'Making the video, a few minutes...' : 'Making the picture...'}
                     </div>
                   )}
                 </div>
               )}
               {pictureError && (
                 <Callout tone="danger" size="xs" role="alert">
-                  Picture: {pictureError}
+                  {media === 'video' ? 'Video' : 'Picture'}: {pictureError}
                 </Callout>
               )}
             </div>
           ) : (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="ai-post-brief">What is it about?</Label>
+                <Label htmlFor="ai-post-brief" required>
+                  What is it about?
+                </Label>
                 <Textarea
                   id="ai-post-brief"
                   value={brief}
@@ -280,29 +357,36 @@ export function AiPostDialog({
                   maxLength={4000}
                   rows={5}
                   className="min-h-32 resize-y"
+                  aria-required
+                  aria-invalid={!!briefError}
                   data-testid="ai-post-brief"
                 />
+                <FieldError>{briefError}</FieldError>
                 {!brief && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {STARTERS.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => {
-                          setBrief(s)
-                          document.getElementById('ai-post-brief')?.focus()
-                        }}
-                        className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground pointer-coarse:py-2"
-                      >
-                        {s.replace(/[: ]+$/, '')}
-                      </button>
-                    ))}
+                  <div className="mt-1 grid gap-2">
+                    <p className="text-xs font-medium text-muted-foreground">Or start from an idea</p>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {STARTERS.map((s) => (
+                        <button
+                          key={s.label}
+                          type="button"
+                          onClick={() => {
+                            setBrief(s.text)
+                            document.getElementById('ai-post-brief')?.focus()
+                          }}
+                          className="flex min-h-10 items-center gap-2 rounded-lg border bg-card px-3 py-2 text-left text-sm transition-colors outline-none hover:border-brand/40 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <s.icon className="size-4 shrink-0 text-brand" />
+                          <span className="min-w-0 leading-tight">{s.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
 
               <div className="grid gap-2">
-                <Label>Format</Label>
+                <Label required>Format</Label>
                 <div role="radiogroup" aria-label="Format" className="grid gap-2 sm:grid-cols-3">
                   {FORMATS.map((f) => (
                     <button
@@ -332,20 +416,49 @@ export function AiPostDialog({
                 </div>
               </div>
 
-              <Chips label="Voice" options={VOICES} value={voice} onChange={setVoice} />
-              <Chips label="Tone" options={TONES} value={tone} onChange={setTone} />
+              <Chips label="Voice" required options={VOICES} value={voice} onChange={setVoice} />
+              <Chips label="Tone" required options={TONES} value={tone} onChange={setTone} />
 
-              {canPicture && (
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border bg-card p-3">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                    <ImageIcon className="size-4" />
-                  </span>
-                  <span className="grid flex-1 gap-0.5">
-                    <span className="text-sm font-medium">Add a picture</span>
-                    <span className="text-xs text-muted-foreground">AI makes one to go with the post.</span>
-                  </span>
-                  <Switch checked={picture} onCheckedChange={setPicture} aria-label="Add a picture" />
-                </label>
+              {(canPicture || canVideo) && (
+                <div className="grid gap-2">
+                  <Label>Media</Label>
+                  <div role="radiogroup" aria-label="Media" className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        { id: 'none', label: 'Text only', icon: X, show: true },
+                        { id: 'image', label: 'Picture', icon: ImageIcon, show: canPicture },
+                        { id: 'video', label: 'Video', icon: Film, show: canVideo },
+                      ] as const
+                    )
+                      .filter((m) => m.show)
+                      .map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={media === m.id}
+                          onClick={() => setMediaKind(m.id)}
+                          className={cn(
+                            'flex min-h-10 items-center justify-center gap-2 rounded-xl border bg-card px-3 py-2.5 text-sm font-medium transition-colors outline-none hover:border-brand/40 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring',
+                            media === m.id && 'border-brand bg-brand-soft/60 text-brand hover:bg-brand-soft/60',
+                          )}
+                        >
+                          <m.icon className="size-4 shrink-0" /> {m.label}
+                        </button>
+                      ))}
+                  </div>
+                  {media !== 'none' && (
+                    <>
+                      <Chips label="Shape" options={SHAPES} value={shape} onChange={setShape} />
+                      <p className="text-xs text-muted-foreground">
+                        {media === 'video'
+                          ? 'AI makes a 5 second clip to go with the post; it takes a few minutes.'
+                          : 'AI makes a picture to go with the post.'}{' '}
+                        It lands in your library too.
+                      </p>
+                    </>
+                  )}
+                </div>
               )}
 
               {write.error && (
@@ -362,7 +475,7 @@ export function AiPostDialog({
           )}
         </div>
 
-        <DialogFooter className="items-center border-t bg-muted/30 px-6 py-4 sm:justify-between">
+        <SheetFooter className="mt-0 flex-row flex-wrap items-center justify-between border-t bg-muted/30 px-6 py-4 max-sm:px-5">
           <p className="text-xs text-muted-foreground max-sm:hidden">{note}</p>
           {draft ? (
             <div className="flex flex-wrap justify-end gap-2">
@@ -394,16 +507,16 @@ export function AiPostDialog({
               <Button variant="ghost" onClick={() => close(false)}>
                 Cancel
               </Button>
-              <Button onClick={() => write.mutate()} disabled={!canWrite} data-testid="ai-post-write">
+              <Button onClick={submit} disabled={write.isPending} data-testid="ai-post-write">
                 {write.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />}
                 {write.isPending ? 'Writing...' : 'Write the post'}
                 {!write.isPending && <Kbd className="ml-1 max-sm:hidden">⌘↵</Kbd>}
               </Button>
             </div>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }
 

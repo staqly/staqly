@@ -3854,7 +3854,8 @@ paths:
       summary: Draft a post from a brief with AI (posts:write)
       description: >
         The composer's Write with AI. The assistant's model (no tools) writes a title, the post and, for a thread,
-        the comments under it, and with image a description of a picture for the generate operation. Nothing is
+        the comments under it, and with media a description of a picture or a video clip to make with the
+        generate or text_to_video operation. Nothing is
         saved. Counts as AI usage.
       requestBody:
         required: true
@@ -3869,7 +3870,7 @@ paths:
                 voice: { type: string, enum: [personal, brand, neutral], default: personal, description: "personal: I, brand: we" }
                 tone: { type: string, enum: [friendly, professional, witty, bold, informative], default: friendly }
                 max_chars: { type: integer, minimum: 0, description: The shortest character limit of the picked channels (0 = none) }
-                image: { type: boolean, description: Also describe a picture to go with the post (image_prompt) }
+                media: { type: string, enum: [image, video], description: "Also describe a picture or a short video clip to go with the post (media_prompt), for the generate or text_to_video operation" }
       responses:
         "200":
           description: OK
@@ -3882,7 +3883,7 @@ paths:
                   title: { type: string }
                   content: { type: string }
                   comments: { type: array, items: { type: string } }
-                  image_prompt: { type: string }
+                  media_prompt: { type: string }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "402": { $ref: "#/components/responses/PaymentRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }

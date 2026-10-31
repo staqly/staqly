@@ -74,10 +74,10 @@ describe('the design editor in a drawer over the post', () => {
     const user = userEvent.setup()
 
     renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
-    const design = await screen.findByTestId('design-new')
+    const design = await screen.findByTestId('design-menu')
 
-    expect(design.tagName).toBe('BUTTON')
     await user.click(design)
+    await user.click(await screen.findByTestId('design-new'))
     const editor = await screen.findByRole('dialog', { name: 'Design' })
 
     expect(open).not.toHaveBeenCalled()
@@ -111,6 +111,7 @@ describe('the design editor in a drawer over the post', () => {
     const user = userEvent.setup()
 
     renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await user.click(await screen.findByTestId('design-menu'))
     await user.click(await screen.findByTestId('design-new'))
     const editor = await screen.findByRole('dialog', { name: 'Design' })
 
@@ -118,7 +119,8 @@ describe('the design editor in a drawer over the post', () => {
     await user.click(await within(editor).findByRole('button', { name: 'Back to the post' }))
     await waitFor(() => expect(drawer()).not.toBeInTheDocument())
 
-    await user.click(screen.getByTestId('design-new'))
+    await user.click(screen.getByTestId('design-menu'))
+    await user.click(await screen.findByTestId('design-new'))
     const again = await screen.findByRole('dialog', { name: 'Design' })
 
     await user.click(await within(again).findByRole('button', { name: /^Rename/ }))
@@ -148,7 +150,8 @@ describe('the design editor in a drawer over the post', () => {
     await user.click(await screen.findByTestId('add-comment'))
     const part = screen.getByTestId('thread-part-0')
 
-    await user.click(within(part).getByTestId('design-new'))
+    await user.click(within(part).getByTestId('design-menu'))
+    await user.click(await screen.findByTestId('design-new'))
     const editor = await screen.findByRole('dialog', { name: 'Design' })
 
     await user.click(await within(editor).findByRole('button', { name: /Save and use in the post/ }))
