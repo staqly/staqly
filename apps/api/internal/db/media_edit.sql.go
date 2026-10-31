@@ -205,7 +205,7 @@ func (q *Queries) MediaUsedOutsideDrafts(ctx context.Context, arg MediaUsedOutsi
 
 const repointDraftMedia = `-- name: RepointDraftMedia :exec
 UPDATE posts SET media = replace(media, ?1, ?2), thread = replace(thread, ?1, ?2),
-  updated_at = ?3
+  version = version + 1, updated_at = ?3
 WHERE workspace_id = ?4 AND status = 'draft' AND (instr(media, ?1) > 0 OR instr(thread, ?1) > 0)
 `
 

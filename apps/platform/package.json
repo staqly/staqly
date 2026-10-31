@@ -8,7 +8,7 @@
     "build": "next build",
     "size": "node scripts/bundle-size.mjs --check",
     "start": "next start",
-    "lint": "oxlint",
+    "lint": "oxlint && node scripts/check-react-compiler.mjs",
     "gen": "npx --yes -p typescript@5.9.3 -p openapi-typescript@7.13.0 openapi-typescript ../api/openapi.yaml -o lib/api-types.ts",
     "test": "vitest run",
     "test:watch": "vitest",

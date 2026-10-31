@@ -94,26 +94,41 @@ func (s *Service) SetNotificationPrefs(ctx context.Context, p Principal, in Noti
 	if err != nil {
 		return NotificationPrefs{}, err
 	}
-	st := parsePrefs(u.NotificationPrefs)
-	if in.Scope != "" {
-		if in.Scope != "mine" && in.Scope != "all" {
-			return NotificationPrefs{}, invalid("scope", "must be mine or all")
-		}
-		st.Scope = in.Scope
-	}
-	if st.Events == nil {
-		st.Events = map[string]NotificationChoice{}
+	if in.Scope != "" && in.Scope != "mine" && in.Scope != "all" {
+		return NotificationPrefs{}, invalid("scope", "must be mine or all")
 	}
 	for _, c := range in.Events {
 		if !slices.Contains(PersonalEvents, c.Event) {
 			return NotificationPrefs{}, invalid("events", "unknown event "+c.Event)
 		}
-		st.Events[c.Event] = NotificationChoice{Email: c.Email, InApp: c.InApp}
 	}
-	if err := s.Q.SetUserNotificationPrefs(ctx, db.SetUserNotificationPrefsParams{NotificationPrefs: mustJSON(st), UpdatedAt: s.now(), ID: u.ID}); err != nil {
+	if err := s.updateNotificationPrefs(ctx, u.ID, func(st *storedPrefs) {
+		if in.Scope != "" {
+			st.Scope = in.Scope
+		}
+		for _, c := range in.Events {
+			st.Events[c.Event] = NotificationChoice{Email: c.Email, InApp: c.InApp}
+		}
+	}); err != nil {
 		return NotificationPrefs{}, err
 	}
 	return s.GetNotificationPrefs(ctx, p)
+}
+
+// Read and merge inside the write transaction so settings saves and unsubscribe links cannot undo each other.
+func (s *Service) updateNotificationPrefs(ctx context.Context, userID string, update func(*storedPrefs)) error {
+	return s.tx(ctx, func(q *db.Queries) error {
+		u, err := q.GetUser(ctx, userID)
+		if err != nil {
+			return err
+		}
+		st := parsePrefs(u.NotificationPrefs)
+		if st.Events == nil {
+			st.Events = map[string]NotificationChoice{}
+		}
+		update(&st)
+		return q.SetUserNotificationPrefs(ctx, db.SetUserNotificationPrefsParams{NotificationPrefs: mustJSON(st), UpdatedAt: s.now(), ID: userID})
+	})
 }
 
 // ---- unsubscribe links ----
@@ -147,18 +162,14 @@ func (s *Service) Unsubscribe(ctx context.Context, token string) (string, error)
 	if !slices.Contains(PersonalEvents, event) {
 		return "", bad
 	}
-	u, err := s.Q.GetUser(ctx, userID)
-	if err != nil {
+	err := s.updateNotificationPrefs(ctx, userID, func(st *storedPrefs) {
+		c := st.choice(event)
+		st.Events[event] = NotificationChoice{Email: false, InApp: c.InApp}
+	})
+	if isNoRows(err) {
 		return "", bad
 	}
-	st := parsePrefs(u.NotificationPrefs)
-	c := st.choice(event)
-	c.Email = false
-	if st.Events == nil {
-		st.Events = map[string]NotificationChoice{}
-	}
-	st.Events[event] = NotificationChoice{Email: false, InApp: c.InApp}
-	if err := s.Q.SetUserNotificationPrefs(ctx, db.SetUserNotificationPrefsParams{NotificationPrefs: mustJSON(st), UpdatedAt: s.now(), ID: u.ID}); err != nil {
+	if err != nil {
 		return "", err
 	}
 	return event, nil

@@ -783,7 +783,7 @@ func (q *Queries) SetTargetStatus(ctx context.Context, arg SetTargetStatusParams
 const stripMediaFromPosts = `-- name: StripMediaFromPosts :exec
 UPDATE posts
 SET media = (SELECT json_group_array(j.value) FROM json_each(posts.media) AS j WHERE j.value <> CAST(?1 AS TEXT)),
-    updated_at = ?2
+    version = version + 1, updated_at = ?2
 WHERE workspace_id = ?3 AND instr(media, '"' || CAST(?1 AS TEXT) || '"') > 0
 `
 

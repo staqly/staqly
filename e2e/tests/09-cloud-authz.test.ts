@@ -46,10 +46,7 @@ beforeAll(async () => {
   a = await adminFor(first!.id)
 })
 
-// Writing needs reading: creating or editing a post looks its collection up, scheduling reads the post. Every key
-// in the matrix holds the two read scopes next to the one under test, so the rows check the write scopes alone.
-const BASE: Scope[] = ['collections:read', 'posts:read']
-
+// Every key has exactly one scope: successful writes must not depend on extra read permissions.
 describe('scope matrix (REST)', () => {
   const keys = {} as Record<Scope, string>
   let collectionId: string
@@ -59,7 +56,7 @@ describe('scope matrix (REST)', () => {
 
   beforeAll(async () => {
     for (const scope of ALL_SCOPES) {
-      keys[scope] = (await createKey(a.key, [...new Set([...BASE, scope])])).key
+      keys[scope] = (await createKey(a.key, [scope])).key
     }
 
     const admin = api(a.key)
@@ -394,7 +391,7 @@ describe('scope matrix (REST)', () => {
         const { method, path, json } = await row.request()
 
         got[scope] = (await withKey(keys[scope], path, { method, json })).status
-        want[scope] = scope === row.scope || scope === 'admin' || BASE.includes(row.scope) ? row.ok : 403
+        want[scope] = scope === row.scope || scope === 'admin' ? row.ok : 403
       }
 
       expect(got).toEqual(want)

@@ -41,4 +41,4 @@ SELECT COUNT(*) FROM posts WHERE workspace_id = @workspace_id AND status IN ('sc
 SELECT id, thread FROM posts WHERE workspace_id = @workspace_id AND instr(thread, @quoted) > 0;
 
 -- name: SetPostThreadMedia :exec
-UPDATE posts SET thread = @thread, updated_at = @updated_at WHERE workspace_id = @workspace_id AND id = @id;
+UPDATE posts SET thread = @thread, version = version + 1, updated_at = @updated_at WHERE workspace_id = @workspace_id AND id = @id;

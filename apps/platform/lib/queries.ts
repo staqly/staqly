@@ -412,8 +412,21 @@ export function useRefreshDuePosts(posts: Post[]) {
       return
     }
 
-    // setTimeout overflows past ~24.8 days: a later post wakes it early, and it arms again.
-    const t = setTimeout(() => setNow(Date.now()), Math.min(next - Date.now(), 2 ** 31 - 1) + 50)
+    let t: ReturnType<typeof setTimeout> | undefined
+    const arm = () => {
+      const left = next - Date.now()
+
+      if (left <= 0) {
+        setNow(Date.now())
+
+        return
+      }
+
+      // Long waits need another timer even when `next` stays unchanged; include the margin in the cap.
+      t = setTimeout(arm, Math.min(left + 50, 2 ** 31 - 1))
+    }
+
+    arm()
 
     return () => clearTimeout(t)
   }, [next])

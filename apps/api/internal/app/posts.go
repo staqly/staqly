@@ -654,7 +654,7 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 	if err != nil {
 		return Post{}, err
 	}
-	return s.GetPost(ctx, p, row.ID)
+	return s.getPost(ctx, p, row.ID)
 }
 
 // schedulePublish queues the publish_post job at publishAt and records post.scheduled.
@@ -684,6 +684,11 @@ func (s *Service) GetPost(ctx context.Context, p Principal, id string) (Post, er
 	if err := p.require(ScopePostsRead); err != nil {
 		return Post{}, err
 	}
+	return s.getPost(ctx, p, id)
+}
+
+// getPost also returns an authorized mutation's result without requiring an additional read scope.
+func (s *Service) getPost(ctx context.Context, p Principal, id string) (Post, error) {
 	post, _, err := s.loadPost(ctx, s.Q, p.WorkspaceID, id)
 	return post, err
 }
@@ -982,7 +987,7 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 	if err != nil {
 		return Post{}, err
 	}
-	return s.GetPost(ctx, p, id)
+	return s.getPost(ctx, p, id)
 }
 
 // SchedulePost sets the time and makes the post scheduled (from draft, scheduled or failed).
@@ -1042,7 +1047,7 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 	if err != nil {
 		return Post{}, err
 	}
-	return s.GetPost(ctx, p, id)
+	return s.getPost(ctx, p, id)
 }
 
 // PublishPost publishes now (from draft, scheduled or failed).
@@ -1085,7 +1090,7 @@ func (s *Service) PublishPost(ctx context.Context, p Principal, id string) (Post
 	if err != nil {
 		return Post{}, err
 	}
-	return s.GetPost(ctx, p, id)
+	return s.getPost(ctx, p, id)
 }
 
 // CancelPost takes a scheduled post back to draft (its time stays as a note; the job goes).
@@ -1117,7 +1122,7 @@ func (s *Service) CancelPost(ctx context.Context, p Principal, id string) (Post,
 	if err != nil {
 		return Post{}, err
 	}
-	return s.GetPost(ctx, p, id)
+	return s.getPost(ctx, p, id)
 }
 
 // titleOr is the post's title, or for a post from before titles were required its first line (at most 100
@@ -1608,7 +1613,7 @@ func (s *Service) ReportTargetResult(ctx context.Context, p Principal, postID, c
 	if err != nil {
 		return Post{}, err
 	}
-	return s.GetPost(ctx, p, postID)
+	return s.getPost(ctx, p, postID)
 }
 
 // RetryTarget tries a failed target once more, now.
@@ -1654,7 +1659,7 @@ func (s *Service) RetryTarget(ctx context.Context, p Principal, postID, channelI
 	if err != nil {
 		return Post{}, err
 	}
-	return s.GetPost(ctx, p, postID)
+	return s.getPost(ctx, p, postID)
 }
 
 // ---- preview ----

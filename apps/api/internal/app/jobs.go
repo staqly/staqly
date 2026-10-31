@@ -330,6 +330,10 @@ func (s *Service) GetJob(ctx context.Context, p Principal, id string) (Job, erro
 	if err := p.require(ScopePostsRead); err != nil {
 		return Job{}, err
 	}
+	return s.getJob(ctx, p, id)
+}
+
+func (s *Service) getJob(ctx context.Context, p Principal, id string) (Job, error) {
 	r, err := s.jobRow(ctx, p, id)
 	if err != nil {
 		return Job{}, err
@@ -469,7 +473,7 @@ func (s *Service) RetryJob(ctx context.Context, p Principal, id string) (Job, er
 	if err != nil {
 		return Job{}, err
 	}
-	return s.GetJob(ctx, p, id)
+	return s.getJob(ctx, p, id)
 }
 
 // cancellableJobKinds: the work people start (publishing, schedules, repeats, replies, reposts). The rest is
@@ -509,7 +513,7 @@ func (s *Service) CancelJob(ctx context.Context, p Principal, id string) (Job, e
 			return Job{}, err // a conflict (not scheduled any more) or a deleted post needs nothing
 		}
 	}
-	return s.GetJob(ctx, p, id)
+	return s.getJob(ctx, p, id)
 }
 
 func contains(list []string, v string) bool {

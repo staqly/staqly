@@ -476,6 +476,11 @@ func (s *Service) GetMediaInfo(ctx context.Context, p Principal, id string) (Med
 	if err := p.require(ScopeMediaRead); err != nil {
 		return Media{}, err
 	}
+	return s.getMediaInfo(ctx, p, id)
+}
+
+// getMediaInfo also returns an authorized write's result.
+func (s *Service) getMediaInfo(ctx context.Context, p Principal, id string) (Media, error) {
 	m, err := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
 	if err != nil {
 		return Media{}, notFound("media")
@@ -499,45 +504,50 @@ func (s *Service) UpdateMedia(ctx context.Context, p Principal, id string, in Me
 	if err := p.require(ScopeMediaWrite); err != nil {
 		return Media{}, err
 	}
-	m, err := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
-	if err != nil {
-		return Media{}, notFound("media")
-	}
-	name, alt := m.OriginalName, m.AltText
-	if in.Name != nil {
-		if strings.TrimSpace(*in.Name) == "" {
-			return Media{}, invalid("name", "is required")
+	var m db.Medium
+	err := s.tx(ctx, func(q *db.Queries) error {
+		var err error
+		m, err = q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if isNoRows(err) {
+			return notFound("media")
 		}
-		name = cleanOriginalName(strings.TrimSpace(*in.Name))
-	}
-	if in.AltText != nil {
-		alt = strings.TrimSpace(*in.AltText)
-		if len([]rune(alt)) > 1500 {
-			return Media{}, invalid("alt_text", "at most 1500 characters")
+		if err != nil {
+			return err
 		}
-	}
-	var tags []string
-	if in.Tags != nil {
-		if tags, err = normalizeMediaTags(in.Tags); err != nil {
-			return Media{}, err
+		name, alt := m.OriginalName, m.AltText
+		if in.Name != nil {
+			if strings.TrimSpace(*in.Name) == "" {
+				return invalid("name", "is required")
+			}
+			name = cleanOriginalName(strings.TrimSpace(*in.Name))
 		}
-	}
-	w, h, d := m.Width, m.Height, m.DurationMs
-	for _, v := range []struct {
-		field string
-		in    *int64
-		out   *int64
-		max   int64
-	}{{"width", in.Width, &w, 100_000}, {"height", in.Height, &h, 100_000}, {"duration_ms", in.DurationMs, &d, 86_400_000}} {
-		if v.in == nil {
-			continue
+		if in.AltText != nil {
+			alt = strings.TrimSpace(*in.AltText)
+			if len([]rune(alt)) > 1500 {
+				return invalid("alt_text", "at most 1500 characters")
+			}
 		}
-		if *v.in < 0 || *v.in > v.max {
-			return Media{}, invalid(v.field, fmt.Sprintf("must be 0 to %d", v.max))
+		var tags []string
+		if in.Tags != nil {
+			if tags, err = normalizeMediaTags(in.Tags); err != nil {
+				return err
+			}
 		}
-		*v.out = *v.in
-	}
-	err = s.tx(ctx, func(q *db.Queries) error {
+		w, h, d := m.Width, m.Height, m.DurationMs
+		for _, v := range []struct {
+			field string
+			in    *int64
+			out   *int64
+			max   int64
+		}{{"width", in.Width, &w, 100_000}, {"height", in.Height, &h, 100_000}, {"duration_ms", in.DurationMs, &d, 86_400_000}} {
+			if v.in == nil {
+				continue
+			}
+			if *v.in < 0 || *v.in > v.max {
+				return invalid(v.field, fmt.Sprintf("must be 0 to %d", v.max))
+			}
+			*v.out = *v.in
+		}
 		if _, err := q.UpdateMediaInfo(ctx, db.UpdateMediaInfoParams{OriginalName: name, AltText: alt,
 			WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 			return err
@@ -560,12 +570,12 @@ func (s *Service) UpdateMedia(ctx context.Context, p Principal, id string, in Me
 			}
 			m.Tags = mustJSON(tags)
 		}
+		m.OriginalName, m.AltText, m.Width, m.Height, m.DurationMs = name, alt, w, h, d
 		return nil
 	})
 	if err != nil {
 		return Media{}, err
 	}
-	m.OriginalName, m.AltText, m.Width, m.Height, m.DurationMs = name, alt, w, h, d
 	return s.toMedia(m), nil
 }
 

@@ -110,7 +110,7 @@ LIMIT @lim;
 -- Removes one media id from every post's media array (media is a JSON array of quoted ids).
 UPDATE posts
 SET media = (SELECT json_group_array(j.value) FROM json_each(posts.media) AS j WHERE j.value <> CAST(@media_id AS TEXT)),
-    updated_at = @updated_at
+    version = version + 1, updated_at = @updated_at
 WHERE workspace_id = @workspace_id AND instr(media, '"' || CAST(@media_id AS TEXT) || '"') > 0;
 
 -- name: SetPostThread :exec

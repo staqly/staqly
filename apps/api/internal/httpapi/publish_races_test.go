@@ -17,7 +17,7 @@ func TestParallelTargetResultsSettleOnce(t *testing.T) {
 	ctx := context.Background()
 	c := e.collection("Automation")
 	ch := e.customChannel("My worker")
-	worker := e.keyWith(app.ScopePostsRead, app.ScopePostsPublish)
+	worker := e.keyWith(app.ScopePostsPublish)
 	post := e.post(c.ID, map[string]any{"content": "once", "targets": []map[string]any{{"channel_id": ch.ID}}})
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/publish", e.key, nil, 202, nil)
 	e.svc.RunDueJobsOnce(ctx)
@@ -100,7 +100,7 @@ func TestPreviewLinksNeedPostsWrite(t *testing.T) {
 	c := e.collection("Share")
 	post := e.post(c.ID, nil)
 	reader := e.keyWith(app.ScopePostsRead)
-	writer := e.keyWith(app.ScopePostsRead, app.ScopePostsWrite)
+	writer := e.keyWith(app.ScopePostsWrite)
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/previews", reader, map[string]any{}, 403, nil)
 	var link app.PreviewLink
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/previews", writer, map[string]any{}, 201, &link)

@@ -36,11 +36,14 @@ export const NOTIFICATIONS_QUERY = { types: NOTIFICATION_TYPES, limit: 30 }
  */
 export function useNotifications() {
   // Only the events that make a notification; refreshed with every new event (the live list's newest).
-  const live = useRecentEvents().data?.[0]?.seq
+  const { data: liveEvents, isPending: waitingForLive } = useRecentEvents()
+  const live = liveEvents?.[0]?.seq
   const events = useQuery({
     queryKey: ['notifications', live ?? 0],
     queryFn: async () => (await api.events(NOTIFICATIONS_QUERY)).data,
     placeholderData: keepPreviousData,
+    // The first live response supplies the key; fetching before it repeats the same request on every cold load.
+    enabled: !waitingForLive,
   })
   const recent = events.data
   const session = useSession()

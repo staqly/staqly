@@ -48,6 +48,14 @@ func (s *Service) ReplaceMedia(ctx context.Context, p Principal, id, filename st
 		return Media{}, err
 	}
 	err = s.tx(ctx, func(q *db.Queries) error {
+		// Uploading can take minutes: metadata or the original itself may have changed meanwhile.
+		old, err = q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if isNoRows(err) || err == nil && old.DeletedAt.Valid {
+			return notFound("media")
+		}
+		if err != nil {
+			return err
+		}
 		if err := usedOutsideDrafts(q); err != nil {
 			return err
 		}
@@ -74,7 +82,7 @@ func (s *Service) ReplaceMedia(ctx context.Context, p Principal, id, filename st
 		return Media{}, err
 	}
 	s.trackAs(nil, p, "media_edited", "kind", "file")
-	return s.GetMediaInfo(ctx, p, edited.ID)
+	return s.getMediaInfo(ctx, p, edited.ID)
 }
 
 // MediaProject is an editable picture of the design editor: its design (JSON: page, texts, pictures, shapes) kept
@@ -283,7 +291,7 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 		}
 	}
 	s.trackAs(nil, p, "media_edited", "kind", "project")
-	return s.GetMediaProject(ctx, p, id)
+	return s.getMediaProject(ctx, p, id)
 }
 
 func nonNil(v []string) []string {
@@ -298,6 +306,11 @@ func (s *Service) GetMediaProject(ctx context.Context, p Principal, id string) (
 	if err := p.require(ScopeMediaRead); err != nil {
 		return MediaProject{}, err
 	}
+	return s.getMediaProject(ctx, p, id)
+}
+
+// getMediaProject also returns a save's result under media:write.
+func (s *Service) getMediaProject(ctx context.Context, p Principal, id string) (MediaProject, error) {
 	m, err := s.Q.GetMediaProject(ctx, db.GetMediaProjectParams{WorkspaceID: p.WorkspaceID, ID: id})
 	if err != nil {
 		return MediaProject{}, notFound("project")

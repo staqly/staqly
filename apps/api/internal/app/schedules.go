@@ -411,6 +411,10 @@ func (s *Service) GetSchedule(ctx context.Context, p Principal, id string) (Sche
 	if err := p.require(ScopePostsRead); err != nil {
 		return Schedule{}, err
 	}
+	return s.getSchedule(ctx, p, id)
+}
+
+func (s *Service) getSchedule(ctx context.Context, p Principal, id string) (Schedule, error) {
 	r, err := s.Q.GetSchedule(ctx, db.GetScheduleParams{WorkspaceID: p.WorkspaceID, ID: id})
 	if isNoRows(err) {
 		return Schedule{}, notFound("schedule")
@@ -515,7 +519,7 @@ func (s *Service) RunScheduleNow(ctx context.Context, p Principal, id string) (S
 	if err := s.runScheduleWith(ctx, id, false); err != nil {
 		return Schedule{}, err
 	}
-	return s.GetSchedule(ctx, p, id)
+	return s.getSchedule(ctx, p, id)
 }
 
 // ---- the run ----

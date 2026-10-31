@@ -577,7 +577,9 @@ function ScheduleRow({
       />
       <span className="min-w-0">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-sm font-medium">{schedule.name}</span>
+          <span className="truncate text-sm font-medium" title={schedule.name}>
+            {schedule.name}
+          </span>
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             {schedule.kind === 'recurring' ? (
               <Repeat className="size-3" aria-hidden />
