@@ -20,7 +20,6 @@ import {
   X,
   Palette,
   Pencil,
-  Sparkles,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
@@ -50,8 +49,6 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useIsPast } from '@/hooks/use-is-past'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
-import { allowanceUsedUp } from '@/lib/ai'
-import { useAiStatus } from '@/lib/ai-status'
 import {
   api,
   mediaThumbUrl,
@@ -100,8 +97,8 @@ const PostPreviewSheet = dynamic(() => import('./preview/post-preview').then((m)
   ssr: false,
 })
 
-// Write with AI: its form loads on first use.
-const AiPostDialog = dynamic(() => import('./ai-post-dialog').then((m) => m.AiPostDialog), { ssr: false })
+// Write with AI: loads with the composer's first render, not with the page (it shows once AI is known to be there).
+const WriteWithAi = dynamic(() => import('./ai-post-dialog').then((m) => m.WriteWithAi), { ssr: false })
 
 /** How often a published post comes back: a copy is scheduled that much later (the API's repeat_every). */
 const REPEAT_OPTIONS = [
@@ -1734,11 +1731,6 @@ export function ComposerForm({
       <MonitorSmartphone />
     </Button>
   )
-  // Write with AI: with the assistant's model on the server and this month's allowance left.
-  const aiStatus = useAiStatus()
-  const canAiWrite =
-    !locked && !allowanceUsedUp(aiStatus.data) && !!aiStatus.data?.operations.some((o) => o.id === 'assistant')
-  const aiWrite = useLazyDialog()
   const aiMaxChars = Math.min(...picked.map((c) => providerOf(c)?.limits?.max_chars || Infinity))
   const applyAiPost = ({ draft, picture }: AiPostResult) => {
     setTitle(draft.title)
@@ -1988,17 +1980,12 @@ export function ComposerForm({
                   ) : (
                     <>
                       Post <RequiredMark />
-                      {canAiWrite && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          className="ml-auto border-brand/40 text-brand hover:bg-brand-soft hover:text-brand"
-                          onClick={() => aiWrite.setOpen(true)}
-                          data-testid="ai-post-open"
-                        >
-                          <Sparkles /> Write with AI
-                        </Button>
+                      {!locked && (
+                        <WriteWithAi
+                          maxChars={Number.isFinite(aiMaxChars) ? aiMaxChars : 0}
+                          replaces={!!(title.trim() || content.trim())}
+                          onUse={applyAiPost}
+                        />
                       )}
                     </>
                   )}
@@ -2117,15 +2104,6 @@ export function ComposerForm({
         </div>
       </Tabs>
       {preview}
-      {aiWrite.used && (
-        <AiPostDialog
-          open={aiWrite.open}
-          onOpenChange={aiWrite.setOpen}
-          maxChars={Number.isFinite(aiMaxChars) ? aiMaxChars : 0}
-          replaces={!!(title.trim() || content.trim())}
-          onUse={applyAiPost}
-        />
-      )}
       <ComposerFooter
         post={post}
         locked={locked}

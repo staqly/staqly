@@ -19,7 +19,7 @@ import { Kbd } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { allowanceNote, requestKey } from '@/lib/ai'
+import { allowanceNote, allowanceUsedUp, requestKey } from '@/lib/ai'
 import { isLive, useAiJob, useAiStatus } from '@/lib/ai-status'
 import { aiResultUrl, api, errorMessage, type AIPostDraft, type AIPostRequest, type Media } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -404,5 +404,34 @@ export function AiPostDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * The composer's "Write with AI" button and its dialog: shown with the assistant's model on the server and this
+ * month's AI allowance left.
+ */
+export function WriteWithAi(props: { maxChars: number; replaces: boolean; onUse: (r: AiPostResult) => void }) {
+  const status = useAiStatus()
+  const [open, setOpen] = useState(false)
+
+  if (allowanceUsedUp(status.data) || !status.data?.operations.some((o) => o.id === 'assistant')) {
+    return null
+  }
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="xs"
+        className="ml-auto border-brand/40 text-brand hover:bg-brand-soft hover:text-brand"
+        onClick={() => setOpen(true)}
+        data-testid="ai-post-open"
+      >
+        <Sparkles /> Write with AI
+      </Button>
+      <AiPostDialog open={open} onOpenChange={setOpen} {...props} />
+    </>
   )
 }
