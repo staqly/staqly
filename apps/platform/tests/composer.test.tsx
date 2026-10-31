@@ -1,11 +1,12 @@
 import { screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Composer } from '@/components/posts/composer'
 
 import { channel, collection, post, provider, target } from './fixtures'
-import { mockApi, renderWithProviders } from './utils'
+import { mockApi, renderWithProviders, type Call } from './utils'
 
 // ProseMirror does not type in jsdom: the editor is a plain textarea here (the text conversion has its own
 // test in post-text.test.ts, the real editor runs in e2e/ui).
@@ -76,6 +77,64 @@ async function pickChannels(user: ReturnType<typeof userEvent.setup>, ...ids: st
 }
 
 describe('composer', () => {
+  afterEach(() => toast.dismiss())
+
+  it.each(['new', 'existing'] as const)(
+    'retries a %s post after scheduling fails without duplicating it or reusing a stale version',
+    async (kind) => {
+      const draft = post({ id: 'pst_9', status: 'draft', version: 4, content: 'Ready', targets: [target()] })
+      let version = draft.version
+      let attempts = 0
+      const onSaved = vi.fn<() => void>()
+      const api = mockApi({
+        ...routes,
+        'POST /v1/posts': () => ({ ...draft, version: ++version }),
+        'PATCH /v1/posts/pst_9': ({ body }: Call) => {
+          if ((body as { expected_version: number }).expected_version !== version) {
+            return { status: 409, body: { error: { code: 'conflict', message: 'Stale version' } } }
+          }
+
+          return { ...draft, content: (body as { content: string }).content, version: ++version }
+        },
+        'POST /v1/posts/pst_9/schedule': () => {
+          attempts++
+
+          return attempts === 1
+            ? { status: 503, body: { error: { code: 'unavailable', message: 'Scheduling unavailable' } } }
+            : { ...draft, status: 'scheduled', version: ++version }
+        },
+        'GET /v1/posts': () => ({ data: [{ ...draft, version }] }),
+      })
+      const user = userEvent.setup()
+
+      renderWithProviders(
+        <Composer
+          open
+          onOpenChange={() => {}}
+          onSaved={onSaved}
+          collectionId="col_1"
+          post={kind === 'existing' ? draft : undefined}
+        />,
+        { mode: 'local' },
+      )
+
+      if (kind === 'new') {
+        await pickChannels(user, 'ch_1')
+        await user.type(screen.getByTestId('post-content'), 'Ready')
+      }
+
+      await user.click(await screen.findByTestId('publish-now'))
+      await screen.findAllByText('Scheduling unavailable')
+      expect(onSaved).not.toHaveBeenCalled()
+      await user.type(screen.getByTestId('post-content'), ' again')
+      await user.click(screen.getByTestId('publish-now'))
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1))
+      expect(api.find('POST', '/v1/posts')).toHaveLength(kind === 'new' ? 1 : 0)
+      expect(api.find('PATCH', '/v1/posts/pst_9').at(-1)?.body).toMatchObject({ content: 'Ready again' })
+      expect(attempts).toBe(2)
+    },
+  )
+
   it('opened outside a collection, a new post starts in the Default collection', async () => {
     mockApi({
       ...routes,

@@ -9,7 +9,7 @@ import { formatDateTimeIn } from '@/lib/format'
 import { notificationFor, notificationsFor } from '@/lib/notifications'
 import { qk } from '@/lib/queries'
 
-import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
+import { makeClient, mockApi, renderWithProviders, sessionFixture, type Call } from './utils'
 
 function event(over: Partial<StashEvent> & { type: string; seq: number }): StashEvent {
   return {
@@ -161,6 +161,55 @@ describe('notifications', () => {
     expect(
       await screen.findByText("You're all caught up. Published, failed and scheduled runs show up here."),
     ).toBeInTheDocument()
+  })
+
+  it('reports an initial notifications error and can retry instead of claiming the list is empty', async () => {
+    let broken = true
+
+    mockApi({
+      'GET /v1/events': () =>
+        broken ? { status: 500, body: { error: { code: 'internal', message: 'Offline' } } } : { data: [published] },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<NotificationsPage />, { mode: 'local' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load data')
+    expect(screen.queryByText(/No notifications yet/)).not.toBeInTheDocument()
+    broken = false
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await screen.findByTestId('notifications-page-list')
+    expect(pageRows()).toHaveLength(1)
+  })
+
+  it('stops automatic pagination on error, keeps loaded notifications, and retries the failed page on demand', async () => {
+    let broken = true
+    let olderRequests = 0
+
+    mockApi({
+      'GET /v1/events': ({ query }: Call) => {
+        if (!query.get('cursor')) {
+          return { data: [reconnect], next_cursor: 'older' }
+        }
+
+        olderRequests++
+
+        // A third automatic request would silently recover, hiding a retry loop from a mere final-list assertion.
+        return broken && olderRequests < 3
+          ? { status: 500, body: { error: { code: 'internal', message: 'Offline' } } }
+          : { data: [published] }
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<NotificationsPage />, { mode: 'local' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load more')
+    expect(olderRequests).toBe(1)
+    expect(pageRows()).toHaveLength(1)
+    broken = false
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(pageRows()).toHaveLength(2))
+    expect(olderRequests).toBe(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('the page shows 15 notifications at a time, whatever their day, and loads 15 more', async () => {

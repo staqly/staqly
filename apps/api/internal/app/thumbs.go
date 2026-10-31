@@ -90,6 +90,8 @@ func thumbKey(workspaceID, storage string, w int, ext string) string {
 // removeMediaFiles deletes an upload and its cached thumbnails. The error is
 // the original's (missing files are not an error).
 func (s *Service) removeMediaFiles(ctx context.Context, workspaceID, storage string) error {
+	ctx, cancel := mediaCleanupContext(ctx)
+	defer cancel()
 	// The thumbnails all at once: with an object store each delete is a round trip.
 	var wg sync.WaitGroup
 	for _, w := range ThumbWidths {

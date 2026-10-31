@@ -14,6 +14,7 @@ const PAGES = [
   '/media',
   '/channels',
   '/activity',
+  '/notifications',
   '/alerts',
   '/webhooks',
   '/integrations',

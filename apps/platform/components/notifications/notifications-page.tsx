@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 
+import { ErrorState, LoadMore } from '@/components/common/error-state'
 import { IdChip } from '@/components/common/id-chip'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
 import { NOTIFICATIONS_QUERY, useNotifications } from '@/components/shell/notifications-bell'
@@ -53,14 +54,14 @@ export function NotificationsPage() {
   // Grouped over every loaded page: a publish split by a page boundary joins up once the older page loads.
   const rows = useMemo(() => notificationsFor(events.data?.pages.flatMap((p) => p.data)), [events.data])
   const [shown, setShown] = useState(PAGE)
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = events
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, isError, error, fetchNextPage, refetch } = events
 
   // A page of events groups into fewer notifications: keep fetching until there are enough to show.
   useEffect(() => {
-    if (rows.length < shown && hasNextPage && !isFetchingNextPage) {
+    if (rows.length < shown && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) {
       void fetchNextPage()
     }
-  }, [rows.length, shown, hasNextPage, isFetchingNextPage, fetchNextPage])
+  }, [rows.length, shown, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage])
 
   const days = useMemo(() => {
     const out: { label: string; rows: typeof rows }[] = []
@@ -101,6 +102,8 @@ export function NotificationsPage() {
               <Skeleton key={i} className="h-20 rounded-xl" />
             ))}
           </div>
+        ) : isError && !events.data ? (
+          <ErrorState error={error} onRetry={() => void refetch()} />
         ) : rows.length === 0 ? (
           <p className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
             No notifications yet. Published, failed and scheduled runs show up here.
@@ -118,14 +121,17 @@ export function NotificationsPage() {
           ))
         )}
         {(rows.length > shown || hasNextPage) && (
-          <Button
-            variant="outline"
-            className="justify-self-center"
-            onClick={() => setShown((n) => n + PAGE)}
-            disabled={rows.length < shown && isFetchingNextPage}
-          >
-            {rows.length < shown && isFetchingNextPage ? 'Loading...' : 'Load more'}
-          </Button>
+          <LoadMore
+            loading={isFetchingNextPage}
+            failed={isFetchNextPageError}
+            onLoad={() => {
+              if (isFetchNextPageError) {
+                void fetchNextPage()
+              } else {
+                setShown((n) => n + PAGE)
+              }
+            }}
+          />
         )}
       </div>
     </PageContainer>
@@ -165,7 +171,11 @@ function NotificationRow({
           {n.href ? (
             <Link
               href={n.href}
-              className={cn('min-w-0 text-sm leading-snug wrap-anywhere hover:underline', isNew && 'font-medium')}
+              prefetch={false}
+              className={cn(
+                'min-w-0 text-sm leading-snug wrap-anywhere hover:underline pointer-coarse:min-h-10',
+                isNew && 'font-medium',
+              )}
             >
               {n.text}
             </Link>
@@ -214,7 +224,11 @@ function NotificationRow({
         </dl>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           {e.post_id && (
-            <Link href={`/posts/${encodeURIComponent(e.post_id)}`} className="text-brand underline underline-offset-2">
+            <Link
+              href={`/posts/${encodeURIComponent(e.post_id)}`}
+              prefetch={false}
+              className="inline-flex items-center text-brand underline underline-offset-2 pointer-coarse:min-h-10"
+            >
               Open the post
             </Link>
           )}
@@ -223,12 +237,16 @@ function NotificationRow({
               href={link}
               target="_blank"
               rel="noopener noreferrer nofollow"
-              className="inline-flex items-center gap-1 text-brand underline underline-offset-2"
+              className="inline-flex items-center gap-1 text-brand underline underline-offset-2 pointer-coarse:min-h-10"
             >
               Open on the platform <ExternalLink className="size-3" aria-hidden />
             </a>
           )}
-          <Link href={activity} className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+          <Link
+            href={activity}
+            prefetch={false}
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground pointer-coarse:min-h-10"
+          >
             <History className="size-3" aria-hidden /> In Activity
           </Link>
         </div>
