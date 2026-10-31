@@ -70,6 +70,12 @@ export function routes({
     { name: 'video editor', path: '/media/video' },
     { name: 'sound editor', path: '/media/audio' },
     { name: 'activity', path: '/activity' },
+    { name: 'notifications', path: '/notifications' },
+    {
+      name: 'notifications expanded',
+      path: '/notifications',
+      open: (p) => click(p, 'button:has-text("Show"):has-text("channels"):visible'),
+    },
     { name: 'activity filtered', path: `/activity?post=${ids.published}` },
     { name: 'alerts', path: '/alerts' },
     { name: 'webhooks', path: '/webhooks' },

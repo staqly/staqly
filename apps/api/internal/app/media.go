@@ -254,11 +254,21 @@ func (s *Service) UploadMedia(ctx context.Context, p Principal, filename string,
 	err = s.Cfg.Blob.Put(ctx, mediaKey(p.WorkspaceID, storage), staged, n, mime)
 	staged.Close()
 	if err != nil {
+		// A failed response does not prove the object store rejected the write.
+		s.removeStoredFile(ctx, mediaKey(p.WorkspaceID, storage))
 		return Media{}, fmt.Errorf("store media file: %w", err)
 	}
 	row := db.Medium{ID: id, WorkspaceID: p.WorkspaceID, StorageName: storage, OriginalName: cleanOriginalName(filename),
 		MimeType: mime, SizeBytes: n, Sha256: hex.EncodeToString(h.Sum(nil)), CreatedAt: s.now(), Width: width, Height: height}
 	if err := s.tx(ctx, func(q *db.Queries) error {
+		// The subscription may change while the file is being uploaded.
+		plan, err := s.planFor(ctx, q, p.WorkspaceID)
+		if err != nil {
+			return err
+		}
+		if limit := plan.Limits.MaxUploadBytes; limit != Unlimited && n > limit {
+			return &Error{Code: "too_large", Status: 413, Message: "file exceeds the current plan's upload limit"}
+		}
 		if plan.Limits.StorageBytes != Unlimited {
 			used, err := q.StorageUsed(ctx, p.WorkspaceID)
 			if err != nil {
@@ -272,7 +282,7 @@ func (s *Service) UploadMedia(ctx context.Context, p Principal, filename string,
 			OriginalName: row.OriginalName, MimeType: mime, SizeBytes: n, Sha256: row.Sha256, CreatedAt: row.CreatedAt,
 			Width: width, Height: height})
 	}); err != nil {
-		_ = s.Cfg.Blob.Delete(ctx, mediaKey(p.WorkspaceID, storage))
+		s.removeStoredFile(ctx, mediaKey(p.WorkspaceID, storage))
 		return Media{}, err
 	}
 	s.trackAs(nil, p, "media_uploaded", "type", strings.SplitN(mime, "/", 2)[0], "size_bytes", n)
@@ -297,10 +307,12 @@ func (s *Service) OpenMedia(ctx context.Context, p Principal, id string) (io.Rea
 
 // DiscardUpload removes media the caller just uploaded for a post that was
 // then not created (multipart create failed), so failed requests don't leak
-// storage quota. It needs only posts:write, like the upload itself, and
+// storage quota. It needs only media:write, like the upload itself, and
 // deletes nothing a post references: deleting media in use is DeleteMedia
 // (posts:delete).
 func (s *Service) DiscardUpload(ctx context.Context, p Principal, id string) error {
+	ctx, cancel := mediaCleanupContext(ctx)
+	defer cancel()
 	if err := p.require(ScopeMediaWrite); err != nil {
 		return err
 	}

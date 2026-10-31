@@ -241,6 +241,7 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 	err = s.Cfg.Blob.Put(ctx, projectKey(p.WorkspaceID, storage), f, n, "application/json")
 	f.Close()
 	if err != nil {
+		s.removeStoredFile(ctx, projectKey(p.WorkspaceID, storage))
 		return MediaProject{}, fmt.Errorf("store project file: %w", err)
 	}
 	sources, _ := json.Marshal(nonNil(in.SourceIDs))
@@ -251,6 +252,14 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 		id = newID("prj")
 	}
 	err = s.tx(ctx, func(q *db.Queries) error {
+		// The subscription may change while the file is being uploaded.
+		plan, err := s.planFor(ctx, q, p.WorkspaceID)
+		if err != nil {
+			return err
+		}
+		if limit := plan.Limits.MaxUploadBytes; limit != Unlimited && n > limit {
+			return &Error{Code: "too_large", Status: 413, Message: "file exceeds the current plan's upload limit"}
+		}
 		replaced = ""
 		var prevBytes int64
 		if prev.ID != "" {
@@ -282,13 +291,11 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 		return err
 	})
 	if err != nil {
-		_ = s.Cfg.Blob.Delete(ctx, projectKey(p.WorkspaceID, storage))
+		s.removeStoredFile(ctx, projectKey(p.WorkspaceID, storage))
 		return MediaProject{}, err
 	}
 	if replaced != "" {
-		if err := s.Cfg.Blob.Delete(ctx, projectKey(p.WorkspaceID, replaced)); err != nil {
-			s.logger(ctx).Warn("old project file not removed", "project_id", id, "err", err)
-		}
+		s.removeStoredFile(ctx, projectKey(p.WorkspaceID, replaced))
 	}
 	s.trackAs(nil, p, "media_edited", "kind", "project")
 	return s.getMediaProject(ctx, p, id)
@@ -355,15 +362,21 @@ func (s *Service) DeleteMediaProject(ctx context.Context, p Principal, id string
 	if err := p.require(ScopePostsDelete); err != nil {
 		return err
 	}
-	m, err := s.Q.GetMediaProject(ctx, db.GetMediaProjectParams{WorkspaceID: p.WorkspaceID, ID: id})
-	if err != nil {
-		return notFound("project")
-	}
-	if _, err := s.W.DeleteMediaProject(ctx, db.DeleteMediaProjectParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+	var m db.MediaProject
+	if err := s.tx(ctx, func(q *db.Queries) error {
+		var err error
+		m, err = q.GetMediaProject(ctx, db.GetMediaProjectParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if isNoRows(err) {
+			return notFound("project")
+		}
+		if err != nil {
+			return err
+		}
+		_, err = q.DeleteMediaProject(ctx, db.DeleteMediaProjectParams{WorkspaceID: p.WorkspaceID, ID: id})
+		return err
+	}); err != nil {
 		return err
 	}
-	if err := s.Cfg.Blob.Delete(ctx, projectKey(m.WorkspaceID, m.StorageName)); err != nil {
-		s.logger(ctx).Warn("project file not removed", "project_id", id, "err", err)
-	}
+	s.removeStoredFile(ctx, projectKey(m.WorkspaceID, m.StorageName))
 	return nil
 }

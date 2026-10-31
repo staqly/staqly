@@ -512,7 +512,7 @@ func (s *Service) CreateAIJob(ctx context.Context, p Principal, in AIJobInput) (
 		}
 		name := f.name
 		if err := s.Cfg.Blob.Put(ctx, aiFileKey(p.WorkspaceID, id, name), bytes.NewReader(f.data), int64(len(f.data)), f.ct); err != nil {
-			s.deleteAIFiles(ctx, p.WorkspaceID, id, inputs)
+			s.deleteAIFiles(ctx, p.WorkspaceID, id, append(inputs, name))
 			return AIJob{}, false, err
 		}
 		inputs = append(inputs, name)
@@ -711,7 +711,7 @@ func (s *Service) DiscardAIJob(ctx context.Context, p Principal, id string) erro
 
 func (s *Service) deleteAIFiles(ctx context.Context, workspaceID, id string, names []string) {
 	for _, n := range names {
-		_ = s.Cfg.Blob.Delete(ctx, aiFileKey(workspaceID, id, n))
+		s.removeStoredFile(ctx, aiFileKey(workspaceID, id, n))
 	}
 }
 
@@ -959,7 +959,7 @@ func (s *Service) runAIJob(ctx context.Context, workspaceID, id string) error {
 		}
 		done, err := s.finishAIJob(ctx, row, "succeeded", "", "", cost, res)
 		if err != nil || !done {
-			_ = s.Cfg.Blob.Delete(context.WithoutCancel(ctx), res.ResultKey) // cancelled while it finished
+			s.removeStoredFile(ctx, res.ResultKey) // cancelled while it finished
 		}
 		return err
 	}

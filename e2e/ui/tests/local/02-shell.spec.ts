@@ -7,6 +7,7 @@ const ROUTES: [string, string | RegExp][] = [
   ['/posts', /.+/], // the h1 is the open collection's name; the pane heading is an h2
   ['/channels', 'Channels'],
   ['/activity', 'Activity'],
+  ['/notifications', 'Notifications'],
   ['/alerts', 'Alerts'],
   ['/webhooks', 'Webhooks'],
   ['/integrations', 'Integrations'],
@@ -81,7 +82,6 @@ test.describe('shell and navigation', () => {
     // The old routes land on the new ones.
     for (const [from, to] of [
       ['/inbox', /\/schedule$/],
-      ['/notifications', /\/alerts$/],
       ['/collections', /\/posts/],
       [
         `/collections/${srv.seed.collections.research}`,

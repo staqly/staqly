@@ -80,7 +80,7 @@ function PublishChannelRow({ channel: c }: { channel: NotificationChannel }) {
             href={link}
             target="_blank"
             rel="noopener noreferrer nofollow"
-            className="inline-flex w-fit items-center gap-1 text-brand underline underline-offset-2 pointer-coarse:py-1"
+            className="inline-flex w-fit items-center gap-1 text-brand underline underline-offset-2 pointer-coarse:min-h-10"
             aria-label={`Open on the platform: ${label}`}
           >
             Open on the platform <ExternalLink className="size-3" aria-hidden />

@@ -1431,7 +1431,7 @@ export function Composer({
  */
 export function ComposerForm({
   collectionId,
-  post,
+  post: initialPost,
   defaultPublishAt,
   defaultMedia,
   initialTab,
@@ -1447,6 +1447,9 @@ export function ComposerForm({
   headerActions?: React.ReactNode
   onDone: (post: Post) => void
 }) {
+  // A successful write survives a failed scheduling step: retries edit that draft at its new version.
+  const [savedPost, setSavedPost] = useState<Post>()
+  const post = initialPost && (!savedPost || initialPost.version >= savedPost.version) ? initialPost : savedPost
   const qc = useQueryClient()
   const collections = useCollections()
   const channels = useChannels()
@@ -1565,30 +1568,45 @@ export function ComposerForm({
         const { collection: _c, status: _s, ...patch } = body
 
         saved = await api.updatePost(post.id, { ...patch, expected_version: post.version })
-
-        if (mode === 'schedule' && publishAt) {
-          saved = await api.schedulePost(post.id, publishAt.toISOString())
-        }
       } else {
         saved = await api.createPost(body)
       }
 
-      // Publish now from the dashboard waits a few seconds with an Undo: the post is scheduled for that moment and
-      // the queue sends it then (agents and the API still publish at once).
-      if (mode === 'now') {
-        saved = await api.schedulePost(saved.id, new Date(Date.now() + undoDelayMs()).toISOString())
+      // Publish now waits a few seconds with an Undo; existing drafts schedule after their content is saved.
+      const at =
+        mode === 'now'
+          ? new Date(Date.now() + undoDelayMs()).toISOString()
+          : post && mode === 'schedule'
+            ? publishAt?.toISOString()
+            : undefined
+
+      if (at) {
+        saved = await api.schedulePost(saved.id, at).catch((e: unknown) => {
+          // The first write committed: retain its id/version and expose it even if this drawer closes.
+          setSavedPost(saved)
+
+          if (post) {
+            syncPostInCache(qc, saved)
+          } else {
+            refetchPostListsFromStart(qc, saved.id)
+          }
+
+          invalidateAfterPostChange(qc, saved.id, { usage: !post })
+
+          throw e
+        })
       }
 
-      return { saved, mode }
+      return { saved, mode, created: !post }
     },
-    onSuccess: ({ saved, mode }) => {
-      if (post) {
-        syncPostInCache(qc, saved)
-      } else {
+    onSuccess: ({ saved, mode, created }) => {
+      if (created) {
         refetchPostListsFromStart(qc, saved.id)
+      } else {
+        syncPostInCache(qc, saved)
       }
 
-      invalidateAfterPostChange(qc, saved.id, { usage: !post })
+      invalidateAfterPostChange(qc, saved.id, { usage: created })
 
       if (mode === 'now') {
         // The canceled post (a draft again), not `saved`, which still says scheduled.
@@ -1599,7 +1617,7 @@ export function ComposerForm({
       } else {
         namedToast(
           postTitle(saved, 40),
-          mode === 'schedule' ? 'is scheduled' : post ? 'was saved' : 'was saved as a draft',
+          mode === 'schedule' ? 'is scheduled' : created ? 'was saved as a draft' : 'was saved',
         )
       }
 
