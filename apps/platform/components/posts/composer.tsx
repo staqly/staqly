@@ -40,6 +40,7 @@ import { PostStats } from '@/components/posts/post-actions'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FieldDescription, FieldError } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Label, RequiredMark } from '@/components/ui/label'
@@ -278,7 +279,7 @@ function ChannelPicker({
       id="post-channels"
       label="Channels"
       placeholder="Pick where the post goes"
-      className="h-auto min-h-9 w-full py-1"
+      className="h-auto min-h-8 w-full py-1 pointer-coarse:min-h-11"
       value={[...selected]}
       onChange={onChange}
       disabled={disabled}
@@ -458,9 +459,24 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
         <ImagePlus /> {upload.isPending ? 'Uploading...' : 'Upload'}
       </Button>
       <LibraryPickerButton onAdd={onAdd} />
-      <Button type="button" variant="outline" size="sm" onClick={() => design.setOpen(true)} data-testid="design-new">
-        <Palette /> Design
-      </Button>
+      {/* One Design button: pick what to make (a graphic in a drawer here, a video in the video editor). */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm" data-testid="design-menu">
+            <Palette /> Design <ChevronDown />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onSelect={() => design.setOpen(true)} data-testid="design-new">
+            <ImagePlus /> Image or graphic
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <a href={`/media/video?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="video-new">
+              <Film /> Video
+            </a>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       {design.used && (
         <DesignDrawer
           open={design.open}
@@ -472,11 +488,6 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
           }}
         />
       )}
-      <Button type="button" variant="outline" size="sm" asChild>
-        <a href={`/media/video?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="video-new">
-          <Film /> Video
-        </a>
-      </Button>
     </>
   )
 }
@@ -1412,18 +1423,17 @@ export function Composer({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-4xl">
-        {open && (
-          <ComposerForm
-            collectionId={collectionId}
-            post={post}
-            defaultPublishAt={defaultPublishAt}
-            defaultMedia={defaultMedia}
-            onDone={(p) => {
-              onOpenChange(false)
-              onSaved?.(p)
-            }}
-          />
-        )}
+        {/* Mounted with the drawer's content: it stays while the drawer slides out and starts fresh on each opening. */}
+        <ComposerForm
+          collectionId={collectionId}
+          post={post}
+          defaultPublishAt={defaultPublishAt}
+          defaultMedia={defaultMedia}
+          onDone={(p) => {
+            onOpenChange(false)
+            onSaved?.(p)
+          }}
+        />
       </SheetContent>
     </Sheet>
   )

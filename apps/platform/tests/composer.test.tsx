@@ -65,6 +65,18 @@ const routes = {
   },
 }
 
+/** An AI operation the server offers. */
+const aiOp = (id: string, kind: string) => ({
+  id,
+  kind,
+  prompt: 'required',
+  image: false,
+  mask: false,
+  provider: 'fal',
+  model: 'm',
+  fallback: '',
+})
+
 /** Opens the Channels multi-select, picks these channels and closes it. */
 async function pickChannels(user: ReturnType<typeof userEvent.setup>, ...ids: string[]) {
   await user.click(await screen.findByRole('button', { name: 'Channels' }))
@@ -78,6 +90,62 @@ async function pickChannels(user: ReturnType<typeof userEvent.setup>, ...ids: st
 
 describe('composer', () => {
   afterEach(() => toast.dismiss())
+
+  it('writes the post with a video made by AI and adds the video to the post', async () => {
+    const job = {
+      id: 'aij_1',
+      operation: 'text_to_video',
+      kind: 'video',
+      status: 'succeeded',
+      result: { content_type: 'video/mp4' },
+      created_at: new Date().toISOString(),
+    }
+    const clip = {
+      id: 'med_9',
+      original_name: 'clip.mp4',
+      mime_type: 'video/mp4',
+      size: 10,
+      created_at: new Date().toISOString(),
+    }
+    const api = mockApi({
+      ...routes,
+      'GET /v1/ai': {
+        configured: true,
+        providers: ['fal'],
+        operations: [aiOp('assistant', 'text'), aiOp('generate', 'image'), aiOp('text_to_video', 'video')],
+        usage: { period: '2026-10', used_usd: 0, limit_usd: 10 },
+      },
+      'POST /v1/ai/post': { title: 'Launch', content: 'It is out.', comments: [], media_prompt: 'A rocket at dawn' },
+      'POST /v1/ai/jobs': { ...job, status: 'queued' },
+      'GET /v1/ai/jobs/aij_1': job,
+      'POST /v1/ai/jobs/aij_1/accept': clip,
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await user.click(await screen.findByTestId('ai-post-open'))
+    const drawer = await screen.findByTestId('ai-post-dialog')
+
+    await user.click(within(drawer).getByRole('button', { name: /Announce a feature/ }))
+    expect(within(drawer).getByTestId('ai-post-brief')).toHaveValue('Announce our newest feature: ')
+    await user.type(within(drawer).getByTestId('ai-post-brief'), 'v2')
+    await user.click(within(drawer).getByRole('radio', { name: /Video/ }))
+    await user.click(within(drawer).getByRole('radio', { name: 'Portrait' }))
+    await user.click(within(drawer).getByTestId('ai-post-write'))
+    expect(await within(drawer).findByText('It is out.')).toBeInTheDocument()
+    expect(api.find('POST', '/v1/ai/post')[0]?.body).toMatchObject({ media: 'video' })
+    await waitFor(() => expect(within(drawer).getByTestId('ai-post-use')).toBeEnabled())
+    const sent = api.find('POST', '/v1/ai/jobs')[0]?.body as FormData
+
+    expect(sent.get('operation')).toBe('text_to_video')
+    expect(sent.get('prompt')).toBe('A rocket at dawn')
+    expect(sent.get('aspect_ratio')).toBe('9:16')
+    await user.click(within(drawer).getByTestId('ai-post-use'))
+    await waitFor(() => expect(screen.queryByTestId('ai-post-dialog')).not.toBeInTheDocument())
+    expect(api.find('POST', '/v1/ai/jobs/aij_1/accept')).toHaveLength(1)
+    expect(screen.getByTestId('post-title')).toHaveValue('Launch')
+    expect(screen.getByTestId('post-content')).toHaveValue('It is out.')
+  })
 
   it("writes the post with AI and puts the draft into the form, within the picked channels' limit", async () => {
     const assistant = {
@@ -111,7 +179,9 @@ describe('composer', () => {
     await user.click(await screen.findByTestId('ai-post-open'))
     const dialog = await screen.findByTestId('ai-post-dialog')
 
-    expect(within(dialog).getByTestId('ai-post-write')).toBeDisabled()
+    await user.click(within(dialog).getByTestId('ai-post-write'))
+    expect(within(dialog).getByText('Say what the post is about.')).toBeInTheDocument()
+    expect(api.find('POST', '/v1/ai/post')).toHaveLength(0)
     await user.type(within(dialog).getByTestId('ai-post-brief'), 'Spring sale, 20% off')
     await user.click(within(dialog).getByRole('radio', { name: /Thread/ }))
     await user.click(within(dialog).getByRole('radio', { name: 'Brand ("we")' }))

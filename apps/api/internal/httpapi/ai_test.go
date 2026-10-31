@@ -1094,7 +1094,7 @@ func TestAIPost(t *testing.T) {
 	e := newEnv(t)
 	e.paid()
 	var asked, sys string
-	answer := `Here it is: {"title":"Spring sale","content":"Our spring sale starts today.","comments":["20% off everything."," "],"image_prompt":"A sunny shop window"}`
+	answer := `Here it is: {"title":"Spring sale","content":"Our spring sale starts today.","comments":["20% off everything."," "],"media_prompt":"A sunny shop window"}`
 	own := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Messages []struct{ Content any } }
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -1105,25 +1105,30 @@ func TestAIPost(t *testing.T) {
 	}))
 	defer own.Close()
 
-	brief := map[string]any{"brief": "Spring sale, 20% off", "format": "thread", "voice": "brand", "max_chars": 280, "image": true}
+	brief := map[string]any{"brief": "Spring sale, 20% off", "format": "thread", "voice": "brand", "max_chars": 280, "media": "image"}
 	e.do(nil, "POST", "/v1/ai/post", e.key, brief, 409, nil)
 	e.svc.Cfg.AI = app.AIConfig{Assistant: app.AIEndpoint{BaseURL: own.URL + "/v1", Model: "m", Prices: &[2]float64{0, 0}}}
 	var out app.AIPost
 	e.do(nil, "POST", "/v1/ai/post", e.key, brief, 200, &out)
 	if out.Title != "Spring sale" || out.Content != "Our spring sale starts today." || len(out.Comments) != 1 ||
-		out.ImagePrompt != "A sunny shop window" || !strings.Contains(asked, "Spring sale") ||
+		out.MediaPrompt != "A sunny shop window" || !strings.Contains(asked, "Spring sale") ||
 		!strings.Contains(sys, "at most 280 characters") || !strings.Contains(sys, `("we")`) {
 		t.Fatalf("%+v asked=%q sys=%q", out, asked, sys)
 	}
 	// A short post has no comments and, unasked, no picture.
 	out = app.AIPost{}
 	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "Spring sale"}, 200, &out)
-	if len(out.Comments) != 0 || out.ImagePrompt != "" {
+	if len(out.Comments) != 0 || out.MediaPrompt != "" {
 		t.Fatalf("%+v", out)
 	}
 	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": " "}, 422, nil)
 	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "x", "format": "essay"}, 422, nil)
 	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "x", "tone": "angry"}, 422, nil)
+	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "x", "media": "gif"}, 422, nil)
+	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "x", "media": "video"}, 200, &out)
+	if out.MediaPrompt != "A sunny shop window" || !strings.Contains(sys, "video clip") {
+		t.Fatalf("%+v sys=%q", out, sys)
+	}
 	answer = "Sorry, I can't."
 	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "x"}, 502, nil)
 }

@@ -24,8 +24,9 @@ type AIPostRequest struct {
 	Tone string `json:"tone"`
 	// The shortest character limit of the picked channels: the first post fits it. 0: none.
 	MaxChars int `json:"max_chars"`
-	// Also describe a picture for the post (image_prompt), for the picture tool to make.
-	Image bool `json:"image"`
+	// Also describe a picture ("image") or a short video clip ("video") for the post (media_prompt), for the
+	// generate or text_to_video operation to make. "": none.
+	Media string `json:"media"`
 }
 
 // AIPost is the drafted post.
@@ -33,7 +34,7 @@ type AIPost struct {
 	Title       string   `json:"title"`
 	Content     string   `json:"content"`
 	Comments    []string `json:"comments"`
-	ImagePrompt string   `json:"image_prompt,omitempty"`
+	MediaPrompt string   `json:"media_prompt,omitempty"`
 }
 
 var (
@@ -70,6 +71,8 @@ func (s *Service) AIPost(ctx context.Context, p Principal, in AIPostRequest) (AI
 		return AIPost{}, invalid("voice", "must be personal, brand or neutral")
 	case !slices.Contains(aiPostTones, in.Tone):
 		return AIPost{}, invalid("tone", "must be friendly, professional, witty, bold or informative")
+	case in.Media != "" && in.Media != "image" && in.Media != "video":
+		return AIPost{}, invalid("media", "must be image or video")
 	case in.MaxChars < 0:
 		return AIPost{}, invalid("max_chars", "must not be negative")
 	}
@@ -78,8 +81,11 @@ func (s *Service) AIPost(ctx context.Context, p Principal, in AIPostRequest) (AI
 		limit = fmt.Sprintf(" The post and each comment must be at most %d characters.", in.MaxChars)
 	}
 	picture := ""
-	if in.Image {
-		picture = ` "image_prompt": a vivid description of one picture to go with the post, for an image model (no text in the picture).`
+	switch in.Media {
+	case "image":
+		picture = ` "media_prompt": a vivid description of one picture to go with the post, for an image model (no text in the picture).`
+	case "video":
+		picture = ` "media_prompt": a vivid description of a 5 second video clip to go with the post (the scene, what moves, the camera), for a video model (no text in it).`
 	}
 	sys := "You write social media posts. Write " + aiPostFormats[in.Format] + ", in " + aiPostVoices[in.Voice] +
 		", with a " + in.Tone + " tone." + limit + " Write in the language of the brief. Plain text: no markdown, " +
@@ -99,8 +105,8 @@ func (s *Service) AIPost(ctx context.Context, p Principal, in AIPostRequest) (AI
 	if in.Format != "thread" {
 		out.Comments = []string{}
 	}
-	if !in.Image {
-		out.ImagePrompt = ""
+	if in.Media == "" {
+		out.MediaPrompt = ""
 	}
 	return out, nil
 }
@@ -115,7 +121,7 @@ func parseAIPost(text string) (AIPost, bool) {
 	if json.Unmarshal([]byte(text[start:end+1]), &out) != nil {
 		return AIPost{}, false
 	}
-	out.Title, out.Content, out.ImagePrompt = strings.TrimSpace(out.Title), strings.TrimSpace(out.Content), strings.TrimSpace(out.ImagePrompt)
+	out.Title, out.Content, out.MediaPrompt = strings.TrimSpace(out.Title), strings.TrimSpace(out.Content), strings.TrimSpace(out.MediaPrompt)
 	comments := make([]string, 0, len(out.Comments))
 	for _, c := range out.Comments {
 		if c = strings.TrimSpace(c); c != "" {

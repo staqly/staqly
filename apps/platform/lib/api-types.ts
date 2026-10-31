@@ -3199,7 +3199,7 @@ export interface paths {
         put?: never;
         /**
          * Draft a post from a brief with AI (posts:write)
-         * @description The composer's Write with AI. The assistant's model (no tools) writes a title, the post and, for a thread, the comments under it, and with image a description of a picture for the generate operation. Nothing is saved. Counts as AI usage.
+         * @description The composer's Write with AI. The assistant's model (no tools) writes a title, the post and, for a thread, the comments under it, and with media a description of a picture or a video clip to make with the generate or text_to_video operation. Nothing is saved. Counts as AI usage.
          */
         post: operations["aiPost"];
         delete?: never;
@@ -12696,8 +12696,11 @@ export interface operations {
                     tone?: "friendly" | "professional" | "witty" | "bold" | "informative";
                     /** @description The shortest character limit of the picked channels (0 = none) */
                     max_chars?: number;
-                    /** @description Also describe a picture to go with the post (image_prompt) */
-                    image?: boolean;
+                    /**
+                     * @description Also describe a picture or a short video clip to go with the post (media_prompt), for the generate or text_to_video operation
+                     * @enum {string}
+                     */
+                    media?: "image" | "video";
                 };
             };
         };
@@ -12712,7 +12715,7 @@ export interface operations {
                         title: string;
                         content: string;
                         comments: string[];
-                        image_prompt?: string;
+                        media_prompt?: string;
                     };
                 };
             };
