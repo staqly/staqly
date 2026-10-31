@@ -1,3 +1,4 @@
+import { onlineManager } from '@tanstack/react-query'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -327,6 +328,36 @@ describe('auth gate', () => {
     )
     expect(await screen.findByTestId('local-sign-in')).toBeInTheDocument()
     expect(screen.getByText(/not the access token of this computer/i)).toBeInTheDocument()
+  })
+
+  it('says the server is not answering when a proxy in front of it gives up', async () => {
+    mockApi({ 'GET /v1/setup': setup, 'GET /v1/session': { status: 502, body: { error: { code: 'bad_gateway' } } } })
+
+    renderWithProviders(
+      <AuthGate>
+        <div>dashboard</div>
+      </AuthGate>,
+    )
+    expect(await screen.findByRole('heading', { name: "Can't reach staqly" })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
+  it('says the browser is offline, and opens once it is back online', async () => {
+    mockApi({ 'GET /v1/setup': setup, 'GET /v1/session': { ...sessionFixture('local'), csrf_token: 'csrf-local' } })
+    onlineManager.setOnline(false)
+
+    try {
+      renderWithProviders(
+        <AuthGate>
+          <div>dashboard</div>
+        </AuthGate>,
+      )
+      expect(await screen.findByRole('heading', { name: "You're offline" })).toBeInTheDocument()
+      onlineManager.setOnline(true)
+      expect(await screen.findByText('dashboard')).toBeInTheDocument()
+    } finally {
+      onlineManager.setOnline(true)
+    }
   })
 
   it('leaves connect-a-device links to their page', () => {
