@@ -79,6 +79,58 @@ async function pickChannels(user: ReturnType<typeof userEvent.setup>, ...ids: st
 describe('composer', () => {
   afterEach(() => toast.dismiss())
 
+  it("writes the post with AI and puts the draft into the form, within the picked channels' limit", async () => {
+    const assistant = {
+      id: 'assistant',
+      kind: 'text',
+      prompt: 'required',
+      image: false,
+      mask: false,
+      provider: 'openai',
+      model: 'm',
+      fallback: '',
+    }
+    const api = mockApi({
+      ...routes,
+      'GET /v1/ai': {
+        configured: true,
+        providers: ['openai'],
+        operations: [assistant],
+        usage: { period: '2026-10', used_usd: 0, limit_usd: 10 },
+      },
+      'POST /v1/ai/post': {
+        title: 'Spring sale',
+        content: 'Our spring sale starts today.',
+        comments: ['20% off everything.'],
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_2')
+    await user.click(await screen.findByTestId('ai-post-open'))
+    const dialog = await screen.findByTestId('ai-post-dialog')
+
+    expect(within(dialog).getByTestId('ai-post-write')).toBeDisabled()
+    await user.type(within(dialog).getByTestId('ai-post-brief'), 'Spring sale, 20% off')
+    await user.click(within(dialog).getByRole('radio', { name: /Thread/ }))
+    await user.click(within(dialog).getByRole('radio', { name: 'Brand ("we")' }))
+    await user.click(within(dialog).getByTestId('ai-post-write'))
+    expect(await within(dialog).findByText('Our spring sale starts today.')).toBeInTheDocument()
+    expect(api.find('POST', '/v1/ai/post')[0]?.body).toMatchObject({
+      brief: 'Spring sale, 20% off',
+      format: 'thread',
+      voice: 'brand',
+      max_chars: 300,
+    })
+
+    await user.click(within(dialog).getByTestId('ai-post-use'))
+    await waitFor(() => expect(screen.queryByTestId('ai-post-dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('post-title')).toHaveValue('Spring sale')
+    expect(screen.getByTestId('post-content')).toHaveValue('Our spring sale starts today.')
+    expect(screen.getByDisplayValue('20% off everything.')).toBeInTheDocument()
+  })
+
   it.each(['new', 'existing'] as const)(
     'retries a %s post after scheduling fails without duplicating it or reusing a stale version',
     async (kind) => {

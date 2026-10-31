@@ -3188,6 +3188,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ai/post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft a post from a brief with AI (posts:write)
+         * @description The composer's Write with AI. The assistant's model (no tools) writes a title, the post and, for a thread, the comments under it, and with image a description of a picture for the generate operation. Nothing is saved. Counts as AI usage.
+         */
+        post: operations["aiPost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/assistant/chats": {
         parameters: {
             query?: never;
@@ -12635,6 +12655,64 @@ export interface operations {
                 content: {
                     "application/json": {
                         text: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    aiPost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description What the post is about, in any words */
+                    brief: string;
+                    /**
+                     * @default short
+                     * @enum {string}
+                     */
+                    format?: "short" | "long" | "thread";
+                    /**
+                     * @description personal: I, brand: we
+                     * @default personal
+                     * @enum {string}
+                     */
+                    voice?: "personal" | "brand" | "neutral";
+                    /**
+                     * @default friendly
+                     * @enum {string}
+                     */
+                    tone?: "friendly" | "professional" | "witty" | "bold" | "informative";
+                    /** @description The shortest character limit of the picked channels (0 = none) */
+                    max_chars?: number;
+                    /** @description Also describe a picture to go with the post (image_prompt) */
+                    image?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        title: string;
+                        content: string;
+                        comments: string[];
+                        image_prompt?: string;
                     };
                 };
             };
