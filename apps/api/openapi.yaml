@@ -3847,6 +3847,48 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "502": { $ref: "#/components/responses/BadGateway" }
+  /v1/ai/post:
+    post:
+      operationId: aiPost
+      tags: [posts]
+      summary: Draft a post from a brief with AI (posts:write)
+      description: >
+        The composer's Write with AI. The assistant's model (no tools) writes a title, the post and, for a thread,
+        the comments under it, and with image a description of a picture for the generate operation. Nothing is
+        saved. Counts as AI usage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [brief]
+              properties:
+                brief: { type: string, maxLength: 4000, description: "What the post is about, in any words" }
+                format: { type: string, enum: [short, long, thread], default: short }
+                voice: { type: string, enum: [personal, brand, neutral], default: personal, description: "personal: I, brand: we" }
+                tone: { type: string, enum: [friendly, professional, witty, bold, informative], default: friendly }
+                max_chars: { type: integer, minimum: 0, description: The shortest character limit of the picked channels (0 = none) }
+                image: { type: boolean, description: Also describe a picture to go with the post (image_prompt) }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [title, content, comments]
+                properties:
+                  title: { type: string }
+                  content: { type: string }
+                  comments: { type: array, items: { type: string } }
+                  image_prompt: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "502": { $ref: "#/components/responses/BadGateway" }
   /v1/assistant/chats:
     get:
       operationId: listAssistantChats

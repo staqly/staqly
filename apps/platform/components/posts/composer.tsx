@@ -87,6 +87,7 @@ import { cn } from '@/lib/utils'
 import { xPostsWarning } from '@/lib/x-posts'
 import { displayZone } from '@/lib/zone'
 
+import type { AiPostResult } from './ai-post-dialog'
 import { AllChannelsTab, ChannelTab } from './channel-tab'
 import { PostEditor } from './post-editor'
 import { isVideo, MediaItem } from './preview/parts'
@@ -95,6 +96,9 @@ import { isVideo, MediaItem } from './preview/parts'
 const PostPreviewSheet = dynamic(() => import('./preview/post-preview').then((m) => m.PostPreviewSheet), {
   ssr: false,
 })
+
+// Write with AI: loads with the composer's first render, not with the page (it shows once AI is known to be there).
+const WriteWithAi = dynamic(() => import('./ai-post-dialog').then((m) => m.WriteWithAi), { ssr: false })
 
 /** How often a published post comes back: a copy is scheduled that much later (the API's repeat_every). */
 const REPEAT_OPTIONS = [
@@ -1727,6 +1731,21 @@ export function ComposerForm({
       <MonitorSmartphone />
     </Button>
   )
+  const aiMaxChars = Math.min(...picked.map((c) => providerOf(c)?.limits?.max_chars || Infinity))
+  const applyAiPost = ({ draft, picture }: AiPostResult) => {
+    setTitle(draft.title)
+    setContent(draft.content)
+    setTab('all')
+
+    if (draft.comments.length) {
+      setThread(draft.comments.map((c) => ({ uid: crypto.randomUUID(), content: c, media: [], delay: 0 })))
+    }
+
+    if (picture) {
+      setMedia((ms) => [...ms, picture])
+    }
+  }
+
   const preview = previewUsed && (
     <PostPreviewSheet
       open={previewOpen}
@@ -1776,6 +1795,14 @@ export function ComposerForm({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            {/* Up top: it writes the title as well as the text. */}
+            {!locked && (
+              <WriteWithAi
+                maxChars={Number.isFinite(aiMaxChars) ? aiMaxChars : 0}
+                replaces={!!(title.trim() || content.trim())}
+                onUse={applyAiPost}
+              />
+            )}
             {previewButton}
             {headerActions && (
               <div className="flex items-center gap-1.5" data-testid="post-actions">
@@ -1832,51 +1859,27 @@ export function ComposerForm({
           {/* Every section stays mounted (hidden when inactive), so switching never loses what was typed. */}
           <div className="grid min-h-0 content-start overflow-y-auto overscroll-contain p-4">
             <TabsContent value="post" forceMount className="grid content-start gap-4 data-[state=inactive]:hidden">
-              <div className="grid gap-2">
-                <Label htmlFor="post-title" required>
-                  Title
-                </Label>
-                <Input
-                  id="post-title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="What is this post about?"
-                  maxLength={300}
-                  disabled={locked}
-                  aria-required
-                  aria-invalid={!!errors.title}
-                  data-testid="post-title"
-                />
-                <FieldDescription>
-                  YouTube, Reddit, Pinterest and blogs publish it; the other platforms only show it in staqly.
-                </FieldDescription>
-                <FieldError>{errors.title}</FieldError>
-              </div>
-
-              {/* Channels and, for a new post, its collection side by side (4:1); stacked on phones. */}
+              {/* Title and, for a new post, its collection side by side (4:1); stacked on phones. */}
               <div className={cn('grid gap-4', !post && 'sm:grid-cols-[minmax(0,4fr)_minmax(0,1fr)]')}>
                 <div className="grid min-w-0 content-start gap-2">
-                  <Label htmlFor="post-channels" required>
-                    Channels
+                  <Label htmlFor="post-title" required>
+                    Title
                   </Label>
-                  <ChannelPicker
-                    channels={channelList}
-                    providers={providerList}
-                    selected={selected}
-                    onChange={(ids) => setSelected(new Set(ids))}
+                  <Input
+                    id="post-title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="What is this post about?"
+                    maxLength={300}
                     disabled={locked}
-                    invalid={!!errors.targets}
+                    aria-required
+                    aria-invalid={!!errors.title}
+                    data-testid="post-title"
                   />
-                  <FieldError>{errors.targets}</FieldError>
-                  {/* Posts to X are metered: say so before publishing when this period's are used up. */}
-                  {!locked && xOut && picked.some((c) => c.provider === 'x') && (
-                    <Callout tone="danger" size="xs" data-testid="x-posts-exhausted">
-                      {xOut}{' '}
-                      <Link href="/settings/plan" className="font-medium underline underline-offset-2">
-                        Plan & usage
-                      </Link>
-                    </Callout>
-                  )}
+                  <FieldDescription>
+                    YouTube, Reddit, Pinterest and blogs publish it; the other platforms only show it in staqly.
+                  </FieldDescription>
+                  <FieldError>{errors.title}</FieldError>
                 </div>
                 {!post && (
                   <div className="grid min-w-0 content-start gap-2">
@@ -1901,6 +1904,30 @@ export function ComposerForm({
                     </Select>
                     <FieldError>{errors.collection}</FieldError>
                   </div>
+                )}
+              </div>
+
+              <div className="grid min-w-0 content-start gap-2">
+                <Label htmlFor="post-channels" required>
+                  Channels
+                </Label>
+                <ChannelPicker
+                  channels={channelList}
+                  providers={providerList}
+                  selected={selected}
+                  onChange={(ids) => setSelected(new Set(ids))}
+                  disabled={locked}
+                  invalid={!!errors.targets}
+                />
+                <FieldError>{errors.targets}</FieldError>
+                {/* Posts to X are metered: say so before publishing when this period's are used up. */}
+                {!locked && xOut && picked.some((c) => c.provider === 'x') && (
+                  <Callout tone="danger" size="xs" data-testid="x-posts-exhausted">
+                    {xOut}{' '}
+                    <Link href="/settings/plan" className="font-medium underline underline-offset-2">
+                      Plan & usage
+                    </Link>
+                  </Callout>
                 )}
               </div>
 

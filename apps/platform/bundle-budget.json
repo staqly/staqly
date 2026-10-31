@@ -4,7 +4,7 @@
   "routes": {
     "/posts": 415,
     "/posts/_": 415,
-    "/channels": 392,
+    "/channels": 393,
     "/analytics": 380,
     "/media": 380,
     "/activity": 375,

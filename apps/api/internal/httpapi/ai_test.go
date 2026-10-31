@@ -1088,3 +1088,42 @@ func TestAIText(t *testing.T) {
 	e.do(nil, "POST", "/v1/ai/text", e.key, map[string]any{"text": "", "instruction": "Shorter"}, 422, nil)
 	e.do(nil, "POST", "/v1/ai/text", e.key, map[string]any{"text": "x", "instruction": ""}, 422, nil)
 }
+
+// The composer's Write with AI: a post drafted from a brief, as JSON the dashboard puts into the form.
+func TestAIPost(t *testing.T) {
+	e := newEnv(t)
+	e.paid()
+	var asked, sys string
+	answer := `Here it is: {"title":"Spring sale","content":"Our spring sale starts today.","comments":["20% off everything."," "],"image_prompt":"A sunny shop window"}`
+	own := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Messages []struct{ Content any } }
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		sys, asked = fmt.Sprint(body.Messages[0].Content), fmt.Sprint(body.Messages[len(body.Messages)-1].Content)
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunk, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"delta": map[string]any{"content": answer}}}})
+		_, _ = io.WriteString(w, "data: "+string(chunk)+"\n\ndata: [DONE]\n\n")
+	}))
+	defer own.Close()
+
+	brief := map[string]any{"brief": "Spring sale, 20% off", "format": "thread", "voice": "brand", "max_chars": 280, "image": true}
+	e.do(nil, "POST", "/v1/ai/post", e.key, brief, 409, nil)
+	e.svc.Cfg.AI = app.AIConfig{Assistant: app.AIEndpoint{BaseURL: own.URL + "/v1", Model: "m", Prices: &[2]float64{0, 0}}}
+	var out app.AIPost
+	e.do(nil, "POST", "/v1/ai/post", e.key, brief, 200, &out)
+	if out.Title != "Spring sale" || out.Content != "Our spring sale starts today." || len(out.Comments) != 1 ||
+		out.ImagePrompt != "A sunny shop window" || !strings.Contains(asked, "Spring sale") ||
+		!strings.Contains(sys, "at most 280 characters") || !strings.Contains(sys, `("we")`) {
+		t.Fatalf("%+v asked=%q sys=%q", out, asked, sys)
+	}
+	// A short post has no comments and, unasked, no picture.
+	out = app.AIPost{}
+	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "Spring sale"}, 200, &out)
+	if len(out.Comments) != 0 || out.ImagePrompt != "" {
+		t.Fatalf("%+v", out)
+	}
+	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": " "}, 422, nil)
+	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "x", "format": "essay"}, 422, nil)
+	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "x", "tone": "angry"}, 422, nil)
+	answer = "Sorry, I can't."
+	e.do(nil, "POST", "/v1/ai/post", e.key, map[string]any{"brief": "x"}, 502, nil)
+}

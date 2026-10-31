@@ -16,6 +16,7 @@ func init() {
 	RegisterAuthedRoutes(func(s *Server, r chi.Router) {
 		r.Post("/assistant/chat", s.assistantChat)
 		r.Post("/ai/text", s.aiText)
+		r.Post("/ai/post", s.aiPost)
 		r.Get("/assistant/chats", s.listAssistantChats)
 		r.Get("/assistant/chats/{id}", s.getAssistantChat)
 		r.Delete("/assistant/chats/{id}", s.deleteAssistantChat)
@@ -29,6 +30,16 @@ func (s *Server) aiText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := s.svc.AIText(r.Context(), principal(r), in)
+	respond(w, r, 200, out, err)
+}
+
+// aiPost: POST /v1/ai/post, a post drafted from a brief by the assistant's model (the composer's Write with AI).
+func (s *Server) aiPost(w http.ResponseWriter, r *http.Request) {
+	var in app.AIPostRequest
+	if !decode(w, r, &in) {
+		return
+	}
+	out, err := s.svc.AIPost(r.Context(), principal(r), in)
 	respond(w, r, 200, out, err)
 }
 

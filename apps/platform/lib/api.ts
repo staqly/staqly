@@ -84,6 +84,8 @@ export type AssistantMessage = Schemas['AssistantMessage']
 export type TelegramConnect = Schemas['TelegramConnect']
 /** A kept conversation with the assistant (the list leaves out messages and pending). */
 export type AssistantChat = Schemas['AssistantChat']
+export type AIPostRequest = operations['aiPost']['requestBody']['content']['application/json']
+export type AIPostDraft = operations['aiPost']['responses']['200']['content']['application/json']
 export type AssistantRequest = operations['assistantChat']['requestBody']['content']['application/json']
 
 /** What the assistant streams (POST /v1/assistant/chat). */
@@ -1070,6 +1072,8 @@ export const api = {
   /** A short text rewritten by AI (the design editor's text tools). */
   aiText: (text: string, instruction: string) =>
     request<{ text: string }>('/v1/ai/text', { method: 'POST', json: { text, instruction } }),
+  /** A post drafted by AI from a brief (the composer's Write with AI); nothing is saved. */
+  aiPost: (body: AIPostRequest) => request<AIPostDraft>('/v1/ai/post', { method: 'POST', json: body }),
   /** The person's assistant chats, newest first, a page at a time; q finds words in titles. */
   assistantChats: (q: string, cursor?: string) =>
     request<{ data: AssistantChat[]; next_cursor?: string }>(
