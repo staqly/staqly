@@ -856,8 +856,7 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
             {params.fromComposer ? 'Save and use in the post' : dirty || !project ? 'Save to Media' : 'Saved'}
             {dirty && (
               <span className="absolute -top-1 -right-1 flex size-2.5" aria-hidden>
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60 motion-reduce:hidden" />
-                <span className="relative inline-flex size-2.5 rounded-full bg-brand ring-2 ring-background" />
+                <span className="relative inline-flex size-2.5 animate-pulse rounded-full bg-amber-500 ring-2 ring-background motion-reduce:animate-none" />
               </span>
             )}
             {dirty && <span className="sr-only">(unsaved changes)</span>}
