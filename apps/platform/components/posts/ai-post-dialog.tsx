@@ -424,8 +424,8 @@ export function WriteWithAi(props: { maxChars: number; replaces: boolean; onUse:
       <Button
         type="button"
         variant="outline"
-        size="xs"
-        className="ml-auto border-brand/40 text-brand hover:bg-brand-soft hover:text-brand"
+        size="sm"
+        className="border-brand/40 text-brand hover:bg-brand-soft hover:text-brand"
         onClick={() => setOpen(true)}
         data-testid="ai-post-open"
       >

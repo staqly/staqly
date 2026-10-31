@@ -1795,6 +1795,14 @@ export function ComposerForm({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            {/* Up top: it writes the title as well as the text. */}
+            {!locked && (
+              <WriteWithAi
+                maxChars={Number.isFinite(aiMaxChars) ? aiMaxChars : 0}
+                replaces={!!(title.trim() || content.trim())}
+                onUse={applyAiPost}
+              />
+            )}
             {previewButton}
             {headerActions && (
               <div className="flex items-center gap-1.5" data-testid="post-actions">
@@ -1980,13 +1988,6 @@ export function ComposerForm({
                   ) : (
                     <>
                       Post <RequiredMark />
-                      {!locked && (
-                        <WriteWithAi
-                          maxChars={Number.isFinite(aiMaxChars) ? aiMaxChars : 0}
-                          replaces={!!(title.trim() || content.trim())}
-                          onUse={applyAiPost}
-                        />
-                      )}
                     </>
                   )}
                 </h3>
