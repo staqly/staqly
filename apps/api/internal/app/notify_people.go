@@ -90,6 +90,9 @@ func (s *Service) GetNotificationPrefs(ctx context.Context, p Principal) (Notifi
 
 // SetNotificationPrefs replaces the person's choices (unknown events are refused).
 func (s *Service) SetNotificationPrefs(ctx context.Context, p Principal, in NotificationPrefs) (NotificationPrefs, error) {
+	if err := notGuest(p); err != nil {
+		return NotificationPrefs{}, err
+	}
 	u, err := s.personFor(ctx, p)
 	if err != nil {
 		return NotificationPrefs{}, err

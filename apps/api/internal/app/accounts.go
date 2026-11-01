@@ -99,7 +99,8 @@ func googleOnly(s *Service) error {
 func forbidden(msg string) *Error { return &Error{Code: "forbidden", Status: 403, Message: msg} }
 
 // notGuest: what a guest link's session may not do, so the access ends with the link and the account stays its
-// owner's: add a way in (keys, links, invitations, sign-in methods), change how the account signs in, or leave.
+// owner's: add a way in (keys, links, invitations, sign-in methods), change how the account signs in, edit the
+// account (profile, notifications) or leave.
 func notGuest(p Principal) error {
 	if p.Guest {
 		return forbidden("not with a guest link: it gives time-limited access to this account")
@@ -681,6 +682,9 @@ type AccountUpdate struct {
 
 // RenameMe changes the signed-in person's name (how members, the activity log and emails show them) and picture.
 func (s *Service) RenameMe(ctx context.Context, p Principal, in AccountUpdate) (User, error) {
+	if err := notGuest(p); err != nil {
+		return User{}, err
+	}
 	if err := accountsOnly(s); err != nil {
 		return User{}, err
 	}

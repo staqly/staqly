@@ -44,7 +44,7 @@ import { browser } from '@/lib/browser'
 import { focusFirstInvalid, formApiError, useFormErrors } from '@/lib/form-errors'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
-import { qk, useBackupAccess, useMode, useSession } from '@/lib/queries'
+import { qk, useBackupAccess, useMode, useRole, useSession } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
@@ -331,6 +331,7 @@ function LocalDeleteCard() {
 export function DataPrivacyPage() {
   const { isCloud } = useMode()
   const exportAccess = useBackupAccess()
+  const { accountsEnabled, canManagePeople, isOwner } = useRole()
 
   return (
     <PageContainer>
@@ -339,7 +340,10 @@ export function DataPrivacyPage() {
       <div className="mt-6 grid gap-4">
         {/* Every plan exports its data. On Starter the workspace ZIP has no media files and the activity log
             export needs Plus or above (the API answers 402); local installs always have everything. */}
-        {exportAccess === 'data-only' ? (
+        {/* The workspace ZIP is its owners' and admins' (the admin scope); deleting it the owners'. */}
+        {!canManagePeople ? (
+          <ActivityExportCard />
+        ) : exportAccess === 'data-only' ? (
           <WorkspaceExportCard dataOnly />
         ) : exportAccess ? (
           <>
@@ -360,8 +364,12 @@ export function DataPrivacyPage() {
             </p>
           </div>
         </SettingsCard>
-        <h2 className={cn('mt-4 text-sm font-semibold', TONES.danger.text)}>Danger zone</h2>
-        {isCloud ? <DeleteWorkspaceCard /> : <LocalDeleteCard />}
+        {(!isCloud || isOwner || (!accountsEnabled && canManagePeople)) && (
+          <>
+            <h2 className={cn('mt-4 text-sm font-semibold', TONES.danger.text)}>Danger zone</h2>
+            {isCloud ? <DeleteWorkspaceCard /> : <LocalDeleteCard />}
+          </>
+        )}
       </div>
     </PageContainer>
   )

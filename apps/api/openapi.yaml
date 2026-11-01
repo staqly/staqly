@@ -1428,6 +1428,7 @@ paths:
                   csrf_token: { type: string, description: Empty for API-key callers }
                   user: { $ref: "#/components/schemas/User" }
                   role: { $ref: "#/components/schemas/Role" }
+                  guest: { type: boolean, description: "Signed in with a guest link: time-limited access to this person's account, which cannot change the account or the workspace settings" }
                   accounts_enabled: { type: boolean, description: "Cloud accounts with Google sign-in are on" }
                   workspaces: { type: array, items: { $ref: "#/components/schemas/MyWorkspace" }, description: "Workspaces this person can switch to" }
                   onboarded: { type: boolean, description: "The welcome wizard is done (per person in an account; in the Community Edition per workspace, and a workspace with channels or posts counts as done). False sends the dashboard to /welcome once." }

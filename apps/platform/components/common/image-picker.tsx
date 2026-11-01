@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { imageToDataUrl } from '@/lib/image-upload'
 import { safeImageSrc } from '@/lib/safe'
+import { cn } from '@/lib/utils'
 
 /**
  * A logo or picture: the current one (or `fallback`), Upload / Replace and Remove. The file is scaled to a small
@@ -19,6 +20,7 @@ export function ImagePicker({
   pending,
   onChange,
   hint,
+  round,
 }: {
   label: string
   value: string
@@ -26,6 +28,8 @@ export function ImagePicker({
   pending: boolean
   onChange: (dataUrl: string) => void
   hint?: string
+  /** A person's picture: a circle, like the avatar everywhere else (a logo stays a rounded square). */
+  round?: boolean
 }) {
   const input = useRef<HTMLInputElement>(null)
   const hintId = useId()
@@ -33,7 +37,12 @@ export function ImagePicker({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted">
+      <span
+        className={cn(
+          'flex size-12 shrink-0 items-center justify-center overflow-hidden border bg-muted',
+          round ? 'rounded-full' : 'rounded-xl',
+        )}
+      >
         {src ? <img src={src} alt="" className="size-full object-cover" /> : fallback}
       </span>
       <div className="grid gap-1">

@@ -695,6 +695,8 @@ export function useRole() {
   return {
     role,
     accountsEnabled: !!session.data?.accounts_enabled,
+    /** Signed in with a guest link: no account or workspace settings (Plan & usage only, read-only). */
+    guest: !!session.data?.guest,
     /** An owner of this workspace with people (pays, deletes it, adds workspaces); never in local mode. */
     isOwner: !!session.data?.accounts_enabled && role === 'owner',
     canManagePeople: role === 'owner' || role === 'admin',

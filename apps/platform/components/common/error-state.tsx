@@ -11,6 +11,7 @@ export function ErrorState({
   title = 'Could not load data',
   description,
   action,
+  bare,
 }: {
   error: unknown
   onRetry?: () => void
@@ -20,6 +21,8 @@ export function ErrorState({
   description?: React.ReactNode
   /** A way on, e.g. a link back to the list. */
   action?: React.ReactNode
+  /** Inside a card: no frame of its own. */
+  bare?: boolean
 }) {
   // A server-side failure says so in plain words instead of "Internal server error".
   const serverSide = error instanceof ApiError && error.status >= 500
@@ -30,7 +33,8 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        'mx-auto flex w-full max-w-lg flex-col items-center gap-3 rounded-2xl border bg-card px-6 py-10 text-center text-sm shadow-xs',
+        'mx-auto flex w-full max-w-lg flex-col items-center gap-3 text-center text-sm',
+        bare ? 'py-6' : 'rounded-2xl border bg-card px-6 py-10 shadow-xs',
         className,
       )}
     >

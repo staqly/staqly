@@ -334,7 +334,7 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
 function UserMenu() {
   const session = useSession()
   const { isLocal } = useMode()
-  const { accountsEnabled, role, canManagePeople } = useRole()
+  const { accountsEnabled, role, canManagePeople, guest } = useRole()
   const router = useRouter()
   const { setOpenMobile, state, isMobile } = useSidebar()
   const logout = useLogout()
@@ -439,7 +439,11 @@ function UserMenu() {
             )}
             <DropdownMenuSeparator />
             {/* People in an account: members and their own account, then the workspace's settings apart (Plan & usage is in the workspace menu). */}
-            {accountsEnabled ? (
+            {guest ? (
+              <DropdownMenuItem onSelect={() => go('/settings/plan')}>
+                <Gauge /> Plan & usage
+              </DropdownMenuItem>
+            ) : accountsEnabled ? (
               <>
                 {canManagePeople && (
                   <DropdownMenuItem onSelect={() => go('/settings/members')}>

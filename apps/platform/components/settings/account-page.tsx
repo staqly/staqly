@@ -84,7 +84,8 @@ function ProfileCard() {
           <ImagePicker
             label="picture"
             value={user.avatar_url}
-            fallback={<UserAvatar name={user.name} className="size-12" />}
+            fallback={<UserAvatar name={user.name} className="size-full" />}
+            round
             pending={picture.isPending}
             onChange={(v) => picture.mutate(v)}
             hint="Optional. Shown to the members of your workspaces; without one, your Google picture or your initials."

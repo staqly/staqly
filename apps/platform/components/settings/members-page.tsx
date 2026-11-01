@@ -142,7 +142,7 @@ function MembersCard() {
       {members.isPending ? (
         <Skeleton className="h-24" />
       ) : members.isError ? (
-        <ErrorState error={members.error} onRetry={() => void members.refetch()} />
+        <ErrorState bare error={members.error} onRetry={() => void members.refetch()} />
       ) : (
         <ul className="grid divide-y" data-testid="members">
           {members.data.data.map((m, _, all) => {
@@ -266,7 +266,7 @@ function InvitationsCard() {
       {invitations.isPending ? (
         <Skeleton className="h-12" />
       ) : invitations.isError ? (
-        <ErrorState error={invitations.error} onRetry={() => void invitations.refetch()} />
+        <ErrorState bare error={invitations.error} onRetry={() => void invitations.refetch()} />
       ) : invitations.data.data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No open invitations.</p>
       ) : (
