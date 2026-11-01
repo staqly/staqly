@@ -227,21 +227,6 @@ export function AddChannelPage() {
     )
   } else if (link.isLoading || !l) {
     body = <Skeleton className="mx-auto h-72 w-full max-w-2xl rounded-2xl" />
-  } else if (pendingID && !pickError && (pending.isLoading || pending.data)) {
-    const p = pending.data
-
-    body = p ? (
-      <AccountPicker
-        provider={p.provider}
-        name={l?.providers.find((x) => x.id === p.provider)?.name ?? p.provider}
-        accounts={p.accounts}
-        busy={finish.isPending}
-        onConnect={(ids) => finish.mutate(ids)}
-        onCancel={leavePicker}
-      />
-    ) : (
-      <Skeleton className="mx-auto h-72 w-full max-w-lg rounded-2xl" />
-    )
   } else if (picked) {
     body = (
       <div className="mx-auto w-full max-w-lg">
@@ -298,6 +283,17 @@ export function AddChannelPage() {
         </div>
       </header>
       <main className="px-4 py-10 sm:px-6 sm:py-16">{body}</main>
+      {/* After the platform's sign-in: which of its accounts to connect, over the platforms. */}
+      {l && !done && !returned && pendingID && !pickError && pending.data && (
+        <AccountPicker
+          provider={pending.data.provider}
+          name={l.providers.find((x) => x.id === pending.data.provider)?.name ?? pending.data.provider}
+          accounts={pending.data.accounts}
+          busy={finish.isPending}
+          onConnect={(ids) => finish.mutate(ids)}
+          onCancel={leavePicker}
+        />
+      )}
     </div>
   )
 }
