@@ -21,6 +21,11 @@ export const RichTextEditorRoot = ({
 
   const mergedIcons = useMemo(() => ({ ...DEFAULT_ICONS, ...icons }), [icons])
 
+  const context = useMemo(
+    () => ({ editable, editor, icons: mergedIcons, labels: mergedLabels, variant }),
+    [editable, editor, mergedIcons, mergedLabels, variant],
+  )
+
   useEffect(() => {
     if (editor && editor.isEditable !== editable) {
       editor.setEditable(editable)
@@ -28,15 +33,7 @@ export const RichTextEditorRoot = ({
   }, [editor, editable])
 
   return (
-    <RichTextEditorContext.Provider
-      value={{
-        editable,
-        editor,
-        icons: mergedIcons,
-        labels: mergedLabels,
-        variant,
-      }}
-    >
+    <RichTextEditorContext.Provider value={context}>
       <div
         className={cn('rte-root', variant !== 'default' && `rte-root--${variant}`, className)}
         data-variant={variant}
