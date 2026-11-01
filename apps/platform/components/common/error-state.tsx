@@ -11,7 +11,6 @@ export function ErrorState({
   title = 'Could not load data',
   description,
   action,
-  bare,
 }: {
   error: unknown
   onRetry?: () => void
@@ -21,20 +20,25 @@ export function ErrorState({
   description?: React.ReactNode
   /** A way on, e.g. a link back to the list. */
   action?: React.ReactNode
-  /** Inside a card: no frame of its own. */
-  bare?: boolean
 }) {
-  // A server-side failure says so in plain words instead of "Internal server error".
+  // A server-side failure says so in plain words instead of "Internal server error"; so does a missing permission
+  // (the API names the scope), where trying again would only fail again.
   const serverSide = error instanceof ApiError && error.status >= 500
+  const forbidden = error instanceof ApiError && error.status === 403
   const text =
-    description ?? (serverSide ? 'Something went wrong on our side. Try again in a moment.' : errorMessage(error))
+    description ??
+    (forbidden
+      ? "Your role in this workspace doesn't include this. Ask an owner or admin if you need it."
+      : serverSide
+        ? 'Something went wrong on our side. Try again in a moment.'
+        : errorMessage(error))
+  const retry = forbidden ? undefined : onRetry
 
   return (
     <div
       role="alert"
       className={cn(
-        'mx-auto flex w-full max-w-lg flex-col items-center gap-3 text-center text-sm',
-        bare ? 'py-6' : 'rounded-2xl border bg-card px-6 py-10 shadow-xs',
+        'mx-auto flex w-full max-w-2xl flex-col items-center gap-3 px-6 py-8 text-center text-sm',
         className,
       )}
     >
@@ -42,13 +46,15 @@ export function ErrorState({
         <AlertTriangle className="size-5" />
       </span>
       <div className="grid gap-1">
-        <div className="text-base font-semibold tracking-tight">{title}</div>
-        <div className="max-w-md text-muted-foreground">{text}</div>
+        <div className="text-base font-semibold tracking-tight">
+          {forbidden ? 'Not available with your role' : title}
+        </div>
+        <div className="max-w-xl text-balance text-muted-foreground">{text}</div>
       </div>
-      {(onRetry || action) && (
+      {(retry || action) && (
         <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
-          {onRetry && (
-            <Button variant="outline" onClick={onRetry}>
+          {retry && (
+            <Button variant="outline" onClick={retry}>
               <RotateCw /> Try again
             </Button>
           )}
@@ -80,7 +86,8 @@ export function EmptyState({
         </div>
       )}
       <div className="text-sm font-medium">{title}</div>
-      {description && <div className="max-w-sm text-sm text-muted-foreground">{description}</div>}
+      {/* Wide enough for two lines at most. */}
+      {description && <div className="max-w-xl text-sm text-balance text-muted-foreground">{description}</div>}
       {action && <div className="mt-1">{action}</div>}
     </div>
   )

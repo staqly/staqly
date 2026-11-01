@@ -142,7 +142,7 @@ export function ChannelsHealthCard() {
       {providers.isLoading ? (
         <Skeleton className="h-28" />
       ) : providers.error ? (
-        <ErrorState bare title="Could not load platforms" error={providers.error} onRetry={() => providers.refetch()} />
+        <ErrorState title="Could not load platforms" error={providers.error} onRetry={() => providers.refetch()} />
       ) : oauth.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No platform is set up on this server yet; your own automation always works.

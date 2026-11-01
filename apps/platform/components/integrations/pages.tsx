@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api, errorMessage, type Agent, type EventQuery, type Health, type SessionInfo } from '@/lib/api'
 import { usePublicApiUrl } from '@/lib/config'
-import { useCollections, useMode } from '@/lib/queries'
+import { useCollections, useMode, useRole } from '@/lib/queries'
 import { TONES } from '@/lib/tones'
 import { cn, hrefWithParams } from '@/lib/utils'
 
@@ -366,6 +366,7 @@ function KeyHint({ cloud }: { cloud: boolean }) {
 
 export function IntegrationsPage() {
   const { isLocal } = useMode()
+  const { can } = useRole()
   const apiUrl = usePublicApiUrl()
   const mcpUrl = `${apiUrl}/mcp`
   const { key } = useApiKeyValue()
@@ -401,7 +402,8 @@ export function IntegrationsPage() {
       {view === 'agents' ? (
         <div className="mt-6 grid grid-cols-1 gap-4">
           {isLocal && <AccessTokenCard />}
-          <ConnectedAgents selectedId={agent?.id ?? null} onSelect={setAgent} />
+          {/* The list of agents and API connections is the admins' (the admin scope). */}
+          {can('admin') && <ConnectedAgents selectedId={agent?.id ?? null} onSelect={setAgent} />}
           <RecentActivity agent={agent} onShowAll={() => setAgent(null)} />
         </div>
       ) : (

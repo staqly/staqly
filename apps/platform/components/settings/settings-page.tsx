@@ -156,7 +156,7 @@ function DevicesCard() {
       {sessions.isLoading ? (
         <Skeleton className="h-20" />
       ) : sessions.error ? (
-        <ErrorState bare error={sessions.error} onRetry={() => sessions.refetch()} />
+        <ErrorState error={sessions.error} onRetry={() => sessions.refetch()} />
       ) : list.length === 0 ? (
         <div
           className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground"
