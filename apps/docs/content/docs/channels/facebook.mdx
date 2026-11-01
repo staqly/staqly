@@ -132,6 +132,8 @@ Unpublishing deletes the post on the Page through the API, thread comments first
 A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show its reactions (as likes), comments and
 shares (videos and reels have no shares count). They need no extra permission.
 
+[Audience comments](/dashboard/posts#audience-comments) also need `pages_read_user_content`, which the Meta app must have approved through App Review: without it Meta may hide commenters' names or text.
+
 
 ## When publishing fails
 

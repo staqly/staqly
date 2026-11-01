@@ -272,6 +272,21 @@ const cases: Case[] = [
     query: { refresh: 'true' },
   },
   {
+    name: 'posts.responses',
+    call: (c) => c.posts.responses('pst_1', { channelId: 'ch_1' }),
+    reply: json({ overall: null, channels: [] }),
+    method: 'GET',
+    path: '/v1/posts/pst_1/responses',
+    query: { channel: 'ch_1' },
+  },
+  {
+    name: 'posts.refreshResponses',
+    call: (c) => c.posts.refreshResponses('pst_1'),
+    reply: json({ overall: null, channels: [] }, 202),
+    method: 'POST',
+    path: '/v1/posts/pst_1/responses/refresh',
+  },
+  {
     name: 'posts.reportMetrics',
     call: (c) => c.posts.reportMetrics('pst_1', 'ch_1', { likes: 3 }),
     method: 'PUT',

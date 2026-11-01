@@ -37,6 +37,7 @@ func postsCommand() *Command {
 			postsResultCommand(),
 			postsPreviewCommand(),
 			postsStatsCommand(),
+			postsResponsesCommand(),
 			postsShareCommand(),
 			postsCommentsCommand(),
 			postsHistoryCommand(),
@@ -836,6 +837,78 @@ func postsStatsCommand() *Command {
 			return nil
 		}
 	}, "staqly posts stats pst_123", "staqly posts stats pst_123 --refresh --json")
+}
+
+func printInsight(c *Ctx, in *ResponseInsight) {
+	if in == nil {
+		fmt.Fprintln(c.Out, "  No analysis yet.")
+		return
+	}
+	fmt.Fprintf(c.Out, "  %d positive, %d neutral, %d negative\n", in.Positive, in.Neutral, in.Negative)
+	if in.Summary != "" {
+		fmt.Fprintf(c.Out, "  %s\n", in.Summary)
+	}
+	if len(in.Themes) > 0 {
+		fmt.Fprintf(c.Out, "  Themes: %s\n", strings.Join(in.Themes, "; "))
+	}
+	for _, q := range in.Questions {
+		fmt.Fprintf(c.Out, "  Question: %s\n", q)
+	}
+	if in.Error != "" {
+		fmt.Fprintf(c.Out, "  Analysis error: %s\n", in.Error)
+	}
+}
+
+func postsResponsesCommand() *Command {
+	return leaf("responses", "<id>", "Show the replies to a post and what they say: overall, then per channel", 1, 1, func(fs *flag.FlagSet) runFunc {
+		channel := fs.String("channel", "", "only this channel (ID or name)")
+		refresh := fs.Bool("refresh", false, "read the replies from the platforms now")
+		return func(c *Ctx, args []string) error {
+			cl, err := c.Client()
+			if err != nil {
+				return err
+			}
+			path := "/v1/posts/" + url.PathEscape(args[0]) + "/responses"
+			var res PostResponses
+			var raw []byte
+			if *refresh {
+				raw, err = cl.Post(c, path+"/refresh", nil, &res)
+			} else {
+				q := url.Values{}
+				if *channel != "" {
+					id, err := resolveChannelID(c, cl, *channel)
+					if err != nil {
+						return err
+					}
+					q.Set("channel", id)
+				}
+				raw, err = cl.Get(c, path, q, &res)
+			}
+			if err != nil || c.JSON {
+				return jsonOr(c, raw, err)
+			}
+			fmt.Fprintln(c.Out, c.paint(bold, "Overall"))
+			printInsight(c, res.Overall)
+			for _, ch := range res.Channels {
+				fmt.Fprintf(c.Out, "\n%s\n", c.paint(bold, ch.ChannelName))
+				if !ch.Available {
+					fmt.Fprintf(c.Out, "  Not available for this platform. %s\n", ch.Error)
+					continue
+				}
+				printInsight(c, ch.Insight)
+				rs := append([]PostResponse(nil), ch.Responses...)
+				sort.SliceStable(rs, func(i, j int) bool { return rs[i].CreatedAt > rs[j].CreatedAt })
+				for _, r := range rs {
+					who := r.Author
+					if r.AuthorHandle != "" {
+						who = r.AuthorHandle
+					}
+					fmt.Fprintf(c.Out, "  - %s %s [%s]: %s\n", fmtTime(r.CreatedAt), who, orDash(r.Sentiment), truncate(firstLine(r.Text), 120))
+				}
+			}
+			return nil
+		}
+	}, "staqly posts responses pst_123", "staqly posts responses pst_123 --channel \"Bear on X\" --refresh")
 }
 
 func postsShareCommand() *Command {

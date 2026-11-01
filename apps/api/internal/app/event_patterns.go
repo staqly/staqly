@@ -14,7 +14,7 @@ var knownEventTypes = map[string]bool{
 	"post.reply_published": true, "post.reply_failed": true,
 	"post.published": true, "post.failed": true, "post.purged": true,
 	"post.unpublished": true, "post.target_removed": true, "post.target_remove_failed": true,
-	"post.preview_shared": true, "post.feedback_added": true,
+	"post.preview_shared": true, "post.responses_analyzed": true, "post.feedback_added": true,
 	"channel.connected": true, "channel.updated": true, "channel.needs_reconnect": true, "channel.disconnected": true,
 	"channel_link.created": true, "channel_link.revoked": true,
 	"schedule.created": true, "schedule.updated": true, "schedule.deleted": true,

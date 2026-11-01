@@ -52,6 +52,8 @@ func (t *tools) addPostTools(s *mcp.Server) {
 	add(s, t, &mcp.Tool{Name: "preview_post", Description: "How each target will carry the post: the text per channel (with the channel's links mode applied), the links it removes or defangs (links_found, with a warning naming the channel) and what its provider objects to (too long, missing title...).", Annotations: ro()}, t.previewPost)
 	add(s, t, &mcp.Tool{Name: "get_post_metrics", Description: "A post's numbers per channel (views, likes, reposts, replies, quotes, bookmarks, link clicks where the platform gives them), read from the platform when older than ten minutes or with refresh true. available false: the platform reports none.", Annotations: ro()}, t.postMetrics)
 	add(s, t, &mcp.Tool{Name: "get_analytics", Description: "The workspace's publishing analytics for a range of days (from and to, YYYY-MM-DD in the workspace's time zone, both included; default the last 30 days, at most 366): totals with the previous period of the same length (posts published, targets published and failed, success rate, retries, average and p90 delay after the publish time), what waits now, published and failed per day, per channel (with the most common failure and the platform numbers already cached: views, engagements, link clicks), per source (dashboard, each agent over MCP or the API, schedules, repeats), posting times by weekday and hour with average engagements (low_confidence under min_samples), top posts and failure reasons. Optional channels, collection and sources filters. Never calls a platform. Requires posts:read.", Annotations: ro()}, t.analytics)
+	add(s, t, &mcp.Tool{Name: "get_post_responses", Description: "What people answered under a published post (comments, replies), per channel and overall, each with sentiment counts, a summary, themes and questions. channel_id limits it to one channel. available false: staqly can't read that platform.", Annotations: ro()}, t.postResponses)
+	add(s, t, &mcp.Tool{Name: "refresh_post_responses", Description: "Read the post's responses from the platforms now and return what is stored; the AI reading follows shortly. Requires posts:write.", Annotations: wr()}, t.refreshPostResponses)
 	add(s, t, &mcp.Tool{Name: "report_post_metrics", Description: "Your own automation (provider custom) sends the numbers of a post it published, replacing the stored ones. Requires posts:publish.", Annotations: wr()}, t.reportMetrics)
 	add(s, t, &mcp.Tool{Name: "create_preview_link", Description: "A link to a read-only preview page of the post (as each channel shows it) where anyone with the link can comment without signing in. The url is returned once; expires_in_days 0 never expires.", Annotations: wr()}, t.createPreviewLink)
 	add(s, t, &mcp.Tool{Name: "list_preview_links", Description: "A post's preview links (active, expiry, revoked); the links themselves are not shown again.", Annotations: ro()}, t.listPreviewLinks)
@@ -612,3 +614,20 @@ func (t *tools) retryJob(ctx context.Context, _ *mcp.CallToolRequest, in jobRef)
 }
 
 var _ = providers.StatusAvailable // the catalog's statuses are what list_providers reports
+
+type postResponsesIn struct {
+	PostID    string `json:"post_id" jsonschema:"post ID (post_...)"`
+	ChannelID string `json:"channel_id,omitempty" jsonschema:"only this channel's responses"`
+}
+
+func (t *tools) postResponses(ctx context.Context, _ *mcp.CallToolRequest, in postResponsesIn) (*mcp.CallToolResult, any, error) {
+	return nil0(t.svc.PostResponses(ctx, t.principal(ctx), in.PostID, in.ChannelID))
+}
+
+type refreshResponsesIn struct {
+	PostID string `json:"post_id" jsonschema:"post ID (post_...)"`
+}
+
+func (t *tools) refreshPostResponses(ctx context.Context, _ *mcp.CallToolRequest, in refreshResponsesIn) (*mcp.CallToolResult, any, error) {
+	return nil0(t.svc.RefreshPostResponses(ctx, t.principal(ctx), in.PostID))
+}

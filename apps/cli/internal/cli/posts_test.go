@@ -308,6 +308,18 @@ func TestPostsRetryResultPreviewHistoryTags(t *testing.T) {
 	if q := f.last("GET", "/v1/posts/pst_1/metrics").Query; len(q["refresh"]) != 1 || q["refresh"][0] != "true" {
 		t.Fatalf("refresh query = %v", q)
 	}
+	f.on("GET /v1/posts/pst_1/responses", 200, map[string]any{
+		"overall": map[string]any{"positive": 2, "neutral": 0, "negative": 1, "summary": "Mostly happy", "themes": []any{"pricing"}, "questions": []any{"When ships?"}},
+		"channels": []any{map[string]any{"channel_id": "ch_1", "channel_name": "Bear on X", "available": true, "insight": nil, "responses": []any{
+			map[string]any{"author": "Old", "text": "first reply", "sentiment": "positive", "created_at": "2026-10-13T10:00:00Z"},
+			map[string]any{"author": "New", "text": "second reply", "sentiment": "negative", "created_at": "2026-10-14T10:00:00Z"}}}}})
+	rr := f.run("posts", "responses", "pst_1").mustCode(t, 0)
+	mustContain(t, rr.out, "Mostly happy", "pricing", "When ships?", "Bear on X", "first reply")
+	if strings.Index(rr.out, "second reply") > strings.Index(rr.out, "first reply") {
+		t.Fatalf("responses must be newest first:\n%s", rr.out)
+	}
+	f.on("POST /v1/posts/pst_1/responses/refresh", 202, map[string]any{"overall": nil, "channels": []any{}})
+	f.run("posts", "responses", "pst_1", "--refresh").mustCode(t, 0)
 	f.on("POST /v1/posts/pst_1/previews", 201, map[string]any{"id": "prv_1", "url": "http://localhost:8080/preview#tok"})
 	mustContain(t, f.run("posts", "share", "pst_1", "--expires", "7").mustCode(t, 0).out, "http://localhost:8080/preview#tok", "shown only now")
 	if b := f.last("POST", "/v1/posts/pst_1/previews").json(t); b["expires_in_days"] != float64(7) {

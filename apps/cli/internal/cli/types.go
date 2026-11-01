@@ -367,3 +367,37 @@ type Delivery struct {
 	CreatedAt      string  `json:"created_at"`
 	DeliveredAt    *string `json:"delivered_at"`
 }
+
+type ResponseInsight struct {
+	Positive  int64    `json:"positive"`
+	Neutral   int64    `json:"neutral"`
+	Negative  int64    `json:"negative"`
+	Summary   string   `json:"summary"`
+	Themes    []string `json:"themes"`
+	Questions []string `json:"questions"`
+	Status    string   `json:"status"`
+	Error     string   `json:"error"`
+}
+
+type PostResponse struct {
+	Author       string `json:"author"`
+	AuthorHandle string `json:"author_handle"`
+	Text         string `json:"text"`
+	Sentiment    string `json:"sentiment"`
+	Likes        *int64 `json:"likes"`
+	CreatedAt    string `json:"created_at"`
+}
+
+type ChannelResponses struct {
+	ChannelID   string           `json:"channel_id"`
+	ChannelName string           `json:"channel_name"`
+	Available   bool             `json:"available"`
+	Error       string           `json:"error"`
+	Insight     *ResponseInsight `json:"insight"`
+	Responses   []PostResponse   `json:"responses"`
+}
+
+type PostResponses struct {
+	Overall  *ResponseInsight   `json:"overall"`
+	Channels []ChannelResponses `json:"channels"`
+}

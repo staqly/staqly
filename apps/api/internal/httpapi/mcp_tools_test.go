@@ -38,7 +38,7 @@ func TestMCPToolsCoverREST(t *testing.T) {
 		list_webhook_deliveries list_alerts get_alert list_alert_deliveries list_api_keys list_sessions get_workspace
 		get_workspace_export list_plans get_usage get_billing list_providers list_channels get_channel list_posts get_post
 		search_posts get_post_history preview_post list_requested_work list_tags list_schedules list_jobs
-		get_post_metrics list_preview_links list_post_comments list_channel_groups list_channel_links list_channel_options
+		get_post_metrics get_post_responses list_preview_links list_post_comments list_channel_groups list_channel_links list_channel_options
 		get_generated_media get_analytics`)
 	writes := strings.Fields(`create_collection update_collection delete_collection upload_media update_media delete_media create_media_folder update_media_folder delete_media_folder organize_media restore_media keep_media generate_media keep_generated_media create_webhook
 		update_webhook delete_webhook rotate_webhook_secret test_webhook retry_webhook_delivery create_alert update_alert
@@ -46,7 +46,7 @@ func TestMCPToolsCoverREST(t *testing.T) {
 		start_workspace_export create_device_link start_billing_checkout open_billing_portal connect_channel
 		update_channel delete_channel test_channel create_post update_post schedule_post publish_post unpublish_post cancel_post duplicate_post
 		delete_post delete_posts purge_post report_publish_result retry_target create_schedule update_schedule delete_schedule run_schedule retry_job
-		report_post_metrics create_preview_link revoke_preview_link reply_to_post_comment resolve_post_comment create_channel_group update_channel_group
+		report_post_metrics refresh_post_responses create_preview_link revoke_preview_link reply_to_post_comment resolve_post_comment create_channel_group update_channel_group
 		delete_channel_group create_channel_link revoke_channel_link`)
 	for _, n := range readOnly {
 		tl, ok := tools[n]
@@ -66,7 +66,7 @@ func TestMCPToolsCoverREST(t *testing.T) {
 			t.Errorf("%s must not be read-only", n)
 		}
 	}
-	if want := len(readOnly) + len(writes); len(tools) != want || want != 106 {
+	if want := len(readOnly) + len(writes); len(tools) != want || want != 108 {
 		t.Errorf("tool count %d, want %d (every tool listed here)", len(tools), want)
 	}
 	if _, ok := tools["rotate_recovery_key"]; ok {

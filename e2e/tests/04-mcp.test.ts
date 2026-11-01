@@ -10,7 +10,7 @@ import { callTool, INITIALIZE, INITIALIZED, mcpHttp, mcpStdio, toolCall } from '
 import { LOCAL_TOKEN } from '../lib/stack.js'
 
 // Update when tools are added or removed (apps/api/internal/mcpserver).
-const TOOL_COUNT = 106
+const TOOL_COUNT = 108
 
 describe('MCP', () => {
   const agent = api()
@@ -50,6 +50,8 @@ describe('MCP', () => {
       'retry_job',
       'create_alert',
       'preview_post',
+      'get_post_responses',
+      'refresh_post_responses',
     ]) {
       expect(names).toContain(name)
     }

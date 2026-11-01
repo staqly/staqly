@@ -319,6 +319,11 @@ func SetAssistantInstructions(v string) { serverInstructionsForAssistant = v }
 // assistantStep: one model call (streamed), recorded as an AI job against the allowance. When the model can't
 // take it (it refused before answering) the fallback gets the same call, within the same allowance.
 func (s *Service) assistantStep(ctx context.Context, p Principal, msgs []AssistantMessage, sys string, tools []AssistantTool, onText func(string)) (AssistantMessage, error) {
+	return s.assistantStepOp(ctx, p, AIAssistant, msgs, sys, tools, onText)
+}
+
+// assistantStepOp is assistantStep recorded under another operation (comment_insights).
+func (s *Service) assistantStepOp(ctx context.Context, p Principal, op string, msgs []AssistantMessage, sys string, tools []AssistantTool, onText func(string)) (AssistantMessage, error) {
 	if len(msgs) > assistantMaxMessages {
 		msgs = msgs[len(msgs)-assistantMaxMessages:]
 		for len(msgs) > 0 && msgs[0].Role == "tool" { // a tool result without its call is refused
@@ -329,7 +334,7 @@ func (s *Service) assistantStep(ctx context.Context, p Principal, msgs []Assista
 	for _, e := range s.assistantEndpoints() {
 		estimate := s.assistantEstimate(e, msgs, sys, tools)
 		var id string
-		if id, err = s.reserveAI(ctx, p, AIAssistant, "", map[string]any{"model": e.Model}, estimate); err != nil {
+		if id, err = s.reserveAI(ctx, p, op, "", map[string]any{"model": e.Model}, estimate); err != nil {
 			return AssistantMessage{}, err
 		}
 		started := s.Now()
@@ -344,7 +349,7 @@ func (s *Service) assistantStep(ctx context.Context, p Principal, msgs []Assista
 			status, code, msg = "failed", "ai_failed", cerr.Error()
 		}
 		_, _ = s.finishAIJob(context.WithoutCancel(ctx), db.AiJob{ID: id, WorkspaceID: p.WorkspaceID, StartedAt: formatTime(started),
-			Operation: AIAssistant, Provider: e.provider(), Model: e.Model}, status, code, msg, cost, db.AiJob{})
+			Operation: op, Provider: e.provider(), Model: e.Model}, status, code, msg, cost, db.AiJob{})
 		if cerr == nil || wrote || ctx.Err() != nil { // the person saw part of the answer: no second one
 			return out, cerr
 		}

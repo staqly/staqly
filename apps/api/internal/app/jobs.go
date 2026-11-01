@@ -29,12 +29,13 @@ var (
 	jobWriteTimeout  = 30 * time.Second
 	jobShutdownGrace = 30 * time.Second
 	jobRunTimeout    = map[string]time.Duration{
-		"publish_target":  10 * time.Minute,
-		"remove_target":   2 * time.Minute,
-		"run_schedule":    3 * time.Minute, // the schedule's endpoint call has its own 60 s limit
-		"refresh_channel": 2 * time.Minute,
-		"publish_reply":   10 * time.Minute, // a reply uploads its media like a post
-		"ai_run":          10 * time.Minute, // a video takes a few minutes at the AI provider
+		"publish_target":    10 * time.Minute,
+		"remove_target":     2 * time.Minute,
+		"run_schedule":      3 * time.Minute, // the schedule's endpoint call has its own 60 s limit
+		"refresh_channel":   2 * time.Minute,
+		"analyze_responses": 5 * time.Minute,  // one model call over all the responses
+		"publish_reply":     10 * time.Minute, // a reply uploads its media like a post
+		"ai_run":            10 * time.Minute, // a video takes a few minutes at the AI provider
 	}
 	jobDefaultRunTimeout = time.Minute
 )
@@ -115,6 +116,10 @@ func (s *Service) execJob(ctx context.Context, kind string, a jobArgs) error {
 		return s.runSyncEntitlements(ctx, a.WorkspaceID)
 	case "ai_run":
 		return s.runAIJob(ctx, a.WorkspaceID, p.AIJobID)
+	case "read_responses":
+		return s.readResponses(ctx, p.PostID, p.ChannelID)
+	case "analyze_responses":
+		return s.analyzeResponses(ctx, a.WorkspaceID, p.PostID)
 	}
 	if run, ok := testJobKinds[kind]; ok {
 		return run(ctx, a)

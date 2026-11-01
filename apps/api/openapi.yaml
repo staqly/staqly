@@ -2118,6 +2118,37 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/posts/{id}/responses:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    get:
+      operationId: getPostResponses
+      tags: [posts]
+      summary: What people answered under the published post, per channel and overall, with the AI's reading (posts:read)
+      description: |
+        Comments and replies staqly read from the platforms (Facebook, Instagram, Threads, YouTube, X where the platform allows),
+        with sentiment counts, a summary, themes and questions per channel and `overall`. `available: false` means staqly can't read
+        that platform. Reads happen in the background after publishing; `POST .../responses/refresh` reads now.
+      parameters:
+        - { name: channel, in: query, description: Only this channel, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PostResponses" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/posts/{id}/responses/refresh:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: refreshPostResponses
+      tags: [posts]
+      summary: Read the post's responses from the platforms now (posts:write)
+      description: Queues the reading and the AI analysis; returns what is stored at this moment.
+      responses:
+        "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/PostResponses" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /v1/posts/{id}/targets/{channel}/metrics:
     parameters:
       - { $ref: "#/components/parameters/id" }
@@ -5775,6 +5806,49 @@ components:
         samples: { type: integer, minimum: 0, description: Published targets with numbers }
         avg_engagements: { type: [number, "null"], minimum: 0 }
         low_confidence: { type: boolean, description: Fewer samples than min_samples }
+    PostResponses:
+      type: object
+      required: [overall, channels]
+      properties:
+        overall: { oneOf: [{ $ref: "#/components/schemas/ResponseInsight" }, { type: "null" }] }
+        channels: { type: array, items: { $ref: "#/components/schemas/ChannelResponses" } }
+    ChannelResponses:
+      type: object
+      required: [channel_id, channel_name, provider, available, insight, responses]
+      properties:
+        channel_id: { type: string }
+        channel_name: { type: string }
+        provider: { type: string }
+        available: { type: boolean, description: False when staqly can't read this platform }
+        error: { type: string }
+        insight: { oneOf: [{ $ref: "#/components/schemas/ResponseInsight" }, { type: "null" }] }
+        responses: { type: array, items: { $ref: "#/components/schemas/PostResponse" } }
+    ResponseInsight:
+      type: object
+      required: [positive, neutral, negative, summary, themes, questions, status, analyzed_at]
+      properties:
+        positive: { type: integer, format: int64 }
+        neutral: { type: integer, format: int64 }
+        negative: { type: integer, format: int64 }
+        summary: { type: string }
+        themes: { type: array, items: { type: string } }
+        questions: { type: array, items: { type: string } }
+        status: { type: string }
+        error: { type: string }
+        analyzed_at: { type: [string, "null"], format: date-time }
+    PostResponse:
+      type: object
+      required: [id, author, text, sentiment, likes, created_at]
+      properties:
+        id: { type: string }
+        parent_id: { type: string }
+        author: { type: string }
+        author_handle: { type: string }
+        text: { type: string }
+        url: { type: string }
+        sentiment: { type: string }
+        likes: { type: [integer, "null"], format: int64 }
+        created_at: { type: string }
     TargetMetrics:
       type: object
       required: [channel_id, channel_name, provider, status, external_url, available, metrics, updated_at]

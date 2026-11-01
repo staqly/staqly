@@ -131,6 +131,7 @@ staqly posts unpublish post_1 [--channel CH ...] # take a published post down fr
 staqly posts duplicate post_1              # a new draft with the same content, media, tags and channels
 staqly posts preview post_1                # the text per channel (links removed or defanged) and what each platform objects to
 staqly posts stats post_1 --refresh        # its numbers per channel (views, likes...) where the platform reports them
+staqly posts responses post_1 [--channel ID|name] [--refresh]   # what people answered under it: sentiment, summary, themes, questions; --refresh reads the platforms first
 staqly posts share post_1 --expires 7      # a preview link anyone can open and comment on (shown once)
 staqly posts comments post_1               # what reviewers said on the preview
 staqly posts retry post_1 <channel> [--wait]   # one failed channel again

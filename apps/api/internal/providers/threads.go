@@ -24,7 +24,7 @@ var (
 	threadsPoll = 3 * time.Second
 )
 
-const threadsScopes = "threads_basic,threads_content_publish,threads_manage_replies,threads_manage_insights,threads_delete"
+const threadsScopes = "threads_basic,threads_content_publish,threads_manage_replies,threads_manage_insights,threads_read_replies,threads_delete"
 
 func init() {
 	l := Limits{MaxChars: 500, MaxMedia: 10, MediaKinds: []string{"image", "video"}}

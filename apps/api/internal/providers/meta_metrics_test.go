@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -17,10 +18,17 @@ func TestMetaMetrics(t *testing.T) {
 		case "/v24.0/1_2":
 			_, _ = w.Write([]byte(`{"reactions":{"data":[],"summary":{"total_count":7}},"comments":{"data":[],"summary":{"total_count":2}},"shares":{"count":3}}`))
 		case "/v24.0/vid":
-			if r.URL.Query().Get("fields") != "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)" {
+			if !strings.HasPrefix(r.URL.Query().Get("fields"), "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)") {
 				t.Errorf("video fields: %s", r.URL.Query().Get("fields"))
 			}
 			_, _ = w.Write([]byte(`{"reactions":{"summary":{"total_count":1}},"comments":{"summary":{"total_count":0}}}`))
+		case "/v24.0/vidrej":
+			if strings.Contains(r.URL.Query().Get("fields"), "reactions.type") {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"message":"(#100) Tried accessing nonexisting field (r_like)","code":100}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"reactions":{"summary":{"total_count":4}},"comments":{"summary":{"total_count":1}}}`))
 		case "/v24.0/ig":
 			_, _ = w.Write([]byte(`{"like_count":10,"comments_count":4,"media_product_type":"FEED"}`))
 		case "/v24.0/ig/insights":
@@ -54,6 +62,9 @@ func TestMetaMetrics(t *testing.T) {
 	}
 	if m, err = (Facebook{}).Metrics(ctx, c, "vid"); err != nil || v(m.Likes) != 1 || m.Shares != nil {
 		t.Fatalf("facebook video: %+v %v", m, err)
+	}
+	if m, err = (Facebook{}).Metrics(ctx, c, "vidrej"); err != nil || v(m.Likes) != 4 || v(m.Replies) != 1 || m.Reactions != nil {
+		t.Fatalf("facebook video refusing reaction fields: %+v %v", m, err)
 	}
 	if m, err = (Instagram{}).Metrics(ctx, c, "ig"); err != nil || v(m.Likes) != 10 || v(m.Replies) != 4 ||
 		v(m.Impressions) != 120 || v(m.Shares) != 5 || v(m.Bookmarks) != 6 {

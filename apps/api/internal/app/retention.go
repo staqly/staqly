@@ -17,9 +17,10 @@ import (
 // RETENTION_EVENTS_DAYS (0 = keep forever, default), RETENTION_DELIVERIES_DAYS
 // (default 30, 0 = keep forever), RETENTION_NOTIFICATIONS_DAYS (finished notification outbox
 // rows; default 30, 0 = keep forever) and RETENTION_AGENTS_DAYS (agents and API
-// connections not seen for that long; default 30, 0 = keep forever).
+// connections not seen for that long; default 30, 0 = keep forever) and RETENTION_RESPONSES_DAYS (audience
+// responses read longer ago; default 90, 0 = keep forever).
 type RetentionConfig struct {
-	EventsDays, DeliveriesDays, NotificationsDays, AgentsDays int
+	EventsDays, DeliveriesDays, NotificationsDays, AgentsDays, ResponsesDays int
 }
 
 func (s *Service) RetentionConfig() RetentionConfig {
@@ -40,6 +41,7 @@ func (s *Service) RetentionConfig() RetentionConfig {
 		DeliveriesDays:    num("RETENTION_DELIVERIES_DAYS", 30),
 		NotificationsDays: num("RETENTION_NOTIFICATIONS_DAYS", 30),
 		AgentsDays:        num("RETENTION_AGENTS_DAYS", 30),
+		ResponsesDays:     num("RETENTION_RESPONSES_DAYS", 90),
 	}
 }
 
@@ -49,6 +51,7 @@ type RetentionReport struct {
 	Exports       int64 `json:"exports"`
 	Notifications int64 `json:"notifications"`
 	Agents        int64 `json:"agents"`
+	Responses     int64 `json:"responses"`
 	Media         int64 `json:"media"`
 	// TrialFingerprints: repeated-trial fingerprints past their use.
 	TrialFingerprints int64 `json:"trial_fingerprints"`
@@ -174,6 +177,29 @@ func (s *Service) RunRetention(ctx context.Context) (RetentionReport, error) {
 	if cfg.AgentsDays > 0 {
 		if rep.Agents, err = s.W.PruneAgents(ctx, cutoff(cfg.AgentsDays)); err != nil {
 			return rep, err
+		}
+	}
+
+	// Audience responses read long ago, then the insights of posts left without any.
+	if cfg.ResponsesDays > 0 {
+		ids, err := s.W.RetentionWorkspaceIDs(ctx)
+		if err != nil {
+			return rep, err
+		}
+		for _, ws := range ids {
+			for {
+				n, err := s.W.DeleteOldResponses(ctx, db.DeleteOldResponsesParams{WorkspaceID: ws, Cutoff: cutoff(cfg.ResponsesDays), Lim: retentionBatch})
+				if err != nil {
+					return rep, err
+				}
+				rep.Responses += n
+				if n < retentionBatch {
+					break
+				}
+			}
+			if _, err := s.W.DeleteOrphanResponseInsights(ctx, ws); err != nil {
+				return rep, err
+			}
 		}
 	}
 	return rep, nil
