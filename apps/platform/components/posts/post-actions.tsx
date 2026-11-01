@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 
 import { Callout } from '@/components/common/callout'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
@@ -63,6 +63,16 @@ import { postHref } from './post-href'
 
 // Only the Statistics tab shows it: its own chunk, loaded when the tab opens.
 const PostResponses = dynamic(() => import('@/components/posts/post-responses').then((m) => m.PostResponses))
+
+// The comments' heading while their code loads: in place, so the drawer around it never falls back to its loading view.
+function ResponsesShell() {
+  return (
+    <section className="grid gap-3 border-t pt-4" aria-label="Audience comments" aria-busy>
+      <h3 className="flex h-8 items-center text-sm font-semibold pointer-coarse:h-11">Audience comments</h3>
+      <Skeleton className="h-5 w-32" />
+    </section>
+  )
+}
 
 const METRIC_LABELS: [Exclude<keyof NonNullable<TargetMetrics['metrics']>, 'reactions'>, string, LucideIcon][] = [
   ['impressions', 'Views', Eye],
@@ -187,8 +197,19 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
 
   return (
     <div className="grid gap-3" data-testid="post-stats">
-      {metrics.isLoading ? (
-        <Skeleton className="h-32" />
+      {metrics.isPending ? (
+        // The channels' cards as they will be, a line where the numbers come: nothing moves when they arrive.
+        <ul className="grid gap-3" aria-busy>
+          {(post.targets ?? []).map((t) => (
+            <li key={t.channel_id} className="rounded-xl border p-3">
+              <div className="flex items-center gap-2 text-sm">
+                <ProviderIcon id={t.provider} className="size-4" />
+                <span className="min-w-0 truncate font-medium">{t.channel_name}</span>
+              </div>
+              <Skeleton className="mt-2 h-5 w-40" />
+            </li>
+          ))}
+        </ul>
       ) : metrics.error ? (
         <ErrorState error={metrics.error} onRetry={() => metrics.refetch()} />
       ) : rows.length === 0 ? (
@@ -267,7 +288,9 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
           <RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /> Refresh
         </Button>
       </div>
-      <PostResponses postId={post.id} active={active} />
+      <Suspense fallback={<ResponsesShell />}>
+        <PostResponses postId={post.id} active={active} />
+      </Suspense>
     </div>
   )
 }
