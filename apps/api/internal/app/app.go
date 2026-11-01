@@ -95,6 +95,8 @@ type Principal struct {
 	UserID string
 	// Role: that person's role in WorkspaceID (owner, admin, editor, viewer); their Scopes come from it.
 	Role string
+	// Guest: a session from a guest link (CreateGuestLink); Role and Scopes are capped at the link's role.
+	Guest bool
 }
 
 // Has: local mode and sessions from before accounts (no user) may do everything in their workspace, as

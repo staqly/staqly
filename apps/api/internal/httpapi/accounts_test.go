@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1065,4 +1066,49 @@ func TestTrialOncePerWorkspaceOneAtATime(t *testing.T) {
 	sub["status"] = "canceled"
 	e.stripeEvent("evt_first_3", "customer.subscription.deleted", sub, testWhsec)
 	trialFor(app.TrialUsed)
+}
+
+// A guest link (`server connect-link --email --for`) signs browsers in as its person, as many times as it
+// allows, as an editor whatever their role, until it expires; its sessions end with it and add no way in.
+func TestGuestLink(t *testing.T) {
+	e := newAccountsEnv(t, "")
+	owner := e.mustSignIn(ana, "")
+	mine := e.session(owner)
+	ctx := context.Background()
+	if _, err := e.svc.CreateGuestLink(ctx, ana.Email, "", app.GuestLink{For: time.Hour, Role: app.RoleOwner}); err == nil {
+		t.Fatal("a guest link with the owner role")
+	}
+	link, err := e.svc.CreateGuestLink(ctx, "ANA@example.com", "", app.GuestLink{For: 24 * time.Hour, Uses: 2, Role: app.RoleEditor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := link.URL[strings.Index(link.URL, "#")+1:]
+	redeem := func(want int) *person {
+		jar, _ := cookiejar.New(nil)
+		g := &person{c: noRedirects(jar), id: ana}
+		var out struct {
+			CSRF string `json:"csrf_token"`
+		}
+		e.as(g, "POST", "/v1/device-links/redeem", map[string]any{"token": token}, want, &out)
+		g.csrf = out.CSRF
+		return g
+	}
+	guest := redeem(201)
+	if s := e.session(guest); s.User.Email != ana.Email || s.Workspace.ID != mine.Workspace.ID || s.Role != app.RoleEditor ||
+		slices.Contains(s.Principal.Scopes, app.ScopeAdmin) {
+		t.Fatalf("guest session: %+v", s)
+	}
+	e.as(guest, "POST", "/v1/collections", map[string]any{"name": "Demo"}, 201, nil)
+	e.as(guest, "DELETE", "/v1/workspace", map[string]any{"confirm": mine.Workspace.Name}, 403, nil)
+	e.as(guest, "POST", "/v1/api-keys", map[string]any{"name": "k", "scopes": []string{"posts:read"}}, 403, nil)
+	e.as(guest, "POST", "/v1/device-links", nil, 403, nil)
+	e.as(guest, "POST", "/v1/invitations", map[string]any{"email": eve.Email, "role": app.RoleViewer}, 403, nil)
+	e.as(guest, "POST", "/v1/account/workspaces", map[string]any{"name": "Mine"}, 403, nil)
+	e.as(owner, "POST", "/v1/device-links", nil, 201, nil) // the owner's own session is not a guest
+	redeem(201)
+	redeem(410) // two uses
+
+	clock := time.Now().Add(25 * time.Hour)
+	e.svc.Now = func() time.Time { return clock }
+	e.as(guest, "GET", "/v1/session", nil, 401, nil) // ended with the link
 }

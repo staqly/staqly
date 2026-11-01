@@ -138,6 +138,9 @@ func passkeyOnly(s *Service, p Principal) (*webauthn.WebAuthn, error) {
 // BeginPasskeyRegistration: options for navigator.credentials.create. The passkey must be discoverable
 // (it names the person at sign-in); passkeys the person has are excluded so a device is not added twice.
 func (s *Service) BeginPasskeyRegistration(ctx context.Context, p Principal) (PasskeyChallenge, error) {
+	if err := notGuest(p); err != nil {
+		return PasskeyChallenge{}, err
+	}
 	wa, err := passkeyOnly(s, p)
 	if err != nil {
 		return PasskeyChallenge{}, err

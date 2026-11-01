@@ -98,6 +98,15 @@ func googleOnly(s *Service) error {
 
 func forbidden(msg string) *Error { return &Error{Code: "forbidden", Status: 403, Message: msg} }
 
+// notGuest: what a guest link's session may not do, so the access ends with the link and the account stays its
+// owner's: add a way in (keys, links, invitations, sign-in methods), change how the account signs in, or leave.
+func notGuest(p Principal) error {
+	if p.Guest {
+		return forbidden("not with a guest link: it gives time-limited access to this account")
+	}
+	return nil
+}
+
 // ---- sign-in with Google ----
 
 type googleOIDC struct {
@@ -176,6 +185,9 @@ func (s *Service) StartGoogleLogin(ctx context.Context, next, invite, setupToken
 
 // StartGoogleLink: a signed-in person adds Google to their sign-in methods (Settings, Account).
 func (s *Service) StartGoogleLink(ctx context.Context, p Principal) (string, string, error) {
+	if err := notGuest(p); err != nil {
+		return "", "", err
+	}
 	if p.Kind != PrincipalSession || p.UserID == "" {
 		return "", "", forbidden("only a signed-in person adds a sign-in method")
 	}
@@ -500,13 +512,18 @@ func (s *Service) createCloudWorkspace(ctx context.Context, q *db.Queries, name,
 }
 
 func (s *Service) createUserSession(ctx context.Context, q *db.Queries, workspaceID, userID, userAgent string) (NewSession, string, error) {
+	return s.newUserSession(ctx, q, workspaceID, userID, userAgent, s.Now().UTC().Add(s.Cfg.SessionTTL), "")
+}
+
+// newUserSession: a session until a given time; guestRole caps what it may do (CreateGuestLink).
+func (s *Service) newUserSession(ctx context.Context, q *db.Queries, workspaceID, userID, userAgent string, until time.Time, guestRole string) (NewSession, string, error) {
 	now := s.Now().UTC()
-	ns := NewSession{Token: randomString(32), CSRFToken: randomString(20), ExpiresAt: now.Add(s.Cfg.SessionTTL)}
+	ns := NewSession{Token: randomString(32), CSRFToken: randomString(20), ExpiresAt: until}
 	userAgent = truncateRunes(userAgent, 300)
 	id := newID("ses")
 	err := q.CreateUserSession(ctx, db.CreateUserSessionParams{ID: id, WorkspaceID: workspaceID, TokenHash: hashSecret(ns.Token),
 		CsrfToken: ns.CSRFToken, UserAgent: userAgent, CreatedAt: formatTime(now), LastSeenAt: formatTime(now),
-		ExpiresAt: formatTime(ns.ExpiresAt), UserID: nullStr(userID)})
+		ExpiresAt: formatTime(ns.ExpiresAt), UserID: nullStr(userID), GuestRole: guestRole})
 	return ns, id, err
 }
 
@@ -609,6 +626,9 @@ func (s *Service) SwitchWorkspace(ctx context.Context, p Principal, workspaceID 
 // CreateWorkspace: a signed-in person adds a workspace and owns it. timezone is an IANA name ("" = UTC; the
 // dashboard sends the browser's).
 func (s *Service) CreateWorkspace(ctx context.Context, p Principal, name, timezone string) (MyWorkspace, error) {
+	if err := notGuest(p); err != nil {
+		return MyWorkspace{}, err
+	}
 	if err := accountsOnly(s); err != nil {
 		return MyWorkspace{}, err
 	}
@@ -837,6 +857,9 @@ func (s *Service) memberOut(ctx context.Context, p Principal, userID string) (Me
 // RemoveMember: admins remove editors and viewers (and other admins), owners anyone; everyone may leave.
 // Their sessions in this workspace end at once; the last owner stays.
 func (s *Service) RemoveMember(ctx context.Context, p Principal, userID string) error {
+	if err := notGuest(p); err != nil {
+		return err
+	}
 	// A key carries its creator's user id, but leaving is a person's own act (people are managed by people).
 	self := p.Kind == PrincipalSession && p.UserID != "" && p.UserID == userID
 	if !self {
@@ -935,6 +958,9 @@ func (s *Service) ListInvitations(ctx context.Context, p Principal) ([]Invitatio
 
 // CreateInvitation: a single-use, expiring link for one address and role (only its hash is stored).
 func (s *Service) CreateInvitation(ctx context.Context, p Principal, email, role string) (Invitation, error) {
+	if err := notGuest(p); err != nil {
+		return Invitation{}, err
+	}
 	if err := s.requirePeopleManager(p); err != nil {
 		return Invitation{}, err
 	}

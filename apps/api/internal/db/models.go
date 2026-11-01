@@ -163,6 +163,9 @@ type DeviceLink struct {
 	ExpiresAt   string         `json:"expires_at"`
 	UsedAt      sql.NullString `json:"used_at"`
 	UserID      string         `json:"user_id"`
+	MaxUses     int64          `json:"max_uses"`
+	Uses        int64          `json:"uses"`
+	GuestRole   string         `json:"guest_role"`
 }
 
 type EmailCode struct {
@@ -475,6 +478,7 @@ type Session struct {
 	ExpiresAt   string         `json:"expires_at"`
 	RevokedAt   sql.NullString `json:"revoked_at"`
 	UserID      sql.NullString `json:"user_id"`
+	GuestRole   string         `json:"guest_role"`
 }
 
 type StripeEvent struct {
