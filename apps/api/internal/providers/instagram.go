@@ -79,9 +79,11 @@ func (Instagram) AuthURL(app App, redirect, state string, _ map[string]string) (
 		return "", &Failure{Kind: ErrRejected, Msg: "Instagram needs the Meta app's login configuration: whoever runs this server sets PROVIDER_INSTAGRAM_CONFIG_ID"}
 	}
 	q := url.Values{
-		"client_id":     {app.ClientID},
-		"config_id":     {app.ConfigID},
-		"redirect_uri":  {redirect},
+		"client_id":    {app.ClientID},
+		"config_id":    {app.ConfigID},
+		"redirect_uri": {redirect},
+		// Otherwise an existing Facebook session skips the Instagram login choice.
+		"prompt":        {"login"},
 		"response_type": {"code"},
 		"state":         {state},
 	}

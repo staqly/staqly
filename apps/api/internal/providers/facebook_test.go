@@ -490,7 +490,8 @@ func TestInstagramConnect(t *testing.T) {
 	// Facebook Login for Business with the app's configuration, which says the permissions: no scope.
 	u, err := ig.AuthURL(app, "https://app.example/cb", "st", nil)
 	q, _ := url.Parse(u)
-	if err != nil || q.Query().Get("config_id") != "cfg1" || q.Query().Get("scope") != "" || q.Query().Get("state") != "st" {
+	if err != nil || q.Query().Get("config_id") != "cfg1" || q.Query().Get("scope") != "" || q.Query().Get("state") != "st" ||
+		q.Query().Get("prompt") != "login" || q.Query().Get("response_type") != "code" || q.Query().Get("redirect_uri") != "https://app.example/cb" {
 		t.Fatalf("auth url %s %v", u, err)
 	}
 	if _, err := ig.AuthURL(App{ClientID: "cid", ClientSecret: "secret"}, "https://app.example/cb", "st", nil); !errors.Is(err, ErrRejected) {
