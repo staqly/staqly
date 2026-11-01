@@ -274,8 +274,15 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 		return err
 	}
 	text, _ := providers.ApplyLinks(channelLinks(ch), parts[index].Content)
+	ref := fmt.Sprintf("reply:%s:%s:%d", postID, channelID, index)
+	fresh := false
 	if ch.Provider == ProviderX {
-		if err := s.checkX(ctx, s.Q, row.WorkspaceID, xUnits(text)); err != nil {
+		fresh, err = s.reservePublishingAllowance(ctx, row.WorkspaceID, ref, ch.Provider, xUnits(text), false)
+		if err != nil {
+			var businessError *Error
+			if !errors.As(err, &businessError) {
+				return err
+			}
 			return s.replyEnded(ctx, postID, channelID, index, providers.Result{}, errorMessage(err))
 		}
 	}
@@ -284,6 +291,11 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 	// As for the post: what the platform answered is recorded even if the budget ran out meanwhile.
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jobWriteTimeout)
 	defer cancel()
+	if ch.Provider == ProviderX {
+		if chargeErr := s.finishPublishingAllowance(wctx, row.WorkspaceID, ref, ch.Provider, fresh, err); chargeErr != nil {
+			return chargeErr
+		}
+	}
 	switch {
 	case err == nil:
 		return s.replyEnded(wctx, postID, channelID, index, result, "")
@@ -328,6 +340,9 @@ func (s *Service) replyEnded(ctx context.Context, postID, channelID string, inde
 				text, _ := providers.ApplyLinks(channelLinks(ch), parts[index].Content)
 				ref := fmt.Sprintf("reply:%s:%s:%d", postID, channelID, index)
 				if err := s.meterX(ctx, q, row.WorkspaceID, ref, xUnits(text)); err != nil {
+					return err
+				}
+				if err := q.DeletePublishingAllowanceReservation(ctx, db.DeletePublishingAllowanceReservationParams{WorkspaceID: row.WorkspaceID, Ref: ref}); err != nil {
 					return err
 				}
 			}

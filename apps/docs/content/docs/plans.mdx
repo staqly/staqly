@@ -137,7 +137,7 @@ now an ended Starter period (read-only) until a plan is paid for.
   seats at the trial's end. No plan caps the seats. Agents and API keys are not seats and cost
   nothing.
 - **Posts to X** are counted because X charges for every post sent through its API: each post and
-  thread reply counts once when it goes out (a post with a live link counts 14; X channels remove
+  thread reply needs one unit (a post with a live link needs 14; X channels remove
   or defang links by default). The plan's posts reset every month. **Extra posts** come in
   one-time bundles, **Settings → Plan & usage → Buy more** (next to X): 200 for €10, 1,000 for €40 or
   4,000 for €150, excl. VAT. They are used after the included ones and expire at the end of the
@@ -145,7 +145,7 @@ now an ended Starter period (read-only) until a plan is paid for.
   post scheduled for later fails with the reason). `GET /v1/billing/x-posts` shows what's left.
 - **Posts to LinkedIn** are counted because LinkedIn limits how many posts and video uploads all
   of staqly's workspaces together can send each day, so each plan includes a fair share: every post
-  to a LinkedIn profile or Page counts once when it goes out, and a post with a video also counts on
+  to a LinkedIn profile or Page needs one unit, and a post with a video also counts on
   the video allowance. Comments don't count. The allowances reset every month and can't be bought
   on top. When one is used up, publishing to LinkedIn answers **402 `linkedin_posts_exhausted`** or
   **`linkedin_videos_exhausted`** (and a post scheduled for later fails with the reason).
@@ -156,6 +156,13 @@ now an ended Starter period (read-only) until a plan is paid for.
   schedules, per calendar month in UTC. Editing an existing post does not count again; deleting one does not
   refund its allowance. Publishing one post to several channels counts once here, but each X or LinkedIn
   target consumes that platform's allowance. Thread replies consume X credits separately.
+
+X and LinkedIn allowances are reserved when a worker starts publishing, so concurrent posts cannot
+spend the same remaining allowance. Usage includes these in-progress reservations. A terminal rejection or an explicit capacity deferral
+returns a fresh reservation. Other retryable failures and uncertain outcomes (such as a lost response)
+keep it reserved; the post may already be live. Retrying that target uses its original reservation, including across a month boundary.
+Changing a retry to need more units requires restoring its original content or creating a new post.
+Scheduled posts cancelled before publishing do not reserve an allowance.
 
 ## Shared platform capacity
 

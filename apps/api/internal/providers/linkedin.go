@@ -251,7 +251,7 @@ func linkedinPublish(ctx context.Context, token, author, visibility string, p Po
 		urn = h.Get("X-LinkedIn-Id")
 	}
 	if urn == "" {
-		return Result{}, &Failure{Kind: ErrRejected, Msg: "LinkedIn published the post but did not say its id; check the profile"}
+		return Result{}, &Failure{Kind: ErrRejected, OutcomeUnknown: true, Msg: "LinkedIn published the post but did not say its id; check the profile"}
 	}
 	return Result{ExternalID: urn, URL: linkedinPostURL(urn)}, nil
 }
@@ -546,6 +546,8 @@ func linkedinError(status int, body string) error {
 		return &Failure{Kind: ErrRejected, Msg: "LinkedIn refused it (" + detail + ")"}
 	case strings.Contains(body, "processing"), strings.Contains(body, "not ready"):
 		return &Failure{Msg: "LinkedIn is still processing the media; staqly tries again in a few minutes"}
+	case strings.Contains(strings.ToLower(body), "duplicate"):
+		return &Failure{Kind: ErrRejected, OutcomeUnknown: true, Msg: "LinkedIn: " + detail}
 	case status >= 400:
 		return &Failure{Kind: ErrRejected, Msg: "LinkedIn: " + detail}
 	}
