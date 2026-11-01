@@ -28,14 +28,15 @@ export function PublicShell({
       />
       {/* The way back sits in the page's corner; the logo then stands in the middle. */}
       {back && (
-        <div className="absolute top-[max(0.75rem,env(safe-area-inset-top))] left-2 flex min-h-11 items-center sm:top-5 sm:left-4">
+        <div className="absolute top-[max(1.5rem,env(safe-area-inset-top))] left-2 flex min-h-11 items-center sm:top-10 sm:left-4">
           {back}
         </div>
       )}
       <header
         className={cn(
           'mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 sm:px-6 sm:pt-5 lg:px-8',
-          back && 'justify-center',
+          // Opened from the app: a larger logo, centred between the top of the page and the first section.
+          back && 'justify-center pt-[max(1.5rem,env(safe-area-inset-top))] pb-6 sm:pt-10 sm:pb-10',
         )}
       >
         <Link
@@ -43,7 +44,7 @@ export function PublicShell({
           className="flex min-h-11 items-center rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           aria-label="Staqly home"
         >
-          <Logo className="text-lg" markClassName="size-8" />
+          <Logo className={back ? 'text-xl' : 'text-lg'} markClassName={back ? 'size-10' : 'size-8'} />
         </Link>
         {nav}
       </header>

@@ -371,7 +371,7 @@ export function PlansPage() {
 
   return (
     <PublicShell
-      className="flex flex-col items-center pt-8 sm:pt-14"
+      className="flex flex-col items-center"
       back={
         <Button asChild variant="ghost" size="icon" aria-label="Back" className="group">
           <Link
