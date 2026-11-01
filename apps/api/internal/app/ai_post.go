@@ -85,7 +85,7 @@ func (s *Service) AIPost(ctx context.Context, p Principal, in AIPostRequest) (AI
 	case "image":
 		picture = ` "media_prompt": a vivid description of one picture to go with the post, for an image model (no text in the picture).`
 	case "video":
-		picture = ` "media_prompt": a vivid description of a 5 second video clip to go with the post (the scene, what moves, the camera), for a video model (no text in it).`
+		picture = ` "media_prompt": a vivid description of a short video clip (5 to 10 seconds) to go with the post (the scene, what moves, the camera), for a video model (no text in it).`
 	}
 	sys := "You write social media posts. Write " + aiPostFormats[in.Format] + ", in " + aiPostVoices[in.Voice] +
 		", with a " + in.Tone + " tone." + limit + " Write in the language of the brief. Plain text: no markdown, " +
