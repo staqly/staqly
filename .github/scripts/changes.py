@@ -1,4 +1,4 @@
-"""Select CI jobs from the whole push or PR diff; uncertainty runs the full suite."""
+"""Select CI jobs from a pull request's diff; pushes to main and uncertainty run the full suite."""
 import json
 import os
 from pathlib import Path
@@ -22,14 +22,10 @@ JOBS = {
 
 
 def changed_files(event, payload):
-    if event == 'pull_request':
-        base = 'HEAD^1'  # checkout's merge commit: first parent is the PR base
-    elif event == 'push':
-        base = payload.get('before', '')
-        if not re.fullmatch(r'[0-9a-f]{40}', base) or base == '0' * 40:
-            return None
-    else:
+    # A push to main runs everything: that run is what a release checks (release.yml), so it must be complete.
+    if event != 'pull_request':
         return None
+    base = 'HEAD^1'  # checkout's merge commit: first parent is the PR base
     try:
         return subprocess.check_output(
             ['git', 'diff', '--name-only', '--no-renames', '-z', base, 'HEAD', '--'],

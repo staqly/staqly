@@ -39,7 +39,7 @@ make dev           # build from this checkout with the dev stack (compose.dev.ym
 make dev-tunnel TUNNEL=~/.cloudflared/<name>.yml  # the dev stack on https through a named Cloudflare tunnel (Instagram: callback and media); dev sign-in off
 make site          # landing page :8070 + docs :8090 from this checkout
 make connect       # one-time sign-in link for another browser
-make release VERSION=v0.2.0  # tag origin/main; CI publishes the binaries and ghcr.io/staqly/staqly:v0.2.0
+make release VERSION=v0.2.0  # tag origin/main (right after the merge is fine); once its CI passes, release.yml publishes the binaries and ghcr.io/staqly/staqly:v0.2.0
 ```
 
 Run `pnpm check` before finishing a change; run `pnpm test:e2e` for anything
@@ -55,7 +55,7 @@ Run `test:ui-responsive` for dashboard layout changes.
 
 | Workflow | When | What |
 |---|---|---|
-| `ci.yml` | push to `main` and pull requests (affected jobs); nightly and by hand (all jobs) | `pnpm check` tasks per package, generated code up to date, the Docker e2e suite, actionlint on the workflows; one `CI passed` job sums them up (the check branch protection should require) |
+| `ci.yml` | pull requests (affected jobs); push to `main`, nightly and by hand (all jobs) | `pnpm check` tasks per package, generated code up to date, the Docker e2e suite, actionlint on the workflows; one `CI passed` job sums them up (the check branch protection should require) |
 | `cross-client.yml` | pushes/PRs touching the API, CLI, SDKs or the suite; nightly and by hand | `pnpm --filter @staqly/e2e test:cross-client` (Go, uv, Node; no secrets) |
 | `n8n.yml` | relevant pushes to `main`, nightly, by hand | the dev stack built from the checkout + a real n8n: `test:n8n` (no secrets) |
 | `ui.yml` | nightly, by hand | the dashboard in a real browser: `test:ui` (flows, axe) and `test:ui-responsive` against `staqly serve` built from the checkout (no secrets) |

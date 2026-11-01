@@ -13,8 +13,7 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded PRs. Each main push keeps its own run: otherwise cancelling a
-# filtered run could leave its changed packages untested by the next push.
+# Cancel superseded PRs. Each main push keeps its own run: a release checks the run of exactly its commit.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -24,7 +23,7 @@ env:
   TURBO_FORCE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
 
 jobs:
-  # Pushes and PRs check affected packages; nightly/manual runs check everything.
+  # Pull requests check affected packages; pushes to main, nightly and manual runs check everything.
   changes:
     name: What changed
     runs-on: ubuntu-latest
@@ -106,11 +105,16 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   # The same Go suite on PostgreSQL (cloud mode's database): every test opens a fresh schema
-  # (internal/store/storetest), plus the schema drift check and the SQLite import.
+  # (internal/store/storetest), plus the schema drift check and the SQLite import. internal/httpapi alone takes
+  # about 8 min with -race here, so its tests are split over three runners and a fourth runs every other package.
   api-postgres:
-    name: API (Go) on PostgreSQL
+    name: API (Go) on PostgreSQL (${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.api == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["httpapi 1/3", "httpapi 2/3", "httpapi 3/3", "other packages"]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     services:
@@ -128,7 +132,22 @@ jobs:
         working-directory: apps/api
         env:
           STAQLY_TEST_DATABASE_URL: postgres://staqly:staqly@127.0.0.1:5432/staqly?sslmode=disable
-        run: go test -race -timeout 25m ./...
+          SHARD: ${{ matrix.shard }}
+        run: |
+          if [ "$SHARD" = "other packages" ]; then
+            mapfile -t pkgs < <(go list ./... | grep -v '/internal/httpapi$')
+            go test -race -timeout 25m "${pkgs[@]}"
+            exit
+          fi
+          # Every top-level test of the package, sorted; shard n of 3 runs every third one.
+          n=${SHARD#httpapi }; n=${n%/3}
+          mapfile -t tests < <(grep -hoE '^func Test[A-Za-z0-9_]+\(t \*testing\.T\)' internal/httpapi/*_test.go | sed -E 's/^func (Test[A-Za-z0-9_]+).*/\1/' | sort -u)
+          mine=()
+          for i in "${!tests[@]}"; do
+            if (( i % 3 == n - 1 )); then mine+=("${tests[$i]}"); fi
+          done
+          echo "${#mine[@]} of ${#tests[@]} tests"
+          go test -race -timeout 25m -run "^($(IFS='|'; echo "${mine[*]}"))\$" ./internal/httpapi
 
   # ── staqly CLI ────────────────────────────────────────────────────────────
   cli:
