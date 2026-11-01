@@ -1116,7 +1116,12 @@ func credentialsExpiry(creds providers.Credentials) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// refreshChannel is the refresh_channel job: a failed refresh marks the channel needs_reconnect.
+// refreshRetryDelay: a token refresh that failed every attempt without the platform refusing the sign-in
+// (unreachable, 5xx) runs again this much later.
+const refreshRetryDelay = 15 * time.Minute
+
+// refreshChannel is the refresh_channel job: a refused refresh marks the channel needs_reconnect; an unreachable
+// platform is tried again (jobFailed), the channel stays connected.
 func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	row, err := s.Q.GetChannelByID(ctx, channelID)
 	if isNoRows(err) {
@@ -1151,7 +1156,7 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 		return s.channelNeedsReconnect(ctx, row, err)
 	}
 	if err != nil {
-		return err // the platform could not be reached: the job tries again; its last failure needs reconnecting
+		return err // the platform could not be reached: the job tries again, then again later (jobFailed)
 	}
 	sealed, err := s.seal(fresh)
 	if err != nil {
