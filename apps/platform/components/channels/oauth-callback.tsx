@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import { AccountPicker } from '@/components/channels/account-picker'
+import { ChannelsPage } from '@/components/channels/channels-page'
 import { PageContainer } from '@/components/common/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api, ApiError, errorMessage } from '@/lib/api'
@@ -17,7 +18,7 @@ import { clearOAuthReturn, peekOAuthReturn } from '@/lib/welcome'
  * callback and redirected here with `channel=<id>`, `pending=<id>` or `error=<message>` (with `code` when the
  * accounts were used in an earlier unpaid free trial: the shell's dialog explains that instead). A channel or an
  * error lands on Channels (which shows the error over itself); a pending sign-in may publish as several accounts, so
- * this page asks which ones to connect first.
+ * Channels shows here with a dialog over it asking which ones to connect first.
  */
 export function OAuthCallback() {
   const params = useSearchParams()
@@ -91,18 +92,17 @@ export function OAuthCallback() {
     const name = providers.data?.find((p) => p.id === pc.data.provider)?.name ?? pc.data.provider
 
     return (
-      <PageContainer>
-        <div className="mt-[6vh]">
-          <AccountPicker
-            provider={pc.data.provider}
-            name={name}
-            accounts={pc.data.accounts}
-            busy={finish.isPending}
-            onConnect={(ids) => finish.mutate(ids)}
-            onCancel={() => land(null, null)}
-          />
-        </div>
-      </PageContainer>
+      <>
+        <ChannelsPage />
+        <AccountPicker
+          provider={pc.data.provider}
+          name={name}
+          accounts={pc.data.accounts}
+          busy={finish.isPending}
+          onConnect={(ids) => finish.mutate(ids)}
+          onCancel={() => land(null, null)}
+        />
+      </>
     )
   }
 
