@@ -220,3 +220,26 @@ func TestPasskeyAddSignInRenameRemove(t *testing.T) {
 		t.Fatalf("events: %+v", events)
 	}
 }
+
+// A registration started by the account owner must not be finished from their guest session.
+// Otherwise an outstanding challenge can turn temporary access into a permanent sign-in method.
+func TestGuestCannotFinishOwnerPasskeyRegistration(t *testing.T) {
+	e, _ := newEmailEnv(t, "")
+	owner := e.emailSignIn("owner@example.com", nil)
+	var ch challengeOut
+	e.as(owner, "POST", "/v1/account/sign-in-methods/passkey/start", nil, 200, &ch)
+	key := newSoftKey(t)
+	answer := key.create(ch.Options)
+
+	guest := e.guestFor("owner@example.com", "")
+
+	body := map[string]any{"challenge_id": ch.ID, "name": "Pending key", "response": answer}
+	e.as(guest, "POST", "/v1/account/sign-in-methods/passkey/start", nil, 403, nil)
+	e.as(guest, "POST", "/v1/account/sign-in-methods/passkey/finish", body, 403, nil)
+	// Refusing the guest neither installs their key nor spends the owner's challenge.
+	e.as(owner, "POST", "/v1/account/sign-in-methods/passkey/finish", body, 201, nil)
+	signedIn := e.passkeySignIn(key, 1, key.key, 201, nil)
+	if e.session(signedIn).User.ID != e.session(owner).User.ID {
+		t.Fatal("owner could not finish registration")
+	}
+}
