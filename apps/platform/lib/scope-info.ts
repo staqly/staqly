@@ -15,6 +15,7 @@ export const SCOPE_INFO: Record<Scope, string> = {
   'media:write': 'Upload and delete media files',
   'webhooks:manage': 'Manage webhooks and deliveries',
   'alerts:manage': 'Manage alerts (they hold chat tokens)',
+  'integrations:manage': 'Manage your integration keys and connected agents (sign-in required)',
   'events:read': 'Read the activity log',
   admin: 'Manage API keys, sessions and workspace',
 }

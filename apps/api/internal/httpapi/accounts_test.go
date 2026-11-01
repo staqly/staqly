@@ -240,6 +240,7 @@ type sessionOut struct {
 	Guest      bool              `json:"guest"`
 	Workspaces []app.MyWorkspace `json:"workspaces"`
 	Principal  struct {
+		ID     string   `json:"id"`
 		Scopes []string `json:"scopes"`
 	} `json:"principal"`
 }
@@ -757,9 +758,11 @@ func TestInvitationAcceptRace(t *testing.T) {
 func TestRoleMatrix(t *testing.T) {
 	e := newAccountsEnv(t, "")
 	owner, admin, editor, viewer, _ := e.team()
+	_, token := e.invite(owner, frank.Email, app.RoleOperator)
+	operator := e.mustSignIn(frank, "invite="+url.QueryEscape(token))
 	var col app.Collection
 	e.as(owner, "POST", "/v1/collections", map[string]any{"name": "Seed"}, 201, &col)
-	people := map[string]*person{app.RoleOwner: owner, app.RoleAdmin: admin, app.RoleEditor: editor, app.RoleViewer: viewer}
+	people := map[string]*person{app.RoleOwner: owner, app.RoleAdmin: admin, app.RoleOperator: operator, app.RoleEditor: editor, app.RoleViewer: viewer}
 	type action struct {
 		name   string
 		method string
@@ -792,17 +795,17 @@ func TestRoleMatrix(t *testing.T) {
 		{"write post", "POST", static("/v1/posts"), func() any { return map[string]any{"title": "Post", "collection": col.ID, "content": "hi"} }, app.RoleEditor, 201},
 		{"create collection", "POST", static("/v1/collections"), func() any { return map[string]any{"name": uniq()} }, app.RoleEditor, 201},
 		{"delete post", "DELETE", func() string { return "/v1/posts/" + newPost() }, nil, app.RoleEditor, 204},
-		{"delete collection", "DELETE", func() string { id := newCol(); return "/v1/collections/" + id + "?confirm=" + lastCol }, nil, app.RoleAdmin, 204},
-		{"connect channel", "POST", static("/v1/channels"), func() any { return map[string]any{"provider": "custom", "name": uniq()} }, app.RoleAdmin, 201},
-		{"create webhook", "POST", static("/v1/webhooks"), func() any { return map[string]any{"url": "http://127.0.0.1:9/h", "events": []string{"post.*"}} }, app.RoleAdmin, 201},
-		{"create API key", "POST", static("/v1/api-keys"), func() any { return map[string]any{"name": uniq(), "scopes": []string{"posts:read"}} }, app.RoleAdmin, 201},
+		{"delete collection", "DELETE", func() string { id := newCol(); return "/v1/collections/" + id + "?confirm=" + lastCol }, nil, app.RoleOperator, 204},
+		{"connect channel", "POST", static("/v1/channels"), func() any { return map[string]any{"provider": "custom", "name": uniq()} }, app.RoleOperator, 201},
+		{"create webhook", "POST", static("/v1/webhooks"), func() any { return map[string]any{"url": "http://127.0.0.1:9/h", "events": []string{"post.*"}} }, app.RoleOperator, 201},
+		{"create API key", "POST", static("/v1/api-keys"), func() any { return map[string]any{"name": uniq(), "scopes": []string{"posts:read"}} }, app.RoleOperator, 201},
 		{"list sessions", "GET", static("/v1/sessions"), nil, app.RoleAdmin, 200},
 		{"rename workspace", "PATCH", static("/v1/workspace"), func() any { return map[string]any{"name": "Studio"} }, app.RoleAdmin, 200},
 		{"list members", "GET", static("/v1/members"), nil, app.RoleAdmin, 200},
 		{"list invitations", "GET", static("/v1/invitations"), nil, app.RoleAdmin, 200},
 		{"invite", "POST", static("/v1/invitations"), func() any { return map[string]any{"email": uniq() + "@example.com", "role": app.RoleViewer} }, app.RoleAdmin, 201},
 	}
-	rank := map[string]int{app.RoleViewer: 0, app.RoleEditor: 1, app.RoleAdmin: 2, app.RoleOwner: 3}
+	rank := map[string]int{app.RoleViewer: 0, app.RoleEditor: 1, app.RoleOperator: 2, app.RoleAdmin: 3, app.RoleOwner: 4}
 	for _, a := range actions {
 		for role, p := range people {
 			want := a.ok
@@ -1070,7 +1073,7 @@ func TestTrialOncePerWorkspaceOneAtATime(t *testing.T) {
 }
 
 // A guest link (`server connect-link --email --for`) signs browsers in as its person, as many times as it
-// allows, as an editor whatever their role, until it expires; its sessions end with it and add no way in.
+// allows, with app access but no administration, until it expires; its sessions end with it and add no way in.
 func TestGuestLink(t *testing.T) {
 	e := newAccountsEnv(t, "")
 	owner := e.mustSignIn(ana, "")
@@ -1079,7 +1082,7 @@ func TestGuestLink(t *testing.T) {
 	if _, err := e.svc.CreateGuestLink(ctx, ana.Email, "", app.GuestLink{For: time.Hour, Role: app.RoleOwner}); err == nil {
 		t.Fatal("a guest link with the owner role")
 	}
-	link, err := e.svc.CreateGuestLink(ctx, "ANA@example.com", "", app.GuestLink{For: 24 * time.Hour, Uses: 2, Role: app.RoleEditor})
+	link, err := e.svc.CreateGuestLink(ctx, "ANA@example.com", "", app.GuestLink{For: 24 * time.Hour, Uses: 2, Role: app.RoleOperator})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1095,13 +1098,59 @@ func TestGuestLink(t *testing.T) {
 		return g
 	}
 	guest := redeem(201)
-	if s := e.session(guest); s.User.Email != ana.Email || s.Workspace.ID != mine.Workspace.ID || s.Role != app.RoleEditor || !s.Guest ||
+	if s := e.session(guest); s.User.Email != ana.Email || s.Workspace.ID != mine.Workspace.ID || s.Role != app.RoleOperator || !s.Guest ||
 		slices.Contains(s.Principal.Scopes, app.ScopeAdmin) {
 		t.Fatalf("guest session: %+v", s)
 	}
-	e.as(guest, "POST", "/v1/collections", map[string]any{"name": "Demo"}, 201, nil)
+	// A guest can use every non-admin feature the account may use, including channels and collection deletion.
+	scopes := e.session(guest).Principal.Scopes
+	for _, scope := range app.AllScopes {
+		if scope != app.ScopeAdmin && !slices.Contains(scopes, scope) {
+			t.Fatalf("guest is missing %s", scope)
+		}
+	}
+	var col app.Collection
+	e.as(guest, "POST", "/v1/collections", map[string]any{"name": "Demo"}, 201, &col)
+	e.as(guest, "DELETE", "/v1/collections/"+col.ID+"?confirm=Demo", nil, 204, nil)
+	var alert app.Alert
+	e.as(guest, "POST", "/v1/alerts", map[string]any{"name": "Demo", "type": "ntfy", "config": map[string]any{"topic": "demo"}}, 201, &alert)
+	e.as(guest, "PATCH", "/v1/alerts/"+alert.ID, map[string]any{"name": "Changed"}, 200, nil)
+	e.as(guest, "DELETE", "/v1/alerts/"+alert.ID, nil, 204, nil)
+	var webhook app.Webhook
+	e.as(guest, "POST", "/v1/webhooks", map[string]any{"url": "http://127.0.0.1:9/h", "events": []string{"post.*"}}, 201, &webhook)
+	e.as(guest, "PATCH", "/v1/webhooks/"+webhook.ID, map[string]any{"description": "Changed"}, 200, nil)
+	e.as(guest, "DELETE", "/v1/webhooks/"+webhook.ID, nil, 204, nil)
+	var channel app.Channel
+	e.as(guest, "POST", "/v1/channels", map[string]any{"provider": "custom", "name": "Demo"}, 201, &channel)
+	e.as(guest, "PATCH", "/v1/channels/"+channel.ID, map[string]any{"name": "Updated"}, 200, nil)
+	e.as(guest, "DELETE", "/v1/channels/"+channel.ID, nil, 204, nil)
+
+	// The same scope check protects the real OAuth entry point, callback and account picker.
+	e.as(owner, "PUT", "/v1/providers/fakepages/app", map[string]any{"client_id": "cid", "client_secret": "s3cret"}, 204, nil)
+	var start struct{ URL string }
+	e.as(guest, "GET", "/v1/channels/oauth/fakepages/start", nil, 200, &start)
+	u, _ := url.Parse(start.URL)
+	resp := e.do(guest.c, "GET", "/v1/channels/oauth/fakepages/callback?code=two&state="+u.Query().Get("state"), "", nil, 302, nil)
+	location, _ := url.Parse(resp.Header.Get("Location"))
+	pending := location.Query().Get("pending")
+	if pending == "" {
+		t.Fatalf("guest OAuth callback: %s", location)
+	}
+	var connected struct{ Data []app.Channel }
+	e.as(guest, "POST", "/v1/pending-connections/"+pending, map[string]any{"account_ids": []string{"p1"}}, 201, &connected)
+	if len(connected.Data) != 1 {
+		t.Fatalf("guest connected channels: %+v", connected)
+	}
+	e.as(guest, "DELETE", "/v1/channels/"+connected.Data[0].ID, nil, 204, nil)
+
+	e.as(guest, "PATCH", "/v1/workspace", map[string]any{"name": "Changed"}, 403, nil)
 	e.as(guest, "DELETE", "/v1/workspace", map[string]any{"confirm": mine.Workspace.Name}, 403, nil)
-	e.as(guest, "POST", "/v1/api-keys", map[string]any{"name": "k", "scopes": []string{"posts:read"}}, 403, nil)
+	e.as(guest, "GET", "/v1/members", nil, 403, nil)
+	e.as(guest, "PATCH", "/v1/members/"+mine.User.ID, map[string]any{"role": app.RoleAdmin}, 403, nil)
+	e.as(guest, "GET", "/v1/billing/details", nil, 403, nil)
+	e.as(guest, "POST", "/v1/billing/checkout", map[string]any{"plan": "plus", "interval": "month"}, 403, nil)
+	e.as(guest, "POST", "/v1/billing/portal", nil, 403, nil)
+	e.as(guest, "POST", "/v1/api-keys", map[string]any{"name": "forbidden admin key", "scopes": []string{"admin"}}, 403, nil)
 	e.as(guest, "POST", "/v1/device-links", nil, 403, nil)
 	e.as(guest, "POST", "/v1/invitations", map[string]any{"email": eve.Email, "role": app.RoleViewer}, 403, nil)
 	e.as(guest, "POST", "/v1/account/workspaces", map[string]any{"name": "Mine"}, 403, nil)
@@ -1118,4 +1167,136 @@ func TestGuestLink(t *testing.T) {
 	clock := time.Now().Add(25 * time.Hour)
 	e.svc.Now = func() time.Time { return clock }
 	e.as(guest, "GET", "/v1/session", nil, 401, nil) // ended with the link
+}
+
+func TestGuestLinkRoleLimits(t *testing.T) {
+	e := newAccountsEnv(t, "")
+	owner, admin, editor, viewer, _ := e.team()
+	workspace := e.session(owner).Workspace.ID
+	for _, tc := range []struct {
+		name       string
+		person     *person
+		guestRole  string
+		writeCode  int
+		manageCode int
+	}{
+		{"read-only link", owner, app.RoleViewer, 403, 403},
+		{"content-only link", owner, app.RoleEditor, 201, 403},
+		{"admin account", admin, app.RoleOperator, 201, 201},
+		{"editor account", editor, app.RoleOperator, 201, 403},
+		{"viewer account", viewer, app.RoleOperator, 403, 403},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			link, err := e.svc.CreateGuestLink(context.Background(), tc.person.id.Email, workspace,
+				app.GuestLink{For: time.Hour, Role: tc.guestRole})
+			if err != nil {
+				t.Fatal(err)
+			}
+			jar, _ := cookiejar.New(nil)
+			guest := &person{c: noRedirects(jar), id: tc.person.id}
+			var out struct {
+				CSRF string `json:"csrf_token"`
+			}
+			e.as(guest, "POST", "/v1/device-links/redeem", map[string]any{"token": strings.SplitN(link.URL, "#", 2)[1]}, 201, &out)
+			guest.csrf = out.CSRF
+			e.as(guest, "GET", "/v1/channels", nil, 200, nil)
+			e.as(guest, "POST", "/v1/collections", map[string]any{"name": tc.name}, tc.writeCode, nil)
+			e.as(guest, "POST", "/v1/channels", map[string]any{"provider": "custom", "name": tc.name}, tc.manageCode, nil)
+			if tc.person == admin {
+				// Existing guest sessions lose permissions immediately when the underlying membership changes.
+				id := e.session(admin).User.ID
+				e.as(owner, "PATCH", "/v1/members/"+id, map[string]any{"role": app.RoleViewer}, 200, nil)
+				e.as(guest, "POST", "/v1/channels", map[string]any{"provider": "custom", "name": "After demotion"}, 403, nil)
+				e.as(guest, "POST", "/v1/collections", map[string]any{"name": "After demotion"}, 403, nil)
+			}
+		})
+	}
+	// The broader guest cap must not grant ordinary editors channel-management rights.
+	e.as(editor, "POST", "/v1/channels", map[string]any{"provider": "custom", "name": "Ordinary editor"}, 403, nil)
+}
+
+// Operators manage their own integrations; guest credentials remain bound to the guest session.
+func TestOperatorIntegrationKeys(t *testing.T) {
+	e := newAccountsEnv(t, "")
+	owner, admin, _, _, _ := e.team()
+	adminID := e.session(admin).User.ID
+	e.as(owner, "PATCH", "/v1/members/"+adminID, map[string]any{"role": app.RoleOperator}, 200, nil)
+	var ownerKey app.APIKey
+	e.as(owner, "POST", "/v1/api-keys", map[string]any{"name": "Owner key", "scopes": []string{app.ScopeAdmin}}, 201, &ownerKey)
+	guestLink, err := e.svc.CreateGuestLink(context.Background(), ana.Email, "", app.GuestLink{For: time.Hour, Role: app.RoleOperator})
+	if err != nil {
+		t.Fatal(err)
+	}
+	redeem := func() *person {
+		jar, _ := cookiejar.New(nil)
+		guest := &person{c: noRedirects(jar), id: ana}
+		var result struct {
+			CSRF string `json:"csrf_token"`
+		}
+		e.as(guest, "POST", "/v1/device-links/redeem", map[string]any{"token": strings.SplitN(guestLink.URL, "#", 2)[1]}, 201, &result)
+		guest.csrf = result.CSRF
+		return guest
+	}
+	guest := redeem()
+	otherGuest := redeem()
+	for _, actor := range []*person{admin, guest} {
+		e.as(actor, "POST", "/v1/api-keys", map[string]any{"name": "No admin", "scopes": []string{app.ScopeAdmin}}, 403, nil)
+		e.as(actor, "DELETE", "/v1/api-keys/"+ownerKey.ID, nil, 404, nil)
+		e.as(actor, "POST", "/v1/api-keys/"+ownerKey.ID+"/rotate", nil, 404, nil)
+		var key app.APIKey
+		e.as(actor, "POST", "/v1/api-keys", map[string]any{"name": "n8n", "scopes": []string{app.ScopePostsRead, app.ScopeChannelsManage, app.ScopeIntegrationsManage}, "expires_at": time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)}, 201, &key)
+		var listed struct {
+			Data   []app.APIKey
+			Scopes []string `json:"available_scopes"`
+		}
+		e.as(actor, "GET", "/v1/api-keys", nil, 200, &listed)
+		if len(listed.Data) != 1 || listed.Data[0].ID != key.ID || slices.Contains(listed.Scopes, app.ScopeAdmin) {
+			t.Fatalf("operator key visibility/scopes: %+v", listed)
+		}
+		e.do(nil, "GET", "/v1/posts", key.Key, nil, 200, nil, "User-Agent", "operator-agent/1")
+		e.do(nil, "POST", "/v1/api-keys", key.Key, map[string]any{"name": "Descendant", "scopes": []string{app.ScopePostsRead}}, 403, nil)
+		e.do(nil, "PATCH", "/v1/workspace", key.Key, map[string]any{"name": "Forbidden"}, 403, nil)
+		var agents struct{ Data []app.Agent }
+		e.as(actor, "GET", "/v1/agents", nil, 200, &agents)
+		if len(agents.Data) == 0 {
+			t.Fatalf("operator agents: %+v", agents)
+		}
+		for _, agent := range agents.Data {
+			if agent.PrincipalID != key.ID {
+				t.Fatalf("another user agent exposed: %+v", agent)
+			}
+		}
+		e.as(otherGuest, "DELETE", "/v1/agents/"+agents.Data[0].ID, nil, 404, nil)
+		e.as(actor, "DELETE", "/v1/agents/"+agents.Data[0].ID, nil, 204, nil)
+		var rotated app.APIKey
+		e.as(actor, "POST", "/v1/api-keys/"+key.ID+"/rotate", nil, 201, &rotated)
+		e.do(nil, "GET", "/v1/posts", key.Key, nil, 401, nil)
+		e.do(nil, "GET", "/v1/posts", rotated.Key, nil, 200, nil)
+		if actor == guest {
+			session := e.session(guest)
+			if rotated.ExpiresAt == nil || *rotated.ExpiresAt != guestLink.ExpiresAt || *key.ExpiresAt != guestLink.ExpiresAt {
+				t.Fatalf("guest key escaped session expiry: %+v", rotated)
+			}
+			e.as(otherGuest, "DELETE", "/v1/api-keys/"+rotated.ID, nil, 404, nil)
+			e.as(otherGuest, "POST", "/v1/api-keys/"+rotated.ID+"/rotate", nil, 404, nil)
+			// Even an owner rotating the key cannot detach it from its guest session.
+			var byOwner app.APIKey
+			e.as(owner, "POST", "/v1/api-keys/"+rotated.ID+"/rotate", nil, 201, &byOwner)
+			e.do(nil, "GET", "/v1/posts", byOwner.Key, nil, 200, nil)
+			e.as(owner, "DELETE", "/v1/sessions/"+session.Principal.ID, nil, 204, nil)
+			e.do(nil, "GET", "/v1/posts", byOwner.Key, nil, 401, nil)
+		} else {
+			// Removing a permission from the creator also narrows the issued key immediately.
+			e.as(owner, "PATCH", "/v1/members/"+adminID, map[string]any{"role": app.RoleEditor}, 200, nil)
+			e.do(nil, "POST", "/v1/channels", rotated.Key, map[string]any{"provider": "custom", "name": "Denied"}, 403, nil)
+			e.as(owner, "PATCH", "/v1/members/"+adminID, map[string]any{"role": app.RoleOperator}, 200, nil)
+			e.as(actor, "DELETE", "/v1/api-keys/"+rotated.ID, nil, 204, nil)
+			e.do(nil, "GET", "/v1/posts", rotated.Key, nil, 401, nil)
+		}
+	}
+	var timed app.APIKey
+	e.as(otherGuest, "POST", "/v1/api-keys", map[string]any{"name": "Expires", "scopes": []string{app.ScopePostsRead}}, 201, &timed)
+	clock := e.svc.Now()
+	e.svc.Now = func() time.Time { return clock.Add(2 * time.Hour) }
+	e.do(nil, "GET", "/v1/posts", timed.Key, nil, 401, nil)
 }

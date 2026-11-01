@@ -140,7 +140,7 @@
       "additionalProperties": false,
       "properties": {
         "expires_at": {
-          "description": "RFC3339 expiry; omit for a key that does not expire",
+          "description": "RFC3339 expiry; at most one year, capped at the guest session expiry",
           "type": "string"
         },
         "name": {

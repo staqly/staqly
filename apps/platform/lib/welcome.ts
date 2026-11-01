@@ -22,7 +22,7 @@ export interface WelcomeDraft {
   agent?: 'claude' | 'codex'
   /** The agent's key was made in the agent step (the workspace could write then): the end doesn't make another. */
   keyMade?: boolean
-  invites?: { emails: string[]; role: 'admin' | 'editor' | 'viewer' }
+  invites?: { emails: string[]; role: 'admin' | 'operator' | 'editor' | 'viewer' }
   /** The workspace this draft belongs to: a draft from another workspace is dropped. */
   workspace?: string
   // The agent key itself stays in memory only (lib/session-key.ts), never in storage.

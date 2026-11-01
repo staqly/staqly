@@ -111,7 +111,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 }
 
 const getAPIKey = `-- name: GetAPIKey :one
-SELECT id, workspace_id, name, prefix, key_hash, scopes, created_at, last_used_at, expires_at, revoked_at, created_by_user_id FROM api_keys WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, name, prefix, key_hash, scopes, created_at, last_used_at, expires_at, revoked_at, created_by_user_id, guest_session_id FROM api_keys WHERE workspace_id = ? AND id = ?
 `
 
 type GetAPIKeyParams struct {
@@ -134,12 +134,13 @@ func (q *Queries) GetAPIKey(ctx context.Context, arg GetAPIKeyParams) (ApiKey, e
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.CreatedByUserID,
+		&i.GuestSessionID,
 	)
 	return i, err
 }
 
 const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
-SELECT id, workspace_id, name, prefix, key_hash, scopes, created_at, last_used_at, expires_at, revoked_at, created_by_user_id FROM api_keys WHERE key_hash = ?
+SELECT id, workspace_id, name, prefix, key_hash, scopes, created_at, last_used_at, expires_at, revoked_at, created_by_user_id, guest_session_id FROM api_keys WHERE key_hash = ?
 `
 
 func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error) {
@@ -157,6 +158,7 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, 
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.CreatedByUserID,
+		&i.GuestSessionID,
 	)
 	return i, err
 }
@@ -282,7 +284,7 @@ func (q *Queries) GetWorkspaceByRecoveryVerifier(ctx context.Context, recoveryVe
 }
 
 const listAPIKeys = `-- name: ListAPIKeys :many
-SELECT id, workspace_id, name, prefix, key_hash, scopes, created_at, last_used_at, expires_at, revoked_at, created_by_user_id FROM api_keys WHERE workspace_id = ? ORDER BY revoked_at IS NOT NULL, created_at DESC
+SELECT id, workspace_id, name, prefix, key_hash, scopes, created_at, last_used_at, expires_at, revoked_at, created_by_user_id, guest_session_id FROM api_keys WHERE workspace_id = ? ORDER BY revoked_at IS NOT NULL, created_at DESC
 `
 
 func (q *Queries) ListAPIKeys(ctx context.Context, workspaceID string) ([]ApiKey, error) {
@@ -306,6 +308,7 @@ func (q *Queries) ListAPIKeys(ctx context.Context, workspaceID string) ([]ApiKey
 			&i.ExpiresAt,
 			&i.RevokedAt,
 			&i.CreatedByUserID,
+			&i.GuestSessionID,
 		); err != nil {
 			return nil, err
 		}
@@ -420,6 +423,27 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) (i
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const setAPIKeyAccess = `-- name: SetAPIKeyAccess :exec
+UPDATE api_keys SET created_by_user_id = ?, guest_session_id = ? WHERE workspace_id = ? AND id = ?
+`
+
+type SetAPIKeyAccessParams struct {
+	CreatedByUserID sql.NullString `json:"created_by_user_id"`
+	GuestSessionID  sql.NullString `json:"guest_session_id"`
+	WorkspaceID     string         `json:"workspace_id"`
+	ID              string         `json:"id"`
+}
+
+func (q *Queries) SetAPIKeyAccess(ctx context.Context, arg SetAPIKeyAccessParams) error {
+	_, err := q.db.ExecContext(ctx, setAPIKeyAccess,
+		arg.CreatedByUserID,
+		arg.GuestSessionID,
+		arg.WorkspaceID,
+		arg.ID,
+	)
+	return err
 }
 
 const swapRecoveryVerifier = `-- name: SwapRecoveryVerifier :execrows

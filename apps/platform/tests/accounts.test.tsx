@@ -225,7 +225,7 @@ describe('members', () => {
         name: 'Cleo',
         email: 'cleo@example.com',
         avatar_url: '',
-        role: 'admin',
+        role: 'operator',
         you: false,
         created_at: '2026-10-19T00:00:00Z',
       },
@@ -240,8 +240,10 @@ describe('members', () => {
 
     expect(within(select).queryByRole('option', { name: 'Owner' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Role of Ana Owner')).not.toBeInTheDocument()
-    await user.selectOptions(select, 'admin')
+    expect(within(select).getByRole('option', { name: 'Admin' })).toBeInTheDocument()
+    await user.selectOptions(select, 'operator')
     await waitFor(() => expect(api.find('PATCH', '/v1/members/usr_2')).toHaveLength(1))
+    expect(api.find('PATCH', '/v1/members/usr_2')[0]!.body).toEqual({ role: 'operator' })
   })
 
   it('per user pricing: the seats billed and what one more person costs while the workspace pays', async () => {

@@ -100,9 +100,6 @@ UPDATE sessions SET workspace_id = ? WHERE id = ? AND user_id = ? AND revoked_at
 -- A member removed from a workspace is signed out of it everywhere.
 UPDATE sessions SET revoked_at = @now WHERE workspace_id = @workspace_id AND user_id = @user_id AND revoked_at IS NULL;
 
--- name: SetAPIKeyCreator :exec
-UPDATE api_keys SET created_by_user_id = ? WHERE id = ?;
-
 -- name: RevokeAnonymousSessions :execrows
 -- A workspace from before accounts joins one: browser sessions without a person behind them end.
 UPDATE sessions SET revoked_at = @now WHERE workspace_id = @workspace_id AND user_id IS NULL AND revoked_at IS NULL;

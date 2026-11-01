@@ -247,7 +247,7 @@ func (s *Server) rotateRecovery(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listKeys(w http.ResponseWriter, r *http.Request) {
 	out, err := s.svc.ListAPIKeys(r.Context(), principal(r))
-	respond(w, r, 200, map[string]any{"data": out, "available_scopes": app.AllScopes}, err)
+	respond(w, r, 200, map[string]any{"data": out, "available_scopes": principal(r).GrantableKeyScopes()}, err)
 }
 
 func (s *Server) createKey(w http.ResponseWriter, r *http.Request) {

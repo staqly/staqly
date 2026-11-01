@@ -622,20 +622,6 @@ func (q *Queries) RevokeUserSessionsInWorkspace(ctx context.Context, arg RevokeU
 	return result.RowsAffected()
 }
 
-const setAPIKeyCreator = `-- name: SetAPIKeyCreator :exec
-UPDATE api_keys SET created_by_user_id = ? WHERE id = ?
-`
-
-type SetAPIKeyCreatorParams struct {
-	CreatedByUserID sql.NullString `json:"created_by_user_id"`
-	ID              string         `json:"id"`
-}
-
-func (q *Queries) SetAPIKeyCreator(ctx context.Context, arg SetAPIKeyCreatorParams) error {
-	_, err := q.db.ExecContext(ctx, setAPIKeyCreator, arg.CreatedByUserID, arg.ID)
-	return err
-}
-
 const setSessionWorkspace = `-- name: SetSessionWorkspace :execrows
 UPDATE sessions SET workspace_id = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL
 `

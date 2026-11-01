@@ -142,6 +142,7 @@ Scope = Literal[
     "webhooks:manage",
     "alerts:manage",
     "events:read",
+    "integrations:manage",
     "admin",
 ]
 
@@ -454,7 +455,7 @@ class MyWorkspace(StaqlyModel):
 
 
 class Member(StaqlyModel):
-    """A person in the workspace and their role (owner, admin, editor or viewer)."""
+    """A person in the workspace and their role (owner, admin, operator, editor or viewer)."""
 
     user_id: str
     name: str
@@ -471,7 +472,7 @@ class Whoami(StaqlyModel):
     principal: Principal
     csrf_token: str = ""
     user: User | None = None
-    #: The caller's role in this workspace (owner, admin, editor, viewer).
+    #: The caller's role in this workspace (owner, admin, operator, editor, viewer).
     role: str = ""
     accounts_enabled: bool = False
     workspaces: list[MyWorkspace] = Field(default_factory=list)

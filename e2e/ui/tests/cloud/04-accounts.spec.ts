@@ -87,6 +87,7 @@ test('email codes: sign-up, workspaces, invitations, roles and isolation', async
   const owner = addr('owner')
   const editor = addr('editor')
   const viewer = addr('viewer')
+  const operator = addr('operator')
 
   // 1. Sign-up: a new address gets an account and a first workspace.
   await signInWithCode(page, owner, state().cloud.setupToken)
@@ -111,12 +112,13 @@ test('email codes: sign-up, workspaces, invitations, roles and isolation', async
   // The only way to sign in cannot be removed: no Remove until there is another.
   await expect(page.getByTestId('sign-in-methods').getByRole('button', { name: 'Remove' })).toHaveCount(0)
 
-  // 3. Invite an editor and a viewer to the first workspace (Members page).
+  // 3. Invite an editor, viewer and operator to the first workspace (Members page).
   const links: Record<string, string> = {}
 
   for (const [email, role] of [
     [editor, 'Editor'],
     [viewer, 'Viewer'],
+    [operator, 'Operator'],
   ] as const) {
     await page.goto('/settings/members')
     await ready(page, 'Settings')
@@ -189,6 +191,51 @@ test('email codes: sign-up, workspaces, invitations, roles and isolation', async
   expect((await vwApi.post('/posts', { collection: 'Default', title: 'Nope', content: 'nope' })).status()).toBe(403)
   expect((await vwApi.post(`/posts/${postAId}/publish`, {})).status()).toBe(403)
   await vw.ctx.close()
+
+  // Operators accept invitations, connect channels and create integration keys without administration.
+  const op = await newBrowser(browser)
+
+  await op.page.goto(invitePath(links[operator]))
+  await op.page.getByTestId('accept-with-code').click()
+  await op.page.getByRole('textbox', { name: 'Code' }).fill(await devCode(operator))
+  await pastWelcome(op.page)
+  const opApi = await asBrowser(op.page)
+
+  expect(opApi.session.role).toBe('operator')
+  await op.page.goto('/channels')
+  await op.page.getByTestId('add-channel').click()
+  await op.page.getByTestId('provider-custom').click()
+  const connect = op.page.getByRole('dialog', { name: 'Connect Your own automation' })
+
+  await connect.getByRole('textbox', { name: /^Name/ }).fill(`Operator channel ${run}`)
+  await connect.getByRole('combobox', { name: /How posts reach your automation/ }).click()
+  await op.page.getByRole('option', { name: 'Let my agents and webhooks pick it up' }).click()
+  await connect.getByTestId('connect-channel').click()
+  await expect(connect).toBeHidden()
+  await expect(op.page.getByText(/is connected/)).toBeVisible()
+  await op.page.goto('/integrations/api-keys?new=1')
+  const keyForm = op.page.getByRole('dialog', { name: 'Create API key' })
+
+  await keyForm.getByRole('textbox', { name: 'Name' }).fill('Operator integration')
+  await keyForm.getByRole('button', { name: /^Full access/ }).click()
+  await keyForm.getByRole('button', { name: 'Create key' }).click()
+  await expect(op.page.getByRole('dialog', { name: 'Your new API key' })).toBeVisible()
+  await op.page.getByRole('button', { name: "I've copied it" }).click()
+  const keys = await (await opApi.get('/api-keys')).json()
+
+  expect(keys.data).toHaveLength(1)
+  expect(keys.data[0].scopes).toContain('channels:manage')
+  expect(keys.data[0].scopes).not.toContain('admin')
+  expect((await opApi.get('/agents')).status()).toBe(200)
+  expect((await opApi.get('/alerts')).status()).toBe(200)
+  expect((await opApi.get('/webhooks')).status()).toBe(200)
+  expect((await opApi.get('/members')).status()).toBe(403)
+  expect((await opApi.get('/billing/details')).status()).toBe(403)
+  await op.page.goto('/integrations?view=agents')
+  await expect(op.page.getByTestId('agents')).toBeVisible()
+  await expect(op.page.getByRole('link', { name: 'Alerts', exact: true })).toBeVisible()
+  await expect(op.page.getByRole('link', { name: 'Webhooks', exact: true })).toBeVisible()
+  await op.ctx.close()
 
   // 7. Sign out and back in with a new code: the same person, a new session, no second account.
   await page.getByTestId('user-menu-trigger').first().click()

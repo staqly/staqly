@@ -40,13 +40,17 @@ import { UserAvatar } from './user-avatar'
 const ROLE_HELP: Record<Role, string> = {
   viewer: 'Sees posts, channels and activity. Changes nothing.',
   editor: 'Writes, schedules and publishes posts. No channels, keys or people.',
+  operator:
+    'Manages content, channels, schedules, webhooks and alerts. Includes own integration keys; no workspace settings, people or billing.',
   admin: 'Everything in this workspace, including channels, API keys and people.',
   owner: 'Like an admin, and can also make or remove owners.',
 }
 
 /** Roles this person may hand out: owners any, admins up to admin. */
 function assignable(myRole: string): Role[] {
-  return myRole === 'owner' ? ['viewer', 'editor', 'admin', 'owner'] : ['viewer', 'editor', 'admin']
+  return myRole === 'owner'
+    ? ['viewer', 'editor', 'operator', 'admin', 'owner']
+    : ['viewer', 'editor', 'operator', 'admin']
 }
 
 export function MembersPage() {

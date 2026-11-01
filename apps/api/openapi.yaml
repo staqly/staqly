@@ -1642,7 +1642,7 @@ paths:
     get:
       operationId: listAPIKeys
       tags: [auth]
-      summary: List API keys (admin)
+      summary: List API keys (admin, or own keys with integrations:manage)
       responses:
         "200":
           description: OK
@@ -1660,7 +1660,7 @@ paths:
     post:
       operationId: createAPIKey
       tags: [auth]
-      summary: Create a scoped API key (admin). The raw key is returned once.
+      summary: Create a scoped API key (admin or integrations:manage). The raw key is returned once.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
@@ -1688,7 +1688,7 @@ paths:
     delete:
       operationId: revokeAPIKey
       tags: [auth]
-      summary: Revoke an API key (admin)
+      summary: Revoke an API key (admin, or own keys with integrations:manage)
       parameters:
         - { $ref: "#/components/parameters/id" }
         - { $ref: "#/components/parameters/idempotencyKey" }
@@ -1704,7 +1704,7 @@ paths:
     post:
       operationId: rotateAPIKey
       tags: [auth]
-      summary: Revoke a key and issue a replacement with the same name and scopes (admin)
+      summary: Rotate an API key (admin, or own keys with integrations:manage)
       description: Cloud only; the Community Edition (local mode) has no API keys (409).
       parameters:
         - { $ref: "#/components/parameters/id" }
@@ -3340,7 +3340,7 @@ paths:
       description: >-
         Recorded automatically: MCP clients by their clientInfo (Claude Code, Codex, Cursor...), REST clients by
         their User-Agent (an SDK's appended user agent names the agent), per credential. Browsers are not agents.
-        Needs admin: it names the API keys agents use. At most 200 agents are kept per workspace.
+        Needs admin or integrations:manage. Non-admins need a browser session and see only agents using their own keys. At most 200 agents are kept per workspace.
       responses:
         "200":
           description: OK
@@ -4939,8 +4939,8 @@ components:
         schedules, publishes, cancels, retries a target or reports a custom target's result.
         Deleting needs its own scope: `posts:delete` deletes posts and media, `collections:delete`
         deletes collections; the `:write` scopes never imply them. `channels:manage` and
-        `alerts:manage` hold credentials. Purging stays `admin`. Dashboard sessions and the Community Edition's access token hold every scope.
-      enum: ["collections:read", "collections:write", "collections:delete", "posts:read", "posts:write", "posts:delete", "posts:publish", "channels:read", "channels:manage", "schedules:manage", "media:read", "media:write", "webhooks:manage", "alerts:manage", "events:read", admin]
+        `alerts:manage` hold credentials. `integrations:manage` lets signed-in people manage their own API keys and agents; keys cannot exceed their permissions. Guest keys are bound to their creating session and cannot outlive it. Purging stays `admin`. Dashboard sessions and the Community Edition's access token hold every scope.
+      enum: ["collections:read", "collections:write", "collections:delete", "posts:read", "posts:write", "posts:delete", "posts:publish", "channels:read", "channels:manage", "schedules:manage", "media:read", "media:write", "webhooks:manage", "alerts:manage", "events:read", "integrations:manage", admin]
 
     Plan:
       type: object
@@ -5003,8 +5003,8 @@ components:
 
     Role:
       type: string
-      enum: [owner, admin, editor, viewer]
-      description: "viewer: read; editor: write, schedule and publish; admin: everything in the workspace; owner: admin who may also manage owners"
+      enum: [owner, admin, operator, editor, viewer]
+      description: "viewer: read; editor: write, schedule and publish; operator: manage content, channels and automation without workspace administration; admin: everything in the workspace; owner: admin who may also manage owners"
     User:
       type: object
       required: [id, name, email, avatar_url]

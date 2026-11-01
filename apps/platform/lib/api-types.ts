@@ -1283,10 +1283,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List API keys (admin) */
+        /** List API keys (admin, or own keys with integrations:manage) */
         get: operations["listAPIKeys"];
         put?: never;
-        /** Create a scoped API key (admin). The raw key is returned once. */
+        /** Create a scoped API key (admin or integrations:manage). The raw key is returned once. */
         post: operations["createAPIKey"];
         delete?: never;
         options?: never;
@@ -1304,7 +1304,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Revoke an API key (admin) */
+        /** Revoke an API key (admin, or own keys with integrations:manage) */
         delete: operations["revokeAPIKey"];
         options?: never;
         head?: never;
@@ -1321,7 +1321,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Revoke a key and issue a replacement with the same name and scopes (admin)
+         * Rotate an API key (admin, or own keys with integrations:manage)
          * @description Cloud only; the Community Edition (local mode) has no API keys (409).
          */
         post: operations["rotateAPIKey"];
@@ -2824,7 +2824,7 @@ export interface paths {
         };
         /**
          * Agents seen talking to the workspace, most recently active first
-         * @description Recorded automatically: MCP clients by their clientInfo (Claude Code, Codex, Cursor...), REST clients by their User-Agent (an SDK's appended user agent names the agent), per credential. Browsers are not agents. Needs admin: it names the API keys agents use. At most 200 agents are kept per workspace.
+         * @description Recorded automatically: MCP clients by their clientInfo (Claude Code, Codex, Cursor...), REST clients by their User-Agent (an SDK's appended user agent names the agent), per credential. Browsers are not agents. Needs admin or integrations:manage. Non-admins need a browser session and see only agents using their own keys. At most 200 agents are kept per workspace.
          */
         get: operations["listAgents"];
         put?: never;
@@ -4203,10 +4203,10 @@ export interface components {
          *     schedules, publishes, cancels, retries a target or reports a custom target's result.
          *     Deleting needs its own scope: `posts:delete` deletes posts and media, `collections:delete`
          *     deletes collections; the `:write` scopes never imply them. `channels:manage` and
-         *     `alerts:manage` hold credentials. Purging stays `admin`. Dashboard sessions and the Community Edition's access token hold every scope.
+         *     `alerts:manage` hold credentials. `integrations:manage` lets signed-in people manage their own API keys and agents; keys cannot exceed their permissions. Guest keys are bound to their creating session and cannot outlive it. Purging stays `admin`. Dashboard sessions and the Community Edition's access token hold every scope.
          * @enum {string}
          */
-        Scope: "collections:read" | "collections:write" | "collections:delete" | "posts:read" | "posts:write" | "posts:delete" | "posts:publish" | "channels:read" | "channels:manage" | "schedules:manage" | "media:read" | "media:write" | "webhooks:manage" | "alerts:manage" | "events:read" | "admin";
+        Scope: "collections:read" | "collections:write" | "collections:delete" | "posts:read" | "posts:write" | "posts:delete" | "posts:publish" | "channels:read" | "channels:manage" | "schedules:manage" | "media:read" | "media:write" | "webhooks:manage" | "alerts:manage" | "events:read" | "integrations:manage" | "admin";
         Plan: {
             /**
              * @description starter, plus, pro or business; unlocked (Community Edition)
@@ -4305,10 +4305,10 @@ export interface components {
             active: boolean;
         };
         /**
-         * @description viewer: read; editor: write, schedule and publish; admin: everything in the workspace; owner: admin who may also manage owners
+         * @description viewer: read; editor: write, schedule and publish; operator: manage content, channels and automation without workspace administration; admin: everything in the workspace; owner: admin who may also manage owners
          * @enum {string}
          */
-        Role: "owner" | "admin" | "editor" | "viewer";
+        Role: "owner" | "admin" | "operator" | "editor" | "viewer";
         User: {
             id: string;
             /** @description The person's name (from Google or set by them); in the Community Edition the computer's user name */

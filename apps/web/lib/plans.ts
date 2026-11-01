@@ -187,7 +187,7 @@ export const COMPARE: { category: string; rows: CompareRow[] }[] = [
         hint: 'Each member is billed per user, whatever the role; agents are free',
         values: ['Per user', 'Per user', 'Per user', 'Per user'],
       },
-      { label: 'Roles: owner, admin, editor, viewer', values: [true, true, true, true] },
+      { label: 'Roles: owner, admin, operator, editor, viewer', values: [true, true, true, true] },
       { label: 'Sign-in with Google, email code or a passkey', values: [true, true, true, true] },
     ],
   },

@@ -405,6 +405,17 @@ func (s *Service) AuthenticateAPIKey(ctx context.Context, raw string) (Principal
 		}
 		p.Scopes, p.UserID, p.Role = intersectScopes(scopes, up.Scopes), up.UserID, up.Role
 	}
+	if k.GuestSessionID.Valid {
+		session, err := s.Q.GetSession(ctx, db.GetSessionParams{WorkspaceID: k.WorkspaceID, ID: k.GuestSessionID.String})
+		if err != nil || session.RevokedAt.Valid || session.ExpiresAt <= now || session.GuestRole == "" || session.UserID.String != p.UserID {
+			return Principal{}, ErrUnauthorized
+		}
+		p.Guest = true
+		p.Scopes = intersectScopes(p.Scopes, RoleScopes[session.GuestRole])
+		if roleRank(session.GuestRole) < roleRank(p.Role) {
+			p.Role = session.GuestRole
+		}
+	}
 	s.trackActive(p)
 	return p, nil
 }
@@ -757,10 +768,7 @@ func errLocalNoRecovery() error {
 const maxKeyLifetime = 365 * 24 * time.Hour
 
 func (s *Service) CreateAPIKey(ctx context.Context, p Principal, in CreateAPIKeyInput) (APIKey, error) {
-	if err := notGuest(p); err != nil {
-		return APIKey{}, err
-	}
-	if err := p.require(ScopeAdmin); err != nil {
+	if err := requireKeyManager(p); err != nil {
 		return APIKey{}, err
 	}
 	// Local agents need no key, and a key would let another device in through the exposed dashboard without
@@ -776,6 +784,11 @@ func (s *Service) CreateAPIKey(ctx context.Context, p Principal, in CreateAPIKey
 	if err != nil {
 		return APIKey{}, err
 	}
+	for _, scope := range scopes {
+		if !p.Has(scope) {
+			return APIKey{}, forbidden("a key cannot exceed your permissions")
+		}
+	}
 	// Every key expires within a year: without expires_at it gets the full year, and a later date is refused.
 	longest := s.Now().UTC().Add(maxKeyLifetime)
 	e := formatTime(longest)
@@ -790,6 +803,15 @@ func (s *Service) CreateAPIKey(ctx context.Context, p Principal, in CreateAPIKey
 		}
 		if e > formatTime(longest.Add(time.Hour)) {
 			return APIKey{}, invalid("expires_at", "can be at most a year from now")
+		}
+	}
+	if p.Guest {
+		session, err := s.Q.GetSession(ctx, db.GetSessionParams{WorkspaceID: p.WorkspaceID, ID: p.ID})
+		if err != nil || session.RevokedAt.Valid || session.ExpiresAt <= s.now() || session.GuestRole == "" {
+			return APIKey{}, ErrUnauthorized
+		}
+		if e > session.ExpiresAt {
+			e = session.ExpiresAt
 		}
 	}
 	exp := &e
@@ -816,7 +838,11 @@ func (s *Service) createKey(ctx context.Context, q *db.Queries, p Principal, nam
 	}
 	key, err := s.insertKey(ctx, q, p, name, scopes, exp)
 	if err == nil && p.UserID != "" {
-		err = q.SetAPIKeyCreator(ctx, db.SetAPIKeyCreatorParams{CreatedByUserID: nullStr(p.UserID), ID: key.ID})
+		var guestSession sql.NullString
+		if p.Guest {
+			guestSession = nullStr(p.ID)
+		}
+		err = q.SetAPIKeyAccess(ctx, db.SetAPIKeyAccessParams{CreatedByUserID: nullStr(p.UserID), GuestSessionID: guestSession, WorkspaceID: p.WorkspaceID, ID: key.ID})
 	}
 	return key, err
 }
@@ -843,22 +869,24 @@ func (s *Service) insertKey(ctx context.Context, q *db.Queries, p Principal, nam
 }
 
 func (s *Service) ListAPIKeys(ctx context.Context, p Principal) ([]APIKey, error) {
-	if err := p.require(ScopeAdmin); err != nil {
+	if err := requireKeyManager(p); err != nil {
 		return nil, err
 	}
 	rows, err := s.Q.ListAPIKeys(ctx, p.WorkspaceID)
 	out := []APIKey{}
 	for _, r := range rows {
-		out = append(out, toAPIKey(r))
+		if canManageKey(p, r) {
+			out = append(out, toAPIKey(r))
+		}
 	}
 	return out, err
 }
 
 func (s *Service) RevokeAPIKey(ctx context.Context, p Principal, id string) error {
-	if err := p.require(ScopeAdmin); err != nil {
+	if err := requireKeyManager(p); err != nil {
 		return err
 	}
-	if err := s.notOwnersKey(ctx, p, id); err != nil {
+	if err := s.checkKeyAccess(ctx, p, id); err != nil {
 		return err
 	}
 	return s.tx(ctx, func(q *db.Queries) error {
@@ -875,6 +903,47 @@ func (s *Service) RevokeAPIKey(ctx context.Context, p Principal, id string) erro
 		_, err = s.emit(ctx, q, p, "api_key.revoked", "", "", map[string]any{"api_key_id": id})
 		return err
 	})
+}
+
+// A guest manages only keys from this session, never the account owner's other keys.
+func canManageKey(p Principal, k db.ApiKey) bool {
+	if p.Has(ScopeAdmin) {
+		return true
+	}
+	return p.UserID != "" && k.CreatedByUserID.String == p.UserID &&
+		(!p.Guest || k.GuestSessionID.String == p.ID)
+}
+
+// GrantableKeyScopes is the permission ceiling shown by REST and MCP key forms.
+func (p Principal) GrantableKeyScopes() []string {
+	scopes := []string{}
+	for _, scope := range AllScopes {
+		if p.Has(scope) {
+			scopes = append(scopes, scope)
+		}
+	}
+	return scopes
+}
+
+func requireKeyManager(p Principal) error {
+	if err := p.require(ScopeIntegrationsManage); err != nil {
+		return err
+	}
+	if !p.Has(ScopeAdmin) && (p.Kind != PrincipalSession || p.UserID == "") {
+		return forbidden("managing your integration keys requires a signed-in person")
+	}
+	return nil
+}
+
+func (s *Service) checkKeyAccess(ctx context.Context, p Principal, id string) error {
+	if !p.Has(ScopeAdmin) {
+		k, err := s.Q.GetAPIKey(ctx, db.GetAPIKeyParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if err != nil || !canManageKey(p, k) {
+			return notFound("api key")
+		}
+		return nil
+	}
+	return s.notOwnersKey(ctx, p, id)
 }
 
 // notOwnersKey: an admin manages admins' and editors' keys, not an owner's (an owner's key can carry the
@@ -896,13 +965,13 @@ func (s *Service) notOwnersKey(ctx context.Context, p Principal, id string) erro
 
 // RotateAPIKey revokes a key and issues a replacement with the same name and scopes.
 func (s *Service) RotateAPIKey(ctx context.Context, p Principal, id string) (APIKey, error) {
-	if err := p.require(ScopeAdmin); err != nil {
+	if err := requireKeyManager(p); err != nil {
 		return APIKey{}, err
 	}
 	if s.Cfg.Mode == ModeLocal {
 		return APIKey{}, errLocalNoKeys() // a rotation mints a key like CreateAPIKey
 	}
-	if err := s.notOwnersKey(ctx, p, id); err != nil {
+	if err := s.checkKeyAccess(ctx, p, id); err != nil {
 		return APIKey{}, err
 	}
 	var key APIKey
@@ -920,11 +989,21 @@ func (s *Service) RotateAPIKey(ctx context.Context, p Principal, id string) (API
 		}
 		var scopes []string
 		_ = json.Unmarshal([]byte(old.Scopes), &scopes)
+		if !p.Has(ScopeAdmin) {
+			scopes = intersectScopes(scopes, p.Scopes)
+			if len(scopes) == 0 {
+				return forbidden("the key has no permissions you can grant")
+			}
+		}
 		var exp *string
 		if old.ExpiresAt.Valid {
 			exp = &old.ExpiresAt.String
 		}
 		if key, err = s.createKey(ctx, q, p, old.Name, scopes, exp); err != nil {
+			return err
+		}
+		// Rotation must preserve the original creator and guest lifetime, even when an admin rotates it.
+		if err := q.SetAPIKeyAccess(ctx, db.SetAPIKeyAccessParams{CreatedByUserID: old.CreatedByUserID, GuestSessionID: old.GuestSessionID, WorkspaceID: p.WorkspaceID, ID: key.ID}); err != nil {
 			return err
 		}
 		_, err = s.emit(ctx, q, p, "api_key.rotated", "", "", map[string]any{"old_key_id": id, "new_key_id": key.ID,

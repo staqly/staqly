@@ -402,8 +402,9 @@ export function IntegrationsPage() {
       {view === 'agents' ? (
         <div className="mt-6 grid grid-cols-1 gap-4">
           {isLocal && <AccessTokenCard />}
-          {/* The list of agents and API connections is the admins' (the admin scope). */}
-          {can('admin') && <ConnectedAgents selectedId={agent?.id ?? null} onSelect={setAgent} />}
+          {(can('admin') || can('integrations:manage')) && (
+            <ConnectedAgents selectedId={agent?.id ?? null} onSelect={setAgent} />
+          )}
           <RecentActivity agent={agent} onShowAll={() => setAgent(null)} />
         </div>
       ) : (

@@ -66,6 +66,7 @@ type ApiKey struct {
 	ExpiresAt       sql.NullString `json:"expires_at"`
 	RevokedAt       sql.NullString `json:"revoked_at"`
 	CreatedByUserID sql.NullString `json:"created_by_user_id"`
+	GuestSessionID  sql.NullString `json:"guest_session_id"`
 }
 
 type AssistantChat struct {

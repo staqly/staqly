@@ -32,29 +32,30 @@ import (
 
 // Scopes. Sessions (the dashboard) implicitly hold every scope.
 const (
-	ScopeCollectionsRead   = "collections:read"
-	ScopeCollectionsWrite  = "collections:write"
-	ScopeCollectionsDelete = "collections:delete" // deleting is never implied by :write
-	ScopePostsRead         = "posts:read"
-	ScopePostsWrite        = "posts:write"   // create, edit, duplicate
-	ScopePostsDelete       = "posts:delete"  // delete posts and media
-	ScopePostsPublish      = "posts:publish" // schedule, publish now, cancel, retry a target, report a custom target's result
-	ScopeMediaRead         = "media:read"
-	ScopeMediaWrite        = "media:write"
-	ScopeEventsRead        = "events:read"
-	ScopeChannelsRead      = "channels:read"   // list connected channels and the provider catalog
-	ScopeChannelsManage    = "channels:manage" // connect, reconnect, remove channels: tokens live here
-	ScopeSchedulesManage   = "schedules:manage"
-	ScopeWebhooksManage    = "webhooks:manage"
-	ScopeAlertsManage      = "alerts:manage" // alert channels hold secrets: not in the default key
-	ScopeAdmin             = "admin"
+	ScopeCollectionsRead    = "collections:read"
+	ScopeCollectionsWrite   = "collections:write"
+	ScopeCollectionsDelete  = "collections:delete" // deleting is never implied by :write
+	ScopePostsRead          = "posts:read"
+	ScopePostsWrite         = "posts:write"   // create, edit, duplicate
+	ScopePostsDelete        = "posts:delete"  // delete posts and media
+	ScopePostsPublish       = "posts:publish" // schedule, publish now, cancel, retry a target, report a custom target's result
+	ScopeMediaRead          = "media:read"
+	ScopeMediaWrite         = "media:write"
+	ScopeEventsRead         = "events:read"
+	ScopeChannelsRead       = "channels:read"   // list connected channels and the provider catalog
+	ScopeChannelsManage     = "channels:manage" // connect, reconnect, remove channels: tokens live here
+	ScopeSchedulesManage    = "schedules:manage"
+	ScopeWebhooksManage     = "webhooks:manage"
+	ScopeAlertsManage       = "alerts:manage"       // alert channels hold secrets: not in the default key
+	ScopeIntegrationsManage = "integrations:manage" // own API keys and connected agents; key management needs a session
+	ScopeAdmin              = "admin"
 )
 
 var AllScopes = []string{
 	ScopeCollectionsRead, ScopeCollectionsWrite, ScopeCollectionsDelete,
 	ScopePostsRead, ScopePostsWrite, ScopePostsDelete, ScopePostsPublish,
 	ScopeChannelsRead, ScopeChannelsManage, ScopeSchedulesManage, ScopeMediaRead, ScopeMediaWrite,
-	ScopeWebhooksManage, ScopeAlertsManage, ScopeEventsRead, ScopeAdmin,
+	ScopeWebhooksManage, ScopeAlertsManage, ScopeEventsRead, ScopeIntegrationsManage, ScopeAdmin,
 }
 
 // AdminKeyScopes are granted to the key created at sign-up and to the new key
@@ -93,7 +94,7 @@ type Principal struct {
 	// UserID: a person signed in with Google (cloud accounts, accounts.go); "" for local mode, API keys
 	// without a creator and sessions from before accounts.
 	UserID string
-	// Role: that person's role in WorkspaceID (owner, admin, editor, viewer); their Scopes come from it.
+	// Role: that person's role in WorkspaceID (owner, admin, operator, editor, viewer); their Scopes come from it.
 	Role string
 	// Guest: a session from a guest link (CreateGuestLink); Role and Scopes are capped at the link's role.
 	Guest bool
