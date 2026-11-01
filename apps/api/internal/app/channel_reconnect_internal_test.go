@@ -161,3 +161,31 @@ func TestUnrenewableTokenNeedsReconnectWhenItRunsOut(t *testing.T) {
 		t.Fatalf("after it ran out: %q, %d events", row.Status, len(evs.Data))
 	}
 }
+
+// Was a bug: a few seconds without the network (DNS failing as a laptop wakes up) used up the refresh job's
+// attempts and marked the channel needs_reconnect, though nothing refused its sign-in. It stays connected and
+// the refresh runs again later.
+func TestRefreshFailingOfflineKeepsTheChannel(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	sealed, err := s.seal(providers.Credentials{"access_token": "at", "refresh_token": "rt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.W.CreateChannel(ctx, db.CreateChannelParams{ID: "chn_x", WorkspaceID: p.WorkspaceID, Provider: "x", Name: "Brand",
+		Status: "connected", Credentials: sealed, Settings: "{}", CreatedAt: s.now(), UpdatedAt: s.now()}); err != nil {
+		t.Fatal(err)
+	}
+	s.jobFailed(ctx, "refresh_channel", jobArgs{WorkspaceID: p.WorkspaceID, Payload: jobPayload{ChannelID: "chn_x"}},
+		errors.New(`X could not be reached: dial tcp: lookup api.x.com: no such host`))
+
+	row, _ := s.Q.GetChannelByID(ctx, "chn_x")
+	evs, _ := s.ListEvents(ctx, p, EventFilter{ChannelID: "chn_x", Type: "channel.needs_reconnect"})
+	if row.Status != "connected" || len(evs.Data) != 0 {
+		t.Fatalf("offline refresh: %q, %d needs_reconnect events", row.Status, len(evs.Data))
+	}
+	want := s.Now().Add(refreshRetryDelay)
+	if js := jobsByKey(t, s, "refresh_channel:chn_x"); len(js) != 1 || js[0].ScheduledAt.Sub(want).Abs() > time.Minute {
+		t.Fatalf("refresh jobs %+v, want one at %s", js, want)
+	}
+}
