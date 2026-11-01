@@ -66,7 +66,7 @@ export function NotificationPrefsCard() {
         {prefs.isLoading ? (
           <Skeleton className="h-48" />
         ) : prefs.error ? (
-          <ErrorState error={prefs.error} onRetry={() => prefs.refetch()} />
+          <ErrorState bare error={prefs.error} onRetry={() => prefs.refetch()} />
         ) : current ? (
           <>
             {!current.mail_ready && (

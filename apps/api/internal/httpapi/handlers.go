@@ -183,7 +183,7 @@ func (s *Server) currentSession(w http.ResponseWriter, r *http.Request) {
 		"scopes": scopes}, "csrf_token": csrf,
 		// The person (sidebar), their role here, and the workspaces they can switch to. A development
 		// server's API key session (no person) keeps the dashboard from before accounts.
-		"user": s.svc.CurrentUser(r.Context(), p), "role": role,
+		"user": s.svc.CurrentUser(r.Context(), p), "role": role, "guest": p.Guest,
 		"accounts_enabled": s.svc.AccountsEnabled() && (p.UserID != "" || !s.svc.LegacySignIn()), "workspaces": workspaces,
 		// false sends the dashboard to the welcome wizard once (POST /v1/session/onboarded ends it).
 		"onboarded": s.svc.Onboarded(r.Context(), p),

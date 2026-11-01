@@ -124,7 +124,7 @@ export function SignInMethodsCard() {
       {methods.isPending ? (
         <Skeleton className="h-16" />
       ) : methods.isError ? (
-        <ErrorState error={methods.error} onRetry={() => void methods.refetch()} />
+        <ErrorState bare error={methods.error} onRetry={() => void methods.refetch()} />
       ) : (
         <ul className="grid divide-y" data-testid="sign-in-methods">
           {list.map((m) => (

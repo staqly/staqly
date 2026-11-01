@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, errorMessage, exportDownloadUrl, type WorkspaceExport } from '@/lib/api'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
-import { qk, useBackupAccess } from '@/lib/queries'
+import { qk, useBackupAccess, useRole } from '@/lib/queries'
 
 import { SettingsCard as Card } from './settings-card'
 import { SettingsNav } from './settings-nav'
@@ -32,6 +32,7 @@ const DOCKER_UPLOADS = `docker run --rm --volumes-from staqly:ro -v "$PWD":/out 
  */
 export function BackupCard() {
   const access = useBackupAccess()
+  const { canManagePeople } = useRole()
 
   if (access === 'local') {
     return (
@@ -64,6 +65,21 @@ export function BackupCard() {
             <DocsLink path="/self-hosting/backup-and-restore">the backup guide</DocsLink>.
           </p>
         </Tabs>
+      </Card>
+    )
+  }
+
+  // Backups hold the whole workspace: its owners and admins make them (the server asks for the admin scope).
+  if (!canManagePeople) {
+    return (
+      <Card
+        title="Backups"
+        icon={<DatabaseBackup />}
+        description="A backup is a ZIP of the whole workspace: collections, posts, channels, schedules, events and media."
+      >
+        <p className="text-sm text-muted-foreground" data-testid="backups-admins-only">
+          Owners and admins of this workspace make and download its backups. Ask one of them if you need a copy.
+        </p>
       </Card>
     )
   }

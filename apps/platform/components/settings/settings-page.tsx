@@ -156,7 +156,7 @@ function DevicesCard() {
       {sessions.isLoading ? (
         <Skeleton className="h-20" />
       ) : sessions.error ? (
-        <ErrorState error={sessions.error} onRetry={() => sessions.refetch()} />
+        <ErrorState bare error={sessions.error} onRetry={() => sessions.refetch()} />
       ) : list.length === 0 ? (
         <div
           className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground"
@@ -326,16 +326,17 @@ function RecoveryCard() {
 
 export function SettingsPage() {
   const { isCloud } = useMode()
-  const { accountsEnabled } = useRole()
+  const { accountsEnabled, canManagePeople } = useRole()
 
   return (
     <PageContainer>
       <SettingsHeader />
       <SettingsNav className="mt-4" />
       <div className="mt-6 grid gap-4">
-        <WorkspaceCard />
+        {/* The workspace and its devices are its owners' and admins' (the server asks for the admin scope). */}
+        {canManagePeople && <WorkspaceCard />}
         <ThemeCard />
-        <DevicesCard />
+        {canManagePeople && <DevicesCard />}
         {/* People in an account recover access with their sign-in methods; the key is for workspaces without one. */}
         {isCloud && !accountsEnabled && <RecoveryCard />}
       </div>

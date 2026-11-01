@@ -8405,6 +8405,8 @@ export interface operations {
                         csrf_token: string;
                         user?: components["schemas"]["User"];
                         role?: components["schemas"]["Role"];
+                        /** @description Signed in with a guest link: time-limited access to this person's account, which cannot change the account or the workspace settings */
+                        guest?: boolean;
                         /** @description Cloud accounts with Google sign-in are on */
                         accounts_enabled?: boolean;
                         /** @description Workspaces this person can switch to */

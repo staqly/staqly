@@ -298,6 +298,9 @@ func (s *Service) FinishPasskeySignIn(ctx context.Context, challengeID string, r
 
 // RenamePasskey changes the name a person gave one of their passkeys.
 func (s *Service) RenamePasskey(ctx context.Context, p Principal, id, name string) ([]SignInMethod, error) {
+	if err := notGuest(p); err != nil {
+		return nil, err
+	}
 	if err := accountsOnly(s); err != nil {
 		return nil, err
 	}

@@ -161,7 +161,7 @@ export function QueueCard() {
         {jobs.isLoading ? (
           <SkeletonList count={3} className="h-12 rounded-lg" />
         ) : jobs.error && !jobs.data ? (
-          <ErrorState title="Could not load the queue" error={jobs.error} onRetry={() => void jobs.refetch()} />
+          <ErrorState bare title="Could not load the queue" error={jobs.error} onRetry={() => void jobs.refetch()} />
         ) : (jobs.data?.length ?? 0) === 0 ? (
           <p className="text-sm text-muted-foreground">
             {status ? `No ${status} jobs.` : 'Nothing in the queue. Jobs appear when a post is scheduled or published.'}

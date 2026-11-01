@@ -237,6 +237,7 @@ type sessionOut struct {
 	Workspace  app.Workspace     `json:"workspace"`
 	User       app.User          `json:"user"`
 	Role       string            `json:"role"`
+	Guest      bool              `json:"guest"`
 	Workspaces []app.MyWorkspace `json:"workspaces"`
 	Principal  struct {
 		Scopes []string `json:"scopes"`
@@ -1094,7 +1095,7 @@ func TestGuestLink(t *testing.T) {
 		return g
 	}
 	guest := redeem(201)
-	if s := e.session(guest); s.User.Email != ana.Email || s.Workspace.ID != mine.Workspace.ID || s.Role != app.RoleEditor ||
+	if s := e.session(guest); s.User.Email != ana.Email || s.Workspace.ID != mine.Workspace.ID || s.Role != app.RoleEditor || !s.Guest ||
 		slices.Contains(s.Principal.Scopes, app.ScopeAdmin) {
 		t.Fatalf("guest session: %+v", s)
 	}
@@ -1104,6 +1105,12 @@ func TestGuestLink(t *testing.T) {
 	e.as(guest, "POST", "/v1/device-links", nil, 403, nil)
 	e.as(guest, "POST", "/v1/invitations", map[string]any{"email": eve.Email, "role": app.RoleViewer}, 403, nil)
 	e.as(guest, "POST", "/v1/account/workspaces", map[string]any{"name": "Mine"}, 403, nil)
+	// The account stays its owner's: profile and notifications too.
+	e.as(guest, "PATCH", "/v1/account", map[string]any{"name": "Guest"}, 403, nil)
+	e.as(guest, "PUT", "/v1/account/notifications", map[string]any{"scope": "mine"}, 403, nil)
+	if e.session(owner).Guest {
+		t.Fatal("the owner's own session is not a guest")
+	}
 	e.as(owner, "POST", "/v1/device-links", nil, 201, nil) // the owner's own session is not a guest
 	redeem(201)
 	redeem(410) // two uses
