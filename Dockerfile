@@ -55,6 +55,11 @@ COPY apps/api/go.mod apps/api/go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY apps/api/ .
 RUN find web -mindepth 1 ! -name .gitkeep -delete
+# Compiles everything but the dashboard while the export stage builds it: the build below then only
+# re-embeds web/ and links (the go-build cache mount is shared within one build).
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath ./cmd/server ./cmd/mcp-stdio
 COPY --from=export /repo/apps/platform/out ./web/
 
 # modernc.org/sqlite is pure Go: CGO off, fully static binaries.
