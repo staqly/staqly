@@ -519,11 +519,38 @@ function RetryTarget({ post, target, className }: { post: Post; target: PostTarg
   )
 }
 
+/** Taking a channel down: removing, removed, failed with the platform's error (as text), or remove by hand. */
+function TargetRemoval({ target }: { target: PostTarget }) {
+  switch (target.removal) {
+    case 'removing':
+      return <span className="text-muted-foreground">Removing...</span>
+    case 'removed':
+      return (
+        <span
+          className="text-muted-foreground"
+          title={target.removed_at ? formatDateTime(target.removed_at) : undefined}
+        >
+          Removed
+        </span>
+      )
+    case 'failed':
+      return (
+        <span className="text-destructive" data-testid="removal-error">
+          Removal failed{target.removal_error ? `: ${target.removal_error}` : ''}
+        </span>
+      )
+    case 'manual':
+      return <span className="text-amber-700 dark:text-amber-400">Remove by hand: this platform has no delete</span>
+    default:
+      return null
+  }
+}
+
 /**
  * How one channel of a saved post went: state, the link once published, the error, and Retry when failed (unless
  * the card shows Retry in its own header: `retry={false}`).
  */
-function TargetStatus({ post, target, retry = true }: { post: Post; target: PostTarget; retry?: boolean }) {
+export function TargetStatus({ post, target, retry = true }: { post: Post; target: PostTarget; retry?: boolean }) {
   const url = target.external_url ? safeHttpUrl(target.external_url) : undefined
 
   return (
@@ -545,6 +572,7 @@ function TargetStatus({ post, target, retry = true }: { post: Post; target: Post
           {timeAgo(target.published_at)}
         </span>
       )}
+      <TargetRemoval target={target} />
       {retry && target.status === 'failed' && <RetryTarget post={post} target={target} className="ml-auto" />}
       {target.error && <DeliveryError error={target.error} />}
       {(target.replies?.length ?? 0) > 0 && (
@@ -1788,7 +1816,7 @@ export function ComposerForm({
             {post ? (
               <SheetDescription asChild>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <PostStatusBadge status={post.status} />
+                  <PostStatusBadge status={post.status} unpublishedAt={post.unpublished_at} />
                   <span>{post.collection_name}</span>
                   {post.publish_at && (
                     <span title={formatDateTime(post.publish_at)}>

@@ -43,6 +43,7 @@ func (t *tools) addPostTools(s *mcp.Server) {
 	add(s, t, &mcp.Tool{Name: "schedule_post", Description: "Set when a post goes out (RFC3339, in the future) and make it scheduled; the post needs at least one target. Requires posts:publish.",
 		Annotations: wr()}, t.schedulePost)
 	add(s, t, &mcp.Tool{Name: "publish_post", Description: "Publish a draft, scheduled or failed post now. Requires posts:publish.", Annotations: wr()}, t.publishPost)
+	add(s, t, &mcp.Tool{Name: "unpublish_post", Description: "Take a published post down from its channels: all the channels it is published on, or only channel_ids. The post stays as history; each target shows removal removing, then removed, failed (the platform refused) or manual (the platform has no delete: remove it yourself). Requires posts:publish.", Annotations: destructive()}, t.unpublishPost)
 	add(s, t, &mcp.Tool{Name: "cancel_post", Description: "Take a scheduled post off the schedule; it becomes a draft again. Requires posts:publish.", Annotations: wr()}, t.cancelPost)
 	add(s, t, &mcp.Tool{Name: "duplicate_post", Description: "Copy a post (content, media, tags, metadata, targets) into a new draft. Requires posts:write.", Annotations: wr()}, t.duplicatePost)
 	add(s, t, &mcp.Tool{Name: "delete_post", Description: "Delete a draft, scheduled or failed post (its event history is kept). A post that went out (published, publishing, or published on any channel) is history and cannot be deleted (conflict). Requires posts:delete (posts:write alone is not enough).", Annotations: destructive()}, t.deletePost)
@@ -338,6 +339,15 @@ func (t *tools) schedulePost(ctx context.Context, _ *mcp.CallToolRequest, in sch
 
 func (t *tools) publishPost(ctx context.Context, _ *mcp.CallToolRequest, in postRef) (*mcp.CallToolResult, any, error) {
 	return nil0(t.svc.PublishPost(ctx, t.principal(ctx), in.PostID))
+}
+
+type unpublishIn struct {
+	PostID     string   `json:"post_id" jsonschema:"post ID (pst_...)"`
+	ChannelIDs []string `json:"channel_ids,omitempty" jsonschema:"only these channels (chn_...); default every published one"`
+}
+
+func (t *tools) unpublishPost(ctx context.Context, _ *mcp.CallToolRequest, in unpublishIn) (*mcp.CallToolResult, any, error) {
+	return nil0(t.svc.UnpublishPost(ctx, t.principal(ctx), in.PostID, in.ChannelIDs))
 }
 
 func (t *tools) cancelPost(ctx context.Context, _ *mcp.CallToolRequest, in postRef) (*mcp.CallToolResult, any, error) {

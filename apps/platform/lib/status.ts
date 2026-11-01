@@ -7,6 +7,7 @@ import {
   LoaderCircle,
   PauseCircle,
   PlugZap,
+  Undo2,
   Unplug,
   type LucideIcon,
 } from 'lucide-react'
@@ -42,6 +43,9 @@ export const POST_STATUS_META: Record<PostStatus, StatusMeta> = {
   published: status('Published', 'success', BadgeCheck, 'Out on every channel'),
   failed: status('Failed', 'danger', CircleX, 'At least one channel failed; retry it or reschedule'),
 }
+
+/** A post that was published and then taken down from its channels (shown instead of Published). */
+export const UNPUBLISHED_META = status('Unpublished', 'neutral', Undo2, 'Taken down from its channels')
 
 /** One post on one channel. */
 export const TARGET_STATUS_META: Record<TargetStatus, StatusMeta> = {

@@ -15,6 +15,7 @@ import {
   PenSquare,
   Send,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -50,7 +51,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { api, type Collection, type Post, type PostQuery, type PostPage } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { canReschedule, isLocked, postTitle, publishedTargets, wentOut } from '@/lib/posts'
+import { canReschedule, canUnpublish, isLocked, postTitle, publishedTargets, wentOut } from '@/lib/posts'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
 import {
   invalidateAfterPostChange,
@@ -66,13 +67,21 @@ import { formatSchedule } from '@/lib/schedule'
 import { normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 
-import { PostStats, ShareDialog } from './post-actions'
+import { PostStats, ShareDialog, UnpublishDialog } from './post-actions'
 import { postHref, PostsQueryContext } from './post-href'
 
 /** Drag data of post rows: the ids being dragged, so a collection in the pane only accepts posts. */
 export const POST_DRAG = 'application/x-staqly-posts'
 
-export type PostAction = 'preview' | 'duplicate' | 'delete' | 'publish' | 'unschedule' | 'stats' | 'copy-link'
+export type PostAction =
+  | 'preview'
+  | 'duplicate'
+  | 'delete'
+  | 'unpublish'
+  | 'publish'
+  | 'unschedule'
+  | 'stats'
+  | 'copy-link'
 
 function CheckMark() {
   return (
@@ -223,7 +232,7 @@ export const PostRow = memo(function PostRow({
           >
             {postTitle(post)}
           </Link>
-          <PostStatusBadge status={post.status} />
+          <PostStatusBadge status={post.status} unpublishedAt={post.unpublished_at} />
         </span>
         <span className="mt-0.5 flex min-w-0 items-center gap-x-1.5 text-xs text-muted-foreground">
           {at && (
@@ -329,6 +338,7 @@ function RowMenu({
   const waiting = post.status === 'scheduled' || post.status === 'publishing'
   const canPublish = canReschedule(post) && (post.targets?.length ?? 0) > 0
   const canUnschedule = post.status === 'scheduled'
+  const unpublishable = canUnpublish(post)
   const links = (waiting ? [] : publishedTargets(post)).flatMap((t) => {
     const url = safeHttpUrl(t.external_url)
 
@@ -360,7 +370,7 @@ function RowMenu({
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>
-        {canWrite && (canPublish || canUnschedule) && (
+        {canWrite && (canPublish || canUnschedule || unpublishable) && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -372,6 +382,11 @@ function RowMenu({
               {canUnschedule && (
                 <DropdownMenuItem onSelect={() => onAction('unschedule', post)}>
                   <CalendarX2 /> Cancel schedule
+                </DropdownMenuItem>
+              )}
+              {unpublishable && (
+                <DropdownMenuItem onSelect={() => onAction('unpublish', post)}>
+                  <Undo2 /> Unpublish
                 </DropdownMenuItem>
               )}
             </DropdownMenuGroup>
@@ -519,7 +534,7 @@ function syncMovedPost(qc: QueryClient, post: Post) {
 export function usePostRowActions(query = '') {
   const qc = useQueryClient()
   const router = useRouter()
-  const [open, setOpen] = useState<{ action: 'preview' | 'stats' | 'delete'; post: Post } | null>(null)
+  const [open, setOpen] = useState<{ action: 'preview' | 'stats' | 'delete' | 'unpublish'; post: Post } | null>(null)
   const duplicate = useMutation({
     mutationFn: (p: Post) => api.duplicatePost(p.id),
     onSuccess: (p) => {
@@ -568,6 +583,7 @@ export function usePostRowActions(query = '') {
       case 'preview':
       case 'stats':
       case 'delete':
+      case 'unpublish':
         setOpen({ action, post })
         break
       case 'duplicate':
@@ -602,6 +618,7 @@ export function usePostRowActions(query = '') {
           </DialogContent>
         </Dialog>
       )}
+      {open?.action === 'unpublish' && <UnpublishDialog post={open.post} onClose={() => setOpen(null)} />}
       <ConfirmDialog
         open={open?.action === 'delete'}
         onOpenChange={close}

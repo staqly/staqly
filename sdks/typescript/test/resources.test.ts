@@ -336,6 +336,26 @@ const cases: Case[] = [
     path: '/v1/posts/pst_1/targets/ch_1/retry',
   },
   {
+    name: 'posts.unpublish all',
+    call: (c) => c.posts.unpublish('pst_1'),
+    method: 'POST',
+    path: '/v1/posts/pst_1/unpublish',
+  },
+  {
+    name: 'posts.unpublish empty list is sent',
+    call: (c) => c.posts.unpublish('pst_1', { channelIds: [] }),
+    method: 'POST',
+    path: '/v1/posts/pst_1/unpublish',
+    body: { channel_ids: [] },
+  },
+  {
+    name: 'posts.unpublish some',
+    call: (c) => c.posts.unpublish('pst_1', { channelIds: ['ch_1'] }),
+    method: 'POST',
+    path: '/v1/posts/pst_1/unpublish',
+    body: { channel_ids: ['ch_1'] },
+  },
+  {
     name: 'posts.reportResult published',
     call: (c) => c.posts.reportResult('pst_1', 'ch_1', { status: 'published', url: 'https://x/1', external_id: '42' }),
     method: 'POST',

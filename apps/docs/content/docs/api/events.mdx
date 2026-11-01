@@ -112,6 +112,9 @@ objects carry them in `data` (`data.channel`, `data.schedule`, `data.webhook`).
 | `post.reply_failed` | A reply was refused or ran out of retries; the parts after it are skipped | `channel_id`, `index`, `error` |
 | `post.published` | Every target is published | — |
 | `post.failed` | A target failed, so the post did | — |
+| `post.unpublished` | A published post was [taken down](/concepts#unpublish) | `channels` (the channel ids being removed) |
+| `post.target_removed` | One target was removed from its platform | `channel_id`, `channel` (as above) |
+| `post.target_remove_failed` | Removing a target failed | `channel_id`, `channel` (as above), `error` |
 | `post.deleted` | A post was deleted (its history is kept) | — |
 | `post.preview_shared` | A [preview link](/dashboard/share-a-preview) was made | `preview_id`, `expires_at` |
 | `post.feedback_added` | Someone commented on a preview (actor: their name) | `comment_id`, `author_name`, `body` (first 280 characters), `quote`; `channel_id` when it is about one channel |

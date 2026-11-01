@@ -624,6 +624,24 @@ class Posts(_Resource):
         )
         return _model(Post, r)
 
+    def unpublish(
+        self,
+        post_id: str,
+        *,
+        channel_ids: builtins.list[str] | None = None,
+        request_options: RequestOptions | None = None,
+    ) -> Post:
+        """Takes a published post down from its channels (all, or only `channel_ids`)."""
+        r = self._http.request(
+            RequestSpec(
+                "POST",
+                f"/v1/posts/{_q(post_id)}/unpublish",
+                json={"channel_ids": list(channel_ids)} if channel_ids is not None else None,
+                options=_opts(request_options),
+            )
+        )
+        return _model(Post, r)
+
     def report_result(
         self,
         post_id: str,

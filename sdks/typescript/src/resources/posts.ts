@@ -142,6 +142,16 @@ export class Posts extends APIResource {
     })
   }
 
+  /** Takes a published post down from its channels (all, or only `channelIds`). */
+  unpublish(id: string, input?: { channelIds?: string[] }, options?: RequestOptions): Promise<Post> {
+    return this.http.request({
+      method: 'POST',
+      path: `/v1/posts/${enc(id)}/unpublish`,
+      body: input?.channelIds !== undefined ? { channel_ids: input.channelIds } : undefined,
+      options,
+    })
+  }
+
   /**
    * Closes a target on your own automation (a channel of provider `custom`) that waits for a
    * result: `published` (with `url` / `external_id`) or `failed` (with `error`). 409 unless the

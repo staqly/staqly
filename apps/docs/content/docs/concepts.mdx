@@ -72,6 +72,7 @@ A post is one piece of content on its way to one or more channels.
 | `status` | `draft`, `scheduled`, `publishing`, `published` or `failed` (see [below](#status-lifecycle)). |
 | `publish_at` | When it goes out. A draft keeps the time as a note after a cancel. |
 | `published_at` | When the last target was published. |
+| `unpublished_at` | Set when the post was [taken down](#unpublish) from its channels; `unpublished_by` says who. The status stays `published`. |
 | `tags` | Labels such as `launch` or `client-a`; `GET /v1/tags` counts them. Every channel shares them: platforms with tags of their own (YouTube, Dev.to, Hashnode, Medium, WordPress) get them as their tags, your own automation gets them in `tags`, and every other channel gets them as hashtags at the end of the text (`#launch #clienta`), except those the text already has. |
 | `metadata` | Free JSON for your own use: prompt, model, campaign. |
 | `source` | Who created it: a client name, an agent, or `schedule:<name>` for posts a schedule fetched. |
@@ -202,6 +203,23 @@ stateDiagram-v2
 - A **published** post cannot be edited; **duplicate** it (`POST /v1/posts/{id}/duplicate`) into a
   new draft with the same content, media, tags, metadata and targets.
 - **Delete** keeps the post's events as history; **purge** (`admin`) erases them too.
+
+### Unpublish
+
+`POST /v1/posts/{id}/unpublish` (`posts:publish`) takes a published post down from all its channels, or
+only `channel_ids`. A job deletes it on each platform, thread parts first (newest first), then the post.
+The post stays `published` as history, with `unpublished_at` and `unpublished_by`. Each target gets a
+`removal`:
+
+| `removal` | Meaning |
+|---|---|
+| `removing` | The job is deleting it on the platform |
+| `removed` | Gone from the platform (`removed_at` says when) |
+| `failed` | The platform refused; `removal_error` says why. Call unpublish again to retry |
+| `manual` | The platform has no delete: remove it there yourself (the target keeps its link) |
+
+Which platforms delete through the API: see [the post in the dashboard](/dashboard/posts#unpublish).
+Events: `post.unpublished`, `post.target_removed`, `post.target_remove_failed`.
 
 ## Schedules
 

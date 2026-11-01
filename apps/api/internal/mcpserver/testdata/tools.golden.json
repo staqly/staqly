@@ -2810,6 +2810,38 @@
   },
   {
     "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Take a published post down from its channels: all the channels it is published on, or only channel_ids. The post stays as history; each target shows removal removing, then removed, failed (the platform refused) or manual (the platform has no delete: remove it yourself). Requires posts:publish.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_ids": {
+          "description": "only these channels (chn_...); default every published one",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "post_id": {
+          "description": "post ID (pst_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "unpublish_post"
+  },
+  {
+    "annotations": {
       "destructiveHint": false,
       "idempotentHint": false,
       "readOnlyHint": false

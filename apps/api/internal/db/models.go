@@ -380,6 +380,8 @@ type Post struct {
 	Thread        string         `json:"thread"`
 	CreatedByUser string         `json:"created_by_user"`
 	Title         string         `json:"title"`
+	UnpublishedAt sql.NullString `json:"unpublished_at"`
+	UnpublishedBy string         `json:"unpublished_by"`
 }
 
 type PostComment struct {
@@ -403,20 +405,23 @@ type PostComment struct {
 }
 
 type PostTarget struct {
-	PostID      string         `json:"post_id"`
-	ChannelID   string         `json:"channel_id"`
-	Content     sql.NullString `json:"content"`
-	Settings    string         `json:"settings"`
-	Status      string         `json:"status"`
-	ExternalID  string         `json:"external_id"`
-	ExternalUrl string         `json:"external_url"`
-	Error       string         `json:"error"`
-	Attempts    int64          `json:"attempts"`
-	PublishedAt sql.NullString `json:"published_at"`
-	UpdatedAt   string         `json:"updated_at"`
-	Replies     string         `json:"replies"`
-	Metrics     string         `json:"metrics"`
-	MetricsAt   sql.NullString `json:"metrics_at"`
+	PostID       string         `json:"post_id"`
+	ChannelID    string         `json:"channel_id"`
+	Content      sql.NullString `json:"content"`
+	Settings     string         `json:"settings"`
+	Status       string         `json:"status"`
+	ExternalID   string         `json:"external_id"`
+	ExternalUrl  string         `json:"external_url"`
+	Error        string         `json:"error"`
+	Attempts     int64          `json:"attempts"`
+	PublishedAt  sql.NullString `json:"published_at"`
+	UpdatedAt    string         `json:"updated_at"`
+	Replies      string         `json:"replies"`
+	Metrics      string         `json:"metrics"`
+	MetricsAt    sql.NullString `json:"metrics_at"`
+	Removal      string         `json:"removal"`
+	RemovalError string         `json:"removal_error"`
+	RemovedAt    sql.NullString `json:"removed_at"`
 }
 
 type PreviewLink struct {

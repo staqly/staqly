@@ -140,7 +140,7 @@ func (q *Queries) SearchPosts(ctx context.Context, s PostSearch) ([]Post, string
 		var p Post
 		var key string
 		if err := rows.Scan(&p.ID, &p.WorkspaceID, &p.CollectionID, &p.Content, &p.Media, &p.Status, &p.PublishAt, &p.PublishedAt,
-			&p.Tags, &p.Metadata, &p.Source, &p.ExternalRef, &p.Version, &p.CreatedAt, &p.UpdatedAt, &p.RepeatEvery, &p.RepeatOf, &p.Thread, &p.CreatedByUser, &p.Title, &key); err != nil {
+			&p.Tags, &p.Metadata, &p.Source, &p.ExternalRef, &p.Version, &p.CreatedAt, &p.UpdatedAt, &p.RepeatEvery, &p.RepeatOf, &p.Thread, &p.CreatedByUser, &p.Title, &p.UnpublishedAt, &p.UnpublishedBy, &key); err != nil {
 			return nil, "", err
 		}
 		if len(out) == limit {
