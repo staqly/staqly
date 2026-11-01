@@ -32,7 +32,7 @@ RUN npm install --global "$(node -p 'require("./package.json").packageManager')"
 FROM node AS prune
 COPY . .
 # the turbo version in pnpm-lock.yaml
-RUN pnpm dlx turbo@2.11.10 prune @staqly/platform --docker
+RUN pnpm dlx turbo@2.11.10 prune @staqly/platform @staqly/admin --docker
 
 FROM node AS export
 COPY --from=prune /repo/out/json/ .
@@ -40,7 +40,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 # No build-time URLs: the API address shown in snippets comes from the API's
 # PUBLIC_API_URL at runtime (GET /v1/setup), so one pre-built image fits all.
 COPY --from=prune /repo/out/full/ .
-RUN pnpm --filter @staqly/platform build
+RUN pnpm --filter @staqly/platform build && pnpm --filter @staqly/admin build
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: Go binaries with the export embedded. Runs on the build machine's
@@ -61,6 +61,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath ./cmd/server ./cmd/mcp-stdio
 COPY --from=export /repo/apps/platform/out ./web/
+RUN find admin -mindepth 1 ! -name .gitkeep -delete
+COPY --from=export /repo/apps/admin/out ./admin/
 
 # modernc.org/sqlite is pure Go: CGO off, fully static binaries.
 RUN --mount=type=cache,target=/go/pkg/mod \

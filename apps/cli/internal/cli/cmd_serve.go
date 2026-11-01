@@ -18,6 +18,7 @@ func serveCommand() *Command {
 			data := fs.String("data", "", "data directory (default ~/.local/share/staqly, or $STAQLY_DATA_DIR)")
 			port := fs.Int("port", 3333, "API and MCP port (always on 127.0.0.1)")
 			dashboardPort := fs.Int("dashboard-port", 8080, "dashboard port")
+			adminPort := fs.Int("admin-port", 0, "also serve the admin panel on this port (0 = off), on the dashboard's address")
 			expose := fs.Bool("expose", false, "serve the dashboard on all interfaces (phones, tablets); browsers then sign in once with a link")
 			return func(c *Ctx, args []string) error {
 				dir := *data
@@ -42,6 +43,9 @@ func serveCommand() *Command {
 					"DASHBOARD_ADDR": net.JoinHostPort(webHost, fmt.Sprint(*dashboardPort)),
 					"PUBLIC_API_URL": firstNonEmpty(c.Env.Getenv("PUBLIC_API_URL"), fmt.Sprintf("http://localhost:%d", *port)),
 					"LOG_FORMAT":     firstNonEmpty(c.Env.Getenv("LOG_FORMAT"), "text"),
+				}
+				if *adminPort > 0 {
+					env["ADMIN_ADDR"] = net.JoinHostPort(webHost, fmt.Sprint(*adminPort))
 				}
 				for k, v := range env {
 					if err := os.Setenv(k, v); err != nil {

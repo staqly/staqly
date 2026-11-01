@@ -252,58 +252,68 @@ func (s *Service) DeleteWorkspace(ctx context.Context, p Principal, confirm stri
 	if err := s.requireOwner(ctx, p); err != nil {
 		return err
 	}
+	ws, err := s.Q.GetWorkspace(ctx, p.WorkspaceID)
+	if isNoRows(err) {
+		return notFound("workspace")
+	}
+	if err != nil {
+		return err
+	}
+	if confirm != ws.Name {
+		return invalid("confirm", "must be exactly the workspace name")
+	}
+	return s.deleteWorkspace(ctx, p.WorkspaceID)
+}
+
+// deleteWorkspace removes a workspace with everything in it (the checks are the callers').
+func (s *Service) deleteWorkspace(ctx context.Context, wsID string) error {
 	// A large workspace takes a while to cascade-delete; a client that gives
 	// up must not roll it back half way (or leave files behind).
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
 	defer cancel()
 	// Stop billing first: a deleted workspace must not be charged again. If
 	// Stripe can't be reached, the deletion fails and can be retried.
-	if ws, err := s.Q.GetWorkspace(ctx, p.WorkspaceID); err == nil && confirm == ws.Name {
-		if err := s.cancelSubscription(ctx, p.WorkspaceID); err != nil {
-			return err
-		}
+	if err := s.cancelSubscription(ctx, wsID); err != nil {
+		return err
 	}
 	var exports []string
 	err := s.tx(ctx, func(q *db.Queries) error {
-		ws, err := q.GetWorkspace(ctx, p.WorkspaceID)
-		if isNoRows(err) {
-			return notFound("workspace")
-		}
-		if err != nil {
+		if _, err := q.GetWorkspace(ctx, wsID); err != nil {
+			if isNoRows(err) {
+				return notFound("workspace")
+			}
 			return err
 		}
-		if confirm != ws.Name {
-			return invalid("confirm", "must be exactly the workspace name")
-		}
-		if exports, err = q.ListWorkspaceExportIDs(ctx, p.WorkspaceID); err != nil {
+		var err error
+		if exports, err = q.ListWorkspaceExportIDs(ctx, wsID); err != nil {
 			return err
 		}
-		if err := q.DeleteWorkspaceDeliveries(ctx, p.WorkspaceID); err != nil {
+		if err := q.DeleteWorkspaceDeliveries(ctx, wsID); err != nil {
 			return err
 		}
-		if err := q.DeleteInstallationFor(ctx, p.WorkspaceID); err != nil {
+		if err := q.DeleteInstallationFor(ctx, wsID); err != nil {
 			return err
 		}
-		if err := s.deleteWorkspaceJobs(ctx, q, p.WorkspaceID); err != nil {
+		if err := s.deleteWorkspaceJobs(ctx, q, wsID); err != nil {
 			return err
 		}
-		if err := s.settleTrialOnDelete(ctx, q, p.WorkspaceID); err != nil {
+		if err := s.settleTrialOnDelete(ctx, q, wsID); err != nil {
 			return err
 		}
-		_, err = q.DeleteWorkspaceRow(ctx, p.WorkspaceID)
+		_, err = q.DeleteWorkspaceRow(ctx, wsID)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	files, err := s.removeWorkspaceFiles(ctx, p.WorkspaceID)
+	files, err := s.removeWorkspaceFiles(ctx, wsID)
 	if err != nil {
 		s.logger(ctx).Warn("files not removed after workspace deletion", "err", err)
 	}
 	for _, id := range exports {
-		s.removeExportFile(ctx, p.WorkspaceID, id)
+		s.removeExportFile(ctx, wsID, id)
 	}
-	s.logger(ctx).Info("workspace deleted", "workspace_id", p.WorkspaceID, "files", files)
+	s.logger(ctx).Info("workspace deleted", "workspace_id", wsID, "files", files)
 	return nil
 }
 

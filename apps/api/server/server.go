@@ -28,6 +28,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/posthog/posthog-go"
 	api "github.com/staqly/staqly/apps/api"
+	"github.com/staqly/staqly/apps/api/internal/adminapi"
 	"github.com/staqly/staqly/apps/api/internal/app"
 	"github.com/staqly/staqly/apps/api/internal/blob"
 	"github.com/staqly/staqly/apps/api/internal/config"
@@ -51,7 +52,7 @@ func Main(args []string, version string) int {
 			return storageCmd(args[1:])
 		case "token":
 			return tokenCmd(args[1:])
-		case "recovery-key", "set-plan", "workspaces", "connect-link", "stats", "attach-workspace", "clear-trial-review":
+		case "recovery-key", "set-plan", "workspaces", "admins", "admin", "connect-link", "stats", "attach-workspace", "clear-trial-review":
 			return admin(args[0], args[1:])
 		}
 	}
@@ -121,6 +122,9 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 	if err := svc.MoveLegacyFiles(ctx); err != nil {
 		return fmt.Errorf("media storage (%s): moving files to workspace folders: %w", svc.Cfg.Blob.Name(), err)
 	}
+	if err := svc.EnsureAdmins(ctx); err != nil {
+		return fmt.Errorf("admins: %w", err)
+	}
 	localToken := ""
 	if cfg.App.Mode == app.ModeLocal {
 		if err := svc.EnsureLocalWorkspace(ctx); err != nil {
@@ -187,6 +191,16 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 			return err
 		}
 	}
+	var aln net.Listener
+	if cfg.AdminAddr != "" {
+		if aln, err = net.Listen("tcp", cfg.AdminAddr); err != nil {
+			ln.Close()
+			if dln != nil {
+				dln.Close()
+			}
+			return err
+		}
+	}
 	workerCtx, stopWorkers := context.WithCancel(ctx)
 	workersDone := make(chan struct{})
 	go func() { svc.RunBackground(workerCtx); close(workersDone) }()
@@ -212,6 +226,16 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 		go func() {
 			log.Info("dashboard listening", "addr", dln.Addr().String(), "exposed", cfg.App.DashboardExposed)
 			errc <- dash.Serve(dln)
+		}()
+	}
+	if aln != nil {
+		site, _ := fs.Sub(api.Admin, "admin")
+		adm := &http.Server{Handler: web.AdminHandler(site, adminapi.New(svc, log, adminapi.Config{CookieSecure: cfg.CookieSecure, TrustProxy: cfg.TrustProxy}), log),
+			ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Minute, IdleTimeout: 120 * time.Second}
+		servers = append(servers, adm)
+		go func() {
+			log.Info("admin listening", "addr", aln.Addr().String())
+			errc <- adm.Serve(aln)
 		}()
 	}
 	if localToken != "" {
@@ -391,6 +415,9 @@ func copyUploads(ctx context.Context, cfg config.Config, dir string, dry bool) i
 //	server clear-trial-review <workspace_id>
 //	                                        a trial paused (or ended) because it reused an unpaid trial's accounts
 //	                                        or card was a mistake: lift it, and don't check that workspace again
+//	server admins                           list the admin panel's admins
+//	server admin add <email> [--name N]     let that address sign in to the admin panel
+//	server admin remove <email>             remove an admin (not the last one) and sign them out
 //	server stats                            JSON overview: workspaces by plan, trials, signups, usage
 //	server connect-link [workspace_id]      one-time sign-in link for a browser (5 min)
 //	server connect-link [workspace_id] --email ADDR [--for 7d] [--uses N] [--role operator|editor|viewer]
@@ -416,6 +443,36 @@ func admin(cmd string, args []string) int {
 	defer database.Close()
 	svc := app.New(database, slog.New(slog.DiscardHandler), cfg.App)
 	switch cmd {
+	case "admins":
+		list, err := svc.AdminListAdmins(ctx)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		for _, a := range list {
+			last := "-"
+			if a.LastLoginAt != nil {
+				last = *a.LastLoginAt
+			}
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\n", a.Email, a.Name, a.CreatedAt, a.CreatedBy, last)
+		}
+	case "admin":
+		fs := flag.NewFlagSet("admin", flag.ContinueOnError)
+		name := fs.String("name", "", "display name")
+		if len(args) < 2 || fs.Parse(args[2:]) != nil || fs.NArg() != 0 || (args[0] != "add" && args[0] != "remove") {
+			fmt.Fprintln(os.Stderr, "usage: server admin add <email> [--name N] | server admin remove <email>")
+			return 2
+		}
+		var err error
+		if args[0] == "add" {
+			_, err = svc.AdminAddAdmin(ctx, app.Admin{}, args[1], *name)
+		} else {
+			err = svc.AdminRemoveAdmin(ctx, app.Admin{}, args[1])
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
 	case "workspaces":
 		rows, err := svc.Q.ListWorkspaces(ctx)
 		if err != nil {

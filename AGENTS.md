@@ -7,6 +7,7 @@ and publish them to connected channels (the posts pivot, 2026-10-19). Monorepo:
 |---|---|---|
 | `apps/api` | Go backend: REST, MCP (stdio + Streamable HTTP), webhook worker, SQLite | [apps/api/AGENTS.md](apps/api/AGENTS.md) |
 | `apps/platform` | Next.js dashboard (static export embedded in the server and image `ghcr.io/staqly/staqly`), including the design editor at `/media/edit` (Konva: templates, text, photos, pages, AI) and the video and sound editor at `/media/video` and `/media/audio` (a timeline; MP4/M4A made in the browser with WebCodecs and Mediabunny) | [apps/platform/AGENTS.md](apps/platform/AGENTS.md) |
+| `apps/admin` | Staff admin panel (Next.js static export embedded in the server, served on `ADMIN_ADDR`, local and cloud mode; admins in the `admins` table): workspaces, people, payments, promotion codes, usage, audit log | — |
 | `apps/cli` | `staqly` CLI and `staqly serve` (one binary, goreleaser) | — |
 | `apps/docs` | docs.staqly.ai (Fumadocs, GitHub Pages) | [apps/docs/AGENTS.md](apps/docs/AGENTS.md) |
 | `apps/web` | staqly.ai landing page (Next.js static export) | [apps/web/README.md](apps/web/README.md) |

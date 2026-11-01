@@ -224,6 +224,12 @@ type Config struct {
 	// Set, platforms that download a post's media get signed links there instead of the store's own (S3).
 	PublicMediaURL string
 	DashboardPort  string // dashboard port, for links printed by the CLI
+	// AdminEnabled: the admin panel listener is on (ADMIN_ADDR set).
+	AdminEnabled bool
+	// AdminEmails (ADMIN_EMAILS): addresses added to the admins table at every start (never removed), lowercase.
+	AdminEmails []string
+	// AdminEmail (ADMIN_EMAIL): the default admin a local install gets when it has none ("" = admin@localhost).
+	AdminEmail string
 	// DashboardExposed: the dashboard listens beyond loopback (default in compose.yml), so
 	// requests arriving through it can't be trusted as "this computer".
 	DashboardExposed bool

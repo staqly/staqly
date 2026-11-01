@@ -8,6 +8,47 @@ import (
 	"database/sql"
 )
 
+type Admin struct {
+	ID          string         `json:"id"`
+	Email       string         `json:"email"`
+	Name        string         `json:"name"`
+	CreatedAt   string         `json:"created_at"`
+	CreatedBy   string         `json:"created_by"`
+	LastLoginAt sql.NullString `json:"last_login_at"`
+}
+
+type AdminAudit struct {
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	Action      string `json:"action"`
+	WorkspaceID string `json:"workspace_id"`
+	Target      string `json:"target"`
+	Details     string `json:"details"`
+	CreatedAt   string `json:"created_at"`
+}
+
+type AdminCode struct {
+	ID        string         `json:"id"`
+	Email     string         `json:"email"`
+	CodeHash  string         `json:"code_hash"`
+	Attempts  int64          `json:"attempts"`
+	CreatedAt string         `json:"created_at"`
+	ExpiresAt string         `json:"expires_at"`
+	UsedAt    sql.NullString `json:"used_at"`
+}
+
+type AdminSession struct {
+	ID         string         `json:"id"`
+	Email      string         `json:"email"`
+	TokenHash  string         `json:"token_hash"`
+	CsrfToken  string         `json:"csrf_token"`
+	UserAgent  string         `json:"user_agent"`
+	CreatedAt  string         `json:"created_at"`
+	LastSeenAt string         `json:"last_seen_at"`
+	ExpiresAt  string         `json:"expires_at"`
+	RevokedAt  sql.NullString `json:"revoked_at"`
+}
+
 type Agent struct {
 	ID            string `json:"id"`
 	WorkspaceID   string `json:"workspace_id"`
