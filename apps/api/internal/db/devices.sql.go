@@ -11,7 +11,8 @@ import (
 )
 
 const createDeviceLink = `-- name: CreateDeviceLink :exec
-INSERT INTO device_links (id, workspace_id, token_hash, created_by, created_at, expires_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO device_links (id, workspace_id, token_hash, created_by, created_at, expires_at, user_id, max_uses, guest_role)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateDeviceLinkParams struct {
@@ -22,6 +23,8 @@ type CreateDeviceLinkParams struct {
 	CreatedAt   string `json:"created_at"`
 	ExpiresAt   string `json:"expires_at"`
 	UserID      string `json:"user_id"`
+	MaxUses     int64  `json:"max_uses"`
+	GuestRole   string `json:"guest_role"`
 }
 
 func (q *Queries) CreateDeviceLink(ctx context.Context, arg CreateDeviceLinkParams) error {
@@ -33,12 +36,14 @@ func (q *Queries) CreateDeviceLink(ctx context.Context, arg CreateDeviceLinkPara
 		arg.CreatedAt,
 		arg.ExpiresAt,
 		arg.UserID,
+		arg.MaxUses,
+		arg.GuestRole,
 	)
 	return err
 }
 
 const getDeviceLinkByHash = `-- name: GetDeviceLinkByHash :one
-SELECT id, workspace_id, token_hash, created_by, created_at, expires_at, used_at, user_id FROM device_links WHERE token_hash = ?
+SELECT id, workspace_id, token_hash, created_by, created_at, expires_at, used_at, user_id, max_uses, uses, guest_role FROM device_links WHERE token_hash = ?
 `
 
 func (q *Queries) GetDeviceLinkByHash(ctx context.Context, tokenHash string) (DeviceLink, error) {
@@ -53,6 +58,9 @@ func (q *Queries) GetDeviceLinkByHash(ctx context.Context, tokenHash string) (De
 		&i.ExpiresAt,
 		&i.UsedAt,
 		&i.UserID,
+		&i.MaxUses,
+		&i.Uses,
+		&i.GuestRole,
 	)
 	return i, err
 }
@@ -67,7 +75,8 @@ func (q *Queries) PurgeDeviceLinks(ctx context.Context, expiresAt string) error 
 }
 
 const useDeviceLink = `-- name: UseDeviceLink :execrows
-UPDATE device_links SET used_at = ?1 WHERE id = ?2 AND used_at IS NULL AND expires_at > ?1
+UPDATE device_links SET used_at = ?1, uses = uses + 1
+WHERE id = ?2 AND (max_uses = 0 OR uses < max_uses) AND expires_at > ?1
 `
 
 type UseDeviceLinkParams struct {
@@ -75,7 +84,7 @@ type UseDeviceLinkParams struct {
 	ID  string         `json:"id"`
 }
 
-// Single use: only the first redeemer flips used_at.
+// max_uses redeemers (0: any number until it expires); used_at is the last use.
 func (q *Queries) UseDeviceLink(ctx context.Context, arg UseDeviceLinkParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, useDeviceLink, arg.Now, arg.ID)
 	if err != nil {

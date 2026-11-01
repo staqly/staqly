@@ -173,7 +173,7 @@ func (q *Queries) GetInstallation(ctx context.Context) (Installation, error) {
 }
 
 const getSession = `-- name: GetSession :one
-SELECT id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, revoked_at, user_id FROM sessions WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, revoked_at, user_id, guest_role FROM sessions WHERE workspace_id = ? AND id = ?
 `
 
 type GetSessionParams struct {
@@ -195,12 +195,13 @@ func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (Session
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.UserID,
+		&i.GuestRole,
 	)
 	return i, err
 }
 
 const getSessionByHash = `-- name: GetSessionByHash :one
-SELECT id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, revoked_at, user_id FROM sessions WHERE token_hash = ?
+SELECT id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, revoked_at, user_id, guest_role FROM sessions WHERE token_hash = ?
 `
 
 func (q *Queries) GetSessionByHash(ctx context.Context, tokenHash string) (Session, error) {
@@ -217,6 +218,7 @@ func (q *Queries) GetSessionByHash(ctx context.Context, tokenHash string) (Sessi
 		&i.ExpiresAt,
 		&i.RevokedAt,
 		&i.UserID,
+		&i.GuestRole,
 	)
 	return i, err
 }
@@ -319,7 +321,7 @@ func (q *Queries) ListAPIKeys(ctx context.Context, workspaceID string) ([]ApiKey
 }
 
 const listSessions = `-- name: ListSessions :many
-SELECT id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, revoked_at, user_id FROM sessions
+SELECT id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, revoked_at, user_id, guest_role FROM sessions
 WHERE workspace_id = ? AND revoked_at IS NULL AND expires_at > ?
 ORDER BY last_seen_at DESC
 `
@@ -349,6 +351,7 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 			&i.ExpiresAt,
 			&i.RevokedAt,
 			&i.UserID,
+			&i.GuestRole,
 		); err != nil {
 			return nil, err
 		}

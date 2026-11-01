@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -392,6 +393,10 @@ func copyUploads(ctx context.Context, cfg config.Config, dir string, dry bool) i
 //	                                        or card was a mistake: lift it, and don't check that workspace again
 //	server stats                            JSON overview: workspaces by plan, trials, signups, usage
 //	server connect-link [workspace_id]      one-time sign-in link for a browser (5 min)
+//	server connect-link [workspace_id] --email ADDR [--for 7d] [--uses N] [--role editor|viewer]
+//	                                        sign-in link as that person, without their mailbox; with --for a guest
+//	                                        link: N uses (0, the default: any number) until it expires, sessions
+//	                                        that end with it, as an editor (or viewer): no billing, no deleting
 //	server attach-workspace <workspace_id> <email>
 //	                                        give a workspace without an account (from before accounts, or
 //	                                        imported with import-sqlite) to the person with that address:
@@ -438,9 +443,56 @@ func admin(cmd string, args []string) int {
 		// stderr: stdout stays just the key for scripts.
 		fmt.Fprintf(os.Stderr, "Revoked %d browser session(s) of this workspace.\n", revoked)
 	case "connect-link":
+		fs := flag.NewFlagSet("connect-link", flag.ContinueOnError)
+		email := fs.String("email", "", "sign in as the person with this address")
+		dur := fs.String("for", "", "guest link: how long it works, e.g. 1d, 7d, 30d or 12h")
+		uses := fs.Int("uses", 0, "guest link: how many sign-ins (0: any number until it expires)")
+		role := fs.String("role", app.RoleEditor, "guest link: editor or viewer")
+		pos := []string{}
+		for { // flags may come before or after the workspace id
+			if err := fs.Parse(args); err != nil {
+				return 2
+			}
+			if fs.NArg() == 0 {
+				break
+			}
+			pos, args = append(pos, fs.Arg(0)), fs.Args()[1:]
+		}
 		ws := ""
-		if len(args) > 0 {
-			ws = args[0]
+		if len(pos) > 0 {
+			ws = pos[0]
+		}
+		if *email != "" {
+			g := app.GuestLink{For: 5 * time.Minute, Uses: 1}
+			if *dur != "" {
+				d, err := parseDays(*dur)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "--for:", err)
+					return 2
+				}
+				g = app.GuestLink{For: d, Uses: *uses, Role: *role}
+			}
+			link, err := svc.CreateGuestLink(ctx, *email, ws, g)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return 1
+			}
+			fmt.Println(link.URL)
+			if g.Role == "" {
+				fmt.Fprintf(os.Stderr, "Open this link in the browser to sign it in as %s. It works once and expires in 5 minutes.\n", *email)
+			} else {
+				n := "any number of times"
+				if g.Uses > 0 {
+					n = strconv.Itoa(g.Uses) + " time(s)"
+				}
+				fmt.Fprintf(os.Stderr, "Guest link: signs a browser in as %s (%s) %s until %s; its sessions end then. "+
+					"Revoke them early under Settings -> Devices.\n", *email, g.Role, n, link.ExpiresAt)
+			}
+			return 0
+		}
+		if *dur != "" {
+			fmt.Fprintln(os.Stderr, "--for needs --email: a guest link signs someone in as a person")
+			return 2
 		}
 		if ws == "" {
 			inst, err := svc.Q.GetInstallation(ctx)
@@ -617,4 +669,20 @@ func tokenCmd(args []string) int {
 		fmt.Fprintf(os.Stderr, "Sign a browser in: %s/#token=%s\n", u, tok)
 	}
 	return 0
+}
+
+// parseDays: a Go duration, or a number of days ("7d").
+func parseDays(v string) (time.Duration, error) {
+	if n, ok := strings.CutSuffix(v, "d"); ok {
+		d, err := strconv.Atoi(n)
+		if err != nil || d <= 0 {
+			return 0, fmt.Errorf("%q is not a number of days", v)
+		}
+		return time.Duration(d) * 24 * time.Hour, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err == nil && d <= 0 {
+		err = fmt.Errorf("%q is not a positive duration", v)
+	}
+	return d, err
 }
