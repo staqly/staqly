@@ -163,10 +163,11 @@ func (s *Service) AdminDeleteWorkspace(ctx context.Context, a Admin, wsID, confi
 	if confirm != ws.Name {
 		return &Error{Code: "confirm_mismatch", Status: 400, Message: "type the workspace name to confirm"}
 	}
-	if err := s.deleteWorkspace(ctx, wsID); err != nil {
+	// The stored id, not the one from the request: it names the workspace's files.
+	if err := s.deleteWorkspace(ctx, ws.ID); err != nil {
 		return err
 	}
-	return s.AdminAudit(ctx, a, "delete_workspace", wsID, ws.Name, map[string]any{"name": ws.Name})
+	return s.AdminAudit(ctx, a, "delete_workspace", ws.ID, ws.Name, map[string]any{"name": ws.Name})
 }
 
 func (s *Service) AdminDeleteUser(ctx context.Context, a Admin, userID, confirm string) error {
