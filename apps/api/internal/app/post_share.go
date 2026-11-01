@@ -709,7 +709,8 @@ func (s *Service) PostMetrics(ctx context.Context, p Principal, postID string, r
 		stale := !t.MetricsAt.Valid || t.MetricsAt.String < formatTime(s.Now().Add(-metricsFresh))
 		if ok && canRead && t.Status == "published" && t.ExternalID != "" && (refresh || stale) {
 			if fresh, err := s.readMetrics(ctx, p.WorkspaceID, t.ChannelID, e, reader, t.ExternalID); err != nil {
-				m.Error = err.Error()
+				s.logger(ctx).Info("post metrics: not read", "post_id", postID, "channel_id", t.ChannelID, "provider", t.Provider, "err", err)
+				m.Error = readFailure(e.Name(), err)
 			} else {
 				now := s.now()
 				if err := s.Q.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(fresh), MetricsAt: nullStr(now),
@@ -731,7 +732,15 @@ func (s *Service) readMetrics(ctx context.Context, workspaceID, channelID string
 	}
 	ch, err := s.Q.GetChannelByID(ctx, channelID)
 	if err != nil || ch.WorkspaceID != workspaceID {
-		return providers.Metrics{}, errors.New("channel not found")
+		return providers.Metrics{}, errChannelGone
+	}
+	// A disconnected channel has no sign-in left to read with (the platform would only say "unregistered caller").
+	switch ch.Status {
+	case "needs_reconnect":
+		return providers.Metrics{}, &providers.Failure{Kind: providers.ErrReauth, Msg: "the channel needs reconnecting"}
+	case "connected":
+	default:
+		return providers.Metrics{}, errChannelGone
 	}
 	var creds providers.Credentials
 	if err := s.unseal(ch.Credentials, &creds); err != nil {
@@ -782,4 +791,25 @@ func (s *Service) ReportTargetMetrics(ctx context.Context, p Principal, postID, 
 	}
 	return TargetMetrics{ChannelID: channelID, ChannelName: ch.Name, Provider: ch.Provider, Status: t.Status, ExternalURL: t.ExternalUrl,
 		Available: true, Metrics: &m, UpdatedAt: &now}, nil
+}
+
+// errChannelGone: the post went out on a channel that is no longer connected to staqly.
+var errChannelGone = errors.New("the channel is no longer connected")
+
+// readFailure: what a person reads when a platform's numbers or comments can't be read right now. The platform's own
+// words are technical (and logged); an app error (an expired subscription) already speaks to people.
+func readFailure(platform string, err error) string {
+	var appErr *Error
+	switch {
+	case errors.As(err, &appErr):
+		return appErr.Message
+	case errors.Is(err, errChannelGone):
+		return "This channel is no longer connected to staqly, so the numbers aren't updated. Connect the account again under Channels to see new ones on your next posts."
+	case errors.Is(err, providers.ErrReauth):
+		return "staqly lost access to this " + platform + " account. Reconnect it under Channels and try again."
+	case errors.Is(err, providers.ErrRejected):
+		return platform + " didn't share them this time. If the post was deleted on " + platform + ", they won't change any more."
+	default:
+		return "We couldn't reach " + platform + " just now. Try again in a moment."
+	}
 }
