@@ -28,7 +28,7 @@ export function PublicShell({
       />
       {/* The way back sits in the page's corner; the logo then stands in the middle. */}
       {back && (
-        <div className="absolute top-[max(1.5rem,env(safe-area-inset-top))] left-2 flex min-h-11 items-center sm:top-10 sm:left-4">
+        <div className="absolute top-[max(0.75rem,env(safe-area-inset-top))] left-2 flex min-h-11 items-center sm:top-5 sm:left-4">
           {back}
         </div>
       )}
