@@ -254,7 +254,7 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
                   <p className="font-medium">Couldn&apos;t read the latest numbers</p>
                   <p className="mt-0.5 text-muted-foreground">
                     {t.error}
-                    {t.metrics ? '. These are the last ones read.' : ''}
+                    {t.metrics ? ' The numbers above are the last ones read.' : ''}
                   </p>
                 </Callout>
               )}

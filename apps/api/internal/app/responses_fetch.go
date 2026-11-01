@@ -95,7 +95,8 @@ func (s *Service) readResponses(ctx context.Context, postID, channelID string) e
 		_ = s.channelNeedsReconnect(wctx, ch, err)
 		return nil
 	case errors.Is(err, providers.ErrRejected):
-		return s.noteResponsesFailed(wctx, post.WorkspaceID, postID, channelID, err.Error())
+		s.logger(ctx).Info("responses: not read", "post_id", postID, "channel_id", channelID, "provider", ch.Provider, "err", err)
+		return s.noteResponsesFailed(wctx, post.WorkspaceID, postID, channelID, readFailure(e.Name(), err))
 	case err != nil:
 		return err
 	}

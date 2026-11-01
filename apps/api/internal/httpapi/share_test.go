@@ -318,6 +318,18 @@ func TestPostMetrics(t *testing.T) {
 	if m := byChannel(res.Data)[ch.ID]; fakeMet.reads.Load() != 2 || m.Error == "" || m.Metrics == nil || *m.Metrics.Impressions != 1200 {
 		t.Fatalf("a failed refresh keeps the last numbers and says why: %+v", m)
 	}
+	if m := byChannel(res.Data)[ch.ID]; m.Error != "We couldn't reach Fake Metrics just now. Try again in a moment." {
+		t.Fatalf("the platform's own words are not for people: %q", m.Error)
+	}
+	fakeMet.fail.Store(false)
+	// A disconnected channel has no sign-in to read with: the platform isn't asked, the person reads why.
+	if _, err := e.svc.DB.Exec(`UPDATE channels SET status = 'disabled' WHERE id = ?`, ch.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.do(nil, "GET", "/v1/posts/"+post.ID+"/metrics?refresh=true", e.key, nil, 200, &res)
+	if m := byChannel(res.Data)[ch.ID]; fakeMet.reads.Load() != 2 || !strings.HasPrefix(m.Error, "This channel is no longer connected") || m.Metrics == nil {
+		t.Fatalf("disconnected channel: reads %d, %+v", fakeMet.reads.Load(), m)
+	}
 
 	// Your own automation reports its numbers; other platforms can't be written (409, as for a reported result).
 	e.do(nil, "PUT", "/v1/posts/"+post.ID+"/targets/"+tok.ID+"/metrics", e.key, map[string]any{"likes": 3}, 409, nil)
