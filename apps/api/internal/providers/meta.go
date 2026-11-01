@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Meta's platforms (Instagram, Instagram through a Facebook Page, Facebook Pages, Threads) share one shape of API:
+// Meta's platforms (Instagram, Facebook Pages, Threads) share one shape of API:
 // the Graph API, with the token in the query or the form, errors as {"error":{"message","code","error_subcode",
 // "error_user_msg"}}, and media containers that are made, processed and then published. metaGraph is one host of it.
 type metaGraph struct {
@@ -25,10 +25,9 @@ type metaGraph struct {
 }
 
 var (
-	igGraph  = metaGraph{name: "Instagram", host: &instagramGraph, version: instagramVersion}
-	igbGraph = metaGraph{name: "Instagram", host: &facebookGraph, version: instagramVersion}
-	fbGraph  = metaGraph{name: "Facebook", host: &facebookGraph, version: instagramVersion, special: facebookSpecial}
-	thGraph  = metaGraph{name: "Threads", host: &threadsGraph, version: "v1.0", special: threadsSpecial}
+	igGraph = metaGraph{name: "Instagram", host: &facebookGraph, version: instagramVersion}
+	fbGraph = metaGraph{name: "Facebook", host: &facebookGraph, version: instagramVersion, special: facebookSpecial}
+	thGraph = metaGraph{name: "Threads", host: &threadsGraph, version: "v1.0", special: threadsSpecial}
 )
 
 func (g metaGraph) url(path string) string { return *g.host + "/" + g.version + path }

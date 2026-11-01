@@ -16,7 +16,7 @@ import (
 )
 
 // fakeFacebook answers like graph.facebook.com (and graph-video, and the upload host) for the calls Facebook Pages
-// and Instagram Business make.
+// and Instagram make.
 type fakeFacebook struct {
 	mu       sync.Mutex
 	calls    []string
@@ -108,7 +108,7 @@ func (f *fakeFacebook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/me/permissions":
 		granted := f.granted
 		if granted == "" {
-			granted = facebookScopes + "," + instagramBusinessScopes
+			granted = facebookScopes + ",instagram_basic,instagram_content_publish,instagram_manage_comments"
 		}
 		var data []string
 		for _, p := range strings.Split(granted, ",") {
@@ -132,6 +132,10 @@ func (f *fakeFacebook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"paging":{"next":"` + f.srv.URL + `/` + instagramVersion + `/me/accounts?after=2&access_token=long-user"}}`))
 	case path == "/me/accounts":
 		_, _ = w.Write([]byte(`{"data":[{"id":"p2","name":"Jane's Shop","access_token":"page-token-2"}]}`))
+	case path == "/me/assigned_instagram_accounts" && f.noPages:
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	case path == "/me/assigned_instagram_accounts":
+		_, _ = w.Write([]byte(`{"data":[{"id":"ig1","username":"janesbakery.ig","name":"Jane's Bakery","profile_picture_url":"https://cdn.example/ig1.jpg"}]}`))
 	case path == "/me/businesses" && f.noPages:
 		_, _ = w.Write([]byte(`{"data":[]}`))
 	case path == "/me/businesses":
@@ -177,7 +181,7 @@ func (f *fakeFacebook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case q.Get("fields") == "permalink_url":
 		_, _ = w.Write([]byte(`{"permalink_url":"https://www.facebook.com/janesbakery/posts/100"}`))
 
-	// Instagram Business publishing (the same calls as Instagram's, on this host).
+	// Instagram publishing.
 	case path == "/ig1/media":
 		_, _ = w.Write([]byte(`{"id":"c` + string(rune('0'+len(f.forms[path]))) + `"}`))
 	case q.Get("fields") == "status_code,status":
@@ -471,41 +475,50 @@ func TestFacebookValidate(t *testing.T) {
 	}
 }
 
-func TestInstagramBusiness(t *testing.T) {
+func TestInstagramConnect(t *testing.T) {
 	f := useFakeFacebook(t)
-	ig, _ := Get("instagram_business")
-	if ig.Status != StatusAvailable {
-		t.Fatalf("instagram_business is %q", ig.Status)
+	ig, _ := Get("instagram")
+	if ig.Status != StatusAvailable || ig.Name() != "Instagram" {
+		t.Fatalf("instagram is %q %q", ig.Status, ig.Name())
 	}
 	if n, ok := ig.Provider.(Needer); !ok || !n.Needs().PublicMedia || !n.Needs().HTTPS {
-		t.Fatal("instagram_business needs https and public media")
+		t.Fatal("instagram needs https and public media")
 	}
 	ctx := context.Background()
-	app := App{ClientID: "cid", ClientSecret: "secret"}
-	u, _ := ig.AuthURL(app, "https://app.example/cb", "st", nil)
-	if q, _ := url.Parse(u); q.Query().Get("scope") != instagramBusinessScopes {
-		t.Fatalf("auth url %s", u)
+	app := App{ClientID: "cid", ClientSecret: "secret", ConfigID: "cfg1"}
+
+	// Facebook Login for Business with the app's configuration, which says the permissions: no scope.
+	u, err := ig.AuthURL(app, "https://app.example/cb", "st", nil)
+	q, _ := url.Parse(u)
+	if err != nil || q.Query().Get("config_id") != "cfg1" || q.Query().Get("scope") != "" || q.Query().Get("state") != "st" {
+		t.Fatalf("auth url %s %v", u, err)
 	}
-	creds, _, err := ig.Exchange(ctx, app, "https://app.example/cb", "code1", nil)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := ig.AuthURL(App{ClientID: "cid", ClientSecret: "secret"}, "https://app.example/cb", "st", nil); !errors.Is(err, ErrRejected) {
+		t.Fatalf("no configuration: %v", err)
+	}
+	creds, _, err := ig.Exchange(ctx, app, "https://app.example/cb", "code1#_", nil)
+	if err != nil || creds["access_token"] != "short-user" {
+		t.Fatalf("exchange %v %v", creds, err)
 	}
 
-	// Only Pages with a linked Instagram account count; the account is what the person picks.
+	// The accounts the person shared; the channel keeps the sign-in's token.
 	lister := ig.Provider.(AccountLister)
 	accounts, err := lister.Accounts(ctx, creds)
 	if err != nil || len(accounts) != 1 || accounts[0].ID != "ig1" || accounts[0].Handle != "@janesbakery.ig" {
 		t.Fatalf("accounts %+v %v", accounts, err)
 	}
 	ch, profile, err := lister.UseAccount(ctx, creds, "ig1")
-	if err != nil || ch["access_token"] != "page-token-1" || ch["user_id"] != "ig1" || profile.ProfileURL != "https://www.instagram.com/janesbakery.ig/" {
+	if err != nil || ch["access_token"] != "short-user" || ch["user_id"] != "ig1" || profile.ProfileURL != "https://www.instagram.com/janesbakery.ig/" || profile.Name != "Jane's Bakery" {
 		t.Fatalf("use %v %+v %v", ch, profile, err)
+	}
+	if _, _, err := lister.UseAccount(ctx, creds, "ig9"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("an account not shared: %v", err)
 	}
 	if _, err := ig.Refresh(ctx, app, ch); err != nil {
 		t.Fatal(err)
 	}
 
-	// Publishing is Instagram's, on graph.facebook.com.
+	// Publishing on graph.facebook.com.
 	res, err := ig.Publish(ctx, ch, PostContent{Text: "Hi", Media: []MediaFile{jpeg("a.jpg"), jpeg("b.jpg")}}, Settings{"collaborators": "@ana"})
 	if err != nil || res.ExternalID != "1790" || res.URL != "https://www.instagram.com/p/DAbc/" {
 		t.Fatalf("publish %+v %v", res, err)
@@ -513,45 +526,36 @@ func TestInstagramBusiness(t *testing.T) {
 	if p := f.form("/ig1/media", 2); p.Get("media_type") != "CAROUSEL" || p.Get("children") != "c1,c2" || p.Get("collaborators") != `["ana"]` {
 		t.Fatalf("carousel %v", forms(f)["/ig1/media"])
 	}
-	if _, err := ig.Publish(ctx, ch, PostContent{Media: []MediaFile{{Name: "a.jpg", MimeType: "image/jpeg"}}}, Settings{}); !errors.Is(err, ErrRejected) {
-		t.Fatalf("no public link: %v", err)
-	}
-	f.set(func() { f.dropPath = "/ig1/media_publish" })
-	if _, err := ig.Publish(ctx, ch, PostContent{Media: []MediaFile{jpeg("a.jpg")}}, Settings{}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "may have published") {
-		t.Fatalf("lost answer: %v", err)
-	}
-	f.set(func() {
-		f.dropPath, f.failPath, f.failCode, f.failBody = "", "/ig1/media", http.StatusTooManyRequests, `{"error":{"message":"Application request limit reached","code":4}}`
-	})
-	var fail *Failure
-	if _, err := ig.Publish(ctx, ch, PostContent{Media: []MediaFile{jpeg("a.jpg")}}, Settings{}); !errors.As(err, &fail) || fail.Kind != nil {
-		t.Fatalf("rate limit: %v", err)
-	}
 	if r, err := ig.Provider.(Replier).Reply(ctx, ch, "1790", PostContent{Text: "First"}, nil); err != nil || r.ExternalID != "comment:1790:cm1" {
 		t.Fatalf("reply %+v %v", r, err)
 	}
-	if err := ig.Validate(PostContent{Text: "x", Media: []MediaFile{{Name: "a.png", MimeType: "image/png"}}}, Settings{}); err == nil {
-		t.Fatal("a PNG passed")
-	}
 
-	// No Page with a linked account; publishing not allowed.
-	f.set(func() { f.noRole = true })
+	// No account shared; a configuration without publishing or comments; a revoked or expired sign-in.
+	f.set(func() { f.noPages = true })
 	if _, err := lister.Accounts(ctx, creds); !errors.Is(err, ErrRejected) {
-		t.Fatalf("no role: %v", err)
+		t.Fatalf("no account: %v", err)
 	}
-	f.set(func() { f.granted = "pages_show_list,instagram_basic" })
+	f.set(func() { f.noPages, f.granted = false, "instagram_basic,instagram_manage_comments" })
 	if _, _, err := ig.Exchange(ctx, app, "https://app.example/cb", "code1", nil); !errors.Is(err, ErrRejected) {
 		t.Fatalf("without publishing: %v", err)
 	}
+	f.set(func() { f.granted = "instagram_basic,instagram_content_publish" })
+	if c, p, err := ig.Exchange(ctx, app, "https://app.example/cb", "code1", nil); err != nil || c["no_comments"] != "true" || !p.NoComments {
+		t.Fatalf("without comments: %v %+v %v", c, p, err)
+	}
 	if _, err := ig.Refresh(ctx, app, Credentials{"access_token": "revoked", "user_id": "ig1"}); !errors.Is(err, ErrReauth) {
 		t.Fatalf("revoked: %v", err)
+	}
+	expired := Credentials{"access_token": "short-user", "user_id": "ig1", "expires_at": time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)}
+	if _, err := ig.Refresh(ctx, app, expired); !errors.Is(err, ErrReauth) {
+		t.Fatalf("expired: %v", err)
 	}
 }
 
 func TestMetaCheckApp(t *testing.T) {
 	useFakeFacebook(t)
 	ctx := context.Background()
-	for _, p := range []AppChecker{Facebook{}, InstagramBusiness{}} {
+	for _, p := range []AppChecker{Facebook{}, Instagram{}} {
 		if ok, err := p.CheckApp(ctx, App{ClientID: "cid", ClientSecret: "secret"}, ""); !ok || err != nil {
 			t.Fatalf("%T good keys: %v %v", p, ok, err)
 		}

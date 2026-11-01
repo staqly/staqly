@@ -468,6 +468,7 @@ func channelsAppCommand() *Command {
 	cmd := leaf("app", "<provider>", "Register (or --remove) the workspace's developer app for an OAuth platform", 1, 1, func(fs *flag.FlagSet) runFunc {
 		clientID := fs.String("client-id", "", "the app's client id")
 		secret := fs.String("client-secret", "", "the app's client secret; '-' reads stdin")
+		configID := fs.String("config-id", "", "Instagram: the Meta app's login configuration id")
 		remove := fs.Bool("remove", false, "remove the workspace's app (the server's PROVIDER_<ID>_CLIENT_ID applies again, if set)")
 		return func(c *Ctx, args []string) error {
 			cl, err := c.Client()
@@ -495,7 +496,11 @@ func channelsAppCommand() *Command {
 				}
 				s = strings.TrimSpace(s)
 			}
-			if _, err := cl.call(c, Request{Method: "PUT", Path: path, Body: map[string]any{"client_id": *clientID, "client_secret": s}}, nil); err != nil {
+			body := map[string]any{"client_id": *clientID, "client_secret": s}
+			if *configID != "" {
+				body["config_id"] = *configID
+			}
+			if _, err := cl.call(c, Request{Method: "PUT", Path: path, Body: body}, nil); err != nil {
 				return err
 			}
 			if c.JSON {

@@ -1650,14 +1650,21 @@ class AsyncProviders(_Resource):
         *,
         client_id: str,
         client_secret: str,
+        config_id: str | None = None,
         request_options: RequestOptions | None = None,
     ) -> None:
-        """Registers the workspace's own developer app (OAuth client) for a platform."""
+        """Registers the workspace's own developer app (OAuth client) for a platform.
+
+        ``config_id`` is Instagram's login configuration (the Meta app's Facebook Login for Business).
+        """
+        body = {"client_id": client_id, "client_secret": client_secret}
+        if config_id:
+            body["config_id"] = config_id
         await self._http.request(
             RequestSpec(
                 "PUT",
                 f"/v1/providers/{_q(provider)}/app",
-                json={"client_id": client_id, "client_secret": client_secret},
+                json=body,
                 options=_opts(request_options),
             )
         )
