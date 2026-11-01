@@ -188,8 +188,9 @@ func providerEnv(providerID string) string {
 	return "PROVIDER_" + strings.ToUpper(providerID) + "_"
 }
 
-// serverApp is the OAuth client the operator configured for a provider (PROVIDER_<ID>_CLIENT_ID/SECRET). A
-// platform that posts with the server's own bot (Needs.BotToken) also needs PROVIDER_<ID>_BOT_TOKEN.
+// serverApp is the OAuth client the operator configured for a provider (PROVIDER_<ID>_CLIENT_ID/SECRET; Facebook
+// and Instagram share the Meta app's PROVIDER_META_CLIENT_ID/SECRET). A platform that posts with the server's own
+// bot (Needs.BotToken) also needs PROVIDER_<ID>_BOT_TOKEN.
 func (s *Service) serverApp(providerID string) (providers.App, bool) {
 	if ownClient(providerID) {
 		// The server is the client: its client id is its metadata's address (through the dashboard: /api), its key derived from the server's key.
@@ -203,12 +204,20 @@ func (s *Service) serverApp(providerID string) (providers.App, bool) {
 			ClientSecret: hex.EncodeToString(mac.Sum(nil))}, https && len(s.Cfg.SecretKey) > 0
 	}
 	key := providerEnv(providerID) + "CLIENT_"
+	if metaApp(providerID) {
+		key = "PROVIDER_META_CLIENT_"
+	}
 	app := providers.App{ClientID: s.Env(key+"ID", ""), ClientSecret: s.Env(key+"SECRET", ""),
 		ConfigID: s.Env(providerEnv(providerID)+"CONFIG_ID", "")}
 	if needsBotToken(providerID) && s.Env(providerEnv(providerID)+"BOT_TOKEN", "") == "" {
 		return app, false
 	}
 	return app, app.ClientID != ""
+}
+
+// metaApp: the platform signs in through the server's one Meta app (Threads has its own Threads app id).
+func metaApp(providerID string) bool {
+	return providerID == "facebook" || providerID == "instagram"
 }
 
 // needsBotToken: the platform posts with the server's own bot (Discord), so only the server's app works for it.

@@ -48,14 +48,14 @@ Copy the **App ID** and **App secret** from **App settings → Basic** (the Meta
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
-PROVIDER_INSTAGRAM_CLIENT_ID=your-meta-app-id
-PROVIDER_INSTAGRAM_CLIENT_SECRET=your-meta-app-secret
+PROVIDER_META_CLIENT_ID=your-meta-app-id
+PROVIDER_META_CLIENT_SECRET=your-meta-app-secret
 PROVIDER_INSTAGRAM_CONFIG_ID=your-configuration-id
 ```
 
-- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_INSTAGRAM_CLIENT_ID=...`.
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_META_CLIENT_ID=...`.
 - **Binary:** export all three in your shell, then run `staqly serve` or `staqly service install` (the
-  service keeps `PROVIDER_*` settings).
+  service keeps `PROVIDER_*` settings). [Facebook Page](/channels/facebook) uses the same two keys.
 
 Until the ID and secret are set, Instagram shows as **soon** in **Channels → Add channel**; without
 the configuration ID, connecting says it is missing. `PROVIDER_INSTAGRAM_ENABLED=false` hides
