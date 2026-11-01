@@ -178,8 +178,8 @@ export function PostResponses({ postId, active }: { postId: string; active: bool
           <RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /> Refresh comments
         </Button>
       </div>
-      {q.isLoading ? (
-        <Skeleton className="h-24" />
+      {q.isPending ? (
+        <Skeleton className="h-5 w-32" />
       ) : q.error ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : !d || none ? (
