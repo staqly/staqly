@@ -48,6 +48,10 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-staqly-dev-secret-not-for-production}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
       S3_CREATE_BUCKET: ${S3_CREATE_BUCKET:-true}
+      # The staff admin panel on http://localhost:8081 (admins: ADMIN_EMAILS in .env, or `server admin add`).
+      ADMIN_ADDR: ${ADMIN_ADDR:-:8081}
+    ports:
+      - "127.0.0.1:${ADMIN_PORT:-8081}:8081"
     depends_on:
       postgres:
         condition: service_healthy
