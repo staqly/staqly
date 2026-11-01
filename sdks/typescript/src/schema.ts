@@ -5378,6 +5378,8 @@ export interface components {
         DeveloperAppInput: {
             client_id?: string;
             client_secret?: string;
+            /** @description Instagram: the Meta app's Facebook Login for Business configuration (API setup with Unified login) */
+            config_id?: string;
         };
         /** @description A form field a provider needs (a credential to connect, or a setting per target) */
         ProviderField: {

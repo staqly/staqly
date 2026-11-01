@@ -84,19 +84,18 @@ var providerFamilies = map[string]string{
 // never changes (a handle can be renamed), in order of preference. A family not listed here and not a shared space
 // falls back to the account URL (Mastodon) or the handle.
 var accountIDKeys = map[string][]string{
-	"bluesky":            {"did"},
-	"x":                  {"user_id"},
-	"threads":            {"user_id"},
-	"tiktok":             {"open_id"},
-	"instagram":          {"user_id"},
-	"instagram_business": {"user_id"},
-	"linkedin":           {"person_id"},
-	"youtube":            {"channel_id", "google_id"},
-	"twitch":             {"user_id"},
-	"kick":               {"user_id"},
-	"tumblr":             {"user", "blog"},
-	"reddit":             {"username"},
-	"pinterest":          {"username"},
+	"bluesky":   {"did"},
+	"x":         {"user_id"},
+	"threads":   {"user_id"},
+	"tiktok":    {"open_id"},
+	"instagram": {"user_id"},
+	"linkedin":  {"person_id"},
+	"youtube":   {"channel_id", "google_id"},
+	"twitch":    {"user_id"},
+	"kick":      {"user_id"},
+	"tumblr":    {"user", "blog"},
+	"reddit":    {"username"},
+	"pinterest": {"username"},
 }
 
 // sharedSpaces: platforms whose channel is a space many people may use, with who authorized the connection ("" when

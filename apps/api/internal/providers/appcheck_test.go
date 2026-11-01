@@ -30,9 +30,9 @@ func TestCheckApp(t *testing.T) {
 	srv := answer(`{"error":"invalid_request","error_description":"Value passed for the authorization code was invalid."}`,
 		`{"error":"unauthorized_client","error_description":"Missing valid authorization header"}`)
 	defer srv.Close()
-	xAPI, linkedinOAuth, instagramToken = srv.URL, srv.URL, srv.URL
+	xAPI, linkedinOAuth = srv.URL, srv.URL
 	t.Cleanup(func() {
-		xAPI, linkedinOAuth, instagramToken = "https://api.x.com", "https://www.linkedin.com/oauth/v2", "https://api.instagram.com/oauth/access_token"
+		xAPI, linkedinOAuth = "https://api.x.com", "https://www.linkedin.com/oauth/v2"
 	})
 	if ok, err := (X{}).CheckApp(ctx, good, "https://app.example/cb"); !ok || err != nil {
 		t.Fatalf("X good keys: %v %v", ok, err)
@@ -52,16 +52,6 @@ func TestCheckApp(t *testing.T) {
 		t.Fatal("LinkedIn bad keys passed")
 	}
 
-	// Instagram looks at the code first: it answers the same either way, so the check only proves it answers.
-	srv3 := answer(`{"error_type":"OAuthException","code":400,"error_message":"Invalid authorization code"}`,
-		`{"error_type":"OAuthException","code":400,"error_message":"Invalid authorization code"}`)
-	defer srv3.Close()
-	instagramToken = srv3.URL
-	for _, app := range []App{good, bad} {
-		if ok, err := (Instagram{}).CheckApp(ctx, app, "https://app.example/cb"); ok || err != nil {
-			t.Fatalf("Instagram: %v %v", ok, err)
-		}
-	}
 }
 
 func TestPlatformHost(t *testing.T) {

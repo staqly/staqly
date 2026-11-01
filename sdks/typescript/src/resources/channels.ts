@@ -140,7 +140,11 @@ export class Providers extends APIResource {
   }
 
   /** Registers the workspace's own developer app (OAuth client) for a platform. */
-  async setApp(id: string, input: Required<DeveloperAppInput>, options?: RequestOptions): Promise<void> {
+  async setApp(
+    id: string,
+    input: DeveloperAppInput & Required<Pick<DeveloperAppInput, 'client_id' | 'client_secret'>>,
+    options?: RequestOptions,
+  ): Promise<void> {
     await this.http.request({ method: 'PUT', path: `/v1/providers/${enc(id)}/app`, body: input, options })
   }
 

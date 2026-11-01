@@ -223,6 +223,7 @@ staqly channels links revoke chl_123       # channels already connected through 
 | `--group` | string | No | A channel group by name or ID. `list`: only that group. `connect`: put the channel there. `update`: move it there |
 | `--instance` | string | No | `connect`: for OAuth platforms with many servers, the server's URL or host |
 | `--client-id`, `--client-secret` | string | No | `app`: the workspace's own OAuth developer app, used instead of the server's `PROVIDER_<ID>_CLIENT_ID` / `_CLIENT_SECRET`; `--client-secret -` reads stdin. See [Developer apps](/channels/developer-apps) |
+| `--config-id` | string | No | `app`, Instagram: the Meta app's login configuration (`PROVIDER_INSTAGRAM_CONFIG_ID` for the server's app). See [Instagram](/channels/instagram) |
 
 Managing channels needs `channels:manage`; listing them `channels:read`. See
 [Channels](/channels).

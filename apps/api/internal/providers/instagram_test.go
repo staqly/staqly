@@ -13,22 +13,19 @@ import (
 	"time"
 )
 
-// fakeInstagram answers like api.instagram.com and graph.instagram.com for the calls the provider makes.
+// fakeInstagram answers like graph.facebook.com for the publishing calls the Instagram provider makes.
 type fakeInstagram struct {
 	mu          sync.Mutex
 	calls       []string
-	tokenForm   url.Values
 	query       url.Values        // the last GET's query
 	containers  []url.Values      // forms of POST /{user}/media, in order
 	published   url.Values        // form of media_publish
 	comments    []url.Values      // forms of POST /{media}/comments
-	permissions string            // the short token's permissions (default: all three scopes)
 	polls       int               // status checks so far
 	publishCode int               // status for media_publish (0 = 200)
 	publishBody string            // its body then
 	dropPublish bool              // close the connection on media_publish (an answer that never came)
 	statusFor   map[string]string // container id -> status_code (default: IN_PROGRESS once, then FINISHED)
-	unusable    bool              // the long-lived exchange refuses the token (an account the app may not serve)
 	srv         *httptest.Server
 }
 
@@ -44,25 +41,6 @@ func (f *fakeInstagram) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/"+instagramVersion)
 	switch {
-	case r.URL.Path == "/oauth/access_token":
-		f.tokenForm = form
-		perms := f.permissions
-		if perms == "" {
-			perms = instagramScopes
-		}
-		_, _ = w.Write([]byte(`{"data":[{"access_token":"short","user_id":"1784","permissions":"` + perms + `"}]}`))
-	case r.URL.Path == "/access_token" && f.unusable:
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":{"message":"Unsupported request - method type: get","type":"IGApiException","code":100}}`))
-	case r.URL.Path == "/access_token":
-		_, _ = w.Write([]byte(`{"access_token":"long","token_type":"bearer","expires_in":5183944}`))
-	case r.URL.Path == "/refresh_access_token":
-		_, _ = w.Write([]byte(`{"access_token":"renewed","token_type":"bearer","expires_in":5183944}`))
-	case path == "/me" && r.URL.Query().Get("access_token") == "revoked":
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":{"message":"Error validating access token: The session has been invalidated","type":"OAuthException","code":190}}`))
-	case path == "/me":
-		_, _ = w.Write([]byte(`{"id":"app-scoped","user_id":"1784","username":"janedoe","name":"Jane Doe","profile_picture_url":"https://cdn.example/jane.jpg","account_type":"BUSINESS"}`))
 	case path == "/1784/media":
 		f.containers = append(f.containers, form)
 		_, _ = w.Write([]byte(`{"id":"c` + string(rune('0'+len(f.containers))) + `"}`))
@@ -105,11 +83,11 @@ func useFakeInstagram(t *testing.T) *fakeInstagram {
 	t.Helper()
 	f := &fakeInstagram{statusFor: map[string]string{}}
 	f.srv = httptest.NewServer(f)
-	auth, tok, graph, poll := instagramAuthorize, instagramToken, instagramGraph, instagramPoll
-	instagramAuthorize, instagramToken, instagramGraph, instagramPoll = f.srv.URL+"/oauth/authorize", f.srv.URL+"/oauth/access_token", f.srv.URL, time.Millisecond
+	graph, poll := facebookGraph, instagramPoll
+	facebookGraph, instagramPoll = f.srv.URL, time.Millisecond
 	t.Cleanup(func() {
 		f.srv.Close()
-		instagramAuthorize, instagramToken, instagramGraph, instagramPoll = auth, tok, graph, poll
+		facebookGraph, instagramPoll = graph, poll
 	})
 	return f
 }
@@ -124,83 +102,6 @@ func jpeg(name string) MediaFile {
 
 func mp4(name string) MediaFile {
 	return MediaFile{Name: name, MimeType: "video/mp4", SignedURL: "https://bucket.example/" + name}
-}
-
-func TestInstagramConnect(t *testing.T) {
-	f := useFakeInstagram(t)
-	ig, _ := Get("instagram")
-	if ig.Status != StatusAvailable || ig.Name() != "Instagram" {
-		t.Fatalf("instagram is %q %q", ig.Status, ig.Name())
-	}
-	if b, _ := Get("instagram_business"); b.Status != StatusAvailable {
-		t.Fatalf("instagram_business is %q, want available", b.Status)
-	}
-	app := App{ClientID: "cid", ClientSecret: "secret"}
-	u, _ := ig.AuthURL(app, "https://app.example/cb", "st", nil)
-	q, _ := url.Parse(u)
-	if q.Query().Get("scope") != instagramScopes || q.Query().Get("state") != "st" || q.Query().Get("enable_fb_login") != "0" {
-		t.Fatalf("auth url %s", u)
-	}
-
-	// Instagram sends the code back with "#_" on its end.
-	creds, profile, err := ig.Exchange(context.Background(), app, "https://app.example/cb", "code1#_", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if f.tokenForm.Get("code") != "code1" || f.tokenForm.Get("client_secret") != "secret" || f.tokenForm.Get("redirect_uri") != "https://app.example/cb" {
-		t.Fatalf("token form %v", f.tokenForm)
-	}
-	// The hour-long token is traded for the 60-day one, which is what is stored.
-	if creds["access_token"] != "long" || creds["user_id"] != "1784" || creds["expires_at"] == "" {
-		t.Fatalf("creds %v", creds)
-	}
-	if profile.Handle != "@janedoe" || profile.Name != "Jane Doe" || profile.ProfileURL != "https://www.instagram.com/janedoe/" || profile.NoComments {
-		t.Fatalf("profile %+v", profile)
-	}
-
-	// Comments not granted: the channel says so; publishing not granted: no channel.
-	f.permissions = "instagram_business_basic,instagram_business_content_publish"
-	if _, profile, err = ig.Exchange(context.Background(), app, "https://app.example/cb", "c2", nil); err != nil || !profile.NoComments {
-		t.Fatalf("without comments: %+v %v", profile, err)
-	}
-	f.permissions = "instagram_business_basic"
-	if _, _, err := ig.Exchange(context.Background(), app, "https://app.example/cb", "c3", nil); !errors.Is(err, ErrRejected) {
-		t.Fatalf("without publishing: %v", err)
-	}
-
-	// An account the app may not serve (personal, or not a tester): say what to check.
-	f.permissions, f.unusable = "", true
-	if _, _, err := ig.Exchange(context.Background(), app, "https://app.example/cb", "c4", nil); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "tester") {
-		t.Fatalf("unusable token: %v", err)
-	}
-}
-
-func TestInstagramRefresh(t *testing.T) {
-	f := useFakeInstagram(t)
-	ig, _ := Get("instagram")
-	ctx := context.Background()
-	// Over a month left: only checked; under a month: renewed for 60 days; run out or revoked: reconnect.
-	if c, err := ig.Refresh(ctx, App{}, instagramCreds(50*24*time.Hour)); err != nil || c["access_token"] != "long" {
-		t.Fatalf("young token: %v %v", c, err)
-	}
-	if strings.Contains(strings.Join(f.calls, ","), "refresh_access_token") {
-		t.Fatal("a young token was refreshed")
-	}
-	c, err := ig.Refresh(ctx, App{}, instagramCreds(5*24*time.Hour))
-	if err != nil || c["access_token"] != "renewed" || c["user_id"] != "1784" {
-		t.Fatalf("old token: %v %v", c, err)
-	}
-	if exp, _ := credentialsExpiry(c); exp.Before(time.Now().Add(50 * 24 * time.Hour)) {
-		t.Fatalf("renewed until %v", exp)
-	}
-	if _, err := ig.Refresh(ctx, App{}, instagramCreds(-time.Hour)); !errors.Is(err, ErrReauth) {
-		t.Fatalf("expired: %v", err)
-	}
-	revoked := instagramCreds(50 * 24 * time.Hour)
-	revoked["access_token"] = "revoked"
-	if _, err := ig.Refresh(ctx, App{}, revoked); !errors.Is(err, ErrReauth) {
-		t.Fatalf("revoked: %v", err)
-	}
 }
 
 func TestInstagramPublish(t *testing.T) {

@@ -203,7 +203,8 @@ func (s *Service) serverApp(providerID string) (providers.App, bool) {
 			ClientSecret: hex.EncodeToString(mac.Sum(nil))}, https && len(s.Cfg.SecretKey) > 0
 	}
 	key := providerEnv(providerID) + "CLIENT_"
-	app := providers.App{ClientID: s.Env(key+"ID", ""), ClientSecret: s.Env(key+"SECRET", "")}
+	app := providers.App{ClientID: s.Env(key+"ID", ""), ClientSecret: s.Env(key+"SECRET", ""),
+		ConfigID: s.Env(providerEnv(providerID)+"CONFIG_ID", "")}
 	if needsBotToken(providerID) && s.Env(providerEnv(providerID)+"BOT_TOKEN", "") == "" {
 		return app, false
 	}

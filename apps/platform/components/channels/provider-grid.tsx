@@ -42,7 +42,6 @@ const GROUPS: { title: string; ids: string[] }[] = [
       'x',
       'facebook',
       'instagram',
-      'instagram_business',
       'threads',
       'linkedin',
       'linkedin_page',

@@ -108,24 +108,3 @@ func (LinkedIn) CheckApp(ctx context.Context, app App, _ string) (bool, error) {
 	}
 	return false, unexpected("LinkedIn", status, body)
 }
-
-// Instagram checks a sign-in code before the keys and has no app token for these apps: the check only finds out that
-// it answers; the keys are proven when an account connects.
-func (Instagram) CheckApp(ctx context.Context, app App, redirect string) (bool, error) {
-	req, err := checkForm(ctx, instagramToken, url.Values{"client_id": {app.ClientID}, "client_secret": {app.ClientSecret},
-		"grant_type": {"authorization_code"}, "redirect_uri": {redirect}, "code": {checkCode}})
-	if err != nil {
-		return false, err
-	}
-	status, body, err := probe(ctx, req, "Instagram")
-	switch {
-	case err != nil:
-		return false, err
-	case strings.Contains(body, "authorization code"):
-		return false, nil
-	}
-	return false, unexpected("Instagram", status, body)
-}
-
-// Instagram calls back over https only and downloads every picture and video itself.
-func (Instagram) Needs() Needs { return Needs{HTTPS: true, PublicMedia: true} }

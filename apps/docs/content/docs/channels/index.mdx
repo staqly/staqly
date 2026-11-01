@@ -42,7 +42,7 @@ How you connect depends on the platform's `auth`:
 ### Pick the accounts
 
 Some sign-ins can publish as several accounts: the Facebook Pages you manage, the Instagram accounts
-linked to them, LinkedIn Pages, YouTube channels, Google Business Profile locations and Tumblr blogs.
+you share, LinkedIn Pages, YouTube channels, Google Business Profile locations and Tumblr blogs.
 When there is only one, staqly connects it right away. When there are
 several, the platform sends you back to a list: tick the ones you want and click **Connect**. Every
 account you pick becomes its own channel (one already connected is reconnected instead), and nothing is
@@ -116,8 +116,7 @@ has their app keys; token platforms right away.
 | [LinkedIn](/channels/linkedin) | `linkedin` | OAuth | 3,000 | 9 pictures or 1 video | — |
 | [LinkedIn Page](/channels/linkedin_page) | `linkedin_page` | OAuth, pick Pages | 3,000 | 9 pictures or 1 video | — |
 | [Reddit](/channels/reddit) | `reddit` | OAuth | 40,000 | 1 picture or video | a title and a subreddit |
-| [Instagram](/channels/instagram) | `instagram` | OAuth | 2,200 | 10 JPEG pictures and videos, or 1 reel or story | media |
-| [Instagram Business (through a Facebook Page)](/channels/instagram_business) | `instagram_business` | OAuth, pick accounts | 2,200 | 10 JPEG pictures and videos, or 1 reel or story | media |
+| [Instagram](/channels/instagram) | `instagram` | OAuth, pick accounts | 2,200 | 10 JPEG pictures and videos, or 1 reel or story | media |
 | [Facebook Page](/channels/facebook) | `facebook` | OAuth, pick Pages | 63,206 | 10 pictures or 1 video | — |
 | [Threads](/channels/threads) | `threads` | OAuth | 500 | 10 | — |
 | [YouTube](/channels/youtube) | `youtube` | OAuth, pick channels | 5,000 | 1 video | a title and the video |
@@ -164,7 +163,7 @@ PROVIDER_X_CLIENT_SECRET=...
 ### Platforms that need https
 
 Some platforms send the browser back to staqly only at a secure (`https://`) address after you
-allow the app: Facebook, Instagram, Instagram Business, Threads, TikTok and Slack (`needs_https` in
+allow the app: Facebook, Instagram, Threads, TikTok and Slack (`needs_https` in
 `GET /v1/providers`). On a dashboard opened at a plain `http://` address, such as
 `http://localhost:8080`, they show **Not available** in **Add channel** and can't be connected.
 

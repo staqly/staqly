@@ -41,7 +41,8 @@ platform is listed as `soon`.
 
 [Discord](/channels/discord) posts through the server's own bot, so it also needs
 `PROVIDER_DISCORD_BOT_TOKEN` beside its two keys, and only the server's app works for it: a
-workspace can't save its own.
+workspace can't save its own. [Instagram](/channels/instagram) also needs
+`PROVIDER_INSTAGRAM_CONFIG_ID`, the Meta app's login configuration.
 
 `GET /v1/providers` reports `app_configured` per provider (status `soon` while it is false). Starting an OAuth flow without an app
 answers `409 app_not_configured`; starting it for a `soon` provider answers `409 provider_soon`.
