@@ -175,8 +175,8 @@ func TestStripeBillingLifecycle(t *testing.T) {
 		t.Errorf("checkout form = %v", checkout)
 	}
 	// The customer is findable in Stripe: the workspace's id and name.
-	if customer.Get("metadata[workspace_id]") == "" || !strings.HasPrefix(customer.Get("description"), "staqly workspace ws_") ||
-		customer.Get("business_name") == "" {
+	if !strings.HasPrefix(customer.Get("name"), "ws_") || customer.Get("metadata[workspace_id]") != customer.Get("name") ||
+		customer.Get("description") == "" || customer.Get("description") != customer.Get("business_name") {
 		t.Errorf("customer form = %v", customer)
 	}
 	// Starter: Stripe's 7-day trial with a card required (cancelled if no card is on file at its end).
