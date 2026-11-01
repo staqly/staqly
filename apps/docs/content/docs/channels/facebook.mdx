@@ -45,17 +45,17 @@ Copy the **App ID** and **App secret** from **App settings → Basic**.
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
-PROVIDER_FACEBOOK_CLIENT_ID=your-meta-app-id
-PROVIDER_FACEBOOK_CLIENT_SECRET=your-meta-app-secret
+PROVIDER_META_CLIENT_ID=your-meta-app-id
+PROVIDER_META_CLIENT_SECRET=your-meta-app-secret
 ```
 
-- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_FACEBOOK_CLIENT_ID=...`.
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_META_CLIENT_ID=...`.
 - **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
   service keeps `PROVIDER_*` settings).
 
 Until both are set, Facebook Page shows as **soon** in **Channels → Add channel**.
-`PROVIDER_FACEBOOK_ENABLED=false` hides it altogether. The same Meta app can also serve
-[Instagram](/channels/instagram) (its own `PROVIDER_INSTAGRAM_*` keys and a login configuration).
+`PROVIDER_FACEBOOK_ENABLED=false` hides it altogether. The same Meta app, with the same keys, also serves
+[Instagram](/channels/instagram) (which adds a login configuration).
 A workspace may instead save its own app over the API (`PUT /v1/providers/facebook/app`).
 
 </Step>
