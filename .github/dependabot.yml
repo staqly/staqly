@@ -21,7 +21,7 @@ updates:
     directory: /
     schedule: { interval: monthly }
     ignore:
-      # Stay on the current Node LTS; odd/non-LTS majors (25, 26 before LTS) are skipped.
+      # Stay on the current Node LTS; major upgrades are checked and applied deliberately.
       - dependency-name: node
         update-types: [version-update:semver-major]
   # Actions are pinned to commit SHAs with a `# vX.Y.Z` comment; Dependabot bumps both. "/" covers

@@ -13,6 +13,6 @@
     "gen": "go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate"
   },
   "devDependencies": {
-    "@redocly/cli": "2.67.1"
+    "@redocly/cli": "2.72.1"
   }
 }

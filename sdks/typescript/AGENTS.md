@@ -28,8 +28,9 @@ STAQLY_LIVE=1 STAQLY_API_URL=http://127.0.0.1:3334 pnpm test     # + live, cloud
 Rules:
 
 * No runtime dependencies and no `node:` imports outside `src/node.ts`.
-* Tooling: oxlint (`.oxlintrc.json`); no formatter yet (oxfmt is pre-1.0). vitest
-  stays on 4.x while `engines` says Node 20.19 (vitest 5 needs Node ≥22.12).
+* Tooling: oxlint (`.oxlintrc.json`), oxfmt and Vitest 5 run on the root Node LTS
+  (`.nvmrc`). Keep `@types/node` on 20.x and the public `engines` at Node ≥20.19
+  so development tooling does not widen the SDK runtime requirements.
 * Request bodies / query params keep the API's snake_case names and schema types;
   SDK options are camelCase. Every method accepts `RequestOptions` last.
 * Keep the surface aligned with `sdks/python` (same namespaces and method

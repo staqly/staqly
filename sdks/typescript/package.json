@@ -42,9 +42,9 @@
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
-    "@types/node": "^20.19.0",
-    "oxfmt": "^0.74.0",
-    "oxlint": "^1.89.0",
+    "@types/node": "^20.19.43",
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0",
     "publint": "^0.3.25",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
