@@ -85,28 +85,43 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	return migrateRiver(ctx, db)
 }
 
-// squashedVersion is the last migration before the history was squashed into 00001_init.sql (2026-10-20,
-// before the first release): a database at this version has exactly the squashed schema.
-const squashedVersion = 47
+// oldChainVersion is the last migration of the history that was squashed into 00001_init.sql (2026-11-01).
+const oldChainVersion = 76
 
-// baselineSquash lets a database made before the squash run on: at version 47 it already has 00001_init's
-// schema, so version 1 is recorded as applied (PostgreSQL databases started at 27 and never had it). One
-// stopped part way (2-46) can't be upgraded and is refused; a new database has no goose table yet.
+// baselineSquash lets a database made by the old chain (00001, 00048-00076) run on: at version 76 it has
+// exactly 00001_init's schema, so its goose rows are replaced by version 1 and goose goes on with 00002.
+//
+// Telling an old database from a new one: the old chain skipped numbers (never 67 and 68; a fresh one went
+// 1, 48, ...), while a database made by the squashed chain has every version from 1 to its latest. So the
+// versions above 0 are counted: a gap means the old chain. A gap below 76 is refused (upgrade to v0.13.0, which
+// ends the old chain, first). Once rewritten the rows are 0 and 1 and later migrations number on from 2
+// without a gap, so a database is never rewritten twice. Limit: an old database stopped at 2-46 or at 47-65
+// with no gap looks new; goose then fails on its missing migrations instead of changing anything.
 func baselineSquash(ctx context.Context, db *sql.DB) error {
-	var max sql.NullInt64
-	if err := db.QueryRowContext(ctx, "SELECT MAX(version_id) FROM goose_db_version").Scan(&max); err != nil || !max.Valid || max.Int64 <= 1 {
+	var max, n sql.NullInt64
+	if err := db.QueryRowContext(ctx, "SELECT MAX(version_id), COUNT(DISTINCT version_id) FROM goose_db_version WHERE version_id > 0").Scan(&max, &n); err != nil || !max.Valid || max.Int64 <= 1 {
 		return nil // no goose table yet (a new database), or only the init
 	}
-	if max.Int64 < squashedVersion {
-		return fmt.Errorf("migrate: this database is at version %d, from before the migrations were squashed; "+
-			"only databases at version %d or newer can be opened (start a new one)", max.Int64, squashedVersion)
+	if n.Int64 == max.Int64 {
+		return nil // every version from 1: the squashed chain
 	}
-	var n int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM goose_db_version WHERE version_id = 1").Scan(&n); err != nil || n > 0 {
+	if max.Int64 < oldChainVersion {
+		return fmt.Errorf("migrate: this database is at version %d, from before the migrations were squashed; "+
+			"upgrade to staqly v0.13.0 first (it takes the database to version %d), then to this version", max.Int64, oldChainVersion)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	_, err := db.ExecContext(ctx, "INSERT INTO goose_db_version (version_id, is_applied) VALUES (1, true)")
-	return err
+	defer tx.Rollback()
+	// Keep goose's own initial row (version 0).
+	if _, err := tx.ExecContext(ctx, "DELETE FROM goose_db_version WHERE version_id <> 0"); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO goose_db_version (version_id, is_applied) VALUES (1, true)"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // migrateRiver applies the job queue's own schema (River: river_job, river_leader, river_queue, ...),

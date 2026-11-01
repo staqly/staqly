@@ -70,7 +70,7 @@ func postgresSchema(t *testing.T, db *sql.DB) []string {
 	var out []string
 	out = append(out, version(t, db))
 	// The position among the table's columns, not ordinal_position: PostgreSQL keeps a dropped column's number
-	// (00053 dropped workspaces.account_id), SQLite renumbers.
+	// (a dropped column), SQLite renumbers.
 	rows, err := db.Query(`SELECT table_name, ROW_NUMBER() OVER (PARTITION BY table_name ORDER BY ordinal_position), column_name, data_type, is_nullable FROM information_schema.columns
 		WHERE table_schema = current_schema() AND table_name <> 'goose_db_version' AND table_name NOT LIKE 'river_%' ORDER BY table_name, ordinal_position`)
 	if err != nil {

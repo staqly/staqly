@@ -36,9 +36,8 @@ sqlc generate                       # after editing db/queries or migrations (~/
 ## Conventions
 
 * **Schema change** = one new `db/migrations/0000N_*.sql` (never edit an applied
-  migration; `00001_init.sql` is the squashed history, and numbers go on from
-  00048: databases from before the squash have 2–47 recorded as applied, so a
-  file numbered there would be skipped) for both databases. Write
+  migration; `00001_init.sql` is the history squashed on 2026-11-01, and numbers go on from
+  00002) for both databases. Write
   it in SQLite's dialect; PostgreSQL reads it through `store.postgresDDL`
   (INTEGER → BIGINT, BLOB → BYTEA, `json_valid(x)` → `x IS JSON`). What can't be
   shared goes in dialect blocks: lines between `-- +sqlite` and `-- +end` run on

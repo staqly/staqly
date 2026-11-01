@@ -148,11 +148,10 @@ every job sets `timeout-minutes` and only the `permissions:` it uses.
   `pnpm format` = `oxlint --fix` + `oxfmt`.
 * User-facing name is **staqly**; code identifiers use `staqly`
   (`X-Staqly-*`, `STAQLY_*`, `staqly-api`).
-* **Migrations are append-only once released.** Before the first release the
-  history was squashed into one file, `db/migrations/00001_init.sql`, shared by
-  SQLite and PostgreSQL (databases made before the squash, at version 47, get it
-  recorded as applied by `store.baselineSquash`). From the first release on, never
-  edit a released migration — add `0000N_<name>.sql` (goose) instead, or existing
+* **Migrations are append-only once released.** The history up to 00076 was squashed into
+  `db/migrations/00001_init.sql` on 2026-11-01, shared by SQLite and PostgreSQL (databases the old chain
+  left at version 76 are rebaselined to version 1 by `store.baselineSquash`; older ones must go through
+  v0.13.0 first). The next migration is `00002_<name>.sql` (goose); never edit a released one, or existing
   installs will diverge.
 * Node: the current LTS, pinned to a patched release in `.nvmrc` (CI), the root
   `Dockerfile` (dashboard build stage) and `compose.e2e.yml` (test receiver).
