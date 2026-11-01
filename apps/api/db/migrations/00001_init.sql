@@ -1,8 +1,8 @@
 -- +goose Up
--- The whole schema, for SQLite (local mode) and PostgreSQL (cloud mode) alike. Before the first release the
--- history (00001-00047) was squashed into this one file; a database made before the squash is at version 45
--- and store.baselineSquash records this file as applied there. From the first release on, migrations are
--- append-only: add 00002_<name>.sql.
+-- The whole schema, for SQLite (local mode) and PostgreSQL (cloud mode) alike. The history through 00076 was
+-- squashed into this one file on 2026-11-01; a database made by the old chain (at version 76) is rebaselined by
+-- store.baselineSquash to version 1. Migrations are append-only: the next one is 00002_<name>.sql. Columns that
+-- later migrations added sit at the end of their table, in the order they were added.
 --
 -- Written in SQLite's dialect. PostgreSQL reads it through store.postgresDDL: INTEGER becomes BIGINT, BLOB
 -- becomes BYTEA, json_valid(x) becomes x IS JSON, lines between "-- +sqlite" and "-- +end" are dropped and
@@ -29,14 +29,6 @@ CREATE TABLE users (
     notification_prefs TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(notification_prefs))
 );
 
-CREATE TABLE accounts (
-    id            TEXT PRIMARY KEY,
-    owner_user_id TEXT NOT NULL UNIQUE REFERENCES users (id),
-    name          TEXT NOT NULL,
-    created_at    TEXT NOT NULL,
-    updated_at    TEXT NOT NULL
-);
-
 CREATE TABLE workspaces (
     id                         TEXT PRIMARY KEY,
     name                       TEXT NOT NULL,
@@ -50,16 +42,16 @@ CREATE TABLE workspaces (
     stripe_subscription_id     TEXT,
     subscription_status        TEXT,
     processing_timeout_seconds INTEGER,
-    account_id                 TEXT REFERENCES accounts (id),
     onboarded_at               TEXT,
     -- Stripe Entitlements: the features the subscription grants (plan features, add-ons, one customer's deal),
     -- a JSON array of {lookup_key, name, metadata}, written by the sync_entitlements job, read with the plan.
-    entitlements               TEXT NOT NULL DEFAULT '[]'
+    entitlements               TEXT NOT NULL DEFAULT '[]',
+    timezone                   TEXT NOT NULL DEFAULT 'UTC',  -- IANA name: post repeats keep their wall-clock time across DST
+    logo                       TEXT NOT NULL DEFAULT '',     -- small PNG/JPEG data: URL, '' for staqly's
+    design_brand               TEXT NOT NULL DEFAULT '{}'    -- the design editor's brand kit (JSON)
 );
 
 CREATE INDEX workspaces_stripe_customer ON workspaces (stripe_customer_id);
-
-CREATE INDEX workspaces_account ON workspaces (account_id) WHERE account_id IS NOT NULL;
 
 CREATE TABLE api_keys (
     id                 TEXT PRIMARY KEY,
@@ -87,7 +79,8 @@ CREATE TABLE sessions (
     last_seen_at TEXT NOT NULL,
     expires_at   TEXT NOT NULL,
     revoked_at   TEXT,
-    user_id      TEXT REFERENCES users (id) ON DELETE CASCADE
+    user_id      TEXT REFERENCES users (id) ON DELETE CASCADE,
+    guest_role   TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX sessions_workspace ON sessions (workspace_id);
@@ -219,7 +212,7 @@ CREATE TABLE webhook_deliveries (
     id               TEXT PRIMARY KEY,
     workspace_id     TEXT NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
     webhook_id       TEXT NOT NULL REFERENCES webhooks (id) ON DELETE CASCADE,
-    event_id         TEXT NOT NULL REFERENCES events (id),
+    event_id         TEXT NOT NULL REFERENCES events (id) ON DELETE CASCADE,
     event_type       TEXT NOT NULL,
     status           TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'succeeded', 'failed')),
     attempts         INTEGER NOT NULL DEFAULT 0,
@@ -238,6 +231,9 @@ CREATE INDEX webhook_deliveries_due ON webhook_deliveries (status, next_attempt_
 CREATE INDEX webhook_deliveries_webhook ON webhook_deliveries (webhook_id, created_at);
 
 CREATE INDEX webhook_deliveries_workspace ON webhook_deliveries (workspace_id, created_at);
+
+-- The webhook worker's poll reads due deliveries per workspace without scanning every due row.
+CREATE INDEX webhook_deliveries_pending ON webhook_deliveries (workspace_id, next_attempt_at) WHERE status = 'pending';
 
 CREATE INDEX webhook_deliveries_event ON webhook_deliveries (event_id);
 
@@ -270,7 +266,10 @@ CREATE TABLE device_links (
     created_at   TEXT NOT NULL,
     expires_at   TEXT NOT NULL,
     used_at      TEXT,
-    user_id      TEXT NOT NULL DEFAULT ''
+    user_id      TEXT NOT NULL DEFAULT '',
+    max_uses     INTEGER NOT NULL DEFAULT 1,   -- 0 = until it expires
+    uses         INTEGER NOT NULL DEFAULT 0,
+    guest_role   TEXT NOT NULL DEFAULT ''      -- '' = an ordinary connect link
 );
 
 CREATE TABLE notification_channels (
@@ -378,7 +377,9 @@ CREATE TABLE channels (
     last_error   TEXT NOT NULL DEFAULT '',
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
-    group_id     TEXT NOT NULL DEFAULT ''
+    group_id     TEXT NOT NULL DEFAULT '',
+    comments     INTEGER NOT NULL DEFAULT 1,          -- may this connection post comments under its posts
+    deleted_at   TEXT                                 -- a removed channel stays as a row (no credentials)
 );
 
 CREATE INDEX channels_workspace ON channels (workspace_id, provider);
@@ -410,7 +411,10 @@ CREATE TABLE posts (
     repeat_every    TEXT NOT NULL DEFAULT '',
     repeat_of       TEXT NOT NULL DEFAULT '',
     thread          TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(thread)),
-    created_by_user TEXT NOT NULL DEFAULT ''
+    created_by_user TEXT NOT NULL DEFAULT '',
+    title           TEXT NOT NULL DEFAULT '',
+    unpublished_at  TEXT,
+    unpublished_by  TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX posts_calendar ON posts (workspace_id, publish_at);
@@ -418,6 +422,14 @@ CREATE INDEX posts_calendar ON posts (workspace_id, publish_at);
 CREATE INDEX posts_collection ON posts (workspace_id, collection_id, status);
 
 CREATE INDEX posts_created ON posts (workspace_id, created_at, id);
+
+-- The post list's sort keys (db.SearchPosts: unscheduled posts last), so a page reads its rows in order.
+CREATE INDEX posts_publish_asc ON posts (workspace_id, (COALESCE(publish_at, '9999')), id);
+
+CREATE INDEX posts_publish_desc ON posts (workspace_id, (COALESCE(publish_at, '')), id);
+
+-- The analytics page: what waits (scheduled, drafts, next time).
+CREATE INDEX posts_status ON posts (workspace_id, status, publish_at);
 
 CREATE INDEX posts_repeat_of ON posts (repeat_of) WHERE repeat_of <> '';
 
@@ -433,10 +445,15 @@ CREATE TABLE post_targets (
     attempts      INTEGER NOT NULL DEFAULT 0,
     published_at  TEXT,
     updated_at    TEXT NOT NULL, replies TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(replies)), metrics TEXT NOT NULL DEFAULT '', metrics_at TEXT,
+    removal       TEXT NOT NULL DEFAULT '',  -- after an unpublish: removed, manual, failed
+    removal_error TEXT NOT NULL DEFAULT '',
+    removed_at    TEXT,
     PRIMARY KEY (post_id, channel_id)
 );
 
 CREATE INDEX post_targets_channel ON post_targets (channel_id, status);
+
+CREATE INDEX post_targets_channel_published ON post_targets (channel_id, status, published_at);
 
 CREATE TABLE schedules (
     id              TEXT PRIMARY KEY,
@@ -537,7 +554,8 @@ CREATE TABLE email_codes (
     created_at  TEXT NOT NULL,
     expires_at  TEXT NOT NULL,
     verified_at TEXT,
-    used_at     TEXT
+    used_at     TEXT,
+    client      TEXT NOT NULL DEFAULT ''  -- keyed hash of the asker's address, never the address
 );
 
 CREATE INDEX email_codes_email ON email_codes (email, created_at);
@@ -600,6 +618,12 @@ CREATE TABLE post_comments (
 
 CREATE INDEX post_comments_post ON post_comments (post_id, created_at);
 
+-- The per-link comment limit on public preview pages.
+CREATE INDEX post_comments_preview ON post_comments (preview_id, created_at);
+
+-- The analytics page's preview feedback threads.
+CREATE INDEX post_comments_workspace ON post_comments (workspace_id, parent_id, created_at);
+
 CREATE TABLE job_requeues (
     key           TEXT PRIMARY KEY,
     workspace_id  TEXT NOT NULL,
@@ -620,7 +644,8 @@ CREATE TABLE channel_groups (
     position     INTEGER NOT NULL DEFAULT 0,
     is_default   INTEGER NOT NULL DEFAULT 0,
     created_at   TEXT NOT NULL,
-    updated_at   TEXT NOT NULL
+    updated_at   TEXT NOT NULL,
+    icon         TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX channel_groups_workspace ON channel_groups (workspace_id, position);
@@ -667,20 +692,11 @@ CREATE TABLE media_projects (
   size_bytes INTEGER NOT NULL,
   created_by TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  page_ids TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE INDEX media_projects_workspace_updated ON media_projects (workspace_id, updated_at);
-
-CREATE TABLE workspace_ai (
-  workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
-  provider TEXT NOT NULL,
-  model TEXT NOT NULL,
-  credentials TEXT NOT NULL,
-  key_hint TEXT NOT NULL,
-  updated_by TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL
-);
 
 -- usage_events: one row per published post or thread reply to a metered provider (X); the primary key makes
 -- metering idempotent (a retried job counts once). units: posts as the provider bills them (a post with a live
@@ -711,3 +727,181 @@ CREATE TABLE credit_grants (
     created_at   TEXT NOT NULL
 );
 CREATE INDEX credit_grants_live ON credit_grants (workspace_id, provider, expires_at);
+
+-- A sign-in that may publish as several accounts (Facebook Pages, YouTube channels, Google Business locations...)
+-- waits here, sealed, while the person picks the accounts that become channels. Rows live ten minutes.
+CREATE TABLE pending_connections (
+    id           TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    provider     TEXT NOT NULL,
+    credentials  TEXT NOT NULL,
+    accounts     TEXT NOT NULL DEFAULT '[]',
+    link_id      TEXT NOT NULL DEFAULT '',
+    group_id     TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    expires_at   TEXT NOT NULL
+);
+
+CREATE INDEX pending_connections_expiry ON pending_connections (expires_at);
+
+-- ai_jobs: one AI request of the design editor or the media library (a picture or a video made by fal.ai or
+-- Higgsfield), run by the job queue (ai_run:<id>). The row is also the AI usage ledger: who asked, which provider
+-- and model ran it, how long it took and what it is estimated to cost (cost_micros, millionths of a US dollar;
+-- the monthly limit sums it). Inputs and the result are temporary files under workspaces/<id>/ai/<job>/, deleted
+-- once accepted, discarded or a day old; the prompt is cleared with them.
+--   status: queued, running, succeeded, failed, canceled
+--   submit_state: '' (not sent), submitting (sent, answer not seen: never sent again blindly), submitted
+CREATE TABLE ai_jobs (
+    id                  TEXT PRIMARY KEY,
+    workspace_id        TEXT NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    created_by          TEXT NOT NULL,
+    operation           TEXT NOT NULL,
+    kind                TEXT NOT NULL,
+    status              TEXT NOT NULL,
+    prompt              TEXT NOT NULL DEFAULT '',
+    params              TEXT NOT NULL DEFAULT '{}',
+    inputs              TEXT NOT NULL DEFAULT '',
+    input_hash          TEXT NOT NULL,
+    idempotency_key     TEXT NOT NULL DEFAULT '',
+    provider            TEXT NOT NULL DEFAULT '',
+    model               TEXT NOT NULL DEFAULT '',
+    fallback_from       TEXT NOT NULL DEFAULT '',
+    submit_state        TEXT NOT NULL DEFAULT '',
+    provider_request    TEXT NOT NULL DEFAULT '',
+    result_key          TEXT NOT NULL DEFAULT '',
+    result_type         TEXT NOT NULL DEFAULT '',
+    result_width        INTEGER NOT NULL DEFAULT 0,
+    result_height       INTEGER NOT NULL DEFAULT 0,
+    media_id            TEXT NOT NULL DEFAULT '',
+    error_code          TEXT NOT NULL DEFAULT '',
+    error               TEXT NOT NULL DEFAULT '',
+    cost_micros         INTEGER NOT NULL DEFAULT 0,
+    duration_ms         INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL,
+    started_at          TEXT NOT NULL DEFAULT '',
+    finished_at         TEXT NOT NULL DEFAULT '',
+    files_purged        INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX ai_jobs_workspace_created ON ai_jobs (workspace_id, created_at);
+CREATE UNIQUE INDEX ai_jobs_idempotency ON ai_jobs (workspace_id, created_by, idempotency_key) WHERE idempotency_key <> '';
+CREATE INDEX ai_jobs_unpurged ON ai_jobs (files_purged, created_at);
+
+-- assistant_chats: the dashboard assistant's conversations, one person's in one workspace (owner: the user id, or
+-- the principal for local mode and keys). Saved by the server after every turn; listed newest first by updated_at
+-- and searched by title (the first thing the person asked).
+--   messages: the conversation in the model's chat format (JSON array), at most the last 200
+--   pending: the tool call waiting for Allow or Deny (JSON object), '' for none
+CREATE TABLE assistant_chats (
+    id           TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    owner        TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    messages     TEXT NOT NULL DEFAULT '[]',
+    pending      TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+CREATE INDEX assistant_chats_list ON assistant_chats (workspace_id, owner, updated_at, id);
+
+-- telegram_connect_codes: connecting a Telegram chat through the server's own bot. The dashboard asks for a code;
+-- the person adds the bot to the chat and sends /connect CODE there; the bot's poller finds the code, connects
+-- the chat as a channel of the workspace that asked and records the outcome (channel_id, or error).
+-- Codes last 10 minutes and are deleted a day after.
+CREATE TABLE telegram_connect_codes (
+    code         TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
+    created_by   TEXT NOT NULL,
+    actor_name   TEXT NOT NULL DEFAULT '',
+    group_id     TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    expires_at   TEXT NOT NULL,
+    channel_id   TEXT NOT NULL DEFAULT '',
+    error        TEXT NOT NULL DEFAULT ''
+);
+
+-- oauth_clients: the OAuth clients staqly registered on its own on a platform's servers (Mastodon: one per server
+-- and return address), so every sign-in to that server reuses one instead of registering again. Server-wide, not a
+-- workspace's: the client is staqly's. credentials is sealed (client id and secret).
+CREATE TABLE oauth_clients (
+    provider     TEXT NOT NULL,
+    server       TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    credentials  TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    PRIMARY KEY (provider, server, redirect_uri)
+);
+
+-- Repeated free trials (cloud with billing only). trial_fingerprints: who a workspace's channels belong to, and the
+-- cards it paid with, as an HMAC with a key derived from the server's secret key: never the platform's id or
+-- Stripe's card fingerprint itself. kind: account (a personal account: an X user, a Bluesky DID...), person (the
+-- platform user who authorized a shared space: a Slack workspace, a Facebook Page...; a space without one has no
+-- fingerprint) or card. Server-wide and kept when the workspace is deleted, so a trial that ended unpaid is still
+-- known: unpaid_trial_at is set on every row of a workspace whose trial ended without a payment (cleared if it pays
+-- later); only those within 180 days count.
+CREATE TABLE trial_fingerprints (
+    kind            TEXT NOT NULL,
+    fingerprint     TEXT NOT NULL,
+    workspace_id    TEXT NOT NULL,
+    unpaid_trial_at TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    PRIMARY KEY (kind, fingerprint, workspace_id)
+);
+
+CREATE INDEX trial_fingerprints_workspace ON trial_fingerprints (workspace_id);
+
+-- workspace_trials: a workspace's trial as far as repeated trials go (a row: its trial or a payment was seen).
+-- paid_at: when it was first seen paying (an active subscription); unpaid_trial_at: when its trial ended without a
+-- payment; revoked_at / revoked_reason (card): its trial was ended at once because its card was used in an unpaid
+-- trial; review_at / review_reason (channels): its trial is paused (no publishing, no new channels) because it
+-- connected accounts of an unpaid trial, until it pays or the operator clears it (cleared_at: the operator vouched
+-- for it, and it isn't checked again).
+CREATE TABLE workspace_trials (
+    workspace_id    TEXT PRIMARY KEY REFERENCES workspaces (id) ON DELETE CASCADE,
+    paid_at         TEXT,
+    unpaid_trial_at TEXT,
+    revoked_at      TEXT,
+    revoked_reason  TEXT,
+    review_at       TEXT,
+    review_reason   TEXT,
+    cleared_at      TEXT,
+    updated_at      TEXT NOT NULL
+);
+
+-- What the audience answered to a published post on its channels (comments, replies), read from the platforms,
+-- and the AI's reading of them per channel ('' = the whole post).
+CREATE TABLE post_responses (
+    workspace_id  TEXT NOT NULL,
+    post_id       TEXT NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+    channel_id    TEXT NOT NULL,
+    id            TEXT NOT NULL,                       -- the platform's id
+    parent_id     TEXT NOT NULL DEFAULT '',
+    author        TEXT NOT NULL DEFAULT '',
+    author_handle TEXT NOT NULL DEFAULT '',
+    text          TEXT NOT NULL DEFAULT '',
+    url           TEXT NOT NULL DEFAULT '',
+    likes         INTEGER,
+    created_at    TEXT NOT NULL,
+    fetched_at    TEXT NOT NULL,
+    sentiment     TEXT NOT NULL DEFAULT '' CHECK (sentiment IN ('', 'positive', 'neutral', 'negative')),
+    PRIMARY KEY (post_id, channel_id, id)
+);
+CREATE INDEX post_responses_fetched ON post_responses (workspace_id, fetched_at);
+
+CREATE TABLE post_response_insights (
+    workspace_id    TEXT NOT NULL,
+    post_id         TEXT NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+    channel_id      TEXT NOT NULL DEFAULT '',
+    positive        INTEGER NOT NULL DEFAULT 0,
+    neutral         INTEGER NOT NULL DEFAULT 0,
+    negative        INTEGER NOT NULL DEFAULT 0,
+    summary         TEXT NOT NULL DEFAULT '',
+    themes          TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(themes)),
+    questions       TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(questions)),
+    status          TEXT NOT NULL DEFAULT '' CHECK (status IN ('', 'ok', 'waiting_credits', 'failed')),
+    error           TEXT NOT NULL DEFAULT '',
+    responses_seen  INTEGER NOT NULL DEFAULT 0,
+    analyzed_at     TEXT NOT NULL,
+    PRIMARY KEY (post_id, channel_id)
+);

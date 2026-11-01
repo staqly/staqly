@@ -20,7 +20,7 @@ func TestOpenTemplateAndReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	var version int64
-	if err := first.QueryRowContext(ctx, "SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil || version < 55 {
+	if err := first.QueryRowContext(ctx, "SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil || version < 1 {
 		t.Fatalf("goose version %d: %v", version, err)
 	}
 	if _, err := first.ExecContext(ctx, "SELECT COUNT(*) FROM river_job"); err != nil {

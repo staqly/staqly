@@ -101,11 +101,11 @@ func sameVersion(ctx context.Context, src, pg *sql.DB) error {
 	if err := pg.QueryRowContext(ctx, "SELECT MAX(version_id) FROM goose_db_version WHERE is_applied = 1").Scan(&b); err != nil {
 		return err
 	}
-	// A database made before the squash says 47 where a new one says 1: the same schema.
-	if a == squashedVersion {
+	// A database made by the old chain says 76 where a squashed one says 1: the same schema.
+	if a == oldChainVersion {
 		a = 1
 	}
-	if b == squashedVersion {
+	if b == oldChainVersion {
 		b = 1
 	}
 	if a != b {
