@@ -1,6 +1,6 @@
 ---
 title: LinkedIn Page
-description: Publish to LinkedIn company pages you administer, with up to 9 pictures or one video and comments. What to register in the LinkedIn developer portal and what LinkedIn reviews.
+description: Publish to LinkedIn company pages you administer, with up to 9 pictures or one video, comments and statistics. What to register in the LinkedIn developer portal and what LinkedIn reviews.
 ---
 
 Staqly publishes to **LinkedIn company pages** through LinkedIn's REST API: a page admin signs in,
@@ -63,7 +63,7 @@ Staqly asks for these scopes:
 | Scope | Why |
 |---|---|
 | `r_basicprofile` | Read the member's name |
-| `rw_organization_admin` | List the pages the member administers, with names and logos |
+| `rw_organization_admin` | List the pages the member administers, with names and logos, and read a post's **Statistics** |
 | `w_organization_social` | Post, upload pictures and videos and comment as the page |
 | `r_organization_social` | Read the page's posts |
 
@@ -97,6 +97,12 @@ monthly LinkedIn posts with those to profiles; see [LinkedIn](/channels/linkedin
 
 A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the post,
 written as the page, in order and after their delays. Comments take text only.
+
+## Statistics
+
+A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show its impressions, clicks, likes,
+comments and reposts, as LinkedIn counts them for the page. A post LinkedIn has no numbers for yet
+(just published) shows none. They need no permission beyond the ones above.
 
 ## When publishing fails
 
