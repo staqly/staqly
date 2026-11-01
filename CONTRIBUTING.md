@@ -15,7 +15,8 @@ The repo is a Turborepo with pnpm workspaces (`pnpm-workspace.yaml`,
 `lint`, `typecheck`, `test`, `build`, `gen`) where they apply; the Go API, the CLI and the
 Python SDK wrap their toolchains (go, uv) in a small `package.json`, so one
 command covers everything and turbo caches unchanged packages. Requires Node
-(see `.nvmrc`), pnpm (`corepack enable`), Go and uv.
+(see `.nvmrc`), pnpm (`npm install --global "$(node -p 'require("./package.json").packageManager')"`
+from the repository root), Go and uv. Node 26 no longer bundles Corepack.
 
 ```bash
 pnpm install

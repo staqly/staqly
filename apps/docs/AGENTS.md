@@ -12,7 +12,7 @@ built as a **static export** (`out/`). It is *not* part of the root
 | Search | Fumadocs built-in static Orama search (index exported to `/api/search`, searched in the browser) |
 | Diagrams | ` ```mermaid ` fences → `<Mermaid>` (client-side, themed; nothing rendered at build time) |
 | Tooling | TypeScript 7 (native compiler), **oxlint** (`.oxlintrc.json`: react, nextjs, typescript, import, jsx-a11y, unicorn, oxc plugins; warnings fail `pnpm lint`). **oxfmt** (`.oxfmtrc.json`): printWidth 120, single quotes (double in JSX attributes), no semicolons, trailing commas, imports grouped (builtin → external → internal → relative) with a blank line between groups; `pnpm format` / `format:check`. |
-| Node | 24 (root `.nvmrc`; keep `@types/node` on 24.x to match) |
+| Node | 26 (root `.nvmrc`; keep `@types/node` on 26.x to match) |
 
 ## Commands
 

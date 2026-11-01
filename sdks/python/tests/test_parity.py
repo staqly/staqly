@@ -63,6 +63,7 @@ NOT_IN_SDK = {
     ("GET", "/v1/channels/oauth/{}/callback"),
     ("GET", "/v1/pending-connections/{}"),
     ("POST", "/v1/pending-connections/{}"),
+    ("POST", "/v1/ai/post"),  # the dashboard composer's assistant, like /v1/assistant/* below
     ("POST", "/mcp"),
 }
 NOT_IN_SDK_PREFIXES = (

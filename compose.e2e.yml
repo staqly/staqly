@@ -29,7 +29,7 @@ services:
   # Fake webhook endpoint: fails the first delivery, accepts the rest and
   # records them for the tests (GET /requests, POST /reset).
   receiver:
-    image: node:24.22.1-alpine
+    image: node:26.13.0-alpine
     container_name: staqly-e2e-receiver
     command: ["node", "/receiver/server.mjs"]
     volumes:

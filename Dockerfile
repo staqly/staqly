@@ -21,12 +21,13 @@
 # Stage 1: dashboard static export (only the dashboard's slice of the pnpm
 # workspace, exactly what pnpm-lock.yaml says)
 # ─────────────────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM node:24.22.1-alpine AS node
-ENV NEXT_TELEMETRY_DISABLED=1 PNPM_HOME=/pnpm COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+FROM --platform=$BUILDPLATFORM node:26.13.0-alpine AS node
+ENV NEXT_TELEMETRY_DISABLED=1 PNPM_HOME=/pnpm
 WORKDIR /repo
 # pnpm (packageManager in package.json) fetched once into its own layer, not on every source change
 COPY package.json ./
-RUN corepack enable && corepack install
+# Node 26 no longer bundles Corepack. Install the exact version declared by the workspace.
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')"
 
 FROM node AS prune
 COPY . .

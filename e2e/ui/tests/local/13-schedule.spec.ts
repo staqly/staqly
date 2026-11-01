@@ -20,6 +20,8 @@ const entry = (page: Page, id: string) => page.locator(`[data-testid="schedule-e
 async function showWeekOf(page: Page, day: Date) {
   const key = dayKey(day)
 
+  // A view change is asynchronous; do not mistake the outgoing month's grid for the week.
+  await expect(page.getByRole('radio', { name: 'Week', exact: true })).toBeChecked()
   await expect(page.getByTestId('schedule-grid')).toBeVisible()
   await expect(page.locator('[data-testid^="schedule-slot-"]').first()).toBeVisible()
 
@@ -106,9 +108,10 @@ test.describe('the schedule', () => {
     ).toBeVisible()
     // List layout: the same posts as rows.
     await page.getByRole('radio', { name: 'Week' }).click()
+    // Navigate while the calendar slots still exist; tomorrow may be in the next week.
+    await showWeekOf(page, tomorrow)
     await page.getByRole('radio', { name: 'List' }).click()
     await expect(page).toHaveURL(/list=1/)
-    await showWeekOf(page, tomorrow).catch(() => undefined)
     await expect(page.getByTestId('schedule-list')).toContainText('Beach day')
     await page.getByRole('radio', { name: 'Calendar' }).click()
     await expect(page.getByTestId('schedule-grid')).toBeVisible()
