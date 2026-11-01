@@ -134,11 +134,12 @@ func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause e
 	case "run_schedule":
 		s.scheduleFailed(ctx, p.ScheduleID, cause)
 	case "refresh_channel":
-		// The platform kept failing the token refresh: the channel needs a person to reconnect it.
-		row, err := s.Q.GetChannelByID(ctx, p.ChannelID)
-		if err == nil {
-			_ = s.channelNeedsReconnect(ctx, row, cause)
-		}
+		// A refused sign-in already marked the channel needs_reconnect (refreshChannel); what is left is the
+		// platform or the network being down (a laptop waking up, DNS failing). Reconnecting would not help:
+		// the channel stays connected and the refresh is tried again later.
+		s.logger(ctx).Warn("token refresh failed; trying again later", "channel", p.ChannelID, "err", cause)
+		_ = s.enqueue(ctx, s.W, a.WorkspaceID, "refresh_channel", "refresh_channel:"+p.ChannelID,
+			map[string]any{"channel_id": p.ChannelID}, s.Now().Add(refreshRetryDelay), 3)
 	case "publish_reply":
 		// The post is out; its thread stops at this part.
 		if err := s.replyEnded(ctx, p.PostID, p.ChannelID, p.Index, providers.Result{}, cause.Error()); err != nil {

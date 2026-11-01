@@ -152,7 +152,7 @@ and `profile_url`, provider-level default `settings` for new targets, and a stat
 | Status | Meaning |
 |---|---|
 | `connected` | Ready to publish. |
-| `needs_reconnect` | A publish or a token refresh failed with the stored credentials; `last_error` says why. Reconnect it in the dashboard, or with fresh `fields` for a token platform. |
+| `needs_reconnect` | The platform refused the stored credentials on a publish or a token refresh; `last_error` says why. Reconnect it in the dashboard, or with fresh `fields` for a token platform. |
 | `disabled` | Turned off by you; its targets wait. |
 
 Credentials are stored **sealed** (AES-256-GCM with a key kept in `DATA_DIR/secret.key` or
@@ -234,7 +234,7 @@ still running when its server stopped is picked up again after 15 minutes.
 | `publish_target` | Publishes one target through its provider, or asks your own automation. |
 | `target_timeout` | Fails a target on your own automation that reported nothing within the processing timeout. |
 | `run_schedule` | Runs a schedule at its time. |
-| `refresh_channel` | Refreshes an OAuth sign-in before it expires; a failure marks the channel `needs_reconnect`. |
+| `refresh_channel` | Refreshes an OAuth sign-in before it expires. A platform refusing the sign-in marks the channel `needs_reconnect`; one that can't be reached (network, outage) leaves it connected and is tried again 15 minutes later. |
 | `repeat_post` | Creates the next occurrence of a repeating post once it is published. |
 | `publish_reply` | Publishes one comment of a post's thread, after its delay. |
 | `repost` | Reposts a published post from another channel of the workspace (X). |
