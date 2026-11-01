@@ -71,7 +71,7 @@ may use and allows it. Staqly asks for these permissions:
 | `pages_show_list` | List the Pages the person manages |
 | `business_management` | Also list the Pages a business portfolio owns or manages for clients |
 | `pages_manage_posts` | Publish posts, reels and stories as the Page |
-| `pages_read_engagement` | Read the Page's name, picture and posts |
+| `pages_read_engagement` | Read the Page's name, picture and posts, and a post's reactions, comments and shares (**Statistics**) |
 | `pages_manage_engagement` | Post the comments of a post's thread as the Page |
 
 Staqly then lists the Pages: pick one or more, and each becomes a channel showing the Page's name,
@@ -122,6 +122,12 @@ Over the API: `{"post_type": "reel"}` in the target's `settings`.
 A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the post, as
 the Page, in order and after their delays. A comment takes text and at most one picture. Stories
 take no comments.
+
+## Statistics
+
+A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show its reactions (as likes), comments and
+shares (videos and reels have no shares count). They need no extra permission.
+
 
 ## When publishing fails
 
