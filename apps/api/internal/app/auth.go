@@ -445,6 +445,12 @@ func (s *Service) AuthenticateSession(ctx context.Context, token string) (Princi
 			return Principal{}, "", ErrUnauthorized
 		}
 		p.Kind, p.ID = PrincipalSession, sess.ID
+		if sess.GuestRole != "" {
+			p.Guest, p.Scopes = true, intersectScopes(p.Scopes, RoleScopes[sess.GuestRole])
+			if slices.Index(Roles, sess.GuestRole) < slices.Index(Roles, p.Role) {
+				p.Role = sess.GuestRole
+			}
+		}
 		s.trackActive(p)
 		return p, sess.CsrfToken, nil
 	}
@@ -751,6 +757,9 @@ func errLocalNoRecovery() error {
 const maxKeyLifetime = 365 * 24 * time.Hour
 
 func (s *Service) CreateAPIKey(ctx context.Context, p Principal, in CreateAPIKeyInput) (APIKey, error) {
+	if err := notGuest(p); err != nil {
+		return APIKey{}, err
+	}
 	if err := p.require(ScopeAdmin); err != nil {
 		return APIKey{}, err
 	}

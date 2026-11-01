@@ -114,6 +114,9 @@ func (s *Service) VerifyEmailSignIn(ctx context.Context, email, code, next, invi
 // StartEmailLink mails a code to an address the signed-in person wants to sign in with too. Whether the
 // address already belongs to someone else shows only after the code proves it is theirs.
 func (s *Service) StartEmailLink(ctx context.Context, p Principal, email string) (EmailCodeSent, error) {
+	if err := notGuest(p); err != nil {
+		return EmailCodeSent{}, err
+	}
 	if p.Kind != PrincipalSession || p.UserID == "" {
 		return EmailCodeSent{}, forbidden("only a signed-in person adds a sign-in method")
 	}
@@ -352,6 +355,9 @@ func (s *Service) ListSignInMethods(ctx context.Context, p Principal) ([]SignInM
 
 // RemoveSignInMethod: the person keeps at least one way to sign in.
 func (s *Service) RemoveSignInMethod(ctx context.Context, p Principal, provider, subject string) ([]SignInMethod, error) {
+	if err := notGuest(p); err != nil {
+		return nil, err
+	}
 	if err := accountsOnly(s); err != nil {
 		return nil, err
 	}

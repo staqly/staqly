@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,57 @@ func (s *Service) CreateDeviceLink(ctx context.Context, p Principal, origin stri
 	if p.Kind != PrincipalSession && p.Kind != PrincipalLocal && p.Kind != PrincipalSystem {
 		return DeviceLink{}, &Error{Code: "forbidden", Status: 403, Message: "device links can only be created from the dashboard"}
 	}
+	if err := notGuest(p); err != nil {
+		return DeviceLink{}, err
+	}
+	return s.createDeviceLink(ctx, p, origin, GuestLink{For: deviceLinkTTL, Uses: 1})
+}
+
+// GuestLink: how long a link works, how many times it signs a browser in (0: any number), and with which role
+// (RoleEditor or RoleViewer; "" for an ordinary connect link). A guest's sessions end with the link.
+type GuestLink struct {
+	For  time.Duration
+	Uses int
+	Role string
+}
+
+// CreateGuestLink is `server connect-link --email --for`: the operator lets someone into the account of the person
+// with this address for a while, without their mailbox. Sessions from it have Role at most (never billing or
+// deleting the workspace) and can't add a way in that outlasts the link (notGuest). workspaceID "" picks the
+// person's only workspace.
+func (s *Service) CreateGuestLink(ctx context.Context, email, workspaceID string, g GuestLink) (DeviceLink, error) {
+	if g.Role != "" && g.Role != RoleEditor && g.Role != RoleViewer {
+		return DeviceLink{}, invalid("role", "a guest is an editor or a viewer")
+	}
+	if g.For <= 0 || g.Uses < 0 {
+		return DeviceLink{}, invalid("for", "a link needs a duration and 0 or more uses")
+	}
+	email, err := normalizeEmail(email)
+	if err != nil {
+		return DeviceLink{}, err
+	}
+	user, err := s.Q.OldestUserByEmail(ctx, email)
+	if err != nil {
+		return DeviceLink{}, notFound("person with this address")
+	}
+	if workspaceID == "" {
+		rows, err := s.Q.ListUserWorkspaces(ctx, user.ID)
+		if err != nil {
+			return DeviceLink{}, err
+		}
+		if len(rows) != 1 {
+			return DeviceLink{}, invalid("workspace_id", email+" is in "+strconv.Itoa(len(rows))+" workspaces: pass one (see `server workspaces`)")
+		}
+		workspaceID = rows[0].ID
+	}
+	if _, err := s.userPrincipal(ctx, s.Q, user.ID, workspaceID); err != nil {
+		return DeviceLink{}, notFound("membership of " + email + " in this workspace")
+	}
+	p := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "cli", Name: "Server CLI", UserID: user.ID}
+	return s.createDeviceLink(ctx, p, "", g)
+}
+
+func (s *Service) createDeviceLink(ctx context.Context, p Principal, origin string, g GuestLink) (DeviceLink, error) {
 	// In a workspace with people the link signs in its maker (their role is read on every request as usual);
 	// without a person behind the session there is no one to sign in.
 	if p.UserID == "" && s.workspaceHasPeople(ctx, s.Q, p.WorkspaceID) {
@@ -48,16 +100,17 @@ func (s *Service) CreateDeviceLink(ctx context.Context, p Principal, origin stri
 	}
 	token := randomString(32)
 	now := s.Now().UTC()
-	exp := formatTime(now.Add(deviceLinkTTL))
+	exp := formatTime(now.Add(g.For))
 	err = s.tx(ctx, func(q *db.Queries) error {
 		if err := q.PurgeDeviceLinks(ctx, formatTime(now.Add(-time.Hour))); err != nil { // a failed statement aborts a PostgreSQL transaction
 			return err
 		}
 		if err := q.CreateDeviceLink(ctx, db.CreateDeviceLinkParams{ID: newID("dvl"), WorkspaceID: p.WorkspaceID,
-			TokenHash: hashSecret(token), CreatedBy: p.Kind + ":" + p.ID, CreatedAt: formatTime(now), ExpiresAt: exp, UserID: p.UserID}); err != nil {
+			TokenHash: hashSecret(token), CreatedBy: p.Kind + ":" + p.ID, CreatedAt: formatTime(now), ExpiresAt: exp, UserID: p.UserID,
+			MaxUses: int64(g.Uses), GuestRole: g.Role}); err != nil {
 			return err
 		}
-		_, err := s.emit(ctx, q, p, "device_link.created", "", "", map[string]any{"expires_at": exp})
+		_, err := s.emit(ctx, q, p, "device_link.created", "", "", map[string]any{"expires_at": exp, "uses": g.Uses, "guest_role": g.Role})
 		return err
 	})
 	if err != nil {
@@ -124,7 +177,7 @@ func (s *Service) RedeemDeviceLink(ctx context.Context, token, userAgent, curren
 			return err
 		}
 		if n == 0 {
-			if link.UsedAt.Valid {
+			if link.MaxUses > 0 && link.Uses >= link.MaxUses {
 				return &Error{Code: "link_used", Status: 410, Message: "this connect link was already used; generate a new QR code"}
 			}
 			return &Error{Code: "link_expired", Status: 410, Message: "this connect link expired; generate a new QR code"}
@@ -134,7 +187,12 @@ func (s *Service) RedeemDeviceLink(ctx context.Context, token, userAgent, curren
 			if _, err := s.userPrincipal(ctx, q, link.UserID, link.WorkspaceID); err != nil {
 				return &Error{Code: "invalid_link", Status: 401, Message: "this connect link is not valid"}
 			}
-			ns, _, err = s.createUserSession(ctx, q, link.WorkspaceID, link.UserID, userAgent)
+			if link.GuestRole != "" {
+				until, _ := time.Parse(timeFormat, link.ExpiresAt)
+				ns, _, err = s.newUserSession(ctx, q, link.WorkspaceID, link.UserID, userAgent, until, link.GuestRole)
+			} else {
+				ns, _, err = s.createUserSession(ctx, q, link.WorkspaceID, link.UserID, userAgent)
+			}
 		} else {
 			// A link from before the workspace had people signs no one in now.
 			n, err := q.CountMembers(ctx, link.WorkspaceID)

@@ -187,8 +187,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 }
 
 const createUserSession = `-- name: CreateUserSession :exec
-INSERT INTO sessions (id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, user_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO sessions (id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, user_id, guest_role)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateUserSessionParams struct {
@@ -201,6 +201,7 @@ type CreateUserSessionParams struct {
 	LastSeenAt  string         `json:"last_seen_at"`
 	ExpiresAt   string         `json:"expires_at"`
 	UserID      sql.NullString `json:"user_id"`
+	GuestRole   string         `json:"guest_role"`
 }
 
 func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionParams) error {
@@ -214,6 +215,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.LastSeenAt,
 		arg.ExpiresAt,
 		arg.UserID,
+		arg.GuestRole,
 	)
 	return err
 }

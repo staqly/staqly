@@ -68,7 +68,9 @@ func TestBaselineSquash(t *testing.T) {
 			CREATE TABLE email_codes (id TEXT PRIMARY KEY);
 			CREATE TABLE channels (id TEXT PRIMARY KEY, provider TEXT);
 			CREATE TABLE media_projects (id TEXT PRIMARY KEY);
-			CREATE TABLE channel_groups (id TEXT PRIMARY KEY)`, tc.max)
+			CREATE TABLE channel_groups (id TEXT PRIMARY KEY);
+			CREATE TABLE device_links (id TEXT PRIMARY KEY, used_at TEXT);
+			CREATE TABLE sessions (id TEXT PRIMARY KEY)`, tc.max)
 		raw.Close()
 		if err != nil {
 			t.Fatal(err)

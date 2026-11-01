@@ -226,7 +226,7 @@ export function PaymentFailedPage() {
   }
 
   return (
-    <PublicShell className="flex flex-col items-center pt-8 sm:pt-14" back={back}>
+    <PublicShell className="flex flex-col items-center" back={back}>
       <div className="w-full max-w-lg">{content}</div>
     </PublicShell>
   )

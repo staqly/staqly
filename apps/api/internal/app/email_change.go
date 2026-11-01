@@ -52,6 +52,9 @@ func (s *Service) changeSubject(ctx context.Context, p Principal, current string
 
 // StartEmailChange mails a code to the address the person signs in with now.
 func (s *Service) StartEmailChange(ctx context.Context, p Principal, current string) (EmailCodeSent, error) {
+	if err := notGuest(p); err != nil {
+		return EmailCodeSent{}, err
+	}
 	current, err := s.changeSubject(ctx, p, current)
 	if err != nil {
 		return EmailCodeSent{}, err
@@ -103,6 +106,9 @@ func (s *Service) provedCurrent(ctx context.Context, q *db.Queries, userID, curr
 // StartEmailChangeNew mails a code to the new address once the current one is proved. Whether the new
 // address already belongs to someone shows only after its code proves it is the person's.
 func (s *Service) StartEmailChangeNew(ctx context.Context, p Principal, current, next string) (EmailCodeSent, error) {
+	if err := notGuest(p); err != nil {
+		return EmailCodeSent{}, err
+	}
 	current, err := s.changeSubject(ctx, p, current)
 	if err != nil {
 		return EmailCodeSent{}, err

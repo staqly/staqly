@@ -171,7 +171,7 @@ publishing history.
 | `session.revoked` | A browser session signed out or was revoked | `session_id`, `reason` (`logout` or `revoked`) |
 | `access_token.rotated` | Staqly Community Edition: the [access token](/local-vs-cloud#the-access-token) was replaced, from the dashboard or with `server token --rotate` (every other browser was signed out) | `sessions_revoked` |
 | `recovery_key.rotated` | The recovery key was rotated (other sessions were signed out) | `sessions_revoked`; `via: "cli"` when rotated with `server recovery-key`, `via: "recovery"` when a recovery used it up |
-| `device_link.created` | A *Connect a device* link was created | `expires_at` |
+| `device_link.created` | A *Connect a device* link (or a guest link, `server connect-link --for`) was created | `expires_at`, `uses` (0: any number), `guest_role` (`""` for a connect link) |
 | `device.connected` | A *Connect a device* link was redeemed | `user_agent` |
 | `sign_in_method.added` | A person added a passkey or an email address to how they sign in (cloud) | `provider`; `passkey_id`, `name` or `email` |
 | `sign_in_method.changed` | A person changed their email sign-in address (cloud) | `provider`, `from`, `to` |

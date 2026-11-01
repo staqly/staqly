@@ -90,8 +90,8 @@ UPDATE workspace_invitations SET accepted_at = @now, accepted_by = @user_id, upd
 WHERE id = @id AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > @now;
 
 -- name: CreateUserSession :exec
-INSERT INTO sessions (id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, user_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO sessions (id, workspace_id, token_hash, csrf_token, user_agent, created_at, last_seen_at, expires_at, user_id, guest_role)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: SetSessionWorkspace :execrows
 UPDATE sessions SET workspace_id = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL;
