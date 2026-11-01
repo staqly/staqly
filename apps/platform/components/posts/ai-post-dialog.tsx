@@ -3,11 +3,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlignLeft,
-  ArrowLeft,
+  BadgePercent,
   BookOpen,
+  Briefcase,
   CalendarDays,
   Check,
   Film,
+  GraduationCap,
   ImageIcon,
   Lightbulb,
   ListTree,
@@ -67,6 +69,9 @@ const STARTERS = [
   { label: 'Tell a story', text: 'Tell the story behind ', icon: BookOpen },
   { label: 'Celebrate a milestone', text: 'Celebrate our milestone: ', icon: Trophy },
   { label: 'Ask your audience', text: 'Ask our audience what they think about ', icon: MessageCircleQuestion },
+  { label: 'Promote an offer', text: 'Promote our offer: ', icon: BadgePercent },
+  { label: 'Share a lesson', text: 'Share a lesson we learned from ', icon: GraduationCap },
+  { label: "We're hiring", text: 'Announce an open role: ', icon: Briefcase },
 ]
 
 type MediaKind = 'none' | 'image' | 'video'
@@ -76,6 +81,12 @@ const SHAPES: { id: Shape; label: string }[] = [
   { id: '1:1', label: 'Square' },
   { id: '9:16', label: 'Portrait' },
   { id: '16:9', label: 'Landscape' },
+]
+
+// What the video models make (Kling on fal, Higgsfield): one clip of 5 or 10 seconds.
+const LENGTHS: { id: '5' | '10'; label: string }[] = [
+  { id: '5', label: '5 seconds' },
+  { id: '10', label: '10 seconds' },
 ]
 
 // A picture's size per shape (1344 px on the long side, like the design editor's pictures).
@@ -158,6 +169,7 @@ export function AiPostDialog({
   const [tone, setTone] = useState<Tone>('friendly')
   const [mediaKind, setMediaKind] = useState<MediaKind>('none')
   const [shape, setShape] = useState<Shape>('1:1')
+  const [length, setLength] = useState<'5' | '10'>('5')
   const [jobId, setJobId] = useState<string | null>(null)
   const [pictureError, setPictureError] = useState('')
   const job = useAiJob(jobId)
@@ -182,7 +194,7 @@ export function AiPostDialog({
       if (media !== 'none' && draft.media_prompt) {
         const body =
           media === 'video'
-            ? { operation: 'text_to_video' as const, fields: { duration: 5, aspect_ratio: shape } }
+            ? { operation: 'text_to_video' as const, fields: { duration: Number(length), aspect_ratio: shape } }
             : { operation: 'generate' as const, fields: PICTURE_SIZE[shape] }
 
         api
@@ -252,7 +264,7 @@ export function AiPostDialog({
     <Sheet open={open} onOpenChange={close}>
       <SheetContent
         // A second drawer over the composer, a little narrower so the composer's edge shows (like the preview).
-        className="gap-0 overflow-hidden p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[calc(42rem-1.5rem)]"
+        className="gap-0 overflow-hidden p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[calc(42rem-1.5rem)] data-[side=right]:lg:max-w-[calc(56rem-3rem)]"
         data-testid="ai-post-dialog"
         // ⌘/Ctrl+Enter writes from anywhere in the form.
         onKeyDown={(e) => {
@@ -264,17 +276,6 @@ export function AiPostDialog({
       >
         <SheetHeader className="relative gap-1 border-b bg-gradient-to-br from-brand-soft/70 via-transparent to-transparent px-6 pb-4">
           <div className="mb-2 flex items-center gap-2">
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              aria-label="Back to the post"
-              tooltip="Back to the post"
-              onClick={() => close(false)}
-              className="-ml-1.5"
-            >
-              <ArrowLeft />
-            </Button>
             <span className="flex size-10 items-center justify-center rounded-xl bg-brand text-brand-foreground shadow-sm">
               <Sparkles className="size-5" />
             </span>
@@ -355,32 +356,30 @@ export function AiPostDialog({
                   onChange={(e) => setBrief(e.target.value)}
                   placeholder="A few words or notes: what happened, what you want people to know or do, links..."
                   maxLength={4000}
-                  rows={5}
-                  className="min-h-32 resize-y"
+                  rows={4}
+                  className="min-h-24 resize-y"
                   aria-required
                   aria-invalid={!!briefError}
                   data-testid="ai-post-brief"
                 />
                 <FieldError>{briefError}</FieldError>
                 {!brief && (
-                  <div className="mt-1 grid gap-2">
-                    <p className="text-xs font-medium text-muted-foreground">Or start from an idea</p>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {STARTERS.map((s) => (
-                        <button
-                          key={s.label}
-                          type="button"
-                          onClick={() => {
-                            setBrief(s.text)
-                            document.getElementById('ai-post-brief')?.focus()
-                          }}
-                          className="flex min-h-10 items-center gap-2 rounded-lg border bg-card px-3 py-2 text-left text-sm transition-colors outline-none hover:border-brand/40 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <s.icon className="size-4 shrink-0 text-brand" />
-                          <span className="min-w-0 leading-tight">{s.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap items-center gap-1.5" aria-label="Start from an idea" role="group">
+                    <span className="mr-0.5 text-xs text-muted-foreground">Ideas:</span>
+                    {STARTERS.map((s) => (
+                      <button
+                        key={s.label}
+                        type="button"
+                        onClick={() => {
+                          setBrief(s.text)
+                          document.getElementById('ai-post-brief')?.focus()
+                        }}
+                        className="inline-flex h-7 items-center gap-1.5 rounded-full border bg-card px-2.5 text-xs transition-colors outline-none hover:border-brand/40 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:h-9"
+                      >
+                        <s.icon className="size-3.5 shrink-0 text-brand" />
+                        {s.label}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
@@ -450,9 +449,12 @@ export function AiPostDialog({
                   {media !== 'none' && (
                     <>
                       <Chips label="Shape" options={SHAPES} value={shape} onChange={setShape} />
+                      {media === 'video' && (
+                        <Chips label="Length" options={LENGTHS} value={length} onChange={setLength} />
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {media === 'video'
-                          ? 'AI makes a 5 second clip to go with the post; it takes a few minutes.'
+                          ? `AI makes a ${length} second clip to go with the post; it takes a few minutes.`
                           : 'AI makes a picture to go with the post.'}{' '}
                         It lands in your library too.
                       </p>
