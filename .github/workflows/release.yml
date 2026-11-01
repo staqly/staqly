@@ -44,10 +44,11 @@ jobs:
           gh run watch "$run" --repo "$GITHUB_REPOSITORY" --exit-status --interval 30 >/dev/null
 
   # Each architecture builds on its own native runner (arm64 on GitHub's arm runner) and is pushed by digest; the
-  # next job joins them under the version tags. One runner compiling both used to take twice as long.
+  # next job joins them under the version tags. One runner compiling both used to take twice as long. The builds
+  # start at once, next to `verify` (a tag can go up while main's CI still runs): an untagged digest publishes
+  # nothing, only `manifest`, after `verify`, tags it.
   image:
     name: Image (${{ matrix.arch }})
-    needs: [verify]
     strategy:
       matrix:
         include:
@@ -98,7 +99,7 @@ jobs:
 
   manifest:
     name: Image
-    needs: [image]
+    needs: [verify, image]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

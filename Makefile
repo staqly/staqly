@@ -52,12 +52,12 @@ stripe-secret: ## Print the webhook signing secret of the Stripe CLI (put it in 
 
 # Tags the pushed origin/main (never local work), only after a full nightly/manual CI run went green; the tag triggers
 # .github/workflows/release.yml (binaries + ghcr.io/staqly/staqly:VERSION and :latest).
-release: ## Tag origin/main as VERSION (make release VERSION=v0.2.0); CI publishes the binaries and image
+release: ## Tag origin/main as VERSION (make release VERSION=v0.2.0), also while its CI still runs; release.yml publishes once it passes
 	@echo "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$$' || { echo "usage: make release VERSION=v<major>.<minor>.<patch>" >&2; exit 2; }
 	@git fetch --quiet --tags origin main
 	@! git rev-parse -q --verify "refs/tags/$(VERSION)" >/dev/null || { echo "tag $(VERSION) already exists" >&2; exit 1; }
-	@ci=$$(gh run list --workflow ci.yml --branch main --commit "$$(git rev-parse origin/main)" --json event,conclusion --jq '[.[] | select(.event == "schedule" or .event == "workflow_dispatch")][0].conclusion' 2>/dev/null); \
-	  [ "$$ci" = success ] || { echo "Full CI for $$(git rev-parse --short origin/main) is '$${ci:-not found}', not 'success'; not releasing. Run: gh workflow run ci.yml --ref main, then wait for it to pass." >&2; exit 1; }
+	@ci=$$(gh run list --workflow ci.yml --branch main --commit "$$(git rev-parse origin/main)" --event push --json status,conclusion --jq '.[0] | if . == null then "" elif .status != "completed" then "running" else .conclusion end' 2>/dev/null); \
+	  case "$$ci" in success|running) ;; *) echo "CI of the push of $$(git rev-parse --short origin/main) to main is '$${ci:-not found}'; not releasing." >&2; exit 1;; esac
 	git tag -a "$(VERSION)" origin/main -m "release $(VERSION)"
 	git push --quiet origin "$(VERSION)"
 

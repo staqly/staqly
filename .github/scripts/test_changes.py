@@ -25,13 +25,13 @@ class ChangesTest(unittest.TestCase):
         self.assertEqual(selected_jobs(['packages/brand/logo.tsx']),
                          {'dashboard', 'docs', 'web', 'packages', 'e2e'})
 
-    def test_unknown_base_runs_everything(self):
+    def test_main_and_full_runs_run_everything(self):
         self.assertIsNone(changed_files('push', {'before': '0' * 40}))
         self.assertIsNone(changed_files('push', {'before': 'f' * 40}))
         self.assertIsNone(changed_files('schedule', {}))
         self.assertIsNone(changed_files('workflow_dispatch', {}))
 
-    def test_push_covers_every_commit_and_both_sides_of_rename(self):
+    def test_pull_request_covers_both_sides_of_rename(self):
         with tempfile.TemporaryDirectory() as directory:
             previous = Path.cwd()
             os.chdir(directory)
@@ -51,7 +51,7 @@ class ChangesTest(unittest.TestCase):
                 git('commit', '-m', 'first')
                 git('mv', 'old', 'new')
                 git('commit', '-m', 'second')
-                self.assertEqual(set(changed_files('push', {'before': base})), {'first', 'old', 'new'})
+                self.assertIsNone(changed_files('push', {'before': base}))
                 self.assertEqual(set(changed_files('pull_request', {})), {'old', 'new'})
             finally:
                 os.chdir(previous)

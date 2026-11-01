@@ -101,17 +101,18 @@ e2e/perf/            dashboard performance run: seed.mjs (large workspace) and r
 
 The `e2e` job in `.github/workflows/ci.yml` builds the staqly image once (with the
 GitHub Actions layer cache) tagged `staqly-e2e:test`, checks formatting, lint and types of this package,
-then runs `pnpm turbo run test:e2e --filter=@staqly/e2e` with `E2E_BUILD=0`. On pushes to main and
-pull requests, `ci.yml` runs affected jobs only (`.github/scripts/changes.py`). Pushes compare the
-entire `before..HEAD` range; PRs compare the checkout's merge commit to its first parent. A missing
-base runs everything. Image changes include the dashboard, shared packages and `.dockerignore`.
+then runs `pnpm turbo run test:e2e --filter=@staqly/e2e` with `E2E_BUILD=0`. On pull requests,
+`ci.yml` runs affected jobs only (`.github/scripts/changes.py`), comparing the checkout's merge commit
+to its first parent; a missing base runs everything. Pushes to main run every job: that run is the one a
+release checks. Image changes include the dashboard, shared packages and `.dockerignore`.
 Workflows, the lockfile and root configuration run every job.
 
-Nightly and manual CI runs select every job and set `TURBO_FORCE=true` to execute tasks even with
-a warm Turbo cache. Before `make release`, run `gh workflow run ci.yml --ref main` and wait for
-success: release requires a full nightly/manual run for exactly that commit.
-Only superseded PR runs are cancelled; main pushes keep independent runs so their changed packages
-cannot disappear between two filtered pushes. Docker E2E runs alongside the API job.
+Nightly and manual CI runs also set `TURBO_FORCE=true` to execute tasks even with a warm Turbo cache.
+`make release` may tag main while the push's CI still runs (it refuses a failed one): `release.yml` builds
+the image at once, then publishes and deploys only after that CI run passed.
+Only superseded PR runs are cancelled; each main push keeps its own run. Docker E2E runs alongside the
+API jobs; `internal/httpapi` on PostgreSQL is split over three runners (every third test each) and a fourth
+runs the other packages.
 The `workflows` job runs actionlint and the change-selection tests
 (`make lint-workflows`, `python3 -m unittest discover -s .github/scripts`).
 
