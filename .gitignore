@@ -28,6 +28,10 @@ coverage/
 /apps/api/web/*
 !/apps/api/web/.gitkeep
 
+# static export of apps/admin embedded into the Go binaries (make dashboard)
+/apps/api/admin/*
+!/apps/api/admin/.gitkeep
+
 # Agent worktrees (Claude Code)
 .claude/worktrees/
 

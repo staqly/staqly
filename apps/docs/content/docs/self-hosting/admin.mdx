@@ -1,0 +1,103 @@
+---
+title: Admin panel
+description: The staff panel for a staqly install. Off unless you set ADMIN_ADDR. Admins are listed in the database.
+---
+
+The admin panel is for the people who run an install: it shows the whole service on one page and
+lets staff change workspaces, people, plans and payments. Every change is written to the audit log.
+It is for operators, not for workspace members.
+
+It works in [local and cloud mode](/local-vs-cloud). Most of its pages (workspaces, people, payments)
+are meant for cloud installs.
+
+## What it shows
+
+- **Overview:** totals for workspaces, people, active users (7 and 30 days), sign-ups, posts by
+  status, failed targets, usage, and 30-day charts of sign-ups and published posts.
+- **Workspaces:** plan, subscription, owner, members, channels and usage against the plan's limits.
+- **People:** accounts, the workspaces each one is in, and when they last signed in.
+- **Channels:** which platforms are connected, and their status and last error.
+- **Payments:** Stripe invoices with their status (paid, open, uncollectible, void), per workspace or for all.
+- **Promotion codes:** Stripe promotion codes, with redemptions.
+- **Audit log:** every change staff made, newest first.
+
+## What staff can do
+
+- Change a workspace's plan or trial, and clear a trial review.
+- Sync a workspace's billing from Stripe, or cancel its subscription now.
+- Sign in to a workspace as a person, with a one-time link.
+- Revoke a workspace's sessions or a person's sessions.
+- Attach a person to a workspace.
+- Create and deactivate promotion codes.
+- Delete a workspace or a person. Both ask you to type the name or email first.
+
+A person who is the only owner of a workspace that has other members or a live subscription cannot be
+deleted. Attach or delete that workspace first.
+
+## Turn it on
+
+Set `ADMIN_ADDR` in the environment of the server, then restart it:
+
+```bash
+ADMIN_ADDR=:8081   # the panel's listener; empty keeps the panel off
+```
+
+With `staqly serve`, use `--admin-port 8081` instead.
+
+The payments and promotion code pages read from Stripe, so they need billing set up on the server. Without
+it, those pages say that billing is off.
+
+## Who is an admin
+
+Admins are rows of a table in the database, not a setting. The panel's **Admins** page lists them, adds
+and removes them. You cannot remove yourself or the last admin. Removing an admin signs them out at once.
+
+- **Local mode:** a new install gets one default admin, `admin@localhost` (set `ADMIN_EMAIL` before the
+  first start to use your address instead).
+- **Cloud mode:** no admin exists at first. Set `ADMIN_EMAILS=you@example.com,ops@example.com` (commas
+  separate them; case and spaces don't matter): these addresses are added at every start and never
+  removed by it. Or add one from the command line, which also works while the server runs:
+
+  ```bash
+  server admin add you@example.com --name "Ana"
+  server admin remove you@example.com
+  server admins
+  ```
+
+  In a container: `docker exec staqly server admin add you@example.com`.
+
+## Sign in
+
+**Local mode:** open the panel and paste the install's access token (`staqly serve token`, or
+`docker exec staqly server token`). It signs you in as the default admin.
+
+**With an emailed code** (cloud mode, or when `AUTH_DEV_SIGNIN` is on):
+
+1. Enter an admin's address.
+2. staqly emails a 6-digit code. It is valid for 10 minutes and works for 5 attempts.
+3. Enter the code.
+
+Either way the session lasts 12 hours.
+
+The panel sends codes only to admins, and the answer is the same for every address, so it doesn't show
+who is an admin. A code can be requested once every 30 seconds, and at most 10 times an hour per address.
+
+Email has to work for codes. Set the mail settings from [Configuration](/self-hosting/configuration):
+`MAIL_SMTP_HOST` and `MAIL_FROM` (plus the other `MAIL_SMTP_*` settings your provider needs).
+Without them no code can arrive.
+
+## Run it safely
+
+- **Give it its own hostname,** for example `admin.example.com`, and serve it over HTTPS only. Set
+  `COOKIE_SECURE=true` so the session cookie is sent only over HTTPS. Behind a reverse proxy, also set
+  `TRUST_PROXY=true`.
+- **Keep the port off the public internet.** Let only your reverse proxy reach `ADMIN_ADDR`, or put the
+  panel behind a VPN or an allowlist of your own addresses.
+- **Keep the list short.** Every admin can do everything the panel can do. There are no
+  separate roles.
+- **Watch the audit log.** Each change, its author and its target are recorded there, so you can see
+  what was changed and by whom.
+
+The audit log outlives the workspaces and people it names: it is not deleted with them.
+
+For the rest of cloud security, see [Security model](/self-hosting/security).

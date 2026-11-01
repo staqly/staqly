@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -290,5 +291,15 @@ func TestAIAssistantAndMediaConfig(t *testing.T) {
 	t.Setenv("AI_ASSISTANT_FALLBACK_BASE_URL", "")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "AI_FAL_KEY") {
 		t.Fatalf("router fallback without a key: %v", err)
+	}
+}
+
+func TestAdminEmailsParsed(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("ADMIN_EMAILS", " A@x.io, b@y.io ,")
+	t.Setenv("ADMIN_ADDR", " :8081 ")
+	c, _ := Load()
+	if got := fmt.Sprint(c.App.AdminEmails); got != "[a@x.io b@y.io]" || c.AdminAddr != ":8081" || !c.App.AdminEnabled {
+		t.Fatalf("emails %s addr %q", got, c.AdminAddr)
 	}
 }

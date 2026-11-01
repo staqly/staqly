@@ -80,11 +80,14 @@ ps: ## Show container status
 build: ## Build the image from this checkout
 	docker compose build
 
-dashboard: ## Build the dashboard (static export) into apps/api/web for the Go binaries
+dashboard: ## Build the dashboard and admin panel (static exports) into apps/api/web and apps/api/admin for the Go binaries
 	pnpm install --frozen-lockfile
 	pnpm turbo run build --filter=@staqly/platform
 	find apps/api/web -mindepth 1 ! -name .gitkeep -delete
 	cp -R apps/platform/out/. apps/api/web/
+	pnpm turbo run build --filter=@staqly/admin
+	find apps/api/admin -mindepth 1 ! -name .gitkeep -delete
+	cp -R apps/admin/out/. apps/api/admin/
 
 check: ## Formatting, lint, types, unit tests and bundle size of every package (the same as pnpm check)
 	pnpm check

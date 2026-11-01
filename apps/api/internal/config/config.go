@@ -27,6 +27,8 @@ type Config struct {
 	// DashboardAddr: also serve the embedded dashboard there ("" = no; the
 	// Docker setup runs it as its own container, `staqly serve` sets it).
 	DashboardAddr string
+	// AdminAddr: the admin panel listener (ADMIN_ADDR; "" = off; local and cloud mode).
+	AdminAddr string
 	// CORSOrigins: browser origins allowed to call the API with an API key
 	// (cloud mode only; default the docs playground).
 	CORSOrigins []string
@@ -291,6 +293,7 @@ func Load() (Config, error) {
 	c := Config{
 		Addr:              env("ADDR", addr),
 		DashboardAddr:     dashAddr,
+		AdminAddr:         strings.TrimSpace(os.Getenv("ADMIN_ADDR")),
 		CORSOrigins:       corsOrigins(local),
 		DataDir:           dataDir,
 		DBPath:            env("DATABASE_PATH", filepath.Join(dataDir, "workspace.db")),
@@ -318,6 +321,9 @@ func Load() (Config, error) {
 			PublicDashboardURL: os.Getenv("PUBLIC_DASHBOARD_URL"),
 			PublicMediaURL:     strings.TrimRight(os.Getenv("PUBLIC_MEDIA_URL"), "/"),
 			SecretKey:          secretKey,
+			AdminEmails:        adminEmails(os.Getenv("ADMIN_EMAILS")),
+			AdminEmail:         strings.ToLower(strings.TrimSpace(os.Getenv("ADMIN_EMAIL"))),
+			AdminEnabled:       strings.TrimSpace(os.Getenv("ADMIN_ADDR")) != "",
 			DashboardPort:      env("DASHBOARD_PORT", dashboardPort),
 			// A dashboard listening beyond loopback can't vouch for "this computer".
 			DashboardExposed: envBool("DASHBOARD_EXPOSED", dashAddr != "" && !LoopbackOnly(dashAddr)),
@@ -483,4 +489,15 @@ func storage(uploadDir, dataDir string) (blob.Store, error) {
 	default:
 		return nil, fmt.Errorf("STORAGE_DRIVER must be disk or s3 (got %q)", d)
 	}
+}
+
+// adminEmails splits ADMIN_EMAILS: trimmed, lowercase, empties dropped.
+func adminEmails(v string) []string {
+	var out []string
+	for _, e := range strings.Split(v, ",") {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+			out = append(out, e)
+		}
+	}
+	return out
 }
