@@ -1,0 +1,28 @@
+# A merged or closed pull request needs no more checks: cancel its runs still queued or going.
+name: Cancel closed pull request runs
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    name: Cancel runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A fork's token can't cancel: its runs finish as before.
+      - name: Cancel the branch's pull request runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          gh run list -R "$REPO" --branch "$BRANCH" --event pull_request --limit 50 --json databaseId,status \
+            -q '.[] | select(.status != "completed") | .databaseId' |
+            while read -r id; do
+              [ "$id" = "$GITHUB_RUN_ID" ] || gh run cancel -R "$REPO" "$id" || true
+            done

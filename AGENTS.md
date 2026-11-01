@@ -59,6 +59,7 @@ Run `test:ui-responsive` for dashboard layout changes.
 | `cross-client.yml` | pushes/PRs touching the API, CLI, SDKs or the suite; nightly and by hand | `pnpm --filter @staqly/e2e test:cross-client` (Go, uv, Node; no secrets) |
 | `n8n.yml` | relevant pushes to `main`, nightly, by hand | the dev stack built from the checkout + a real n8n: `test:n8n` (no secrets) |
 | `ui.yml` | nightly, by hand | the dashboard in a real browser: `test:ui` (flows, axe) and `test:ui-responsive` against `staqly serve` built from the checkout (no secrets) |
+| `cancel-closed-pr.yml` | a pull request is merged or closed | cancels its runs still queued or going |
 | `docs.yml`, `release.yml`, `codeql.yml` | docs changes on `main`; `v*` tags; pushes, pull requests and weekly | docs site; once the tag is on `main` and CI passed on that commit, binaries + image, then (stable tags, this repository only) a `repository_dispatch` `staqly-release` to the repository in the variable `DEPLOY_DISPATCH_REPO` with the secret `DEPLOY_DISPATCH_TOKEN` (fails when either is missing); code scanning |
 
 The landing page (`apps/web`) is built and hosted outside this repository's workflows. The real-agent

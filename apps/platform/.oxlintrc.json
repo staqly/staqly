@@ -92,7 +92,8 @@
     ],
     "nextjs/no-img-element": "off",
     "no-await-in-loop": "off",
-    "jsx-a11y/no-noninteractive-tabindex": "off"
+    "jsx-a11y/no-noninteractive-tabindex": "off",
+    "oxc/no-map-spread": "off"
   },
   "overrides": [
     {

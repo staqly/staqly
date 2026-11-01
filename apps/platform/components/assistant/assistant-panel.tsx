@@ -249,6 +249,7 @@ function Rich({ text }: { text: string }) {
 
         if (item) {
           return (
+            // oxlint-disable-next-line react/no-array-index-key -- a line of this one answer: lines never move
             <div key={i} className="flex gap-2 pl-1">
               <span className="text-muted-foreground">•</span>
               <span>{inline(item[1]!, `l${i}`)}</span>
@@ -257,6 +258,7 @@ function Rich({ text }: { text: string }) {
         }
 
         return (
+          // oxlint-disable-next-line react/no-array-index-key -- a line of this one answer: lines never move
           <p key={i} className={cn(head && 'font-semibold')}>
             {inline(head ? head[1]! : l, `l${i}`)}
           </p>
@@ -331,6 +333,7 @@ function Conversation({
       {messages.map((m, i) => {
         if (m.role === 'user') {
           return (
+            // oxlint-disable-next-line react/no-array-index-key -- the chat only grows at its end: a message keeps its place
             <div key={i} className="ml-10 grid max-w-[85%] justify-items-end gap-1.5 self-end">
               {(m.attachments?.length ?? 0) > 0 && (
                 <div className="flex flex-wrap justify-end gap-1.5">
@@ -358,6 +361,7 @@ function Conversation({
         }
 
         return (
+          // oxlint-disable-next-line react/no-array-index-key -- the chat only grows at its end: a message keeps its place
           <Fragment key={i}>
             {m.content && <AssistantBubble>{<Rich text={m.content} />}</AssistantBubble>}
             {(m.tool_calls ?? []).map((c) => {
