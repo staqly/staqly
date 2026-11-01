@@ -5,8 +5,9 @@ description: Publish pictures, carousels, reels and stories to Instagram Busines
 
 Staqly publishes to **Instagram professional accounts** (Business or Creator) through the Instagram
 API with Unified Login: the person signs in with Instagram or Facebook, shares one or more
-Instagram accounts with the app, and each account they pick becomes its own channel. No Facebook
-Page is needed. A published target links to the post on instagram.com.
+Instagram accounts with the app, and each account they pick becomes its own channel. Meta asks them
+to choose the business portfolio that owns the account. No Facebook account or Facebook Page is needed
+when they log in with Instagram. A published target links to the post on instagram.com.
 
 ## What you need
 
@@ -34,7 +35,7 @@ At [Meta for Developers](https://developers.facebook.com/apps), click **Create a
 
 | Where | What |
 |---|---|
-| **Configure your app → Create new configuration** | a configuration whose access token **never expires**, with the Instagram account as its asset and the permissions below. Copy its **configuration ID** |
+| **Configure your app → Create new configuration** | a configuration marked **Instagram Login Compatible**, whose access token **never expires**, with the Instagram account as its asset and the permissions below. Copy its **configuration ID** |
 | **Redirect URL** | your dashboard's `/channels/callback/instagram`, for example `https://staqly.example.com/channels/callback/instagram`. Meta takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
 | **App roles → Roles** | the people who may connect while the app is in development |
 
@@ -68,11 +69,18 @@ Instagram altogether. A workspace may instead save its own app over the API
 ### Connect the accounts
 
 **Connect** opens facebook.com, where the person signs in with Instagram or Facebook, chooses the
-Instagram accounts to share and allows the app. The configuration asks for these permissions:
+business portfolio and Instagram accounts to share, and allows the app. Staqly includes `prompt=login`
+in the login URL so both login options appear even when the browser is already signed in to Facebook.
+Every professional Instagram account already has a business portfolio; select the one that owns the
+account, which may differ from the portfolio that owns the developer app.
+
+For publishing, an ad account is not needed. Configure only the assets and permissions you use; if
+Meta offers an optional ad account, the person can skip it. The configuration asks for these permissions:
 
 | Permission | Why |
 |---|---|
 | `instagram_basic` | Read the accounts' usernames, names and pictures |
+| `instagram_manage_messages` | Required by Meta for an Instagram-compatible Unified Login configuration; this permission alone does not add a messaging inbox to staqly |
 | `instagram_content_publish` | Publish posts, carousels, reels and stories |
 | `instagram_manage_comments` | Post the comments of a post's thread |
 | `instagram_manage_insights` | Read a post's views, shares and saves (**Statistics**) |
@@ -92,6 +100,24 @@ recording of staqly using it) and **Business Verification** of your company.
 
 </Step>
 </Steps>
+
+## Choosing Instagram instead of Facebook
+
+If a login link takes you straight to Facebook's business assets, open the account selector at the top
+of the Meta dialog and choose **Add another account**, then log in with Instagram. When using staqly's
+Connect button, both login options are requested automatically. If Instagram is still missing, the
+server operator should check the **Instagram Login Compatible** label on the selected configuration.
+
+If your Creator or Business account is missing from the account list, select the portfolio that owns
+it. You do not need to add your account to the developer app's portfolio just to connect it.
+
+Staqly uses Unified Login. Meta calls the older **API setup with Instagram login** integration legacy:
+existing integrations still work, with no announced end date, but new apps cannot set it up and new
+features ship only on Unified Login. The two sign-in options in Unified Login do not need separate
+Instagram app credentials or separate staqly providers.
+
+See Meta's [business onboarding guide](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-unified-login/business-onboarding/)
+and [migration guide](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/migration-guide/).
 
 ## The sign-in
 
