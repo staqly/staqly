@@ -101,6 +101,7 @@ type PostInput struct {
 	RepeatEvery string            `json:"repeat_every"` // '' (no repeat), 1d..6d, 1w, 2w or 1mo
 	Thread      []ThreadPart      `json:"thread"`       // follow-up parts published as replies
 	repeatOf    string            // the post this one repeats (set by the repeat worker only)
+	schedule    *db.Schedule      // reject stale endpoint results inside the creation transaction
 }
 
 type PostPatch struct {
@@ -606,6 +607,15 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 		Status: in.Status, PublishAt: nullStr(publishAt), Tags: mustJSON(tags), Metadata: metadata, Source: source,
 		ExternalRef: externalRef, RepeatEvery: repeatEvery, RepeatOf: in.repeatOf, Version: 1, CreatedAt: now, UpdatedAt: now}
 	err = s.tx(ctx, func(q *db.Queries) error {
+		if in.schedule != nil {
+			current, err := scheduleUnchanged(ctx, q, *in.schedule)
+			if err != nil {
+				return err
+			}
+			if !current {
+				return errScheduleChanged
+			}
+		}
 		if err := s.checkMedia(ctx, q, p.WorkspaceID, in.Media, nil); err != nil {
 			return err
 		}
@@ -1353,20 +1363,6 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	if err := e.Validate(content, settings); err != nil {
 		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, err.Error())
 	}
-	if ch.Provider == ProviderX {
-		if err := s.checkX(ctx, s.Q, row.WorkspaceID, xUnits(text)); err != nil {
-			return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, errorMessage(err))
-		}
-	}
-	if isLinkedIn(ch.Provider) {
-		var videos int64
-		if slices.ContainsFunc(files, func(f providers.MediaFile) bool { return strings.HasPrefix(f.MimeType, "video/") }) {
-			videos = 1
-		}
-		if err := s.checkLinkedIn(ctx, s.Q, row.WorkspaceID, 1, videos); err != nil {
-			return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, errorMessage(err))
-		}
-	}
 	var creds providers.Credentials
 	if err := s.unseal(ch.Credentials, &creds); err != nil {
 		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, "stored credentials cannot be read: "+err.Error())
@@ -1377,6 +1373,16 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 		}
 		return err
 	}
+	ref := "post:" + postID + ":" + channelID
+	video := slices.ContainsFunc(files, func(f providers.MediaFile) bool { return strings.HasPrefix(f.MimeType, "video/") })
+	fresh, err := s.reservePublishingAllowance(ctx, row.WorkspaceID, ref, ch.Provider, xUnits(text), video)
+	if err != nil {
+		var businessError *Error
+		if !errors.As(err, &businessError) {
+			return err
+		}
+		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, errorMessage(err))
+	}
 	// The run's budget comes from the job (jobRunTimeout["publish_target"]: uploads and the platform's
 	// processing included). Platform calls (and your own endpoint) go through the same SSRF guard as webhooks.
 	pctx := s.publishingCtx(ctx, row.WorkspaceID)
@@ -1385,6 +1391,9 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	// the post may already be live, and forgetting that would publish it twice on the next attempt.
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jobWriteTimeout)
 	defer cancel()
+	if chargeErr := s.finishPublishingAllowance(wctx, row.WorkspaceID, ref, ch.Provider, fresh, err); chargeErr != nil {
+		return chargeErr
+	}
 	switch {
 	case errors.Is(err, providers.ErrReauth):
 		// The platform no longer accepts the sign-in: the channel needs reconnecting, retrying would not help.

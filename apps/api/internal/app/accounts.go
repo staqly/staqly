@@ -586,8 +586,8 @@ func (s *Service) ListMyWorkspaces(ctx context.Context, p Principal) ([]MyWorksp
 	if p.WorkspaceID == "" {
 		return nil, ErrUnauthorized
 	}
-	// An API key works in its own workspace only: its creator's other workspaces are not its business.
-	if p.UserID == "" || p.Kind != PrincipalSession {
+	// API keys and guest links work in their own workspace only: the person's other workspaces stay private.
+	if p.UserID == "" || p.Kind != PrincipalSession || p.Guest {
 		ws, err := s.GetWorkspace(ctx, p)
 		if err != nil {
 			return nil, err
@@ -611,6 +611,9 @@ func (s *Service) ListMyWorkspaces(ctx context.Context, p Principal) ([]MyWorksp
 
 // SwitchWorkspace moves the signed-in person's session to another workspace they belong to.
 func (s *Service) SwitchWorkspace(ctx context.Context, p Principal, workspaceID string) error {
+	if err := notGuest(p); err != nil {
+		return err
+	}
 	if p.Kind != PrincipalSession || p.UserID == "" {
 		return forbidden("only a signed-in person switches workspaces")
 	}
@@ -1136,6 +1139,9 @@ func (s *Service) LookupInvitation(ctx context.Context, token string) (Invitatio
 
 // AcceptInvitation: a signed-in person accepts a link for their own address; their session moves there.
 func (s *Service) AcceptInvitation(ctx context.Context, p Principal, token string) (MyWorkspace, error) {
+	if err := notGuest(p); err != nil {
+		return MyWorkspace{}, err
+	}
 	if err := accountsOnly(s); err != nil {
 		return MyWorkspace{}, err
 	}

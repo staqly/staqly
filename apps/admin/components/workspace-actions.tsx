@@ -191,6 +191,7 @@ export function WorkspaceActions({ id, name, plan }: { id: string; name: string;
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="operator">operator</SelectItem>
                   <SelectItem value="editor">editor</SelectItem>
                   <SelectItem value="viewer">viewer</SelectItem>
                 </SelectContent>

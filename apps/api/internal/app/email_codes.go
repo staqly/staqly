@@ -132,6 +132,9 @@ func (s *Service) StartEmailLink(ctx context.Context, p Principal, email string)
 
 // VerifyEmailLink adds the address as a sign-in method of the signed-in person.
 func (s *Service) VerifyEmailLink(ctx context.Context, p Principal, email, code string) ([]SignInMethod, error) {
+	if err := notGuest(p); err != nil {
+		return nil, err
+	}
 	if p.Kind != PrincipalSession || p.UserID == "" {
 		return nil, forbidden("only a signed-in person adds a sign-in method")
 	}

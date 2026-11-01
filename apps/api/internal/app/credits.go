@@ -138,7 +138,7 @@ func (s *Service) checkX(ctx context.Context, q *db.Queries, workspaceID string,
 	return s.errXExhausted(x, need)
 }
 
-// meterX counts a published post or reply to X once (ref: post:<post>:<channel> or reply:<post>:<channel>:<n>):
+// meterX charges a reserved or published post/reply to X once (ref: post:<post>:<channel> or reply:<post>:<channel>:<n>):
 // from the included posts first, then bought credits, oldest grant first. What neither covers is recorded as
 // overage (a post already live is never undone). In the caller's transaction.
 func (s *Service) meterX(ctx context.Context, q *db.Queries, workspaceID, ref string, units int64) error {
@@ -373,13 +373,17 @@ func decodeCreditSession(raw json.RawMessage) *creditSession {
 
 // meterTarget counts a published X or LinkedIn target (its main post) once.
 func (s *Service) meterTarget(ctx context.Context, q *db.Queries, row db.Post, t db.PostTarget, channelID string) error {
+	ref := "post:" + row.ID + ":" + channelID
 	ch, err := q.GetChannelByID(ctx, channelID)
 	if err == nil && isLinkedIn(ch.Provider) {
 		video, err := hasVideo(ctx, q, row.WorkspaceID, row.Media)
 		if err != nil {
 			return err
 		}
-		return s.meterLinkedIn(ctx, q, row.WorkspaceID, "post:"+row.ID+":"+channelID, video)
+		if err := s.meterLinkedIn(ctx, q, row.WorkspaceID, ref, video); err != nil {
+			return err
+		}
+		return q.DeletePublishingAllowanceReservation(ctx, db.DeletePublishingAllowanceReservationParams{WorkspaceID: row.WorkspaceID, Ref: ref})
 	}
 	if err != nil || ch.Provider != ProviderX {
 		return nil
@@ -389,7 +393,10 @@ func (s *Service) meterTarget(ctx context.Context, q *db.Queries, row db.Post, t
 		text = t.Content.String
 	}
 	text, _ = providers.ApplyLinks(channelLinks(ch), text)
-	return s.meterX(ctx, q, row.WorkspaceID, "post:"+row.ID+":"+channelID, xUnits(text))
+	if err := s.meterX(ctx, q, row.WorkspaceID, ref, xUnits(text)); err != nil {
+		return err
+	}
+	return q.DeletePublishingAllowanceReservation(ctx, db.DeletePublishingAllowanceReservationParams{WorkspaceID: row.WorkspaceID, Ref: ref})
 }
 
 // errorMessage: an error's text for a target or reply (an *Error's message without its code).

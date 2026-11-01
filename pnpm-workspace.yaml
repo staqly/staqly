@@ -26,3 +26,5 @@ patchedDependencies:
 overrides:
   # shadcn's development CLI: patched Windows service-name command injection.
   'systeminformation@<5.33.16': 5.33.19
+  # Patched globparts amplification in development tooling (ESLint and shadcn).
+  'minimatch@10.2.6': 11.0.1

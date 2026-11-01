@@ -228,12 +228,23 @@ describe('notifications', () => {
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
   })
 
-  it('the page lists every notification with its details and where to go from it', async () => {
-    const api = mockApi({ 'GET /v1/events': { data: [published, failed, reconnect] } })
+  it('the page lists every notification across days with its details and where to go from it', async () => {
+    // Fixed dates cross a day boundary in every time zone, regardless of when the suite runs.
+    const api = mockApi({
+      'GET /v1/events': {
+        data: [
+          { ...published, created_at: '2026-10-30T12:00:00Z' },
+          { ...failed, created_at: '2026-10-30T11:59:00Z' },
+          { ...reconnect, created_at: '2026-10-29T12:00:00Z' },
+        ],
+      },
+    })
 
     renderWithProviders(<NotificationsPage />, { mode: 'local' })
-    const list = await screen.findByTestId('notifications-page-list')
-    const rows = within(list).getAllByRole('listitem')
+    const lists = await screen.findAllByTestId('notifications-page-list')
+    const rows = pageRows()
+
+    expect(lists).toHaveLength(2)
 
     expect(rows).toHaveLength(3)
     // Asked only for the events that make notifications.
