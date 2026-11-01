@@ -997,6 +997,46 @@ class TargetMetrics(StaqlyModel):
     error: str = ""
 
 
+class PostResponse(StaqlyModel):
+    id: str
+    parent_id: str = ""
+    author: str = ""
+    author_handle: str = ""
+    text: str = ""
+    url: str = ""
+    sentiment: str = ""
+    likes: int | None = None
+    created_at: str = ""
+
+
+class ResponseInsight(StaqlyModel):
+    positive: int = 0
+    neutral: int = 0
+    negative: int = 0
+    summary: str = ""
+    themes: list[str] = Field(default_factory=list)
+    questions: list[str] = Field(default_factory=list)
+    status: str = ""
+    error: str = ""
+    analyzed_at: datetime | None = None
+
+
+class ChannelResponses(StaqlyModel):
+    channel_id: str
+    channel_name: str = ""
+    provider: str = ""
+    #: False when staqly can't read this platform.
+    available: bool = False
+    error: str = ""
+    insight: ResponseInsight | None = None
+    responses: list[PostResponse] = Field(default_factory=list)
+
+
+class PostResponses(StaqlyModel):
+    overall: ResponseInsight | None = None
+    channels: list[ChannelResponses] = Field(default_factory=list)
+
+
 # ------------------------------------------------------------------- analytics
 
 

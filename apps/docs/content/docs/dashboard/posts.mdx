@@ -166,6 +166,32 @@ numbers were read.
 
 If a platform can't be reached, the last numbers stay and the channel says why.
 
+Facebook also shows the **reactions by type**: like, love, haha, wow, sad and angry.
+
+### Audience comments
+
+Under **Statistics** a published post shows **Audience comments**: what people answered under it on each
+channel, with an AI reading of it: how many comments are positive, neutral or negative, a short summary, the
+themes and the questions people asked. Filter the comments by sentiment; **Refresh comments** reads them now.
+
+staqly reads the comments of posts published in the last 7 days every 30 minutes, and at once when you press **Refresh comments** (any published post, however old).
+The AI reading follows a couple of minutes after new comments arrive. It uses the workspace's AI allowance: when
+that is used up the comments are kept, the channel says so, and they are analysed once it renews.
+
+| Platform | Comments |
+|---|---|
+| Facebook Page, Instagram, Threads, Bluesky, Mastodon, Reddit | Read |
+| YouTube | Read: the comment threads and their first replies |
+| Slack | Read: one page of replies per thread |
+| X | Read: replies of the last 7 days (recent search); needs a paid X API plan |
+| LinkedIn | Needs the app approved for the Community Management API |
+| Others | *Not available for this platform* |
+
+Facebook needs the `pages_read_user_content` permission, approved for the Meta app through App Review; without
+it Meta may hide commenters' names or text. Threads needs `threads_read_replies`, so a profile connected before
+needs one reconnect. Comments are kept for 90 days by default (`RETENTION_RESPONSES_DAYS`). The same data is
+available from `GET /v1/posts/{id}/responses`, the MCP tool `get_post_responses` and `staqly posts responses`.
+
 **Delete** removes the post and keeps its events in the activity log. Erasing the history too,
 with media no other post uses, is a purge over the API (`POST /v1/posts/{id}/purge`, admin). See
 [Data export & privacy](/self-hosting/data-export#purge-a-post).

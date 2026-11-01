@@ -1356,6 +1356,31 @@
       "idempotentHint": false,
       "readOnlyHint": true
     },
+    "description": "What people answered under a published post (comments, replies), per channel and overall, each with sentiment counts, a summary, themes and questions. channel_id limits it to one channel. available false: staqly can't read that platform.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "description": "only this channel's responses",
+          "type": "string"
+        },
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_post_responses"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "readOnlyHint": true
+    },
     "description": "Get the workspace's plan, usage this period against its limits, and whether it is suspended.",
     "inputSchema": {
       "additionalProperties": false,
@@ -2103,6 +2128,28 @@
       "type": "object"
     },
     "name": "purge_post"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Read the post's responses from the platforms now and return what is stored; the AI reading follows shortly. Requires posts:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "refresh_post_responses"
   },
   {
     "annotations": {

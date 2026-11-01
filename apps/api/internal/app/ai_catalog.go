@@ -32,6 +32,7 @@ const (
 	AITextToVideo       = "text_to_video"      // a video clip from a prompt
 	AIImageToVideo      = "image_to_video"     // a picture brought to life as a video clip
 	AIAssistant         = "assistant"          // the dashboard's chat assistant (POST /v1/assistant/chat, not a job)
+	AICommentInsights   = "comment_insights"   // labels and summarises the responses to a post (the assistant's model; not offered in the editor)
 )
 
 // AI providers.
@@ -65,6 +66,7 @@ var aiOps = []aiOpSpec{
 	{AITextToVideo, "video", "required", false, false},
 	{AIImageToVideo, "video", "required", true, false},
 	{AIAssistant, "text", "required", false, false},
+	{AICommentInsights, "text", "none", false, false},
 }
 
 func aiOpByID(id string) (aiOpSpec, bool) {

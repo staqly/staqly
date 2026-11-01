@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"strings"
@@ -53,35 +54,54 @@ func num(m map[string]int64, name string) *int64 {
 }
 
 func (Facebook) Metrics(ctx context.Context, c Credentials, externalID string) (Metrics, error) {
-	fields := "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
+	base := "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)"
 	post := strings.Contains(externalID, "_") // a Page post is <page>_<post>; videos and reels are a bare video id, without shares
 	if post {
-		fields += ",shares"
+		base += ",shares"
 	}
-	var out struct {
-		Reactions struct {
-			Summary struct {
-				Total int64 `json:"total_count"`
-			} `json:"summary"`
-		} `json:"reactions"`
-		Comments struct {
-			Summary struct {
-				Total int64 `json:"total_count"`
-			} `json:"summary"`
-		} `json:"comments"`
-		Shares struct {
-			Count int64 `json:"count"`
-		} `json:"shares"`
+	withTypes := base
+	for _, t := range fbReactionTypes { // one aliased field per type, in the same request
+		withTypes += ",reactions.type(" + strings.ToUpper(t) + ").limit(0).summary(total_count).as(r_" + t + ")"
 	}
-	if err := fbGraph.get(ctx, c["access_token"], "/"+url.PathEscape(externalID), url.Values{"fields": {fields}}, &out); err != nil {
+	var raw map[string]json.RawMessage
+	typed := true
+	err := fbGraph.get(ctx, c["access_token"], "/"+url.PathEscape(externalID), url.Values{"fields": {withTypes}}, &raw)
+	if errors.Is(err, ErrRejected) { // some nodes (videos) refuse the aliased fields: the plain numbers still work
+		typed, raw = false, nil
+		err = fbGraph.get(ctx, c["access_token"], "/"+url.PathEscape(externalID), url.Values{"fields": {base}}, &raw)
+	}
+	if err != nil {
 		return Metrics{}, err
 	}
-	m := Metrics{Likes: &out.Reactions.Summary.Total, Replies: &out.Comments.Summary.Total}
+	total := func(key string) int64 {
+		var s struct {
+			Summary struct {
+				Total int64 `json:"total_count"`
+			} `json:"summary"`
+		}
+		_ = json.Unmarshal(raw[key], &s)
+		return s.Summary.Total
+	}
+	var shares struct {
+		Count int64 `json:"count"`
+	}
+	_ = json.Unmarshal(raw["shares"], &shares)
+	likes, replies := total("reactions"), total("comments")
+	m := Metrics{Likes: &likes, Replies: &replies}
 	if post { // Facebook leaves shares out while there are none
-		m.Shares = &out.Shares.Count
+		m.Shares = &shares.Count
+	}
+	for _, t := range fbReactionTypes {
+		if !typed {
+			break
+		}
+		m.Reactions = append(m.Reactions, Reaction{Emoji: t, Count: total("r_" + t)})
 	}
 	return m, nil
 }
+
+// fbReactionTypes are the reaction names Facebook counts apart.
+var fbReactionTypes = []string{"like", "love", "haha", "wow", "sad", "angry"}
 
 func (Instagram) Metrics(ctx context.Context, c Credentials, externalID string) (Metrics, error) {
 	token := c["access_token"]

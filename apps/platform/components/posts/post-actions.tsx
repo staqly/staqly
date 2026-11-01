@@ -23,6 +23,7 @@ import {
   Undo2,
   UserPlus,
 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
@@ -59,6 +60,9 @@ import {
 import { safeHttpUrl } from '@/lib/safe'
 
 import { postHref } from './post-href'
+
+// Only the Statistics tab shows it: its own chunk, loaded when the tab opens.
+const PostResponses = dynamic(() => import('@/components/posts/post-responses').then((m) => m.PostResponses))
 
 const METRIC_LABELS: [Exclude<keyof NonNullable<TargetMetrics['metrics']>, 'reactions'>, string, LucideIcon][] = [
   ['impressions', 'Views', Eye],
@@ -263,6 +267,7 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
           <RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /> Refresh
         </Button>
       </div>
+      <PostResponses postId={post.id} active={active} />
     </div>
   )
 }

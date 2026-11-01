@@ -11,6 +11,7 @@ import type {
   PostCommentInput,
   PostMetrics,
   PostPreview,
+  PostResponses,
   PreviewLink,
   PurgeResult,
   RequestOptions,
@@ -184,6 +185,21 @@ export class Posts extends APIResource {
     })
 
     return res.data
+  }
+
+  /** The replies to the post per channel with their analysis; `channelId` limits it to one channel. */
+  responses(id: string, params: { channelId?: string } = {}, options?: RequestOptions): Promise<PostResponses> {
+    return this.http.request({
+      method: 'GET',
+      path: `/v1/posts/${enc(id)}/responses`,
+      query: params.channelId ? { channel: params.channelId } : {},
+      options,
+    })
+  }
+
+  /** Reads the replies from the platforms now and queues a new analysis (202). */
+  refreshResponses(id: string, options?: RequestOptions): Promise<PostResponses> {
+    return this.http.request({ method: 'POST', path: `/v1/posts/${enc(id)}/responses/refresh`, options })
   }
 
   /** Your own automation sends the numbers of a post it published on a custom channel. */

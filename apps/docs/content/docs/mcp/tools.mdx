@@ -285,6 +285,21 @@ A post's numbers per channel (views, likes, reposts, replies, quotes, bookmarks,
 | `post_id` | string | <Required /> | Post ID (post_...) |
 | `refresh` | boolean | | Read the numbers from the platforms now |
 
+### `get_post_responses`
+What people answered under a published post (comments, replies), per channel and overall, each with sentiment counts, a summary, themes and questions. `available` false: staqly can't read that platform. *Read-only* · `posts:read`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `channel_id` | string | | Only this channel's responses |
+
+### `refresh_post_responses`
+Read the post's responses from the platforms now and return what is stored; the AI reading follows shortly. · `posts:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
 ### `report_post_metrics`
 Your own automation (provider `custom`) sends the numbers of a post it published, replacing the stored ones. · `posts:publish`
 

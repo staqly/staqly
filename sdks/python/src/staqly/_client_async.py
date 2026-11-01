@@ -72,6 +72,7 @@ from .models import (
     PostMetrics,
     PostPage,
     PostPreview,
+    PostResponses,
     PostTargetInput,
     PreviewLink,
     Provider,
@@ -697,6 +698,33 @@ class AsyncPosts(_Resource):
             )
         )
         return _models(TargetMetrics, r)
+
+    async def responses(
+        self,
+        post_id: str,
+        *,
+        channel_id: str | None = None,
+        request_options: RequestOptions | None = None,
+    ) -> PostResponses:
+        """The replies to the post per channel with their analysis; ``channel_id`` limits it to one."""
+        r = await self._http.request(
+            RequestSpec(
+                "GET",
+                f"/v1/posts/{_q(post_id)}/responses",
+                params={"channel": channel_id},
+                options=_opts(request_options),
+            )
+        )
+        return _model(PostResponses, r)
+
+    async def refresh_responses(
+        self, post_id: str, *, request_options: RequestOptions | None = None
+    ) -> PostResponses:
+        """Reads the replies from the platforms now and queues a new analysis."""
+        r = await self._http.request(
+            RequestSpec("POST", f"/v1/posts/{_q(post_id)}/responses/refresh", options=_opts(request_options))
+        )
+        return _model(PostResponses, r)
 
     async def report_metrics(
         self,

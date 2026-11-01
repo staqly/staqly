@@ -85,6 +85,8 @@ they finish; afterwards the download returns `410`.
 | `channels.json` | Connected channels: provider, name, handle, status, settings. Credentials are never exported |
 | `schedules.json` | Schedules; endpoint secrets replaced by `[redacted]` |
 | `events.ndjson` | The activity log, oldest first |
+| `responses.ndjson` | The audience comments read from the platforms, per post and channel |
+| `response_insights.ndjson` | The AI reading of those comments: sentiment counts, summary, themes, questions |
 | `media.ndjson` | Every upload: id, `original_name`, `mime_type`, size, SHA-256 and `file` (empty in a data-only export) |
 | `media/` | The uploaded files under their original names (not in a data-only export) |
 | `webhooks.json` | Webhook endpoints, signing secrets replaced by `[redacted]` |
@@ -105,6 +107,7 @@ variables](/self-hosting/configuration#how-to-change-a-setting). A daily worker 
 | Variable | Default | Deletes |
 |---|---|---|
 | `RETENTION_DELIVERIES_DAYS` | `30` | Webhook deliveries that succeeded or failed more than N days ago. Pending deliveries are never deleted. `0` keeps them forever |
+| `RETENTION_RESPONSES_DAYS` | `90` | Audience comments read from the platforms, older than N days. `0` keeps them forever |
 | `RETENTION_AGENTS_DAYS` | `30` | Agents and API connections in Integrations not seen for N days (their events stay). `0` keeps them forever |
 | `RETENTION_NOTIFICATIONS_DAYS` | `30` | Alert outbox rows that were `sent`, `skipped` or `failed` more than N days ago, plus pending rows of alerts disabled for that long. `0` keeps them forever |
 | `RETENTION_EVENTS_DAYS` | `0` (forever) | Events older than N days. A `retention.events_pruned` event per workspace records the count |

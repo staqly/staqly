@@ -40,6 +40,11 @@ export type PostPage = Schemas['PostPage']
 export type PostPreview = Schemas['PostPreview']
 export type PostMetrics = Schemas['Metrics']
 export type TargetMetrics = Schemas['TargetMetrics']
+/** Replies to a post per channel, with an analysis (counts, summary, themes, questions). */
+export type PostResponses = Schemas['PostResponses']
+export type ChannelResponses = Schemas['ChannelResponses']
+export type ResponseInsight = Schemas['ResponseInsight']
+export type PostResponse = Schemas['PostResponse']
 /** The analytics report (`analytics.get`). */
 export type Analytics = Schemas['Analytics']
 export type AnalyticsTotals = Schemas['AnalyticsTotals']

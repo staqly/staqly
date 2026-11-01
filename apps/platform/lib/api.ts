@@ -38,6 +38,7 @@ export type PostPage = Schemas['PostPage']
 export type PostStatus = Schemas['PostStatus']
 export type TargetStatus = Schemas['TargetStatus']
 export type TargetMetrics = Schemas['TargetMetrics']
+export type PostResponses = Schemas['PostResponses']
 export type PreviewLink = Schemas['PreviewLink']
 export type PostComment = Schemas['PostComment']
 export type PublicPreview = Schemas['PublicPreview']
@@ -975,6 +976,12 @@ export const api = {
   duplicatePost: (id: string) => request<Post>(`/v1/posts/${encodeURIComponent(id)}/duplicate`, { method: 'POST' }),
   postMetrics: (id: string, refresh = false) =>
     request<{ data: TargetMetrics[] }>(`/v1/posts/${encodeURIComponent(id)}/metrics${refresh ? '?refresh=true' : ''}`),
+  postResponses: (id: string, channelId = '') =>
+    request<PostResponses>(
+      `/v1/posts/${encodeURIComponent(id)}/responses${channelId ? `?channel=${encodeURIComponent(channelId)}` : ''}`,
+    ),
+  refreshPostResponses: (id: string) =>
+    request<PostResponses>(`/v1/posts/${encodeURIComponent(id)}/responses/refresh`, { method: 'POST' }),
   previewLinks: (id: string) => request<{ data: PreviewLink[] }>(`/v1/posts/${encodeURIComponent(id)}/previews`),
   createPreviewLink: (id: string, expires_in_days = 0) =>
     request<PreviewLink>(`/v1/posts/${encodeURIComponent(id)}/previews`, { method: 'POST', json: { expires_in_days } }),

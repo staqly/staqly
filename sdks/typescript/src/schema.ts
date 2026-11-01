@@ -1646,6 +1646,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/posts/{id}/responses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What people answered under the published post, per channel and overall, with the AI's reading (posts:read)
+         * @description Comments and replies staqly read from the platforms (Facebook, Instagram, Threads, YouTube, X where the platform allows),
+         *     with sentiment counts, a summary, themes and questions per channel and `overall`. `available: false` means staqly can't read
+         *     that platform. Reads happen in the background after publishing; `POST .../responses/refresh` reads now.
+         */
+        get: operations["getPostResponses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/posts/{id}/responses/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read the post's responses from the platforms now (posts:write)
+         * @description Queues the reading and the AI analysis; returns what is stored at this moment.
+         */
+        post: operations["refreshPostResponses"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/posts/{id}/targets/{channel}/metrics": {
         parameters: {
             query?: never;
@@ -5126,6 +5172,47 @@ export interface components {
             avg_engagements: number | null;
             /** @description Fewer samples than min_samples */
             low_confidence: boolean;
+        };
+        PostResponses: {
+            overall: components["schemas"]["ResponseInsight"] | null;
+            channels: components["schemas"]["ChannelResponses"][];
+        };
+        ChannelResponses: {
+            channel_id: string;
+            channel_name: string;
+            provider: string;
+            /** @description False when staqly can't read this platform */
+            available: boolean;
+            error?: string;
+            insight: components["schemas"]["ResponseInsight"] | null;
+            responses: components["schemas"]["PostResponse"][];
+        };
+        ResponseInsight: {
+            /** Format: int64 */
+            positive: number;
+            /** Format: int64 */
+            neutral: number;
+            /** Format: int64 */
+            negative: number;
+            summary: string;
+            themes: string[];
+            questions: string[];
+            status: string;
+            error?: string;
+            /** Format: date-time */
+            analyzed_at: string | null;
+        };
+        PostResponse: {
+            id: string;
+            parent_id?: string;
+            author: string;
+            author_handle?: string;
+            text: string;
+            url?: string;
+            sentiment: string;
+            /** Format: int64 */
+            likes: number | null;
+            created_at: string;
         };
         TargetMetrics: {
             channel_id: string;
@@ -9526,6 +9613,61 @@ export interface operations {
                     "application/json": {
                         data: components["schemas"]["TargetMetrics"][];
                     };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getPostResponses: {
+        parameters: {
+            query?: {
+                /** @description Only this channel */
+                channel?: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostResponses"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    refreshPostResponses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostResponses"];
                 };
             };
             401: components["responses"]["Unauthorized"];

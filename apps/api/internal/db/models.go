@@ -404,6 +404,38 @@ type PostComment struct {
 	AuthorUser  string         `json:"author_user"`
 }
 
+type PostResponse struct {
+	WorkspaceID  string        `json:"workspace_id"`
+	PostID       string        `json:"post_id"`
+	ChannelID    string        `json:"channel_id"`
+	ID           string        `json:"id"`
+	ParentID     string        `json:"parent_id"`
+	Author       string        `json:"author"`
+	AuthorHandle string        `json:"author_handle"`
+	Text         string        `json:"text"`
+	Url          string        `json:"url"`
+	Likes        sql.NullInt64 `json:"likes"`
+	CreatedAt    string        `json:"created_at"`
+	FetchedAt    string        `json:"fetched_at"`
+	Sentiment    string        `json:"sentiment"`
+}
+
+type PostResponseInsight struct {
+	WorkspaceID   string `json:"workspace_id"`
+	PostID        string `json:"post_id"`
+	ChannelID     string `json:"channel_id"`
+	Positive      int64  `json:"positive"`
+	Neutral       int64  `json:"neutral"`
+	Negative      int64  `json:"negative"`
+	Summary       string `json:"summary"`
+	Themes        string `json:"themes"`
+	Questions     string `json:"questions"`
+	Status        string `json:"status"`
+	Error         string `json:"error"`
+	ResponsesSeen int64  `json:"responses_seen"`
+	AnalyzedAt    string `json:"analyzed_at"`
+}
+
 type PostTarget struct {
 	PostID       string         `json:"post_id"`
 	ChannelID    string         `json:"channel_id"`

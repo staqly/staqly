@@ -651,6 +651,23 @@ func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string
 		after = rows[len(rows)-1].ID
 	}
 
+	// responses.ndjson, response_insights.ndjson
+	resp, err := s.Q.ExportResponses(ctx, wsID)
+	if err != nil {
+		return err
+	}
+	if err := writeNDJSON(create, "responses.ndjson", len(resp), func(i int) any { return resp[i] }); err != nil {
+		return err
+	}
+	counts["responses"] = len(resp)
+	insights, err := s.Q.ExportResponseInsights(ctx, wsID)
+	if err != nil {
+		return err
+	}
+	if err := writeNDJSON(create, "response_insights.ndjson", len(insights), func(i int) any { return insights[i] }); err != nil {
+		return err
+	}
+
 	// events.ndjson
 	if w, err = create("events.ndjson", zip.Deflate); err != nil {
 		return err
