@@ -64,7 +64,7 @@ func TestMCPWebhookDeliveriesRetry(t *testing.T) {
 func TestMCPWorkspaceAdminTools(t *testing.T) {
 	e := newEnv(t)
 	admin := e.keyWith(app.ScopeAdmin)
-	mcpErr(e, e.key, "create_api_key", map[string]any{"name": "x", "scopes": []string{"posts:read"}}, "admin")
+	mcpErr(e, e.key, "create_api_key", map[string]any{"name": "x", "scopes": []string{"posts:read"}}, "integrations:manage")
 	mcpErr(e, e.key, "rename_workspace", map[string]any{"name": "x"}, "admin")
 	mcpErr(e, e.key, "list_sessions", nil, "admin")
 	mcpErr(e, e.key, "start_workspace_export", nil, "admin")

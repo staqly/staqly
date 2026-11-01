@@ -77,11 +77,15 @@ key (even one created while the same data ran in cloud mode) is refused with `40
   with the same name, scopes and expiry; an expired key can't be rotated, `409`, create a new one)
   and **revoked**. `last_used_at` shows when a key was last
   used.
-- Manage keys in **Integrations → API keys** or via `/v1/api-keys` (needs `admin`).
+- Manage keys in **Integrations → API keys** or via `/v1/api-keys`. Admins manage workspace keys; signed-in operators (`integrations:manage`) manage only their own keys.
+
+Guest operators manage only keys created in their current guest session. These keys cannot exceed the
+session's permissions or expiry, and stop working as soon as that session is revoked. Rotation preserves
+both restrictions, including when an admin rotates the key.
 
 ### The admin key and agent keys
 
-Owners and admins create keys under **Integrations → API keys**; a key never does more than its
+Owners, admins and operators create keys under **Integrations → API keys**; a key never does more than its
 creator's current role (see [Accounts](/accounts#api-keys)). Give agents keys with
 only the scopes they need and no `admin`: such keys work for the API and MCP but can never open
 the dashboard, and they can't create or revoke keys.
@@ -112,6 +116,7 @@ Business any number.
 | `webhooks:manage` | Manage webhooks and their deliveries |
 | `alerts:manage` | Manage [alerts](/automation/alerts) (they hold secrets such as bot tokens) |
 | `events:read` | Read the activity log and export it |
+| `integrations:manage` | Signed-in people manage their own API keys and connected agents; API keys cannot create more keys with this scope |
 | `admin` | Everything, including API keys, sessions, device links, renaming the workspace, the [workspace export](/self-hosting/data-export), post purge, billing and plan changes, and seeing [audit events](/api/events#audit-events) in the activity log |
 
 A call without the needed scope returns `403 forbidden`: *"missing required scope

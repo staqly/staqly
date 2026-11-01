@@ -27,26 +27,31 @@ import (
 // require). Local mode never reaches any of this.
 
 const (
-	RoleOwner  = "owner"
-	RoleAdmin  = "admin"
-	RoleEditor = "editor"
-	RoleViewer = "viewer"
+	RoleOwner    = "owner"
+	RoleAdmin    = "admin"
+	RoleOperator = "operator"
+	RoleEditor   = "editor"
+	RoleViewer   = "viewer"
 )
 
 // Roles in order of power: a person may only grant or change roles up to their own.
-var Roles = []string{RoleViewer, RoleEditor, RoleAdmin, RoleOwner}
+var Roles = []string{RoleViewer, RoleEditor, RoleOperator, RoleAdmin, RoleOwner}
 
 func roleRank(role string) int { return slices.Index(Roles, role) }
 
 // RoleScopes is the whole permission model: what each workspace role may do, as scopes.
 //   - viewer: read only;
 //   - editor: write, schedule and publish content, use the connected channels; no members, keys or channels;
+//   - operator: all app operations, including channels and automation, but no workspace administration;
 //   - admin and owner: everything in the workspace (admin covers every scope); what tells them apart is
 //     who may change owners, pay and delete the workspace (owners only).
 var RoleScopes = map[string][]string{
 	RoleViewer: {ScopeCollectionsRead, ScopePostsRead, ScopeMediaRead, ScopeEventsRead, ScopeChannelsRead},
 	RoleEditor: {ScopeCollectionsRead, ScopeCollectionsWrite, ScopePostsRead, ScopePostsWrite, ScopePostsDelete,
 		ScopePostsPublish, ScopeMediaRead, ScopeMediaWrite, ScopeEventsRead, ScopeChannelsRead, ScopeSchedulesManage},
+	RoleOperator: {ScopeCollectionsRead, ScopeCollectionsWrite, ScopeCollectionsDelete, ScopePostsRead, ScopePostsWrite,
+		ScopePostsDelete, ScopePostsPublish, ScopeMediaRead, ScopeMediaWrite, ScopeEventsRead, ScopeChannelsRead,
+		ScopeChannelsManage, ScopeSchedulesManage, ScopeWebhooksManage, ScopeAlertsManage, ScopeIntegrationsManage},
 	RoleAdmin: {ScopeAdmin},
 	RoleOwner: {ScopeAdmin},
 }
@@ -772,7 +777,7 @@ func (s *Service) requirePeopleManager(p Principal) error {
 // canAssign: owners grant any role; admins up to admin, and never touch owners.
 func canAssign(actor Principal, current, next string) error {
 	if roleRank(next) < 0 {
-		return invalid("role", "use owner, admin, editor or viewer")
+		return invalid("role", "use owner, admin, operator, editor or viewer")
 	}
 	if actor.Role == RoleOwner {
 		return nil
@@ -858,7 +863,7 @@ func (s *Service) memberOut(ctx context.Context, p Principal, userID string) (Me
 	return Member{}, notFound("member")
 }
 
-// RemoveMember: admins remove editors and viewers (and other admins), owners anyone; everyone may leave.
+// RemoveMember: admins remove operators, editors and viewers (and other admins), owners anyone; everyone may leave.
 // Their sessions in this workspace end at once; the last owner stays.
 func (s *Service) RemoveMember(ctx context.Context, p Principal, userID string) error {
 	if err := notGuest(p); err != nil {

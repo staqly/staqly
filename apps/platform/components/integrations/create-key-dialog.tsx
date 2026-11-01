@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { useNow } from '@/hooks/use-now'
 import { ALL_SCOPES, api, type APIKey, type Scope } from '@/lib/api'
 import { fieldsOf, focusFirstInvalid, formApiError, useFormErrors } from '@/lib/form-errors'
-import { qk } from '@/lib/queries'
+import { qk, useRole } from '@/lib/queries'
 import { SCOPE_INFO, scopeGroup } from '@/lib/scope-info'
 import { SCOPE_PRESETS } from '@/lib/scope-presets'
 import { rememberApiKey } from '@/lib/session-key'
@@ -58,6 +58,7 @@ export function CreateKeyDialog({
   availableScopes: Scope[]
   onCreated: (k: APIKey) => void
 }) {
+  const { guest } = useRole()
   const qc = useQueryClient()
   const [name, setName] = useState('')
   const [scopes, setScopes] = useState<Scope[]>(SCOPE_PRESETS[0].scopes)
@@ -130,6 +131,8 @@ export function CreateKeyDialog({
             <DialogTitle>Create API key</DialogTitle>
             <DialogDescription>
               Give each agent or automation its own key with only the scopes it needs.
+              {guest &&
+                ' This key expires with your guest session at the latest and stops working if that session is revoked.'}
             </DialogDescription>
           </DialogHeader>
           <Field data-invalid={!!nameError}>

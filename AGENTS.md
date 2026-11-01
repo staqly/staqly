@@ -78,7 +78,7 @@ every job sets `timeout-minutes` and only the `permissions:` it uses.
   `STAQLY_LOCAL_TOKEN` fixes it for tests/CI): API clients send it as
   `Authorization: Bearer`, browsers trade it for a session (or use a connect
   link). Only `cmd/mcp-stdio` stays keyless (it opens the database itself). `cloud`: people sign in with Google or an email
-  code (accounts, workspace members with roles owner/admin/editor/viewer,
+  code (accounts, workspace members with roles owner/admin/operator/editor/viewer,
   invitations; the verified address is the person: Google and an email code for the same address sign into one account), scoped API keys, sessions
   + CSRF, plan limits (402); without Google or mail it refuses to start unless
   `AUTH_DEV_SIGNIN=true` (dev and tests only: email codes readable at
@@ -101,7 +101,7 @@ every job sets `timeout-minutes` and only the `permissions:` it uses.
   reports a custom target's result. Scopes: `collections:read|write|delete`,
   `posts:read|write|delete|publish`, `channels:read|manage`,
   `schedules:manage`, `media:read|write`, `webhooks:manage`, `alerts:manage`,
-  `events:read`, `admin`. Dashboard sessions and local mode hold all.
+  `events:read`, `integrations:manage` (own keys/agents for signed-in operators), `admin`. Dashboard sessions and local mode hold all.
 * **Deleting needs its own scope**: `posts:delete` (posts, media),
   `collections:delete` (collections); `:write` never implies it. Purge stays
   `admin`; webhooks, channels, schedules and alerts delete with their
@@ -152,7 +152,7 @@ every job sets `timeout-minutes` and only the `permissions:` it uses.
 * **Migrations are append-only once released.** The history up to 00076 was squashed into
   `db/migrations/00001_init.sql` on 2026-11-01, shared by SQLite and PostgreSQL (databases the old chain
   left at version 76 are rebaselined to version 1 by `store.baselineSquash`; older ones must go through
-  v0.13.0 first). The next migration is `00002_<name>.sql` (goose); never edit a released one, or existing
+  v0.13.0 first). Add the next numbered migration (goose); never edit a released one, or existing
   installs will diverge.
 * Node: the current LTS, pinned to a patched release in `.nvmrc` (CI), the root
   `Dockerfile` (dashboard build stage) and `compose.e2e.yml` (test receiver).

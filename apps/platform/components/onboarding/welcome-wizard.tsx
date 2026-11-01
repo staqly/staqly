@@ -59,6 +59,7 @@ const ROLE_TEXT: Record<Role, string> = {
   owner: 'You can do everything here, including people, channels and billing.',
   admin: 'You can do everything in this workspace: posts, channels, keys and people.',
   editor: 'You write, schedule and publish posts. Admins look after channels and people.',
+  operator: 'You manage posts, channels and automation. Admins look after workspace settings and people.',
   viewer: 'You see the calendar, posts and activity. You can ask an admin for more.',
 }
 
@@ -623,7 +624,7 @@ function TeamStep({
   onDone: (invites: WelcomeDraft['invites']) => void
 }) {
   const [emails, setEmails] = useState(invites?.emails.join(', ') ?? '')
-  const [role, setRole] = useState<'admin' | 'editor' | 'viewer'>(invites?.role ?? 'editor')
+  const [role, setRole] = useState<'admin' | 'operator' | 'editor' | 'viewer'>(invites?.role ?? 'editor')
   const list = emails
     .split(/[\s,;]+/)
     .map((e) => e.trim())
@@ -657,9 +658,9 @@ function TeamStep({
           <NativeSelect
             id="welcome-role"
             value={role}
-            onChange={(e) => setRole(e.target.value as 'admin' | 'editor' | 'viewer')}
+            onChange={(e) => setRole(e.target.value as 'admin' | 'operator' | 'editor' | 'viewer')}
           >
-            {(['editor', 'viewer', 'admin'] as const).map((r) => (
+            {(['editor', 'operator', 'viewer', 'admin'] as const).map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABELS[r]}
               </option>

@@ -108,13 +108,27 @@ func AgentFromUserAgent(ua string) (name, version string) {
 
 // ListAgents lists the agents seen in the workspace, most recently active first.
 func (s *Service) ListAgents(ctx context.Context, p Principal) ([]Agent, error) {
-	// Admin: it names the API keys agents use, like the key list.
-	if err := p.require(ScopeAdmin); err != nil {
+	// Like keys, non-admins see only their own integrations.
+	if err := requireKeyManager(p); err != nil {
 		return nil, err
+	}
+	var visible map[string]bool
+	if !p.Has(ScopeAdmin) {
+		keys, err := s.ListAPIKeys(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		visible = map[string]bool{}
+		for _, key := range keys {
+			visible[key.ID] = true
+		}
 	}
 	rows, err := s.Q.ListAgents(ctx, p.WorkspaceID)
 	out := []Agent{}
 	for _, a := range rows {
+		if visible != nil && !visible[a.PrincipalID] {
+			continue
+		}
 		out = append(out, Agent{ID: a.ID, Kind: a.Kind, Name: a.Name, Version: a.Version, PrincipalID: a.PrincipalID,
 			PrincipalName: a.PrincipalName, FirstSeenAt: a.FirstSeenAt, LastSeenAt: a.LastSeenAt, Requests: a.Requests,
 			PostsCreated: a.ItemsCreated})
@@ -124,8 +138,21 @@ func (s *Service) ListAgents(ctx context.Context, p Principal) ([]Agent, error) 
 
 // ForgetAgent removes an agent from the list (it comes back if it talks to the workspace again).
 func (s *Service) ForgetAgent(ctx context.Context, p Principal, id string) error {
-	if err := p.require(ScopeAdmin); err != nil {
+	if err := requireKeyManager(p); err != nil {
 		return err
+	}
+	if !p.Has(ScopeAdmin) {
+		agents, err := s.ListAgents(ctx, p)
+		if err != nil {
+			return err
+		}
+		found := false
+		for _, agent := range agents {
+			found = found || agent.ID == id
+		}
+		if !found {
+			return notFound("agent")
+		}
 	}
 	n, err := s.W.DeleteAgent(ctx, db.DeleteAgentParams{WorkspaceID: p.WorkspaceID, ID: id})
 	if err == nil && n == 0 {

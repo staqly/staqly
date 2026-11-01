@@ -251,6 +251,7 @@ export const SCOPES: readonly Scope[] = [
   'webhooks:manage',
   'alerts:manage',
   'events:read',
+  'integrations:manage',
   'admin',
 ]
 

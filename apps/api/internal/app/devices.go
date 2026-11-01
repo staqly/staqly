@@ -37,7 +37,8 @@ func (s *Service) CreateDeviceLink(ctx context.Context, p Principal, origin stri
 }
 
 // GuestLink: how long a link works, how many times it signs a browser in (0: any number), and with which role
-// (RoleEditor or RoleViewer; "" for an ordinary connect link). A guest's sessions end with the link.
+// (RoleOperator: app operations without admin; RoleEditor: content; RoleViewer: read-only; "": ordinary connect link).
+// A guest's sessions end with the link and never exceed the person's current workspace permissions.
 type GuestLink struct {
 	For  time.Duration
 	Uses int
@@ -45,12 +46,12 @@ type GuestLink struct {
 }
 
 // CreateGuestLink is `server connect-link --email --for`: the operator lets someone into the account of the person
-// with this address for a while, without their mailbox. Sessions from it have Role at most (never billing or
-// deleting the workspace) and can't add a way in that outlasts the link (notGuest). workspaceID "" picks the
+// with this address for a while, without their mailbox. Sessions from it cannot administer the account or workspace
+// (including billing) or add a sign-in method that outlasts the link (notGuest). workspaceID "" picks the
 // person's only workspace.
 func (s *Service) CreateGuestLink(ctx context.Context, email, workspaceID string, g GuestLink) (DeviceLink, error) {
-	if g.Role != "" && g.Role != RoleEditor && g.Role != RoleViewer {
-		return DeviceLink{}, invalid("role", "a guest is an editor or a viewer")
+	if g.Role != "" && g.Role != RoleOperator && g.Role != RoleEditor && g.Role != RoleViewer {
+		return DeviceLink{}, invalid("role", "a guest is an operator, editor or viewer")
 	}
 	if g.For <= 0 || g.Uses < 0 {
 		return DeviceLink{}, invalid("for", "a link needs a duration and 0 or more uses")

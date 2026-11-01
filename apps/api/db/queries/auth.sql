@@ -76,3 +76,6 @@ UPDATE sessions SET revoked_at = ? WHERE workspace_id = ? AND id = ? AND revoked
 -- Recovery-key use or rotation signs out every other browser.
 UPDATE sessions SET revoked_at = @revoked_at
 WHERE workspace_id = @workspace_id AND id <> @keep_id AND revoked_at IS NULL;
+
+-- name: SetAPIKeyAccess :exec
+UPDATE api_keys SET created_by_user_id = ?, guest_session_id = ? WHERE workspace_id = ? AND id = ?;

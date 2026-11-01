@@ -393,10 +393,10 @@ func copyUploads(ctx context.Context, cfg config.Config, dir string, dry bool) i
 //	                                        or card was a mistake: lift it, and don't check that workspace again
 //	server stats                            JSON overview: workspaces by plan, trials, signups, usage
 //	server connect-link [workspace_id]      one-time sign-in link for a browser (5 min)
-//	server connect-link [workspace_id] --email ADDR [--for 7d] [--uses N] [--role editor|viewer]
+//	server connect-link [workspace_id] --email ADDR [--for 7d] [--uses N] [--role operator|editor|viewer]
 //	                                        sign-in link as that person, without their mailbox; with --for a guest
 //	                                        link: N uses (0, the default: any number) until it expires, sessions
-//	                                        that end with it, as an editor (or viewer): no billing, no deleting
+//	                                        that end with it, as an operator by default: no account/workspace admin
 //	server attach-workspace <workspace_id> <email>
 //	                                        give a workspace without an account (from before accounts, or
 //	                                        imported with import-sqlite) to the person with that address:
@@ -447,7 +447,7 @@ func admin(cmd string, args []string) int {
 		email := fs.String("email", "", "sign in as the person with this address")
 		dur := fs.String("for", "", "guest link: how long it works, e.g. 1d, 7d, 30d or 12h")
 		uses := fs.Int("uses", 0, "guest link: how many sign-ins (0: any number until it expires)")
-		role := fs.String("role", app.RoleEditor, "guest link: editor or viewer")
+		role := fs.String("role", app.RoleOperator, "guest link: operator (app access without administration), editor or viewer")
 		pos := []string{}
 		for { // flags may come before or after the workspace id
 			if err := fs.Parse(args); err != nil {
