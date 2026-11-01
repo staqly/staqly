@@ -27,7 +27,7 @@ use case **Access the Threads API**. In **Use cases → Access the Threads API �
 
 | Where | What |
 |---|---|
-| **Permissions** | add `threads_content_publish`, `threads_manage_replies` and `threads_manage_insights` (`threads_basic` is there already) |
+| **Permissions** | add `threads_content_publish`, `threads_manage_replies`, `threads_manage_insights` and `threads_delete` (`threads_basic` is there already) |
 | **Settings → Redirect Callback URLs** | your dashboard's `/channels/callback/threads`, for example `https://staqly.example.com/channels/callback/threads`. Meta takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
 | **App roles → Roles → Threads testers** | the Threads profiles that may connect while the app is in development; each accepts the invitation on threads.com (Settings → Account → Website permissions → Invites) |
 
@@ -68,6 +68,9 @@ asks for these scopes:
 | `threads_content_publish` | Publish posts |
 | `threads_manage_replies` | Post the replies of a post's thread, and choose who can reply |
 | `threads_manage_insights` | Read a post's numbers (**Statistics**) |
+| `threads_delete` | Delete a post when you unpublish it |
+
+A profile connected before staqly asked for `threads_delete` needs to be reconnected once to unpublish.
 
 The channel shows the profile's name, `@username` and picture.
 

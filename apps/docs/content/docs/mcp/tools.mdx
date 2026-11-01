@@ -222,6 +222,14 @@ Take a scheduled post off the schedule; it becomes a draft again. · `posts:publ
 |---|---|---|---|
 | `post_id` | string | <Required /> | Post ID (post_...) |
 
+### `unpublish_post`
+Take a published post down from its channels: all of them, or only `channel_ids`. The post stays as history; each target shows `removal` (`removing`, `removed`, `failed` or `manual`). · `posts:publish`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | <Required /> | Post ID (post_...) |
+| `channel_ids` | string[] | | Only these channels (default: all it is published on) |
+
 ### `duplicate_post`
 Copy a post (content, media, tags, metadata, targets) into a new draft. · `posts:write`
 

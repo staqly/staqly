@@ -1,4 +1,4 @@
-import { channelStatusMeta, postStatusMeta, targetStatusMeta, type StatusMeta } from '@/lib/status'
+import { channelStatusMeta, postStatusMeta, targetStatusMeta, UNPUBLISHED_META, type StatusMeta } from '@/lib/status'
 import { cn } from '@/lib/utils'
 
 const PILL =
@@ -37,9 +37,23 @@ function Badge({
   )
 }
 
-/** A post's status (Draft, Scheduled, Publishing, Published, Failed). */
-export function PostStatusBadge({ status, title, className }: { status: string; title?: string; className?: string }) {
-  return <Badge meta={postStatusMeta(status)} status={status} title={title} className={className} />
+/** A post's status (Draft, Scheduled, Publishing, Published, Failed); "Unpublished" once it was taken down. */
+export function PostStatusBadge({
+  status,
+  unpublishedAt,
+  title,
+  className,
+}: {
+  status: string
+  unpublishedAt?: string | null
+  title?: string
+  className?: string
+}) {
+  return unpublishedAt ? (
+    <Badge meta={UNPUBLISHED_META} status="unpublished" title={title} className={className} />
+  ) : (
+    <Badge meta={postStatusMeta(status)} status={status} title={title} className={className} />
+  )
 }
 
 /** One channel's state for a post (Waiting, Publishing, Published, Failed). */

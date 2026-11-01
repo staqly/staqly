@@ -20,6 +20,7 @@ import {
   Share2,
   Timer,
   Trash2,
+  Undo2,
   UserPlus,
 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -32,6 +33,7 @@ import { ErrorState } from '@/components/common/error-state'
 import { NativeSelect } from '@/components/common/native-select'
 import { FeedbackThreads } from '@/components/preview/feedback-threads'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   DropdownMenu,
@@ -45,8 +47,15 @@ import { threadsOf } from '@/lib/annotations'
 import { api, type Post, type PostComment, type PreviewLink, type TargetMetrics } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { postTitle, wentOut } from '@/lib/posts'
-import { invalidateAfterPostChange, qk, refetchPostListsFromStart, removePostFromLists } from '@/lib/queries'
+import { canUnpublish, liveTargets, postTitle, wentOut } from '@/lib/posts'
+import {
+  invalidateAfterPostChange,
+  qk,
+  refetchPostListsFromStart,
+  removePostFromLists,
+  syncPostInCache,
+  useRole,
+} from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 
 import { postHref } from './post-href'
@@ -447,6 +456,66 @@ export function ShareDialog({
 }
 
 /**
+ * Unpublish: pick the channels to take the post down from (all by default), then a job deletes it on each
+ * platform. Platforms without a delete end up "Remove by hand" on the channel's row. Mount it only while open.
+ */
+export function UnpublishDialog({ post, onClose }: { post: Post; onClose: () => void }) {
+  const qc = useQueryClient()
+  const targets = liveTargets(post)
+  const [picked, setPicked] = useState(() => new Set(targets.map((t) => t.channel_id)))
+  const unpublish = useMutation({
+    mutationFn: () => api.unpublishPost(post.id, [...picked]),
+    onSuccess: (p) => {
+      syncPostInCache(qc, p)
+      invalidateAfterPostChange(qc, p.id)
+      namedToast(postTitle(p, 40), 'is being taken down')
+    },
+    onError: (e) => toastApiError(e),
+  })
+
+  return (
+    <ConfirmDialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Unpublish this post?"
+      description={
+        <span className="grid gap-3" data-testid="unpublish-dialog">
+          <span>
+            It is deleted on the platforms you pick and stays here as history. Platforms that cannot delete posts show
+            &quot;Remove by hand&quot; with a link.
+          </span>
+          {targets.map((t) => (
+            <label key={t.channel_id} className="flex items-center gap-2 text-foreground">
+              <Checkbox
+                checked={picked.has(t.channel_id)}
+                onCheckedChange={(c) =>
+                  setPicked((s) => {
+                    const next = new Set(s)
+
+                    if (c === true) {
+                      next.add(t.channel_id)
+                    } else {
+                      next.delete(t.channel_id)
+                    }
+
+                    return next
+                  })
+                }
+              />
+              <ProviderIcon id={t.provider} className="size-4" /> {t.channel_name}
+            </label>
+          ))}
+        </span>
+      }
+      confirmLabel="Unpublish"
+      variant="destructive"
+      // No channel picked would mean "all" to the API: never send that by accident.
+      onConfirm={() => picked.size > 0 && unpublish.mutate()}
+    />
+  )
+}
+
+/**
  * The actions on a saved post, as an icon row in its sheet: open it on the platform, share a preview
  * (and read the feedback), duplicate, delete; plus Publish now while it can still be published.
  */
@@ -456,6 +525,8 @@ export function PostActions({ post, onDeleted }: { post: Post; onDeleted: () => 
   const params = useSearchParams()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [unpublishOpen, setUnpublishOpen] = useState(false)
+  const { canWrite } = useRole()
   // A post that went out is history: it stays (the API refuses to delete it), so there is no Delete.
   const deletable = !wentOut(post)
   const comments = useQuery({ queryKey: commentsKey(post.id), queryFn: () => api.postComments(post.id) })
@@ -527,6 +598,19 @@ export function PostActions({ post, onDeleted }: { post: Post; onDeleted: () => 
         >
           <Copy />
         </Button>
+        {canWrite && canUnpublish(post) && (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Unpublish"
+            tooltip="Unpublish"
+            onClick={() => setUnpublishOpen(true)}
+            data-testid="post-unpublish"
+          >
+            <Undo2 />
+          </Button>
+        )}
         {deletable && (
           <Button
             type="button"
@@ -540,6 +624,7 @@ export function PostActions({ post, onDeleted }: { post: Post; onDeleted: () => 
           </Button>
         )}
       </div>
+      {unpublishOpen && <UnpublishDialog post={post} onClose={() => setUnpublishOpen(false)} />}
       {shareOpen && <ShareDialog post={post} open={shareOpen} onOpenChange={setShareOpen} />}
       <ConfirmDialog
         open={deleteOpen && deletable}

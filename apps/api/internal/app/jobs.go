@@ -30,6 +30,7 @@ var (
 	jobShutdownGrace = 30 * time.Second
 	jobRunTimeout    = map[string]time.Duration{
 		"publish_target":  10 * time.Minute,
+		"remove_target":   2 * time.Minute,
 		"run_schedule":    3 * time.Minute, // the schedule's endpoint call has its own 60 s limit
 		"refresh_channel": 2 * time.Minute,
 		"publish_reply":   10 * time.Minute, // a reply uploads its media like a post
@@ -90,6 +91,8 @@ func (s *Service) execJob(ctx context.Context, kind string, a jobArgs) error {
 		return s.runPublishPost(ctx, a.WorkspaceID, p.PostID)
 	case "publish_target":
 		return s.publishTarget(ctx, p.PostID, p.ChannelID)
+	case "remove_target":
+		return s.removeTarget(ctx, p.PostID, p.ChannelID)
 	case "target_timeout":
 		return s.targetTimedOut(ctx, p.PostID, p.ChannelID)
 	case "run_schedule":
@@ -126,6 +129,10 @@ func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause e
 	case "publish_target":
 		if err := s.finishTarget(ctx, p.PostID, p.ChannelID, "failed", providers.Result{}, cause.Error()); err != nil {
 			s.logger(ctx).Error("target not settled after failed job", "err", err)
+		}
+	case "remove_target":
+		if err := s.settleRemoval(ctx, p.PostID, p.ChannelID, "failed", cause.Error()); err != nil {
+			s.logger(ctx).Error("removal not settled after failed job", "err", err)
 		}
 	case "publish_post":
 		s.scheduledPublishFailed(ctx, a.WorkspaceID, p.PostID, cause)

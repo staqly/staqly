@@ -704,6 +704,32 @@ CASES = [
         202,
     ),
     Case(
+        "posts.unpublish all",
+        lambda c: c.posts.unpublish("pst_1"),
+        "POST",
+        "/v1/posts/pst_1/unpublish",
+        post(),
+        202,
+    ),
+    Case(
+        "posts.unpublish empty list is sent",
+        lambda c: c.posts.unpublish("pst_1", channel_ids=[]),
+        "POST",
+        "/v1/posts/pst_1/unpublish",
+        post(),
+        202,
+        body={"channel_ids": []},
+    ),
+    Case(
+        "posts.unpublish some",
+        lambda c: c.posts.unpublish("pst_1", channel_ids=["ch_1"]),
+        "POST",
+        "/v1/posts/pst_1/unpublish",
+        post(),
+        202,
+        body={"channel_ids": ["ch_1"]},
+    ),
+    Case(
         "posts.report_result published",
         lambda c: c.posts.report_result(
             "pst_1", "ch_1", status="published", url="https://x/1", external_id="42"

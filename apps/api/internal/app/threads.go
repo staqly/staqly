@@ -231,8 +231,8 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 		return err
 	}
 	target, err := s.Q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
-	if isNoRows(err) || (err == nil && target.Status != "published") {
-		return nil // the target went away, or was never published
+	if isNoRows(err) || (err == nil && (target.Status != "published" || target.Removal != "")) {
+		return nil // the target went away, was never published, or is being taken down
 	}
 	if err != nil {
 		return err
@@ -345,7 +345,7 @@ func (s *Service) replyEnded(ctx context.Context, postID, channelID string, inde
 			s.postEventData(ctx, q, row.WorkspaceID, postID, data)); err != nil {
 			return err
 		}
-		if errMsg == "" && index+1 < len(parts) {
+		if errMsg == "" && index+1 < len(parts) && t.Removal == "" {
 			return s.enqueueReply(ctx, q, row.WorkspaceID, postID, channelID, index+1, result.ExternalID, parts[index+1].DelaySeconds)
 		}
 		return nil

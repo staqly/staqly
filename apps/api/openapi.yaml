@@ -2007,6 +2007,38 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/posts/{id}/unpublish:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: unpublishPost
+      tags: [posts]
+      summary: Take a published post down from its channels (posts:publish)
+      description: |
+        Removes the post from every channel it is published on, or only `channel_ids`. The post stays
+        (history). Each target gets `removal`: `removing` while a job deletes it on the platform, then
+        `removed`, `failed` (see `removal_error`; retry by calling this again) or `manual` (the platform
+        has no delete: remove it there yourself). 409 `not_published` when nothing is published.
+      parameters:
+        - { $ref: "#/components/parameters/idempotencyKey" }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                channel_ids: { type: array, items: { type: string }, description: "Only these channels; default every published one" }
+      responses:
+        "202": { description: Removal started, content: { application/json: { schema: { $ref: "#/components/schemas/Post" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /v1/posts/{id}/cancel:
     parameters: [{ $ref: "#/components/parameters/id" }]
     post:
@@ -5375,10 +5407,15 @@ components:
       type: string
       enum: [pending, publishing, published, failed]
 
+    TargetRemoval:
+      type: string
+      enum: ["", removing, removed, failed, manual]
+      description: "Taking the target down: empty (never asked), removing, removed, failed, manual (the platform has no delete)"
+
     PostTarget:
       type: object
       description: One channel a post goes to, with the result of publishing there
-      required: [channel_id, channel_name, provider, avatar_url, content, settings, status, external_id, external_url, error, attempts, published_at, replies]
+      required: [channel_id, channel_name, provider, avatar_url, content, settings, status, external_id, external_url, error, attempts, published_at, removal, removal_error, removed_at, replies]
       properties:
         channel_id: { type: string }
         channel_name: { type: string }
@@ -5392,6 +5429,9 @@ components:
         error: { type: string }
         attempts: { type: integer }
         published_at: { type: [string, "null"], format: date-time }
+        removal: { $ref: "#/components/schemas/TargetRemoval" }
+        removal_error: { type: string, description: "Why taking it down failed" }
+        removed_at: { type: [string, "null"], format: date-time, description: When it was taken down on the platform }
         replies: { type: array, items: { $ref: "#/components/schemas/Reply" }, description: "How each thread part went on this channel, one per part" }
 
     Reply:
@@ -5439,7 +5479,7 @@ components:
 
     Post:
       type: object
-      required: [id, collection_id, collection_name, title, content, media, media_items, status, publish_at, published_at, tags, metadata, source, external_ref, repeat_every, thread, version, targets, created_at, updated_at, created_by, open_comments]
+      required: [id, collection_id, collection_name, title, content, media, media_items, status, publish_at, published_at, unpublished_at, unpublished_by, tags, metadata, source, external_ref, repeat_every, thread, version, targets, created_at, updated_at, created_by, open_comments]
       properties:
         id: { type: string }
         collection_id: { type: string }
@@ -5451,6 +5491,8 @@ components:
         status: { $ref: "#/components/schemas/PostStatus" }
         publish_at: { type: [string, "null"], format: date-time, description: "When it goes out (scheduled), or the time it kept as a note (draft after cancel)" }
         published_at: { type: [string, "null"], format: date-time }
+        unpublished_at: { type: [string, "null"], format: date-time, description: When it was taken down from its channels }
+        unpublished_by: { type: string, description: "Who took it down: a person or the API key" }
         tags: { type: array, items: { type: string } }
         metadata: { type: object, additionalProperties: true, description: Free JSON for your own use }
         source: { type: string, description: "Who created it: a client name, an agent, a schedule" }

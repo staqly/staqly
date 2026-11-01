@@ -16,6 +16,8 @@ type Post struct {
 	Status         string         `json:"status"`
 	PublishAt      *string        `json:"publish_at"`
 	PublishedAt    *string        `json:"published_at"`
+	UnpublishedAt  *string        `json:"unpublished_at"`
+	UnpublishedBy  string         `json:"unpublished_by"`
 	Tags           []string       `json:"tags"`
 	Metadata       map[string]any `json:"metadata"`
 	Source         string         `json:"source"`
@@ -29,18 +31,21 @@ type Post struct {
 }
 
 type PostTarget struct {
-	ChannelID   string            `json:"channel_id"`
-	ChannelName string            `json:"channel_name"`
-	Provider    string            `json:"provider"`
-	Content     *string           `json:"content"`
-	Settings    map[string]string `json:"settings"`
-	Status      string            `json:"status"`
-	ExternalID  string            `json:"external_id"`
-	ExternalURL string            `json:"external_url"`
-	Error       string            `json:"error"`
-	Attempts    int               `json:"attempts"`
-	PublishedAt *string           `json:"published_at"`
-	Replies     []Reply           `json:"replies"`
+	ChannelID    string            `json:"channel_id"`
+	ChannelName  string            `json:"channel_name"`
+	Provider     string            `json:"provider"`
+	Content      *string           `json:"content"`
+	Settings     map[string]string `json:"settings"`
+	Status       string            `json:"status"`
+	ExternalID   string            `json:"external_id"`
+	ExternalURL  string            `json:"external_url"`
+	Error        string            `json:"error"`
+	Attempts     int               `json:"attempts"`
+	PublishedAt  *string           `json:"published_at"`
+	Removal      string            `json:"removal"`
+	RemovalError string            `json:"removal_error"`
+	RemovedAt    *string           `json:"removed_at"`
+	Replies      []Reply           `json:"replies"`
 }
 
 // ThreadPart is one reply under a post.

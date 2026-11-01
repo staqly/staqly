@@ -64,7 +64,7 @@ func (s *Service) enqueueReposts(ctx context.Context, q *db.Queries, workspaceID
 // runRepost is the repost job: the channel repostBy reposts what channelID published for postID.
 func (s *Service) runRepost(ctx context.Context, postID, channelID, repostBy string) error {
 	target, err := s.Q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
-	if isNoRows(err) || (err == nil && (target.Status != "published" || target.ExternalID == "")) {
+	if isNoRows(err) || (err == nil && (target.Status != "published" || target.ExternalID == "" || target.Removal != "")) {
 		return nil // the post went away or never made it out
 	}
 	if err != nil {

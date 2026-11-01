@@ -1532,6 +1532,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/posts/{id}/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take a published post down from its channels (posts:publish)
+         * @description Removes the post from every channel it is published on, or only `channel_ids`. The post stays
+         *     (history). Each target gets `removal`: `removing` while a job deletes it on the platform, then
+         *     `removed`, `failed` (see `removal_error`; retry by calling this again) or `manual` (the platform
+         *     has no delete: remove it there yourself). 409 `not_published` when nothing is published.
+         */
+        post: operations["unpublishPost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/posts/{id}/cancel": {
         parameters: {
             query?: never;
@@ -4693,6 +4718,11 @@ export interface components {
         PostStatus: "draft" | "scheduled" | "publishing" | "published" | "failed";
         /** @enum {string} */
         TargetStatus: "pending" | "publishing" | "published" | "failed";
+        /**
+         * @description Taking the target down: empty (never asked), removing, removed, failed, manual (the platform has no delete)
+         * @enum {string}
+         */
+        TargetRemoval: "" | "removing" | "removed" | "failed" | "manual";
         /** @description One channel a post goes to, with the result of publishing there */
         PostTarget: {
             channel_id: string;
@@ -4715,6 +4745,14 @@ export interface components {
             attempts: number;
             /** Format: date-time */
             published_at: string | null;
+            removal: components["schemas"]["TargetRemoval"];
+            /** @description Why taking it down failed */
+            removal_error: string;
+            /**
+             * Format: date-time
+             * @description When it was taken down on the platform
+             */
+            removed_at: string | null;
             /** @description How each thread part went on this channel, one per part */
             replies: components["schemas"]["Reply"][];
         };
@@ -4774,6 +4812,13 @@ export interface components {
             publish_at: string | null;
             /** Format: date-time */
             published_at: string | null;
+            /**
+             * Format: date-time
+             * @description When it was taken down from its channels
+             */
+            unpublished_at: string | null;
+            /** @description Who took it down: a person or the API key */
+            unpublished_by: string;
             tags: string[];
             /** @description Free JSON for your own use */
             metadata: {
@@ -9293,6 +9338,51 @@ export interface operations {
                     "application/json": components["schemas"]["Post"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    unpublishPost: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Replays the stored response when the same key is repeated with the same method, path,
+                 *     query string and body within 24 hours (422 `idempotency_mismatch` with a different
+                 *     request, 409 `idempotency_in_progress` while the first one runs). Not applied to
+                 *     multipart uploads or to responses that carry a secret.
+                 */
+                "Idempotency-Key"?: components["parameters"]["idempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Only these channels; default every published one */
+                    channel_ids?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Removal started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];

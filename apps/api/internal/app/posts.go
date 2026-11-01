@@ -43,6 +43,10 @@ type PostTarget struct {
 	Attempts    int64             `json:"attempts"`
 	PublishedAt *string           `json:"published_at"`
 	Replies     []Reply           `json:"replies"` // one per thread part
+	// Removal: what taking it down is doing: removing, removed, manual (delete it on the platform), failed.
+	Removal      string  `json:"removal"`
+	RemovalError string  `json:"removal_error"`
+	RemovedAt    *string `json:"removed_at"`
 }
 
 type Post struct {
@@ -68,6 +72,9 @@ type Post struct {
 	UpdatedAt      string          `json:"updated_at"`
 	// CreatedBy names who created the post: a person, or an API key (an agent, an automation); empty when unknown.
 	CreatedBy string `json:"created_by"`
+	// UnpublishedAt / UnpublishedBy: when and by whom the post was taken down from its channels (unpublish.go).
+	UnpublishedAt *string `json:"unpublished_at"`
+	UnpublishedBy string  `json:"unpublished_by"`
 	// OpenComments counts reviewers' comment threads not resolved yet.
 	OpenComments int64 `json:"open_comments"`
 }
@@ -128,7 +135,7 @@ type PostPage struct {
 func targetOut(t db.ListTargetsRow) PostTarget {
 	out := PostTarget{ChannelID: t.ChannelID, ChannelName: t.ChannelName, Provider: t.Provider, AvatarURL: t.ChannelAvatarUrl, Content: ptr(t.Content),
 		Settings: map[string]string{}, Status: t.Status, ExternalID: t.ExternalID, ExternalURL: t.ExternalUrl, Error: t.Error,
-		Attempts: t.Attempts, PublishedAt: ptr(t.PublishedAt)}
+		Attempts: t.Attempts, PublishedAt: ptr(t.PublishedAt), Removal: t.Removal, RemovalError: t.RemovalError, RemovedAt: ptr(t.RemovedAt)}
 	_ = json.Unmarshal([]byte(t.Settings), &out.Settings)
 	return out
 }
@@ -138,7 +145,8 @@ func (s *Service) toPost(p db.Post, targets []db.ListTargetsRow, collectionName 
 	out := Post{ID: p.ID, CollectionID: p.CollectionID, CollectionName: collectionName, Title: p.Title, Content: p.Content, Media: []string{}, MediaItems: []Media{},
 		Status: p.Status, PublishAt: ptr(p.PublishAt), PublishedAt: ptr(p.PublishedAt), Tags: []string{},
 		Metadata: json.RawMessage(p.Metadata), Source: p.Source, ExternalRef: p.ExternalRef, RepeatEvery: p.RepeatEvery, Version: p.Version,
-		Thread: s.threadPartsOut(parseThread(p.Thread), media), Targets: []PostTarget{}, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+		Thread: s.threadPartsOut(parseThread(p.Thread), media), Targets: []PostTarget{}, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		UnpublishedAt: ptr(p.UnpublishedAt), UnpublishedBy: p.UnpublishedBy}
 	_ = json.Unmarshal([]byte(p.Media), &out.Media)
 	_ = json.Unmarshal([]byte(p.Tags), &out.Tags)
 	for _, id := range out.Media {
@@ -1010,6 +1018,9 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 		if err != nil {
 			return err
 		}
+		if row.UnpublishedAt.Valid {
+			return errUnpublished
+		}
 		if err := editable(row.Status); err != nil {
 			return err
 		}
@@ -1065,6 +1076,9 @@ func (s *Service) PublishPost(ctx context.Context, p Principal, id string) (Post
 		}
 		if err != nil {
 			return err
+		}
+		if row.UnpublishedAt.Valid {
+			return errUnpublished
 		}
 		if err := editable(row.Status); err != nil {
 			return err
@@ -1631,6 +1645,9 @@ func (s *Service) RetryTarget(ctx context.Context, p Principal, postID, channelI
 		}
 		if err != nil {
 			return err
+		}
+		if row.UnpublishedAt.Valid {
+			return errUnpublished
 		}
 		t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
 		if isNoRows(err) {

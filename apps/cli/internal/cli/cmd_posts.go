@@ -33,6 +33,7 @@ func postsCommand() *Command {
 			postsSimpleCommand("cancel", "Take a scheduled post off the schedule; it becomes a draft", "/cancel", "Cancelled %s, now a draft"),
 			postsSimpleCommand("duplicate", "Copy a post into a new draft", "/duplicate", "Created draft %s"),
 			postsRetryCommand(),
+			postsUnpublishCommand(),
 			postsResultCommand(),
 			postsPreviewCommand(),
 			postsStatsCommand(),
@@ -673,6 +674,51 @@ func postsRetryCommand() *Command {
 			return nil
 		}
 	}, "staqly posts retry pst_123 ch_456", "staqly posts retry pst_123 X --wait")
+}
+
+func postsUnpublishCommand() *Command {
+	return leaf("unpublish", "<id>", "Take a published post down from its channels", 1, 1, func(fs *flag.FlagSet) runFunc {
+		chans := &multiFlag{}
+		fs.Var(chans, "channel", "only this `channel` (ID or name; repeatable; default all)")
+		return func(c *Ctx, args []string) error {
+			cl, err := c.Client()
+			if err != nil {
+				return err
+			}
+			var body any
+			if len(chans.vals) > 0 {
+				ids := make([]string, 0, len(chans.vals))
+				for _, v := range chans.vals {
+					id, err := resolveChannelID(c, cl, v)
+					if err != nil {
+						return err
+					}
+					ids = append(ids, id)
+				}
+				body = map[string]any{"channel_ids": ids}
+			}
+			var p Post
+			raw, err := cl.Post(c, "/v1/posts/"+url.PathEscape(args[0])+"/unpublish", body, &p)
+			if err != nil {
+				return err
+			}
+			if c.JSON {
+				return c.printRaw(raw)
+			}
+			fmt.Fprintf(c.Out, "Unpublishing %s\n", c.paint(bold, p.ID))
+			for _, t := range p.Targets {
+				if t.Removal == "" {
+					continue
+				}
+				name := t.ChannelName
+				if name == "" {
+					name = t.ChannelID
+				}
+				fmt.Fprintf(c.Out, "  %s: %s\n", name, t.Removal)
+			}
+			return nil
+		}
+	}, "staqly posts unpublish pst_123", "staqly posts unpublish pst_123 --channel X")
 }
 
 // ---- result (custom provider) ----

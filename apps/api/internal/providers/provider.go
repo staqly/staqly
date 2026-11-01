@@ -356,6 +356,14 @@ type MetricsReader interface {
 	Metrics(ctx context.Context, c Credentials, externalID string) (Metrics, error)
 }
 
+// Remover is implemented by platforms that can take a published post (or one part of its thread) down again.
+// externalID is what Publish or Reply returned. Remove returns nil also when the platform says the item is
+// already gone, a *Failure with ErrManual when the platform has no way to delete it through its API (the person
+// removes it by hand), ErrReauth when the sign-in no longer works, ErrRejected when the platform refuses.
+type Remover interface {
+	Remove(ctx context.Context, c Credentials, externalID string) error
+}
+
 // Result of a publish: how the platform names the post and where it lives.
 type Result struct {
 	ExternalID string `json:"external_id"`
@@ -368,6 +376,9 @@ var ErrReauth = errors.New("the account needs reconnecting")
 
 // ErrRejected: the platform refused this post (duplicate, too long, not allowed); retrying will not help.
 var ErrRejected = errors.New("the platform refused the post")
+
+// ErrManual: the platform can't delete it through its API; the person removes it by hand.
+var ErrManual = errors.New("remove it by hand")
 
 // Failure is a platform error with the message a person reads; Kind (ErrReauth, ErrRejected or nil for a
 // retryable one) is what errors.Is matches. RetryAt, on a retryable one, is when the platform takes requests

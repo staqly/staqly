@@ -187,7 +187,7 @@ func (q *Queries) DeleteTargetsNotIn(ctx context.Context, arg DeleteTargetsNotIn
 }
 
 const exportPostsPage = `-- name: ExportPostsPage :many
-SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title FROM posts WHERE workspace_id = ?1 AND id > ?2 ORDER BY id LIMIT ?3
+SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title, unpublished_at, unpublished_by FROM posts WHERE workspace_id = ?1 AND id > ?2 ORDER BY id LIMIT ?3
 `
 
 type ExportPostsPageParams struct {
@@ -226,6 +226,8 @@ func (q *Queries) ExportPostsPage(ctx context.Context, arg ExportPostsPageParams
 			&i.Thread,
 			&i.CreatedByUser,
 			&i.Title,
+			&i.UnpublishedAt,
+			&i.UnpublishedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -241,7 +243,7 @@ func (q *Queries) ExportPostsPage(ctx context.Context, arg ExportPostsPageParams
 }
 
 const getPost = `-- name: GetPost :one
-SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title FROM posts WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title, unpublished_at, unpublished_by FROM posts WHERE workspace_id = ? AND id = ?
 `
 
 type GetPostParams struct {
@@ -273,12 +275,14 @@ func (q *Queries) GetPost(ctx context.Context, arg GetPostParams) (Post, error) 
 		&i.Thread,
 		&i.CreatedByUser,
 		&i.Title,
+		&i.UnpublishedAt,
+		&i.UnpublishedBy,
 	)
 	return i, err
 }
 
 const getPostByID = `-- name: GetPostByID :one
-SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title FROM posts WHERE id = ?
+SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title, unpublished_at, unpublished_by FROM posts WHERE id = ?
 `
 
 func (q *Queries) GetPostByID(ctx context.Context, id string) (Post, error) {
@@ -305,12 +309,14 @@ func (q *Queries) GetPostByID(ctx context.Context, id string) (Post, error) {
 		&i.Thread,
 		&i.CreatedByUser,
 		&i.Title,
+		&i.UnpublishedAt,
+		&i.UnpublishedBy,
 	)
 	return i, err
 }
 
 const getTarget = `-- name: GetTarget :one
-SELECT post_id, channel_id, content, settings, status, external_id, external_url, error, attempts, published_at, updated_at, replies, metrics, metrics_at FROM post_targets WHERE post_id = ? AND channel_id = ?
+SELECT post_id, channel_id, content, settings, status, external_id, external_url, error, attempts, published_at, updated_at, replies, metrics, metrics_at, removal, removal_error, removed_at FROM post_targets WHERE post_id = ? AND channel_id = ?
 `
 
 type GetTargetParams struct {
@@ -336,12 +342,15 @@ func (q *Queries) GetTarget(ctx context.Context, arg GetTargetParams) (PostTarge
 		&i.Replies,
 		&i.Metrics,
 		&i.MetricsAt,
+		&i.Removal,
+		&i.RemovalError,
+		&i.RemovedAt,
 	)
 	return i, err
 }
 
 const listTargets = `-- name: ListTargets :many
-SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
+SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, t.removal, t.removal_error, t.removed_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
 JOIN channels c ON c.id = t.channel_id WHERE t.post_id = ? ORDER BY c.name COLLATE NOCASE, c.id
 `
 
@@ -360,6 +369,9 @@ type ListTargetsRow struct {
 	Replies          string         `json:"replies"`
 	Metrics          string         `json:"metrics"`
 	MetricsAt        sql.NullString `json:"metrics_at"`
+	Removal          string         `json:"removal"`
+	RemovalError     string         `json:"removal_error"`
+	RemovedAt        sql.NullString `json:"removed_at"`
 	ChannelName      string         `json:"channel_name"`
 	Provider         string         `json:"provider"`
 	ChannelStatus    string         `json:"channel_status"`
@@ -391,6 +403,9 @@ func (q *Queries) ListTargets(ctx context.Context, postID string) ([]ListTargets
 			&i.Replies,
 			&i.Metrics,
 			&i.MetricsAt,
+			&i.Removal,
+			&i.RemovalError,
+			&i.RemovedAt,
 			&i.ChannelName,
 			&i.Provider,
 			&i.ChannelStatus,
@@ -411,7 +426,7 @@ func (q *Queries) ListTargets(ctx context.Context, postID string) ([]ListTargets
 }
 
 const listTargetsForPosts = `-- name: ListTargetsForPosts :many
-SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
+SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, t.removal, t.removal_error, t.removed_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
 JOIN channels c ON c.id = t.channel_id WHERE t.post_id IN (SELECT value FROM json_each(?1)) ORDER BY t.post_id, c.name COLLATE NOCASE, c.id
 `
 
@@ -430,6 +445,9 @@ type ListTargetsForPostsRow struct {
 	Replies          string         `json:"replies"`
 	Metrics          string         `json:"metrics"`
 	MetricsAt        sql.NullString `json:"metrics_at"`
+	Removal          string         `json:"removal"`
+	RemovalError     string         `json:"removal_error"`
+	RemovedAt        sql.NullString `json:"removed_at"`
 	ChannelName      string         `json:"channel_name"`
 	Provider         string         `json:"provider"`
 	ChannelStatus    string         `json:"channel_status"`
@@ -461,6 +479,9 @@ func (q *Queries) ListTargetsForPosts(ctx context.Context, ids interface{}) ([]L
 			&i.Replies,
 			&i.Metrics,
 			&i.MetricsAt,
+			&i.Removal,
+			&i.RemovalError,
+			&i.RemovedAt,
 			&i.ChannelName,
 			&i.Provider,
 			&i.ChannelStatus,
@@ -544,7 +565,7 @@ func (q *Queries) PostStatusCountsSince(ctx context.Context, arg PostStatusCount
 }
 
 const postsByIDs = `-- name: PostsByIDs :many
-SELECT posts.id, posts.workspace_id, posts.collection_id, posts.content, posts.media, posts.status, posts.publish_at, posts.published_at, posts.tags, posts.metadata, posts.source, posts.external_ref, posts.version, posts.created_at, posts.updated_at, posts.repeat_every, posts.repeat_of, posts.thread, posts.created_by_user, posts.title FROM json_each(?1) AS j CROSS JOIN posts WHERE posts.id = j.value AND posts.workspace_id = ?2
+SELECT posts.id, posts.workspace_id, posts.collection_id, posts.content, posts.media, posts.status, posts.publish_at, posts.published_at, posts.tags, posts.metadata, posts.source, posts.external_ref, posts.version, posts.created_at, posts.updated_at, posts.repeat_every, posts.repeat_of, posts.thread, posts.created_by_user, posts.title, posts.unpublished_at, posts.unpublished_by FROM json_each(?1) AS j CROSS JOIN posts WHERE posts.id = j.value AND posts.workspace_id = ?2
 ORDER BY posts.created_at, posts.id
 `
 
@@ -584,6 +605,8 @@ func (q *Queries) PostsByIDs(ctx context.Context, arg PostsByIDsParams) ([]Post,
 			&i.Thread,
 			&i.CreatedByUser,
 			&i.Title,
+			&i.UnpublishedAt,
+			&i.UnpublishedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -927,7 +950,7 @@ func (q *Queries) WaitingCustomTargets(ctx context.Context, arg WaitingCustomTar
 }
 
 const waitingPosts = `-- name: WaitingPosts :many
-SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title FROM posts WHERE workspace_id = ? AND collection_id = ? AND status = 'draft' AND publish_at IS NULL
+SELECT id, workspace_id, collection_id, content, media, status, publish_at, published_at, tags, metadata, source, external_ref, version, created_at, updated_at, repeat_every, repeat_of, thread, created_by_user, title, unpublished_at, unpublished_by FROM posts WHERE workspace_id = ? AND collection_id = ? AND status = 'draft' AND publish_at IS NULL
 ORDER BY created_at, id LIMIT ?
 `
 
@@ -968,6 +991,8 @@ func (q *Queries) WaitingPosts(ctx context.Context, arg WaitingPostsParams) ([]P
 			&i.Thread,
 			&i.CreatedByUser,
 			&i.Title,
+			&i.UnpublishedAt,
+			&i.UnpublishedBy,
 		); err != nil {
 			return nil, err
 		}

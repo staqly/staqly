@@ -127,6 +127,7 @@ staqly posts update post_1 [--title TEXT] [--content TEXT] [--channel CH ...] [-
 staqly posts schedule post_1 <time>        # set the time, status scheduled
 staqly posts publish post_1 [--wait [--timeout 10m]]
 staqly posts cancel post_1                 # off the calendar, back to draft
+staqly posts unpublish post_1 [--channel CH ...] # take a published post down from its channels (all by default)
 staqly posts duplicate post_1              # a new draft with the same content, media, tags and channels
 staqly posts preview post_1                # the text per channel (links removed or defanged) and what each platform objects to
 staqly posts stats post_1 --refresh        # its numbers per channel (views, likes...) where the platform reports them
@@ -164,7 +165,7 @@ staqly work                                # what your automation is asked for: 
 
 ### Publishing and results
 
-- `schedule`, `publish`, `cancel`, `retry` and `result` need the `posts:publish` scope; `create`,
+- `schedule`, `publish`, `cancel`, `unpublish`, `retry` and `result` need the `posts:publish` scope; `create`,
   `update` and `duplicate` need `posts:write`.
 - `--wait` on `create`, `publish` and `retry` polls the post until it is `published` (exit
   `0`) or `failed` (exit `2`), or `--timeout` passes (exit `3`, default `10m`). See

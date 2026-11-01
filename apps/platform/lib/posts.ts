@@ -32,6 +32,16 @@ export function wentOut(post: Pick<Post, 'status' | 'targets'>) {
   return isLocked(post) || (post.targets ?? []).some((t) => t.status === 'published')
 }
 
+/** A post that can be taken down from its channels: it went out and was not unpublished yet. */
+export function canUnpublish(post: Pick<Post, 'status' | 'targets' | 'unpublished_at'>) {
+  return wentOut(post) && !post.unpublished_at
+}
+
+/** Channels the post is still up on (published, not taken down or being taken down). */
+export function liveTargets(post: Pick<Post, 'targets'>): PostTarget[] {
+  return publishedTargets(post).filter((t) => t.removal !== 'removed' && t.removal !== 'removing')
+}
+
 /** Published targets, for the links under a published post. */
 export function publishedTargets(post: Pick<Post, 'targets'>): PostTarget[] {
   return (post.targets ?? []).filter((t) => t.status === 'published')

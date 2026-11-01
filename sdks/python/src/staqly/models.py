@@ -869,6 +869,10 @@ class PostTarget(StaqlyModel):
     error: str = ""
     attempts: int = 0
     published_at: OptionalDatetime = None
+    #: ``removing``, ``removed``, ``failed`` or ``manual`` once the post is taken down; empty otherwise.
+    removal: str = ""
+    removal_error: str = ""
+    removed_at: OptionalDatetime = None
     #: How each thread part went on this channel, one per part.
     replies: list[Reply] = Field(default_factory=list)
 
@@ -899,6 +903,8 @@ class Post(StaqlyModel):
     #: When it goes out (scheduled), or the time it kept as a note (draft after cancel).
     publish_at: OptionalDatetime = None
     published_at: OptionalDatetime = None
+    unpublished_at: OptionalDatetime = None
+    unpublished_by: str = ""
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     #: Who created it: a client name, an agent, a schedule.

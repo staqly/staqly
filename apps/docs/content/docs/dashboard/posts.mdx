@@ -119,6 +119,7 @@ header, a row of icons next to them (hover for their names), and the sections **
 | Globe, **Open post** | Opens the published post on its platform; with several channels, a menu picks one. Shown once something is published |
 | Eye, **Preview and feedback** | A link to a read-only preview anyone can comment on, and the comments people left (the badge counts them). See [Share a preview](/dashboard/share-a-preview) |
 | Copy, **Duplicate** | A new draft with the same content, media, per-channel texts and settings, tags and comments, without its time; it opens straight away |
+| Undo, **Unpublish** | For a published post: asks which channels (all by default), then takes the post down from them. The post stays in the list as history. See [Unpublish](#unpublish) |
 | Trash, **Delete** | Asks first. Only for a post that hasn't gone out: once it is published, publishing or published on any of its channels, it stays as history (rows and the bar at the bottom leave it out too). **Duplicate** it to post it again |
 
 A direct link such as `/posts/post_oalirbz67y4m4cqxq5dw` opens the same view.
@@ -132,6 +133,19 @@ A draft or scheduled post is edited in place; the footer has **Save changes** (a
 now**) once it is scheduled. Editing a scheduled post keeps its time. A post that is publishing
 or published is read-only: **Duplicate** copies its content, media, tags, metadata and channels
 into a new draft.
+
+### Unpublish
+
+**Unpublish** (needs `posts:publish`) deletes the post on the channels you pick. A job does it; **Delivery**
+shows each channel as *Removing*, *Removed*, *Removal failed* (with the reason; unpublish again to retry) or
+*Remove by hand* (with a link to the post). Thread parts go first, newest first.
+
+| Channel | What happens |
+|---|---|
+| X, Facebook, Threads, YouTube, LinkedIn, LinkedIn Page, Bluesky, Mastodon, Slack, Discord, Discord webhook, Reddit, Tumblr, Pinterest | Deleted through the platform's API |
+| Telegram | Deleted while Telegram still allows it (about 48 hours), otherwise by hand |
+| Instagram | Delete the post by hand: Meta has no API for it. Staqly still removes the comments of its thread |
+| Every other channel | *Remove by hand*, with a link to the post |
 
 ### Numbers
 
