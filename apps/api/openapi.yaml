@@ -2074,7 +2074,7 @@ paths:
       tags: [posts]
       summary: The post's numbers per channel, read from each platform that reports them (posts:read)
       description: |
-        Published targets on platforms that report numbers (X, YouTube, Slack) are read again when the cached numbers are older
+        Published targets on platforms that report numbers (X, YouTube, Facebook, Instagram, Threads, Slack) are read again when the cached numbers are older
         than ten minutes, or now with `refresh=true`. A failed read keeps the last numbers and sets `error`.
         Targets on your own automation show what it reported (PUT .../metrics). `available: false` means the
         platform gives no numbers.

@@ -75,6 +75,7 @@ Instagram accounts to share and allows the app. The configuration asks for these
 | `instagram_basic` | Read the accounts' usernames, names and pictures |
 | `instagram_content_publish` | Publish posts, carousels, reels and stories |
 | `instagram_manage_comments` | Post the comments of a post's thread |
+| `instagram_manage_insights` | Read a post's views, shares and saves (**Statistics**) |
 
 Staqly then lists the shared accounts: pick one or more, and each becomes a channel showing the
 account's name, `@username` and picture. Connecting the same account again reconnects its channel.
@@ -121,6 +122,14 @@ Over the API: `{"post_type": "reel", "share_to_feed": "false"}` in the target's 
 A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the post, in
 order and after their delays: for example a first comment with hashtags. Comments take text only;
 stories have none.
+
+## Statistics
+
+A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show its likes and comments and, with
+`instagram_manage_insights` in the configuration, its views, shares and saves. A story's numbers last as
+long as the story (a day). An account connected before the configuration had the permission shows likes and
+comments until it is reconnected.
+
 
 ## When publishing fails
 

@@ -346,7 +346,7 @@ export function Performance({ data }: { data: Analytics }) {
         <p className="text-sm text-muted-foreground">
           {published === 0
             ? 'No data yet in this range.'
-            : "No numbers yet for the posts in this range. A published post's Statistics tab reads them from platforms that report numbers (X, YouTube, Slack); your own automation can report its own."}
+            : "No numbers yet for the posts in this range. A published post's Statistics tab reads them from platforms that report numbers (X, YouTube, Facebook, Instagram, Threads, Slack); your own automation can report its own."}
         </p>
       )}
       {silent.length > 0 && (

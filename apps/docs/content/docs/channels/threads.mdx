@@ -27,7 +27,7 @@ use case **Access the Threads API**. In **Use cases → Access the Threads API �
 
 | Where | What |
 |---|---|
-| **Permissions** | add `threads_content_publish` and `threads_manage_replies` (`threads_basic` is there already) |
+| **Permissions** | add `threads_content_publish`, `threads_manage_replies` and `threads_manage_insights` (`threads_basic` is there already) |
 | **Settings → Redirect Callback URLs** | your dashboard's `/channels/callback/threads`, for example `https://staqly.example.com/channels/callback/threads`. Meta takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
 | **App roles → Roles → Threads testers** | the Threads profiles that may connect while the app is in development; each accepts the invitation on threads.com (Settings → Account → Website permissions → Invites) |
 
@@ -67,6 +67,7 @@ asks for these scopes:
 | `threads_basic` | Read the profile's username, name and picture |
 | `threads_content_publish` | Publish posts |
 | `threads_manage_replies` | Post the replies of a post's thread, and choose who can reply |
+| `threads_manage_insights` | Read a post's numbers (**Statistics**) |
 
 The channel shows the profile's name, `@username` and picture.
 
@@ -110,6 +111,12 @@ Over the API: `{"reply_control": "mentioned_only"}` in the target's `settings`.
 
 A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies on Threads, each under
 the one before, in order and after their delays. Replies take text, pictures and videos like a post.
+
+## Statistics
+
+A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show Threads' numbers for it: views, likes, replies, reposts,
+quotes and shares. A profile connected before staqly read them needs reconnecting once.
+
 
 ## When publishing fails
 
