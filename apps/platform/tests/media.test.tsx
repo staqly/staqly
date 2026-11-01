@@ -101,6 +101,8 @@ describe('media library page', () => {
 
     await user.click(within(pane).getByRole('button', { name: /All files/ }))
     await user.click((await screen.findAllByRole('button', { name: 'Sunset.png' }))[0]!)
+    // Cold compilation of the lazy drawer can outlast the DOM query timeout on CI.
+    await act(() => vi.dynamicImportSettled())
     const drawer = await screen.findByTestId('media-detail')
 
     // Above the tabs: the preview, one line of facts; the ID sits in the header with a copy button.
@@ -156,6 +158,7 @@ describe('media library page', () => {
 
     renderWithProviders(<MediaPage />, { mode: 'cloud' })
     await user.click((await screen.findAllByRole('button', { name: 'Sunset.png' }))[0]!)
+    await act(() => vi.dynamicImportSettled())
     const drawer = await screen.findByTestId('media-detail')
     const name = within(drawer).getByLabelText(/^Name/)
 
