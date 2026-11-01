@@ -701,6 +701,8 @@ export function useRole() {
     isOwner: !!session.data?.accounts_enabled && role === 'owner',
     canManagePeople: role === 'owner' || role === 'admin',
     canWrite: role !== 'viewer',
+    /** The session holds this scope (sections that need it are hidden without it). */
+    can: (scope: string) => (session.data?.principal.scopes as string[] | undefined)?.includes(scope) ?? false,
   }
 }
 

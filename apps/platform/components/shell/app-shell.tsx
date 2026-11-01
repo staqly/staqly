@@ -636,6 +636,7 @@ function AppSidebar() {
   const pathname = usePathname()
   const { openCommandPalette } = useShell()
   const { setOpenMobile } = useSidebar()
+  const { can } = useRole()
   const close = () => setOpenMobile(false)
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
@@ -728,20 +729,25 @@ function AppSidebar() {
           <SidebarGroupLabel>Automation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/alerts')} tooltip="Alerts">
-                  <Link href="/alerts" onClick={close}>
-                    <BellRing /> <span>Alerts</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/webhooks')} tooltip="Webhooks">
-                  <Link href="/webhooks" onClick={close}>
-                    <Webhook /> <span>Webhooks</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {/* Alerts and webhooks need their manage scope: without it the page could only say so. */}
+              {can('alerts:manage') && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/alerts')} tooltip="Alerts">
+                    <Link href="/alerts" onClick={close}>
+                      <BellRing /> <span>Alerts</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {can('webhooks:manage') && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/webhooks')} tooltip="Webhooks">
+                    <Link href="/webhooks" onClick={close}>
+                      <Webhook /> <span>Webhooks</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive('/integrations')} tooltip="Integrations">
                   <Link href="/integrations" onClick={close}>

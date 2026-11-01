@@ -283,12 +283,24 @@ describe('analytics page', () => {
 
   it('shows the error with a way to try again', async () => {
     mockApi({
-      'GET /v1/analytics': { status: 403, body: { error: { code: 'forbidden', message: 'missing scope posts:read' } } },
+      'GET /v1/analytics': { status: 503, body: { error: { code: 'unavailable', message: 'database busy' } } },
       'GET /v1/channels': { data: [] },
     })
     renderWithProviders(<AnalyticsPage />, { mode: 'cloud' })
 
     expect(await screen.findByText('Could not load analytics')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+  })
+
+  it('a missing permission reads as the role, without a retry that would fail again', async () => {
+    mockApi({
+      'GET /v1/analytics': { status: 403, body: { error: { code: 'forbidden', message: 'missing scope posts:read' } } },
+      'GET /v1/channels': { data: [] },
+    })
+    renderWithProviders(<AnalyticsPage />, { mode: 'cloud' })
+
+    expect(await screen.findByText('Not available with your role')).toBeInTheDocument()
+    expect(screen.queryByText(/missing scope/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument()
   })
 })

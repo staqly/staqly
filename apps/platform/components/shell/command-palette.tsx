@@ -35,7 +35,7 @@ import {
   CommandShortcut,
 } from '@/components/ui/command'
 import { useCollections } from '@/lib/queries'
-import { useMode } from '@/lib/queries'
+import { useMode, useRole } from '@/lib/queries'
 
 import { useIntegrationLinks, useShell } from './app-shell'
 
@@ -46,6 +46,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const collections = useCollections(true)
   const links = useIntegrationLinks()
   const { isCloud } = useMode()
+  const { can } = useRole()
 
   const go = (href: string) => {
     onOpenChange(false)
@@ -81,18 +82,22 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             <CommandItem onSelect={() => go('/activity')}>
               <Activity /> Activity
             </CommandItem>
-            <CommandItem onSelect={() => go('/webhooks')}>
-              <Webhook /> Webhooks
-            </CommandItem>
+            {can('webhooks:manage') && (
+              <CommandItem onSelect={() => go('/webhooks')}>
+                <Webhook /> Webhooks
+              </CommandItem>
+            )}
             <CommandItem onSelect={() => go('/settings')}>
               <Settings /> Settings
             </CommandItem>
             <CommandItem onSelect={() => go('/settings/plan')}>
               <Gauge /> Plan & usage
             </CommandItem>
-            <CommandItem onSelect={() => go('/alerts')}>
-              <BellRing /> Alerts
-            </CommandItem>
+            {can('alerts:manage') && (
+              <CommandItem onSelect={() => go('/alerts')}>
+                <BellRing /> Alerts
+              </CommandItem>
+            )}
             <CommandItem onSelect={() => go('/settings/data')}>
               <ShieldCheck /> Data & privacy
             </CommandItem>
