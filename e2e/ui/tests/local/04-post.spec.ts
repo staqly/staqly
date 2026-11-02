@@ -7,10 +7,10 @@ import { pickDateTime } from '../../lib/pick.js'
 const sheet = (page: Page) => page.getByRole('dialog').first()
 const actions = (page: Page) => page.getByTestId('post-actions')
 
-/** How each channel went: the list in the sheet's Channels tab. */
+/** How each channel went: the list in the sheet's Results tab. */
 async function channelList(page: Page) {
   await sheet(page)
-    .getByRole('tab', { name: /Channels/ })
+    .getByRole('tab', { name: /Results/ })
     .click()
 
   return sheet(page).getByRole('list', { name: 'Channels' })
@@ -49,7 +49,7 @@ test.describe('the post', () => {
     // Nothing to publish any more: the icon row opens it, shows its numbers, shares, duplicates; it stays as history.
     await expect(actions(page).getByRole('button', { name: 'Publish now' })).toHaveCount(0)
     await expect(actions(page).getByRole('button', { name: 'Open post' })).toBeVisible()
-    await expect(sheet(page).getByRole('tab', { name: /Channels/ })).toBeVisible()
+    await expect(sheet(page).getByRole('tab', { name: /Results/ })).toBeVisible()
     await expect(actions(page).getByRole('button', { name: /Preview and feedback/ })).toBeVisible()
     await expect(actions(page).getByRole('button', { name: 'Duplicate' })).toBeVisible()
     await expect(actions(page).getByRole('button', { name: 'Delete' })).toHaveCount(0)

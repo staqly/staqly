@@ -2,7 +2,9 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
+import { takeAwaitedOutcome } from '@/lib/publish-outcome'
 import { isForeignEvent, qk, refreshEventLists, useRecentEvents } from '@/lib/queries'
 
 /** How often the dashboard looks for changes made elsewhere (agents, the scheduler, other tabs); paused in background tabs. */
@@ -87,6 +89,21 @@ export function LiveUpdates() {
     }
 
     const fresh = list.filter((e) => e.seq > previous)
+
+    // How a post this tab published with Publish now went: the Undo toast said it is on its way.
+    for (const e of fresh) {
+      const title =
+        e.post_id && (e.type === 'post.published' || e.type === 'post.failed')
+          ? takeAwaitedOutcome(e.post_id)
+          : undefined
+
+      if (title !== undefined && e.type === 'post.published') {
+        toast.success('Published', { description: title })
+      } else if (title !== undefined) {
+        toast.error("Couldn't publish", { description: `${title}: open it to see why and retry.` })
+      }
+    }
+
     const others = fresh.filter((e) => isForeignEvent(e))
     // A full window of new events can hide earlier changes, including posts absent from this window.
     const missed = fresh.length > 0 && fresh.length === list.length

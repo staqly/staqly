@@ -5580,6 +5580,8 @@ export interface components {
             prefer?: string[];
             /** @description The value comes from the post (its title, its tags), not from the channel's settings: clients don't ask for it per channel */
             from_post?: boolean;
+            /** @description tags: the platform takes max_items of the post's tags (Threads: one topic); the others go at the end of the text as hashtags */
+            hashtag_rest?: boolean;
             options?: {
                 value: string;
                 label: string;

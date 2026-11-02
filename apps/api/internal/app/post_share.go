@@ -565,8 +565,8 @@ func (s *Service) OpenPreview(ctx context.Context, token string) (PublicPreview,
 			pt.Handle = ch.Handle
 			pt.Content, _ = providers.ApplyLinks(channelLinks(ch), text)
 		}
-		if e, ok := providers.Get(t.Provider); t.Provider != "custom" && (!ok || !providers.NativeTags(e.SettingsFields())) { // as publishTarget
-			if full := providers.AppendHashtags(pt.Content, post.Tags); full != pt.Content {
+		if t.Provider != "custom" { // as publishTarget
+			if full := providers.AppendHashtags(pt.Content, textTags(t.Provider, post.Tags)); full != pt.Content {
 				pt.Hashtags = strings.TrimSpace(strings.TrimPrefix(full, strings.TrimRight(pt.Content, " \t\n")))
 			}
 		}

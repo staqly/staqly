@@ -88,8 +88,8 @@ func soonSettings(id string, l Limits) []Field {
 			{Value: "everyone", Label: "Everyone"},
 			{Value: "accounts_you_follow", Label: "Accounts you follow"},
 			{Value: "mentioned_only", Label: "Only accounts you mention"},
-		}}, {Key: "tags", Label: "Topic", Kind: "list", MaxItems: 1, MaxLength: 50, Placeholder: "staqly",
-			Help: "One topic per post, from the post's first tag; Threads drops periods and ampersands."}}
+		}}, {Key: "tags", Label: "Topic", Kind: "list", MaxItems: 1, MaxLength: 50, Placeholder: "staqly", HashtagRest: true,
+			Help: "One topic per post, from the post's first tag (Threads drops periods and ampersands); the other tags go at the end of the text as hashtags."}}
 	case "tiktok":
 		fields = []Field{
 			{Key: "privacy_level", Label: "Who can watch", Kind: "select", Required: true, Options: []Option{

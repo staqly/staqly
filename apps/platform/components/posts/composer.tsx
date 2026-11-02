@@ -135,7 +135,7 @@ interface Count {
  */
 function countFor(channel: Channel, text: string, provider?: Provider, tags: readonly string[] = []): Count {
   const links = applyLinks(channel.links, text)
-  const out = { ...links, text: hashtagsFor(channel, provider) ? appendHashtags(links.text, tags) : links.text }
+  const out = { ...links, text: appendHashtags(links.text, hashtagsFor(channel, provider, tags)) }
 
   // X counts its own way (CJK and emoji 2, a link 23): the API checks that length, so the counter shows it.
   const n = channel.provider === 'x' ? xLength(out.text) : charCount(out.text)
@@ -1274,6 +1274,9 @@ function ComposerFooter({
   )
 }
 
+// A dot before each part of the header's line after the collection ("Default · Published ... · created ...").
+const DOT = "before:mr-3 before:content-['·']"
+
 /**
  * Write or edit a post: the channels in a multi-select with their avatars, a tab row (all channels, then each
  * picked one, from two channels on) that switches the editor between the shared text and one channel's own
@@ -1555,7 +1558,7 @@ export function ComposerForm({
 
   const [tab, setTab] = useState<string>(initialTab ?? 'all')
   const locked = !!post && isLocked(post)
-  // Post (the content), Settings (each channel's platform settings) and, once it was sent off, Channels.
+  // Post (the content), Settings (each channel's platform settings) and, once it was sent off, Results.
   const [section, setSection] = useState<'post' | 'settings' | 'delivery'>('post')
   const targetOf = (id: string) => post?.targets?.find((t) => t.channel_id === id)
   // Per-channel text only makes sense with two channels or more; with one, the shared text is that channel's.
@@ -1669,13 +1672,15 @@ export function ComposerForm({
                   <PostStatusBadge status={post.status} unpublishedAt={post.unpublished_at} />
                   <span>{post.collection_name}</span>
                   {post.publish_at && (
-                    <span title={formatDateTime(post.publish_at)}>
+                    <span className={DOT} title={formatDateTime(post.publish_at)}>
                       {post.status === 'published' ? 'Published' : 'Goes out'}{' '}
                       <span className="font-semibold text-foreground">{formatSchedule(post.publish_at)}</span>
                     </span>
                   )}
-                  <span title={formatDateTime(post.created_at)}>created {timeAgo(post.created_at)}</span>
-                  {post.source && <span>via {post.source}</span>}
+                  <span className={DOT} title={formatDateTime(post.created_at)}>
+                    created {timeAgo(post.created_at)}
+                  </span>
+                  {post.source && <span className={DOT}>via {post.source}</span>}
                 </div>
               </SheetDescription>
             ) : (
@@ -1724,7 +1729,7 @@ export function ComposerForm({
               )}
               {deliveryTargets.length > 0 && (
                 <TabsTrigger value="delivery" data-testid="tab-delivery">
-                  Channels
+                  Results
                   {failedTargets > 0 && (
                     <span
                       className="rounded-full bg-destructive/15 px-1.5 text-[11px] leading-4 text-destructive tabular-nums"
