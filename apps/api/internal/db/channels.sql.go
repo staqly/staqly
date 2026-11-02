@@ -116,6 +116,48 @@ func (q *Queries) ChannelsByIDs(ctx context.Context, arg ChannelsByIDsParams) ([
 	return items, nil
 }
 
+const connectedMetaChannels = `-- name: ConnectedMetaChannels :many
+SELECT id, workspace_id, provider, credentials FROM channels
+WHERE provider IN ('facebook', 'instagram') AND status = 'connected' AND deleted_at IS NULL
+`
+
+type ConnectedMetaChannelsRow struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Provider    string `json:"provider"`
+	Credentials string `json:"credentials"`
+}
+
+// Every workspace's connected Facebook and Instagram channels: a Meta webhook says whose permission changed only by
+// ids kept in the sealed credentials.
+func (q *Queries) ConnectedMetaChannels(ctx context.Context) ([]ConnectedMetaChannelsRow, error) {
+	rows, err := q.db.QueryContext(ctx, connectedMetaChannels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ConnectedMetaChannelsRow
+	for rows.Next() {
+		var i ConnectedMetaChannelsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.Credentials,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countChannels = `-- name: CountChannels :one
 SELECT COUNT(*) FROM channels WHERE workspace_id = ? AND deleted_at IS NULL
 `

@@ -1177,6 +1177,7 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 		return err
 	}
 	s.shareRefresh(ctx, row, creds, fresh)
+	s.syncComments(ctx, row, creds, fresh)
 	if old, ok := credentialsExpiry(creds); ok {
 		if exp, ok := credentialsExpiry(fresh); ok && exp.Equal(old) {
 			// Nothing was renewed (a platform without refresh tokens, like LinkedIn for most apps): look again when
@@ -1257,8 +1258,20 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 		return nil, err
 	}
 	s.shareRefresh(ctx, row, creds, fresh)
+	s.syncComments(ctx, row, creds, fresh)
 	s.scheduleRefresh(ctx, row, fresh)
 	return fresh, nil
+}
+
+// syncComments: a refresh that finds the comments permission taken away (or back) turns the channel's comments
+// off (or on), as connecting does.
+func (s *Service) syncComments(ctx context.Context, row db.Channel, old, fresh providers.Credentials) {
+	if old["no_comments"] == fresh["no_comments"] {
+		return
+	}
+	if err := s.W.SetChannelComments(context.WithoutCancel(ctx), db.SetChannelCommentsParams{Comments: boolInt(fresh["no_comments"] != "true"), ID: row.ID}); err != nil {
+		s.logger(ctx).Warn("channel comments not saved", "channel_id", row.ID, "err", err)
+	}
 }
 
 // shareRefresh hands a renewed sign-in to the other channels made from the same one (the accounts picked after one
