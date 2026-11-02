@@ -626,6 +626,29 @@ describe('composer', () => {
     expect(await screen.findByText('The picture is larger than Bluesky takes')).toBeVisible()
   })
 
+  it('with one channel, its refusal shows under the text (it has no tab of its own)', async () => {
+    mockApi({
+      ...routes,
+      'POST /v1/posts': {
+        status: 422,
+        body: {
+          error: {
+            code: 'validation_failed',
+            message: 'validation failed',
+            fields: { 'targets.ch_1.content': 'Pinterest pins take one picture' },
+          },
+        },
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1')
+    await user.type(screen.getByTestId('post-content'), 'x')
+    await user.click(screen.getByTestId('publish-now'))
+    expect(await screen.findByText('Pinterest pins take one picture')).toBeVisible()
+  })
+
   it('a comment keeps every file uploaded at once, and text typed while they upload', async () => {
     let n = 0
 
