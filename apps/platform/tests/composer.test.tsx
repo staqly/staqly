@@ -688,6 +688,32 @@ describe('composer', () => {
     expect(document.querySelector('input[type="file"]')).toHaveAttribute('accept', 'image/*')
   })
 
+  it('marks every required setting left empty at once, in Settings, without sending', async () => {
+    const api = mockApi({
+      ...routes,
+      'GET /v1/providers': {
+        data: [
+          provider({
+            settings_fields: [
+              { key: 'board', label: 'Board', kind: 'text', required: true },
+              { key: 'link', label: 'Link', kind: 'text', required: true },
+            ],
+          }),
+        ],
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1')
+    await user.type(screen.getByTestId('post-content'), 'x')
+    await user.click(screen.getByTestId('publish-now'))
+    await waitFor(() => expect(screen.getByTestId('tab-settings')).toHaveAttribute('data-state', 'active'))
+    expect(screen.getByText('Board is required')).toBeVisible()
+    expect(screen.getByText('Link is required')).toBeVisible()
+    expect(api.find('POST', '/v1/posts')).toHaveLength(0)
+  })
+
   it('opens Settings when a setting is refused, even with the text refused too', async () => {
     mockApi({
       ...routes,

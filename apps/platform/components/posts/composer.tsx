@@ -1635,8 +1635,29 @@ export function ComposerForm({
   const { mutate: saveAs, isPending: busy } = save
   // Publishing (now or at its time) first lists what each channel leaves out, when one does.
   const [review, setReview] = useState<'now' | 'schedule' | null>(null)
+  // Required settings left empty, checked first so every one turns red at once (the server names one at a time).
+  const missingSettings = () => {
+    const out: Record<string, string> = {}
+
+    for (const ch of picked) {
+      const values = overrides[ch.id]?.settings ?? NO_SETTINGS
+
+      for (const f of visibleFields(providerOf(ch)?.settings_fields ?? [], values)) {
+        if (f.required && !(values[f.key] ?? f.default ?? '').trim()) {
+          out[`targets.${ch.id}.settings.${f.key}`] = `${f.label} is required`
+        }
+      }
+    }
+
+    return out
+  }
   const publish = (mode: 'draft' | 'schedule' | 'now') => {
-    if (mode !== 'draft' && leftOut.length > 0) {
+    const missing = missingSettings()
+
+    if (Object.keys(missing).length > 0) {
+      setErrors(missing)
+      setSection('settings')
+    } else if (mode !== 'draft' && leftOut.length > 0) {
       setReview(mode)
     } else {
       saveAs(mode)
