@@ -437,6 +437,18 @@ func TestYouTubeReplyAndMetrics(t *testing.T) {
 	if sn, _ := f.comment["snippet"].(map[string]any); sn["videoId"] != "vid1" {
 		t.Fatalf("second comment %v", f.comment)
 	}
+	// Comments take text only: a picture is left out and the text goes alone; a comment of only pictures can't go.
+	pic := []MediaFile{{Name: "a.jpg", MimeType: "image/jpeg"}}
+	if _, err := r.Reply(context.Background(), youtubeCreds(), "vid1", PostContent{Text: "With a picture", Media: pic}, nil); err != nil {
+		t.Fatal(err)
+	}
+	top, _ := f.comment["snippet"].(map[string]any)["topLevelComment"].(map[string]any)
+	if text, _ := top["snippet"].(map[string]any)["textOriginal"].(string); text != "With a picture" {
+		t.Fatalf("text-only comment %v", f.comment)
+	}
+	if _, err := r.Reply(context.Background(), youtubeCreds(), "vid1", PostContent{Media: pic}, nil); failureKind(t, err) != ErrRejected {
+		t.Fatalf("only a picture: %v", err)
+	}
 	if _, err := r.Reply(context.Background(), youtubeCreds(), "vid1", PostContent{Text: "private video"}, nil); failureKind(t, err) != ErrRejected ||
 		!strings.Contains(err.Error(), "usually because it is private") {
 		t.Fatalf("private video: %v", err)

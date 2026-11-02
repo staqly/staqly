@@ -362,8 +362,9 @@ func (YouTube) Reply(ctx context.Context, c Credentials, parentExternalID string
 	if video == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "YouTube: nothing to comment on (the video has no id)"}
 	}
-	if len(p.Media) > 0 {
-		return Result{}, commentTextOnly("YouTube")
+	p, err := textOnlyComment("YouTube", p)
+	if err != nil {
+		return Result{}, err
 	}
 	req, err := googleRequest(ctx, token, http.MethodPost, youtubeAPI+"/youtube/v3/commentThreads?part=snippet", map[string]any{
 		"snippet": map[string]any{"channelId": c["channel_id"], "videoId": video,
