@@ -75,6 +75,8 @@ type Post struct {
 	// UnpublishedAt / UnpublishedBy: when and by whom the post was taken down from its channels (unpublish.go).
 	UnpublishedAt *string `json:"unpublished_at"`
 	UnpublishedBy string  `json:"unpublished_by"`
+	// ArchivedAt: when the post was archived (left out of the post list and the calendar by default).
+	ArchivedAt *string `json:"archived_at"`
 	// OpenComments counts reviewers' comment threads not resolved yet.
 	OpenComments int64 `json:"open_comments"`
 }
@@ -123,6 +125,7 @@ type PostFilter struct {
 	CollectionID, Status, ChannelID, Q, Tag string
 	PublishAfter, PublishBefore             string
 	HidePast                                bool // leave out posts that went out (published); failed ones stay
+	IncludeArchived                         bool // archived posts are left out unless this is set
 	Sort                                    string
 	Limit                                   int
 	Cursor                                  string
@@ -147,7 +150,7 @@ func (s *Service) toPost(p db.Post, targets []db.ListTargetsRow, collectionName 
 		Status: p.Status, PublishAt: ptr(p.PublishAt), PublishedAt: ptr(p.PublishedAt), Tags: []string{},
 		Metadata: json.RawMessage(p.Metadata), Source: p.Source, ExternalRef: p.ExternalRef, RepeatEvery: p.RepeatEvery, Version: p.Version,
 		Thread: s.threadPartsOut(parseThread(p.Thread), media), Targets: []PostTarget{}, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
-		UnpublishedAt: ptr(p.UnpublishedAt), UnpublishedBy: p.UnpublishedBy}
+		UnpublishedAt: ptr(p.UnpublishedAt), UnpublishedBy: p.UnpublishedBy, ArchivedAt: ptr(p.ArchivedAt)}
 	_ = json.Unmarshal([]byte(p.Media), &out.Media)
 	_ = json.Unmarshal([]byte(p.Tags), &out.Tags)
 	for _, id := range out.Media {
@@ -728,7 +731,7 @@ func (s *Service) ListPosts(ctx context.Context, p Principal, f PostFilter) (Pos
 		return PostPage{}, invalid("sort", "unknown sort")
 	}
 	search := db.PostSearch{WorkspaceID: p.WorkspaceID, CollectionID: f.CollectionID, Status: f.Status, ChannelID: f.ChannelID,
-		Tag: f.Tag, Query: f.Q, Sort: f.Sort, Cursor: f.Cursor, Limit: clampLimit(f.Limit, 50, 200)}
+		Tag: f.Tag, Query: f.Q, Sort: f.Sort, Cursor: f.Cursor, Limit: clampLimit(f.Limit, 50, 200), IncludeArchived: f.IncludeArchived}
 	if f.HidePast {
 		search.HidePast = s.now()
 	}

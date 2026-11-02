@@ -168,6 +168,9 @@ func (Threads) Refresh(ctx context.Context, _ App, c Credentials) (Credentials, 
 	return t.into(c, time.Now()), nil
 }
 
+// threadsTopic drops what Threads refuses in a topic tag.
+var threadsTopic = strings.NewReplacer(".", "", "&", "")
+
 // Threads publishes a post's thread as replies, each under the one before.
 var _ Replier = Threads{}
 
@@ -175,6 +178,9 @@ func (t Threads) Publish(ctx context.Context, c Credentials, p PostContent, s Se
 	form := url.Values{}
 	if v := s["reply_control"]; v != "" {
 		form.Set("reply_control", v)
+	}
+	if v := threadsTopic.Replace(strings.TrimPrefix(strings.TrimSpace(s["tags"]), "#")); v != "" {
+		form.Set("topic_tag", v)
 	}
 	return t.post(ctx, c, p, form)
 }

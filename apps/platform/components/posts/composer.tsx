@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
+  ArrowRight,
   CalendarClock,
   CheckCircle2,
   ChevronDown,
@@ -31,7 +32,7 @@ import { ProviderFields, visibleFields } from '@/components/channels/provider-fi
 import { Callout } from '@/components/common/callout'
 import { DateTimeFields, formatShort } from '@/components/common/date-time-picker'
 import { MultiSelect } from '@/components/common/multi-select'
-import { PostStatusBadge, TargetStatusBadge } from '@/components/common/status-badge'
+import { PostStatusBadge, TargetStatusBadge, UnpublishedBadge } from '@/components/common/status-badge'
 import { DesignDrawer } from '@/components/design/design-drawer'
 import { useDesignedMedia, useEditedMedia } from '@/components/design/edited-media'
 import { placeSaved } from '@/components/design/embed'
@@ -519,24 +520,28 @@ function RetryTarget({ post, target, className }: { post: Post; target: PostTarg
   )
 }
 
-/** Taking a channel down: removing, removed, failed with the platform's error (as text), or remove by hand. */
+/** Taking a channel down after Published: unpublishing, Unpublished and when, failed with the platform's error (as
+ * text), or remove by hand. */
 function TargetRemoval({ target }: { target: PostTarget }) {
   switch (target.removal) {
     case 'removing':
-      return <span className="text-muted-foreground">Removing...</span>
+      return <span className="text-muted-foreground">Unpublishing...</span>
     case 'removed':
       return (
-        <span
-          className="text-muted-foreground"
-          title={target.removed_at ? formatDateTime(target.removed_at) : undefined}
-        >
-          Removed
+        <span className="inline-flex items-center gap-x-2" data-testid="target-unpublished">
+          <ArrowRight aria-hidden className="size-3 text-muted-foreground" />
+          <UnpublishedBadge title={target.removed_at ? formatDateTime(target.removed_at) : undefined} />
+          {target.removed_at && (
+            <span className="text-muted-foreground" title={formatDateTime(target.removed_at)}>
+              {timeAgo(target.removed_at)}
+            </span>
+          )}
         </span>
       )
     case 'failed':
       return (
         <span className="text-destructive" data-testid="removal-error">
-          Removal failed{target.removal_error ? `: ${target.removal_error}` : ''}
+          Unpublish failed{target.removal_error ? `: ${target.removal_error}` : ''}
         </span>
       )
     case 'manual':

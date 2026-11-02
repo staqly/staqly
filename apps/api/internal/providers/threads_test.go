@@ -209,6 +209,17 @@ func TestThreadsPublish(t *testing.T) {
 		}
 	})
 
+	t.Run("the post's tag is its topic", func(t *testing.T) {
+		f := useFakeThreads(t)
+		if _, err := th.Publish(ctx, threadsCreds(time.Hour), PostContent{Text: "Hello"}, Settings{"tags": "#staqly.ai & co"}); err != nil {
+			t.Fatal(err)
+		}
+		containers, _, _, _ := f.seen()
+		if c := containers[0]; c.Get("topic_tag") != "staqlyai  co" || c.Get("text") != "Hello" {
+			t.Fatalf("container %v", c)
+		}
+	})
+
 	t.Run("one picture, and a carousel", func(t *testing.T) {
 		f := useFakeThreads(t)
 		if _, err := th.Publish(ctx, threadsCreds(time.Hour), PostContent{Text: "Pic", Media: []MediaFile{jpeg("a.jpg")}}, Settings{}); err != nil {

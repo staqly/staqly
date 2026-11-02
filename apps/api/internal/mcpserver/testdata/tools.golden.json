@@ -5,6 +5,28 @@
       "idempotentHint": false,
       "readOnlyHint": false
     },
+    "description": "Archive a draft, published or failed post: it stays as it is but list_posts leaves it out unless include_archived is true. Requires posts:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "archive_post"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
     "description": "Take a scheduled post off the schedule; it becomes a draft again. Requires posts:publish.",
     "inputSchema": {
       "additionalProperties": false,
@@ -1815,7 +1837,7 @@
       "idempotentHint": false,
       "readOnlyHint": true
     },
-    "description": "List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; hide_past leaves out posts that went out; sort created_desc lists the newest first.",
+    "description": "List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; hide_past leaves out posts that went out; archived posts are left out unless include_archived is true; sort created_desc lists the newest first.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1833,6 +1855,10 @@
         },
         "hide_past": {
           "description": "leave out posts that went out (published); failed ones stay",
+          "type": "boolean"
+        },
+        "include_archived": {
+          "description": "list archived posts too",
           "type": "boolean"
         },
         "limit": {
@@ -2718,6 +2744,10 @@
           "description": "leave out posts that went out (published); failed ones stay",
           "type": "boolean"
         },
+        "include_archived": {
+          "description": "list archived posts too",
+          "type": "boolean"
+        },
         "limit": {
           "description": "page size (default 50, max 200)",
           "type": "integer"
@@ -2854,6 +2884,28 @@
       "type": "object"
     },
     "name": "test_webhook"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Bring an archived post back into list_posts. Requires posts:write.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "post_id": {
+          "description": "post ID (post_...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "post_id"
+      ],
+      "type": "object"
+    },
+    "name": "unarchive_post"
   },
   {
     "annotations": {

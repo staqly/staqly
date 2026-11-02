@@ -194,9 +194,30 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
     onError: (e) => toastApiError(e),
   })
   const rows = metrics.data?.data ?? []
+  // Taken down everywhere it went out: the numbers and comments read last stay, nothing reads them again.
+  const frozen = !!post.unpublished_at && liveTargets(post).length === 0
+  const failed = rows.filter((t) => t.error)
 
   return (
     <div className="grid gap-3" data-testid="post-stats">
+      {post.unpublished_at && (
+        <Callout tone="neutral" size="xs" data-testid="stats-unpublished">
+          <p className="font-medium">Unpublished {formatDateTime(post.unpublished_at)}</p>
+          <p className="mt-0.5 text-muted-foreground">
+            The numbers and comments here are the last ones read before it was taken down; they don&apos;t change any
+            more.
+          </p>
+        </Callout>
+      )}
+      {failed.map((t) => (
+        <Callout key={t.channel_id} tone="danger" size="xs" data-testid="metrics-error">
+          <p className="font-medium">Couldn&apos;t read the latest numbers from {t.channel_name}</p>
+          <p className="mt-0.5 text-muted-foreground">
+            {t.error}
+            {t.metrics ? ' The numbers below are the last ones read.' : ''}
+          </p>
+        </Callout>
+      ))}
       {metrics.isPending ? (
         // The channels' cards as they will be, a line where the numbers come: nothing moves when they arrive.
         <ul className="grid gap-3" aria-busy>
@@ -270,26 +291,19 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
                   {t.provider === 'custom' ? 'Your automation has not sent numbers yet.' : 'No numbers yet.'}
                 </p>
               )}
-              {t.error && (
-                <Callout tone="danger" size="xs" className="mt-3" data-testid="metrics-error">
-                  <p className="font-medium">Couldn&apos;t read the latest numbers</p>
-                  <p className="mt-0.5 text-muted-foreground">
-                    {t.error}
-                    {t.metrics ? ' The numbers above are the last ones read.' : ''}
-                  </p>
-                </Callout>
-              )}
             </li>
           ))}
         </ul>
       )}
-      <div>
-        <Button type="button" variant="outline" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-          <RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /> Refresh
-        </Button>
-      </div>
+      {!frozen && (
+        <div>
+          <Button type="button" variant="outline" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+            <RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /> Refresh
+          </Button>
+        </div>
+      )}
       <Suspense fallback={<ResponsesShell />}>
-        <PostResponses postId={post.id} active={active} />
+        <PostResponses postId={post.id} active={active} frozen={frozen} />
       </Suspense>
     </div>
   )

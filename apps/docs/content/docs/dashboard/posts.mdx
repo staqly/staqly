@@ -87,14 +87,25 @@ with a **Show past posts** button.
 Each row has its actions on the right: **Preview and feedback**, **Duplicate** and **Delete**
 (on hover; always on touch screens), and a menu with **Edit**, **Publish now** (with the same
 seconds-long Undo as in the post), **Cancel schedule**, **Open on** a platform, **Statistics** and
-**Copy link**.
+**Copy link** and **Archive** (see [Archive](#archive)).
+
+### Archive
+
+**Archive** in a row's menu (needs `posts:write`) takes an old post out of the list and the
+[calendar](/dashboard/schedule) without deleting it: a draft, a published post or a failed one stays as it
+is, with its numbers and comments. **Filter → Show archived posts** (and the archive button in the
+calendar's toolbar) brings archived posts back into view, marked *Archived*; **Unarchive** in their menu
+returns one for good. A scheduled or publishing post can't be archived (cancel its schedule first), and an
+archived post that is scheduled again shows like any other. The collection's counts leave archived posts
+out. Over the API: `POST /v1/posts/{id}/archive` and `/unarchive`, and `include_archived=true` on the
+list; over MCP `archive_post`, `unarchive_post` and `include_archived` on `list_posts`.
 
 ### Many posts at once
 
 Tick a row's checkbox (it appears on hover, or replaces the channel avatars on a narrow screen);
 **Shift**+click ticks the range up to it, **Cmd/Ctrl+A** ticks every loaded post and **Esc**
 clears. A bar at the bottom acts on all of them: **Duplicate**, **Move** to another collection,
-**Tags** (add or remove), **Cancel schedule** and **Delete** (after a confirmation). Posts an
+**Tags** (add or remove), **Cancel schedule**, **Archive** (or **Unarchive** when every ticked post is archived) and **Delete** (after a confirmation). Posts an
 action doesn't apply to (a published post can't move or change tags; only scheduled ones come off
 the schedule; posts that went out are never deleted) are skipped, and the message says how many. The API does the same with
 [`POST /v1/posts/delete`](/api/reference), MCP with `delete_posts`.
@@ -137,8 +148,8 @@ into a new draft.
 ### Unpublish
 
 **Unpublish** (needs `posts:publish`) deletes the post on the channels you pick. A job does it; **Delivery**
-shows each channel as *Removing*, *Removed*, *Removal failed* (with the reason; unpublish again to retry) or
-*Remove by hand* (with a link to the post). Thread parts go first, newest first.
+shows each channel as *Published*, then *Unpublishing...*, *Unpublished* (with when), *Unpublish failed* (with the reason;
+unpublish again to retry) or *Remove by hand* (with a link to the post). Thread parts go first, newest first.
 
 | Channel | What happens |
 |---|---|
@@ -146,6 +157,10 @@ shows each channel as *Removing*, *Removed*, *Removal failed* (with the reason; 
 | Telegram | Deleted while Telegram still allows it (about 48 hours), otherwise by hand |
 | Instagram | Delete the post by hand: Meta has no API for it. Staqly still removes the comments of its thread |
 | Every other channel | *Remove by hand*, with a link to the post |
+
+Just before taking a channel down, staqly reads its numbers and comments one last time. **Statistics**
+then keeps them as the post's history, says when it was unpublished and has no **Refresh**: nothing is read
+from the platform any more.
 
 ### Numbers
 

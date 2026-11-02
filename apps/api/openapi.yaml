@@ -1816,6 +1816,7 @@ paths:
         - { $ref: "#/components/parameters/publishAfter" }
         - { $ref: "#/components/parameters/publishBefore" }
         - { $ref: "#/components/parameters/hidePast" }
+        - { $ref: "#/components/parameters/includeArchived" }
         - { $ref: "#/components/parameters/q" }
         - { $ref: "#/components/parameters/tag" }
         - { $ref: "#/components/parameters/postSort" }
@@ -1844,6 +1845,7 @@ paths:
         - { $ref: "#/components/parameters/publishAfter" }
         - { $ref: "#/components/parameters/publishBefore" }
         - { $ref: "#/components/parameters/hidePast" }
+        - { $ref: "#/components/parameters/includeArchived" }
         - { $ref: "#/components/parameters/q" }
         - { $ref: "#/components/parameters/tag" }
         - { $ref: "#/components/parameters/postSort" }
@@ -2056,6 +2058,35 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/posts/{id}/archive:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: archivePost
+      tags: [posts]
+      summary: Archive a draft, published or failed post (posts:write)
+      description: |
+        The post stays as it is, but the post list and the calendar leave it out unless they ask for
+        `include_archived`. A scheduled or publishing post can't be archived (409). Archiving an archived
+        post changes nothing.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Post" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/posts/{id}/unarchive:
+    parameters: [{ $ref: "#/components/parameters/id" }]
+    post:
+      operationId: unarchivePost
+      tags: [posts]
+      summary: Bring an archived post back into the lists (posts:write)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Post" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/posts/{id}/duplicate:
     parameters: [{ $ref: "#/components/parameters/id" }]
@@ -4597,6 +4628,7 @@ components:
     publishAfter: { name: publish_after, in: query, description: "publish_at >= (RFC3339 or YYYY-MM-DD); posts without a time never match", schema: { type: string } }
     publishBefore: { name: publish_before, in: query, description: "publish_at < (RFC3339 or YYYY-MM-DD)", schema: { type: string } }
     hidePast: { name: hide_past, in: query, description: "true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay.", schema: { type: boolean, default: false } }
+    includeArchived: { name: include_archived, in: query, description: "true lists archived posts too. Without it they are left out, unless scheduled or publishing again.", schema: { type: boolean, default: false } }
     postSort: { name: sort, in: query, description: "Default publish_asc (soonest first, posts without a time last). created_* and updated_desc order by those times.", schema: { type: string, enum: [publish_asc, publish_desc, created_desc, created_asc, updated_desc] } }
     idempotencyKey:
       name: Idempotency-Key
@@ -5142,8 +5174,8 @@ components:
         archived_at: { type: [string, "null"] }
         created_at: { type: string }
         updated_at: { type: string }
-        post_count: { type: integer }
-        status_counts: { type: object, additionalProperties: { type: integer }, description: Posts by status }
+        post_count: { type: integer, description: "Posts in it, archived ones left out" }
+        status_counts: { type: object, additionalProperties: { type: integer }, description: "Posts by status; archived posts are left out" }
 
     CollectionInput:
       type: object
@@ -5511,7 +5543,7 @@ components:
 
     Post:
       type: object
-      required: [id, collection_id, collection_name, title, content, media, media_items, status, publish_at, published_at, unpublished_at, unpublished_by, tags, metadata, source, external_ref, repeat_every, thread, version, targets, created_at, updated_at, created_by, open_comments]
+      required: [id, collection_id, collection_name, title, content, media, media_items, status, publish_at, published_at, unpublished_at, unpublished_by, archived_at, tags, metadata, source, external_ref, repeat_every, thread, version, targets, created_at, updated_at, created_by, open_comments]
       properties:
         id: { type: string }
         collection_id: { type: string }
@@ -5525,6 +5557,7 @@ components:
         published_at: { type: [string, "null"], format: date-time }
         unpublished_at: { type: [string, "null"], format: date-time, description: When it was taken down from its channels }
         unpublished_by: { type: string, description: "Who took it down: a person or the API key" }
+        archived_at: { type: [string, "null"], format: date-time, description: "When it was archived: lists and the calendar leave it out unless include_archived is true" }
         tags: { type: array, items: { type: string } }
         metadata: { type: object, additionalProperties: true, description: Free JSON for your own use }
         source: { type: string, description: "Who created it: a client name, an agent, a schedule" }

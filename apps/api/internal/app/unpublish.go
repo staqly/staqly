@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/providers"
@@ -157,6 +158,7 @@ func (s *Service) removeTarget(ctx context.Context, postID, channelID string) er
 	}
 	remover := e.Provider.(providers.Remover)
 	pctx := s.publishingCtx(ctx, row.WorkspaceID)
+	s.lastReads(ctx, row.WorkspaceID, target, ch, e, creds)
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jobWriteTimeout)
 	defer cancel()
 
@@ -228,4 +230,27 @@ func (s *Service) settleRemoval(ctx context.Context, postID, channelID, removal,
 		_, err = s.emitRef(ctx, q, sys, typ, Ref{Collection: row.CollectionID, Post: postID, Channel: channelID}, s.postEventData(ctx, q, row.WorkspaceID, postID, extra))
 		return err
 	})
+}
+
+// lastReads reads a target's numbers and comments one last time before it is taken down, so they stay as history
+// (nothing reads them from the platform after that). Best effort: a failed read never holds up the removal.
+func (s *Service) lastReads(ctx context.Context, workspaceID string, target db.PostTarget, ch db.Channel, e providers.Entry, creds providers.Credentials) {
+	log := s.logger(ctx).With("post_id", target.PostID, "channel_id", target.ChannelID, "provider", ch.Provider)
+	if r, ok := e.Provider.(providers.MetricsReader); ok && target.ExternalID != "" {
+		pctx, cancel := context.WithTimeout(s.publishingCtx(ctx, workspaceID), 15*time.Second)
+		m, err := r.Metrics(pctx, creds, target.ExternalID)
+		cancel()
+		if err == nil {
+			err = s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(m), MetricsAt: nullStr(s.now()),
+				PostID: target.PostID, ChannelID: target.ChannelID})
+		}
+		if err != nil {
+			log.Info("unpublish: last numbers not read", "err", err)
+		}
+	}
+	if _, ok := e.Provider.(providers.ResponseReader); ok {
+		if err := s.readResponses(ctx, target.PostID, target.ChannelID); err != nil {
+			log.Info("unpublish: last comments not read", "err", err)
+		}
+	}
 }

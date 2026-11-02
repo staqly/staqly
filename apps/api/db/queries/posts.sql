@@ -45,7 +45,10 @@ SELECT COUNT(*) FROM posts WHERE workspace_id = @workspace_id
 SELECT status, COUNT(*) AS n FROM posts WHERE workspace_id = ? AND created_at >= ? GROUP BY status;
 
 -- name: CollectionPostCounts :many
-SELECT collection_id, status, COUNT(*) AS n FROM posts WHERE workspace_id = ? GROUP BY collection_id, status;
+-- Archived posts don't count, as the post list leaves them out (posts_search.go).
+SELECT collection_id, status, COUNT(*) AS n FROM posts
+WHERE workspace_id = ? AND (archived_at IS NULL OR status IN ('scheduled', 'publishing'))
+GROUP BY collection_id, status;
 
 -- name: WaitingPosts :many
 -- Posts a schedule may take: drafts of the collection without a time of their own, oldest first.
@@ -123,3 +126,6 @@ UPDATE post_targets SET replies = ?, updated_at = ? WHERE post_id = ? AND channe
 -- name: SetPostAuthor :exec
 -- The person behind a new post (personal notifications for "my posts").
 UPDATE posts SET created_by_user = ? WHERE id = ? AND workspace_id = ?;
+
+-- name: SetPostArchived :execrows
+UPDATE posts SET archived_at = @archived_at, updated_at = @updated_at WHERE workspace_id = @workspace_id AND id = @id;

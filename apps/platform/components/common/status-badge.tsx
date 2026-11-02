@@ -56,6 +56,11 @@ export function PostStatusBadge({
   )
 }
 
+/** "Unpublished": a post, or one channel of it, taken down. */
+export function UnpublishedBadge({ title, className }: { title?: string; className?: string }) {
+  return <Badge meta={UNPUBLISHED_META} status="unpublished" title={title} className={className} />
+}
+
 /** One channel's state for a post (Waiting, Publishing, Published, Failed). */
 export function TargetStatusBadge({
   status,

@@ -278,6 +278,8 @@ export interface PostListParams {
   publish_after?: string
   /** `publish_at <` (RFC3339 or YYYY-MM-DD). */
   publish_before?: string
+  /** List archived posts too (they are left out by default). */
+  include_archived?: boolean
   /** Default `publish_asc`: scheduled posts first, soonest first, posts without a time last. */
   sort?: PostSort
   /** Page size, 1–200 (server default 50). */
