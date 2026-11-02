@@ -2,35 +2,12 @@
 
 import { ProviderIcon } from '@staqly/brand/providers'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Bookmark,
-  Clock,
-  Copy,
-  ExternalLink,
-  Eye,
-  Globe,
-  Heart,
-  Link2,
-  type LucideIcon,
-  MessageCircle,
-  MousePointerClick,
-  Quote,
-  RefreshCw,
-  Repeat2,
-  Share2,
-  Timer,
-  Trash2,
-  Undo2,
-  UserPlus,
-} from 'lucide-react'
-import dynamic from 'next/dynamic'
+import { Copy, ExternalLink, Eye, Globe, Link2, Trash2, Undo2 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
-import { Callout } from '@/components/common/callout'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { CopyButton } from '@/components/common/copy-button'
-import { ErrorState } from '@/components/common/error-state'
 import { NativeSelect } from '@/components/common/native-select'
 import { FeedbackThreads } from '@/components/preview/feedback-threads'
 import { Button } from '@/components/ui/button'
@@ -43,9 +20,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Skeleton } from '@/components/ui/skeleton'
 import { threadsOf } from '@/lib/annotations'
-import { api, type Post, type PostComment, type PreviewLink, type TargetMetrics } from '@/lib/api'
+import { api, type Post, type PostComment, type PreviewLink } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
 import { canUnpublish, liveTargets, postTitle, wentOut } from '@/lib/posts'
@@ -60,75 +36,6 @@ import {
 import { safeHttpUrl } from '@/lib/safe'
 
 import { postHref } from './post-href'
-
-// Only the Statistics tab shows it: its own chunk, loaded when the tab opens.
-const PostResponses = dynamic(() => import('@/components/posts/post-responses').then((m) => m.PostResponses))
-
-// The comments' heading while their code loads: in place, so the drawer around it never falls back to its loading view.
-function ResponsesShell() {
-  return (
-    <section className="grid gap-3 border-t pt-4" aria-label="Audience comments" aria-busy>
-      <h3 className="flex h-8 items-center text-sm font-semibold pointer-coarse:h-11">Audience comments</h3>
-      <Skeleton className="h-5 w-32" />
-    </section>
-  )
-}
-
-const METRIC_LABELS: [Exclude<keyof NonNullable<TargetMetrics['metrics']>, 'reactions'>, string, LucideIcon][] = [
-  ['impressions', 'Views', Eye],
-  ['likes', 'Likes', Heart],
-  ['replies', 'Replies', MessageCircle],
-  ['reposts', 'Reposts', Repeat2],
-  ['shares', 'Shares', Share2],
-  ['quotes', 'Quotes', Quote],
-  ['bookmarks', 'Bookmarks', Bookmark],
-  ['link_clicks', 'Link clicks', MousePointerClick],
-  ['watch_minutes', 'Watch time', Clock],
-  ['avg_view_seconds', 'Average view', Timer],
-  ['subscribers_gained', 'Subscribers gained', UserPlus],
-]
-
-/** Durations read as time: 1,284 min watched becomes 21 h 24 min, a 72 s average view 1:12. */
-function metricValue(key: string, n: number) {
-  if (key === 'watch_minutes') {
-    return n >= 60 ? `${Math.floor(n / 60).toLocaleString('en-US')} h ${n % 60} min` : `${n} min`
-  }
-
-  if (key === 'avg_view_seconds') {
-    return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
-  }
-
-  return n.toLocaleString('en-US')
-}
-
-/** What a platform calls a number when it isn't the usual word (Slack has reactions, not likes). */
-function metricLabel(provider: string, key: string, label: string) {
-  return provider === 'slack' && key === 'likes' ? 'Reactions' : label
-}
-
-// Slack names its emoji; the common ones as themselves, the rest (custom ones too) by name.
-const EMOJI: Record<string, string> = {
-  '+1': '👍',
-  thumbsup: '👍',
-  '-1': '👎',
-  thumbsdown: '👎',
-  heart: '❤️',
-  tada: '🎉',
-  joy: '😂',
-  fire: '🔥',
-  eyes: '👀',
-  rocket: '🚀',
-  clap: '👏',
-  raised_hands: '🙌',
-  pray: '🙏',
-  white_check_mark: '✅',
-  heavy_check_mark: '✔️',
-  '100': '💯',
-  smile: '😄',
-  slightly_smiling_face: '🙂',
-  thinking_face: '🤔',
-  star: '⭐',
-}
 
 // Not under ['posts']: those keys hold post lists, which the post cache helpers rewrite.
 const commentsKey = (id: string) => ['post-feedback', id] as const
@@ -177,136 +84,6 @@ function OpenOnPlatform({ post }: { post: Post }) {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-/**
- * The post's numbers per channel (the sheet's Statistics tab); read from the platforms that report them, cached
- * for ten minutes. Fetches only while `active`.
- */
-export function PostStats({ post, active }: { post: Post; active: boolean }) {
-  const qc = useQueryClient()
-  const key = ['post-metrics', post.id] as const
-  const metrics = useQuery({ queryKey: key, queryFn: () => api.postMetrics(post.id), enabled: active })
-  const refresh = useMutation({
-    mutationFn: () => api.postMetrics(post.id, true),
-    onSuccess: (res) => qc.setQueryData(key, res),
-    onError: (e) => toastApiError(e),
-  })
-  const rows = metrics.data?.data ?? []
-  // Taken down everywhere it went out: the numbers and comments read last stay, nothing reads them again.
-  const frozen = !!post.unpublished_at && liveTargets(post).length === 0
-  const failed = rows.filter((t) => t.error)
-
-  return (
-    <div className="grid gap-3" data-testid="post-stats">
-      {post.unpublished_at && (
-        <Callout tone="neutral" size="xs" data-testid="stats-unpublished">
-          <p className="font-medium">Unpublished {formatDateTime(post.unpublished_at)}</p>
-          <p className="mt-0.5 text-muted-foreground">
-            The numbers and comments here are the last ones read before it was taken down; they don&apos;t change any
-            more.
-          </p>
-        </Callout>
-      )}
-      {failed.map((t) => (
-        <Callout key={t.channel_id} tone="danger" size="xs" data-testid="metrics-error">
-          <p className="font-medium">Couldn&apos;t read the latest numbers from {t.channel_name}</p>
-          <p className="mt-0.5 text-muted-foreground">
-            {t.error}
-            {t.metrics ? ' The numbers below are the last ones read.' : ''}
-          </p>
-        </Callout>
-      ))}
-      {metrics.isPending ? (
-        // The channels' cards as they will be, a line where the numbers come: nothing moves when they arrive.
-        <ul className="grid gap-5" aria-busy>
-          {(post.targets ?? []).map((t) => (
-            <li key={t.channel_id}>
-              <div className="flex items-center gap-2 text-sm">
-                <ProviderIcon id={t.provider} className="size-4" />
-                <span className="min-w-0 truncate font-medium">{t.channel_name}</span>
-              </div>
-              <Skeleton className="mt-2 h-5 w-40" />
-            </li>
-          ))}
-        </ul>
-      ) : metrics.error ? (
-        <ErrorState error={metrics.error} onRetry={() => metrics.refetch()} />
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">This post has no channels yet.</p>
-      ) : (
-        // A section per channel (its name over its numbers), the numbers in one line where they fit.
-        <ul className="grid gap-5">
-          {rows.map((t) => (
-            <li key={t.channel_id}>
-              <div className="flex items-center gap-2 text-sm">
-                <ProviderIcon id={t.provider} className="size-4" />
-                <span className="min-w-0 truncate font-medium">{t.channel_name}</span>
-                {t.updated_at && (
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground" title={formatDateTime(t.updated_at)}>
-                    Updated {timeAgo(t.updated_at)}
-                  </span>
-                )}
-              </div>
-              {!t.available ? (
-                <p className="mt-2 text-sm text-muted-foreground">Not available for this platform.</p>
-              ) : t.status !== 'published' && !t.metrics ? (
-                <p className="mt-2 text-sm text-muted-foreground">Numbers appear once the post is published.</p>
-              ) : t.metrics && METRIC_LABELS.some(([k]) => t.metrics?.[k] != null) ? (
-                <dl className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-2">
-                  {METRIC_LABELS.filter(([k]) => t.metrics?.[k] != null).map(([k, label, Icon]) => (
-                    // The label with its icon on top, the number under it, large: each one reads at a glance.
-                    <div key={k} className="grid gap-0.5 rounded-lg border bg-muted/30 px-3 py-2">
-                      <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Icon aria-hidden className="size-3.5" />
-                        {metricLabel(t.provider, k, label)}
-                      </dt>
-                      <dd className="text-xl font-semibold tracking-tight tabular-nums">
-                        {metricValue(k, t.metrics![k]!)}
-                      </dd>
-                    </div>
-                  ))}
-                  {(t.metrics.reactions?.length ?? 0) > 0 && (
-                    <div className="col-span-full flex flex-wrap gap-1.5" aria-label="Reactions">
-                      {t.metrics.reactions!.map((r) => (
-                        <span
-                          key={r.emoji}
-                          className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-sm"
-                          title={r.people?.length ? r.people.join(', ') : undefined}
-                        >
-                          <span aria-label={r.emoji}>{EMOJI[r.emoji] ?? `:${r.emoji}:`}</span>
-                          <span className="tabular-nums">{r.count}</span>
-                          {r.people && r.people.length > 0 && (
-                            <span className="max-w-48 truncate text-xs text-muted-foreground">
-                              {r.people.join(', ')}
-                            </span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </dl>
-              ) : (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {t.provider === 'custom' ? 'Your automation has not sent numbers yet.' : 'No numbers yet.'}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {!frozen && (
-        <div>
-          <Button type="button" variant="outline" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-            <RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /> Refresh
-          </Button>
-        </div>
-      )}
-      <Suspense fallback={<ResponsesShell />}>
-        <PostResponses postId={post.id} active={active} frozen={frozen} />
-      </Suspense>
-    </div>
   )
 }
 

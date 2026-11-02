@@ -7,13 +7,13 @@ import { pickDateTime } from '../../lib/pick.js'
 const sheet = (page: Page) => page.getByRole('dialog').first()
 const actions = (page: Page) => page.getByTestId('post-actions')
 
-/** How each channel went: the list in the sheet's Delivery tab. */
+/** How each channel went: the list in the sheet's Channels tab. */
 async function channelList(page: Page) {
   await sheet(page)
-    .getByRole('tab', { name: /Delivery/ })
+    .getByRole('tab', { name: /Channels/ })
     .click()
 
-  return sheet(page).getByRole('list', { name: 'Delivery per channel' })
+  return sheet(page).getByRole('list', { name: 'Channels' })
 }
 
 /** Publish now from the composer footer (the post as saved; it goes out after the short Undo window). */
@@ -49,7 +49,7 @@ test.describe('the post', () => {
     // Nothing to publish any more: the icon row opens it, shows its numbers, shares, duplicates; it stays as history.
     await expect(actions(page).getByRole('button', { name: 'Publish now' })).toHaveCount(0)
     await expect(actions(page).getByRole('button', { name: 'Open post' })).toBeVisible()
-    await expect(sheet(page).getByRole('tab', { name: 'Statistics' })).toBeVisible()
+    await expect(sheet(page).getByRole('tab', { name: /Channels/ })).toBeVisible()
     await expect(actions(page).getByRole('button', { name: /Preview and feedback/ })).toBeVisible()
     await expect(actions(page).getByRole('button', { name: 'Duplicate' })).toBeVisible()
     await expect(actions(page).getByRole('button', { name: 'Delete' })).toHaveCount(0)

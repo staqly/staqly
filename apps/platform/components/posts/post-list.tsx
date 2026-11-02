@@ -20,6 +20,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { memo, useContext, useEffect, useRef, useState } from 'react'
@@ -69,8 +70,11 @@ import { formatSchedule } from '@/lib/schedule'
 import { normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 
-import { PostStats, ShareDialog, UnpublishDialog } from './post-actions'
+import { ShareDialog, UnpublishDialog } from './post-actions'
 import { postHref, PostsQueryContext } from './post-href'
+
+// The Statistics dialog only: its own chunk, loaded when it opens.
+const PostStats = dynamic(() => import('./post-stats').then((m) => m.PostStats))
 
 /** Drag data of post rows: the ids being dragged, so a collection in the pane only accepts posts. */
 export const POST_DRAG = 'application/x-staqly-posts'

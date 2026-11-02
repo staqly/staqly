@@ -136,7 +136,10 @@ test.describe('sharing a post', () => {
     await expect(
       actions(page).getByRole('link', { name: new RegExp(`Open post on ${col.channel.name}`) }),
     ).toHaveAttribute('href', 'https://example.com/live/1')
-    await page.getByRole('dialog').getByRole('tab', { name: 'Statistics' }).click()
+    await page
+      .getByRole('dialog')
+      .getByRole('tab', { name: /Channels/ })
+      .click()
     await expect(page.getByTestId('post-stats')).toContainText('Your automation has not sent numbers yet.')
 
     await actions(page).getByRole('button', { name: 'Duplicate' }).click()
