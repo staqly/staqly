@@ -652,7 +652,7 @@ FROM post_targets t
 JOIN posts p ON p.id = t.post_id
 JOIN channels c ON c.id = t.channel_id
 WHERE t.external_id = ?1 AND t.external_id <> '' AND t.status = 'published' AND t.removal = ''
-  AND c.provider IN ('instagram', 'facebook', 'threads')
+  AND c.provider IN ('instagram', 'instagram_business', 'facebook', 'threads')
 `
 
 type PublishedTargetsByExternalIDRow struct {

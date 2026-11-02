@@ -149,7 +149,7 @@ const storyLifetime = 24 * time.Hour
 // storyExpired: a published Instagram story past its day, whose numbers are final (story_insights) and must not be
 // asked for again.
 func storyExpired(provider, settings string, publishedAt sql.NullString, now time.Time) bool {
-	if provider != "instagram" || !publishedAt.Valid {
+	if (provider != "instagram" && provider != "instagram_business") || !publishedAt.Valid {
 		return false
 	}
 	var s map[string]string
@@ -184,7 +184,7 @@ func (s *Service) storeStoryInsights(ctx context.Context, payload any) error {
 			return err
 		}
 		for _, r := range rows {
-			if r.Provider != "instagram" {
+			if r.Provider != "instagram" && r.Provider != "instagram_business" {
 				continue
 			}
 			if err := s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(m), MetricsAt: nullStr(s.now()),
@@ -273,8 +273,12 @@ func (s *Service) metaPermissionsChanged(ctx context.Context, body []byte) (int,
 			continue
 		}
 		hit := false
-		for _, rv := range byProvider[r.Provider] {
-			switch r.Provider {
+		provider := r.Provider
+		if provider == "instagram_business" { // the same Instagram permissions
+			provider = "instagram"
+		}
+		for _, rv := range byProvider[provider] {
+			switch provider {
 			case "facebook": // the Page's token is the person's who connected it
 				hit = hit || (rv.user != "" && rv.user == c["authorized_by"] && (len(rv.targets) == 0 || slices.Contains(rv.targets, c["page_id"])))
 			case "instagram": // the sign-in is a business integration's, not the person's: only the account names it

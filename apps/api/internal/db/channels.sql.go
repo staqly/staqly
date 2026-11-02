@@ -118,7 +118,7 @@ func (q *Queries) ChannelsByIDs(ctx context.Context, arg ChannelsByIDsParams) ([
 
 const connectedMetaChannels = `-- name: ConnectedMetaChannels :many
 SELECT id, workspace_id, provider, credentials FROM channels
-WHERE provider IN ('facebook', 'instagram') AND status = 'connected' AND deleted_at IS NULL
+WHERE provider IN ('facebook', 'instagram', 'instagram_business') AND status = 'connected' AND deleted_at IS NULL
 `
 
 type ConnectedMetaChannelsRow struct {
@@ -484,7 +484,7 @@ func (q *Queries) MarkChannelNeedsReconnect(ctx context.Context, arg MarkChannel
 }
 
 const metaChannels = `-- name: MetaChannels :many
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE provider IN ('facebook', 'instagram', 'threads') AND deleted_at IS NULL
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE provider IN ('facebook', 'instagram', 'instagram_business', 'threads') AND deleted_at IS NULL
 `
 
 // Every workspace's Facebook, Instagram and Threads channels still kept: a Meta deauthorize or data deletion request
