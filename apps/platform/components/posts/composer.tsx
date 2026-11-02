@@ -68,7 +68,6 @@ import { formatDateTime, timeAgo } from '@/lib/format'
 import { applyLinks, linksNotice } from '@/lib/links'
 import { namedToast, toastApiError } from '@/lib/notify'
 import { charCount, deletedOutside, isLocked, postTitle, xLength } from '@/lib/posts'
-import { ProviderIcon } from '@/lib/providers'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
 import {
   invalidateAfterPostChange,
@@ -1103,6 +1102,10 @@ const SettingsCard = memo(function SettingsCard({
     }),
     [channel.id],
   )
+  // Required options still empty: named on the header, so a folded card says what it waits for.
+  const missing = visibleFields(fields, values)
+    .filter((f) => f.required && !(values[f.key] ?? f.default ?? '').trim())
+    .map((f) => f.label)
   const prefix = `targets.${channel.id}.settings.`
   const fieldErrors = Object.fromEntries(
     Object.entries(errors)
@@ -1114,21 +1117,29 @@ const SettingsCard = memo(function SettingsCard({
     <Collapsible open={open} onOpenChange={(o) => onOpenChange(channel.id, o)} asChild>
       <section
         aria-label={`${channel.name} settings`}
-        className="overflow-hidden rounded-xl border bg-card"
+        // The header's focus ring is drawn on the card, so it follows the card's rounded corners (inside, the
+        // overflow clipping cut an inset ring's corners square).
+        className="overflow-hidden rounded-xl border bg-card has-[[data-slot=collapsible-trigger]:focus-visible]:ring-2 has-[[data-slot=collapsible-trigger]:focus-visible]:ring-ring"
         data-testid={`settings-${channel.id}`}
       >
-        {/* A tinted header, set off from the page and from the open fields under it. */}
-        <CollapsibleTrigger className="flex w-full min-w-0 items-center gap-2 bg-muted/60 px-3 py-2.5 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
-          <ProviderIcon id={channel.provider} className="size-4 shrink-0" />
-          <span className="shrink-0 font-medium">
-            {platformLabel(channel.provider, provider?.name)} advanced settings
+        {/* A tinted header, set off from the page and from the open fields under it: whose options (the channel,
+            big; its platform under it), what is set or still needed, folded or not. */}
+        <CollapsibleTrigger className="flex w-full min-w-0 items-center gap-3 bg-muted/60 px-3 py-2.5 text-left outline-none hover:bg-muted">
+          <ChannelAvatar channel={channel} className="size-8" />
+          <span className="grid min-w-0 flex-1">
+            <span className="truncate text-sm font-medium">{channel.name}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {platformLabel(channel.provider, provider?.name)} options
+              {missing.length > 0 ? (
+                <span className="text-amber-700 dark:text-amber-400"> · Needs {missing.join(', ')}</span>
+              ) : (
+                !open && summary && <span> · {summary}</span>
+              )}
+            </span>
           </span>
-          {!open && summary && <span className="min-w-0 truncate text-xs text-muted-foreground">{summary}</span>}
-          <span className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <ChannelAvatar channel={channel} className="size-5" />
-            <span className="truncate">{channel.name}</span>
-            <ChevronDown className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')} />
-          </span>
+          <ChevronDown
+            className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')}
+          />
         </CollapsibleTrigger>
         <CollapsibleContent className="border-t p-3">
           <ProviderFields
@@ -1798,38 +1809,46 @@ export function ComposerForm({
         onValueChange={(v) => setSection(v as typeof section)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        {(settingsChannels.length > 0 || deliveryTargets.length > 0) && (
-          <div className="overflow-x-auto px-4 pt-3 pb-1">
-            <TabsList aria-label="Post sections">
-              <TabsTrigger value="post">Post</TabsTrigger>
-              {settingsChannels.length > 0 && (
-                <TabsTrigger value="settings" data-testid="tab-settings">
-                  Settings
-                  {settingsInvalid ? (
-                    <span className="size-2 rounded-full bg-destructive" aria-label="has an error" role="img" />
-                  ) : changedSettings > 0 ? (
-                    <span className="rounded-full bg-muted px-1.5 text-[11px] leading-4 tabular-nums">
-                      {changedSettings}
-                    </span>
-                  ) : null}
-                </TabsTrigger>
-              )}
-              {deliveryTargets.length > 0 && (
-                <TabsTrigger value="delivery" data-testid="tab-delivery">
-                  Insights
-                  {failedTargets > 0 && (
-                    <span
-                      className="rounded-full bg-destructive/15 px-1.5 text-[11px] leading-4 text-destructive tabular-nums"
-                      aria-label={`${failedTargets} failed`}
-                    >
-                      {failedTargets}
-                    </span>
-                  )}
-                </TabsTrigger>
-              )}
-            </TabsList>
-          </div>
-        )}
+        {/* Post and Settings are always there (Settings waits for a channel with options); Insights once it went out. */}
+        <div className="overflow-x-auto px-4 pt-3 pb-1">
+          <TabsList aria-label="Post sections">
+            <TabsTrigger value="post">Post</TabsTrigger>
+            <TabsTrigger
+              value="settings"
+              data-testid="tab-settings"
+              disabled={settingsChannels.length === 0}
+              title={
+                settingsChannels.length > 0
+                  ? undefined
+                  : locked
+                    ? 'It went out: its settings can no longer change'
+                    : 'Pick a channel with its own options first'
+              }
+            >
+              Settings
+              {settingsInvalid ? (
+                <span className="size-2 rounded-full bg-destructive" aria-label="has an error" role="img" />
+              ) : changedSettings > 0 ? (
+                <span className="rounded-full bg-muted px-1.5 text-[11px] leading-4 tabular-nums">
+                  {changedSettings}
+                </span>
+              ) : null}
+            </TabsTrigger>
+            {deliveryTargets.length > 0 && (
+              <TabsTrigger value="delivery" data-testid="tab-delivery">
+                Insights
+                {failedTargets > 0 && (
+                  <span
+                    className="rounded-full bg-destructive/15 px-1.5 text-[11px] leading-4 text-destructive tabular-nums"
+                    aria-label={`${failedTargets} failed`}
+                  >
+                    {failedTargets}
+                  </span>
+                )}
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </div>
         <div className="grid min-h-0 flex-1">
           {/* Every section stays mounted (hidden when inactive), so switching never loses what was typed. */}
           <div className="grid min-h-0 content-start overflow-y-auto overscroll-contain p-4">

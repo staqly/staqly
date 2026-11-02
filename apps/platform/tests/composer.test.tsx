@@ -688,6 +688,23 @@ describe('composer', () => {
     expect(document.querySelector('input[type="file"]')).toHaveAttribute('accept', 'image/*')
   })
 
+  it('always has Post and Settings; Settings waits for a channel, and its card names what it needs', async () => {
+    mockApi({
+      ...routes,
+      'GET /v1/providers': {
+        data: [provider({ settings_fields: [{ key: 'board', label: 'Board', kind: 'text', required: true }] })],
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    expect(await screen.findByTestId('tab-settings')).toBeDisabled()
+    await pickChannels(user, 'ch_1')
+    expect(screen.getByTestId('tab-settings')).toBeEnabled()
+    await user.click(screen.getByTestId('tab-settings'))
+    expect(within(screen.getByTestId('settings-ch_1')).getByText(/Needs Board/)).toBeInTheDocument()
+  })
+
   it('marks every required setting left empty at once, in Settings, without sending', async () => {
     const api = mockApi({
       ...routes,

@@ -50,7 +50,7 @@ export function DisclosureCard({
       <div className="flex items-center gap-2 pr-2.5 text-xs text-muted-foreground">
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-2 text-left hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
+          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1.5 pl-2 text-left hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11"
           aria-expanded={open}
           aria-controls={id}
           onClick={() => {
