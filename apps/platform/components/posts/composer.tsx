@@ -1454,14 +1454,19 @@ export function ComposerForm({
       return { ...o, [channelId]: { ...cur, content: text === contentRef.current ? null : text } }
     })
   })
-  const [onSetting] = useState(
-    () => (channelId: string, key: string, value: string) =>
-      setOverrides((o) => {
-        const cur: Override = o[channelId] ?? { content: null, settings: {} }
+  const [onSetting] = useState(() => (channelId: string, key: string, value: string) => {
+    setOverrides((o) => {
+      const cur: Override = o[channelId] ?? { content: null, settings: {} }
 
-        return { ...o, [channelId]: { ...cur, settings: { ...cur.settings, [key]: value } } }
-      }),
-  )
+      return { ...o, [channelId]: { ...cur, settings: { ...cur.settings, [key]: value } } }
+    })
+    // A changed field is no longer what was refused: its error goes (the next save checks it again).
+    setErrors((e) => {
+      const { [`targets.${channelId}.settings.${key}`]: _, ...rest } = e
+
+      return rest
+    })
+  })
   const [openSettings, setOpenSettings] = useState<Record<string, boolean>>({})
   const [onSettingsOpen] = useState(
     () => (channelId: string, open: boolean) => setOpenSettings((s) => ({ ...s, [channelId]: open })),

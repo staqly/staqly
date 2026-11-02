@@ -712,6 +712,10 @@ describe('composer', () => {
     expect(screen.getByText('Board is required')).toBeVisible()
     expect(screen.getByText('Link is required')).toBeVisible()
     expect(api.find('POST', '/v1/posts')).toHaveLength(0)
+    // Filling a field in takes its error away; the other stays.
+    await user.type(screen.getByLabelText(/^Link/), 'https://example.com')
+    expect(screen.queryByText('Link is required')).not.toBeInTheDocument()
+    expect(screen.getByText('Board is required')).toBeVisible()
   })
 
   it('opens Settings when a setting is refused, even with the text refused too', async () => {
