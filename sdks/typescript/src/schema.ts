@@ -5704,7 +5704,7 @@ export interface components {
         ProviderLimits: {
             /** @description 0 = no limit */
             max_chars: number;
-            /** @description 0 = no media */
+            /** @description 0 = no media. A post with more files, or kinds not in media_kinds, goes out on this channel with the ones that fit, in order */
             max_media: number;
             media_kinds?: ("image" | "video" | "gif" | "file")[];
             /** @description A title setting is required */
@@ -5713,6 +5713,8 @@ export interface components {
             needs_media: boolean;
             /** @description A link setting is required */
             needs_link: boolean;
+            /** @description Its comments (thread parts) take no photos or videos: they go out as text */
+            comments_text_only: boolean;
             /** @description What a channel does with links unless its settings.links says otherwise */
             links: components["schemas"]["LinksMode"];
             /** @description The links modes a channel on this platform may choose (X: remove, defang) */

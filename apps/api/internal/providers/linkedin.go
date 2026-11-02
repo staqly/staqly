@@ -41,7 +41,7 @@ const (
 
 func init() {
 	Register(LinkedIn{NewBase("linkedin", "LinkedIn", AuthOAuth2,
-		Limits{MaxChars: 3000, MaxMedia: 9, MediaKinds: []string{"image", "gif", "video"}})}, StatusAvailable)
+		Limits{MaxChars: 3000, MaxMedia: 9, MediaKinds: []string{"image", "gif", "video"}, CommentsTextOnly: true})}, StatusAvailable)
 }
 
 func (LinkedIn) SettingsFields() []Field { return []Field{linkedinVisibility} }

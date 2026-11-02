@@ -39,7 +39,7 @@ const (
 )
 
 func init() {
-	l := Limits{MaxChars: 40000, MaxMedia: 1, MediaKinds: []string{"image", "video"}, NeedsTitle: true}
+	l := Limits{MaxChars: 40000, MaxMedia: 1, MediaKinds: []string{"image", "video"}, NeedsTitle: true, CommentsTextOnly: true}
 	var fields []Field
 	for _, f := range soonSettings("reddit", l) {
 		fields = append(fields, f)

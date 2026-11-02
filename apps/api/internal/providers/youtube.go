@@ -38,7 +38,7 @@ const youtubeScopes = googleIdentity +
 	" https://www.googleapis.com/auth/yt-analytics.readonly" // watch time, shares, subscribers gained
 
 func init() {
-	limits := Limits{MaxChars: 5000, MaxMedia: 1, MediaKinds: []string{"video"}, NeedsTitle: true, NeedsMedia: true}
+	limits := Limits{MaxChars: 5000, MaxMedia: 1, MediaKinds: []string{"video"}, NeedsTitle: true, NeedsMedia: true, CommentsTextOnly: true}
 	Register(YouTube{NewBase("youtube", "YouTube", AuthOAuth2, limits).WithSettings(soonSettings("youtube", limits)...)}, StatusAvailable)
 }
 

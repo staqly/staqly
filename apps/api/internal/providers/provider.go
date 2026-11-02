@@ -166,6 +166,8 @@ type Limits struct {
 	NeedsTitle bool     `json:"needs_title"`           // a title setting is required (YouTube, Reddit, Dev.to...)
 	NeedsMedia bool     `json:"needs_media"`           // text alone is not a post (Instagram, Pinterest, YouTube)
 	NeedsLink  bool     `json:"needs_link"`            // a link setting is required (Pinterest)
+	// CommentsTextOnly: its comments (thread parts) take no photos or videos; they go out as text (textOnlyComment).
+	CommentsTextOnly bool `json:"comments_text_only"`
 	// Links is what a channel does with the links in a post's text unless its own "links" setting says
 	// otherwise (LinksKeep when empty); LinkModes are the modes a channel may choose (all three when empty).
 	// Platforms that charge for links or bury posts with them leave keep out.
@@ -515,6 +517,29 @@ func (e *ValidationError) Error() string { return e.Field + ": " + e.Msg }
 func invalid(field, msg string) error { return &ValidationError{Field: field, Msg: msg} }
 
 // CheckLimits is the shared validation every provider starts with.
+// FitMedia keeps the files a platform takes: of its kinds (a GIF counts as a picture), at most MaxMedia, in the post's
+// order. A post with more files, or kinds the platform doesn't take, goes out there with the ones that fit (the
+// dashboard lists what each channel leaves out before publishing); with none left, Validate says what is missing.
+func FitMedia(l Limits, files []MediaFile) []MediaFile {
+	var out []MediaFile
+	for _, f := range files {
+		if len(out) >= l.MaxMedia {
+			break
+		}
+		kind, _, _ := strings.Cut(f.MimeType, "/")
+		switch {
+		case f.MimeType == "image/gif" && slices.Contains(l.MediaKinds, "gif"):
+			kind = "gif"
+		case kind != "image" && kind != "video":
+			kind = "file" // audio, PDFs and the rest
+		}
+		if len(l.MediaKinds) == 0 || slices.Contains(l.MediaKinds, kind) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 func CheckLimits(l Limits, p PostContent, s Settings) error {
 	if n := TextLength(l, p.Text); l.MaxChars > 0 && n > l.MaxChars {
 		return invalid("content", fmt.Sprintf("at most %d characters for this channel (%d)", l.MaxChars, n))

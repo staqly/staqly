@@ -80,6 +80,12 @@ billing: card required, nothing charged until it ends); when the trial or a paid
 | A schedule's endpoint call | 60 seconds |
 | Waiting for your own automation's result | a collection's processing timeout, 60 s to 24 h, default 1 hour (`PROCESSING_TIMEOUT`) |
 
+Each channel then takes what its platform takes (`limits` in `GET /v1/providers`). A post with more files than a
+channel takes, or files of a kind it doesn't take, goes out there with the ones that fit, in order (Pinterest: the
+first picture). A channel without comments posts none, and on platforms whose comments take text only
+(`comments_text_only`) the comments go out without their files. The dashboard lists what each channel leaves out
+before publishing.
+
 ## Publishing and other jobs
 
 Publishing, schedule runs and sign-in refreshes are [jobs](/concepts#jobs).

@@ -1476,12 +1476,14 @@ class ProviderLimits(StaqlyModel):
 
     #: 0 = no limit.
     max_chars: int = 0
-    #: 0 = no media.
+    #: 0 = no media; a post with more files, or other kinds, goes out with the ones that fit.
     max_media: int = 0
     media_kinds: list[str] = Field(default_factory=list)
     needs_title: bool = False
     needs_media: bool = False
     needs_link: bool = False
+    #: Its comments (thread parts) take no photos or videos: they go out as text.
+    comments_text_only: bool = False
     #: What a channel does with links unless its settings say otherwise.
     links: str = "keep"
     #: The links modes a channel may choose (X: remove, defang).

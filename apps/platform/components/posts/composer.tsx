@@ -24,6 +24,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { memo, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { flushSync } from 'react-dom'
+import { toast } from 'sonner'
 
 import { ChannelAvatar } from '@/components/channels/channel-avatars'
 import { ProviderFields, visibleFields } from '@/components/channels/provider-fields'
@@ -61,6 +62,7 @@ import {
   type Provider,
   type ProviderField,
 } from '@/lib/api'
+import { acceptFor, channelFit, takesFile, takesWords } from '@/lib/channel-fit'
 import { apiFieldErrors } from '@/lib/form-errors'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { applyLinks, linksNotice } from '@/lib/links'
@@ -90,6 +92,7 @@ import type { AiPostResult } from './ai-post-dialog'
 import { AllChannelsTab, ChannelTab } from './channel-tab'
 import { PostEditor } from './post-editor'
 import { isVideo, MediaItem } from './preview/parts'
+import { PublishReview } from './publish-review'
 
 // The live preview and the platforms' templates load on its first opening, not with the composer.
 const PostPreviewSheet = dynamic(() => import('./preview/post-preview').then((m) => m.PostPreviewSheet), {
@@ -414,8 +417,19 @@ function MediaStrip({
   )
 }
 
-/** The "Upload" button: uploads and hands each file back. */
-function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
+/**
+ * The "Upload" button: uploads and hands each file back. With `limits` (the one picked channel's), it offers only the
+ * files that platform takes, stops once it has as many as it takes (`count`), and is not there when it takes none.
+ */
+function MediaButton({
+  onAdd,
+  limits,
+  count = 0,
+}: {
+  onAdd: (m: Media) => void
+  limits?: Provider['limits']
+  count?: number
+}) {
   const input = useRef<HTMLInputElement>(null)
   // Video opens the video editor in a new tab; what it saves for this token lands here.
   const [token] = useState(() => Math.random().toString(36).slice(2, 12))
@@ -428,14 +442,20 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
     onSuccess: onAdd,
     onError: (e) => toastApiError(e),
   })
+  const full = !!limits && count >= limits.max_media
+  const why = full && limits ? `${takesWords(limits)}.` : undefined
+
+  if (limits?.max_media === 0) {
+    return null
+  }
 
   return (
     <>
       <input
         ref={input}
         type="file"
-        accept="image/*,video/*"
-        multiple
+        accept={acceptFor(limits) ?? 'image/*,video/*'}
+        multiple={!limits || limits.max_media - count > 1}
         className="sr-only"
         tabIndex={-1}
         aria-hidden
@@ -452,27 +472,37 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
         variant="outline"
         size="sm"
         onClick={() => input.current?.click()}
-        disabled={upload.isPending}
+        disabled={upload.isPending || full}
+        title={why}
       >
         <ImagePlus /> {upload.isPending ? 'Uploading...' : 'Upload'}
       </Button>
-      <LibraryPickerButton onAdd={onAdd} />
+      <LibraryPickerButton onAdd={onAdd} disabled={full} />
       {/* One Design button: pick what to make (a graphic in a drawer here, a video in the video editor). */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="outline" size="sm" data-testid="design-menu">
+          <Button type="button" variant="outline" size="sm" data-testid="design-menu" disabled={full} title={why}>
             <Palette /> Design <ChevronDown />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          <DropdownMenuItem onSelect={() => design.setOpen(true)} data-testid="design-new">
-            <ImagePlus /> Image or graphic
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <a href={`/media/video?from=composer&for=${token}`} target="_blank" rel="noopener" data-testid="video-new">
-              <Film /> Video
-            </a>
-          </DropdownMenuItem>
+          {takesFile(limits, 'image/png') && (
+            <DropdownMenuItem onSelect={() => design.setOpen(true)} data-testid="design-new">
+              <ImagePlus /> Image or graphic
+            </DropdownMenuItem>
+          )}
+          {takesFile(limits, 'video/mp4') && (
+            <DropdownMenuItem asChild>
+              <a
+                href={`/media/video?from=composer&for=${token}`}
+                target="_blank"
+                rel="noopener"
+                data-testid="video-new"
+              >
+                <Film /> Video
+              </a>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {design.used && (
@@ -491,32 +521,17 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
 }
 
 /**
- * Over the comments: the picked channels that won't post them (a platform without comments, or a connection not
- * allowed to, like LinkedIn without its Community Management API), so nobody finds out after the post went out.
- * Your own automation is left out: it gets the comments with the post.
+ * Adds an uploaded or picked file, unless the one picked channel's platform doesn't take it or has as many as it takes
+ * already: then it says so, and the file stays in the library.
  */
-function CommentsNotice({
-  parts,
-  picked,
-  providers,
-}: {
-  parts: ThreadPart[]
-  picked: Channel[]
-  providers: Provider[]
-}) {
-  const without = picked.filter((c) => !c.comments && c.provider !== 'custom')
+function addWithin(limits: Provider['limits'] | undefined, set: Dispatch<SetStateAction<Media[]>>, m: Media) {
+  if (limits && !takesFile(limits, m.mime_type)) {
+    toast.error(`${takesWords(limits)}: ${m.original_name} isn't added`)
 
-  if (!parts.some((p) => p.content.trim() || p.media.length) || !without.length) {
-    return null
+    return
   }
 
-  const named = without.map((c) => `${c.name} (${providers.find((p) => p.id === c.provider)?.name ?? c.provider})`)
-
-  return (
-    <Callout tone="warning" size="xs" data-testid="comments-notice">
-      {`${named.join(', ')} can't post comments: the post goes out there without them.`}
-    </Callout>
-  )
+  set((ms) => (limits && ms.length >= limits.max_media ? ms : [...ms, m]))
 }
 
 /** One comment under the post: its text, media and how long after the previous part it goes out. */
@@ -672,7 +687,13 @@ function ThreadEditor({
   countsFor,
   errors,
   locked,
+  noComments,
+  textOnly,
 }: {
+  /** The one picked channel posts no comments: why, in place of Add comment. */
+  noComments?: string
+  /** The one picked channel's comments take text only: no files. */
+  textOnly?: boolean
   parts: ThreadPart[]
   /** A state setter: every change applies to the latest thread, by uid, so uploads that finish later and several
    * files picked at once never write back an older thread or land on another comment. */
@@ -783,7 +804,9 @@ function ThreadEditor({
                   />
                 }
                 start={
-                  locked ? undefined : <MediaButton onAdd={(m) => set(part.uid, (p) => ({ media: [...p.media, m] }))} />
+                  locked || textOnly ? undefined : (
+                    <MediaButton onAdd={(m) => set(part.uid, (p) => ({ media: [...p.media, m] }))} />
+                  )
                 }
                 end={<Counter counts={countsFor(part.content)} />}
               />
@@ -792,7 +815,8 @@ function ThreadEditor({
           </div>
         )
       })}
-      {!locked && (
+      {!locked && noComments && <p className="text-xs text-muted-foreground">{noComments}</p>}
+      {!locked && !noComments && (
         <div className={cn(parts.length > 0 && 'pl-6')}>
           <Button
             type="button"
@@ -944,6 +968,8 @@ interface ChannelEditorProps {
   tags: string[]
   onText: (channelId: string | undefined, text: string) => void
   onMedia: Dispatch<SetStateAction<Media[]>>
+  /** The one picked channel's limits: the files it takes, how many. */
+  limits?: Provider['limits']
 }
 
 /**
@@ -965,6 +991,7 @@ const ChannelEditor = memo(
     tags,
     onText,
     onMedia,
+    limits,
   }: ChannelEditorProps) {
     const providerOf = (c: Channel) => providers.find((p) => p.id === c.provider)
     const counts = channel
@@ -995,7 +1022,11 @@ const ChannelEditor = memo(
               onRemove={locked ? undefined : (id) => onMedia((ms) => ms.filter((m) => m.id !== id))}
             />
           }
-          start={locked ? undefined : <MediaButton onAdd={(m) => onMedia((ms) => [...ms, m])} />}
+          start={
+            locked ? undefined : (
+              <MediaButton limits={limits} count={media.length} onAdd={(m) => addWithin(limits, onMedia, m)} />
+            )
+          }
           end={<Counter counts={counts} />}
         />
       </div>
@@ -1527,8 +1558,8 @@ export function ComposerForm({
 
       setErrors(fields)
 
-      // Only a platform setting is wrong: show it where it lives.
-      if (keys.length && keys.every((k) => /^targets\.[^.]+\.settings\./.test(k))) {
+      // A platform setting is wrong: show it where it lives, in red (the text's own error waits under the text).
+      if (keys.some((k) => /^targets\.[^.]+\.settings\./.test(k))) {
         setSection('settings')
       }
 
@@ -1564,6 +1595,13 @@ export function ComposerForm({
   // Per-channel text only makes sense with two channels or more; with one, the shared text is that channel's.
   const multi = picked.length > 1
   const active = multi && tab !== 'all' ? picked.find((c) => c.id === tab) : undefined
+  // One channel picked: the composer offers only what its platform takes (files, comments).
+  const only = picked.length === 1 ? picked[0] : undefined
+  const onlyLimits = only && only.provider !== 'custom' ? providerOf(only)?.limits : undefined
+  // What each channel leaves out of the post, shown before it goes out.
+  const leftOut = picked
+    .map((ch) => ({ channel: ch, notes: channelFit(ch, providerOf(ch), media, thread) }))
+    .filter((c) => c.notes.length > 0)
   // With one channel there is no tab of its own: its objection (too many files, a video it can't take) shows here.
   const sharedError = errors.content ?? (!multi && picked[0] ? errors[`targets.${picked[0].id}.content`] : undefined)
   const shownTab = active?.id ?? 'all'
@@ -1595,6 +1633,15 @@ export function ComposerForm({
   const live = !!post && post.status !== 'draft'
   const canSend = picked.length > 0 && content.trim().length > 0 && !!collection
   const { mutate: saveAs, isPending: busy } = save
+  // Publishing (now or at its time) first lists what each channel leaves out, when one does.
+  const [review, setReview] = useState<'now' | 'schedule' | null>(null)
+  const publish = (mode: 'draft' | 'schedule' | 'now') => {
+    if (mode !== 'draft' && leftOut.length > 0) {
+      setReview(mode)
+    } else {
+      saveAs(mode)
+    }
+  }
   // The live preview: a second drawer beside this one, fed the same state (nothing is saved for it).
   const { open: previewOpen, used: previewUsed, setOpen: setPreviewOpen, toggle: togglePreview } = useLazyDialog()
   const previewState = useMemo(
@@ -1656,7 +1703,7 @@ export function ComposerForm({
       onSubmit={(e) => {
         e.preventDefault()
         // A draft's primary sends it (now or at the picked time); a post already on its way saves, keeping its time.
-        saveAs(publishAt ? 'schedule' : live ? 'draft' : 'now')
+        publish(publishAt ? 'schedule' : live ? 'draft' : 'now')
       }}
       className="flex min-h-0 flex-1 flex-col"
       noValidate
@@ -1921,6 +1968,7 @@ export function ComposerForm({
                     tags={tags}
                     onText={onText}
                     onMedia={setMedia}
+                    limits={onlyLimits}
                   />
                 ))}
                 <LinksNotices counts={countsFor(active)} />
@@ -1928,7 +1976,6 @@ export function ComposerForm({
               </div>
 
               {/* Comments belong to the post as a whole: written on the shared tab, shown read only per channel. */}
-              {!active && <CommentsNotice parts={thread} picked={picked} providers={providerList} />}
               {!active && (
                 <ThreadEditor
                   parts={thread}
@@ -1936,6 +1983,10 @@ export function ComposerForm({
                   countsFor={(text) => picked.map((c) => countFor(c, text, providerOf(c)))}
                   errors={errors}
                   locked={locked}
+                  noComments={
+                    only && !only.comments && only.provider !== 'custom' ? `${only.name} posts no comments.` : undefined
+                  }
+                  textOnly={!!onlyLimits?.comments_text_only}
                 />
               )}
             </TabsContent>
@@ -1992,7 +2043,7 @@ export function ComposerForm({
         repeatEvery={repeatEvery}
         error={errors.publish_at}
         onClearSchedule={() => setPublishAt(null)}
-        onSave={saveAs}
+        onSave={publish}
         onApplySchedule={(at, rep) => {
           flushSync(() => {
             setPublishAt(at)
@@ -2002,6 +2053,19 @@ export function ComposerForm({
           if (canSend) {
             formRef.current?.requestSubmit()
           }
+        }}
+      />
+      <PublishReview
+        open={review !== null}
+        onOpenChange={(open) => !open && setReview(null)}
+        channels={leftOut}
+        confirmLabel={review === 'schedule' ? 'Schedule' : 'Publish now'}
+        onConfirm={() => {
+          if (review) {
+            saveAs(review)
+          }
+
+          setReview(null)
         }}
       />
     </form>

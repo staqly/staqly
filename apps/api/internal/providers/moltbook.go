@@ -26,7 +26,7 @@ var (
 )
 
 func init() {
-	Register(Moltbook{NewBase("moltbook", "Moltbook", AuthToken, Limits{MaxChars: 40000, NeedsTitle: true}).WithSettings(
+	Register(Moltbook{NewBase("moltbook", "Moltbook", AuthToken, Limits{MaxChars: 40000, NeedsTitle: true, CommentsTextOnly: true}).WithSettings(
 		titleField(300),
 		Field{Key: "submolt", Label: "Submolt", Kind: "text", Default: "general", Placeholder: "general", MaxLength: 30,
 			Help: "The community the post goes to, by its name (lowercase, as in moltbook.com/m/general)."},

@@ -71,3 +71,30 @@ func TestXMetricsOfAGonePost(t *testing.T) {
 		t.Fatalf("a gone post: %v", err)
 	}
 }
+
+// A post goes out with the files a platform takes: of its kinds, in order, at most MaxMedia.
+func TestFitMedia(t *testing.T) {
+	pic, gif, vid, pdf := MediaFile{Name: "a", MimeType: "image/png"}, MediaFile{Name: "g", MimeType: "image/gif"},
+		MediaFile{Name: "v", MimeType: "video/mp4"}, MediaFile{Name: "d", MimeType: "application/pdf"}
+	names := func(fs []MediaFile) (out string) {
+		for _, f := range fs {
+			out += f.Name
+		}
+		return out
+	}
+	for _, c := range []struct {
+		l    Limits
+		in   []MediaFile
+		want string
+	}{
+		{Limits{MaxMedia: 1, MediaKinds: []string{"image"}}, []MediaFile{vid, pic, gif}, "a"}, // Pinterest
+		{Limits{MaxMedia: 1, MediaKinds: []string{"video"}}, []MediaFile{pic, vid}, "v"},      // YouTube
+		{Limits{MaxMedia: 4, MediaKinds: []string{"image", "video"}}, []MediaFile{gif, pdf, vid}, "gv"},
+		{Limits{MaxMedia: 10, MediaKinds: []string{"image", "video", "gif", "file"}}, []MediaFile{gif, pdf}, "gd"},
+		{Limits{MaxChars: 500}, []MediaFile{pic}, ""}, // takes no media
+	} {
+		if got := names(FitMedia(c.l, c.in)); got != c.want {
+			t.Errorf("%+v %s: %q, want %q", c.l, names(c.in), got, c.want)
+		}
+	}
+}
