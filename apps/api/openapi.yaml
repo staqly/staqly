@@ -199,6 +199,41 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /v1/meta/webhook:
+    get:
+      operationId: verifyMetaWebhook
+      tags: [channels]
+      security: [{}]
+      summary: Meta's webhook subscription check (Instagram, Facebook Pages, Threads)
+      description: |
+        Meta for Developers calls this when you save the callback URL (`<dashboard>/api/v1/meta/webhook`).
+        It answers the challenge when `hub.verify_token` is the server's `META_WEBHOOK_VERIFY_TOKEN`; without
+        that setting the endpoint is off (404).
+      parameters:
+        - { name: hub.mode, in: query, schema: { type: string } }
+        - { name: hub.verify_token, in: query, schema: { type: string } }
+        - { name: hub.challenge, in: query, schema: { type: string } }
+      responses:
+        "200": { description: "The challenge, as sent", content: { text/plain: { schema: { type: string } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      operationId: receiveMetaWebhook
+      tags: [channels]
+      security: [{}]
+      summary: An event from Meta (a comment under a post); reads that post's comments now
+      description: |
+        Signed by Meta with the app's secret (`X-Hub-Signature-256`: the Meta app's, the Instagram app's or the
+        Threads app's). Every published post the event names gets its comments read within seconds, as the
+        30-minute sweep would. The body is only a hint: the read asks the platform.
+      parameters:
+        - { name: X-Hub-Signature-256, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [queued], properties: { queued: { type: integer, description: Reads queued } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
   /v1/plans:
     get:
       operationId: listPlans

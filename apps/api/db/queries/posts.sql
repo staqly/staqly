@@ -129,3 +129,12 @@ UPDATE posts SET created_by_user = ? WHERE id = ? AND workspace_id = ?;
 
 -- name: SetPostArchived :execrows
 UPDATE posts SET archived_at = @archived_at, updated_at = @updated_at WHERE workspace_id = @workspace_id AND id = @id;
+
+-- name: PublishedTargetsByExternalID :many
+-- A post's targets on these platforms with this id there, still published (a webhook from the platform names it).
+SELECT t.post_id, t.channel_id, p.workspace_id, c.provider
+FROM post_targets t
+JOIN posts p ON p.id = t.post_id
+JOIN channels c ON c.id = t.channel_id
+WHERE t.external_id = sqlc.arg(external_id) AND t.external_id <> '' AND t.status = 'published' AND t.removal = ''
+  AND c.provider IN ('instagram', 'facebook', 'threads');

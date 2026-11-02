@@ -646,6 +646,51 @@ func (q *Queries) PostsReferencingMedia(ctx context.Context, arg PostsReferencin
 	return count, err
 }
 
+const publishedTargetsByExternalID = `-- name: PublishedTargetsByExternalID :many
+SELECT t.post_id, t.channel_id, p.workspace_id, c.provider
+FROM post_targets t
+JOIN posts p ON p.id = t.post_id
+JOIN channels c ON c.id = t.channel_id
+WHERE t.external_id = ?1 AND t.external_id <> '' AND t.status = 'published' AND t.removal = ''
+  AND c.provider IN ('instagram', 'facebook', 'threads')
+`
+
+type PublishedTargetsByExternalIDRow struct {
+	PostID      string `json:"post_id"`
+	ChannelID   string `json:"channel_id"`
+	WorkspaceID string `json:"workspace_id"`
+	Provider    string `json:"provider"`
+}
+
+// A post's targets on these platforms with this id there, still published (a webhook from the platform names it).
+func (q *Queries) PublishedTargetsByExternalID(ctx context.Context, externalID string) ([]PublishedTargetsByExternalIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, publishedTargetsByExternalID, externalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PublishedTargetsByExternalIDRow
+	for rows.Next() {
+		var i PublishedTargetsByExternalIDRow
+		if err := rows.Scan(
+			&i.PostID,
+			&i.ChannelID,
+			&i.WorkspaceID,
+			&i.Provider,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const publishingPostsOfChannel = `-- name: PublishingPostsOfChannel :many
 SELECT DISTINCT t.post_id FROM post_targets t JOIN posts p ON p.id = t.post_id
 WHERE t.channel_id = ? AND p.status = 'publishing' AND t.status IN ('pending', 'publishing')
