@@ -16,9 +16,20 @@ describe('appendHashtags', () => {
 })
 
 describe('hashtagsFor', () => {
+  const tags = ['a', 'b', 'c']
+
   it('leaves hashtags out for your own automation and platforms with tags of their own', () => {
-    expect(hashtagsFor({ provider: 'x' }, { settings_fields: [] })).toBe(true)
-    expect(hashtagsFor({ provider: 'youtube' }, { settings_fields: [{ key: 'title' }, { key: 'tags' }] })).toBe(false)
-    expect(hashtagsFor({ provider: 'custom' })).toBe(false)
+    expect(hashtagsFor({ provider: 'x' }, { settings_fields: [] }, tags)).toEqual(tags)
+    expect(
+      hashtagsFor({ provider: 'youtube' }, { settings_fields: [{ key: 'title' }, { key: 'tags' }] }, tags),
+    ).toEqual([])
+    expect(hashtagsFor({ provider: 'custom' }, undefined, tags)).toEqual([])
+  })
+
+  it('puts the tags past what the platform takes into the text (Threads: one topic)', () => {
+    const threads = { settings_fields: [{ key: 'tags', max_items: 1, hashtag_rest: true }] }
+
+    expect(hashtagsFor({ provider: 'threads' }, threads, tags)).toEqual(['b', 'c'])
+    expect(hashtagsFor({ provider: 'threads' }, threads, ['a'])).toEqual([])
   })
 })

@@ -42,7 +42,7 @@ export function PreviewBody({ state, tab }: { state: PreviewState; tab: string }
   const provider = state.providers.find((p) => p.id === channel.provider)
   const custom = channel.provider === 'custom'
   const links = applyLinks(channel.links, state.overrides[channel.id]?.content ?? state.content)
-  const text = hashtagsFor(channel, provider) ? appendHashtags(links.text, state.tags) : links.text
+  const text = appendHashtags(links.text, hashtagsFor(channel, provider, state.tags))
   const parts = written(state.thread)
   const takesComments = custom || !!channel.comments
   const comments: PreviewComment[] = takesComments

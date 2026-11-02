@@ -6158,6 +6158,7 @@ components:
         max_items: { type: integer, description: "At most this many values (list, channels, remote)" }
         prefer: { type: array, items: { type: string }, description: "remote: the option labels to pick while the field is empty, the first the list has (Slack: #random, then #general)" }
         from_post: { type: boolean, description: "The value comes from the post (its title, its tags), not from the channel's settings: clients don't ask for it per channel" }
+        hashtag_rest: { type: boolean, description: "tags: the platform takes max_items of the post's tags (Threads: one topic); the others go at the end of the text as hashtags" }
         options:
           type: array
           items:

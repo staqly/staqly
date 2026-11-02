@@ -101,8 +101,15 @@ func TestSoonSettings(t *testing.T) {
 
 func TestWithPostFillsTitleAndTags(t *testing.T) {
 	fields := Base{}.WithSettings(Field{Key: "title"}, Field{Key: "tags", MaxItems: 2}, Field{Key: "privacy"}).SettingsFields()
-	if !fields[0].FromPost || !fields[1].FromPost || fields[2].FromPost || !NativeTags(fields) || NativeTags(fields[2:]) {
+	if !fields[0].FromPost || !fields[1].FromPost || fields[2].FromPost {
 		t.Fatalf("fields: %+v", fields)
+	}
+	// Tags of its own: none go into the text; without, all of them; with HashtagRest, the ones past MaxItems.
+	tags := []string{"a", "b", "c"}
+	rest := []Field{{Key: "tags", MaxItems: 1, HashtagRest: true}}
+	if TextTags(fields, tags) != nil || len(TextTags(fields[2:], tags)) != 3 || strings.Join(TextTags(rest, tags), ",") != "b,c" ||
+		TextTags(rest, tags[:1]) != nil {
+		t.Fatalf("text tags: %v %v %v", TextTags(fields, tags), TextTags(fields[2:], tags), TextTags(rest, tags))
 	}
 	s := WithPost(fields, Limits{}, "Launch", []string{"a", "b", "c"}, Settings{"title": "own", "privacy": "unlisted"})
 	if s["title"] != "Launch" || s["tags"] != "a, b" || s["privacy"] != "unlisted" {

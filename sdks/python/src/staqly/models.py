@@ -1446,6 +1446,8 @@ class ProviderField(StaqlyModel):
     prefer: list[str] = Field(default_factory=list)
     #: The value comes from the post (its title, its tags), not from the channel's settings.
     from_post: bool = False
+    #: tags: the platform takes ``max_items`` of the post's tags; the others go into the text as hashtags.
+    hashtag_rest: bool = False
 
 
 class ImageRules(StaqlyModel):

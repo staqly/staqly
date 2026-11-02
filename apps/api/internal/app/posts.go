@@ -1353,8 +1353,8 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	links := channelLinks(ch)
 	text, _ = providers.ApplyLinks(links, text)
 	// Your own automation gets the tags as they are, in "tags"; a platform with tags of its own gets them there.
-	if ch.Provider != "custom" && !providers.NativeTags(e.SettingsFields()) {
-		text = providers.AppendHashtags(text, tags)
+	if ch.Provider != "custom" {
+		text = providers.AppendHashtags(text, providers.TextTags(e.SettingsFields(), tags))
 	}
 	for i := range thread {
 		thread[i].Text, _ = providers.ApplyLinks(links, thread[i].Text)
@@ -1736,8 +1736,8 @@ func (s *Service) PreviewPost(ctx context.Context, p Principal, id string) (Post
 			tp.Links = channelLinks(ch)
 			var found []string
 			tp.Text, found = providers.ApplyLinks(tp.Links, text)
-			if e, ok := providers.Get(ch.Provider); ch.Provider != "custom" && (!ok || !providers.NativeTags(e.SettingsFields())) {
-				tp.Text = providers.AppendHashtags(tp.Text, post.Tags)
+			if ch.Provider != "custom" {
+				tp.Text = providers.AppendHashtags(tp.Text, textTags(ch.Provider, post.Tags))
 			}
 			text = tp.Text
 			if len(found) > 0 {
@@ -1847,4 +1847,13 @@ func (s *Service) ListRequestedWork(ctx context.Context, p Principal, limit int)
 		out = append(out, WorkItem{Kind: "posts", Schedule: &so, Collection: collection(sc.CollectionID), RequestedAt: sc.LastRunAt.String})
 	}
 	return out, nil
+}
+
+// textTags: the post's tags that go into a provider's text as hashtags (providers.TextTags; all of them for a
+// provider no longer registered).
+func textTags(provider string, tags []string) []string {
+	if e, ok := providers.Get(provider); ok {
+		return providers.TextTags(e.SettingsFields(), tags)
+	}
+	return tags
 }

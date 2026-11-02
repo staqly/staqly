@@ -135,7 +135,7 @@ interface Count {
  */
 function countFor(channel: Channel, text: string, provider?: Provider, tags: readonly string[] = []): Count {
   const links = applyLinks(channel.links, text)
-  const out = { ...links, text: hashtagsFor(channel, provider) ? appendHashtags(links.text, tags) : links.text }
+  const out = { ...links, text: appendHashtags(links.text, hashtagsFor(channel, provider, tags)) }
 
   // X counts its own way (CJK and emoji 2, a link 23): the API checks that length, so the counter shows it.
   const n = channel.provider === 'x' ? xLength(out.text) : charCount(out.text)

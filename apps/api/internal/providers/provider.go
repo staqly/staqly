@@ -58,6 +58,9 @@ type Field struct {
 	// FromPost: the value is the post's own (its title, its tags), filled in at publish time; clients don't ask
 	// for it per channel.
 	FromPost bool `json:"from_post,omitempty"`
+	// HashtagRest: a tags field whose platform takes MaxItems of them (Threads: one topic); the post's other tags
+	// go at the end of the text as hashtags.
+	HashtagRest bool `json:"hashtag_rest,omitempty"`
 }
 
 // ListValues splits a list or channels value: comma-separated, trimmed, empty items dropped.
@@ -557,9 +560,17 @@ func (b Base) WithSettings(fields ...Field) Base {
 	return b
 }
 
-// NativeTags: the platform has tags of its own, so the post's tags go there instead of hashtags in the text.
-func NativeTags(fields []Field) bool {
-	return slices.ContainsFunc(fields, func(f Field) bool { return f.Key == "tags" })
+// TextTags: the post's tags that go into the text as hashtags. All of them, unless the platform has tags of its
+// own (a tags field): then none, or the ones past what it takes when the field says so (HashtagRest).
+func TextTags(fields []Field, tags []string) []string {
+	i := slices.IndexFunc(fields, func(f Field) bool { return f.Key == "tags" })
+	switch {
+	case i < 0:
+		return tags
+	case fields[i].HashtagRest && fields[i].MaxItems > 0 && len(tags) > fields[i].MaxItems:
+		return tags[fields[i].MaxItems:]
+	}
+	return nil
 }
 
 // WithPost fills a channel's settings with what comes from the post: its title where the platform has one, its

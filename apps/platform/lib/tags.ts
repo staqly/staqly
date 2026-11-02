@@ -31,12 +31,24 @@ export function appendHashtags(text: string, tags: readonly string[]): string {
 }
 
 /**
- * Whether a channel gets the post's tags as hashtags in its text: not your own automation (it gets them apart) nor a
- * platform with tags of its own (YouTube, blogs), which gets them there (as the API does: providers.NativeTags).
+ * The post's tags a channel gets as hashtags in its text: none for your own automation (it gets them apart) nor a
+ * platform with tags of its own (YouTube, blogs), which gets them there; on one that takes fewer than the post has
+ * (Threads: one topic), the rest (as the API does: providers.TextTags).
  */
 export function hashtagsFor(
   channel: { provider: string },
-  provider?: { settings_fields?: { key: string }[] | null },
-): boolean {
-  return channel.provider !== 'custom' && !provider?.settings_fields?.some((f) => f.key === 'tags')
+  provider: { settings_fields?: { key: string; max_items?: number; hashtag_rest?: boolean }[] | null } | undefined,
+  tags: readonly string[],
+): readonly string[] {
+  const field = provider?.settings_fields?.find((f) => f.key === 'tags')
+
+  if (channel.provider === 'custom') {
+    return []
+  }
+
+  if (!field) {
+    return tags
+  }
+
+  return field.hashtag_rest && field.max_items ? tags.slice(field.max_items) : []
 }
