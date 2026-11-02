@@ -7,6 +7,7 @@
  */
 import {
   BarChart2,
+  ChevronDown,
   ChevronRight,
   Bookmark,
   CornerUpLeft,
@@ -119,6 +120,10 @@ const PALETTES: Record<string, [Colors, Colors]> = {
       bubble: '#121212',
       dot: '#0095f6',
     },
+  ],
+  pinterest: [
+    { bg: '#fff', fg: '#111', muted: '#5f5f5f', accent: '#e60023', bubble: '#e9e9e9' },
+    { bg: '#000', fg: '#fff', muted: '#a5a5a5', accent: '#e60023', bubble: '#2b2b2b' },
   ],
   youtube: [
     { bg: '#fff', fg: '#0f0f0f', muted: '#606060', accent: '#065fd4', bubble: '#f2f2f2' },
@@ -735,6 +740,65 @@ function TikTokTemplate(p: PreviewProps) {
 // ---------------------------------------------------------------------------------------------------------------
 // YouTube
 
+// ---------------------------------------------------------------------------------------------------------------
+// Pinterest: the pin's page, its picture beside the board, Save, the title and description
+
+const PIN = palette('pinterest')
+
+function PinterestTemplate(p: PreviewProps) {
+  // A pin is one picture: the first one Pinterest takes (the others are left out when it goes out).
+  const picture = p.media.find((m) => m.mime_type.startsWith('image/'))
+  const title = p.settings.title?.trim()
+  let site = ''
+
+  try {
+    site = p.settings.link ? new URL(p.settings.link).hostname.replace(/^www\./, '') : ''
+  } catch {
+    site = ''
+  }
+
+  return (
+    <Frame label={`Pinterest pin by ${p.channel.name}`} className={cn('@container rounded-3xl p-3', PIN.frame)}>
+      <div className="grid gap-4 @md:grid-cols-2">
+        <div className="overflow-hidden rounded-2xl">
+          {picture ? (
+            <MediaItem media={picture} />
+          ) : (
+            <NeedsMedia what="Pinterest pins need a picture." className={PIN.bubble} />
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3">
+          <Actions className="items-center gap-3">
+            <Heart className="size-5" /> <span className="-ml-2 text-sm font-semibold">0</span>
+            <MessageCircle className="size-5" />
+            <Share className="size-5" />
+            <MoreHorizontal className="size-5" />
+            <span className="ml-auto inline-flex min-w-0 items-center gap-1 text-sm font-semibold">
+              <span className="truncate">Board</span> <ChevronDown className="size-4 shrink-0" />
+            </span>
+            <span className="rounded-full bg-(--pv-accent) px-4 py-2.5 text-sm font-semibold text-white">Save</span>
+          </Actions>
+          {site && <p className="text-sm font-semibold underline underline-offset-2">{site}</p>}
+          {title && <p className="text-2xl leading-tight font-semibold wrap-anywhere">{title}</p>}
+          <div className="flex items-center gap-2 text-sm">
+            <Avatar channel={p.channel} className="size-7" />
+            <span className="font-semibold">{p.channel.name}</span>
+          </div>
+          <PostText
+            text={p.text}
+            max={p.maxChars}
+            fold={[160, 3]}
+            more="more"
+            accent={PIN.accent}
+            moreClass="font-semibold"
+            className="text-sm leading-5"
+          />
+        </div>
+      </div>
+    </Frame>
+  )
+}
+
 const YT = palette('youtube')
 
 function YouTubeTemplate(p: PreviewProps) {
@@ -1119,6 +1183,8 @@ function Template(p: PreviewProps) {
       return <TikTokTemplate {...p} />
     case 'youtube':
       return <YouTubeTemplate {...p} />
+    case 'pinterest':
+      return <PinterestTemplate {...p} />
     case 'slack':
       return <SlackTemplate {...p} />
     case 'discord':
