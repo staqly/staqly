@@ -6,9 +6,16 @@ import (
 )
 
 func TestApplyEntitlements(t *testing.T) {
+	// The limits as the database seeds them (migration 00006); ApplyEntitlements is pure, so they are set here.
 	plus, _ := PlanByID("plus")
+	plus.Limits = PlanLimits{PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 10 * gb,
+		MaxUploadBytes: 100 << 20, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300,
+		LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200}
 	business := UnlockedPlan
 	starter, _ := PlanByID("starter")
+	starter.Limits = PlanLimits{PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 2 * gb,
+		MaxUploadBytes: 25 << 20, XPostsPerPeriod: 50, LinkedInPostsPerPeriod: 100, LinkedInVideosPerPeriod: 5,
+		AIMonthlyCents: 100}
 	pack := func(key, name string, md map[string]string) Entitlement {
 		return Entitlement{LookupKey: key, Name: name, Metadata: md}
 	}
@@ -51,9 +58,6 @@ func TestApplyEntitlements(t *testing.T) {
 			if !c.check(got) || len(got.LimitBonuses) != c.bonuses {
 				t.Fatalf("%+v (bonuses %+v)", got.Limits, got.LimitBonuses)
 			}
-			if c.plan.ID != UnlockedPlan.ID && c.plan.Limits != plansByID(c.plan.ID).Limits {
-				t.Fatal("the shared plan must not change")
-			}
 		})
 	}
 	if got := ApplyEntitlements(plus, []Entitlement{pack("channels_extra_10", "Channels pack", map[string]string{"staqly_limit_channels": "+10"})}); got.LimitBonuses[0] != (LimitBonus{Limit: LimitChannels, Add: 10, From: "Channels pack"}) {
@@ -62,9 +66,4 @@ func TestApplyEntitlements(t *testing.T) {
 	if parseEntitlements("not json") != nil || parseEntitlements("") != nil || len(parseEntitlements(`[{"lookup_key":"a"}]`)) != 1 {
 		t.Fatal("parseEntitlements")
 	}
-}
-
-func plansByID(id string) Plan {
-	p, _ := PlanByID(id)
-	return p
 }

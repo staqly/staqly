@@ -4,6 +4,7 @@ import { Logo } from '@staqly/brand/logo'
 import { useQuery } from '@tanstack/react-query'
 import {
   CreditCardIcon,
+  GaugeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
   MenuIcon,
@@ -33,6 +34,7 @@ const NAV = [
   { href: '/users', label: 'Users', icon: UsersIcon },
   { href: '/payments', label: 'Payments', icon: CreditCardIcon },
   { href: '/promo-codes', label: 'Promo codes', icon: TicketPercentIcon },
+  { href: '/limits', label: 'Limits', icon: GaugeIcon },
   { href: '/audit', label: 'Audit log', icon: ScrollTextIcon },
   { href: '/admins', label: 'Admins', icon: ShieldCheckIcon },
 ]

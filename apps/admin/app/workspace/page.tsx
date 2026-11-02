@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { UsageMeters, type WorkspaceUsage } from '@/components/usage-meters'
 import { WorkspaceActions } from '@/components/workspace-actions'
+import { WorkspaceLimits } from '@/components/workspace-limits'
 import { AdminApiError, adminApi } from '@/lib/api'
 import { formatDate } from '@/lib/format'
 
@@ -123,6 +124,7 @@ function WorkspaceView() {
           <Tabs defaultValue="usage">
             <TabsList className="h-auto max-w-full flex-wrap">
               <TabsTrigger value="usage">Usage &amp; limits</TabsTrigger>
+              <TabsTrigger value="limits">Limits</TabsTrigger>
               <TabsTrigger value="members">Members</TabsTrigger>
               <TabsTrigger value="channels">Channels</TabsTrigger>
               <TabsTrigger value="payments">Payments</TabsTrigger>
@@ -137,6 +139,9 @@ function WorkspaceView() {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+            <TabsContent value="limits">
+              <WorkspaceLimits id={d.workspace.id} plan={d.workspace.plan} />
             </TabsContent>
             <TabsContent value="members" className="space-y-3">
               <p className="text-sm text-muted-foreground">

@@ -27,6 +27,7 @@ const (
 	// LimitLinkedInPosts: posts to LinkedIn (profiles and Pages) this month; LimitLinkedInVideos: those with a video.
 	LimitLinkedInPosts  = "linkedin_posts_per_period"
 	LimitLinkedInVideos = "linkedin_videos_per_period"
+	LimitAIMonthlyCents = "ai_monthly_cents"
 	// UsageSeats: the usage meter of billed seats (members); seats are billed per user, never capped.
 	UsageSeats = "seats"
 )
@@ -94,30 +95,15 @@ const (
 // yearly: twelve months at 20 % off, each rounded down to a whole euro (€29 -> €23 a month, €276 a year).
 func yearly(month int) int { return month * 80 / 100 * 12 }
 
-// Plans is the single source of truth for cloud packages, cheapest first. Every new workspace gets a
+// Plans are the cloud packages, cheapest first: names and prices. Their limits (and the feature list made from
+// them) are in the database, editable in the admin panel (limits.go). Every new workspace gets a
 // TrialDays trial of TrialPlan (Starter); afterwards it is read-only until a plan is paid for (billing
 // checkout) or the operator sets one (`server set-plan <workspace> <plan>`). There is no free plan.
 var Plans = []Plan{
-	{ID: "starter", Name: "Starter", PriceMonth: 15, PriceYear: yearly(15), Currency: Currency,
-		Limits: PlanLimits{PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2,
-			StorageBytes: 2 * gb, MaxUploadBytes: 25 << 20, DataExport: false,
-			XPostsPerPeriod: 50, LinkedInPostsPerPeriod: 100, LinkedInVideosPerPeriod: 5, AIMonthlyCents: 100},
-		Features: []string{"5 connected channels", "300 new posts a month", "Calendar, queues and recurring schedules", "Design, video and audio editors", "Publishing and performance analytics", "$1 shared AI allowance a month", "50 X credits a month", "100 LinkedIn posts a month, 5 with video", "MCP, REST API, SDKs and CLI", "2 GB storage, 25 MB per file", "Data export without files"}},
-	{ID: "plus", Name: "Plus", PriceMonth: 29, PriceYear: yearly(29), Currency: Currency, Highlight: true,
-		Limits: PlanLimits{PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10,
-			StorageBytes: 10 * gb, MaxUploadBytes: 100 << 20, DataExport: true,
-			XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200},
-		Features: []string{"15 connected channels", "1,500 new posts a month", "Calendar, queues and recurring schedules", "Design, video and audio editors", "Publishing and performance analytics", "$2 shared AI allowance a month", "100 X credits a month", "300 LinkedIn posts a month, 15 with video", "MCP, REST API, SDKs and CLI", "10 GB storage, 100 MB per file", "Backups and full data export with files"}},
-	{ID: "pro", Name: "Pro", PriceMonth: 59, PriceYear: yearly(59), Currency: Currency,
-		Limits: PlanLimits{PostsPerMonth: 5000, Channels: 40, Alerts: 25, Webhooks: 25, APIKeys: 25,
-			StorageBytes: 30 * gb, MaxUploadBytes: 100 << 20, DataExport: true,
-			XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 30, AIMonthlyCents: 500},
-		Features: []string{"40 connected channels", "5,000 new posts a month", "Calendar, queues and recurring schedules", "Design, video and audio editors", "Publishing and performance analytics", "$5 shared AI allowance a month", "250 X credits a month", "600 LinkedIn posts a month, 30 with video", "MCP, REST API, SDKs and CLI", "30 GB storage, 100 MB per file", "Backups and full data export with files"}},
-	{ID: "business", Name: "Business", PriceMonth: 99, PriceYear: yearly(99), Currency: Currency,
-		Limits: PlanLimits{PostsPerMonth: 15000, Channels: 100, Alerts: 50, Webhooks: 50, APIKeys: 50,
-			StorageBytes: 100 * gb, MaxUploadBytes: 100 << 20, DataExport: true,
-			XPostsPerPeriod: 500, LinkedInPostsPerPeriod: 900, LinkedInVideosPerPeriod: 60, AIMonthlyCents: 1000},
-		Features: []string{"100 connected channels", "15,000 new posts a month", "Calendar, queues and recurring schedules", "Design, video and audio editors", "Publishing and performance analytics", "$10 shared AI allowance a month", "500 X credits a month", "900 LinkedIn posts a month, 60 with video", "MCP, REST API, SDKs and CLI", "100 GB storage, 100 MB per file", "Backups and full data export with files"}},
+	{ID: "starter", Name: "Starter", PriceMonth: 15, PriceYear: yearly(15), Currency: Currency},
+	{ID: "plus", Name: "Plus", PriceMonth: 29, PriceYear: yearly(29), Currency: Currency, Highlight: true},
+	{ID: "pro", Name: "Pro", PriceMonth: 59, PriceYear: yearly(59), Currency: Currency},
+	{ID: "business", Name: "Business", PriceMonth: 99, PriceYear: yearly(99), Currency: Currency},
 }
 
 // TrialDays: the Starter trial. With billing on it is Stripe's: Starter's checkout starts a 7-day trial with a
@@ -201,9 +187,17 @@ func (s *Service) planState(ctx context.Context, q *db.Queries, workspaceID stri
 		return Plan{}, "", false, err
 	}
 	p, ok := PlanByID(row.Plan)
+	suspended := false
 	if !ok {
 		// An unknown plan id (e.g. the retired free plan): the cheapest plan, read-only, never unlimited.
-		return Plans[0], row.PlanExpiresAt.String, true, nil
+		p, suspended = Plans[0], true
+	}
+	if p.Limits, err = s.planLimits(ctx, q, p.ID, workspaceID); err != nil {
+		return Plan{}, "", false, err
+	}
+	p.Features = planFeatures(p.Limits)
+	if suspended {
+		return p, row.PlanExpiresAt.String, true, nil
 	}
 	expires := row.PlanExpiresAt.String
 	// The plan as its subscription's entitlements leave it: every limit check reads this one. Without billing

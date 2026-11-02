@@ -205,6 +205,10 @@ paths:
       tags: [setup]
       security: [{}]
       summary: Cloud plans and their limits (-1 = unlimited)
+      description: |
+        Public: no key needed, and any origin may read it (`Access-Control-Allow-Origin: *`), so a pricing page
+        can show the live prices and limits. The limits are the ones the operator set (admin panel); `features`
+        is made from them.
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Plan" } } } } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }

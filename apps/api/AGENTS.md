@@ -96,8 +96,10 @@ sqlc generate                       # after editing db/queries or migrations (~/
   user input with `ParseTimeFilter`.
 * Errors: `invalid(field,msg)` 422, `conflict` 409, `notFound` 404,
   `limitErr` 402 with `details`. Unknown errors become 500 and are logged.
-* Plan limits live in `internal/app/plans.go` (single source of truth); check
-  them inside the write transaction.
+* Plans (names, prices) live in `internal/app/plans.go`; their limits live in the database
+  (`limits`, `limit_plans`, `limit_workspaces`; `internal/app/limits.go`), seeded by migration 00006 and
+  edited in the admin panel (Limits, and a workspace's Limits tab). `planState` resolves them; check them
+  inside the write transaction. A new limit is a migration row plus its field in `PlanLimits`.
 * Never log headers, query strings or secrets.
 * Keep `ponytail:` comments on deliberate shortcuts with their ceiling.
 

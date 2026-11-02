@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -31,10 +32,15 @@ func TestPlanLimitValues(t *testing.T) {
 			t.Errorf("%s prices %d / %v, want %v", id, p.PriceMonth, p.PriceYear, pr)
 		}
 	}
+	// As a fresh database has them (migration 00006); the admin panel changes them afterwards.
+	live, err := newEnv(t).svc.LivePlans(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 	for id, limits := range want {
-		p, ok := app.PlanByID(id)
-		if !ok || p.Limits != limits {
-			t.Errorf("plan %s: %+v, want %+v", id, p.Limits, limits)
+		i := slices.IndexFunc(live, func(p app.Plan) bool { return p.ID == id })
+		if i < 0 || live[i].Limits != limits {
+			t.Errorf("plan %s: %+v, want %+v", id, live, limits)
 		}
 	}
 	// Local installs: every count is unlimited (a zero would block everything), and exports are on.
@@ -247,7 +253,12 @@ func TestWebsitePricesMatchPlans(t *testing.T) {
 			t.Errorf("X bundle %d: web %v, credits.go %+v", i, bundles[i][1:], b)
 		}
 	}
-	for _, p := range app.OfferedPlans() {
+	// The landing page is static: it shows the limits a fresh database has.
+	live, err := newEnv(t).svc.LivePlans(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range live {
 		n := strings.ReplaceAll(fmt.Sprintf("%d", p.Limits.XPostsPerPeriod), "1600", "1,600")
 		if !strings.Contains(string(src), "'"+n+" X credits a month'") {
 			t.Errorf("apps/web/lib/plans.ts: %s should include %s posts to X a month", p.ID, n)

@@ -83,7 +83,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Cloud plans and their limits (-1 = unlimited) */
+        /**
+         * Cloud plans and their limits (-1 = unlimited)
+         * @description Public: no key needed, and any origin may read it (`Access-Control-Allow-Origin: *`), so a pricing page
+         *     can show the live prices and limits. The limits are the ones the operator set (admin panel); `features`
+         *     is made from them.
+         */
         get: operations["listPlans"];
         put?: never;
         post?: never;

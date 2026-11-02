@@ -18,9 +18,9 @@ import {
 import { useState, type ReactNode } from 'react'
 
 import { IntervalToggle } from '@/components/pricing'
+import { useLivePlans } from '@/lib/live-plans'
 import {
-  COMPARE,
-  PLANS,
+  PLANS as STATIC_PLANS,
   ctaLabel,
   perMonth,
   eur,
@@ -43,10 +43,7 @@ const ICONS: Record<string, ReactNode> = {
   'Coming soon — not available yet': <Clock />,
 }
 
-/** Every row, by category: rows equal on every plan stay in (checks read fast and show what's included). */
-const SECTIONS = COMPARE
-
-const POPULAR = PLANS.findIndex((p) => p.highlight)
+const POPULAR = STATIC_PLANS.findIndex((p) => p.highlight)
 
 function Value({ v }: { v: Cell }) {
   if (v === true) {
@@ -93,6 +90,8 @@ function RowLabel({ row }: { row: CompareRow }) {
  */
 export function CompareTable() {
   const [interval, setInterval] = useState<Interval>('year')
+  // Every row, by category: rows equal on every plan stay in (checks read fast and show what's included).
+  const { plans: PLANS, compare: SECTIONS } = useLivePlans()
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const toggle = (category: string) =>
     setClosed((prev) => {
@@ -233,6 +232,7 @@ export function CompareTable() {
 /** Phones and tablets: pick a plan, see its values section by section. */
 export function ComparePicker() {
   const [index, setIndex] = useState(Math.max(POPULAR, 0))
+  const { plans: PLANS, compare: SECTIONS } = useLivePlans()
   const plan = PLANS[index]!
 
   return (
