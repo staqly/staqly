@@ -287,6 +287,28 @@ type JobRequeue struct {
 	CreatedAt   string `json:"created_at"`
 }
 
+type Limit struct {
+	Key         string `json:"key"`
+	Value       int64  `json:"value"`
+	Description string `json:"description"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type LimitPlan struct {
+	LimitKey  string `json:"limit_key"`
+	PlanID    string `json:"plan_id"`
+	Value     int64  `json:"value"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type LimitWorkspace struct {
+	LimitKey    string `json:"limit_key"`
+	WorkspaceID string `json:"workspace_id"`
+	Value       int64  `json:"value"`
+	Note        string `json:"note"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
 type MediaFolder struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`

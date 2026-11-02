@@ -21,7 +21,12 @@ var importOrder = []string{
 	"channels", "provider_apps", "posts", "post_targets", "preview_links", "post_comments", "post_responses", "post_response_insights", "schedules", "jobs",
 	"job_requeues", "channel_links", "pending_connections", "ai_jobs", "assistant_chats", "telegram_connect_codes", "oauth_clients",
 	"trial_fingerprints", "workspace_trials", "admins", "admin_codes", "admin_sessions", "admin_audit",
+	"limits", "limit_plans", "limit_workspaces",
 }
+
+// seededTables: tables a migration fills (the plan limits); a fresh database has their rows, which the import
+// replaces with the source's.
+var seededTables = map[string]bool{"limits": true, "limit_plans": true}
 
 // ImportReport is how many rows each table received; NULReplaced counts text values whose NUL characters
 // (which SQLite stores and PostgreSQL text cannot) became U+FFFD.
@@ -47,6 +52,9 @@ func ImportSQLite(ctx context.Context, pg *sql.DB, sqlitePath string) (ImportRep
 		return nil, err
 	}
 	for _, t := range importOrder {
+		if seededTables[t] {
+			continue
+		}
 		var n int64
 		if err := pg.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+t).Scan(&n); err != nil {
 			return nil, err
@@ -61,6 +69,12 @@ func ImportSQLite(ctx context.Context, pg *sql.DB, sqlitePath string) (ImportRep
 	}
 	defer tx.Rollback()
 	report := ImportReport{}
+	// Children first: limit_plans refers to limits.
+	for _, t := range []string{"limit_plans", "limits"} {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+t); err != nil {
+			return nil, err
+		}
+	}
 	for _, t := range importOrder {
 		n, nuls, err := copyTable(ctx, src, tx, t)
 		report[NULReplaced] += nuls

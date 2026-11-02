@@ -68,15 +68,20 @@ func TestTrashRefusedForScheduledUseBehindManyDrafts(t *testing.T) {
 const tinyStoragePlan = "tiny-storage"
 
 func init() {
-	app.Plans = append(app.Plans, app.Plan{ID: tinyStoragePlan, Name: "Tiny storage", Hidden: true,
-		Limits: app.PlanLimits{PostsPerMonth: app.Unlimited, Channels: 3, Alerts: 2, Webhooks: 3, APIKeys: 5,
-			StorageBytes: 3000, MaxUploadBytes: 5 << 20}, Features: []string{}})
+	app.Plans = append(app.Plans, app.Plan{ID: tinyStoragePlan, Name: "Tiny storage", Hidden: true})
+}
+
+// tinyStorage: the tiny-storage plan with its limits (the workspace's own values).
+func (e *env) tinyStorage() {
+	e.plan(tinyStoragePlan)
+	e.limits(map[string]int64{app.LimitPostsPerMonth: app.Unlimited, app.LimitChannels: 3, app.LimitAlerts: 2,
+		app.LimitWebhooks: 3, app.LimitAPIKeys: 5, app.LimitStorage: 3000, app.LimitMaxUpload: 5 << 20})
 }
 
 // The storage limit holds under concurrent uploads: it is checked again in the transaction that records the file.
 func TestStorageLimitHoldsUnderConcurrentUploads(t *testing.T) {
 	e := newEnv(t)
-	e.plan(tinyStoragePlan)
+	e.tinyStorage()
 	file := append(append([]byte{}, pngBytes...), make([]byte, 1000-len(pngBytes))...)
 	var wg sync.WaitGroup
 	var ok atomic.Int32
@@ -190,7 +195,7 @@ func TestDeletedMediaCannotBeAttached(t *testing.T) {
 // Design editor projects count toward storage everywhere: the usage shown and the upload check.
 func TestStorageCountsProjects(t *testing.T) {
 	e := newEnv(t)
-	e.plan(tinyStoragePlan) // 3000 bytes
+	e.tinyStorage() // 3000 bytes
 	big := designFile(strings.Repeat("x", 2400))
 	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "Big"}, big, 201, nil)
 	var u app.Usage

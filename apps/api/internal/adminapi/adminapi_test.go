@@ -357,3 +357,28 @@ func TestAdminTokenSignIn(t *testing.T) {
 	}
 	e.want(w, 429)
 }
+
+// The Limits page and a workspace's own limits: read, set, take away; the value is required and checked.
+func TestAdminLimits(t *testing.T) {
+	e := newEnv(t, "a@x.io")
+	e.signIn()
+	ws := e.workspace()
+	w := e.do("GET", "/v1/admin/limits", nil)
+	e.want(w, 200)
+	var all app.AdminLimits
+	if err := json.Unmarshal(w.Body.Bytes(), &all); err != nil || len(all.Limits) < 10 || len(all.Plans) < 4 {
+		t.Fatalf("limits: %s", w.Body)
+	}
+	e.want(e.do("PUT", "/v1/admin/limits/channels/plans/plus", map[string]any{"value": 20}), 204)
+	e.want(e.do("PUT", "/v1/admin/limits/channels", map[string]any{}), 422)
+	e.want(e.do("PUT", "/v1/admin/limits/channels", map[string]any{"value": -5}), 422)
+	e.want(e.do("DELETE", "/v1/admin/limits/channels/plans/plus", nil), 204)
+	e.want(e.do("PUT", "/v1/admin/workspaces/"+ws+"/limits/webhooks", map[string]any{"value": 9, "note": "pilot"}), 204)
+	w = e.do("GET", "/v1/admin/workspaces/"+ws+"/limits", nil)
+	e.want(w, 200)
+	if !strings.Contains(w.Body.String(), `"key":"webhooks","description":"Webhooks","value":9,"source":"workspace"`) {
+		t.Fatalf("workspace limits: %s", w.Body)
+	}
+	e.want(e.do("DELETE", "/v1/admin/workspaces/"+ws+"/limits/webhooks", nil), 204)
+	e.want(e.do("PUT", "/v1/admin/workspaces/"+ws+"/limits/nope", map[string]any{"value": 1}), 404)
+}

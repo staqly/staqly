@@ -62,7 +62,8 @@ func (s *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listPlans(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"data": s.svc.LivePlans(r.Context())})
+	plans, err := s.svc.LivePlans(r.Context())
+	respond(w, r, 200, map[string]any{"data": plans}, err)
 }
 
 func (s *Server) getUsage(w http.ResponseWriter, r *http.Request) {

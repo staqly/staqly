@@ -238,8 +238,11 @@ months at 20 % off, rounded down, so the saving is 20 % or a little more.
 Every plan change is recorded as a `workspace.plan_changed` [event](/api/events#other-events)
 with the reason (for example `stripe:active`).
 
-The plan table lives in `apps/api/internal/app/plans.go`, the single source of truth for
-limits and for the pricing shown in the dashboard.
+The plans and their prices live in `apps/api/internal/app/plans.go`. Their limits live in the
+database: a default per limit, a value per plan where it differs, and a value per workspace where the
+operator set one (it replaces the plan's; Stripe add-ons still add to it). Operators edit them in the
+admin panel (**Limits**, and a workspace's **Limits** tab); every change goes to the admin audit log.
+The feature list shown with each plan is made from its limits.
 
 ## Next steps
 

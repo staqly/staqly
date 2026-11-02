@@ -187,6 +187,10 @@ func TestUploadRechecksPlanAfterStorageWrite(t *testing.T) {
 				if err := e.svc.SetPlan(ctx, p.WorkspaceID, limitedPlan, ""); err != nil {
 					t.Fatal(err)
 				}
+				small := int64(5 << 20)
+				if err := e.svc.AdminSetWorkspaceLimit(ctx, app.Admin{Email: "tests@staqly.ai"}, p.WorkspaceID, app.LimitMaxUpload, &small, ""); err != nil {
+					t.Fatal(err)
+				}
 			}}
 			// The new plan allows 5 MiB, but the upload began on Pro's 100 MiB allowance.
 			if kind == "media" {

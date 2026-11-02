@@ -291,3 +291,49 @@ func (s *server) audit(w http.ResponseWriter, r *http.Request) {
 	v, err := s.svc.AdminListAudit(r.Context(), q.Get("q"), q.Get("workspace_id"), q.Get("cursor"), n)
 	s.reply(w, v, err)
 }
+
+func (s *server) listLimits(w http.ResponseWriter, r *http.Request) {
+	v, err := s.svc.AdminListLimits(r.Context())
+	s.reply(w, v, err)
+}
+
+// setLimit: PUT /limits/{key} sets the default, PUT /limits/{key}/plans/{plan} a plan's value; DELETE on the plan's
+// path takes the plan's own value away (it takes the default again).
+func (s *server) setLimit(w http.ResponseWriter, r *http.Request) {
+	var value *int64
+	if r.Method != http.MethodDelete {
+		var in struct{ Value *int64 }
+		if !s.decode(w, r, &in) {
+			return
+		}
+		if in.Value == nil {
+			writeErr(w, s.log, &app.Error{Code: "validation_failed", Status: 422, Message: "value is required"})
+			return
+		}
+		value = in.Value
+	}
+	s.done(w, s.svc.AdminSetLimit(r.Context(), adminOf(r), chi.URLParam(r, "key"), chi.URLParam(r, "plan"), value))
+}
+
+func (s *server) workspaceLimits(w http.ResponseWriter, r *http.Request) {
+	v, err := s.svc.AdminWorkspaceLimits(r.Context(), chi.URLParam(r, "id"))
+	s.reply(w, map[string]any{"data": v}, err)
+}
+
+// setWorkspaceLimit: PUT gives the workspace its own value (with a note why), DELETE takes it away.
+func (s *server) setWorkspaceLimit(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Value *int64
+		Note  string
+	}
+	if r.Method != http.MethodDelete {
+		if !s.decode(w, r, &in) {
+			return
+		}
+		if in.Value == nil {
+			writeErr(w, s.log, &app.Error{Code: "validation_failed", Status: 422, Message: "value is required"})
+			return
+		}
+	}
+	s.done(w, s.svc.AdminSetWorkspaceLimit(r.Context(), adminOf(r), chi.URLParam(r, "id"), chi.URLParam(r, "key"), in.Value, in.Note))
+}

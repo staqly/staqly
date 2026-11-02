@@ -199,12 +199,15 @@ func (s *Service) withLivePrices(ctx context.Context, p Plan) Plan {
 }
 
 // LivePlans: the offered plans with their charged amounts (see withLivePrices); GET /plans, MCP, the dashboard.
-func (s *Service) LivePlans(ctx context.Context) []Plan {
-	out := OfferedPlans()
+func (s *Service) LivePlans(ctx context.Context) ([]Plan, error) {
+	out, err := s.withLimits(ctx, OfferedPlans())
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
 		out[i] = s.withLivePrices(ctx, out[i])
 	}
-	return out
+	return out, nil
 }
 
 // stripePrice is the part of a Stripe price staqly reads to know which plan and interval was bought.

@@ -467,11 +467,7 @@ func TestAIFallbackReservationMustFitAllowance(t *testing.T) {
 	e.paid()
 	fal, hf := newFakeFal(t), newFakeHiggsfield(t)
 	e.aiSetup(fal, hf)
-	saved := append([]app.Plan(nil), app.Plans...)
-	t.Cleanup(func() { copy(app.Plans, saved) })
-	for i := range app.Plans {
-		app.Plans[i].Limits.AIMonthlyCents = 5 // fits fal's $0.003, not Higgsfield's $0.10
-	}
+	e.limits(map[string]int64{app.LimitAIMonthlyCents: 5}) // fits fal's $0.003, not Higgsfield's $0.10
 	if code, _, body := e.aiJob(e.key, map[string]string{"operation": "generate", "prompt": "bounded fallback"}, nil, nil); code != 402 || !strings.Contains(body, "ai_limit_reached") {
 		t.Fatalf("fallback reservation: %d %s", code, body)
 	}
@@ -656,11 +652,7 @@ func TestAIJobRules(t *testing.T) {
 
 	// The monthly limit: a request that would pass it is refused with 402.
 	// A plan without AI this month (every plan, whichever the workspace has).
-	saved := append([]app.Plan(nil), app.Plans...)
-	for i := range app.Plans {
-		app.Plans[i].Limits.AIMonthlyCents = 0
-	}
-	t.Cleanup(func() { copy(app.Plans, saved) })
+	e.limits(map[string]int64{app.LimitAIMonthlyCents: 0})
 	if code, _, body := e.aiJob(e.key, map[string]string{"operation": "generate", "prompt": "over"}, nil, nil); code != 402 || !strings.Contains(body, "ai_limit_reached") {
 		t.Fatalf("monthly limit: %d %s", code, body)
 	}
@@ -669,7 +661,11 @@ func TestAIJobRules(t *testing.T) {
 	if st.Usage.UsedUSD <= 0 || st.Usage.LimitUSD == nil || *st.Usage.LimitUSD != 0 {
 		t.Fatalf("usage: %+v", st.Usage)
 	}
-	copy(app.Plans, saved)
+	var ws app.Workspace
+	e.do(nil, "GET", "/v1/workspace", e.key, nil, 200, &ws)
+	if err := e.svc.AdminSetWorkspaceLimit(context.Background(), app.Admin{Email: "tests@staqly.ai"}, ws.ID, app.LimitAIMonthlyCents, nil, ""); err != nil {
+		t.Fatal(err)
+	}
 
 	// AI_OPERATIONS turns operations off.
 	e.svc.Cfg.AI.Operations = []string{"generate"}
@@ -919,11 +915,7 @@ func TestAssistant(t *testing.T) {
 	}
 
 	// Exhaustion stops both paid endpoints; a fallback must not bypass the allowance.
-	saved := append([]app.Plan(nil), app.Plans...)
-	for i := range app.Plans {
-		app.Plans[i].Limits.AIMonthlyCents = 0
-	}
-	t.Cleanup(func() { copy(app.Plans, saved) })
+	e.limits(map[string]int64{app.LimitAIMonthlyCents: 0})
 	asked, model = 0, ""
 	evs = e.assistantTurn([]app.AssistantMessage{{Role: "user", Content: "Write a draft about our launch"}}, nil)
 	if last := evs[len(evs)-1]; last.Type != "error" || last.Error.Code != "ai_limit_reached" {

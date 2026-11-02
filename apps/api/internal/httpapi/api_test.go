@@ -120,22 +120,45 @@ func (e *env) do(c *http.Client, method, path, auth string, body any, want int, 
 // old Free plan had: one API key, 50 posts a month...); keys created meanwhile stay
 // valid, limits only block new resources.
 func (e *env) paid() { e.plan("pro") }
-func (e *env) free() { e.plan(limitedPlan) }
+func (e *env) free() {
+	e.plan(limitedPlan)
+	e.limits(limitedLimits)
+}
 
 // limitedPlan: small limits for tests, assignable like an operator's custom deal but never offered.
 const limitedPlan = "limited"
 
 func init() {
-	app.Plans = append(app.Plans, app.Plan{ID: limitedPlan, Name: "Limited", Hidden: true,
-		Limits: app.PlanLimits{PostsPerMonth: 50, Channels: 3, Alerts: 2, Webhooks: 3, APIKeys: 1,
-			StorageBytes: 1 << 30, MaxUploadBytes: 5 << 20, DataExport: false}, Features: []string{}})
+	app.Plans = append(app.Plans, app.Plan{ID: limitedPlan, Name: "Limited", Hidden: true})
 }
 
+// limitedLimits: what the limited plan allows, set as the workspace's own limits (limits live in the database).
+var limitedLimits = map[string]int64{app.LimitPostsPerMonth: 50, app.LimitChannels: 3, app.LimitAlerts: 2,
+	app.LimitWebhooks: 3, app.LimitAPIKeys: 1, app.LimitStorage: 1 << 30, app.LimitMaxUpload: 5 << 20, app.LimitDataExport: 0}
+
+// limits gives the test workspace its own values of these limits, as an operator does in the admin panel.
+func (e *env) limits(values map[string]int64) {
+	var ws app.Workspace
+	e.do(nil, "GET", "/v1/workspace", e.key, nil, 200, &ws)
+	for k, v := range values {
+		if err := e.svc.AdminSetWorkspaceLimit(context.Background(), app.Admin{Email: "tests@staqly.ai"}, ws.ID, k, &v, ""); err != nil {
+			e.t.Fatal(err)
+		}
+	}
+}
+
+// plan moves the test workspace to a plan, taking away any limits of its own (free and tinyStorage set them after).
 func (e *env) plan(id string) {
 	var ws app.Workspace
 	e.do(nil, "GET", "/v1/workspace", e.key, nil, 200, &ws)
-	if err := e.svc.SetPlan(context.Background(), ws.ID, id, ""); err != nil {
+	ctx := context.Background()
+	if err := e.svc.SetPlan(ctx, ws.ID, id, ""); err != nil {
 		e.t.Fatal(err)
+	}
+	for k := range limitedLimits {
+		if err := e.svc.AdminSetWorkspaceLimit(ctx, app.Admin{Email: "tests@staqly.ai"}, ws.ID, k, nil, ""); err != nil {
+			e.t.Fatal(err)
+		}
 	}
 }
 
