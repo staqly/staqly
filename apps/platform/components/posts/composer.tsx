@@ -1558,7 +1558,7 @@ export function ComposerForm({
 
   const [tab, setTab] = useState<string>(initialTab ?? 'all')
   const locked = !!post && isLocked(post)
-  // Post (the content), Settings (each channel's platform settings) and, once it was sent off, Channels.
+  // Post (the content), Settings (each channel's platform settings) and, once it was sent off, Results.
   const [section, setSection] = useState<'post' | 'settings' | 'delivery'>('post')
   const targetOf = (id: string) => post?.targets?.find((t) => t.channel_id === id)
   // Per-channel text only makes sense with two channels or more; with one, the shared text is that channel's.
@@ -1729,7 +1729,7 @@ export function ComposerForm({
               )}
               {deliveryTargets.length > 0 && (
                 <TabsTrigger value="delivery" data-testid="tab-delivery">
-                  Channels
+                  Results
                   {failedTargets > 0 && (
                     <span
                       className="rounded-full bg-destructive/15 px-1.5 text-[11px] leading-4 text-destructive tabular-nums"

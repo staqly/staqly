@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, waitFor } from '@testing-library/react'
+import { toast } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 
 import { LiveUpdates } from '@/components/shell/live-updates'
-import { api, type StashEvent } from '@/lib/api'
+import { api, type Post, type StashEvent } from '@/lib/api'
+import { undoToast } from '@/lib/publish-undo'
 import { qk } from '@/lib/queries'
 
 const event = (seq: number, type = 'webhook.test') =>
@@ -99,5 +101,35 @@ describe('live updates', () => {
     unmount()
     qc.clear()
     fetchEvents.mockRestore()
+  })
+
+  it('says when a post this tab published with Publish now went out, once', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
+    const initial = [event(1)]
+    const success = vi.spyOn(toast, 'success').mockImplementation(() => 1)
+
+    undoToast({ id: 'pst_mine', title: 'Test 1', content: 'x' } as Post, () => {})
+    qc.setQueryData(qk.recentEvents, initial)
+    const fetchEvents = vi.spyOn(api, 'events').mockResolvedValue({ data: initial })
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <LiveUpdates />
+      </QueryClientProvider>,
+    )
+    const published = (seq: number, postId: string) =>
+      ({ ...event(seq, 'post.published'), post_id: postId }) as StashEvent
+
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [published(3, 'pst_other'), published(2, 'pst_mine'), ...initial])
+    })
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Published', { description: 'Test 1' }))
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [published(4, 'pst_mine'), published(3, 'pst_other'), ...initial])
+    })
+    expect(success).toHaveBeenCalledTimes(1)
+    unmount()
+    qc.clear()
+    fetchEvents.mockRestore()
+    success.mockRestore()
   })
 })

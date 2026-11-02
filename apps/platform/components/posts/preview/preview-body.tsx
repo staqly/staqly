@@ -61,7 +61,12 @@ export function PreviewBody({ state, tab }: { state: PreviewState; tab: string }
         comments={comments}
         maxChars={provider?.limits?.max_chars ?? 0}
         count={channel.provider === 'x' ? xLength : charCount}
-        settings={{ ...state.overrides[channel.id]?.settings, ...(state.title.trim() ? { title: state.title } : {}) }}
+        // The post's tags as the platform's own field where it has one (Threads' topic), unless the channel set its own.
+        settings={{
+          ...(state.tags.length ? { tags: state.tags.join(', ') } : {}),
+          ...state.overrides[channel.id]?.settings,
+          ...(state.title.trim() ? { title: state.title } : {}),
+        }}
       />
       {links.found.length > 0 && <Note>{linksNotice(channel.links, channel.name)}</Note>}
       {!takesComments && parts.length > 0 && (

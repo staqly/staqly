@@ -122,7 +122,7 @@ describe('post actions', () => {
     await user.click(screen.getByRole('button', { name: 'Open post' }))
     expect(await screen.findByRole('menuitem', { name: /Telegram news/ })).toBeInTheDocument()
     await user.keyboard('{Escape}')
-    // The numbers are the sheet's Channels tab now, not a header button.
+    // The numbers are the sheet's Results tab now, not a header button.
     expect(screen.queryByRole('button', { name: 'Post statistics' })).not.toBeInTheDocument()
     cleanup()
     renderWithProviders(<PostStats post={withTwo} active />)

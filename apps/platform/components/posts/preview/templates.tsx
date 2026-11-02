@@ -7,6 +7,7 @@
  */
 import {
   BarChart2,
+  ChevronRight,
   Bookmark,
   CornerUpLeft,
   Eye,
@@ -66,8 +67,24 @@ const PALETTES: Record<string, [Colors, Colors]> = {
     { bg: '#161e27', fg: '#f1f3f5', muted: '#aebbc9', accent: '#4fa2fe', line: '#2e4052', border: '#2e4052' },
   ],
   threads: [
-    { bg: '#fff', fg: '#000', muted: '#6b6b6b', accent: '#0064c8', line: '#d9d9d9', border: '#e5e5e5' },
-    { bg: '#101010', fg: '#f3f5f7', muted: '#a0a0a0', accent: '#5fb2ff', line: '#333', border: '#2a2a2a' },
+    {
+      bg: '#fff',
+      fg: '#000',
+      muted: '#6b6b6b',
+      accent: '#0064c8',
+      line: '#d9d9d9',
+      border: '#e5e5e5',
+      bubble: '#f0f0f0',
+    },
+    {
+      bg: '#101010',
+      fg: '#f3f5f7',
+      muted: '#a0a0a0',
+      accent: '#5fb2ff',
+      line: '#333',
+      border: '#2a2a2a',
+      bubble: '#262626',
+    },
   ],
   mastodon: [
     { bg: '#fff', fg: '#282c37', muted: '#606984', accent: '#4a2fc0', line: '#c0cdd9', border: '#c0cdd9' },
@@ -321,7 +338,26 @@ function BlueskyTemplate(p: PreviewProps) {
 
 const THREADS = palette('threads')
 
-function ThreadsPost({ p, text, media, thread }: { p: PreviewProps; text: string; media: Media[]; thread: boolean }) {
+/**
+ * One part of a Threads post: the topic beside the name on the first ("brand > Topic"), "1/2" after the text when
+ * the post has replies, and one picture or video in its own shape (Threads doesn't crop it to the column).
+ */
+function ThreadsPost({
+  p,
+  text,
+  media,
+  thread,
+  part,
+}: {
+  p: PreviewProps
+  text: string
+  media: Media[]
+  thread: boolean
+  part: number
+}) {
+  const parts = p.comments.length + 1
+  const topic = part === 1 ? p.settings.tags?.split(',')[0]?.replace(/[.&]/g, '').trim() : undefined
+
   return (
     <div className="flex gap-3 px-4 pt-3">
       <div className="flex flex-col items-center">
@@ -331,11 +367,33 @@ function ThreadsPost({ p, text, media, thread }: { p: PreviewProps; text: string
       <div className="min-w-0 flex-1 pb-3">
         <p className="flex min-w-0 items-baseline gap-1.5 text-[15px]">
           <span className="truncate font-semibold">{bareHandle(p.channel)}</span>
+          {topic && (
+            <span className="flex min-w-0 items-baseline gap-1.5">
+              <ChevronRight aria-hidden className={cn('size-3.5 shrink-0 self-center', THREADS.muted)} />
+              <span className="truncate font-semibold">{topic}</span>
+            </span>
+          )}
           <span className={cn('shrink-0', THREADS.muted)}>now</span>
           <MoreHorizontal aria-hidden className="ml-auto size-5 shrink-0 self-center" />
         </p>
         <PostText text={text} max={p.maxChars || 500} accent={THREADS.accent} className="text-[15px] leading-snug" />
-        <MediaStripView media={media} className="mt-2" />
+        {parts > 1 && (
+          <span
+            className={cn('mt-1 inline-block rounded-md px-1.5 text-xs tabular-nums', THREADS.bubble, THREADS.muted)}
+          >
+            {part}/{parts}
+          </span>
+        )}
+        {media.length === 1 ? (
+          <span
+            className={cn('mt-2 block h-80 max-w-full overflow-hidden rounded-lg border', THREADS.border)}
+            style={{ aspectRatio: ratioOf(media[0], 0.5, 1.91, 0.8) }}
+          >
+            <MediaItem media={media[0]!} width={1280} />
+          </span>
+        ) : (
+          <MediaStripView media={media} className="mt-2" />
+        )}
         <Actions className="mt-2.5 gap-5">
           <Heart className="size-5" />
           <MessageCircle className="size-5" />
@@ -353,10 +411,18 @@ function ThreadsTemplate(p: PreviewProps) {
       label={`Threads post by ${p.channel.name}`}
       className={cn('rounded-2xl border', THREADS.frame, THREADS.border)}
     >
-      <ThreadsPost p={p} text={p.text} media={p.media} thread={p.comments.length > 0} />
+      <ThreadsPost p={p} text={p.text} media={p.media} thread={p.comments.length > 0} part={1} />
       <SelfThread
         comments={p.comments}
-        render={(c, last) => <ThreadsPost p={p} text={c.text} media={c.media} thread={!last} />}
+        render={(c, last) => (
+          <ThreadsPost
+            p={p}
+            text={c.text}
+            media={c.media}
+            thread={!last}
+            part={p.comments.findIndex((x) => x.key === c.key) + 2}
+          />
+        )}
       />
     </Frame>
   )
