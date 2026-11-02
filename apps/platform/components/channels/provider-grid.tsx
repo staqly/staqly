@@ -33,6 +33,22 @@ function useInsecurePage() {
  * The "Add channel" grid: every platform the catalog lists, in its order, as a tile with the brand mark.
  * Platforms not wired up yet are still shown (greyed, "Soon"), so people see where staqly is going.
  */
+/** A tile's name with its variant in parentheses smaller ("Instagram" over "(Facebook Business)"). */
+function TileName({ name }: { name: string }) {
+  const at = name.indexOf(' (')
+
+  if (at < 0) {
+    return name
+  }
+
+  return (
+    <>
+      {name.slice(0, at)}
+      <span className="block text-[11px] text-muted-foreground">{name.slice(at + 1)}</span>
+    </>
+  )
+}
+
 /** Platform groups in the Add channel grid, in this order; a platform not listed lands in Other. */
 const GROUPS: { title: string; ids: string[] }[] = [
   { title: 'Your own', ids: ['custom'] },
@@ -174,7 +190,7 @@ export function ProviderGrid({
                     )}
                     <ProviderTile id={p.id} name={p.name} className="size-11" />
                     <span className="line-clamp-3 w-full leading-tight" title={p.name}>
-                      {p.name}
+                      <TileName name={p.name} />
                     </span>{' '}
                     {/* The badge sits in the card's corner, clear of the mark (pt-5 leaves it room); after the name
                         in reading order. */}

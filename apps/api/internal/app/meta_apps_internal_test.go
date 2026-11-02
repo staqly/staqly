@@ -58,6 +58,12 @@ func TestInstagramTiles(t *testing.T) {
 	if got := tiles(); got["instagram"] != "Instagram (Standalone)" || got["instagram_business"] != "Instagram (Facebook Business)" {
 		t.Fatalf("instagram login: %v", got)
 	}
+	list, _ := s.ListProviders(context.Background(), p)
+	for _, i := range list {
+		if strings.HasPrefix(i.ID, "instagram") && i.Status != "available" {
+			t.Errorf("%s is %s (app configured %v)", i.ID, i.Status, i.AppConfigured)
+		}
+	}
 	if app, ok := s.serverApp("instagram_business"); !ok || app.ClientID != "meta" || app.InstagramLogin {
 		t.Fatalf("business uses the Meta app: %+v", app)
 	}
