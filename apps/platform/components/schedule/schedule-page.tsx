@@ -1,7 +1,6 @@
 'use client'
 
 import {
-  Archive,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
@@ -22,7 +21,9 @@ import { PageIcon, pageSubtitle } from '@/components/common/page-header'
 import { PostSheet } from '@/components/posts/post-sheet-lazy'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useClock } from '@/hooks/use-clock'
 import { useIsCoarsePointer, useIsMobile } from '@/hooks/use-mobile'
@@ -729,27 +730,37 @@ export function SchedulePage() {
             <List />
           </ToggleGroupItem>
         </ToggleGroup>
+        {/* As on the posts list: archived posts stay out of the calendar until this is on. */}
+        <span className="flex items-center gap-1.5">
+          <Switch
+            id="schedule-show-archived"
+            checked={showArchived}
+            onCheckedChange={(on) => {
+              const p = new URLSearchParams(params)
+
+              if (on) {
+                p.set('archived', '1')
+              } else {
+                p.delete('archived')
+              }
+
+              router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
+            }}
+            data-testid="schedule-show-archived"
+          />
+          <Label htmlFor="schedule-show-archived" className="text-xs font-normal text-muted-foreground">
+            <span className="max-sm:sr-only">Show</span> archived
+          </Label>
+        </span>
+        {/* The page's main action, as on Posts: a post for the next full hour, through the same dialog as "+" on a
+            slot (pick a draft or write one). Just the icon on phones. */}
         <Button
-          variant={showArchived ? 'default' : 'outline'}
-          size="icon"
-          className="size-8 pointer-coarse:size-10"
-          aria-label="Show archived posts"
-          aria-pressed={showArchived}
-          tooltip={showArchived ? 'Hide archived posts' : 'Show archived posts'}
-          onClick={() => {
-            const p = new URLSearchParams(params)
-
-            if (showArchived) {
-              p.delete('archived')
-            } else {
-              p.set('archived', '1')
-            }
-
-            router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
-          }}
-          data-testid="schedule-show-archived"
+          size="sm"
+          className="h-8 pointer-coarse:h-10 max-sm:w-8 max-sm:px-0 max-sm:pointer-coarse:w-10"
+          onClick={() => setSlot(nextFullHour(Date.now()))}
+          data-testid="schedule-new-post"
         >
-          <Archive />
+          <Plus /> <span className="max-sm:sr-only">New post</span>
         </Button>
       </div>
     </div>
