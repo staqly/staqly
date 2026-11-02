@@ -1,5 +1,6 @@
-// The plans as sold, per user. Source of truth: apps/api/internal/app/plans.go (limits and prices); keep this
-// file in step with it. Yearly = twelve whole-euro months at 20 % off or a little more (rounded down).
+// The plans as sold, per user. The page shows these at once (the static export, search engines) and then the live
+// ones from the API (GET /v1/plans: prices from Stripe, limits as the admin panel sets them; live-plans.ts). Keep
+// this file in step with what a fresh database has (apps/api/db/migrations/00006_limits.sql, plans.go). Yearly = twelve whole-euro months at 20 % off or a little more (rounded down).
 // Every member of a workspace is a seat and pays the plan's price, whatever their role.
 
 export type Interval = 'month' | 'year'
@@ -135,7 +136,13 @@ export const FROM = Math.min(...PLANS.map((p) => perMonth(p, 'year')))
 
 export type Cell = string | boolean
 
-export type CompareRow = { label: string; hint?: string; values: [Cell, Cell, Cell, Cell] }
+export type CompareRow = {
+  label: string
+  hint?: string
+  values: [Cell, Cell, Cell, Cell]
+  /** The plan limit the row shows (GET /v1/plans `limits`): live values replace the static ones. */
+  limit?: string
+}
 
 /** The comparison table: a value per plan, in PLANS order. */
 export const COMPARE: { category: string; rows: CompareRow[] }[] = [
@@ -146,6 +153,7 @@ export const COMPARE: { category: string; rows: CompareRow[] }[] = [
         label: 'New posts per month',
         hint: 'Created posts, including drafts, duplicates and agent-created posts; UTC calendar month',
         values: ['300', '1,500', '5,000', '15,000'],
+        limit: 'posts_per_month',
       },
       { label: 'Collections and schedules', values: ['Unlimited', 'Unlimited', 'Unlimited', 'Unlimited'] },
       { label: 'Calendar, comments and per-channel text', values: [true, true, true, true] },
@@ -159,21 +167,25 @@ export const COMPARE: { category: string; rows: CompareRow[] }[] = [
         label: 'Connected channels',
         hint: 'Each connected account counts once, whatever the platform, your own automation included',
         values: ['5', '15', '40', '100'],
+        limit: 'channels',
       },
       {
         label: 'X credits per month',
         hint: 'One credit per post or reply; 14 with a clickable link. Shared across all X channels',
         values: ['50', '100', '250', '500'],
+        limit: 'x_posts_per_period',
       },
       {
         label: 'Posts to LinkedIn included per month',
         hint: 'Profiles and Pages; comments are not counted',
         values: ['100', '300', '600', '900'],
+        limit: 'linkedin_posts_per_period',
       },
       {
         label: 'LinkedIn posts with a video per month',
         hint: 'Each also counts as a LinkedIn post',
         values: ['5', '15', '30', '60'],
+        limit: 'linkedin_videos_per_period',
       },
       { label: 'Your own automation as a channel', values: [true, true, true, true] },
       { label: 'Link handling per channel', values: [true, true, true, true] },
@@ -204,6 +216,7 @@ export const COMPARE: { category: string; rows: CompareRow[] }[] = [
         label: 'Alerts',
         hint: 'Telegram, Slack, Discord, ntfy or email',
         values: ['3', '10', '25', '50'],
+        limit: 'alerts',
       },
     ],
   },
@@ -211,20 +224,26 @@ export const COMPARE: { category: string; rows: CompareRow[] }[] = [
     category: 'API and integrations',
     rows: [
       { label: 'REST API, TypeScript and Python SDKs, CLI', values: [true, true, true, true] },
-      { label: 'Signed webhooks', values: ['3', '10', '25', '50'] },
-      { label: 'API keys', hint: 'Each with its own scopes', values: ['2', '10', '25', '50'] },
+      { label: 'Signed webhooks', values: ['3', '10', '25', '50'], limit: 'webhooks' },
+      { label: 'API keys', hint: 'Each with its own scopes', values: ['2', '10', '25', '50'], limit: 'api_keys' },
     ],
   },
   {
     category: 'Storage and data',
     rows: [
-      { label: 'Media storage', values: ['2 GB', '10 GB', '30 GB', '100 GB'] },
-      { label: 'File size', hint: 'Per upload', values: ['25 MB', '100 MB', '100 MB', '100 MB'] },
+      { label: 'Media storage', values: ['2 GB', '10 GB', '30 GB', '100 GB'], limit: 'storage_bytes' },
+      {
+        label: 'File size',
+        hint: 'Per upload',
+        values: ['25 MB', '100 MB', '100 MB', '100 MB'],
+        limit: 'max_upload_bytes',
+      },
       { label: 'Full history of every post', values: [true, true, true, true] },
       {
         label: 'Backups and data export with files',
         hint: 'Every plan can export its data without the files',
         values: [false, true, true, true],
+        limit: 'data_export',
       },
     ],
   },

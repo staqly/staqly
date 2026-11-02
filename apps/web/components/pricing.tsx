@@ -4,7 +4,8 @@ import { ArrowRight, Check } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 
-import { PLANS, TRIAL_DAYS, ctaLabel, perMonth, eur, type Interval, VAT_NOTE } from '@/lib/plans'
+import { useLivePlans } from '@/lib/live-plans'
+import { TRIAL_DAYS, ctaLabel, perMonth, eur, type Interval, VAT_NOTE } from '@/lib/plans'
 import { DOCS, SELF_HOST, arrowLink, btnPrimary, btnSecondary, signupFor } from '@/lib/site'
 
 /** Monthly / Yearly switch above the plan cards. */
@@ -45,6 +46,7 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
 
 export function PricingCards() {
   const [interval, setPeriod] = useState<Interval>('year')
+  const { plans } = useLivePlans()
 
   return (
     <>
@@ -52,7 +54,7 @@ export function PricingCards() {
         <IntervalToggle value={interval} onChange={setPeriod} />
       </div>
       <div className="mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {PLANS.map((p) => (
+        {plans.map((p) => (
           <div
             key={p.id}
             data-plan={p.id}

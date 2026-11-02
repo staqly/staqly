@@ -242,6 +242,17 @@ func TestCloudSignupCreatesIsolatedWorkspacesAndIsRateLimited(t *testing.T) {
 	if len(plans.Data) != 4 || plans.Data[0].ID != "starter" || plans.Data[3].ID != "business" { // the hidden test plan is not listed
 		t.Fatalf("plans: %+v", plans.Data)
 	}
+	// Public, and readable by the landing page (another origin, no credentials).
+	req, _ := http.NewRequest("GET", e.srv.URL+"/v1/plans", nil)
+	req.Header.Set("Origin", "https://staqly.ai")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.Header.Get("Access-Control-Allow-Origin") != "*" || !strings.Contains(plans.Data[1].Features[0], "connected channels") {
+		t.Fatalf("plans for the landing page: %v %v", resp.Header, plans.Data[1].Features)
+	}
 }
 
 func TestConcurrentFirstSetup(t *testing.T) {

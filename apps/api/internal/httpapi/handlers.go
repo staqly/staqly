@@ -61,7 +61,12 @@ func (s *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
+// listPlans is public: the landing page's pricing (another origin, no credentials) reads it too.
 func (s *Server) listPlans(w http.ResponseWriter, r *http.Request) {
+	if w.Header().Get("Access-Control-Allow-Origin") == "" {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
+	w.Header().Set("Cache-Control", "public, max-age=300")
 	plans, err := s.svc.LivePlans(r.Context())
 	respond(w, r, 200, map[string]any{"data": plans}, err)
 }
