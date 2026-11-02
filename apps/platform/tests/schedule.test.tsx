@@ -238,12 +238,17 @@ describe('schedule page', () => {
 
     expect(within(slot).getByText('Spring sale post')).toBeInTheDocument()
     expect(screen.queryByTestId(`schedule-slot-${dayKey(at(1, 9))}-9`)).not.toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Day' })).toHaveAttribute('aria-checked', 'true')
+    // The view menu is named by the view.
+    expect(screen.getByTestId('schedule-view-menu')).toHaveTextContent('Day')
     // The now line is decorative; the time is text in the header.
     expect(screen.getByTestId('now-line')).toHaveAttribute('aria-hidden', 'true')
     expect(screen.getByText(/^now/)).toBeInTheDocument()
 
-    await userEvent.setup().click(screen.getByRole('radio', { name: 'List' }))
+    const user = userEvent.setup()
+
+    await user.click(screen.getByTestId('schedule-view-menu'))
+    expect(screen.getByRole('menuitemradio', { name: 'Day' })).toHaveAttribute('aria-checked', 'true')
+    await user.click(screen.getByRole('menuitemradio', { name: 'List' }))
     expect(nav.replace).toHaveBeenLastCalledWith(expect.stringMatching(/list=1/), expect.anything())
     nav.set('/schedule', 'view=day&list=1')
     renderWithProviders(<SchedulePage />, { mode: 'local' })
@@ -287,7 +292,10 @@ describe('schedule page', () => {
     nav.set('/schedule', `view=month&at=${dayKey(first)}`)
     mockApi({ 'GET /v1/posts': { data: [] }, 'GET /v1/collections': { data: [] }, 'GET /v1/events': { data: [] } })
     renderWithProviders(<SchedulePage />, { mode: 'local' })
-    await userEvent.setup().click(await screen.findByRole('radio', { name: 'Week' }))
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByTestId('schedule-view-menu'))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Week' }))
     expect(nav.replace).toHaveBeenLastCalledWith(expect.stringContaining(`at=${dayKey(new Date())}`), expect.anything())
   })
 

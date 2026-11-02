@@ -16,12 +16,18 @@ async function drag(page: Page, from: ReturnType<Page['locator']>, to: ReturnTyp
 
 const entry = (page: Page, id: string) => page.locator(`[data-testid="schedule-entry"][data-post-id="${id}"]`)
 
+/** Picks a view, a layout or archived posts in the schedule's view menu. */
+async function pickView(page: Page, name: string) {
+  await page.getByTestId('schedule-view-menu').click()
+  await page.getByRole('menuitemradio', { name, exact: true }).click()
+}
+
 /** Walks the week view forward until the day is on screen (a post two days ahead may be next week). */
 async function showWeekOf(page: Page, day: Date) {
   const key = dayKey(day)
 
   // A view change is asynchronous; do not mistake the outgoing month's grid for the week.
-  await expect(page.getByRole('radio', { name: 'Week', exact: true })).toBeChecked()
+  await expect(page.getByTestId('schedule-view-menu')).toContainText('Week')
   await expect(page.getByTestId('schedule-grid')).toBeVisible()
   await expect(page.locator('[data-testid^="schedule-slot-"]').first()).toBeVisible()
 
@@ -86,13 +92,13 @@ test.describe('the schedule', () => {
     await expect(page.getByTestId('now-line')).toBeAttached()
 
     // Day view: one column, the range names the day.
-    await page.getByRole('radio', { name: 'Day' }).click()
+    await pickView(page, 'Day')
     await expect(page).toHaveURL(/view=day/)
     await expect(page.getByTestId('schedule-range')).toContainText(new Date().getFullYear().toString())
     await page.getByRole('button', { name: 'Next day' }).click()
     await expect(entry(page, srv.seed.posts.scheduledTomorrow!)).toBeVisible()
     // Month view: the posts are in their day cells.
-    await page.getByRole('radio', { name: 'Month' }).click()
+    await pickView(page, 'Month')
     await expect(page).toHaveURL(/view=month/)
     await expect(page.getByTestId(`schedule-day-${dayKey(new Date())}`)).toBeVisible()
 
@@ -107,13 +113,13 @@ test.describe('the schedule', () => {
         .first(),
     ).toBeVisible()
     // List layout: the same posts as rows.
-    await page.getByRole('radio', { name: 'Week' }).click()
+    await pickView(page, 'Week')
     // Navigate while the calendar slots still exist; tomorrow may be in the next week.
     await showWeekOf(page, tomorrow)
-    await page.getByRole('radio', { name: 'List' }).click()
+    await pickView(page, 'List')
     await expect(page).toHaveURL(/list=1/)
     await expect(page.getByTestId('schedule-list')).toContainText('Beach day')
-    await page.getByRole('radio', { name: 'Calendar' }).click()
+    await pickView(page, 'Calendar')
     await expect(page.getByTestId('schedule-grid')).toBeVisible()
   })
 
