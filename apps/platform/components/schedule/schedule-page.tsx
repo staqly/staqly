@@ -690,7 +690,13 @@ export function SchedulePage() {
             <Button variant="outline" size="sm" className="h-8 pointer-coarse:h-10" data-testid="schedule-view-menu">
               {layout === 'list' ? <List /> : <CalendarDays />}
               {VIEW_LABELS[view]}
-              {showArchived && <span className={TONES.warning.text}>· archived</span>}
+              {/* Archived posts on: an amber archive mark, read out as words. */}
+              {showArchived && (
+                <span title="Archived posts are shown" className="inline-flex">
+                  <Archive aria-hidden className={TONES.warning.text} />
+                  <span className="sr-only">with archived posts</span>
+                </span>
+              )}
               <ChevronDown className="text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
@@ -740,11 +746,10 @@ export function SchedulePage() {
 
                 router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
               }}
-              // An amber icon; while archived posts show, a light amber row (the text keeps its colour, hover the menu's).
-              className={cn(TONES.warning.icon, showArchived && TONES.warning.callout)}
               data-testid="schedule-show-archived"
             >
-              <Archive /> Show archived
+              {/* Like its siblings, but an amber icon: it changes which posts show, not how. */}
+              <Archive className={TONES.warning.text} /> Show archived
             </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
