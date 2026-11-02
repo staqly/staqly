@@ -76,6 +76,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/meta/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Meta's webhook subscription check (Instagram, Facebook Pages, Threads)
+         * @description Meta for Developers calls this when you save the callback URL (`<dashboard>/api/v1/meta/webhook`).
+         *     It answers the challenge when `hub.verify_token` is the server's `META_WEBHOOK_VERIFY_TOKEN`; without
+         *     that setting the endpoint is off (404).
+         */
+        get: operations["verifyMetaWebhook"];
+        put?: never;
+        /**
+         * An event from Meta (a comment under a post); reads that post's comments now
+         * @description Signed by Meta with the app's secret (`X-Hub-Signature-256`: the Meta app's, the Instagram app's or the
+         *     Threads app's). Every published post the event names gets its comments read within seconds, as the
+         *     30-minute sweep would. The body is only a hint: the read asks the platform.
+         */
+        post: operations["receiveMetaWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/plans": {
         parameters: {
             query?: never;
@@ -6389,6 +6417,66 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    verifyMetaWebhook: {
+        parameters: {
+            query?: {
+                "hub.mode"?: string;
+                "hub.verify_token"?: string;
+                "hub.challenge"?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The challenge, as sent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    receiveMetaWebhook: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Hub-Signature-256": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Reads queued */
+                        queued: number;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
         };
     };
     listPlans: {

@@ -60,6 +60,8 @@ NOT_IN_SDK = {
     ("GET", "/v1/media-links/{}/{}/{}"),  # platforms download from these links, clients never call them
     ("POST", "/v1/notifications/unsubscribe"),
     ("POST", "/v1/billing/webhook"),
+    ("GET", "/v1/meta/webhook"),  # Meta calls these, clients never do
+    ("POST", "/v1/meta/webhook"),
     ("GET", "/v1/channels/oauth/{}/callback"),
     ("GET", "/v1/pending-connections/{}"),
     ("POST", "/v1/pending-connections/{}"),
