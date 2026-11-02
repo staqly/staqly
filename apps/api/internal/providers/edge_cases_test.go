@@ -106,3 +106,18 @@ func TestPinterestTrialAccess(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// The board setting lists the account's boards, by id with their names.
+func TestPinterestBoardOptions(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"items":[{"id":"11","name":"Buddha"},{"id":"12","name":"Opuszczone miejsca"}],"bookmark":""}`))
+	}))
+	defer srv.Close()
+	old := pinterestAPI
+	pinterestAPI = srv.URL
+	defer func() { pinterestAPI = old }()
+	opts, err := (Pinterest{}).Options(context.Background(), Credentials{"access_token": "t"}, "board")
+	if err != nil || len(opts) != 2 || opts[1].Value != "12" || opts[1].Label != "Opuszczone miejsca" {
+		t.Fatalf("%+v %v", opts, err)
+	}
+}

@@ -129,8 +129,8 @@ func soonSettings(id string, l Limits) []Field {
 	case "pinterest":
 		fields = []Field{
 			titleField(100),
-			{Key: "board", Label: "Board", Kind: "text", Required: true, Placeholder: "Marathon training",
-				Help: "The board the pin is saved to."},
+			{Key: "board", Label: "Board", Kind: "remote", Required: true, MaxItems: 1,
+				Help: "The board the pin is saved to: its name or id works too."},
 			{Key: "link", Label: "Link", Kind: "url", Required: true, Placeholder: "https://example.com/page"},
 			{Key: "alt_text", Label: "Alt text", Kind: "textarea", MaxLength: 500,
 				Help: "Describes the picture for people who use screen readers."},
