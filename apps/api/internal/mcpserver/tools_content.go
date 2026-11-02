@@ -138,7 +138,7 @@ func (t *tools) uploadMedia(ctx context.Context, _ *mcp.CallToolRequest, in uplo
 	if name == "" {
 		name = "upload"
 	}
-	return nil0(t.svc.UploadMedia(ctx, t.principal(ctx), name, bytes.NewReader(raw)))
+	return nil0(t.svc.UploadMedia(ctx, t.principal(ctx), name, bytes.NewReader(raw), false))
 }
 
 type generateMediaIn struct {

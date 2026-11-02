@@ -43,7 +43,7 @@ func (s *Service) ReplaceMedia(ctx context.Context, p Principal, id, filename st
 	if filename == "" {
 		filename = old.OriginalName
 	}
-	edited, err := s.UploadMedia(ctx, p, filename, r)
+	edited, err := s.UploadMedia(ctx, p, filename, r, false)
 	if err != nil {
 		return Media{}, err
 	}

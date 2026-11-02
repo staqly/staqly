@@ -186,7 +186,7 @@ func (s *Service) UseStockPhoto(ctx context.Context, p Principal, id string) (Me
 	if res.StatusCode != 200 {
 		return Media{}, &Error{Code: "bad_gateway", Status: 502, Message: fmt.Sprintf("Pixabay answered %d for the photo", res.StatusCode)}
 	}
-	return s.UploadMedia(ctx, p, "pixabay-"+id+".jpg", io.LimitReader(res.Body, maxStockBytes))
+	return s.UploadMedia(ctx, p, "pixabay-"+id+".jpg", io.LimitReader(res.Body, maxStockBytes), false)
 }
 
 // pixabayHost: a photo is fetched from Pixabay only (or the test server standing in for it).

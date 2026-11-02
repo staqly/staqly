@@ -104,6 +104,9 @@ over empty space to select several files with a box (Shift or Cmd/Ctrl adds to t
 each"), each tile with its folder and how many posts use it. **Keep one** keeps the oldest copy:
 posts that use another copy use the kept one instead, and the other copies move to **Deleted**.
 
+A file added with **Upload** in a post that is identical to one already in the library (not in **Deleted**) is not
+stored again: the post uses the existing file. The API does the same with `POST /v1/media?reuse=true`.
+
 ## AI videos
 
 When the server offers AI videos ([where AI runs](/dashboard/design-editor#where-ai-runs)), **AI video** in the

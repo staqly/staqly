@@ -12405,7 +12405,10 @@ export interface operations {
     };
     uploadMedia: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description When true and an identical file (same SHA-256) is already in the library, not in Deleted, that file is returned and nothing new is stored. */
+                reuse?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;

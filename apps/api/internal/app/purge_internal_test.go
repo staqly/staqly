@@ -21,7 +21,7 @@ func TestPurgePostCountsOnlyTheCommittedRun(t *testing.T) {
 	if err := png.Encode(&img, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
 		t.Fatal(err)
 	}
-	m, err := s.UploadMedia(ctx, p, "one.png", &img)
+	m, err := s.UploadMedia(ctx, p, "one.png", &img, false)
 	if err != nil {
 		t.Fatal(err)
 	}
