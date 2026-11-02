@@ -36,7 +36,7 @@ interface ToneClasses {
   fill: string
   /** Border of a tinted card (e.g. a danger-zone settings card). */
   border: string
-  /** A checked menu row: tinted, coloured text and icons, the same on hover / focus (menu items recolour on focus). */
+  /** A coloured menu row: text and icons in the tone, kept on hover / focus (menu items recolour on focus), a tinted hover. */
   picked: string
 }
 
@@ -54,7 +54,7 @@ export const TONES: Record<Tone, ToneClasses> = {
     fill: 'bg-slate-400',
     border: 'border-slate-500/40',
     picked:
-      'bg-slate-500/10 text-slate-500 dark:text-slate-400 focus:bg-slate-500/15 focus:**:text-slate-500! dark:focus:**:text-slate-400! [&_svg]:text-slate-500',
+      'text-slate-500 dark:text-slate-400 focus:bg-slate-500/15 focus:**:text-slate-500! dark:focus:**:text-slate-400! [&_svg]:text-slate-500',
   },
   info: {
     badge: 'bg-blue-500/10 text-blue-700 ring-blue-600/20 dark:bg-blue-400/10 dark:text-blue-300 dark:ring-blue-400/25',
@@ -68,7 +68,7 @@ export const TONES: Record<Tone, ToneClasses> = {
     fill: 'bg-blue-500',
     border: 'border-blue-500/40',
     picked:
-      'bg-blue-500/10 text-blue-600 dark:text-blue-400 focus:bg-blue-500/15 focus:**:text-blue-600! dark:focus:**:text-blue-400! [&_svg]:text-blue-500',
+      'text-blue-600 dark:text-blue-400 focus:bg-blue-500/15 focus:**:text-blue-600! dark:focus:**:text-blue-400! [&_svg]:text-blue-500',
   },
   warning: {
     badge:
@@ -83,7 +83,7 @@ export const TONES: Record<Tone, ToneClasses> = {
     fill: 'bg-amber-500',
     border: 'border-amber-500/40',
     picked:
-      'bg-amber-500/10 text-amber-700 dark:text-amber-400 focus:bg-amber-500/15 focus:**:text-amber-700! dark:focus:**:text-amber-400! [&_svg]:text-amber-500',
+      'text-amber-700 dark:text-amber-400 focus:bg-amber-500/15 focus:**:text-amber-700! dark:focus:**:text-amber-400! [&_svg]:text-amber-500',
   },
   success: {
     badge:
@@ -98,7 +98,7 @@ export const TONES: Record<Tone, ToneClasses> = {
     fill: 'bg-emerald-500',
     border: 'border-emerald-500/40',
     picked:
-      'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 focus:bg-emerald-500/15 focus:**:text-emerald-700! dark:focus:**:text-emerald-400! [&_svg]:text-emerald-500',
+      'text-emerald-700 dark:text-emerald-400 focus:bg-emerald-500/15 focus:**:text-emerald-700! dark:focus:**:text-emerald-400! [&_svg]:text-emerald-500',
   },
   attention: {
     badge:
@@ -113,7 +113,7 @@ export const TONES: Record<Tone, ToneClasses> = {
     fill: 'bg-orange-500',
     border: 'border-orange-500/40',
     picked:
-      'bg-orange-500/10 text-orange-700 dark:text-orange-400 focus:bg-orange-500/15 focus:**:text-orange-700! dark:focus:**:text-orange-400! [&_svg]:text-orange-500',
+      'text-orange-700 dark:text-orange-400 focus:bg-orange-500/15 focus:**:text-orange-700! dark:focus:**:text-orange-400! [&_svg]:text-orange-500',
   },
   danger: {
     badge: 'bg-red-500/10 text-red-700 ring-red-600/20 dark:bg-red-400/10 dark:text-red-300 dark:ring-red-400/25',
@@ -127,7 +127,7 @@ export const TONES: Record<Tone, ToneClasses> = {
     fill: 'bg-red-500',
     border: 'border-red-500/40',
     picked:
-      'bg-red-500/10 text-red-600 dark:text-red-400 focus:bg-red-500/15 focus:**:text-red-600! dark:focus:**:text-red-400! [&_svg]:text-red-500',
+      'text-red-600 dark:text-red-400 focus:bg-red-500/15 focus:**:text-red-600! dark:focus:**:text-red-400! [&_svg]:text-red-500',
   },
   accent: {
     badge:
@@ -142,6 +142,6 @@ export const TONES: Record<Tone, ToneClasses> = {
     fill: 'bg-violet-500',
     border: 'border-violet-500/40',
     picked:
-      'bg-violet-500/10 text-violet-600 dark:text-violet-400 focus:bg-violet-500/15 focus:**:text-violet-600! dark:focus:**:text-violet-400! [&_svg]:text-violet-500',
+      'text-violet-600 dark:text-violet-400 focus:bg-violet-500/15 focus:**:text-violet-600! dark:focus:**:text-violet-400! [&_svg]:text-violet-500',
   },
 }
