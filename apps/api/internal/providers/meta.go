@@ -27,8 +27,10 @@ type metaGraph struct {
 
 var (
 	igGraph = metaGraph{name: "Instagram", host: &facebookGraph, version: instagramVersion}
-	fbGraph = metaGraph{name: "Facebook", host: &facebookGraph, version: instagramVersion, special: facebookSpecial}
-	thGraph = metaGraph{name: "Threads", host: &threadsGraph, version: "v1.0", special: threadsSpecial}
+	// igLoginGraph: an account connected with Instagram login (the Instagram app's own keys) is on graph.instagram.com.
+	igLoginGraph = metaGraph{name: "Instagram", host: &instagramGraph, version: instagramVersion}
+	fbGraph      = metaGraph{name: "Facebook", host: &facebookGraph, version: instagramVersion, special: facebookSpecial}
+	thGraph      = metaGraph{name: "Threads", host: &threadsGraph, version: "v1.0", special: threadsSpecial}
 )
 
 func (g metaGraph) url(path string) string { return *g.host + "/" + g.version + path }

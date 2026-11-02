@@ -110,7 +110,7 @@ func (Instagram) Metrics(ctx context.Context, c Credentials, externalID string) 
 		Comments *int64 `json:"comments_count"`
 		Product  string `json:"media_product_type"`
 	}
-	if err := igGraph.get(ctx, token, "/"+url.PathEscape(externalID), url.Values{"fields": {"like_count,comments_count,media_product_type"}}, &media); err != nil {
+	if err := igFor(c).get(ctx, token, "/"+url.PathEscape(externalID), url.Values{"fields": {"like_count,comments_count,media_product_type"}}, &media); err != nil {
 		return Metrics{}, err
 	}
 	m := Metrics{Likes: media.Likes, Replies: media.Comments}
@@ -118,7 +118,7 @@ func (Instagram) Metrics(ctx context.Context, c Credentials, externalID string) 
 	if media.Product == "STORY" {
 		metrics = "views,shares"
 	}
-	in, err := metaInsights(ctx, igGraph, token, externalID, metrics)
+	in, err := metaInsights(ctx, igFor(c), token, externalID, metrics)
 	var f *Failure
 	if errors.As(err, &f) && f.Kind == ErrRejected {
 		// A channel connected without instagram_manage_insights, or a story gone after a day: likes and comments only.

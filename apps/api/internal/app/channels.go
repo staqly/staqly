@@ -189,7 +189,7 @@ func providerEnv(providerID string) string {
 }
 
 // serverApp is the OAuth client the operator configured for a provider (PROVIDER_<ID>_CLIENT_ID/SECRET; Facebook
-// and Instagram share the Meta app's PROVIDER_META_CLIENT_ID/SECRET). A platform that posts with the server's own
+// and Instagram share the Meta app's PROVIDER_META_CLIENT_ID/SECRET unless they have their own). A platform that posts with the server's own
 // bot (Needs.BotToken) also needs PROVIDER_<ID>_BOT_TOKEN.
 func (s *Service) serverApp(providerID string) (providers.App, bool) {
 	if ownClient(providerID) {
@@ -204,11 +204,17 @@ func (s *Service) serverApp(providerID string) (providers.App, bool) {
 			ClientSecret: hex.EncodeToString(mac.Sum(nil))}, https && len(s.Cfg.SecretKey) > 0
 	}
 	key := providerEnv(providerID) + "CLIENT_"
-	if metaApp(providerID) {
+	// Facebook and Instagram use the Meta app's keys unless the platform has its own (both of them): Facebook its
+	// own Meta app, Instagram its Instagram app, which signs in with Instagram login instead of Unified login.
+	own := s.Env(key+"ID", "") != "" && s.Env(key+"SECRET", "") != ""
+	if metaApp(providerID) && !own {
 		key = "PROVIDER_META_CLIENT_"
 	}
 	app := providers.App{ClientID: s.Env(key+"ID", ""), ClientSecret: s.Env(key+"SECRET", ""),
-		ConfigID: s.Env(providerEnv(providerID)+"CONFIG_ID", "")}
+		ConfigID: s.Env(providerEnv(providerID)+"CONFIG_ID", ""), InstagramLogin: providerID == "instagram" && own}
+	if app.InstagramLogin {
+		app.ConfigID = ""
+	}
 	if needsBotToken(providerID) && s.Env(providerEnv(providerID)+"BOT_TOKEN", "") == "" {
 		return app, false
 	}

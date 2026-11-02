@@ -228,6 +228,9 @@ type App struct {
 	// ConfigID is the app's Facebook Login for Business configuration (Instagram: it says the permissions and the
 	// kind of token); "" for the other platforms.
 	ConfigID string `json:"config_id,omitempty"`
+	// InstagramLogin: Instagram signs in with the Instagram app's own keys (instagram.com) instead of the Meta app's
+	// Unified login; the server sets it (PROVIDER_INSTAGRAM_CLIENT_ID and _SECRET).
+	InstagramLogin bool `json:"-"`
 }
 
 // Profile is what the platform knows the account as.
