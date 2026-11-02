@@ -1454,14 +1454,19 @@ export function ComposerForm({
       return { ...o, [channelId]: { ...cur, content: text === contentRef.current ? null : text } }
     })
   })
-  const [onSetting] = useState(
-    () => (channelId: string, key: string, value: string) =>
-      setOverrides((o) => {
-        const cur: Override = o[channelId] ?? { content: null, settings: {} }
+  const [onSetting] = useState(() => (channelId: string, key: string, value: string) => {
+    setOverrides((o) => {
+      const cur: Override = o[channelId] ?? { content: null, settings: {} }
 
-        return { ...o, [channelId]: { ...cur, settings: { ...cur.settings, [key]: value } } }
-      }),
-  )
+      return { ...o, [channelId]: { ...cur, settings: { ...cur.settings, [key]: value } } }
+    })
+    // A changed field is no longer what was refused: its error goes (the next save checks it again).
+    setErrors((e) => {
+      const { [`targets.${channelId}.settings.${key}`]: _, ...rest } = e
+
+      return rest
+    })
+  })
   const [openSettings, setOpenSettings] = useState<Record<string, boolean>>({})
   const [onSettingsOpen] = useState(
     () => (channelId: string, open: boolean) => setOpenSettings((s) => ({ ...s, [channelId]: open })),
@@ -1635,8 +1640,29 @@ export function ComposerForm({
   const { mutate: saveAs, isPending: busy } = save
   // Publishing (now or at its time) first lists what each channel leaves out, when one does.
   const [review, setReview] = useState<'now' | 'schedule' | null>(null)
+  // Required settings left empty, checked first so every one turns red at once (the server names one at a time).
+  const missingSettings = () => {
+    const out: Record<string, string> = {}
+
+    for (const ch of picked) {
+      const values = overrides[ch.id]?.settings ?? NO_SETTINGS
+
+      for (const f of visibleFields(providerOf(ch)?.settings_fields ?? [], values)) {
+        if (f.required && !(values[f.key] ?? f.default ?? '').trim()) {
+          out[`targets.${ch.id}.settings.${f.key}`] = `${f.label} is required`
+        }
+      }
+    }
+
+    return out
+  }
   const publish = (mode: 'draft' | 'schedule' | 'now') => {
-    if (mode !== 'draft' && leftOut.length > 0) {
+    const missing = missingSettings()
+
+    if (Object.keys(missing).length > 0) {
+      setErrors(missing)
+      setSection('settings')
+    } else if (mode !== 'draft' && leftOut.length > 0) {
       setReview(mode)
     } else {
       saveAs(mode)
