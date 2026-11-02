@@ -12,8 +12,27 @@ function Tooltip({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Root
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
-function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+// Focus handed back by a closing dialog or menu (or the window regaining focus) comes from inside another one
+// or from nowhere: it doesn't open the tooltip, only focus the person moved there (Tab) does.
+const RESTORED_FROM = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
+
+function TooltipTrigger({ onFocus, ...props }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      onFocus={(e) => {
+        onFocus?.(e)
+
+        const from = e.relatedTarget
+        const box = from instanceof Element ? from.closest(RESTORED_FROM) : null
+
+        if (!(from instanceof Element) || (box && !box.contains(e.currentTarget))) {
+          e.preventDefault() // Radix skips its own open on a prevented focus
+        }
+      }}
+      {...props}
+    />
+  )
 }
 
 function TooltipContent({

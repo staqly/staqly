@@ -418,7 +418,7 @@ describe('composer', () => {
     await user.click(now)
     expect(api.find('PATCH', '/v1/posts/pst_9')).toHaveLength(0)
     expect(api.find('POST', '/v1/posts/pst_9/schedule')).toHaveLength(0)
-    now.blur()
+    screen.getByRole('button', { name: 'Clear schedule' }).focus() // moved there from another control
     now.focus()
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'The date is in the past: pick a future time or clear the date to publish now',
