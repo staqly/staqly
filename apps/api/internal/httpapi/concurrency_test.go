@@ -106,7 +106,7 @@ func TestConcurrentItemWritesNeverBusy(t *testing.T) {
 					}
 					post(strings.NewReader(`{"title":"Post","collection":"`+col.ID+`","content":"`+content+`","media":["`+m.ID+`"]}`), "application/json")
 				default: // service directly, with a separately uploaded file
-					m, err := svc.UploadMedia(ctx, p, "b.png", strings.NewReader(string(pngBytes)))
+					m, err := svc.UploadMedia(ctx, p, "b.png", strings.NewReader(string(pngBytes)), false)
 					if err != nil {
 						fail("upload: %v", err)
 						continue

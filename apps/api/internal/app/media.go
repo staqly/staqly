@@ -185,8 +185,9 @@ func cleanOriginalName(name string) string {
 	return name
 }
 
-// UploadMedia validates size and type, then keeps the file in the store (disk or S3).
-func (s *Service) UploadMedia(ctx context.Context, p Principal, filename string, r io.Reader) (Media, error) {
+// UploadMedia validates size and type, then keeps the file in the store (disk or S3). With reuse, a file
+// identical to one already in the library (not in Deleted) is not stored again: the existing one is returned.
+func (s *Service) UploadMedia(ctx context.Context, p Principal, filename string, r io.Reader, reuse bool) (Media, error) {
 	if err := p.require(ScopeMediaWrite); err != nil {
 		return Media{}, err
 	}
@@ -233,6 +234,15 @@ func (s *Service) UploadMedia(ctx context.Context, p Principal, filename string,
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
+	sum := hex.EncodeToString(h.Sum(nil))
+	if reuse && err == nil && n <= maxBytes {
+		// Before the storage limit: the existing file takes no more room.
+		if twin, terr := s.Q.OldestTwin(ctx, db.OldestTwinParams{WorkspaceID: p.WorkspaceID, Sha256: sum, ID: id}); terr == nil {
+			if m, gerr := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: twin}); gerr == nil {
+				return s.toMedia(m), nil
+			}
+		}
+	}
 	switch {
 	case err != nil:
 	case n > maxBytes && maxBytes < s.Cfg.MaxUploadBytes:
@@ -259,7 +269,7 @@ func (s *Service) UploadMedia(ctx context.Context, p Principal, filename string,
 		return Media{}, fmt.Errorf("store media file: %w", err)
 	}
 	row := db.Medium{ID: id, WorkspaceID: p.WorkspaceID, StorageName: storage, OriginalName: cleanOriginalName(filename),
-		MimeType: mime, SizeBytes: n, Sha256: hex.EncodeToString(h.Sum(nil)), CreatedAt: s.now(), Width: width, Height: height}
+		MimeType: mime, SizeBytes: n, Sha256: sum, CreatedAt: s.now(), Width: width, Height: height}
 	if err := s.tx(ctx, func(q *db.Queries) error {
 		// The subscription may change while the file is being uploaded.
 		plan, err := s.planFor(ctx, q, p.WorkspaceID)

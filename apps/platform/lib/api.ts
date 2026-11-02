@@ -830,12 +830,13 @@ export const api = {
   tags: () => request<{ data: { name: string; count: number }[] }>('/v1/tags'),
 
   // Media
-  uploadMedia: (file: File | Blob, fileName?: string) => {
+  /** `reuse`: an identical file already in the library is returned instead of stored again. */
+  uploadMedia: (file: File | Blob, fileName?: string, opts: { reuse?: boolean } = {}) => {
     const form = new FormData()
 
     form.append('file', file, fileName ?? (file instanceof File ? file.name : 'upload'))
 
-    return request<Media>('/v1/media', { method: 'POST', form })
+    return request<Media>('/v1/media', { method: 'POST', form, query: opts.reuse ? { reuse: 'true' } : undefined })
   },
   media: (id: string) => request<Media>(`/v1/media/${encodeURIComponent(id)}/info`),
   /** Moves a file to Deleted; `permanent` deletes it for good. */

@@ -106,3 +106,31 @@ func TestMediaTrashAndDuplicates(t *testing.T) {
 	e.do(nil, "GET", "/v1/media/"+b.ID+"/info", e.key, nil, 404, nil)
 	e.do(nil, "GET", "/v1/media/"+other.ID+"/info", e.key, nil, 200, nil)
 }
+
+// ?reuse=true (the post editor's uploads): a file identical to one in the library returns that one and stores
+// nothing new; a different file, or a twin only in Deleted, is stored as usual.
+func TestUploadMediaReuse(t *testing.T) {
+	e := newEnv(t)
+	e.paid()
+	png := realPNG(t, 10, 10)
+
+	var a, same, other app.Media
+	e.upload("/v1/media", e.key, nil, "a.png", png, 201, &a)
+	e.upload("/v1/media?reuse=true", e.key, nil, "again.png", png, 201, &same)
+	e.upload("/v1/media?reuse=true", e.key, nil, "other.png", realPNG(t, 12, 12), 201, &other)
+	if same.ID != a.ID || other.ID == a.ID {
+		t.Fatalf("reuse: a=%s same=%s other=%s", a.ID, same.ID, other.ID)
+	}
+	var p app.MediaPage
+	e.do(nil, "GET", "/v1/media", e.key, nil, 200, &p)
+	if len(p.Data) != 2 {
+		t.Fatalf("library: %+v", p.Data)
+	}
+
+	e.do(nil, "DELETE", "/v1/media/"+a.ID, e.keyWith(app.ScopePostsDelete, app.ScopeMediaRead), nil, 204, nil)
+	var fresh app.Media
+	e.upload("/v1/media?reuse=true", e.key, nil, "back.png", png, 201, &fresh)
+	if fresh.ID == a.ID {
+		t.Fatal("a file in Deleted is not reused")
+	}
+}

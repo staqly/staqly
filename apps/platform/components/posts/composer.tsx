@@ -437,7 +437,7 @@ function MediaButton({
 
   useDesignedMedia(token, onAdd)
   const upload = useMutation({
-    mutationFn: (file: File) => api.uploadMedia(file),
+    mutationFn: (file: File) => api.uploadMedia(file, undefined, { reuse: true }),
     onSuccess: onAdd,
     onError: (e) => toastApiError(e),
   })

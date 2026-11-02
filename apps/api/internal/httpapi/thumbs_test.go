@@ -109,7 +109,7 @@ func TestMediaThumbnails(t *testing.T) {
 	}
 	upload := func(name string, b []byte) app.Media {
 		t.Helper()
-		m, err := svc.UploadMedia(ctx, p, name, bytes.NewReader(b))
+		m, err := svc.UploadMedia(ctx, p, name, bytes.NewReader(b), false)
 		if err != nil {
 			t.Fatal(err)
 		}

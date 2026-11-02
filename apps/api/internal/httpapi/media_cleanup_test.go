@@ -60,7 +60,7 @@ func TestCanceledUploadRemovesStoredObject(t *testing.T) {
 			defer cancel()
 			e.svc.Cfg.Blob = afterPutStore{Store: e.svc.Cfg.Blob, after: cancel, err: tc.putErr}
 			if kind == "media" {
-				_, err = e.svc.UploadMedia(ctx, p, "photo.png", bytes.NewReader(realPNG(t, 2, 2)))
+				_, err = e.svc.UploadMedia(ctx, p, "photo.png", bytes.NewReader(realPNG(t, 2, 2)), false)
 			} else {
 				_, err = e.svc.SaveMediaProject(ctx, p, id, app.MediaProjectInput{Name: "Changed"}, bytes.NewReader(designFile("changed")))
 			}
@@ -92,7 +92,7 @@ func TestDiscardUploadAfterCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := e.svc.UploadMedia(context.Background(), p, "photo.png", bytes.NewReader(realPNG(t, 2, 2)))
+	m, err := e.svc.UploadMedia(context.Background(), p, "photo.png", bytes.NewReader(realPNG(t, 2, 2)), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestUploadRechecksPlanAfterStorageWrite(t *testing.T) {
 			// The new plan allows 5 MiB, but the upload began on Pro's 100 MiB allowance.
 			if kind == "media" {
 				data := append(realPNG(t, 2, 2), make([]byte, 6<<20)...)
-				_, err = e.svc.UploadMedia(ctx, p, "photo.png", bytes.NewReader(data))
+				_, err = e.svc.UploadMedia(ctx, p, "photo.png", bytes.NewReader(data), false)
 			} else {
 				data := append(designFile("large"), bytes.Repeat([]byte(" "), 6<<20)...)
 				_, err = e.svc.SaveMediaProject(ctx, p, "", app.MediaProjectInput{Name: "Large"}, bytes.NewReader(data))

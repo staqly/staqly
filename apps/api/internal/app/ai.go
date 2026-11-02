@@ -641,7 +641,7 @@ func (s *Service) AcceptAIJob(ctx context.Context, p Principal, id string) (Medi
 		ext = ".jpg"
 	}
 	// ponytail: two accepts at the same moment make two library files; the editor sends one.
-	m, err := s.UploadMedia(ctx, p, aiFileName(row)+ext, f)
+	m, err := s.UploadMedia(ctx, p, aiFileName(row)+ext, f, false)
 	if err != nil {
 		return Media{}, err
 	}

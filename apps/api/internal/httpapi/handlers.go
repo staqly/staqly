@@ -341,7 +341,7 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if part.FormName() == "file" {
-			out, err := s.svc.UploadMedia(r.Context(), principal(r), part.FileName(), part)
+			out, err := s.svc.UploadMedia(r.Context(), principal(r), part.FileName(), part, r.URL.Query().Get("reuse") == "true")
 			respond(w, r, 201, out, err)
 			return
 		}

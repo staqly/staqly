@@ -35,7 +35,7 @@ func TestFilesLiveInWorkspaceFolders(t *testing.T) {
 	if err := png.Encode(&pic, image.NewRGBA(image.Rect(0, 0, 400, 300))); err != nil {
 		t.Fatal(err)
 	}
-	m, err := s.UploadMedia(ctx, p, "a.png", bytes.NewReader(pic.Bytes()))
+	m, err := s.UploadMedia(ctx, p, "a.png", bytes.NewReader(pic.Bytes()), false)
 	if err != nil {
 		t.Fatal(err)
 	}

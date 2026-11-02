@@ -3505,6 +3505,12 @@ paths:
       operationId: uploadMedia
       tags: [media]
       summary: Upload a file (media:write). Type is detected from content; SVG/HTML are rejected.
+      parameters:
+        - name: reuse
+          in: query
+          required: false
+          description: When true and an identical file (same SHA-256) is already in the library, not in Deleted, that file is returned and nothing new is stored.
+          schema: { type: boolean }
       requestBody:
         required: true
         content:
