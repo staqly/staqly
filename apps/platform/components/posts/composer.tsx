@@ -1564,6 +1564,8 @@ export function ComposerForm({
   // Per-channel text only makes sense with two channels or more; with one, the shared text is that channel's.
   const multi = picked.length > 1
   const active = multi && tab !== 'all' ? picked.find((c) => c.id === tab) : undefined
+  // With one channel there is no tab of its own: its objection (too many files, a video it can't take) shows here.
+  const sharedError = errors.content ?? (!multi && picked[0] ? errors[`targets.${picked[0].id}.content`] : undefined)
   const shownTab = active?.id ?? 'all'
   const ownText = active ? (overrides[active.id]?.content ?? null) : null
   const countsFor = (ch?: Channel): Count[] =>
@@ -1910,7 +1912,7 @@ export function ComposerForm({
                     channel={ch}
                     value={ch ? (overrides[ch.id]?.content ?? content) : content}
                     hidden={(ch?.id ?? 'all') !== shownTab}
-                    error={ch ? errors[`targets.${ch.id}.content`] : errors.content}
+                    error={ch ? errors[`targets.${ch.id}.content`] : sharedError}
                     locked={locked}
                     media={media}
                     picked={ch ? undefined : picked}
@@ -1922,7 +1924,7 @@ export function ComposerForm({
                   />
                 ))}
                 <LinksNotices counts={countsFor(active)} />
-                <FieldError>{active ? errors[`targets.${active.id}.content`] : errors.content}</FieldError>
+                <FieldError>{active ? errors[`targets.${active.id}.content`] : sharedError}</FieldError>
               </div>
 
               {/* Comments belong to the post as a whole: written on the shared tab, shown read only per channel. */}
