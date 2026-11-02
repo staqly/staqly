@@ -376,7 +376,7 @@ func TestAdminLimits(t *testing.T) {
 	e.want(e.do("PUT", "/v1/admin/workspaces/"+ws+"/limits/webhooks", map[string]any{"value": 9, "note": "pilot"}), 204)
 	w = e.do("GET", "/v1/admin/workspaces/"+ws+"/limits", nil)
 	e.want(w, 200)
-	if !strings.Contains(w.Body.String(), `"key":"webhooks","description":"Webhooks","value":9,"source":"workspace"`) {
+	if !strings.Contains(w.Body.String(), `"value":9,"source":"workspace","plan":25,"note":"pilot"`) {
 		t.Fatalf("workspace limits: %s", w.Body)
 	}
 	e.want(e.do("DELETE", "/v1/admin/workspaces/"+ws+"/limits/webhooks", nil), 204)
