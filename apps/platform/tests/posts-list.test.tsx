@@ -192,7 +192,7 @@ describe('posts list', () => {
     await user.click(within(rows[0]!).getByRole('button', { name: /More actions for Again later/ }))
     expect(await screen.findByRole('menuitem', { name: 'Cancel schedule' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /Open on/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: 'Statistics' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Insights' })).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
     await user.click(within(rows[1]!).getByRole('button', { name: /More actions for Out now/ }))
     expect(await screen.findByRole('menuitem', { name: /Open on/ })).toBeInTheDocument()

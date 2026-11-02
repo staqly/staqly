@@ -73,7 +73,7 @@ import { cn } from '@/lib/utils'
 import { ShareDialog, UnpublishDialog } from './post-actions'
 import { postHref, PostsQueryContext } from './post-href'
 
-// The Statistics dialog only: its own chunk, loaded when it opens.
+// The Insights dialog only: its own chunk, loaded when it opens.
 const PostStats = dynamic(() => import('./post-stats').then((m) => m.PostStats))
 
 /** Drag data of post rows: the ids being dragged, so a collection in the pane only accepts posts. */
@@ -422,7 +422,7 @@ function RowMenu({
                 </DropdownMenuItem>
               ))}
               <DropdownMenuItem onSelect={() => onAction('stats', post)}>
-                <BarChart3 /> Statistics
+                <BarChart3 /> Insights
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </>
@@ -672,7 +672,7 @@ export function usePostRowActions(query = '') {
         <Dialog open onOpenChange={close}>
           <DialogContent className="sm:max-w-xl">
             <DialogHeader>
-              <DialogTitle>Post statistics</DialogTitle>
+              <DialogTitle>Post insights</DialogTitle>
               <DialogDescription>{postTitle(open.post, 60)}</DialogDescription>
             </DialogHeader>
             <PostStats post={open.post} active />

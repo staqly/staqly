@@ -41,7 +41,7 @@ export function numbersNote(c: ChannelAnalytics): string | null {
   if (cov.with_data === 0) {
     return cov.support === 'automation'
       ? "Your automation hasn't reported numbers for these posts"
-      : "No numbers read yet: a published post's Statistics tab reads them"
+      : "No numbers read yet: a published post's Insights tab reads them"
   }
 
   return null

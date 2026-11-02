@@ -277,7 +277,7 @@ describe('analytics page', () => {
     ).toBe('No data yet in this range')
     expect(
       numbersNote(channel({ metrics_coverage: { support: 'platform', published: 3, with_data: 0, updated_at: null } })),
-    ).toMatch(/Statistics tab/)
+    ).toMatch(/Insights tab/)
     expect(numbersNote(channel())).toBeNull()
   })
 

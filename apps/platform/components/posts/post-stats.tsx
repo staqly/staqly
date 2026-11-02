@@ -33,7 +33,7 @@ import { qk } from '@/lib/queries'
 import type { SentimentFilter } from './post-responses'
 import { RetryTarget, TargetStatus } from './target-status'
 
-// Only the post's Channels tab and the Statistics dialog show them: their own chunk, loaded when they open.
+// Only the post's Insights tab and the list's Insights dialog show them: their own chunk, loaded when they open.
 const CommentsOverview = dynamic(() => import('@/components/posts/post-responses').then((m) => m.CommentsOverview))
 const ChannelComments = dynamic(() => import('@/components/posts/post-responses').then((m) => m.ChannelComments))
 
@@ -131,7 +131,7 @@ function MetricTiles({ t }: { t: TargetMetrics & { metrics: NonNullable<TargetMe
 }
 
 /**
- * The post on its channels (the sheet's Channels tab, the list's Statistics dialog): per channel how it went out
+ * The post on its channels (the sheet's Insights tab, the list's Insights dialog): per channel how it went out
  * (status, link, errors, Retry, unpublished), its numbers in one line and its audience comments, with the AI's
  * reading of all comments on top. Numbers and comments are read only once something went out, and only while
  * `active`; the numbers are cached for ten minutes.

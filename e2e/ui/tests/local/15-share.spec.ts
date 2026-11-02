@@ -138,7 +138,7 @@ test.describe('sharing a post', () => {
     ).toHaveAttribute('href', 'https://example.com/live/1')
     await page
       .getByRole('dialog')
-      .getByRole('tab', { name: /Results/ })
+      .getByRole('tab', { name: /Insights/ })
       .click()
     await expect(page.getByTestId('post-stats')).toContainText('Your automation has not sent numbers yet.')
 
