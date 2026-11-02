@@ -351,7 +351,7 @@ export function MediaStripView({ media, className }: { media: Media[]; className
       aria-label="Pictures, scroll sideways"
       role="group"
       className={cn(
-        'flex snap-x gap-1.5 overflow-x-auto pb-1 outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'flex snap-x gap-1.5 overflow-x-auto rounded-md pb-1 outline-none focus-visible:ring-2 focus-visible:ring-ring',
         className,
       )}
     >

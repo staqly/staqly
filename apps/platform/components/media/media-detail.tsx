@@ -616,7 +616,7 @@ function Details({ item, onOpenMedia }: { item: MediaLibraryItem; onOpenMedia?: 
           key="twin"
           type="button"
           onClick={() => onOpenMedia(twin)}
-          className="truncate font-mono text-xs underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="truncate rounded-sm font-mono text-xs underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           {shortId(twin)}
         </button>
