@@ -4,9 +4,12 @@ import { ProviderIcon } from '@staqly/brand/providers'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bookmark,
+  ChevronsLeft,
+  ChevronsRight,
   Clock,
   Eye,
   Heart,
+  LogOut,
   type LucideIcon,
   MessageCircle,
   MousePointerClick,
@@ -16,6 +19,7 @@ import {
   Share2,
   Timer,
   UserPlus,
+  Users,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { Suspense, useState } from 'react'
@@ -49,6 +53,10 @@ const METRIC_LABELS: [Exclude<keyof NonNullable<TargetMetrics['metrics']>, 'reac
   ['watch_minutes', 'Watch time', Clock],
   ['avg_view_seconds', 'Average view', Timer],
   ['subscribers_gained', 'Subscribers gained', UserPlus],
+  ['reach', 'Reach', Users],
+  ['taps_forward', 'Taps forward', ChevronsRight],
+  ['taps_back', 'Taps back', ChevronsLeft],
+  ['exits', 'Exits', LogOut],
 ]
 
 /** Durations read as time: 1,284 min watched becomes 21 h 24 min, a 72 s average view 1:12. */
