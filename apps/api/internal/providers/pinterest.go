@@ -155,8 +155,9 @@ type pinterestBoard struct {
 }
 
 // board finds the account's board named (or with the id) v.
-func (Pinterest) board(ctx context.Context, token, v string) (string, error) {
-	var names []string
+// boards lists the account's boards (up to 20 pages of 250).
+func (Pinterest) boards(ctx context.Context, token string) ([]pinterestBoard, error) {
+	var all []pinterestBoard
 	bookmark := ""
 	for page := 0; page < 20; page++ {
 		path := "/v5/boards?page_size=250"
@@ -168,17 +169,45 @@ func (Pinterest) board(ctx context.Context, token, v string) (string, error) {
 			Bookmark string           `json:"bookmark"`
 		}
 		if err := pinterestGet(ctx, token, path, &out); err != nil {
-			return "", err
+			return nil, err
 		}
-		for _, b := range out.Items {
-			if b.ID == v || strings.EqualFold(strings.TrimSpace(b.Name), v) {
-				return b.ID, nil
-			}
-			names = append(names, b.Name)
-		}
+		all = append(all, out.Items...)
 		if bookmark = out.Bookmark; bookmark == "" {
 			break
 		}
+	}
+	return all, nil
+}
+
+// Pinterest lists the account's boards for the board setting.
+var _ OptionLister = Pinterest{}
+
+func (p Pinterest) Options(ctx context.Context, c Credentials, key string) ([]Option, error) {
+	if key != "board" {
+		return nil, nil
+	}
+	boards, err := p.boards(ctx, c["access_token"])
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Option, 0, len(boards))
+	for _, b := range boards {
+		out = append(out, Option{Value: b.ID, Label: b.Name})
+	}
+	return out, nil
+}
+
+func (p Pinterest) board(ctx context.Context, token, v string) (string, error) {
+	boards, err := p.boards(ctx, token)
+	if err != nil {
+		return "", err
+	}
+	var names []string
+	for _, b := range boards {
+		if b.ID == v || strings.EqualFold(strings.TrimSpace(b.Name), v) {
+			return b.ID, nil
+		}
+		names = append(names, b.Name)
 	}
 	if len(names) == 0 {
 		return "", &Failure{Kind: ErrRejected, Msg: "Pinterest: this account has no boards; create one on pinterest.com first"}
