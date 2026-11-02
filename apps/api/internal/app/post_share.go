@@ -707,7 +707,8 @@ func (s *Service) PostMetrics(ctx context.Context, p Principal, postID string, r
 		reader, canRead := e.Provider.(providers.MetricsReader)
 		m.Available = (ok && canRead) || t.Provider == "custom"
 		stale := !t.MetricsAt.Valid || t.MetricsAt.String < formatTime(s.Now().Add(-metricsFresh))
-		if ok && canRead && t.Status == "published" && t.ExternalID != "" && (refresh || stale) {
+		// A target taken down keeps the numbers read last (unpublish reads them once more before removing it).
+		if ok && canRead && t.Status == "published" && t.ExternalID != "" && t.Removal != "removing" && t.Removal != "removed" && (refresh || stale) {
 			if fresh, err := s.readMetrics(ctx, p.WorkspaceID, t.ChannelID, e, reader, t.ExternalID); err != nil {
 				s.logger(ctx).Info("post metrics: not read", "post_id", postID, "channel_id", t.ChannelID, "provider", t.Provider, "err", err)
 				m.Error = readFailure(e.Name(), err)

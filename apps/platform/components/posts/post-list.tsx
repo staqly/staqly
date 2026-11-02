@@ -2,6 +2,8 @@
 
 import { type InfiniteData, type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  Archive,
+  ArchiveRestore,
   BarChart3,
   CalendarX2,
   Copy,
@@ -82,6 +84,8 @@ export type PostAction =
   | 'unschedule'
   | 'stats'
   | 'copy-link'
+  | 'archive'
+  | 'unarchive'
 
 function CheckMark() {
   return (
@@ -233,6 +237,15 @@ export const PostRow = memo(function PostRow({
             {postTitle(post)}
           </Link>
           <PostStatusBadge status={post.status} unpublishedAt={post.unpublished_at} />
+          {post.archived_at && (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground"
+              title={`Archived ${formatDateTime(post.archived_at)}`}
+              data-testid="post-archived"
+            >
+              <Archive aria-hidden className="size-3" /> Archived
+            </span>
+          )}
         </span>
         <span className="mt-0.5 flex min-w-0 items-center gap-x-1.5 text-xs text-muted-foreground">
           {at && (
@@ -414,6 +427,16 @@ function RowMenu({
         <DropdownMenuItem onSelect={() => onAction('copy-link', post)}>
           <Link2 /> Copy link
         </DropdownMenuItem>
+        {canWrite && post.archived_at && (
+          <DropdownMenuItem onSelect={() => onAction('unarchive', post)}>
+            <ArchiveRestore /> Unarchive
+          </DropdownMenuItem>
+        )}
+        {canWrite && !post.archived_at && !waiting && (
+          <DropdownMenuItem onSelect={() => onAction('archive', post)}>
+            <Archive /> Archive
+          </DropdownMenuItem>
+        )}
         {canWrite && !wentOut(post) && (
           <>
             <DropdownMenuSeparator className="@3xl:hidden" />
@@ -527,6 +550,26 @@ function syncMovedPost(qc: QueryClient, post: Post) {
 }
 
 /**
+ * Write an archived (or unarchived) post into the cache: lists without archived posts lose an archived one; one
+ * brought back is in none of them yet, so they load again from the start.
+ */
+function syncArchivedPost(qc: QueryClient, post: Post) {
+  syncPostInCache(qc, post)
+
+  if (!post.archived_at) {
+    refetchPostListsFromStart(qc)
+
+    return
+  }
+
+  qc.setQueriesData<InfiniteData<PostPage>>(
+    { queryKey: qk.postsAll, predicate: (q) => !(q.queryKey[1] as PostQuery | undefined)?.include_archived },
+    (old) =>
+      old ? { ...old, pages: old.pages.map((p) => ({ ...p, data: p.data.filter((it) => it.id !== post.id) })) } : old,
+  )
+}
+
+/**
  * One set of dialogs and mutations for every row of a list (rows only call `onAction`), so a long list does not
  * mount a dialog, a menu content or a mutation per post. `query`: the posts view's query string, kept on the
  * link to a duplicate.
@@ -573,9 +616,19 @@ export function usePostRowActions(query = '') {
     },
     onError: (e) => toastApiError(e),
   })
+  const archive = useMutation({
+    mutationFn: ({ p, on }: { p: Post; on: boolean }) => api.archivePost(p.id, on),
+    onSuccess: (p) => {
+      syncArchivedPost(qc, p)
+      invalidateAfterPostChange(qc)
+      namedToast(postTitle(p, 40), p.archived_at ? 'was archived' : 'is back from the archive')
+    },
+    onError: (e) => toastApiError(e),
+  })
   const { mutate: dup } = duplicate
   const { mutate: pub } = publish
   const { mutate: unsched } = unschedule
+  const { mutate: arch } = archive
 
   // setOpen and the mutate functions are stable: rows can take this callback without re-rendering.
   const [onAction] = useState(() => (action: PostAction, post: Post) => {
@@ -594,6 +647,10 @@ export function usePostRowActions(query = '') {
         break
       case 'unschedule':
         unsched(post)
+        break
+      case 'archive':
+      case 'unarchive':
+        arch({ p: post, on: action === 'archive' })
         break
       case 'copy-link':
         void navigator.clipboard
@@ -669,7 +726,7 @@ export function useMovePosts() {
 }
 
 /**
- * The floating bar for selected posts: Duplicate, Move to collection, Tags, Cancel schedule and Delete, each for all
+ * The floating bar for selected posts: Duplicate, Move to collection, Tags, Cancel schedule, Archive and Delete, each for all
  * of them. Posts an action does not apply to (a published post can't move or change tags; only scheduled ones can be
  * taken off the schedule) are skipped, and the toast says how many.
  */
@@ -686,6 +743,11 @@ export function PostSelectionBar({
   const [dialog, setDialog] = useState<'delete' | 'move' | 'tags' | null>(null)
   const editable = selected.filter((p) => !isLocked(p))
   const scheduled = selected.filter((p) => p.status === 'scheduled')
+  // A post on its way out (scheduled, publishing) can't be archived; with only archived ones picked, it brings them back.
+  const restoring = selected.length > 0 && selected.every((p) => p.archived_at)
+  const archivable = restoring
+    ? selected
+    : selected.filter((p) => !p.archived_at && p.status !== 'scheduled' && p.status !== 'publishing')
   // Posts that went out are history: Delete leaves them out (the API keeps them too).
   const deletable = selected.filter((p) => !wentOut(p))
   const skipped = (n: number) => (n > 0 ? `${posts(n)} skipped` : undefined)
@@ -722,6 +784,13 @@ export function PostSelectionBar({
       finish('taken off the schedule', selected.length, done.length, failed)
     },
   })
+  const archive = useMutation({
+    mutationFn: () => eachPost(archivable, (p) => api.archivePost(p.id, !restoring)),
+    onSuccess: ({ done, failed }) => {
+      done.forEach((p) => syncArchivedPost(qc, p))
+      finish(restoring ? 'brought back from the archive' : 'archived', selected.length, done.length, failed)
+    },
+  })
   const move = useMutation({
     mutationFn: (collection: string) => eachPost(editable, (p) => api.updatePost(p.id, { collection })),
     onSuccess: ({ done, failed }) => {
@@ -739,7 +808,13 @@ export function PostSelectionBar({
       finish('updated', selected.length, done.length, failed)
     },
   })
-  const busy = remove.isPending || duplicate.isPending || unschedule.isPending || move.isPending || retag.isPending
+  const busy =
+    remove.isPending ||
+    duplicate.isPending ||
+    unschedule.isPending ||
+    move.isPending ||
+    retag.isPending ||
+    archive.isPending
 
   return (
     <>
@@ -784,6 +859,15 @@ export function PostSelectionBar({
               onClick={() => unschedule.mutate()}
             >
               <CalendarX2 /> {label('Cancel schedule')}
+            </Button>
+            <Button
+              variant="ghost"
+              aria-label={restoring ? 'Unarchive' : 'Archive'}
+              disabled={busy || archivable.length === 0}
+              onClick={() => archive.mutate()}
+              data-testid="posts-bulk-archive"
+            >
+              {restoring ? <ArchiveRestore /> : <Archive />} {label(restoring ? 'Unarchive' : 'Archive')}
             </Button>
             <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
             <Button

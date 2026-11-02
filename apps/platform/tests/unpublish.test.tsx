@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { PostStatusBadge } from '@/components/common/status-badge'
 import { TargetStatus } from '@/components/posts/composer'
-import { PostActions } from '@/components/posts/post-actions'
+import { PostActions, PostStats } from '@/components/posts/post-actions'
 import { canUnpublish } from '@/lib/posts'
 
 import { post, target } from './fixtures'
@@ -61,11 +61,50 @@ describe('unpublish', () => {
     expect(screen.getByText('Unpublished')).toBeInTheDocument()
   })
 
+  it('statistics of a post taken down keep the last numbers, say so on top and read nothing more', async () => {
+    const down = out({
+      unpublished_at: '2026-01-03T10:00:00Z',
+      targets: [target({ status: 'published', removal: 'removed', removed_at: '2026-01-03T10:00:00Z' })],
+    })
+
+    mockApi({
+      'GET /v1/session': { mode: 'local', role: 'owner' },
+      'GET /v1/posts/pst_1/metrics': {
+        data: [
+          {
+            channel_id: 'ch_1',
+            channel_name: 'Brand on X',
+            provider: 'x',
+            status: 'published',
+            external_url: '',
+            available: true,
+            metrics: { impressions: 42 },
+            updated_at: '2026-01-03T09:59:00Z',
+          },
+        ],
+      },
+      'GET /v1/posts/pst_1/responses': { overall: null, channels: [] },
+    })
+    renderWithProviders(<PostStats post={down} active />)
+    expect(await screen.findByText('42')).toBeInTheDocument()
+    expect(screen.getByTestId('stats-unpublished')).toHaveTextContent('last ones read')
+    expect(screen.queryByRole('button', { name: /Refresh/ })).toBeNull()
+  })
+
+  it('target row reads Published, then Unpublished with when', () => {
+    const removed = target({ status: 'published', removal: 'removed', removed_at: '2026-01-03T10:00:00Z' })
+
+    renderWithProviders(<TargetStatus post={out()} target={removed} />)
+    expect(screen.getByText('Published')).toBeInTheDocument()
+    expect(screen.getByTestId('target-unpublished')).toHaveTextContent('Unpublished')
+    expect(screen.queryByText('Removed')).toBeNull()
+  })
+
   it('target row shows the removal error as text and the link for manual removal', () => {
     const failed = target({ status: 'published', removal: 'failed', removal_error: '<b>x</b> refused' })
     const { container, unmount } = renderWithProviders(<TargetStatus post={out()} target={failed} />)
 
-    expect(screen.getByTestId('removal-error')).toHaveTextContent('Removal failed: <b>x</b> refused')
+    expect(screen.getByTestId('removal-error')).toHaveTextContent('Unpublish failed: <b>x</b> refused')
     expect(container.querySelector('b')).toBeNull()
     unmount()
 

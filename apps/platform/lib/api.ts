@@ -969,6 +969,8 @@ export const api = {
   schedulePost: (id: string, publish_at: string) =>
     request<Post>(`/v1/posts/${encodeURIComponent(id)}/schedule`, { method: 'POST', json: { publish_at } }),
   cancelPost: (id: string) => request<Post>(`/v1/posts/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  archivePost: (id: string, archived: boolean) =>
+    request<Post>(`/v1/posts/${encodeURIComponent(id)}/${archived ? 'archive' : 'unarchive'}`, { method: 'POST' }),
   unpublishPost: (id: string, channelIds?: string[]) =>
     request<Post>(`/v1/posts/${encodeURIComponent(id)}/unpublish`, {
       method: 'POST',

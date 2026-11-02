@@ -129,6 +129,19 @@ export class Posts extends APIResource {
     return this.http.request({ method: 'POST', path: `/v1/posts/${enc(id)}/cancel`, options })
   }
 
+  /**
+   * Archives a draft, published or failed post: it stays as it is, but lists leave it out unless they ask for
+   * `include_archived`. Needs `posts:write`.
+   */
+  archive(id: string, options?: RequestOptions): Promise<Post> {
+    return this.http.request({ method: 'POST', path: `/v1/posts/${enc(id)}/archive`, options })
+  }
+
+  /** Brings an archived post back into the lists. Needs `posts:write`. */
+  unarchive(id: string, options?: RequestOptions): Promise<Post> {
+    return this.http.request({ method: 'POST', path: `/v1/posts/${enc(id)}/unarchive`, options })
+  }
+
   /** Copies content, media, tags, metadata and targets into a new draft. */
   duplicate(id: string, options?: RequestOptions): Promise<Post> {
     return this.http.request({ method: 'POST', path: `/v1/posts/${enc(id)}/duplicate`, options })

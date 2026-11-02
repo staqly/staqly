@@ -906,6 +906,8 @@ class Post(StaqlyModel):
     published_at: OptionalDatetime = None
     unpublished_at: OptionalDatetime = None
     unpublished_by: str = ""
+    #: When it was archived: lists leave it out unless ``include_archived``.
+    archived_at: OptionalDatetime = None
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     #: Who created it: a client name, an agent, a schedule.

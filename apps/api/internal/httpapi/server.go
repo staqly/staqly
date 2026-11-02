@@ -156,6 +156,8 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 			r.Post("/posts/{id}/schedule", s.schedulePost)
 			r.Post("/posts/{id}/publish", s.publishPost)
 			r.Post("/posts/{id}/cancel", s.cancelPost)
+			r.Post("/posts/{id}/archive", s.archivePost)
+			r.Post("/posts/{id}/unarchive", s.unarchivePost)
 			r.Post("/posts/{id}/duplicate", s.duplicatePost)
 			r.Get("/posts/{id}/events", s.postEvents)
 			r.Get("/posts/{id}/preview", s.previewPost)

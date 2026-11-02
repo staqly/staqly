@@ -1576,6 +1576,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/posts/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive a draft, published or failed post (posts:write)
+         * @description The post stays as it is, but the post list and the calendar leave it out unless they ask for
+         *     `include_archived`. A scheduled or publishing post can't be archived (409). Archiving an archived
+         *     post changes nothing.
+         */
+        post: operations["archivePost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/posts/{id}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bring an archived post back into the lists (posts:write) */
+        post: operations["unarchivePost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/posts/{id}/duplicate": {
         parameters: {
             query?: never;
@@ -4437,8 +4480,9 @@ export interface components {
             archived_at: string | null;
             created_at: string;
             updated_at: string;
+            /** @description Posts in it, archived ones left out */
             post_count: number;
-            /** @description Posts by status */
+            /** @description Posts by status; archived posts are left out */
             status_counts: {
                 [key: string]: number;
             };
@@ -4865,6 +4909,11 @@ export interface components {
             unpublished_at: string | null;
             /** @description Who took it down: a person or the API key */
             unpublished_by: string;
+            /**
+             * Format: date-time
+             * @description When it was archived: lists and the calendar leave it out unless include_archived is true
+             */
+            archived_at: string | null;
             tags: string[];
             /** @description Free JSON for your own use */
             metadata: {
@@ -6134,6 +6183,8 @@ export interface components {
         publishBefore: string;
         /** @description true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay. */
         hidePast: boolean;
+        /** @description true lists archived posts too. Without it they are left out, unless scheduled or publishing again. */
+        includeArchived: boolean;
         /** @description Default publish_asc (soonest first, posts without a time last). created_* and updated_desc order by those times. */
         postSort: "publish_asc" | "publish_desc" | "created_desc" | "created_asc" | "updated_desc";
         /**
@@ -9090,6 +9141,8 @@ export interface operations {
                 publish_before?: components["parameters"]["publishBefore"];
                 /** @description true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay. */
                 hide_past?: components["parameters"]["hidePast"];
+                /** @description true lists archived posts too. Without it they are left out, unless scheduled or publishing again. */
+                include_archived?: components["parameters"]["includeArchived"];
                 /** @description Words of the content (case-insensitive substring match) */
                 q?: components["parameters"]["q"];
                 /** @description Posts carrying this tag */
@@ -9140,6 +9193,8 @@ export interface operations {
                 publish_before?: components["parameters"]["publishBefore"];
                 /** @description true leaves out past posts: the published ones. Failed, draft, scheduled and publishing posts always stay. */
                 hide_past?: components["parameters"]["hidePast"];
+                /** @description true lists archived posts too. Without it they are left out, unless scheduled or publishing again. */
+                include_archived?: components["parameters"]["includeArchived"];
                 /** @description Words of the content (case-insensitive substring match) */
                 q?: components["parameters"]["q"];
                 /** @description Posts carrying this tag */
@@ -9515,6 +9570,59 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    archivePost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    unarchivePost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Post"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
         };
     };

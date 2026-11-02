@@ -123,7 +123,7 @@ Permanently delete a collection and its schedules. Its posts move to the Default
 ## Posts
 
 ### `list_posts`
-List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; hide_past leaves out posts that went out; sort created_desc lists the newest first. *Read-only* · `posts:read`
+List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; hide_past leaves out posts that went out; archived posts are left out unless include_archived is true; sort created_desc lists the newest first. *Read-only* · `posts:read`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -131,6 +131,7 @@ List posts, optionally by collection, status, channel or tag. Default order is b
 | `collection` | string | No | Collection ID or name |
 | `cursor` | string | No | Next_cursor of the previous page |
 | `hide_past` | boolean | No | Leave out posts that went out (published); failed ones stay |
+| `include_archived` | boolean | No | List archived posts too |
 | `limit` | integer | No | Page size (default 50, max 200) |
 | `publish_after` | string | No | RFC3339 or YYYY-MM-DD, inclusive |
 | `publish_before` | string | No | RFC3339 or YYYY-MM-DD, exclusive |
@@ -147,6 +148,7 @@ Find posts whose content contains a text, with the same filters as list_posts. *
 | `collection` | string | No | Collection ID or name |
 | `cursor` | string | No | Next_cursor of the previous page |
 | `hide_past` | boolean | No | Leave out posts that went out (published); failed ones stay |
+| `include_archived` | boolean | No | List archived posts too |
 | `limit` | integer | No | Page size (default 50, max 200) |
 | `publish_after` | string | No | RFC3339 or YYYY-MM-DD, inclusive |
 | `publish_before` | string | No | RFC3339 or YYYY-MM-DD, exclusive |
@@ -221,6 +223,24 @@ Take a scheduled post off the schedule; it becomes a draft again. · `posts:publ
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `post_id` | string | <Required /> | Post ID (post_...) |
+
+### `archive_post`
+Archive a draft, published or failed post: it stays as it is but `list_posts` leaves it out unless `include_archived` is true. · `posts:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
+
+### `unarchive_post`
+Bring an archived post back into `list_posts`. · `posts:write`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+
+| `post_id` | string | <Required /> | Post ID (post_...) |
+
 
 ### `unpublish_post`
 Take a published post down from its channels: all of them, or only `channel_ids`. The post stays as history; each target shows `removal` (`removing`, `removed`, `failed` or `manual`). · `posts:publish`

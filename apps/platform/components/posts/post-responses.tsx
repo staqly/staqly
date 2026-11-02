@@ -150,7 +150,8 @@ function ChannelCard({ c, filter }: { c: Responses['channels'][number]; filter: 
 }
 
 /** "Audience comments": what people answered under the post, with the AI's reading. Fetches only while `active`. */
-export function PostResponses({ postId, active }: { postId: string; active: boolean }) {
+/** `frozen`: the post was taken down, so the comments read last stay and there is nothing more to read. */
+export function PostResponses({ postId, active, frozen }: { postId: string; active: boolean; frozen?: boolean }) {
   const qc = useQueryClient()
   const key = ['post-responses', postId]
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all')
@@ -167,16 +168,18 @@ export function PostResponses({ postId, active }: { postId: string; active: bool
     <section className="grid gap-3 border-t pt-4" aria-label="Audience comments" data-testid="post-responses">
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-semibold">Audience comments</h3>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="ml-auto"
-          disabled={refresh.isPending}
-          onClick={() => refresh.mutate()}
-        >
-          <RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /> Refresh comments
-        </Button>
+        {!frozen && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            disabled={refresh.isPending}
+            onClick={() => refresh.mutate()}
+          >
+            <RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /> Refresh comments
+          </Button>
+        )}
       </div>
       {q.isPending ? (
         <Skeleton className="h-5 w-32" />

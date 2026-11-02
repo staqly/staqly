@@ -37,6 +37,7 @@ type PostSearch struct {
 	Query                       string // substring of the content, case-insensitive
 	PublishAfter, PublishBefore string // publish_at range; NULL never matches
 	HidePast                    string // non-empty: published posts are left out (PastPostSQL)
+	IncludeArchived             bool   // archived posts are left out unless this is set
 	Sort                        string
 	Cursor                      string // opaque, from a previous page
 	Limit                       int
@@ -100,6 +101,10 @@ func (q *Queries) SearchPosts(ctx context.Context, s PostSearch) ([]Post, string
 	if s.PublishBefore != "" {
 		add("p.publish_at < ?", s.PublishBefore)
 	}
+	if !s.IncludeArchived {
+		// A post scheduled again after it was archived shows: nothing goes out unseen.
+		add("(p.archived_at IS NULL OR p.status IN ('scheduled', 'publishing'))")
+	}
 	if s.HidePast != "" {
 		add("NOT " + PastPostSQL)
 	}
@@ -140,7 +145,7 @@ func (q *Queries) SearchPosts(ctx context.Context, s PostSearch) ([]Post, string
 		var p Post
 		var key string
 		if err := rows.Scan(&p.ID, &p.WorkspaceID, &p.CollectionID, &p.Content, &p.Media, &p.Status, &p.PublishAt, &p.PublishedAt,
-			&p.Tags, &p.Metadata, &p.Source, &p.ExternalRef, &p.Version, &p.CreatedAt, &p.UpdatedAt, &p.RepeatEvery, &p.RepeatOf, &p.Thread, &p.CreatedByUser, &p.Title, &p.UnpublishedAt, &p.UnpublishedBy, &key); err != nil {
+			&p.Tags, &p.Metadata, &p.Source, &p.ExternalRef, &p.Version, &p.CreatedAt, &p.UpdatedAt, &p.RepeatEvery, &p.RepeatOf, &p.Thread, &p.CreatedByUser, &p.Title, &p.UnpublishedAt, &p.UnpublishedBy, &p.ArchivedAt, &key); err != nil {
 			return nil, "", err
 		}
 		if len(out) == limit {

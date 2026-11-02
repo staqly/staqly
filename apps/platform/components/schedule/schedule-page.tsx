@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  Archive,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
@@ -457,14 +458,17 @@ export function SchedulePage() {
   }, [params, today])
   const range = useMemo(() => rangeOf(view, anchor), [view, anchor])
   // The calendar always shows what went out: past days are its record (the posts list hides them instead).
+  // Archived posts stay out of the calendar unless asked for (?archived=1).
+  const showArchived = params.get('archived') === '1'
   const query = useMemo(
     () => ({
       publish_after: range.publish_after,
       publish_before: range.publish_before,
+      include_archived: showArchived || undefined,
       sort: 'publish_asc' as const,
       limit: 200,
     }),
-    [range.publish_after, range.publish_before],
+    [range.publish_after, range.publish_before, showArchived],
   )
   // No polling: the recent events tell when someone else changed a post.
   const { data, error, isLoading, refetch, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } =
@@ -725,6 +729,28 @@ export function SchedulePage() {
             <List />
           </ToggleGroupItem>
         </ToggleGroup>
+        <Button
+          variant={showArchived ? 'default' : 'outline'}
+          size="icon"
+          className="size-8 pointer-coarse:size-10"
+          aria-label="Show archived posts"
+          aria-pressed={showArchived}
+          tooltip={showArchived ? 'Hide archived posts' : 'Show archived posts'}
+          onClick={() => {
+            const p = new URLSearchParams(params)
+
+            if (showArchived) {
+              p.delete('archived')
+            } else {
+              p.set('archived', '1')
+            }
+
+            router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
+          }}
+          data-testid="schedule-show-archived"
+        >
+          <Archive />
+        </Button>
       </div>
     </div>
   )

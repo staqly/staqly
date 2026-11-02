@@ -297,6 +297,7 @@ class Collections(_Resource):
         q: str | None = None,
         publish_after: TimeFilter | None = None,
         publish_before: TimeFilter | None = None,
+        include_archived: bool = False,
         sort: str | None = None,
         limit: int | None = None,
         cursor: str | None = None,
@@ -310,6 +311,7 @@ class Collections(_Resource):
             "q": q,
             "publish_after": publish_after,
             "publish_before": publish_before,
+            "include_archived": include_archived or None,
             "sort": sort,
             "limit": limit,
             "cursor": cursor,
@@ -602,6 +604,21 @@ class Posts(_Resource):
         """Takes a scheduled post off the schedule; it becomes a draft."""
         r = self._http.request(
             RequestSpec("POST", f"/v1/posts/{_q(post_id)}/cancel", options=_opts(request_options))
+        )
+        return _model(Post, r)
+
+    def archive(self, post_id: str, *, request_options: RequestOptions | None = None) -> Post:
+        """Archives a draft, published or failed post: it stays as it is, but lists leave it out unless
+        they ask for ``include_archived``. Needs ``posts:write``."""
+        r = self._http.request(
+            RequestSpec("POST", f"/v1/posts/{_q(post_id)}/archive", options=_opts(request_options))
+        )
+        return _model(Post, r)
+
+    def unarchive(self, post_id: str, *, request_options: RequestOptions | None = None) -> Post:
+        """Brings an archived post back into the lists. Needs ``posts:write``."""
+        r = self._http.request(
+            RequestSpec("POST", f"/v1/posts/{_q(post_id)}/unarchive", options=_opts(request_options))
         )
         return _model(Post, r)
 

@@ -37,7 +37,7 @@ func ownResponseIDs(target db.PostTarget) map[string]bool {
 	return own
 }
 
-// readResponses reads the responses under one published target, stores them (the sentiment of a known one stays)
+// readResponses reads the responses under one published target (also while it is being taken down: the last read), stores them (the sentiment of a known one stays)
 // and queues the analysis when something new arrived. The provider is called outside any transaction.
 func (s *Service) readResponses(ctx context.Context, postID, channelID string) error {
 	post, err := s.Q.GetPostByID(ctx, postID)
@@ -48,7 +48,7 @@ func (s *Service) readResponses(ctx context.Context, postID, channelID string) e
 		return err
 	}
 	target, err := s.Q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
-	if isNoRows(err) || (err == nil && (target.Status != "published" || target.Removal != "" || target.ExternalID == "")) {
+	if isNoRows(err) || (err == nil && (target.Status != "published" || (target.Removal != "" && target.Removal != "removing") || target.ExternalID == "")) {
 		return nil
 	}
 	if err != nil {

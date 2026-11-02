@@ -634,7 +634,7 @@ func postFilter(r *http.Request) app.PostFilter {
 	q := r.URL.Query()
 	return app.PostFilter{CollectionID: q.Get("collection_id"), Status: q.Get("status"), ChannelID: q.Get("channel_id"), Q: q.Get("q"),
 		Tag: q.Get("tag"), PublishAfter: q.Get("publish_after"), PublishBefore: q.Get("publish_before"), Sort: q.Get("sort"),
-		HidePast: q.Get("hide_past") == "true", Limit: qInt(r, "limit"), Cursor: q.Get("cursor")}
+		HidePast: q.Get("hide_past") == "true", IncludeArchived: q.Get("include_archived") == "true", Limit: qInt(r, "limit"), Cursor: q.Get("cursor")}
 }
 
 func (s *Server) listPosts(w http.ResponseWriter, r *http.Request) {
@@ -699,6 +699,16 @@ func (s *Server) publishPost(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) cancelPost(w http.ResponseWriter, r *http.Request) {
 	out, err := s.svc.CancelPost(r.Context(), principal(r), chi.URLParam(r, "id"))
+	respond(w, r, 200, out, err)
+}
+
+func (s *Server) archivePost(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.ArchivePost(r.Context(), principal(r), chi.URLParam(r, "id"), true)
+	respond(w, r, 200, out, err)
+}
+
+func (s *Server) unarchivePost(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.ArchivePost(r.Context(), principal(r), chi.URLParam(r, "id"), false)
 	respond(w, r, 200, out, err)
 }
 

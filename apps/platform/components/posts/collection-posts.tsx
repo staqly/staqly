@@ -26,7 +26,9 @@ import { SkeletonList } from '@/components/common/skeleton-list'
 import { TagFilter } from '@/components/common/tag-filter'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { useDebounced } from '@/hooks/use-debounced'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { POST_STATUSES, type Collection, type Post, type PostQuery, type PostStatus } from '@/lib/api'
@@ -190,6 +192,8 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
   const tags = useMemo(() => splitList(params.get('tag') ?? ''), [params])
   const [search, setSearch] = useState(params.get('q') ?? '')
   const q = useDebounced(search.trim(), 300)
+  // Archived posts stay out of the lists unless asked for (?archived_posts=1).
+  const showArchived = params.get('archived_posts') === '1'
   // Three lists: failed posts first (they need someone), what is still to come (drafts, scheduled, publishing) and
   // what went out. A status filter shows the one it belongs to.
   const showFailed = !status || status === 'failed'
@@ -201,9 +205,10 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
       channel_id: channelIds[0] || undefined,
       tag: tags[0] || undefined,
       q: q || undefined,
+      include_archived: showArchived || undefined,
       limit: 50,
     }),
-    [id, channelIds, tags, q],
+    [id, channelIds, tags, q, showArchived],
   )
   const upcomingQuery: PostQuery = useMemo(
     () => ({ ...base, status: status || 'draft,scheduled,publishing', sort: 'created_desc' }),
@@ -348,7 +353,8 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
 
   const c = collection.data
   const picked = list.filter((p) => selected.has(p.id))
-  const filtered = !!status || channelIds.length > 0 || tags.length > 0 || !!q
+  // Showing archived posts counts as a filter: the collection's counts leave them out.
+  const filtered = !!status || channelIds.length > 0 || tags.length > 0 || !!q || showArchived
   // Filters help only once there is something to filter; an active filter keeps them so it can be cleared.
   const showFilters = filtered || !!search || Object.values(c.status_counts ?? {}).some((n) => n > 0)
   const counts = c.status_counts ?? {}
@@ -413,7 +419,13 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
             {/* Search and the selects live behind one button; it shows only once there is something to filter. */}
             {showFilters && (
               <FilterButton
-                active={(q ? 1 : 0) + (status ? 1 : 0) + (channelIds.length ? 1 : 0) + (tags.length ? 1 : 0)}
+                active={
+                  (q ? 1 : 0) +
+                  (status ? 1 : 0) +
+                  (channelIds.length ? 1 : 0) +
+                  (tags.length ? 1 : 0) +
+                  (showArchived ? 1 : 0)
+                }
                 onClear={() => {
                   setSearch('')
                   router.replace(`/posts?collection=${id}`, { scroll: false })
@@ -455,6 +467,16 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                   value={tags}
                   onChange={(v) => setParam('tag', v.join(',') || undefined)}
                 />
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="show-archived-posts"
+                    checked={showArchived}
+                    onCheckedChange={(on) => setParam('archived_posts', on ? '1' : undefined)}
+                  />
+                  <Label htmlFor="show-archived-posts" className="text-sm font-normal">
+                    Show archived posts
+                  </Label>
+                </div>
               </FilterButton>
             )}
             <Button size="sm" onClick={() => compose.setOpen(true)} disabled={c.archived} data-testid="new-post">
@@ -492,6 +514,9 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                 onRemove={() => setParam('tag', tags.filter((x) => x !== t).join(',') || undefined)}
               />
             ))}
+            {showArchived && (
+              <FilterChip label="Archived posts shown" onRemove={() => setParam('archived_posts', undefined)} />
+            )}
           </div>
         )}
       </div>
@@ -513,9 +538,15 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
               }
               action={
                 filtered ? undefined : (
-                  <Button onClick={() => compose.setOpen(true)} disabled={c.archived}>
-                    <Plus /> New post
-                  </Button>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button onClick={() => compose.setOpen(true)} disabled={c.archived}>
+                      <Plus /> New post
+                    </Button>
+                    {/* Every post may be archived: the filters are hidden then, so the way to them is here. */}
+                    <Button variant="outline" onClick={() => setParam('archived_posts', '1')}>
+                      <Archive /> Show archived posts
+                    </Button>
+                  </div>
                 )
               }
             />

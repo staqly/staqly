@@ -295,3 +295,52 @@ func TestUnpublishStopsReplyAndRepeat(t *testing.T) {
 		t.Fatalf("an unpublished post repeated: %v", err)
 	}
 }
+
+// fakeCounted is a fakeRemovable that reports numbers: views counts up on every read.
+type fakeCounted struct {
+	*fakeRemovable
+	views int64
+}
+
+func (f *fakeCounted) Metrics(context.Context, providers.Credentials, string) (providers.Metrics, error) {
+	f.views++
+	v := f.views
+	return providers.Metrics{Impressions: &v}, nil
+}
+
+// Unpublishing reads the numbers once more, and the post keeps them: nothing asks the platform after that.
+func TestUnpublishKeepsTheLastNumbers(t *testing.T) {
+	s, p, post := publishTest(t)
+	ctx := context.Background()
+	f := &fakeCounted{fakeRemovable: &fakeRemovable{Base: providers.NewBase("fakestats", "fakestats", providers.AuthNone, providers.Limits{MaxChars: 280})}}
+	providers.Register(f, providers.StatusAvailable)
+	t.Cleanup(func() { providers.Unregister("fakestats") })
+	e, _ := providers.Get("fakestats")
+	ch, err := s.saveChannel(ctx, p, e, "fakestats", providers.Credentials{}, providers.Profile{}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := []PostTargetInput{{ChannelID: ch.ID}}
+	if _, err := s.UpdatePost(ctx, p, post.ID, PostPatch{Targets: &targets}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PublishPost(ctx, p, post.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.RunDueJobsOnce(ctx)
+	if _, err := s.UnpublishPost(ctx, p, post.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	s.RunDueJobsOnce(ctx)
+	if f.removedIDs() != "post" {
+		t.Fatalf("removed %q", f.removedIDs())
+	}
+	reads := f.views
+	got, err := s.PostMetrics(ctx, p, post.ID, true)
+	if err != nil || len(got) != 1 || got[0].Metrics == nil || *got[0].Metrics.Impressions != reads || got[0].Error != "" {
+		t.Fatalf("metrics %+v %v", got, err)
+	}
+	if f.views != reads {
+		t.Fatal("a taken-down post's numbers were read from the platform again")
+	}
+}

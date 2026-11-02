@@ -108,6 +108,7 @@ app or changes their password, the channel turns **Needs reconnect**.
 | Setting | What it does |
 |---|---|
 | **Who can reply** (`reply_control`) | `everyone` (default), `accounts_you_follow` or `mentioned_only` |
+| **Topic** (`tags`) | The post's first tag, as its Threads topic (shown beside the profile name); Threads drops periods and ampersands. Not added to the text as a hashtag |
 
 Over the API: `{"reply_control": "mentioned_only"}` in the target's `settings`.
 
