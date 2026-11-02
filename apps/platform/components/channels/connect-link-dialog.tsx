@@ -56,6 +56,7 @@ export function ConnectLinkButton() {
         variant="outline"
         size="icon"
         aria-label="Invite someone to connect a channel"
+        tooltip="Invite someone to connect a channel"
         onClick={() => setOpen(true)}
         data-testid="connect-link"
       >

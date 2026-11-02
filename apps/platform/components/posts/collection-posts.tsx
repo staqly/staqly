@@ -407,12 +407,6 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
             {c.description && <p className="mt-0.5 text-sm wrap-anywhere text-muted-foreground">{c.description}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {/* The only collection: the collections pane is hidden, so its New lives here. */}
-            {onNewCollection && (
-              <Button variant="outline" size="sm" onClick={onNewCollection}>
-                <FolderPlus /> <span className="max-sm:sr-only">New collection</span>
-              </Button>
-            )}
             {/* Archived posts stay out of the lists until this is on (always here: every post may be archived). */}
             <span className="flex items-center gap-1.5">
               <Switch
@@ -474,6 +468,12 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                   onChange={(v) => setParam('tag', v.join(',') || undefined)}
                 />
               </FilterButton>
+            )}
+            {/* The only collection: the collections pane is hidden, so its New lives here. */}
+            {onNewCollection && (
+              <Button variant="outline" size="sm" onClick={onNewCollection}>
+                <FolderPlus /> <span className="max-sm:sr-only">New collection</span>
+              </Button>
             )}
             <Button size="sm" onClick={() => compose.setOpen(true)} disabled={c.archived} data-testid="new-post">
               <Plus /> New post

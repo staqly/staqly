@@ -942,12 +942,12 @@ export function ChannelsPage() {
             description="The accounts your posts go to: connect as many per platform as you need; every post picks its channels."
             actions={
               <>
+                <ConnectLinkButton />
                 {!byGroups && (
                   <Button variant="outline" onClick={() => setNaming({})} data-testid="new-group">
                     <FolderPlus /> New group
                   </Button>
                 )}
-                <ConnectLinkButton />
                 <Button onClick={() => add.setOpen(true)} data-testid="add-channel">
                   <Plus /> Add channel
                 </Button>
