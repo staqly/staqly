@@ -2,8 +2,9 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import { PostResponses } from '@/components/posts/post-responses'
+import { PostStats } from '@/components/posts/post-stats'
 
+import { post, target } from './fixtures'
 import { mockApi, renderWithProviders } from './utils'
 
 const insight = (o = {}) => ({
@@ -40,15 +41,25 @@ const data = {
   ],
 }
 
+const published = post({
+  status: 'published',
+  targets: [
+    target({ channel_id: 'ch_f', channel_name: 'FB page', provider: 'facebook', status: 'published' }),
+    target({ channel_id: 'ch_l', channel_name: 'LI', provider: 'linkedin', status: 'published' }),
+  ],
+})
+const metrics = { data: [] }
+
 describe('post responses', () => {
   it('renders summary, channels, filter, plain text, unavailable channel and refresh', async () => {
     const api = mockApi({
       'GET /v1/posts/pst_1/responses': data,
       'POST /v1/posts/pst_1/responses/refresh': data,
+      'GET /v1/posts/pst_1/metrics': metrics,
     })
     const user = userEvent.setup()
 
-    renderWithProviders(<PostResponses postId="pst_1" active />)
+    renderWithProviders(<PostStats post={published} active />)
     expect((await screen.findAllByText('People like it')).length).toBeGreaterThan(0)
     expect(screen.getAllByText('price').length).toBeGreaterThan(0)
     expect(screen.getByText('Love it <b>x</b>')).toBeInTheDocument()
@@ -58,22 +69,39 @@ describe('post responses', () => {
     expect(screen.queryByText('Love it <b>x</b>')).not.toBeInTheDocument()
     expect(within(screen.getByTestId('responses-ch_f')).getByText('Meh')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Refresh comments/ }))
-    await waitFor(() => expect(api.calls.some((c) => c.method === 'POST')).toBe(true))
-    await waitFor(() => expect(api.calls.filter((c) => c.method === 'GET').length).toBe(2))
+    await user.click(screen.getByRole('button', { name: /Refresh numbers and comments/ }))
+    await waitFor(() => expect(api.find('POST', '/v1/posts/pst_1/responses/refresh')).toHaveLength(1))
+    await waitFor(() => expect(api.find('GET', '/v1/posts/pst_1/responses')).toHaveLength(2))
   })
 
   it('says when the AI allowance is used up and when there is nothing', async () => {
     mockApi({
       'GET /v1/posts/pst_1/responses': { ...data, overall: insight({ status: 'waiting_credits' }), channels: [] },
+      'GET /v1/posts/pst_1/metrics': metrics,
     })
-    renderWithProviders(<PostResponses postId="pst_1" active />)
+    renderWithProviders(<PostStats post={published} active />)
     expect(await screen.findByText(/allowance is used up/)).toBeInTheDocument()
   })
 
-  it('shows No comments yet', async () => {
-    mockApi({ 'GET /v1/posts/pst_1/responses': { overall: null, channels: [] } })
-    renderWithProviders(<PostResponses postId="pst_1" active />)
-    expect(await screen.findByText('No comments yet')).toBeInTheDocument()
+  it('shows No comments yet under a channel', async () => {
+    mockApi({
+      'GET /v1/posts/pst_1/responses': {
+        ...data,
+        overall: null,
+        channels: [{ ...data.channels[0], insight: null, responses: [] }],
+      },
+      'GET /v1/posts/pst_1/metrics': metrics,
+    })
+    renderWithProviders(<PostStats post={published} active />)
+    expect(await screen.findByTestId('responses-ch_f')).toHaveTextContent('Comments 0')
+    expect(screen.queryByTestId('post-responses')).toBeNull()
+  })
+
+  it('a scheduled post shows its channels without reading numbers or comments', async () => {
+    const api = mockApi({})
+
+    renderWithProviders(<PostStats post={post({ status: 'scheduled', targets: [target()] })} active />)
+    expect(screen.getAllByTestId('post-channel')).toHaveLength(1)
+    expect(api.calls).toHaveLength(0)
   })
 })

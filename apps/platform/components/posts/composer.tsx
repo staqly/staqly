@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
-  ArrowRight,
   CalendarClock,
   CheckCircle2,
   ChevronDown,
@@ -12,7 +11,6 @@ import {
   MonitorSmartphone,
   Clock3,
   ChevronUp,
-  ExternalLink,
   Film,
   Repeat2,
   ImagePlus,
@@ -32,12 +30,13 @@ import { ProviderFields, visibleFields } from '@/components/channels/provider-fi
 import { Callout } from '@/components/common/callout'
 import { DateTimeFields, formatShort } from '@/components/common/date-time-picker'
 import { MultiSelect } from '@/components/common/multi-select'
-import { PostStatusBadge, TargetStatusBadge, UnpublishedBadge } from '@/components/common/status-badge'
+import { PostStatusBadge } from '@/components/common/status-badge'
 import { DesignDrawer } from '@/components/design/design-drawer'
 import { useDesignedMedia, useEditedMedia } from '@/components/design/edited-media'
 import { placeSaved } from '@/components/design/embed'
 import { LibraryPickerButton } from '@/components/media/library-picker'
-import { PostStats } from '@/components/posts/post-actions'
+import { PostStats } from '@/components/posts/post-stats'
+import { TargetStatus } from '@/components/posts/target-status'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -59,7 +58,6 @@ import {
   type Media,
   type Post,
   type PostInput,
-  type PostTarget,
   type Provider,
   type ProviderField,
 } from '@/lib/api'
@@ -67,7 +65,7 @@ import { apiFieldErrors } from '@/lib/form-errors'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { applyLinks, linksNotice } from '@/lib/links'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { charCount, isLocked, postTitle, splitDeliveryError, xLength } from '@/lib/posts'
+import { charCount, isLocked, postTitle, xLength } from '@/lib/posts'
 import { ProviderIcon } from '@/lib/providers'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
 import {
@@ -82,7 +80,6 @@ import {
   useTags,
   useXPosts,
 } from '@/lib/queries'
-import { safeHttpUrl } from '@/lib/safe'
 import { dateFormats, formatSchedule, formatTime, nextFullHour } from '@/lib/schedule'
 import { appendHashtags, hashtagsFor, normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
@@ -493,138 +490,6 @@ function MediaButton({ onAdd }: { onAdd: (m: Media) => void }) {
   )
 }
 
-/** Retry for a channel that failed: queues it again. */
-function RetryTarget({ post, target, className }: { post: Post; target: PostTarget; className?: string }) {
-  const qc = useQueryClient()
-  const retry = useMutation({
-    mutationFn: () => api.retryTarget(post.id, target.channel_id),
-    onSuccess: (p) => {
-      syncPostInCache(qc, p)
-      invalidateAfterPostChange(qc, p.id)
-      namedToast(target.channel_name, 'is being retried')
-    },
-    onError: (e) => toastApiError(e),
-  })
-
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      className={className}
-      onClick={() => retry.mutate()}
-      disabled={retry.isPending}
-    >
-      <RotateCcw /> Retry
-    </Button>
-  )
-}
-
-/** Taking a channel down after Published: unpublishing, Unpublished and when, failed with the platform's error (as
- * text), or remove by hand. */
-function TargetRemoval({ target }: { target: PostTarget }) {
-  switch (target.removal) {
-    case 'removing':
-      return <span className="text-muted-foreground">Unpublishing...</span>
-    case 'removed':
-      return (
-        <span className="inline-flex items-center gap-x-2" data-testid="target-unpublished">
-          <ArrowRight aria-hidden className="size-3 text-muted-foreground" />
-          <UnpublishedBadge title={target.removed_at ? formatDateTime(target.removed_at) : undefined} />
-          {target.removed_at && (
-            <span className="text-muted-foreground" title={formatDateTime(target.removed_at)}>
-              {timeAgo(target.removed_at)}
-            </span>
-          )}
-        </span>
-      )
-    case 'failed':
-      return (
-        <span className="text-destructive" data-testid="removal-error">
-          Unpublish failed{target.removal_error ? `: ${target.removal_error}` : ''}
-        </span>
-      )
-    case 'manual':
-      return <span className="text-amber-700 dark:text-amber-400">Remove by hand: this platform has no delete</span>
-    default:
-      return null
-  }
-}
-
-/**
- * How one channel of a saved post went: state, the link once published, the error, and Retry when failed (unless
- * the card shows Retry in its own header: `retry={false}`).
- */
-export function TargetStatus({ post, target, retry = true }: { post: Post; target: PostTarget; retry?: boolean }) {
-  const url = target.external_url ? safeHttpUrl(target.external_url) : undefined
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-testid="post-target">
-      <TargetStatusBadge status={target.status} />
-      {url && (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer nofollow"
-          className="inline-flex max-w-full min-w-0 items-center gap-1 text-brand underline underline-offset-2 pointer-coarse:-my-3 pointer-coarse:py-3"
-        >
-          <span className="truncate">{url}</span>
-          <ExternalLink className="size-3 shrink-0" aria-hidden />
-        </a>
-      )}
-      {target.published_at && (
-        <span className="text-muted-foreground" title={formatDateTime(target.published_at)}>
-          {timeAgo(target.published_at)}
-        </span>
-      )}
-      <TargetRemoval target={target} />
-      {retry && target.status === 'failed' && <RetryTarget post={post} target={target} className="ml-auto" />}
-      {target.error && <DeliveryError error={target.error} />}
-      {(target.replies?.length ?? 0) > 0 && (
-        <ol className="grid basis-full gap-1 border-l pl-3" aria-label={`Comments on ${target.channel_name}`}>
-          {target.replies!.map((r) => {
-            const href = r.external_url ? safeHttpUrl(r.external_url) : undefined
-
-            return (
-              <li key={r.index} className="flex flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="post-reply">
-                <span className="text-muted-foreground">Comment {r.index + 1}</span>
-                <span
-                  className={cn(
-                    r.status === 'published' && 'text-emerald-600 dark:text-emerald-400',
-                    r.status === 'failed' && 'text-destructive',
-                    (r.status === 'pending' || r.status === 'skipped') && 'text-muted-foreground',
-                  )}
-                >
-                  {
-                    {
-                      pending: 'Waiting',
-                      publishing: 'Publishing',
-                      published: 'Published',
-                      failed: 'Failed',
-                      skipped: 'Not sent (no comments on this channel)',
-                    }[r.status]
-                  }
-                </span>
-                {href && (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer nofollow"
-                    className="inline-flex items-center gap-1 text-brand underline underline-offset-2 pointer-coarse:-my-3 pointer-coarse:py-3"
-                  >
-                    Open <ExternalLink className="size-3" aria-hidden />
-                  </a>
-                )}
-                {r.error && <DeliveryError error={r.error} />}
-              </li>
-            )
-          })}
-        </ol>
-      )}
-    </div>
-  )
-}
-
 /**
  * Over the comments: the picked channels that won't post them (a platform without comments, or a connection not
  * allowed to, like LinkedIn without its Community Management API), so nobody finds out after the post went out.
@@ -650,23 +515,6 @@ function CommentsNotice({
   return (
     <Callout tone="warning" size="xs" data-testid="comments-notice">
       {`${named.join(', ')} can't post comments: the post goes out there without them.`}
-    </Callout>
-  )
-}
-
-/** Why a channel or a comment failed: the sentence first, the platform's own text folded under it. */
-function DeliveryError({ error }: { error: string }) {
-  const { summary, detail } = splitDeliveryError(error)
-
-  return (
-    <Callout tone="danger" size="xs" className="basis-full" data-testid="delivery-error">
-      <p>{summary}</p>
-      {detail && (
-        <details className="mt-1 text-muted-foreground">
-          <summary className="cursor-pointer select-none">Technical details</summary>
-          <code className="mt-1 block font-mono wrap-anywhere">{detail}</code>
-        </details>
-      )}
     </Callout>
   )
 }
@@ -1707,8 +1555,8 @@ export function ComposerForm({
 
   const [tab, setTab] = useState<string>(initialTab ?? 'all')
   const locked = !!post && isLocked(post)
-  // Post (the content), Settings (each channel's platform settings) and, once it was sent off, Delivery.
-  const [section, setSection] = useState<'post' | 'settings' | 'delivery' | 'stats'>('post')
+  // Post (the content), Settings (each channel's platform settings) and, once it was sent off, Channels.
+  const [section, setSection] = useState<'post' | 'settings' | 'delivery'>('post')
   const targetOf = (id: string) => post?.targets?.find((t) => t.channel_id === id)
   // Per-channel text only makes sense with two channels or more; with one, the shared text is that channel's.
   const multi = picked.length > 1
@@ -1733,11 +1581,8 @@ export function ComposerForm({
   const settingsInvalid = Object.keys(errors).some((k) => /^targets\.[^.]+\.settings\./.test(k))
   const deliveryTargets = useMemo(() => (post && post.status !== 'draft' ? (post.targets ?? []) : []), [post])
   const failedTargets = deliveryTargets.filter((t) => t.status === 'failed').length
-  const hasStats = deliveryTargets.some((t) => t.status === 'published')
   const shownSection =
-    (section === 'settings' && settingsChannels.length === 0) ||
-    (section === 'delivery' && !deliveryTargets.length) ||
-    (section === 'stats' && !hasStats)
+    (section === 'settings' && settingsChannels.length === 0) || (section === 'delivery' && !deliveryTargets.length)
       ? 'post'
       : section
   const formRef = useRef<HTMLFormElement>(null)
@@ -1879,7 +1724,7 @@ export function ComposerForm({
               )}
               {deliveryTargets.length > 0 && (
                 <TabsTrigger value="delivery" data-testid="tab-delivery">
-                  Delivery
+                  Channels
                   {failedTargets > 0 && (
                     <span
                       className="rounded-full bg-destructive/15 px-1.5 text-[11px] leading-4 text-destructive tabular-nums"
@@ -1888,11 +1733,6 @@ export function ComposerForm({
                       {failedTargets}
                     </span>
                   )}
-                </TabsTrigger>
-              )}
-              {hasStats && (
-                <TabsTrigger value="stats" data-testid="tab-stats">
-                  Statistics
                 </TabsTrigger>
               )}
             </TabsList>
@@ -2123,27 +1963,9 @@ export function ComposerForm({
             </TabsContent>
 
             <TabsContent value="delivery" forceMount className="grid content-start gap-3 data-[state=inactive]:hidden">
-              {post && deliveryTargets.length > 0 && (
-                <ul className="grid gap-2" aria-label="Delivery per channel">
-                  {deliveryTargets.map((t) => (
-                    <li key={t.channel_id} className="grid gap-1 rounded-xl border p-3">
-                      {/* Retry in the card's top right corner, beside the channel's name. */}
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="min-w-0 text-sm font-medium wrap-anywhere">{t.channel_name}</span>
-                        {t.status === 'failed' && <RetryTarget post={post} target={t} className="shrink-0" />}
-                      </div>
-                      <TargetStatus post={post} target={t} retry={false} />
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {/* How it went out per channel, with each one's numbers and comments once it did. */}
+              {post && deliveryTargets.length > 0 && <PostStats post={post} active={shownSection === 'delivery'} />}
             </TabsContent>
-
-            {post && hasStats && (
-              <TabsContent value="stats" className="grid content-start gap-3">
-                <PostStats post={post} active={shownSection === 'stats'} />
-              </TabsContent>
-            )}
           </div>
         </div>
       </Tabs>

@@ -217,10 +217,10 @@ export function routes({
       open: (p) => click(p, '[data-testid=post-preview]:visible'),
     },
     {
-      name: 'post stats',
-      // Statistics show once something is published.
+      name: 'post channels',
+      // How it went out per channel, with its numbers once something is published.
       path: `/posts/${ids.published}`,
-      open: (p) => click(p, '[data-testid=tab-stats]:visible'),
+      open: (p) => click(p, '[data-testid=tab-delivery]:visible'),
     },
     // The public preview page a shared link opens (long post, long comment).
     { name: 'preview page', path: `/preview#${previewToken}` },

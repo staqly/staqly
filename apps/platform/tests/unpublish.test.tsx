@@ -3,8 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import { PostStatusBadge } from '@/components/common/status-badge'
-import { TargetStatus } from '@/components/posts/composer'
-import { PostActions, PostStats } from '@/components/posts/post-actions'
+import { PostActions } from '@/components/posts/post-actions'
+import { PostStats } from '@/components/posts/post-stats'
+import { TargetStatus } from '@/components/posts/target-status'
 import { canUnpublish } from '@/lib/posts'
 
 import { post, target } from './fixtures'

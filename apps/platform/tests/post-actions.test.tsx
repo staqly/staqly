@@ -2,7 +2,8 @@ import { screen, waitFor, within, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import { PostActions, PostStats } from '@/components/posts/post-actions'
+import { PostActions } from '@/components/posts/post-actions'
+import { PostStats } from '@/components/posts/post-stats'
 import { PreviewPage } from '@/components/preview/preview-page'
 
 import { comment, post, target } from './fixtures'
@@ -121,7 +122,7 @@ describe('post actions', () => {
     await user.click(screen.getByRole('button', { name: 'Open post' }))
     expect(await screen.findByRole('menuitem', { name: /Telegram news/ })).toBeInTheDocument()
     await user.keyboard('{Escape}')
-    // The numbers are the sheet's Statistics tab now, not a header button.
+    // The numbers are the sheet's Channels tab now, not a header button.
     expect(screen.queryByRole('button', { name: 'Post statistics' })).not.toBeInTheDocument()
     cleanup()
     renderWithProviders(<PostStats post={withTwo} active />)
@@ -129,7 +130,7 @@ describe('post actions', () => {
 
     expect(await within(stats).findByText('1,200')).toBeInTheDocument()
     expect(within(stats).getByText('Views')).toBeInTheDocument()
-    expect(within(stats).getByText('Not available for this platform.')).toBeInTheDocument()
+    expect(within(stats).getByText('Numbers are not available for this platform.')).toBeInTheDocument()
   })
 
   it('creates a preview link to copy and lists the feedback threads with emails, replies and resolves', async () => {

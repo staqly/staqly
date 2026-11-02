@@ -51,6 +51,7 @@ export const qk = {
   jobs: (status?: string) => ['jobs', status ?? 'all'] as const,
   jobsAll: ['jobs'] as const,
   jobStats: ['jobs', 'stats'] as const,
+  postResponses: (id: string) => ['post-responses', id] as const,
   events: (query: EventQuery) => ['events', query] as const,
   // Outside ['events'] on purpose: invalidating the activity feed after our own changes must not trigger it.
   recentEvents: ['recent-events'] as const,
