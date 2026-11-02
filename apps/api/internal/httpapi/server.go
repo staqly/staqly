@@ -716,7 +716,10 @@ func allowContentType(types ...string) func(http.Handler) http.Handler {
 				return
 			}
 			ct, _, _ := strings.Cut(r.Header.Get("Content-Type"), ";")
-			if slices.Contains(types, strings.ToLower(strings.TrimSpace(ct))) {
+			ct = strings.ToLower(strings.TrimSpace(ct))
+			// Meta's account callbacks post a form (signed_request); nothing else takes one.
+			metaForm := ct == "application/x-www-form-urlencoded" && slices.Contains(metaFormPaths, r.URL.Path)
+			if slices.Contains(types, ct) || metaForm {
 				next.ServeHTTP(w, r)
 				return
 			}

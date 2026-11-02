@@ -154,6 +154,9 @@ type instagramAccount struct {
 	Username string `json:"username"`
 	Name     string `json:"name"`
 	Picture  string `json:"profile_picture_url"`
+	// AppUserID: the app-scoped id an Instagram login account has besides its account id (Meta's deauthorize and
+	// data deletion callbacks name the person by it).
+	AppUserID string `json:"-"`
 }
 
 func (a instagramAccount) profile() Profile {
@@ -216,6 +219,9 @@ func (Instagram) UseAccount(ctx context.Context, c Credentials, accountID string
 			continue
 		}
 		creds := Credentials{"user_id": a.ID}
+		if a.AppUserID != "" {
+			creds["app_user_id"] = a.AppUserID
+		}
 		for _, k := range []string{"access_token", "expires_at", "no_comments", "login"} {
 			if c[k] != "" {
 				creds[k] = c[k]
@@ -490,7 +496,7 @@ func instagramMe(ctx context.Context, token string) (instagramAccount, error) {
 	if id == "" {
 		return instagramAccount{}, errors.New("Instagram did not say which account signed in")
 	}
-	return instagramAccount{ID: id, Username: me.Username, Name: me.Name, Picture: me.Picture}, nil
+	return instagramAccount{ID: id, AppUserID: me.ID, Username: me.Username, Name: me.Name, Picture: me.Picture}, nil
 }
 
 // instagramLoginExchange trades the code at api.instagram.com for a short token, then for the 60-day one.

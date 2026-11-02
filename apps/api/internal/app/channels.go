@@ -164,8 +164,16 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 		if !s.providerEnabled(e.ID()) {
 			continue // turned off on this server: no tile, no connecting, no publishing
 		}
+		// Instagram through Facebook Business is the second Instagram tile only next to Instagram login (the Instagram
+		// app's own keys); with Unified login, one Instagram tile covers both kinds of sign-in.
+		if e.ID() == "instagram_business" && !s.instagramLogin() {
+			continue
+		}
 		_, serverOK := s.serverApp(e.ID())
 		info := providerInfo(e, (configured[e.ID()] && !needsBotToken(e.ID()) && !ownClient(e.ID())) || serverOK)
+		if e.ID() == "instagram" && s.instagramLogin() {
+			info.Name = "Instagram (Standalone)"
+		}
 		if !info.AppConfigured {
 			info.Status = providers.StatusSoon // an OAuth platform waits for its app's keys in the environment
 		}
@@ -221,9 +229,16 @@ func (s *Service) serverApp(providerID string) (providers.App, bool) {
 	return app, app.ClientID != ""
 }
 
+// instagramLogin: Instagram signs in with the Instagram app's own keys (Instagram login), so Instagram through a
+// Facebook Page is offered as a second tile.
+func (s *Service) instagramLogin() bool {
+	app, _ := s.serverApp("instagram")
+	return app.InstagramLogin
+}
+
 // metaApp: the platform signs in through the server's one Meta app (Threads has its own Threads app id).
 func metaApp(providerID string) bool {
-	return providerID == "facebook" || providerID == "instagram"
+	return providerID == "facebook" || providerID == "instagram" || providerID == "instagram_business"
 }
 
 // needsBotToken: the platform posts with the server's own bot (Discord), so only the server's app works for it.

@@ -10,6 +10,18 @@ import (
 	"database/sql"
 )
 
+const deleteChannelResponses = `-- name: DeleteChannelResponses :execrows
+DELETE FROM post_responses WHERE channel_id = ?
+`
+
+func (q *Queries) DeleteChannelResponses(ctx context.Context, channelID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteChannelResponses, channelID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteOldResponses = `-- name: DeleteOldResponses :execrows
 DELETE FROM post_responses
 WHERE (post_id, channel_id, id) IN (SELECT r.post_id, r.channel_id, r.id FROM post_responses r

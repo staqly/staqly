@@ -15,11 +15,42 @@ import (
 // maxMetaWebhookBytes: Meta's events are small; a larger body is not one.
 const maxMetaWebhookBytes = 1 << 20
 
+// metaFormPaths: Meta's account callbacks, which post a form (signed_request) instead of JSON.
+var metaFormPaths = []string{"/v1/meta/deauthorize", "/v1/meta/data-deletion"}
+
 func init() {
 	RegisterPublicRoutes(func(s *Server, r chi.Router) {
 		r.Get("/meta/webhook", s.verifyMetaWebhook)
 		r.Post("/meta/webhook", s.metaWebhook)
+		r.Post("/meta/deauthorize", s.metaDeauthorize)
+		r.Post("/meta/data-deletion", s.metaDataDeletion)
+		r.Get("/meta/data-deletion/{code}", s.metaDataDeletionStatus)
 	})
+}
+
+// metaDeauthorize: Meta's Deauthorize callback (someone removed the app from their account).
+func (s *Server) metaDeauthorize(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxMetaWebhookBytes)
+	n, err := s.svc.MetaDeauthorize(r.Context(), r.PostFormValue("signed_request"))
+	respond(w, r, 200, map[string]any{"channels": n}, err)
+}
+
+// metaDataDeletion: Meta's Data deletion request callback; Meta shows the person the status page and the code.
+func (s *Server) metaDataDeletion(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxMetaWebhookBytes)
+	url, code, err := s.svc.MetaDataDeletion(r.Context(), r.PostFormValue("signed_request"))
+	respond(w, r, 200, map[string]any{"url": url, "confirmation_code": code}, err)
+}
+
+// metaDataDeletionStatus: the page a deletion request's link opens, in plain words.
+func (s *Server) metaDataDeletionStatus(w http.ResponseWriter, r *http.Request) {
+	text, err := s.svc.MetaDataDeletionStatus(r.Context(), chi.URLParam(r, "code"))
+	if err != nil {
+		respond(w, r, 0, nil, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = io.WriteString(w, text)
 }
 
 func (s *Server) verifyMetaWebhook(w http.ResponseWriter, r *http.Request) {

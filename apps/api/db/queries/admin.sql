@@ -63,3 +63,6 @@ UPDATE admins SET last_login_at = @last_login_at WHERE email = @email;
 
 -- name: RevokeAdminSessionsByEmail :exec
 UPDATE admin_sessions SET revoked_at = @revoked_at WHERE email = @email AND revoked_at IS NULL;
+
+-- name: AdminAuditExists :one
+SELECT COUNT(*) FROM admin_audit WHERE action = ? AND target = ?;

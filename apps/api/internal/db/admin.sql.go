@@ -10,6 +10,22 @@ import (
 	"database/sql"
 )
 
+const adminAuditExists = `-- name: AdminAuditExists :one
+SELECT COUNT(*) FROM admin_audit WHERE action = ? AND target = ?
+`
+
+type AdminAuditExistsParams struct {
+	Action string `json:"action"`
+	Target string `json:"target"`
+}
+
+func (q *Queries) AdminAuditExists(ctx context.Context, arg AdminAuditExistsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, adminAuditExists, arg.Action, arg.Target)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countAdminCodesSince = `-- name: CountAdminCodesSince :one
 SELECT COUNT(*) FROM admin_codes WHERE email = ? AND created_at > ?
 `

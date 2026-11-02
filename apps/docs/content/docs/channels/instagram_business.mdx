@@ -1,0 +1,30 @@
+---
+title: Instagram (Facebook Business)
+description: Publish to an Instagram Business or Creator account linked to a Facebook Page, through Facebook Login. The second Instagram option next to Instagram login.
+---
+
+**Instagram (Facebook Business)** connects an Instagram account through Facebook: the person signs in on
+facebook.com, and staqly lists the Instagram Business or Creator accounts linked to the Facebook Pages they
+manage. It is offered only on a server that uses [Instagram login](/channels/instagram#instagram-login-instead)
+for **Instagram (Standalone)**; with Unified login, the one **Instagram** tile covers both kinds of sign-in.
+
+Once connected it works like [Instagram](/channels/instagram): posts, reels, stories and carousels, the thread
+as comments, statistics, audience comments and unpublishing, with the same limits and settings.
+
+## What you need
+
+- The **Meta app** that serves [Facebook Pages](/channels/facebook): `PROVIDER_META_CLIENT_ID` and
+  `PROVIDER_META_CLIENT_SECRET` (or `PROVIDER_INSTAGRAM_BUSINESS_CLIENT_ID` / `_SECRET` for an app of its own).
+- In that app, **Facebook Login** with the redirect URL `https://<your dashboard>/channels/callback/instagram_business`,
+  and the permissions `instagram_basic`, `instagram_content_publish`, `instagram_manage_comments`,
+  `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement` and `business_management`.
+- An Instagram account set to **Business** or **Creator**, linked to a Facebook Page the person manages.
+- [Media storage Instagram can reach](/channels/instagram#what-you-need), as for Instagram.
+
+`PROVIDER_INSTAGRAM_BUSINESS_ENABLED=false` hides it.
+
+## The sign-in
+
+**Connect** opens facebook.com; the person allows the permissions and picks the Instagram account (staqly lists
+the ones linked to their Pages). staqly keeps the Page's token, which doesn't expire while the app keeps its
+permissions. If the person removes the app, the channel turns **Needs reconnect**.
