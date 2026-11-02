@@ -425,3 +425,14 @@ func TestWithoutOwnParts(t *testing.T) {
 		t.Error("an unknown count became a number")
 	}
 }
+
+// A refusal staqly worded itself says why; a bare one stays the general sentence.
+func TestReadFailure(t *testing.T) {
+	quota := &providers.Failure{Kind: providers.ErrRejected, Msg: "YouTube's daily limit is used up; it resets at midnight Pacific time"}
+	if got := readFailure("YouTube", quota); got != quota.Msg {
+		t.Fatalf("worded: %q", got)
+	}
+	if got := readFailure("YouTube", providers.ErrRejected); !strings.Contains(got, "didn't share them") {
+		t.Fatalf("bare: %q", got)
+	}
+}

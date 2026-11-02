@@ -49,12 +49,15 @@ function SentimentBar({ i }: { i: Insight }) {
   )
 }
 
-function InsightView({ i }: { i: Insight }) {
+/** One analysis. `quiet` leaves out its error when the card around it already says it (the same read failed). */
+function InsightView({ i, quiet }: { i: Insight; quiet?: boolean }) {
   return (
     <div className="grid gap-2">
       <SentimentBar i={i} />
       {i.status === 'waiting_credits' && <p className="text-sm text-muted-foreground">{WAITING}</p>}
-      {i.status === 'failed' && i.error && <p className="text-sm text-destructive">{i.error}</p>}
+      {i.status === 'failed' && i.error && !quiet && (
+        <p className="text-xs text-amber-700 dark:text-amber-400">Couldn&apos;t refresh the comments: {i.error}</p>
+      )}
       {i.summary && <p className="text-sm whitespace-pre-wrap">{i.summary}</p>}
       {i.themes.length > 0 && (
         <div className="flex flex-wrap gap-1.5" aria-label="Themes">
@@ -176,8 +179,10 @@ export function ChannelComments({
         <ChevronDown aria-hidden className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2 grid gap-3">
-        {c.error && <p className="text-sm text-destructive">{c.error}</p>}
-        {c.insight && <InsightView i={c.insight} />}
+        {c.error && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">Couldn&apos;t refresh the comments: {c.error}</p>
+        )}
+        {c.insight && <InsightView i={c.insight} quiet={!!c.error} />}
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No comments yet</p>
         ) : (

@@ -862,10 +862,12 @@ func (s *Service) ReportTargetMetrics(ctx context.Context, p Principal, postID, 
 // errChannelGone: the post went out on a channel that is no longer connected to staqly.
 var errChannelGone = errors.New("the channel is no longer connected")
 
-// readFailure: what a person reads when a platform's numbers or comments can't be read right now. The platform's own
-// words are technical (and logged); an app error (an expired subscription) already speaks to people.
+// readFailure: what a person reads when a platform's numbers or comments can't be read right now. A refusal staqly
+// worded itself (a daily limit used up, comments turned off) says why; any other platform answer is technical (and
+// logged), and an app error (an expired subscription) already speaks to people.
 func readFailure(platform string, err error) string {
 	var appErr *Error
+	var f *providers.Failure
 	switch {
 	case errors.As(err, &appErr):
 		return appErr.Message
@@ -873,6 +875,8 @@ func readFailure(platform string, err error) string {
 		return "This channel is no longer connected to staqly, so the numbers aren't updated. Connect the account again under Channels to see new ones on your next posts."
 	case errors.Is(err, providers.ErrReauth):
 		return "staqly lost access to this " + platform + " account. Reconnect it under Channels and try again."
+	case errors.Is(err, providers.ErrRejected) && errors.As(err, &f) && f.Msg != "":
+		return f.Msg
 	case errors.Is(err, providers.ErrRejected):
 		return platform + " didn't share them this time. If the post was deleted on " + platform + ", they won't change any more."
 	default:

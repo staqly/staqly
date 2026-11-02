@@ -21,8 +21,17 @@ const UNPUBLISHING = status('Unpublishing', 'warning', LoaderCircle, 'Being take
 // the post list's statistics dialog doesn't load it.
 
 /** Why a channel or a comment failed: the sentence first, the platform's own text folded under it. */
-function DeliveryError({ error }: { error: string }) {
+function DeliveryError({ error, compact }: { error: string; compact?: boolean }) {
   const { summary, detail } = splitDeliveryError(error)
+
+  // A comment under a post that went out: one quiet line, not a box louder than the post's own state.
+  if (compact) {
+    return (
+      <p className="basis-full text-xs text-muted-foreground" data-testid="delivery-error" title={detail || undefined}>
+        {summary}
+      </p>
+    )
+  }
 
   return (
     <Callout tone="danger" size="xs" className="basis-full" data-testid="delivery-error">
@@ -181,7 +190,7 @@ export function TargetStatus({ post, target, retry = true }: { post: Post; targe
                     Open <ExternalLink className="size-3" aria-hidden />
                   </a>
                 )}
-                {r.error && <DeliveryError error={r.error} />}
+                {r.error && <DeliveryError error={r.error} compact />}
               </li>
             )
           })}
