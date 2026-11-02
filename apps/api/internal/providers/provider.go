@@ -409,6 +409,12 @@ type Failure struct {
 	OutcomeUnknown bool
 }
 
+// commentTextOnly refuses a comment with media on a platform whose comments take text only.
+func commentTextOnly(platform string) *Failure {
+	return &Failure{Kind: ErrRejected, Msg: platform + " comments can't include photos or videos, so this comment was not posted. " +
+		"The post itself is live; add the comment on " + platform + " yourself, or keep comments for " + platform + " to text"}
+}
+
 // RetryAt is when a retryable failure says to try again, or zero.
 func RetryAt(err error) time.Time {
 	var f *Failure

@@ -273,7 +273,7 @@ func linkedinComment(ctx context.Context, token, actor, parentExternalID string,
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "LinkedIn: nothing to comment on (the post has no id)"}
 	}
 	if len(p.Media) > 0 {
-		return Result{}, &Failure{Kind: ErrRejected, Msg: "LinkedIn comments take text only"}
+		return Result{}, commentTextOnly("LinkedIn")
 	}
 	req, err := linkedinJSON(ctx, token, http.MethodPost, linkedinAPI+"/rest/socialActions/"+linkedinURN(post)+"/comments",
 		map[string]any{"actor": actor, "object": post, "message": map[string]string{"text": p.Text}})
