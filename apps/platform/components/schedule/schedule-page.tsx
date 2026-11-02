@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  Archive,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
@@ -689,7 +690,7 @@ export function SchedulePage() {
             <Button variant="outline" size="sm" className="h-8 pointer-coarse:h-10" data-testid="schedule-view-menu">
               {layout === 'list' ? <List /> : <CalendarDays />}
               {VIEW_LABELS[view]}
-              {showArchived && <span className="text-muted-foreground">· archived</span>}
+              {showArchived && <span className={TONES.warning.text}>· archived</span>}
               <ChevronDown className="text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
@@ -739,9 +740,11 @@ export function SchedulePage() {
 
                 router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
               }}
+              // Amber like other "not the usual view" states; the whole row tinted while archived posts show.
+              className={cn(TONES.warning.icon, TONES.warning.menu, showArchived && TONES.warning.chip)}
               data-testid="schedule-show-archived"
             >
-              Show archived
+              <Archive /> Show archived
             </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
