@@ -111,13 +111,33 @@ server operator should check the **Instagram Login Compatible** label on the sel
 If your Creator or Business account is missing from the account list, select the portfolio that owns
 it. You do not need to add your account to the developer app's portfolio just to connect it.
 
-Staqly uses Unified Login. Meta calls the older **API setup with Instagram login** integration legacy:
-existing integrations still work, with no announced end date, but new apps cannot set it up and new
-features ship only on Unified Login. The two sign-in options in Unified Login do not need separate
-Instagram app credentials or separate staqly providers.
+Staqly uses Unified Login by default. If your Meta app has **API setup with Instagram login**, staqly can
+use that instead (below).
 
 See Meta's [business onboarding guide](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-unified-login/business-onboarding/)
 and [migration guide](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/migration-guide/).
+
+## Instagram login instead
+
+With **Instagram login**, people sign in on instagram.com with the Instagram account itself (Business or
+Creator), with no Facebook account or business portfolio in between. Use it when Unified login doesn't suit
+you or Meta has Facebook Login unavailable for the app.
+
+1. In the Meta app's **Instagram** use case open **API setup with Instagram login**. Under **Set up Instagram
+   business login → Business login settings** add the redirect URL `https://<your dashboard>/channels/callback/instagram`,
+   and copy the **Instagram app ID** and **Instagram app secret** (not the Meta app's keys).
+2. Set both on the server and restart it:
+
+   ```bash title=".env"
+   PROVIDER_INSTAGRAM_CLIENT_ID=your-instagram-app-id
+   PROVIDER_INSTAGRAM_CLIENT_SECRET=your-instagram-app-secret
+   ```
+
+With both set, **Connect with Instagram** opens instagram.com, asks for publishing, comments and insights, and
+keeps a 60-day token that staqly renews on its own. `PROVIDER_INSTAGRAM_CONFIG_ID` is then not used. Accounts
+connected before keep working as they are (each remembers how it signed in); connect one again to move it to
+Instagram login. For [comments right away](#comments-right-away), set the webhook in **API setup with Instagram
+login** too: Meta signs those calls with the Instagram app's secret, which the server then has.
 
 ## The sign-in
 

@@ -66,7 +66,7 @@ type igComment struct {
 
 func (Instagram) Responses(ctx context.Context, c Credentials, externalID string, since time.Time) ([]Response, error) {
 	flat := "id,username,text,timestamp,like_count,from"
-	return metaResponses(ctx, igGraph, c["access_token"], "/"+url.PathEscape(externalID)+"/comments",
+	return metaResponses(ctx, igFor(c), c["access_token"], "/"+url.PathEscape(externalID)+"/comments",
 		flat+",replies{"+flat+"}", nil, since, func(raw json.RawMessage) []Response {
 			var d igComment
 			if json.Unmarshal(raw, &d) != nil || d.ID == "" {

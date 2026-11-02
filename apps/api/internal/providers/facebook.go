@@ -25,7 +25,11 @@ type Facebook struct{ Base }
 var (
 	facebookAuthorize = "https://www.facebook.com/" + instagramVersion + "/dialog/oauth"
 	facebookGraph     = "https://graph.facebook.com"
-	facebookVideo     = "https://graph-video.facebook.com" // video posts (Facebook takes their bytes on this host)
+	// Instagram login (the Instagram app's own keys instead of the Meta app's Unified login).
+	instagramGraph     = "https://graph.instagram.com"
+	instagramAuthorize = "https://www.instagram.com/oauth/authorize"
+	instagramToken     = "https://api.instagram.com/oauth/access_token"
+	facebookVideo      = "https://graph-video.facebook.com" // video posts (Facebook takes their bytes on this host)
 	// facebookPoll is how long to wait between checks of a video Facebook is still taking in.
 	facebookPoll = 3 * time.Second
 )

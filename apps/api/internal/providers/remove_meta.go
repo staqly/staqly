@@ -60,7 +60,7 @@ func (Instagram) Remove(ctx context.Context, c Credentials, externalID string) e
 	if !ok {
 		return &Failure{Kind: ErrManual, Msg: "Instagram has no way to delete a post through its API: delete it in the Instagram app"}
 	}
-	return igGraph.del(ctx, c["access_token"], id)
+	return igFor(c).del(ctx, c["access_token"], id)
 }
 
 func (Threads) Remove(ctx context.Context, c Credentials, externalID string) error {

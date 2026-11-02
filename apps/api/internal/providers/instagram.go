@@ -68,15 +68,36 @@ func (Instagram) Needs() Needs { return Needs{HTTPS: true, PublicMedia: true} }
 
 // CheckApp asks Facebook for an app token: the keys are the Meta app's, as for Facebook Pages.
 func (Instagram) CheckApp(ctx context.Context, app App, _ string) (bool, error) {
+	if app.InstagramLogin {
+		return true, nil // Instagram login has no app token to ask for; a wrong key shows at the first sign-in
+	}
 	return metaCheckApp(ctx, igGraph, igGraph.url("/oauth/access_token"), app)
 }
 
-// AuthURL opens Facebook Login for Business with the app's Instagram configuration: the configuration, not a scope,
-// says which permissions and which kind of token the sign-in gives.
+// instagramScopes: what Instagram login asks for (the Instagram app's keys).
+const instagramScopes = "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments,instagram_business_manage_insights"
+
+// igFor: the Graph host of a connected account: graph.instagram.com for Instagram login, else graph.facebook.com.
+func igFor(c Credentials) metaGraph {
+	if c["login"] == "instagram" {
+		return igLoginGraph
+	}
+	return igGraph
+}
+
+// AuthURL opens the sign-in. With the Instagram app's own keys (app.InstagramLogin: PROVIDER_INSTAGRAM_CLIENT_ID and
+// _SECRET) it is Instagram login, on instagram.com with the Instagram account itself; otherwise Facebook Login for
+// Business with the Meta app's Instagram configuration (Unified login), where the configuration, not a scope, says
+// which permissions and which kind of token the sign-in gives.
 func (Instagram) AuthURL(app App, redirect, state string, _ map[string]string) (string, error) {
+	if app.InstagramLogin {
+		q := url.Values{"client_id": {app.ClientID}, "redirect_uri": {redirect}, "response_type": {"code"},
+			"scope": {instagramScopes}, "state": {state}, "enable_fb_login": {"0"}, "force_reauth": {"true"}}
+		return instagramAuthorize + "?" + q.Encode(), nil
+	}
 	if app.ConfigID == "" {
 		// For whoever runs the server: PROVIDER_INSTAGRAM_CONFIG_ID is the configuration made under the Meta app's
-		// Instagram use case, API setup with Unified login.
+		// Instagram use case, API setup with Unified login (or the Instagram app's own keys for Instagram login).
 		return "", &Failure{Kind: ErrRejected, Msg: "Instagram needs the Meta app's login configuration: whoever runs this server sets PROVIDER_INSTAGRAM_CONFIG_ID"}
 	}
 	q := url.Values{
@@ -93,6 +114,9 @@ func (Instagram) AuthURL(app App, redirect, state string, _ map[string]string) (
 
 // Exchange trades the code for the token; the Instagram accounts it reaches come from Accounts.
 func (Instagram) Exchange(ctx context.Context, app App, redirect, code string, _ map[string]string) (Credentials, Profile, error) {
+	if app.InstagramLogin {
+		return instagramLoginExchange(ctx, app, redirect, strings.TrimSuffix(code, "#_"))
+	}
 	q := url.Values{"client_id": {app.ClientID}, "client_secret": {app.ClientSecret}, "redirect_uri": {redirect},
 		"code": {strings.TrimSuffix(code, "#_")}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, igGraph.url("/oauth/access_token")+"?"+q.Encode(), nil)
@@ -144,6 +168,13 @@ func instagramAccounts(ctx context.Context, c Credentials) ([]instagramAccount, 
 	if token == "" {
 		return nil, &Failure{Kind: ErrReauth, Msg: "Instagram: no sign-in stored; connect again"}
 	}
+	if c["login"] == "instagram" {
+		a, err := instagramMe(ctx, token)
+		if err != nil {
+			return nil, err
+		}
+		return []instagramAccount{a}, nil
+	}
 	var out []instagramAccount
 	err := metaEach(ctx, igGraph, token, "/me/assigned_instagram_accounts", url.Values{"fields": {"id,username,name,profile_picture_url"}, "limit": {"100"}},
 		func(raw json.RawMessage) {
@@ -185,7 +216,7 @@ func (Instagram) UseAccount(ctx context.Context, c Credentials, accountID string
 			continue
 		}
 		creds := Credentials{"user_id": a.ID}
-		for _, k := range []string{"access_token", "expires_at", "no_comments"} {
+		for _, k := range []string{"access_token", "expires_at", "no_comments", "login"} {
 			if c[k] != "" {
 				creds[k] = c[k]
 			}
@@ -233,6 +264,9 @@ func (Instagram) Refresh(ctx context.Context, app App, c Credentials) (Credentia
 	if exp, ok := credentialsExpiry(c); ok && !exp.After(time.Now()) {
 		return nil, &Failure{Kind: ErrReauth, Msg: "Instagram's sign-in ran out; reconnect the account"}
 	}
+	if c["login"] == "instagram" {
+		return instagramLoginRefresh(ctx, c)
+	}
 	if err := igGraph.get(ctx, c["access_token"], "/"+c["user_id"], url.Values{"fields": {"id"}}, nil); err != nil {
 		return nil, err
 	}
@@ -251,10 +285,11 @@ func (Instagram) Publish(ctx context.Context, c Credentials, p PostContent, s Se
 	if token == "" || user == "" {
 		return Result{}, &Failure{Kind: ErrReauth, Msg: "Instagram: no account stored; reconnect the account"}
 	}
-	return instagramPublish(ctx, igGraph, token, user, p, s)
+	return instagramPublish(ctx, igFor(c), token, user, p, s)
 }
 
-// instagramPublish publishes a post to an Instagram account through g (graph.facebook.com).
+// instagramPublish publishes a post to an Instagram account through g (graph.facebook.com, or graph.instagram.com
+// for Instagram login: the same Content Publishing API).
 func instagramPublish(ctx context.Context, g metaGraph, token, user string, p PostContent, s Settings) (Result, error) {
 	for _, m := range p.Media {
 		if m.SignedURL == "" {
@@ -405,7 +440,7 @@ func instagramPermalink(ctx context.Context, g metaGraph, token, id string) stri
 // Reply comments under the post. parentExternalID is the post or, from the second part on, the comment before
 // ("comment:<post>:<comment>"); every part becomes a comment on the post itself, in order.
 func (Instagram) Reply(ctx context.Context, c Credentials, parentExternalID string, p PostContent, _ Settings) (Result, error) {
-	return instagramReply(ctx, igGraph, c, parentExternalID, p)
+	return instagramReply(ctx, igFor(c), c, parentExternalID, p)
 }
 
 func instagramReply(ctx context.Context, g metaGraph, c Credentials, parentExternalID string, p PostContent) (Result, error) {
@@ -434,4 +469,127 @@ func instagramReply(ctx context.Context, g metaGraph, c Credentials, parentExter
 		return Result{}, err
 	}
 	return Result{ExternalID: "comment:" + post + ":" + out.ID, URL: instagramPermalink(ctx, g, token, post)}, nil
+}
+
+// ---- Instagram login (the Instagram app's own keys) ----
+
+// instagramMe is the account an Instagram login token belongs to. user_id is the professional account's id, the one
+// the Content Publishing API takes (id is app-scoped).
+func instagramMe(ctx context.Context, token string) (instagramAccount, error) {
+	var me struct {
+		ID       string `json:"id"`
+		UserID   string `json:"user_id"`
+		Username string `json:"username"`
+		Name     string `json:"name"`
+		Picture  string `json:"profile_picture_url"`
+	}
+	if err := igLoginGraph.get(ctx, token, "/me", url.Values{"fields": {"user_id,username,name,profile_picture_url"}}, &me); err != nil {
+		return instagramAccount{}, instagramStep(err, "reading the account")
+	}
+	id := cmp.Or(me.UserID, me.ID)
+	if id == "" {
+		return instagramAccount{}, errors.New("Instagram did not say which account signed in")
+	}
+	return instagramAccount{ID: id, Username: me.Username, Name: me.Name, Picture: me.Picture}, nil
+}
+
+// instagramLoginExchange trades the code at api.instagram.com for a short token, then for the 60-day one.
+func instagramLoginExchange(ctx context.Context, app App, redirect, code string) (Credentials, Profile, error) {
+	form := url.Values{"client_id": {app.ClientID}, "client_secret": {app.ClientSecret}, "grant_type": {"authorization_code"},
+		"redirect_uri": {redirect}, "code": {code}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, instagramTokenURL(), strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, Profile{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// Instagram answers {"access_token","user_id","permissions"} or the same inside "data": [...].
+	var short struct {
+		AccessToken string          `json:"access_token"`
+		Permissions json.RawMessage `json:"permissions"`
+		Data        []struct {
+			AccessToken string          `json:"access_token"`
+			Permissions json.RawMessage `json:"permissions"`
+		} `json:"data"`
+	}
+	if err := igLoginGraph.do(ctx, req, &short); err != nil {
+		return nil, Profile{}, instagramStep(err, "trading the sign-in's code")
+	}
+	token, perms := short.AccessToken, short.Permissions
+	if token == "" && len(short.Data) > 0 {
+		token, perms = short.Data[0].AccessToken, short.Data[0].Permissions
+	}
+	if token == "" {
+		return nil, Profile{}, errors.New("Instagram returned no access token")
+	}
+	long, err := instagramLoginLong(ctx, "/access_token", url.Values{"grant_type": {"ig_exchange_token"},
+		"client_secret": {app.ClientSecret}, "access_token": {token}})
+	if err != nil {
+		return nil, Profile{}, instagramStep(err, "trading the sign-in for the 60-day token")
+	}
+	creds := long.into(Credentials{"login": "instagram"}, time.Now())
+	granted := instagramPermissions(perms)
+	if granted != nil && !granted["instagram_business_content_publish"] {
+		return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: "Instagram did not allow staqly to post for this account: connect again and allow publishing"}
+	}
+	if granted != nil && !granted["instagram_business_manage_comments"] {
+		creds["no_comments"] = "true"
+	}
+	return creds, Profile{NoComments: creds["no_comments"] == "true"}, nil
+}
+
+// instagramPermissions reads the granted scopes ("a,b" or ["a","b"]); nil when Instagram didn't list them.
+func instagramPermissions(raw json.RawMessage) map[string]bool {
+	var list []string
+	if json.Unmarshal(raw, &list) != nil {
+		var s string
+		if json.Unmarshal(raw, &s) != nil || s == "" {
+			return nil
+		}
+		list = strings.Split(s, ",")
+	}
+	out := map[string]bool{}
+	for _, p := range list {
+		out[strings.TrimSpace(p)] = true
+	}
+	return out
+}
+
+func instagramTokenURL() string {
+	if instagramGraph != "https://graph.instagram.com" {
+		return instagramGraph + "/oauth/access_token" // tests: one fake host for everything
+	}
+	return instagramToken
+}
+
+// instagramLoginLong asks graph.instagram.com for a 60-day token (ig_exchange_token) or a renewed one (ig_refresh_token).
+func instagramLoginLong(ctx context.Context, path string, q url.Values) (instagramLong, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, instagramGraph+path+"?"+q.Encode(), nil)
+	if err != nil {
+		return instagramLong{}, err
+	}
+	var t instagramLong
+	if err := igLoginGraph.do(ctx, req, &t); err != nil {
+		return instagramLong{}, err
+	}
+	if t.AccessToken == "" {
+		return instagramLong{}, errors.New("Instagram returned no access token")
+	}
+	return t, nil
+}
+
+// instagramLoginRefresh renews the 60-day token once fewer than 30 days are left (Instagram renews a token at
+// least a day old), and otherwise checks it still reaches the account.
+func instagramLoginRefresh(ctx context.Context, c Credentials) (Credentials, error) {
+	exp, ok := credentialsExpiry(c)
+	if ok && exp.After(time.Now().Add(30*24*time.Hour)) {
+		if err := igLoginGraph.get(ctx, c["access_token"], "/me", url.Values{"fields": {"user_id"}}, nil); err != nil {
+			return nil, err
+		}
+		return c, nil
+	}
+	t, err := instagramLoginLong(ctx, "/refresh_access_token", url.Values{"grant_type": {"ig_refresh_token"}, "access_token": {c["access_token"]}})
+	if err != nil {
+		return nil, err
+	}
+	return t.into(c, time.Now()), nil
 }

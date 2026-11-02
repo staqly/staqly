@@ -47,6 +47,9 @@ Put them in the server's environment and restart it:
 ```bash title=".env"
 PROVIDER_META_CLIENT_ID=your-meta-app-id
 PROVIDER_META_CLIENT_SECRET=your-meta-app-secret
+# or a Meta app for Facebook alone (both set: Facebook uses it, Instagram keeps the one above)
+# PROVIDER_FACEBOOK_CLIENT_ID=your-facebook-app-id
+# PROVIDER_FACEBOOK_CLIENT_SECRET=your-facebook-app-secret
 ```
 
 - **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_META_CLIENT_ID=...`.
