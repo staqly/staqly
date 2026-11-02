@@ -85,39 +85,64 @@ test.describe('API keys (cloud)', () => {
     await expect(page.getByRole('row').filter({ hasText: name })).toContainText('Active')
   })
 
-  test('an expiry date comes from a calendar where past days cannot be picked', async ({ page }) => {
-    await page.goto('/integrations/api-keys')
-    await page.getByRole('button', { name: 'Create API key' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Create API key' })
+  for (const day of [1, 2]) {
+    test(`an expiry date cannot use past days (month day ${day})`, async ({ page, api }) => {
+      const session = await api.get<{ workspace: { timezone: string } }>('/v1/session')
 
-    await dialog.getByRole('textbox', { name: 'Name' }).fill(uniq('Expiring key'))
-    // Expires: presets (a month by default) or a day you pick, from tomorrow up to a year ahead.
-    await expect(dialog.getByRole('combobox', { name: 'Expires' })).toHaveText('1 month')
-    await dialog.getByRole('combobox', { name: 'Expires' }).click()
-    await page.getByRole('option', { name: 'Pick a day' }).click()
-    await dialog.getByTestId('date-picker').click()
-    const picker = page.getByRole('dialog', { name: 'Pick a date' })
-    const yesterday = new Date()
+      expect(session.workspace.timezone).toBe('UTC')
+      // Use the seeded workspace's zone, not the Node process's local date. The second of the month also
+      // reproduces the ambiguous day-1/day-15 accessible names (the same weekday) on every run.
+      const now = new Date()
+      const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, 12))
 
-    yesterday.setDate(yesterday.getDate() - 1)
+      await page.clock.setFixedTime(today)
+      await page.goto('/integrations/api-keys')
+      await page.getByRole('button', { name: 'Create API key' }).click()
+      const dialog = page.getByRole('dialog', { name: 'Create API key' })
 
-    // Yesterday is shown (same month, or after one step back) but cannot be picked.
-    if (yesterday.getMonth() !== new Date().getMonth()) {
-      await picker.getByRole('button', { name: 'Previous month' }).click()
-    }
+      await dialog.getByRole('textbox', { name: 'Name' }).fill(uniq('Expiring key'))
+      // Expires: presets (a month by default) or a day you pick, from tomorrow up to a year ahead.
+      await expect(dialog.getByRole('combobox', { name: 'Expires' })).toHaveText('1 month')
+      await dialog.getByRole('combobox', { name: 'Expires' }).click()
+      await page.getByRole('option', { name: 'Pick a day' }).click()
+      await dialog.getByTestId('date-picker').click()
+      const picker = page.getByRole('dialog', { name: 'Pick a date' })
+      const yesterday = new Date(today)
 
-    await expect(
-      picker.getByRole('button', {
-        name: yesterday.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' }),
-      }),
-    ).toBeDisabled()
-    await picker.getByRole('button', { name: 'Next month' }).click()
-    await picker.getByRole('button', { name: /\b15$/ }).first().click()
-    await expect(picker).toBeHidden()
-    await expect(dialog.getByTestId('date-picker')).toContainText(/15/)
-    await dialog.getByRole('button', { name: 'Create key' }).click()
-    await expect(page.getByText(/Copy it now/)).toBeVisible()
-  })
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+
+      const previousMonth = yesterday.getUTCMonth() !== today.getUTCMonth()
+
+      // Yesterday is shown (same month, or after one step back) but cannot be picked.
+      if (previousMonth) {
+        await picker.getByRole('button', { name: 'Previous month' }).click()
+      }
+
+      await expect(
+        picker.getByRole('button', {
+          name: yesterday.toLocaleDateString('en-US', {
+            timeZone: session.workspace.timezone,
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+          }),
+          exact: true,
+        }),
+      ).toBeDisabled()
+
+      if (previousMonth) {
+        await picker.getByRole('button', { name: 'Next month' }).click()
+      }
+
+      // Pick next month's 15th so the real server clock accepts the expiry throughout this month.
+      await picker.getByRole('button', { name: 'Next month' }).click()
+      await picker.getByRole('button', { name: /\b15$/ }).first().click()
+      await expect(picker).toBeHidden()
+      await expect(dialog.getByTestId('date-picker')).toContainText(/15/)
+      await dialog.getByRole('button', { name: 'Create key' }).click()
+      await expect(page.getByText(/Copy it now/)).toBeVisible()
+    })
+  }
 
   test('rotate shows a new key and retires the old one; revoke turns the key off', async ({ page, api }) => {
     const name = uniq('Rotate me')

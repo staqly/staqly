@@ -1,13 +1,14 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AiPanel, discardAiRun, expandPlacement } from '@/components/design/ai-panel'
 import { newDesign, newImage, newText, type Page } from '@/components/design/doc'
 import type { PanelCtx } from '@/components/design/panels'
+import * as raster from '@/components/design/raster'
 import type { DesignStore } from '@/components/design/store'
 import { allowanceNote, madeBy } from '@/lib/ai'
-import type { AIJob, AIOperation, AIStatus } from '@/lib/api'
+import { api as client, type AIJob, type AIOperation, type AIStatus } from '@/lib/api'
 
 import { mockApi, renderWithProviders } from './utils'
 
@@ -79,6 +80,7 @@ function ctxWith(page: Page, selected: string[] = []) {
 
 afterEach(() => {
   discardAiRun()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -251,6 +253,58 @@ describe('the AI panel', () => {
     expect(await screen.findByRole('button', { name: 'Make the picture' })).toBeInTheDocument()
     expect(add).not.toHaveBeenCalled()
     expect(updatePage).not.toHaveBeenCalled()
+  })
+
+  it('discards a job whose creation finishes after the editor was closed', async () => {
+    mockApi({ 'GET /v1/ai': status([op('generate')]) })
+    let finish!: (value: AIJob) => void
+    const start = vi.spyOn(client, 'startAiJob').mockImplementation(() => new Promise((resolve) => (finish = resolve)))
+    const discard = vi.spyOn(client, 'discardAiJob').mockResolvedValue(undefined)
+    const { ctx, add } = ctxWith(newDesign().pages[0]!)
+    const view = renderWithProviders(<AiPanel ctx={ctx} />)
+
+    await userEvent.type(await screen.findByRole('textbox'), 'A lighthouse')
+    await userEvent.click(screen.getByRole('button', { name: 'Make the picture' }))
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1))
+    act(discardAiRun)
+    view.unmount()
+    await act(async () => finish(job()))
+
+    await waitFor(() => expect(discard).toHaveBeenCalledWith('aij_1'))
+    expect(add).not.toHaveBeenCalled()
+  })
+
+  it('does not start a paid job if the editor closes while its picture is being prepared', async () => {
+    mockApi({
+      'GET /v1/ai': status([op('edit')]),
+      'GET /v1/media/med_1': {},
+    })
+    let finish!: (blob: Blob) => void
+    const prepare = vi.spyOn(raster, 'downscale').mockImplementation(() => new Promise((resolve) => (finish = resolve)))
+
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi
+        .fn<typeof createImageBitmap>()
+        .mockResolvedValue({ width: 800, height: 600, close: vi.fn<() => void>() } as ImageBitmap),
+    )
+
+    const start = vi.spyOn(client, 'startAiJob').mockResolvedValue(job())
+    const d = newDesign()
+    const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
+    const { ctx, add } = ctxWith({ ...d.pages[0]!, elements: [pic] }, [pic.id])
+    const view = renderWithProviders(<AiPanel ctx={ctx} />)
+
+    await userEvent.click(await screen.findByRole('radio', { name: 'Change it' }))
+    await userEvent.type(screen.getByRole('textbox'), 'Make the sky blue')
+    await userEvent.click(screen.getByRole('button', { name: 'Change the photo' }))
+    await waitFor(() => expect(prepare).toHaveBeenCalledTimes(1))
+    act(discardAiRun)
+    view.unmount()
+    await act(async () => finish(new Blob(['image'], { type: 'image/png' })))
+
+    expect(start).not.toHaveBeenCalled()
+    expect(add).not.toHaveBeenCalled()
   })
 
   it('shows why a request failed and offers to try again', async () => {

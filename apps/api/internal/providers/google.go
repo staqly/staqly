@@ -199,6 +199,12 @@ func googleGet(ctx context.Context, name, token, endpoint string, out any) error
 func googleDo(ctx context.Context, name string, req *http.Request, out any) (http.Header, error) {
 	resp, err := httpClient(ctx).Do(req)
 	if err != nil {
+		// Local capacity guards return a typed failure before sending HTTP. Keep its
+		// retry time so the queue can wait for capacity without spending attempts.
+		var failure *Failure
+		if errors.As(err, &failure) {
+			return nil, failure
+		}
 		// The error quotes the URL, which for an upload is the upload session itself: name the host only.
 		return nil, fmt.Errorf("%s could not be reached (%s)", name, req.URL.Host)
 	}

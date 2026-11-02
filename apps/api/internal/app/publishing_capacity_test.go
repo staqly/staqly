@@ -81,6 +81,16 @@ func TestPublishingCapacityStopsHTTPAndUsesPacificReset(t *testing.T) {
 	if !errors.As(err, &failure) || !failure.RetryAt.Equal(time.Date(2026, 11, 2, 8, 0, 0, 0, time.UTC)) || next.calls != 1 {
 		t.Fatalf("blocked before HTTP, DST reset: %v, calls %d", err, next.calls)
 	}
+	// The reset must survive the provider and http.Client wrappers so the queue snoozes
+	// instead of spending its attempts and failing the post before tomorrow's capacity.
+	youtube, _ := providers.Get("youtube")
+	_, err = youtube.Publish(providers.WithHTTPClient(ctx, &http.Client{Transport: tr}),
+		providers.Credentials{"access_token": "test", "channel_id": "test"},
+		providers.PostContent{Media: []providers.MediaFile{{Size: 1, MimeType: "video/mp4"}}},
+		providers.Settings{"title": "Capacity test"})
+	if !providers.RetryAt(err).Equal(failure.RetryAt) || next.calls != 1 {
+		t.Fatalf("YouTube lost capacity retry time: %v, calls %d", err, next.calls)
+	}
 	now = failure.RetryAt
 	if _, err := tr.RoundTrip(req); err != nil || next.calls != 2 {
 		t.Fatalf("Pacific midnight reset: %v, calls %d", err, next.calls)

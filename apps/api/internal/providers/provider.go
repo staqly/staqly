@@ -387,6 +387,8 @@ type Failure struct {
 	Kind    error
 	Msg     string
 	RetryAt time.Time
+	// OutcomeUnknown means a refused retry may nevertheless have published already.
+	OutcomeUnknown bool
 }
 
 // RetryAt is when a retryable failure says to try again, or zero.

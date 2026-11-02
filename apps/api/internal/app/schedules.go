@@ -600,6 +600,9 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 		case "agent":
 			result = "asked for posts"
 			err := s.tx(ctx, func(q *db.Queries) error {
+				if current, err := scheduleUnchanged(ctx, q, r); err != nil || !current {
+					return err
+				}
 				_, err := s.emitRef(ctx, q, sys, "schedule.posts_requested", Ref{Collection: r.CollectionID, Schedule: r.ID},
 					map[string]any{"schedule": s.toSchedule(ctx, r), "channels": channels})
 				return err
@@ -630,6 +633,9 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 		started := false // set by the run that commits (on PostgreSQL fn may run again after a serialization failure)
 		err := s.tx(ctx, func(q *db.Queries) error {
 			started, nowhere = false, false
+			if current, err := scheduleUnchanged(ctx, q, r); err != nil || !current {
+				return err
+			}
 			cur, err := q.GetPostByID(ctx, p.ID)
 			if err != nil || cur.Status == "publishing" || cur.Status == "published" {
 				return err
@@ -687,7 +693,8 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 		result = fmt.Sprintf("published %d", len(published))
 	}
 
-	// 4. Record the run and the next one.
+	// 4. Record the run and the next one, unless an edit or deletion superseded this run.
+	before := r
 	now := s.now()
 	if advance {
 		if r.Kind == "once" {
@@ -698,6 +705,9 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 		}
 	}
 	err = s.tx(ctx, func(q *db.Queries) error {
+		if current, err := scheduleUnchanged(ctx, q, before); err != nil || !current {
+			return err
+		}
 		if err := q.FinishScheduleRun(ctx, db.FinishScheduleRunParams{Enabled: r.Enabled, NextRunAt: r.NextRunAt, LastRunAt: nullStr(now),
 			LastResult: result, UpdatedAt: now, ID: r.ID}); err != nil {
 			return err
@@ -718,17 +728,30 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 	return err
 }
 
+// A run can wait on an endpoint while someone edits or deletes its schedule. Compare the snapshot
+// inside each write transaction: timestamp equality alone misses updates made in the same clock tick.
+func scheduleUnchanged(ctx context.Context, q *db.Queries, before db.Schedule) (bool, error) {
+	current, err := q.GetScheduleByID(ctx, before.ID)
+	if isNoRows(err) {
+		return false, nil
+	}
+	return current == before, err
+}
+
 // scheduleFailed records a run that errored out after its attempts.
 func (s *Service) scheduleFailed(ctx context.Context, id string, cause error) {
-	r, err := s.Q.GetScheduleByID(ctx, id)
-	if err != nil {
-		return
-	}
-	sys := Principal{WorkspaceID: r.WorkspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
 	now := s.now()
-	r.LastRunAt = nullStr(now)
-	s.computeNext(&r)
 	_ = s.tx(ctx, func(q *db.Queries) error {
+		r, err := q.GetScheduleByID(ctx, id)
+		if isNoRows(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		sys := Principal{WorkspaceID: r.WorkspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
+		r.LastRunAt = nullStr(now)
+		s.computeNext(&r)
 		if err := q.FinishScheduleRun(ctx, db.FinishScheduleRunParams{Enabled: r.Enabled, NextRunAt: r.NextRunAt, LastRunAt: r.LastRunAt,
 			LastResult: "failed: " + truncateRunes(cause.Error(), 200), UpdatedAt: now, ID: r.ID}); err != nil {
 			return err
@@ -736,10 +759,12 @@ func (s *Service) scheduleFailed(ctx context.Context, id string, cause error) {
 		if err := s.queueScheduleJob(ctx, q, r); err != nil {
 			return err
 		}
-		_, err := s.emitRef(ctx, q, sys, "schedule.failed", Ref{Collection: r.CollectionID, Schedule: r.ID}, map[string]any{"schedule": s.toSchedule(ctx, r), "error": cause.Error()})
+		_, err = s.emitRef(ctx, q, sys, "schedule.failed", Ref{Collection: r.CollectionID, Schedule: r.ID}, map[string]any{"schedule": s.toSchedule(ctx, r), "error": cause.Error()})
 		return err
 	})
 }
+
+var errScheduleChanged = errors.New("schedule changed while fetching posts")
 
 // fetchPostsFromEndpoint POSTs the slot to the schedule's endpoint (signed like a webhook) and creates the
 // posts it answers with.
@@ -778,13 +803,16 @@ func (s *Service) fetchPostsFromEndpoint(ctx context.Context, sys Principal, r d
 	var out []db.Post
 	for _, ip := range reply.Posts {
 		in := PostInput{Collection: r.CollectionID, Title: ip.Title, Content: ip.Content, Media: ip.Media, Targets: ip.Targets, Tags: ip.Tags, Metadata: ip.Metadata,
-			Source: "schedule:" + r.Name}
+			Source: "schedule:" + r.Name, schedule: &r}
 		if len(in.Targets) == 0 {
 			for _, ch := range channels {
 				in.Targets = append(in.Targets, PostTargetInput{ChannelID: ch})
 			}
 		}
 		post, err := s.CreatePost(ctx, sys, in)
+		if errors.Is(err, errScheduleChanged) {
+			return out, nil
+		}
 		if err != nil {
 			return nil, fmt.Errorf("a post from the endpoint was refused: %w", err)
 		}

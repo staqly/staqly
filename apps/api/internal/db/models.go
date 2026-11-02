@@ -519,6 +519,12 @@ type ProviderApp struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type PublishingAllowanceReservation struct {
+	WorkspaceID string `json:"workspace_id"`
+	Ref         string `json:"ref"`
+	CreditDraws string `json:"credit_draws"`
+}
+
 type Schedule struct {
 	ID             string         `json:"id"`
 	WorkspaceID    string         `json:"workspace_id"`

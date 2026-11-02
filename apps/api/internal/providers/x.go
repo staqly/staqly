@@ -341,9 +341,12 @@ func (x X) tweet(ctx context.Context, c Credentials, p PostContent, s Settings, 
 		}
 		id := x.recentWithText(ctx, token, c["user_id"], p.Text)
 		if id == "" {
-			return Result{}, err
+			return Result{}, &Failure{Kind: ErrRejected, OutcomeUnknown: true, Msg: err.Error()}
 		}
 		out.Data.ID = id
+	}
+	if out.Data.ID == "" {
+		return Result{}, &Failure{Kind: ErrRejected, OutcomeUnknown: true, Msg: "X accepted the post but did not say its id; check the profile before posting again"}
 	}
 	user := c["username"]
 	if user == "" {

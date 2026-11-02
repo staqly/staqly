@@ -88,7 +88,13 @@ interface AiRun {
 
 // One run per editor, outside React state so switching panels keeps it.
 let current: AiRun | null = null
+let editorVersion = 0
 const listeners = new Set<() => void>()
+
+// Read at the time of the call; the React Compiler may inline a direct module-variable snapshot.
+function getEditorVersion() {
+  return editorVersion
+}
 
 function setRun(r: AiRun | null) {
   current = r
@@ -111,6 +117,8 @@ function useRun() {
 
 /** The editor closes: a run that is still going is cancelled and its files deleted. */
 export function discardAiRun() {
+  editorVersion++
+
   if (current?.jobId) {
     void api.discardAiJob(current.jobId).catch(() => undefined)
   }
@@ -122,7 +130,14 @@ function send(r: AiRun) {
   setRun({ ...r, error: undefined })
   void api
     .startAiJob({ operation: r.op, prompt: r.prompt, fields: r.fields, image: r.image, mask: r.mask }, r.key)
-    .then((job) => current?.key === r.key && setRun({ ...current, jobId: job.id }))
+    .then((job) => {
+      if (current?.key === r.key) {
+        setRun({ ...current, jobId: job.id })
+      } else {
+        // Discarding while POST /ai/jobs is pending must also cancel the job it eventually creates.
+        void api.discardAiJob(job.id).catch(() => undefined)
+      }
+    })
     .catch(
       (e: unknown) =>
         current?.key === r.key &&
@@ -585,6 +600,7 @@ function AiForm({ ctx, op, picture }: { ctx: PanelCtx; op: AIOperation; picture?
   }
 
   const start = () => {
+    const version = getEditorVersion()
     const base: AiRun = {
       key: requestKey(),
       op: op.id,
@@ -611,6 +627,10 @@ function AiForm({ ctx, op, picture }: { ctx: PanelCtx; op: AIOperation; picture?
 
     void ready
       .then((p) => {
+        if (version !== getEditorVersion()) {
+          return
+        }
+
         const r: AiRun = { ...base, targetId: picture.id, image: p.blob, mask: mask ?? undefined }
 
         if (op.id === 'expand') {

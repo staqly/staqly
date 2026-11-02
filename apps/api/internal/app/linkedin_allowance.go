@@ -63,7 +63,7 @@ func (s *Service) checkLinkedIn(ctx context.Context, q *db.Queries, workspaceID 
 	return nil
 }
 
-// meterLinkedIn counts a published post to LinkedIn once (ref: post:<post>:<channel>), and once more on the video
+// meterLinkedIn charges a reserved or published LinkedIn post once (ref: post:<post>:<channel>), and once more on the video
 // allowance when it has a video. In the caller's transaction; a retried job counts once.
 func (s *Service) meterLinkedIn(ctx context.Context, q *db.Queries, workspaceID, ref string, video bool) error {
 	if s.Cfg.Mode == ModeLocal {

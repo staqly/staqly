@@ -2,7 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2, RotateCcw, Sparkles } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Callout } from '@/components/common/callout'
@@ -99,19 +99,40 @@ export function AiVideoDialog({
   const [keeping, setKeeping] = useState(false)
   const [error, setError] = useState('')
   const [key, setKey] = useState(requestKey)
+  const attempt = useRef({ version: 0, jobId: '' })
+
+  useEffect(() => {
+    const active = attempt.current
+
+    return () => {
+      active.version++
+
+      if (active.jobId) {
+        void api.discardAiJob(active.jobId).catch(() => undefined)
+      }
+    }
+  }, [])
+
   const job = useAiJob(jobId)
   const j = job.data
   const running = starting || (!!jobId && (!j || isLive(j)))
 
   const reset = () => {
+    attempt.current.jobId = ''
     setJobId(null)
     setError('')
     setKey(requestKey())
   }
 
   const close = (o: boolean) => {
-    if (!o && jobId && !j?.media_id) {
-      void api.discardAiJob(jobId).catch(() => undefined)
+    if (!o) {
+      attempt.current.version++
+
+      if (jobId && !j?.media_id) {
+        void api.discardAiJob(jobId).catch(() => undefined)
+      }
+
+      setStarting(false)
       reset()
     }
 
@@ -120,9 +141,11 @@ export function AiVideoDialog({
 
   const start = (sameKey: boolean) => {
     const k = sameKey ? key : requestKey()
+    const version = ++attempt.current.version
 
     if (jobId && !sameKey) {
       void api.discardAiJob(jobId).catch(() => undefined) // the earlier result, not kept
+      attempt.current.jobId = ''
       setJobId(null)
     }
 
@@ -130,8 +153,12 @@ export function AiVideoDialog({
     setError('')
     setStarting(true)
     void (from ? pictureBlob(from) : Promise.resolve(undefined))
-      .then((image) =>
-        api.startAiJob(
+      .then((image) => {
+        if (version !== attempt.current.version) {
+          return
+        }
+
+        return api.startAiJob(
           {
             operation: op,
             prompt: prompt.trim(),
@@ -139,11 +166,31 @@ export function AiVideoDialog({
             fields: from ? { duration } : { duration, aspect_ratio: shape },
           },
           k,
-        ),
-      )
-      .then((started) => setJobId(started.id))
-      .catch((e: unknown) => setError(errorMessage(e)))
-      .finally(() => setStarting(false))
+        )
+      })
+      .then((started) => {
+        if (!started) {
+          return
+        }
+
+        // Closing can race with POST /ai/jobs; cancel its returned job instead of losing it.
+        if (version !== attempt.current.version) {
+          return api.discardAiJob(started.id).catch(() => undefined)
+        }
+
+        attempt.current.jobId = started.id
+        setJobId(started.id)
+      })
+      .catch((e: unknown) => {
+        if (version === attempt.current.version) {
+          setError(errorMessage(e))
+        }
+      })
+      .finally(() => {
+        if (version === attempt.current.version) {
+          setStarting(false)
+        }
+      })
   }
 
   const keep = () => {
