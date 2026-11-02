@@ -745,17 +745,24 @@ function TikTokTemplate(p: PreviewProps) {
 
 const PIN = palette('pinterest')
 
+/** "example.com" for a link, empty when there is none or it isn't one. */
+function siteOf(link?: string) {
+  if (!link) {
+    return ''
+  }
+
+  try {
+    return new URL(link).hostname.replace(/^www\./, '')
+  } catch {
+    return ''
+  }
+}
+
 function PinterestTemplate(p: PreviewProps) {
   // A pin is one picture: the first one Pinterest takes (the others are left out when it goes out).
   const picture = p.media.find((m) => m.mime_type.startsWith('image/'))
   const title = p.settings.title?.trim()
-  let site = ''
-
-  try {
-    site = p.settings.link ? new URL(p.settings.link).hostname.replace(/^www\./, '') : ''
-  } catch {
-    site = ''
-  }
+  const site = siteOf(p.settings.link)
 
   return (
     <Frame label={`Pinterest pin by ${p.channel.name}`} className={cn('@container rounded-3xl p-3', PIN.frame)}>
