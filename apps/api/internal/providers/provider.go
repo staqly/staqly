@@ -409,10 +409,17 @@ type Failure struct {
 	OutcomeUnknown bool
 }
 
-// commentTextOnly refuses a comment with media on a platform whose comments take text only.
-func commentTextOnly(platform string) *Failure {
-	return &Failure{Kind: ErrRejected, Msg: platform + " comments can't include photos or videos, so this comment was not posted. " +
-		"The post itself is live; add the comment on " + platform + " yourself, or keep comments for " + platform + " to text"}
+// textOnlyComment drops a comment's photos and videos on a platform whose comments take text only: the text goes out
+// alone. A comment with nothing but media has nothing left to post.
+func textOnlyComment(platform string, p PostContent) (PostContent, error) {
+	if len(p.Media) == 0 {
+		return p, nil
+	}
+	if strings.TrimSpace(p.Text) == "" {
+		return p, &Failure{Kind: ErrRejected, Msg: platform + " comments can't include photos or videos, and this one has no text, so it was not posted. The post itself is live"}
+	}
+	p.Media = nil
+	return p, nil
 }
 
 // RetryAt is when a retryable failure says to try again, or zero.

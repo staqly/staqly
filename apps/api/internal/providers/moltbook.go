@@ -182,8 +182,9 @@ func (Moltbook) Reply(ctx context.Context, c Credentials, parentExternalID strin
 	if post == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Moltbook: nothing to comment on (the post has no id)"}
 	}
-	if len(p.Media) > 0 {
-		return Result{}, commentTextOnly("Moltbook")
+	p, err := textOnlyComment("Moltbook", p)
+	if err != nil {
+		return Result{}, err
 	}
 	body := map[string]any{"content": p.Text}
 	if parent != "" {

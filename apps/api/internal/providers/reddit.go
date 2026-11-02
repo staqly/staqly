@@ -435,8 +435,9 @@ func (Reddit) Reply(ctx context.Context, c Credentials, parentExternalID string,
 	if parentExternalID == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Reddit: nothing to comment on (Reddit did not say the post's id)"}
 	}
-	if len(p.Media) > 0 {
-		return Result{}, commentTextOnly("Reddit")
+	p, err := textOnlyComment("Reddit", p)
+	if err != nil {
+		return Result{}, err
 	}
 	thing := parentExternalID
 	if !strings.HasPrefix(thing, "t1_") && !strings.HasPrefix(thing, "t3_") {
