@@ -31,8 +31,8 @@ export default function LimitsPage() {
     <Shell title="Limits">
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
         What each plan allows. A plan without its own value takes the default (shown faded). A workspace can get its own
-        value on its page (Limits tab); Stripe add-ons add to whichever applies. Changes apply at once and go to the
-        audit log.
+        value on its page (Limits tab); Stripe add-ons add to whichever applies. Unlimited means no limit, 0 none
+        allowed. Changes apply at once and go to the audit log.
       </p>
       {q.isPending ? (
         <Skeleton className="h-96 w-full" />
