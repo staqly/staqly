@@ -89,6 +89,7 @@ function TargetRemoval({ target }: { target: PostTarget }) {
               {timeAgo(target.removed_at)}
             </span>
           )}
+          {target.removal_error && <span className="text-amber-700 dark:text-amber-400">{target.removal_error}</span>}
         </span>
       )
     case 'failed':

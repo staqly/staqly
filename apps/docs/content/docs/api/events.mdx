@@ -113,7 +113,7 @@ objects carry them in `data` (`data.channel`, `data.schedule`, `data.webhook`).
 | `post.published` | Every target is published | — |
 | `post.failed` | A target failed, so the post did | — |
 | `post.unpublished` | A published post was [taken down](/concepts#unpublish) | `channels` (the channel ids being removed) |
-| `post.target_removed` | One target was removed from its platform | `channel_id`, `channel` (as above) |
+| `post.target_removed` | One target was removed from its platform, by unpublishing or, with `deleted_outside: true`, by someone deleting it there (found when staqly read its numbers) | `channel_id`, `channel` (as above), `deleted_outside` |
 | `post.target_remove_failed` | Removing a target failed | `channel_id`, `channel` (as above), `error` |
 | `post.responses_analyzed` | The AI read the [audience comments](/dashboard/posts#audience-comments) of a post (actor: staqly) | `channels`, `positive`, `neutral`, `negative` |
 | `post.deleted` | A post was deleted (its history is kept) | — |
