@@ -740,8 +740,8 @@ export function SchedulePage() {
 
                 router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
               }}
-              // Amber like other "not the usual view" states; the whole row tinted while archived posts show.
-              className={cn(TONES.warning.icon, TONES.warning.menu, showArchived && TONES.warning.chip)}
+              // An amber icon; while archived posts show, a light amber row (the text keeps its colour, hover the menu's).
+              className={cn(TONES.warning.icon, showArchived && TONES.warning.callout)}
               data-testid="schedule-show-archived"
             >
               <Archive /> Show archived
