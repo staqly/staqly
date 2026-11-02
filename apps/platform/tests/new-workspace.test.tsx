@@ -40,7 +40,7 @@ describe('new workspace', () => {
 
     await user.type(screen.getByLabelText(/Name/), 'Client work')
     await user.click(await screen.findByRole('button', { name: 'Create and choose a plan' }))
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('/welcome'))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/welcome?new=1'))
     expect(api.find('POST', '/v1/session/workspace')[0].body).toEqual({ workspace_id: 'ws_new' })
   })
 
