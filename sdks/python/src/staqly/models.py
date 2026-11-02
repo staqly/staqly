@@ -977,6 +977,8 @@ class PostMetrics(StaqlyModel):
     quotes: int | None = None
     bookmarks: int | None = None
     link_clicks: int | None = None
+    #: Clicks on the post itself, apart from its link (Pinterest pin clicks).
+    clicks: int | None = None
     shares: int | None = None
     #: Video: minutes watched in all, the average view in seconds, subscribers it brought (YouTube).
     watch_minutes: int | None = None

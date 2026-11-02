@@ -2264,6 +2264,12 @@
           "description": "the custom channel the target is on",
           "type": "string"
         },
+        "clicks": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
         "exits": {
           "type": [
             "null",

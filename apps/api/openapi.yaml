@@ -2217,7 +2217,7 @@ paths:
       tags: [posts]
       summary: The post's numbers per channel, read from each platform that reports them (posts:read)
       description: |
-        Published targets on platforms that report numbers (X, YouTube, Facebook, Instagram, Threads, Slack) are read again when the cached numbers are older
+        Published targets on platforms that report numbers (X, YouTube, Facebook, Instagram, Threads, LinkedIn Page, Pinterest, TikTok, Bluesky, Mastodon, Reddit, Tumblr, Slack) are read again when the cached numbers are older
         than ten minutes, or now with `refresh=true`. A failed read keeps the last numbers and sets `error`.
         Targets on your own automation show what it reported (PUT .../metrics). `available: false` means the
         platform gives no numbers.
@@ -5719,6 +5719,7 @@ components:
         quotes: { type: integer, minimum: 0 }
         bookmarks: { type: integer, minimum: 0 }
         link_clicks: { type: integer, minimum: 0 }
+        clicks: { type: integer, minimum: 0, description: "Clicks on the post itself, apart from its link (Pinterest pin clicks)" }
         shares: { type: integer, minimum: 0 }
         watch_minutes: { type: integer, minimum: 0, description: "Minutes watched in all (video)" }
         avg_view_seconds: { type: integer, minimum: 0, description: "How long a view lasts on average, in seconds (video)" }

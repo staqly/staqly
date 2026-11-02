@@ -72,6 +72,12 @@ func (f *fakeBluesky) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = w.Write([]byte(`{"uri":"at://did:plc:jane/app.bsky.feed.post/` + rkey + `","cid":"cid-` + rkey + `","value":{}}`))
+	case "app.bsky.feed.getPosts":
+		if r.URL.Query().Get("uris") != "at://did:plc:jane/app.bsky.feed.post/p1" {
+			_, _ = w.Write([]byte(`{"posts":[]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"posts":[{"likeCount":5,"repostCount":2,"replyCount":3,"quoteCount":1}]}`))
 	case "com.atproto.repo.uploadBlob":
 		f.blobs++
 		_, _ = w.Write([]byte(`{"blob":{"$type":"blob","ref":{"$link":"bafy"},"mimeType":"` + r.Header.Get("Content-Type") + `","size":` + jsonInt(len(raw)) + `}}`))

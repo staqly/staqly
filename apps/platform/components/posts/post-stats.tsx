@@ -49,6 +49,7 @@ const METRIC_LABELS: [Exclude<keyof NonNullable<TargetMetrics['metrics']>, 'reac
   ['shares', 'Shares', Share2],
   ['quotes', 'Quotes', Quote],
   ['bookmarks', 'Bookmarks', Bookmark],
+  ['clicks', 'Clicks', MousePointerClick],
   ['link_clicks', 'Link clicks', MousePointerClick],
   ['watch_minutes', 'Watch time', Clock],
   ['avg_view_seconds', 'Average view', Timer],
@@ -73,8 +74,23 @@ function metricValue(key: string, n: number) {
 }
 
 /** What a platform calls a number when it isn't the usual word (Slack has reactions, not likes). */
+const LABELS: Record<string, Record<string, string>> = {
+  slack: { likes: 'Reactions' },
+  pinterest: {
+    bookmarks: 'Saves',
+    clicks: 'Pin clicks',
+    link_clicks: 'Outbound clicks',
+    likes: 'Reactions',
+    replies: 'Comments',
+  },
+  tumblr: { likes: 'Notes' },
+  reddit: { likes: 'Score', replies: 'Comments' },
+  mastodon: { likes: 'Favourites', reposts: 'Boosts' },
+  tiktok: { replies: 'Comments' },
+}
+
 function metricLabel(provider: string, key: string, label: string) {
-  return provider === 'slack' && key === 'likes' ? 'Reactions' : label
+  return LABELS[provider]?.[key] ?? label
 }
 
 // Slack names its emoji; the common ones as themselves, the rest (custom ones too) by name.

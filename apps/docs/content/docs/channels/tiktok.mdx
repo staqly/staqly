@@ -25,7 +25,7 @@ At [developers.tiktok.com](https://developers.tiktok.com/apps), create an app, t
 |---|---|
 | **Products** | Add **Login Kit** and **Content Posting API**; in Content Posting API, turn on **Direct Post** |
 | **Login Kit → Redirect URI** | your dashboard's `/channels/callback/tiktok`, for example `https://staqly.example.com/channels/callback/tiktok`. TikTok takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
-| **Scopes** | `user.info.basic`, `user.info.profile`, `video.publish` |
+| **Scopes** | `user.info.basic`, `user.info.profile`, `video.publish`, `video.list` |
 
 Copy the **Client key** and **Client secret** from the app's page.
 
@@ -61,6 +61,7 @@ for these scopes:
 | `user.info.basic` | Read the account's name and picture |
 | `user.info.profile` | Read the `@username` the channel shows |
 | `video.publish` | Post videos to the account |
+| `video.list` | Read a published video's views, likes, comments and shares (**Insights**); a channel connected before needs reconnecting once |
 
 TikTok's sign-in lasts a day and renews for a year; staqly renews it on its own.
 
