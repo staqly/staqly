@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -205,12 +206,17 @@ func (Facebook) UseAccount(ctx context.Context, c Credentials, accountID string)
 	return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: "Facebook no longer lists this Page for your sign-in; connect again and choose it"}
 }
 
-// Refresh checks the Page token (it does not run out, but the person may remove the app or lose the Page).
-func (Facebook) Refresh(ctx context.Context, _ App, c Credentials) (Credentials, error) {
+// Refresh checks the Page token (it does not run out, but the person may remove the app, lose the Page or take a
+// permission away).
+func (Facebook) Refresh(ctx context.Context, app App, c Credentials) (Credentials, error) {
 	if c["access_token"] == "" || c["page_id"] == "" {
 		return nil, &Failure{Kind: ErrReauth, Msg: "Facebook: no Page stored; reconnect the channel"}
 	}
 	if err := fbGraph.get(ctx, c["access_token"], "/"+c["page_id"], url.Values{"fields": {"id"}}, nil); err != nil {
+		return nil, err
+	}
+	c = maps.Clone(c)
+	if err := metaPermissions(ctx, fbGraph, app, c["access_token"], c["page_id"], "pages_manage_posts", "pages_manage_engagement", c); err != nil {
 		return nil, err
 	}
 	return c, nil

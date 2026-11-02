@@ -135,6 +135,11 @@ comments within seconds of a new one:
 
 Meta signs every call with the Meta app's secret, which the server already has; a call it can't check is refused.
 
+The same webhook tells staqly when someone takes a permission away in their Facebook settings: under **Webhooks** →
+**Permissions**, with the same callback URL and verify token, subscribe to **pages_manage_posts** and **pages_manage_engagement**. Staqly then checks the
+Page's sign-in with Meta right away: without the publishing permission the channel turns *Needs reconnecting* (and
+alerts) before its next post fails; without the comments one its comments turn off, and back on once it returns.
+
 ## Unpublishing
 
 Unpublishing deletes the post on the Page through the API, thread comments first.

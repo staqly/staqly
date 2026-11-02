@@ -1,7 +1,9 @@
 package providers
 
 import (
+	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"mime"
@@ -24,6 +26,7 @@ type fakeFacebook struct {
 	files    map[string][]string     // POST path -> uploaded file contents
 	headers  []http.Header           // the upload host's requests
 	granted  string                  // comma-separated granted permissions (default: all)
+	granular string                  // debug_token's granular_scopes JSON (default: none)
 	noRole   bool                    // /me/accounts lists the Page without a token
 	noPages  bool                    // /me/accounts is empty
 	failPath string                  // POST path that answers failCode/failBody
@@ -106,15 +109,19 @@ func (f *fakeFacebook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = w.Write([]byte(`{"access_token":"short-user","token_type":"bearer","expires_in":3600}`))
 	case path == "/me/permissions":
-		granted := f.granted
-		if granted == "" {
-			granted = facebookScopes + ",instagram_basic,instagram_content_publish,instagram_manage_comments"
-		}
 		var data []string
-		for _, p := range strings.Split(granted, ",") {
+		for _, p := range f.grantedList() {
 			data = append(data, `{"permission":"`+p+`","status":"granted"}`)
 		}
 		_, _ = w.Write([]byte(`{"data":[` + strings.Join(data, ",") + `]}`))
+	case path == "/debug_token":
+		if token != "cid|secret" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"Invalid OAuth access token.","type":"OAuthException","code":190}}`))
+			return
+		}
+		scopes, _ := json.Marshal(f.grantedList())
+		_, _ = w.Write([]byte(`{"data":{"is_valid":true,"scopes":` + string(scopes) + `,"granular_scopes":` + cmp.Or(f.granular, "[]") + `}}`))
 	case path == "/me" && r.Method == http.MethodGet && token == "long-user":
 		_, _ = w.Write([]byte(`{"id":"u1","name":"Jane Doe","picture":{"data":{"url":"https://cdn.example/jane.jpg"}}}`))
 	case path == "/me/accounts" && q.Get("after") == "":
@@ -194,6 +201,10 @@ func (f *fakeFacebook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"error":{"message":"Unknown path ` + path + `","code":803}}`))
 	}
+}
+
+func (f *fakeFacebook) grantedList() []string {
+	return strings.Split(cmp.Or(f.granted, facebookScopes+",instagram_basic,instagram_content_publish,instagram_manage_comments"), ",")
 }
 
 func (f *fakeFacebook) form(path string, i int) url.Values {
@@ -292,6 +303,20 @@ func TestFacebookConnect(t *testing.T) {
 	if _, err := fb.Refresh(ctx, app, Credentials{"access_token": "revoked", "page_id": "p1"}); !errors.Is(err, ErrReauth) {
 		t.Fatalf("revoked: %v", err)
 	}
+	// A permission taken away: publishing for this Page needs reconnecting, comments only turn off; an app token
+	// Facebook refuses says nothing about the channel.
+	f.set(func() { f.granular = `[{"scope":"pages_manage_posts","target_ids":["p2"]}]` })
+	if _, err := fb.Refresh(ctx, app, page); !errors.Is(err, ErrReauth) {
+		t.Fatalf("pages_manage_posts taken away for p1: %v", err)
+	}
+	f.set(func() { f.granular, f.granted = "", "pages_show_list,pages_manage_posts" })
+	if c, err := fb.Refresh(ctx, app, page); err != nil || c["no_comments"] != "true" || page["no_comments"] != "" {
+		t.Fatalf("comments taken away: %v %v", c, err)
+	}
+	if _, err := fb.Refresh(ctx, App{ClientID: "cid", ClientSecret: "wrong"}, page); err == nil || errors.Is(err, ErrReauth) {
+		t.Fatalf("a refused app token: %v", err)
+	}
+	f.set(func() { f.granted = "" })
 
 	// A wrong code, publishing not allowed, no Pages, no role on any Page.
 	if _, _, err := fb.Exchange(ctx, app, "https://app.example/cb", "nope", nil); err == nil || strings.Contains(err.Error(), "secret") {

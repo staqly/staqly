@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -225,7 +226,7 @@ func (t instagramLong) into(c Credentials, now time.Time) Credentials {
 // Refresh checks the token still reaches the account: the system user token can't be renewed (a configuration
 // whose tokens never expire is the one to use), and the person may remove the app or move the account to another
 // business portfolio.
-func (Instagram) Refresh(ctx context.Context, _ App, c Credentials) (Credentials, error) {
+func (Instagram) Refresh(ctx context.Context, app App, c Credentials) (Credentials, error) {
 	if c["access_token"] == "" || c["user_id"] == "" {
 		return nil, &Failure{Kind: ErrReauth, Msg: "Instagram: no account stored; reconnect the account"}
 	}
@@ -233,6 +234,10 @@ func (Instagram) Refresh(ctx context.Context, _ App, c Credentials) (Credentials
 		return nil, &Failure{Kind: ErrReauth, Msg: "Instagram's sign-in ran out; reconnect the account"}
 	}
 	if err := igGraph.get(ctx, c["access_token"], "/"+c["user_id"], url.Values{"fields": {"id"}}, nil); err != nil {
+		return nil, err
+	}
+	c = maps.Clone(c)
+	if err := metaPermissions(ctx, igGraph, app, c["access_token"], c["user_id"], "instagram_content_publish", "instagram_manage_comments", c); err != nil {
 		return nil, err
 	}
 	return c, nil
