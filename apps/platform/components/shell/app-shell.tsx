@@ -38,6 +38,7 @@ import { AssistantIcon } from '@/components/assistant/assistant-icon'
 import { daysLeft } from '@/components/billing/billing-format'
 import { TrialUsedDialog } from '@/components/billing/trial-used-dialog'
 import { PlanBadge } from '@/components/plans/plan-badge'
+import { PostLinkDrawer } from '@/components/posts/post-link-drawer'
 import { NewWorkspaceDialog } from '@/components/settings/new-workspace-dialog'
 import { UserAvatar } from '@/components/settings/user-avatar'
 import { WorkspaceLogo, WorkspaceTile } from '@/components/shell/workspace-tile'
@@ -1017,6 +1018,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ShellContext.Provider value={ctx}>
       <LiveUpdates />
       <IdRoutePrefetch />
+      <PostLinkDrawer />
       <SidebarProvider
         open={sidebarOpen}
         onOpenChange={(open) => {

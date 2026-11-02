@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { Analytics, ChannelAnalytics } from '@/components/analytics/analytics-data'
 import { AnalyticsPage, readParams } from '@/components/analytics/analytics-page'
 import { numbersNote } from '@/components/analytics/analytics-sections'
+import { PostLinkDrawer } from '@/components/posts/post-link-drawer'
 
 import { nav } from './navigation'
 import { mockApi, renderWithProviders } from './utils'
@@ -207,7 +208,14 @@ describe('analytics page', () => {
   it('opens a top post in its drawer on the analytics page', async () => {
     const api = setup()
 
-    renderWithProviders(<AnalyticsPage />, { mode: 'local' })
+    // The shell's PostLinkDrawer turns the post link into the drawer.
+    renderWithProviders(
+      <>
+        <AnalyticsPage />
+        <PostLinkDrawer />
+      </>,
+      { mode: 'local' },
+    )
     await userEvent.click(within(await screen.findByTestId('top-posts')).getByRole('link', { name: 'Launch day' }))
     await waitFor(() => expect(api.find('GET', '/v1/posts/pst_top')).toHaveLength(1))
     expect(nav.pathname).toBe('/analytics')
