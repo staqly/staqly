@@ -344,3 +344,47 @@ func TestUnpublishKeepsTheLastNumbers(t *testing.T) {
 		t.Fatal("a taken-down post's numbers were read from the platform again")
 	}
 }
+
+// fakeGone is a fakeRemovable whose post was deleted on the platform: every read says it is gone.
+type fakeGone struct{ *fakeRemovable }
+
+func (fakeGone) Metrics(context.Context, providers.Credentials, string) (providers.Metrics, error) {
+	return providers.Metrics{}, &providers.Failure{Kind: providers.ErrGone, Msg: "deleted"}
+}
+
+// A post deleted on the platform outside staqly is recorded as removed, with a note, and is not read again.
+func TestTargetDeletedOutside(t *testing.T) {
+	s, p, post := publishTest(t)
+	ctx := context.Background()
+	f := fakeGone{&fakeRemovable{Base: providers.NewBase("fakegone", "Fakegone", providers.AuthNone, providers.Limits{MaxChars: 280})}}
+	providers.Register(f, providers.StatusAvailable)
+	t.Cleanup(func() { providers.Unregister("fakegone") })
+	e, _ := providers.Get("fakegone")
+	ch, err := s.saveChannel(ctx, p, e, "fakegone", providers.Credentials{}, providers.Profile{}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := []PostTargetInput{{ChannelID: ch.ID}}
+	if _, err := s.UpdatePost(ctx, p, post.ID, PostPatch{Targets: &targets}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PublishPost(ctx, p, post.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.RunDueJobsOnce(ctx)
+	got, err := s.PostMetrics(ctx, p, post.ID, true)
+	if err != nil || len(got) != 1 || got[0].Error != "" {
+		t.Fatalf("metrics %+v %v", got, err)
+	}
+	after, _ := s.GetPost(ctx, p, post.ID)
+	tg := targetOf(t, after, ch.ID)
+	if tg.Removal != "removed" || tg.RemovedAt == nil || tg.RemovalError != "Deleted on Fakegone outside staqly" || after.UnpublishedAt != nil {
+		t.Fatalf("target %+v", tg)
+	}
+	if !hasEvent(t, s, p, "post.target_removed") {
+		t.Fatal("post.target_removed missing")
+	}
+	if _, err := s.UnpublishPost(ctx, p, post.ID, nil); err == nil {
+		t.Fatal("a post deleted outside could be unpublished again")
+	}
+}

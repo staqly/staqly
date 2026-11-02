@@ -5573,7 +5573,7 @@ components:
         attempts: { type: integer }
         published_at: { type: [string, "null"], format: date-time }
         removal: { $ref: "#/components/schemas/TargetRemoval" }
-        removal_error: { type: string, description: "Why taking it down failed" }
+        removal_error: { type: string, description: "Why taking it down failed; on `removed`, a note when it was deleted on the platform outside staqly" }
         removed_at: { type: [string, "null"], format: date-time, description: When it was taken down on the platform }
         replies: { type: array, items: { $ref: "#/components/schemas/Reply" }, description: "How each thread part went on this channel, one per part" }
 

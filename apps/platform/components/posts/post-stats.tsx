@@ -172,6 +172,8 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
     onSuccess: ([res]) => {
       qc.setQueryData(key, res)
       void qc.invalidateQueries({ queryKey: qk.postResponses(post.id) })
+      // A read may find a channel's post deleted outside staqly: its target is then Unpublished.
+      void qc.invalidateQueries({ queryKey: qk.post(post.id) })
     },
     onError: (e) => toastApiError(e),
   })

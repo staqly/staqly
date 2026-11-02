@@ -408,7 +408,7 @@ func (YouTube) Metrics(ctx context.Context, c Credentials, externalID string) (M
 		return Metrics{}, err
 	}
 	if len(out.Items) == 0 {
-		return Metrics{}, &Failure{Kind: ErrRejected, Msg: "YouTube can't find the video; it may have been deleted"}
+		return Metrics{}, &Failure{Kind: ErrGone, Msg: "YouTube can't find the video; it was deleted on YouTube"}
 	}
 	st := out.Items[0].Statistics
 	num := func(v string) *int64 { // a hidden count (likes the channel hides) is absent, not zero

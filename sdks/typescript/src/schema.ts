@@ -4929,7 +4929,7 @@ export interface components {
             /** Format: date-time */
             published_at: string | null;
             removal: components["schemas"]["TargetRemoval"];
-            /** @description Why taking it down failed */
+            /** @description Why taking it down failed; on `removed`, a note when it was deleted on the platform outside staqly */
             removal_error: string;
             /**
              * Format: date-time

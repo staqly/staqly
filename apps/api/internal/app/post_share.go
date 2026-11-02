@@ -711,7 +711,11 @@ func (s *Service) PostMetrics(ctx context.Context, p Principal, postID string, r
 		// A story past its day keeps the final numbers Meta sent (story_insights): the API has none any more.
 		expired := storyExpired(t.Provider, t.Settings, t.PublishedAt, s.Now())
 		if ok && canRead && t.Status == "published" && t.ExternalID != "" && t.Removal != "removing" && t.Removal != "removed" && !expired && (refresh || stale) {
-			if fresh, err := s.readMetrics(ctx, p.WorkspaceID, t.ChannelID, e, reader, t.ExternalID); err != nil {
+			if fresh, err := s.readMetrics(ctx, p.WorkspaceID, t.ChannelID, e, reader, t.ExternalID); errors.Is(err, providers.ErrGone) {
+				if err := s.targetGone(ctx, postID, t.ChannelID, e.Name()); err != nil {
+					return nil, err
+				}
+			} else if err != nil {
 				s.logger(ctx).Info("post metrics: not read", "post_id", postID, "channel_id", t.ChannelID, "provider", t.Provider, "err", err)
 				m.Error = readFailure(e.Name(), err)
 			} else {

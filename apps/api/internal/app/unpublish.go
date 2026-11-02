@@ -232,6 +232,36 @@ func (s *Service) settleRemoval(ctx context.Context, postID, channelID, removal,
 	})
 }
 
+// targetGone records a target someone deleted on the platform outside staqly (a read found it gone): removed now,
+// with a note in removal_error, and nothing reads it again. Emits post.target_removed with deleted_outside.
+func (s *Service) targetGone(ctx context.Context, postID, channelID, platform string) error {
+	row, err := s.Q.GetPostByID(ctx, postID)
+	if isNoRows(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	sys := Principal{WorkspaceID: row.WorkspaceID, Kind: PrincipalSystem, ID: "publisher", Name: "Publisher"}
+	return s.tx(ctx, func(q *db.Queries) error {
+		t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
+		if isNoRows(err) || (err == nil && (t.Removal == "removing" || t.Removal == "removed")) {
+			return nil // staqly is taking it down, or it is recorded gone already
+		}
+		if err != nil {
+			return err
+		}
+		now := s.now()
+		if err := q.SetTargetRemoval(ctx, db.SetTargetRemovalParams{Removal: "removed", RemovalError: "Deleted on " + platform + " outside staqly",
+			RemovedAt: nullStr(now), UpdatedAt: now, PostID: postID, ChannelID: channelID}); err != nil {
+			return err
+		}
+		_, err = s.emitRef(ctx, q, sys, "post.target_removed", Ref{Collection: row.CollectionID, Post: postID, Channel: channelID},
+			s.postEventData(ctx, q, row.WorkspaceID, postID, map[string]any{"channel_id": channelID, "deleted_outside": true}))
+		return err
+	})
+}
+
 // lastReads reads a target's numbers and comments one last time before it is taken down, so they stay as history
 // (nothing reads them from the platform after that). Best effort: a failed read never holds up the removal.
 func (s *Service) lastReads(ctx context.Context, workspaceID string, target db.PostTarget, ch db.Channel, e providers.Entry, creds providers.Credentials) {

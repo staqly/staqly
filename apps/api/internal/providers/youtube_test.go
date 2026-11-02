@@ -152,6 +152,8 @@ func (f *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = w.Write([]byte(`{"id":"Ugz1"}`))
+	case r.URL.Path == "/youtube/v3/videos" && r.URL.Query().Get("id") == "gone":
+		_, _ = w.Write([]byte(`{"items":[]}`))
 	case r.URL.Path == "/youtube/v3/videos":
 		_, _ = w.Write([]byte(`{"items":[{"id":"vid1","statistics":{"viewCount":"1200","likeCount":"30","commentCount":"4"}}]}`))
 	case r.URL.Path == "/v2/reports":
@@ -456,6 +458,10 @@ func TestYouTubeReplyAndMetrics(t *testing.T) {
 	m, err = yt.Provider.(MetricsReader).Metrics(context.Background(), youtubeCreds(), "vid1")
 	if err != nil || *m.Impressions != 1200 || m.WatchMinutes != nil || m.Shares != nil {
 		t.Fatalf("metrics without analytics %+v %v", m, err)
+	}
+	// Deleted on YouTube: gone, which is final like a refusal.
+	if _, err := yt.Provider.(MetricsReader).Metrics(context.Background(), youtubeCreds(), "gone"); !errors.Is(err, ErrGone) || !errors.Is(err, ErrRejected) {
+		t.Fatalf("deleted video: %v", err)
 	}
 }
 

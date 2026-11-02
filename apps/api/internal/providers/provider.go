@@ -391,6 +391,10 @@ var ErrReauth = errors.New("the account needs reconnecting")
 // ErrRejected: the platform refused this post (duplicate, too long, not allowed); retrying will not help.
 var ErrRejected = errors.New("the platform refused the post")
 
+// ErrGone: the post is no longer on the platform (deleted there, outside staqly). It is an ErrRejected too, so
+// callers that only know that one still treat it as final.
+var ErrGone = fmt.Errorf("the post is gone from the platform: %w", ErrRejected)
+
 // ErrManual: the platform can't delete it through its API; the person removes it by hand.
 var ErrManual = errors.New("remove it by hand")
 
