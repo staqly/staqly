@@ -6,7 +6,7 @@ import { useNow } from '@/hooks/use-now'
 import { api, type Post } from '@/lib/api'
 import { toastApiError } from '@/lib/notify'
 import { postTitle } from '@/lib/posts'
-import { awaitOutcome, takeAwaitedOutcome } from '@/lib/publish-outcome'
+import { awaitOutcome, forgetOutcome } from '@/lib/publish-outcome'
 
 /** How long Publish now waits for an Undo. Tests shorten it with window.staqlyUndoMs. */
 export function undoDelayMs() {
@@ -41,7 +41,7 @@ export function undoToast(saved: Post, onUndone: (draft: Post) => void) {
         api
           .cancelPost(saved.id)
           .then((draft) => {
-            takeAwaitedOutcome(saved.id)
+            forgetOutcome(saved.id)
             onUndone(draft)
             toast.success('Publishing canceled', { description: 'The post is a draft again.' })
           })

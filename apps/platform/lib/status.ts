@@ -26,7 +26,7 @@ export interface StatusMeta {
   description: string
 }
 
-const status = (label: string, tone: Tone, Icon: LucideIcon, description: string): StatusMeta => ({
+export const status = (label: string, tone: Tone, Icon: LucideIcon, description: string): StatusMeta => ({
   label,
   tone,
   Icon,

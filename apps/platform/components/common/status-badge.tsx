@@ -8,7 +8,7 @@ const PILL =
  * One status as a badge, one look for all: a tinted pill with its icon, coloured by the status's tone
  * (lib/tones.ts). The publishing icon spins while something is being published right now.
  */
-function Badge({
+export function Badge({
   meta,
   status,
   title,
@@ -22,7 +22,7 @@ function Badge({
   /** The id of text that explains the status (why a channel needs reconnecting), read with it. */
   describedBy?: string
 }) {
-  const spin = status === 'publishing'
+  const spin = status === 'publishing' || status === 'unpublishing'
 
   return (
     <span
@@ -54,11 +54,6 @@ export function PostStatusBadge({
   ) : (
     <Badge meta={postStatusMeta(status)} status={status} title={title} className={className} />
   )
-}
-
-/** "Unpublished": a post, or one channel of it, taken down. */
-export function UnpublishedBadge({ title, className }: { title?: string; className?: string }) {
-  return <Badge meta={UNPUBLISHED_META} status="unpublished" title={title} className={className} />
 }
 
 /** One channel's state for a post (Waiting, Publishing, Published, Failed). */

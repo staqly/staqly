@@ -101,6 +101,11 @@ describe('unpublish', () => {
     expect(screen.queryByText('Removed')).toBeNull()
   })
 
+  it('target row shows Unpublishing as a badge while the channel is taken down', () => {
+    renderWithProviders(<TargetStatus post={out()} target={target({ status: 'published', removal: 'removing' })} />)
+    expect(screen.getByTestId('target-unpublishing')).toHaveTextContent('Unpublishing')
+  })
+
   it('target row shows the removal error as text and the link for manual removal', () => {
     const failed = target({ status: 'published', removal: 'failed', removal_error: '<b>x</b> refused' })
     const { container, unmount } = renderWithProviders(<TargetStatus post={out()} target={failed} />)

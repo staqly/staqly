@@ -1,10 +1,10 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, ExternalLink, RotateCcw } from 'lucide-react'
+import { ArrowRight, ExternalLink, LoaderCircle, RotateCcw } from 'lucide-react'
 
 import { Callout } from '@/components/common/callout'
-import { TargetStatusBadge, UnpublishedBadge } from '@/components/common/status-badge'
+import { Badge, TargetStatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
 import { api, type Post, type PostTarget } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
@@ -12,7 +12,10 @@ import { namedToast, toastApiError } from '@/lib/notify'
 import { splitDeliveryError } from '@/lib/posts'
 import { invalidateAfterPostChange, syncPostInCache } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
+import { status, UNPUBLISHED_META } from '@/lib/status'
 import { cn } from '@/lib/utils'
+
+const UNPUBLISHING = status('Unpublishing', 'warning', LoaderCircle, 'Being taken down right now')
 
 // How one channel of a saved post went (the composer, the post's Channels tab): kept apart from the composer so
 // the post list's statistics dialog doesn't load it.
@@ -66,12 +69,21 @@ export function RetryTarget({ post, target, className }: { post: Post; target: P
 function TargetRemoval({ target }: { target: PostTarget }) {
   switch (target.removal) {
     case 'removing':
-      return <span className="text-muted-foreground">Unpublishing...</span>
+      return (
+        <span className="inline-flex items-center gap-x-2" data-testid="target-unpublishing">
+          <ArrowRight aria-hidden className="size-3 text-muted-foreground" />
+          <Badge meta={UNPUBLISHING} status="unpublishing" />
+        </span>
+      )
     case 'removed':
       return (
         <span className="inline-flex items-center gap-x-2" data-testid="target-unpublished">
           <ArrowRight aria-hidden className="size-3 text-muted-foreground" />
-          <UnpublishedBadge title={target.removed_at ? formatDateTime(target.removed_at) : undefined} />
+          <Badge
+            meta={UNPUBLISHED_META}
+            status="unpublished"
+            title={target.removed_at ? formatDateTime(target.removed_at) : undefined}
+          />
           {target.removed_at && (
             <span className="text-muted-foreground" title={formatDateTime(target.removed_at)}>
               {timeAgo(target.removed_at)}

@@ -159,7 +159,7 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
   return (
     <div className="grid gap-4" data-testid="post-stats">
       {post.unpublished_at && (
-        <Callout tone="neutral" size="xs" data-testid="stats-unpublished">
+        <Callout tone="warning" size="xs" data-testid="stats-unpublished">
           <p className="font-medium">Unpublished {formatDateTime(post.unpublished_at)}</p>
           <p className="mt-0.5 text-muted-foreground">
             The numbers and comments here are the last ones read before it was taken down; they don&apos;t change any

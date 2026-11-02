@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { LiveUpdates } from '@/components/shell/live-updates'
 import { api, type Post, type StashEvent } from '@/lib/api'
+import { awaitOutcome } from '@/lib/publish-outcome'
 import { undoToast } from '@/lib/publish-undo'
 import { qk } from '@/lib/queries'
 
@@ -127,6 +128,35 @@ describe('live updates', () => {
       qc.setQueryData(qk.recentEvents, [published(4, 'pst_mine'), published(3, 'pst_other'), ...initial])
     })
     expect(success).toHaveBeenCalledTimes(1)
+    unmount()
+    qc.clear()
+    fetchEvents.mockRestore()
+    success.mockRestore()
+  })
+
+  it('says Unpublished once every channel being taken down settled', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
+    const initial = [event(1)]
+    const success = vi.spyOn(toast, 'success').mockImplementation(() => 1)
+    const removed = (seq: number) => ({ ...event(seq, 'post.target_removed'), post_id: 'pst_down' }) as StashEvent
+
+    awaitOutcome('pst_down', 'Down', true, 2)
+    qc.setQueryData(qk.recentEvents, initial)
+    const fetchEvents = vi.spyOn(api, 'events').mockResolvedValue({ data: initial })
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <LiveUpdates />
+      </QueryClientProvider>,
+    )
+
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [removed(2), ...initial])
+    })
+    expect(success).not.toHaveBeenCalled()
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [removed(3), removed(2), ...initial])
+    })
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Unpublished', { description: 'Down' }))
     unmount()
     qc.clear()
     fetchEvents.mockRestore()
