@@ -387,3 +387,15 @@
     animation: none;
   }
 }
+
+/* Toasts with buttons grow to the left (the toaster sits bottom right), so their title isn't squeezed into three
+   lines beside Undo or Discard and Restore. Phones keep Sonner's full-width toasts. */
+@media (min-width: 601px) {
+  [data-sonner-toast]:has([data-button]) {
+    width: 480px;
+  }
+
+  [data-sonner-toast]:has([data-cancel]) {
+    width: 540px;
+  }
+}
