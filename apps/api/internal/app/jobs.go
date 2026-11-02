@@ -118,6 +118,8 @@ func (s *Service) execJob(ctx context.Context, kind string, a jobArgs) error {
 		return s.runAIJob(ctx, a.WorkspaceID, p.AIJobID)
 	case "read_responses":
 		return s.readResponses(ctx, p.PostID, p.ChannelID)
+	case "check_target":
+		return s.checkTarget(ctx, p.PostID, p.ChannelID)
 	case "analyze_responses":
 		return s.analyzeResponses(ctx, a.WorkspaceID, p.PostID)
 	}

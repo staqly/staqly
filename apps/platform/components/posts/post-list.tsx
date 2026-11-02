@@ -54,7 +54,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { api, type Collection, type Post, type PostQuery, type PostPage } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { canReschedule, canUnpublish, isLocked, postTitle, publishedTargets, wentOut } from '@/lib/posts'
+import {
+  canReschedule,
+  canUnpublish,
+  deletedOutside,
+  isLocked,
+  postTitle,
+  publishedTargets,
+  wentOut,
+} from '@/lib/posts'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
 import {
   invalidateAfterPostChange,
@@ -240,7 +248,7 @@ export const PostRow = memo(function PostRow({
           >
             {postTitle(post)}
           </Link>
-          <PostStatusBadge status={post.status} unpublishedAt={post.unpublished_at} />
+          <PostStatusBadge status={post.status} unpublishedAt={post.unpublished_at} deleted={deletedOutside(post)} />
           {post.archived_at && (
             <span
               className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground"

@@ -4902,10 +4902,10 @@ export interface components {
         /** @enum {string} */
         TargetStatus: "pending" | "publishing" | "published" | "failed";
         /**
-         * @description Taking the target down: empty (never asked), removing, removed, failed, manual (the platform has no delete)
+         * @description Taking the target down: empty (never asked), removing, removed, failed, manual (the platform has no delete), deleted (someone deleted it on the platform outside staqly; removed_at is when staqly found out)
          * @enum {string}
          */
-        TargetRemoval: "" | "removing" | "removed" | "failed" | "manual";
+        TargetRemoval: "" | "removing" | "removed" | "failed" | "manual" | "deleted";
         /** @description One channel a post goes to, with the result of publishing there */
         PostTarget: {
             channel_id: string;
@@ -4929,7 +4929,7 @@ export interface components {
             /** Format: date-time */
             published_at: string | null;
             removal: components["schemas"]["TargetRemoval"];
-            /** @description Why taking it down failed; on `removed`, a note when it was deleted on the platform outside staqly */
+            /** @description Why taking it down failed */
             removal_error: string;
             /**
              * Format: date-time

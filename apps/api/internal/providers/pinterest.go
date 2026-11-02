@@ -330,6 +330,8 @@ func pinterestError(status int, raw []byte) error {
 		return &Failure{Kind: ErrRejected, Msg: "Pinterest: the board is not there any more; choose another"}
 	case status == http.StatusForbidden:
 		return &Failure{Kind: ErrRejected, Msg: "Pinterest refused it (" + detail + "); the account may not save pins to this board"}
+	case status == http.StatusNotFound:
+		return &Failure{Kind: ErrGone, Msg: "Pinterest: the pin is not there any more (" + detail + ")"}
 	}
 	return &Failure{Kind: ErrRejected, Msg: "Pinterest refused the pin: " + detail}
 }

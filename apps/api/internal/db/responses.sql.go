@@ -185,7 +185,7 @@ func (q *Queries) ListResponseInsights(ctx context.Context, arg ListResponseInsi
 }
 
 const listResponseTargets = `-- name: ListResponseTargets :many
-SELECT p.workspace_id, t.post_id, t.channel_id, c.provider
+SELECT p.workspace_id, t.post_id, t.channel_id, c.provider, t.metrics_at
 FROM post_targets t
 JOIN posts p ON p.id = t.post_id
 JOIN channels c ON c.id = t.channel_id
@@ -194,10 +194,11 @@ ORDER BY t.post_id, t.channel_id
 `
 
 type ListResponseTargetsRow struct {
-	WorkspaceID string `json:"workspace_id"`
-	PostID      string `json:"post_id"`
-	ChannelID   string `json:"channel_id"`
-	Provider    string `json:"provider"`
+	WorkspaceID string         `json:"workspace_id"`
+	PostID      string         `json:"post_id"`
+	ChannelID   string         `json:"channel_id"`
+	Provider    string         `json:"provider"`
+	MetricsAt   sql.NullString `json:"metrics_at"`
 }
 
 // Published copies still online on a connected channel, published after the cutoff (the worker's read window).
@@ -215,6 +216,7 @@ func (q *Queries) ListResponseTargets(ctx context.Context, publishedAfter sql.Nu
 			&i.PostID,
 			&i.ChannelID,
 			&i.Provider,
+			&i.MetricsAt,
 		); err != nil {
 			return nil, err
 		}

@@ -41,7 +41,7 @@ func (Bluesky) Metrics(ctx context.Context, c Credentials, externalID string) (M
 		return Metrics{}, err
 	}
 	if len(out.Posts) == 0 {
-		return Metrics{}, &Failure{Kind: ErrRejected, Msg: "Bluesky: the post is not there any more"}
+		return Metrics{}, &Failure{Kind: ErrGone, Msg: "Bluesky: the post is not there any more"}
 	}
 	p := out.Posts[0]
 	return Metrics{Likes: n64(p.Likes), Reposts: n64(p.Reposts), Replies: n64(p.Replies), Quotes: n64(p.Quotes)}, nil
@@ -78,8 +78,9 @@ func (Reddit) Metrics(ctx context.Context, c Credentials, externalID string) (Me
 		Data struct {
 			Children []struct {
 				Data struct {
-					Score    int64 `json:"score"`
-					Comments int64 `json:"num_comments"`
+					Score    int64  `json:"score"`
+					Comments int64  `json:"num_comments"`
+					Author   string `json:"author"`
 				} `json:"data"`
 			} `json:"children"`
 		} `json:"data"`
@@ -87,8 +88,9 @@ func (Reddit) Metrics(ctx context.Context, c Credentials, externalID string) (Me
 	if err := redditDo(ctx, req, &out); err != nil {
 		return Metrics{}, err
 	}
-	if len(out.Data.Children) == 0 {
-		return Metrics{}, &Failure{Kind: ErrRejected, Msg: "Reddit: the post is not there any more"}
+	// A post its author deleted stays listed, with the author "[deleted]".
+	if len(out.Data.Children) == 0 || out.Data.Children[0].Data.Author == "[deleted]" {
+		return Metrics{}, &Failure{Kind: ErrGone, Msg: "Reddit: the post is not there any more"}
 	}
 	d := out.Data.Children[0].Data
 	return Metrics{Likes: n64(d.Score), Replies: n64(d.Comments)}, nil
@@ -116,7 +118,7 @@ func (Tumblr) Metrics(ctx context.Context, c Credentials, externalID string) (Me
 		return Metrics{}, err
 	}
 	if len(out.Response.Posts) == 0 {
-		return Metrics{}, &Failure{Kind: ErrRejected, Msg: "Tumblr: the post is not there any more"}
+		return Metrics{}, &Failure{Kind: ErrGone, Msg: "Tumblr: the post is not there any more"}
 	}
 	return Metrics{Likes: n64(out.Response.Posts[0].Notes)}, nil
 }
@@ -169,7 +171,7 @@ func (TikTok) Metrics(ctx context.Context, c Credentials, externalID string) (Me
 		return Metrics{}, err
 	}
 	if len(out.Data.Videos) == 0 {
-		return Metrics{}, &Failure{Kind: ErrRejected, Msg: "TikTok: the video is not there any more"}
+		return Metrics{}, &Failure{Kind: ErrGone, Msg: "TikTok: the video is not there any more"}
 	}
 	v := out.Data.Videos[0]
 	return Metrics{Impressions: n64(v.Views), Likes: n64(v.Likes), Replies: n64(v.Comments), Shares: n64(v.Shares)}, nil

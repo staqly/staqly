@@ -23,7 +23,7 @@ SELECT * FROM post_response_insights WHERE workspace_id = @workspace_id AND post
 
 -- name: ListResponseTargets :many
 -- Published copies still online on a connected channel, published after the cutoff (the worker's read window).
-SELECT p.workspace_id, t.post_id, t.channel_id, c.provider
+SELECT p.workspace_id, t.post_id, t.channel_id, c.provider, t.metrics_at
 FROM post_targets t
 JOIN posts p ON p.id = t.post_id
 JOIN channels c ON c.id = t.channel_id

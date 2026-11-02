@@ -314,8 +314,8 @@ func mastodonError(status int, raw []byte) error {
 		return &Failure{Msg: "Mastodon rate limit reached; staqly tries again in a few minutes"}
 	case status >= 500:
 		return &Failure{Msg: fmt.Sprintf("the Mastodon server is unavailable (%d); staqly tries again in a few minutes", status)}
-	case status == http.StatusNotFound:
-		return &Failure{Kind: ErrRejected, Msg: "Mastodon could not find it (" + detail + "); the server's address may be wrong, or the post replied to was deleted"}
+	case status == http.StatusNotFound: // ErrGone: reading a deleted status is how staqly finds it was deleted
+		return &Failure{Kind: ErrGone, Msg: "Mastodon could not find it (" + detail + "); the server's address may be wrong, or the post replied to was deleted"}
 	case status == http.StatusRequestEntityTooLarge:
 		return &Failure{Kind: ErrRejected, Msg: "the file is larger than this Mastodon server takes"}
 	}

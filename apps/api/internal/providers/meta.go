@@ -207,6 +207,8 @@ func (g metaGraph) fail(status int, raw []byte) error {
 		return &Failure{Kind: ErrRejected, Msg: name + "'s limit of posts a day for this account is reached (" + detail + "); schedule it for tomorrow"}
 	case sub == 2207050, sub == 2207051:
 		return &Failure{Kind: ErrRejected, Msg: name + " has restricted this account (" + detail + ")"}
+	case code == 100 && sub == 33: // the object does not exist (deleted), as remove_meta reads it too
+		return &Failure{Kind: ErrGone, Msg: name + ": the post is not there any more (" + detail + ")"}
 	case code == 1, code == 2, status >= 500:
 		return &Failure{Msg: fmt.Sprintf("%s is unavailable (%s); staqly tries again in a few minutes", name, detail)}
 	case code == 10, code == 200, status == http.StatusForbidden:

@@ -12,7 +12,7 @@ import { namedToast, toastApiError } from '@/lib/notify'
 import { splitDeliveryError } from '@/lib/posts'
 import { invalidateAfterPostChange, syncPostInCache } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
-import { status, UNPUBLISHED_META } from '@/lib/status'
+import { DELETED_META, status, UNPUBLISHED_META } from '@/lib/status'
 import { cn } from '@/lib/utils'
 
 const UNPUBLISHING = status('Unpublishing', 'warning', LoaderCircle, 'Being taken down right now')
@@ -89,7 +89,19 @@ function TargetRemoval({ target }: { target: PostTarget }) {
               {timeAgo(target.removed_at)}
             </span>
           )}
-          {target.removal_error && <span className="text-amber-700 dark:text-amber-400">{target.removal_error}</span>}
+        </span>
+      )
+    case 'deleted':
+      return (
+        <span className="inline-flex items-center gap-x-2" data-testid="target-deleted">
+          <ArrowRight aria-hidden className="size-3 text-muted-foreground" />
+          <Badge meta={DELETED_META} status="deleted" />
+          <span className="text-muted-foreground">
+            on the platform, outside staqly
+            {target.removed_at && (
+              <span title={formatDateTime(target.removed_at)}> · found {timeAgo(target.removed_at)}</span>
+            )}
+          </span>
         </span>
       )
     case 'failed':

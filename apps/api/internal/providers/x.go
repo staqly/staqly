@@ -266,7 +266,7 @@ func (X) Metrics(ctx context.Context, c Credentials, externalID string) (Metrics
 		return Metrics{}, err
 	}
 	if out.Data.ID == "" { // X answers 200 with only an errors list for a post that is gone
-		return Metrics{}, &Failure{Kind: ErrRejected, Msg: "X: the post is not there any more"}
+		return Metrics{}, &Failure{Kind: ErrGone, Msg: "X: the post is not there any more"}
 	}
 	m := out.Data.PublicMetrics
 	return Metrics{Impressions: &m.Impressions, Likes: &m.Likes, Reposts: &m.Reposts, Replies: &m.Replies,

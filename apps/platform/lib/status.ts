@@ -7,6 +7,7 @@ import {
   LoaderCircle,
   PauseCircle,
   PlugZap,
+  Trash2,
   Undo2,
   Unplug,
   type LucideIcon,
@@ -46,6 +47,7 @@ export const POST_STATUS_META: Record<PostStatus, StatusMeta> = {
 
 /** A post that was published and then taken down from its channels (shown instead of Published). */
 export const UNPUBLISHED_META = status('Unpublished', 'neutral', Undo2, 'Taken down from its channels')
+export const DELETED_META = status('Deleted', 'warning', Trash2, 'Deleted on the platform, outside staqly')
 
 /** One post on one channel. */
 export const TARGET_STATUS_META: Record<TargetStatus, StatusMeta> = {

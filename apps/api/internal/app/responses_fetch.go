@@ -14,6 +14,7 @@ import (
 const (
 	responsesWindow      = 7 * 24 * time.Hour // the worker reads targets published this recently
 	responsesEvery       = 30 * time.Minute
+	checkEvery           = 6 * time.Hour   // a recent target's numbers are read in the background this often
 	responsesAnalyzeWait = 2 * time.Minute // debounce: more reads inside it move the analysis out again
 )
 
@@ -182,20 +183,29 @@ func (s *Service) queueRead(ctx context.Context, workspaceID, postID, channelID 
 		map[string]any{"post_id": postID, "channel_id": channelID}, s.Now(), 3)
 }
 
-// queueRecentResponseReads: one worker tick, a read for every target published in the last 7 days.
+// queueRecentResponseReads: one worker tick, for every target published in the last 7 days a read of its comments
+// and, when its numbers are older than checkEvery, a check_target (its numbers, and whether it was deleted).
 func (s *Service) queueRecentResponseReads(ctx context.Context) error {
 	rows, err := s.Q.ListResponseTargets(ctx, nullStr(formatTime(s.Now().Add(-responsesWindow))))
 	if err != nil {
 		return err
 	}
+	stale := formatTime(s.Now().Add(-checkEvery))
 	for _, t := range rows {
-		if e, ok := providers.Get(t.Provider); !ok {
-			continue
-		} else if _, can := e.Provider.(providers.ResponseReader); !can {
+		e, ok := providers.Get(t.Provider)
+		if !ok {
 			continue
 		}
-		if err := s.queueRead(ctx, t.WorkspaceID, t.PostID, t.ChannelID); err != nil {
-			return err
+		if _, can := e.Provider.(providers.ResponseReader); can {
+			if err := s.queueRead(ctx, t.WorkspaceID, t.PostID, t.ChannelID); err != nil {
+				return err
+			}
+		}
+		if _, can := e.Provider.(providers.MetricsReader); can && (!t.MetricsAt.Valid || t.MetricsAt.String < stale) {
+			if err := s.enqueue(ctx, s.W, t.WorkspaceID, "check_target", "check_target:"+t.PostID+":"+t.ChannelID,
+				map[string]any{"post_id": t.PostID, "channel_id": t.ChannelID}, s.Now(), 3); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
