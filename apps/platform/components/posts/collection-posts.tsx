@@ -421,7 +421,8 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                 onCheckedChange={(on) => setParam('archived_posts', on ? '1' : undefined)}
               />
               <Label htmlFor="show-archived-posts" className="text-xs font-normal text-muted-foreground">
-                <span className="max-sm:sr-only">Show</span> archived
+                <span className="sm:hidden">Archived</span>
+                <span className="max-sm:hidden">Show archived</span>
               </Label>
             </span>
             <Button variant="outline" size="sm" onClick={() => settings.setOpen(true)}>

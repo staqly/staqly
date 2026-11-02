@@ -645,6 +645,29 @@ export function SchedulePage() {
 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2" data-testid="schedule-toolbar">
+      {/* As on the posts list: archived posts stay out of the calendar until this is on. */}
+      <span className="flex items-center gap-1.5 sm:mr-2">
+        <Switch
+          id="schedule-show-archived"
+          checked={showArchived}
+          onCheckedChange={(on) => {
+            const p = new URLSearchParams(params)
+
+            if (on) {
+              p.set('archived', '1')
+            } else {
+              p.delete('archived')
+            }
+
+            router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
+          }}
+          data-testid="schedule-show-archived"
+        />
+        <Label htmlFor="schedule-show-archived" className="text-xs font-normal text-muted-foreground">
+          <span className="sm:hidden">Archived</span>
+          <span className="max-sm:hidden">Show archived</span>
+        </Label>
+      </span>
       <ButtonGroup aria-label="Move the calendar">
         <Button
           variant="outline"
@@ -730,28 +753,6 @@ export function SchedulePage() {
             <List />
           </ToggleGroupItem>
         </ToggleGroup>
-        {/* As on the posts list: archived posts stay out of the calendar until this is on. */}
-        <span className="flex items-center gap-1.5">
-          <Switch
-            id="schedule-show-archived"
-            checked={showArchived}
-            onCheckedChange={(on) => {
-              const p = new URLSearchParams(params)
-
-              if (on) {
-                p.set('archived', '1')
-              } else {
-                p.delete('archived')
-              }
-
-              router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
-            }}
-            data-testid="schedule-show-archived"
-          />
-          <Label htmlFor="schedule-show-archived" className="text-xs font-normal text-muted-foreground">
-            <span className="max-sm:sr-only">Show</span> archived
-          </Label>
-        </span>
         {/* The page's main action, as on Posts: a post for the next full hour, through the same dialog as "+" on a
             slot (pick a draft or write one). Just the icon on phones. */}
         <Button
