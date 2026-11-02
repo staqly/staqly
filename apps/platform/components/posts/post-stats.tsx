@@ -203,7 +203,7 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
         </Callout>
       )}
       {failed.map((t) => (
-        <Callout key={t.channel_id} tone="danger" size="xs" data-testid="metrics-error">
+        <Callout key={t.channel_id} tone="warning" size="xs" data-testid="metrics-error">
           <p className="font-medium">Couldn&apos;t read the latest numbers from {t.channel_name}</p>
           <p className="mt-0.5 text-muted-foreground">
             {t.error}
