@@ -34,12 +34,21 @@ export function wentOut(post: Pick<Post, 'status' | 'targets'>) {
 
 /** A post that can be taken down from its channels: it went out and was not unpublished yet. */
 export function canUnpublish(post: Pick<Post, 'status' | 'targets' | 'unpublished_at'>) {
-  return wentOut(post) && !post.unpublished_at
+  return wentOut(post) && !post.unpublished_at && !deletedOutside(post)
 }
 
-/** Channels the post is still up on (published, not taken down or being taken down). */
+/** Channels the post is still up on (published, not taken down, being taken down or deleted on the platform). */
 export function liveTargets(post: Pick<Post, 'targets'>): PostTarget[] {
-  return publishedTargets(post).filter((t) => t.removal !== 'removed' && t.removal !== 'removing')
+  return publishedTargets(post).filter(
+    (t) => t.removal !== 'removed' && t.removal !== 'removing' && t.removal !== 'deleted',
+  )
+}
+
+/** Every channel it went out on had it deleted on the platform itself, outside staqly. */
+export function deletedOutside(post: Pick<Post, 'targets'>) {
+  const out = publishedTargets(post)
+
+  return out.length > 0 && out.every((t) => t.removal === 'deleted')
 }
 
 /** Published targets, for the links under a published post. */

@@ -67,7 +67,7 @@ func TestXMetricsOfAGonePost(t *testing.T) {
 	old := xAPI
 	xAPI = srv.URL
 	defer func() { xAPI = old }()
-	if _, err := (X{}).Metrics(context.Background(), Credentials{"access_token": "at"}, "123"); !errors.Is(err, ErrRejected) {
+	if _, err := (X{}).Metrics(context.Background(), Credentials{"access_token": "at"}, "123"); !errors.Is(err, ErrGone) {
 		t.Fatalf("a gone post: %v", err)
 	}
 }

@@ -217,9 +217,16 @@ The post stays `published` as history, with `unpublished_at` and `unpublished_by
 | `removed` | Gone from the platform (`removed_at` says when) |
 | `failed` | The platform refused; `removal_error` says why. Call unpublish again to retry |
 | `manual` | The platform has no delete: remove it there yourself (the target keeps its link) |
+| `deleted` | Someone deleted it on the platform itself, outside staqly (`removed_at` is when staqly found out) |
 
 Which platforms delete through the API: see [the post in the dashboard](/dashboard/posts#unpublish).
 Events: `post.unpublished`, `post.target_removed`, `post.target_remove_failed`.
+
+A post someone deletes on the platform itself is found when staqly reads its numbers: when the post is opened,
+and in the background every 6 hours for a week after publishing. Its target becomes `deleted`
+(`post.target_removed` with `deleted_outside: true`), on X, Bluesky, Mastodon, Reddit, Tumblr, Pinterest,
+TikTok, YouTube, Facebook, Instagram and Threads. The post's reply count leaves out its own thread parts, so it
+matches the comments listed.
 
 ## Schedules
 

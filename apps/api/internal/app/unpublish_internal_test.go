@@ -372,13 +372,14 @@ func TestTargetDeletedOutside(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.RunDueJobsOnce(ctx)
-	got, err := s.PostMetrics(ctx, p, post.ID, true)
-	if err != nil || len(got) != 1 || got[0].Error != "" {
-		t.Fatalf("metrics %+v %v", got, err)
+	// The background sweep finds it (check_target), without anyone opening the post.
+	if err := s.queueRecentResponseReads(ctx); err != nil {
+		t.Fatal(err)
 	}
+	s.RunDueJobsOnce(ctx)
 	after, _ := s.GetPost(ctx, p, post.ID)
 	tg := targetOf(t, after, ch.ID)
-	if tg.Removal != "removed" || tg.RemovedAt == nil || tg.RemovalError != "Deleted on Fakegone outside staqly" || after.UnpublishedAt != nil {
+	if tg.Removal != "deleted" || tg.RemovedAt == nil || after.UnpublishedAt != nil {
 		t.Fatalf("target %+v", tg)
 	}
 	if !hasEvent(t, s, p, "post.target_removed") {
@@ -386,5 +387,41 @@ func TestTargetDeletedOutside(t *testing.T) {
 	}
 	if _, err := s.UnpublishPost(ctx, p, post.ID, nil); err == nil {
 		t.Fatal("a post deleted outside could be unpublished again")
+	}
+	got, err := s.PostMetrics(ctx, p, post.ID, true)
+	if err != nil || len(got) != 1 || got[0].Error != "" {
+		t.Fatalf("metrics of a deleted post %+v %v", got, err)
+	}
+}
+
+// Replies leaves out the account's own thread parts the platform counts: every comment-style part, or a chain's first.
+func TestWithoutOwnParts(t *testing.T) {
+	parts := func(ids ...string) string {
+		var r []Reply
+		for i, id := range ids {
+			r = append(r, Reply{Index: i, Status: "published", ExternalID: id})
+		}
+		return mustJSON(r)
+	}
+	for _, c := range []struct {
+		provider, replies string
+		in, want          int64
+	}{
+		{"youtube", parts("comment:v:1", "comment:v:2"), 2, 0},
+		{"facebook", parts("comment:p:1"), 5, 4},
+		{"reddit", parts("t1_a", "t1_b"), 3, 1},
+		{"x", parts("2", "3"), 4, 3},
+		{"bluesky", parts("at://a|c"), 0, 0}, // never below zero
+		{"linkedin_page", parts("urn:li:comment:1"), 2, 2},
+		{"youtube", `[{"index":0,"status":"failed"}]`, 2, 2},
+	} {
+		n := c.in
+		got := withoutOwnParts(providers.Metrics{Replies: &n}, c.provider, c.replies)
+		if *got.Replies != c.want {
+			t.Errorf("%s %s: %d, want %d", c.provider, c.replies, *got.Replies, c.want)
+		}
+	}
+	if withoutOwnParts(providers.Metrics{}, "youtube", parts("comment:v:1")).Replies != nil {
+		t.Error("an unknown count became a number")
 	}
 }

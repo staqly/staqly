@@ -232,8 +232,9 @@ func (s *Service) settleRemoval(ctx context.Context, postID, channelID, removal,
 	})
 }
 
-// targetGone records a target someone deleted on the platform outside staqly (a read found it gone): removed now,
-// with a note in removal_error, and nothing reads it again. Emits post.target_removed with deleted_outside.
+// targetGone records a target someone deleted on the platform outside staqly (a read found it gone): removal
+// "deleted" (removed_at says when it was found), and nothing reads it again. Emits post.target_removed with
+// deleted_outside.
 func (s *Service) targetGone(ctx context.Context, postID, channelID, platform string) error {
 	row, err := s.Q.GetPostByID(ctx, postID)
 	if isNoRows(err) {
@@ -245,14 +246,14 @@ func (s *Service) targetGone(ctx context.Context, postID, channelID, platform st
 	sys := Principal{WorkspaceID: row.WorkspaceID, Kind: PrincipalSystem, ID: "publisher", Name: "Publisher"}
 	return s.tx(ctx, func(q *db.Queries) error {
 		t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
-		if isNoRows(err) || (err == nil && (t.Removal == "removing" || t.Removal == "removed")) {
+		if isNoRows(err) || (err == nil && (t.Removal == "removing" || t.Removal == "removed" || t.Removal == "deleted")) {
 			return nil // staqly is taking it down, or it is recorded gone already
 		}
 		if err != nil {
 			return err
 		}
 		now := s.now()
-		if err := q.SetTargetRemoval(ctx, db.SetTargetRemovalParams{Removal: "removed", RemovalError: "Deleted on " + platform + " outside staqly",
+		if err := q.SetTargetRemoval(ctx, db.SetTargetRemovalParams{Removal: "deleted",
 			RemovedAt: nullStr(now), UpdatedAt: now, PostID: postID, ChannelID: channelID}); err != nil {
 			return err
 		}
@@ -271,7 +272,7 @@ func (s *Service) lastReads(ctx context.Context, workspaceID string, target db.P
 		m, err := r.Metrics(pctx, creds, target.ExternalID)
 		cancel()
 		if err == nil {
-			err = s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(m), MetricsAt: nullStr(s.now()),
+			err = s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(withoutOwnParts(m, ch.Provider, target.Replies)), MetricsAt: nullStr(s.now()),
 				PostID: target.PostID, ChannelID: target.ChannelID})
 		}
 		if err != nil {

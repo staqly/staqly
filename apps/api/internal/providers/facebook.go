@@ -559,8 +559,8 @@ func facebookSpecial(e metaErr) error {
 		return &Failure{Kind: ErrRejected, Msg: "Facebook refused the post under its Community Standards (" + e.detail + ")"}
 	case e.sub == 1609008:
 		return &Failure{Kind: ErrRejected, Msg: "Facebook does not take links to facebook.com in a post (" + e.detail + ")"}
-	case e.code == 100 && strings.Contains(e.lower, "does not exist"):
-		return &Failure{Kind: ErrRejected, Msg: "Facebook can't find the Page or the post (" + e.detail + "); reconnect the channel if the Page moved"}
+	case e.code == 100 && strings.Contains(e.lower, "does not exist"): // ErrGone: a numbers read of a deleted post
+		return &Failure{Kind: ErrGone, Msg: "Facebook can't find the Page or the post (" + e.detail + "); reconnect the channel if the Page moved"}
 	}
 	return nil
 }

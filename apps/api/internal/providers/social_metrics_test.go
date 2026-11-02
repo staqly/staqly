@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -31,7 +32,7 @@ func TestSocialMetrics(t *testing.T) {
 		if err != nil || !is(m.Likes, 5) || !is(m.Reposts, 2) || !is(m.Replies, 3) || !is(m.Quotes, 1) {
 			t.Fatalf("%+v %v", m, err)
 		}
-		if _, err := (Bluesky{}).Metrics(ctx, creds, "at://did:plc:jane/app.bsky.feed.post/gone|x"); err == nil {
+		if _, err := (Bluesky{}).Metrics(ctx, creds, "at://did:plc:jane/app.bsky.feed.post/gone|x"); !errors.Is(err, ErrGone) {
 			t.Fatal("a post that is gone")
 		}
 	})
@@ -89,4 +90,49 @@ func TestSocialMetrics(t *testing.T) {
 			t.Fatal("a publish id has no numbers to read")
 		}
 	})
+}
+
+// A post deleted on the platform reads as ErrGone (an empty answer, a 404, Reddit's "[deleted]", Meta's 100/33), so
+// staqly records it as deleted outside.
+func TestMetricsOfDeletedPosts(t *testing.T) {
+	ctx := context.Background()
+	serve := func(status int, body string) string {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(body))
+		}))
+		t.Cleanup(srv.Close)
+		return srv.URL
+	}
+	use := func(v *string, url string) { old := *v; *v = url; t.Cleanup(func() { *v = old }) }
+	gone := func(name string, err error) {
+		if !errors.Is(err, ErrGone) || !errors.Is(err, ErrRejected) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
+	_, err := (Mastodon{}).Metrics(ctx, Credentials{"instance": serve(404, `{"error":"Record not found"}`), "access_token": "t"}, "110")
+	gone("mastodon", err)
+	use(&redditOAuth, serve(200, `{"data":{"children":[{"data":{"score":1,"num_comments":0,"author":"[deleted]"}}]}}`))
+	_, err = (Reddit{}).Metrics(ctx, Credentials{"access_token": "t"}, "t3_ab")
+	gone("reddit", err)
+	use(&tumblrAPI, serve(200, `{"meta":{"status":200},"response":{"posts":[]}}`))
+	_, err = (Tumblr{}).Metrics(ctx, Credentials{"access_token": "t", "blog": "b1"}, "77")
+	gone("tumblr", err)
+	use(&pinterestAPI, serve(404, `{"code":50,"message":"Pin not found."}`))
+	_, err = (Pinterest{}).Metrics(ctx, Credentials{"access_token": "t"}, "5")
+	gone("pinterest", err)
+	use(&tiktokAPI, serve(200, `{"error":{"code":"ok"},"data":{"videos":[]}}`))
+	_, err = (TikTok{}).Metrics(ctx, Credentials{"access_token": "t"}, "7300")
+	gone("tiktok", err)
+	meta := serve(400, `{"error":{"message":"Object with ID '1_2' does not exist","code":100,"error_subcode":33}}`)
+	use(&facebookGraph, meta)
+	use(&threadsGraph, meta)
+	_, err = (Facebook{}).Metrics(ctx, Credentials{"access_token": "t"}, "1_2")
+	gone("facebook", err)
+	_, err = (Instagram{}).Metrics(ctx, Credentials{"access_token": "t"}, "1")
+	gone("instagram", err)
+	_, err = (Threads{}).Metrics(ctx, Credentials{"access_token": "t"}, "1")
+	gone("threads", err)
 }

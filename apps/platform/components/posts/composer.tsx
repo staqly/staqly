@@ -65,7 +65,7 @@ import { apiFieldErrors } from '@/lib/form-errors'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { applyLinks, linksNotice } from '@/lib/links'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { charCount, isLocked, postTitle, xLength } from '@/lib/posts'
+import { charCount, deletedOutside, isLocked, postTitle, xLength } from '@/lib/posts'
 import { ProviderIcon } from '@/lib/providers'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
 import {
@@ -1669,7 +1669,11 @@ export function ComposerForm({
             {post ? (
               <SheetDescription asChild>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <PostStatusBadge status={post.status} unpublishedAt={post.unpublished_at} />
+                  <PostStatusBadge
+                    status={post.status}
+                    unpublishedAt={post.unpublished_at}
+                    deleted={deletedOutside(post)}
+                  />
                   <span>{post.collection_name}</span>
                   {post.publish_at && (
                     <span className={DOT} title={formatDateTime(post.publish_at)}>

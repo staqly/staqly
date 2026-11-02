@@ -1,4 +1,11 @@
-import { channelStatusMeta, postStatusMeta, targetStatusMeta, UNPUBLISHED_META, type StatusMeta } from '@/lib/status'
+import {
+  channelStatusMeta,
+  DELETED_META,
+  postStatusMeta,
+  targetStatusMeta,
+  UNPUBLISHED_META,
+  type StatusMeta,
+} from '@/lib/status'
 import { cn } from '@/lib/utils'
 
 const PILL =
@@ -37,18 +44,27 @@ export function Badge({
   )
 }
 
-/** A post's status (Draft, Scheduled, Publishing, Published, Failed); "Unpublished" once it was taken down. */
+/**
+ * A post's status (Draft, Scheduled, Publishing, Published, Failed); "Unpublished" once it was taken down, "Deleted"
+ * once every channel had it deleted on the platform itself.
+ */
 export function PostStatusBadge({
   status,
   unpublishedAt,
+  deleted,
   title,
   className,
 }: {
   status: string
   unpublishedAt?: string | null
+  deleted?: boolean
   title?: string
   className?: string
 }) {
+  if (deleted && !unpublishedAt) {
+    return <Badge meta={DELETED_META} status="deleted" title={title} className={className} />
+  }
+
   return unpublishedAt ? (
     <Badge meta={UNPUBLISHED_META} status="unpublished" title={title} className={className} />
   ) : (

@@ -31,7 +31,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { api, type Post, type TargetMetrics } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
-import { liveTargets } from '@/lib/posts'
+import { deletedOutside, liveTargets } from '@/lib/posts'
 import { qk } from '@/lib/queries'
 
 import type { SentimentFilter } from './post-responses'
@@ -179,7 +179,8 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
   })
   const rows = metrics.data?.data
   // Taken down everywhere it went out: the numbers and comments read last stay, nothing reads them again.
-  const frozen = !!post.unpublished_at && liveTargets(post).length === 0
+  const deleted = deletedOutside(post)
+  const frozen = (!!post.unpublished_at || deleted) && liveTargets(post).length === 0
   const failed = (rows ?? []).filter((t) => t.error)
 
   return (
@@ -190,6 +191,14 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
           <p className="mt-0.5 text-muted-foreground">
             The numbers and comments here are the last ones read before it was taken down; they don&apos;t change any
             more.
+          </p>
+        </Callout>
+      )}
+      {deleted && !post.unpublished_at && (
+        <Callout tone="warning" size="xs" data-testid="stats-deleted">
+          <p className="font-medium">Deleted on the platform, outside staqly</p>
+          <p className="mt-0.5 text-muted-foreground">
+            The numbers and comments here are the last ones read before it was deleted; they don&apos;t change any more.
           </p>
         </Callout>
       )}

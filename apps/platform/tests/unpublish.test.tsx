@@ -29,6 +29,21 @@ describe('unpublish', () => {
     expect(canUnpublish(post())).toBe(false)
   })
 
+  it('a post deleted on every platform outside staqly reads Deleted and cannot be unpublished', () => {
+    const gone = out({
+      targets: [
+        target({ status: 'published', removal: 'deleted', removed_at: '2026-01-03T10:00:00Z' }),
+        target({ channel_id: 'ch_2', provider: 'bluesky', status: 'published', removal: 'deleted' }),
+      ],
+    })
+
+    expect(canUnpublish(gone)).toBe(false)
+    renderWithProviders(<PostStatusBadge status="published" deleted />)
+    expect(screen.getByText('Deleted')).toBeInTheDocument()
+    renderWithProviders(<TargetStatus post={gone} target={gone.targets![0]} />)
+    expect(screen.getByTestId('target-deleted')).toHaveTextContent('outside staqly')
+  })
+
   it('confirm dialog lists channels and sends the picked ones', async () => {
     const api = mockApi({
       'GET /v1/session': { mode: 'local', role: 'owner' },
