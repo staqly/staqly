@@ -4,6 +4,7 @@ import {
   CalendarClock,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -21,10 +22,16 @@ import { PageIcon, pageSubtitle } from '@/components/common/page-header'
 import { PostSheet } from '@/components/posts/post-sheet-lazy'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
-import { Label } from '@/components/ui/label'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useClock } from '@/hooks/use-clock'
 import { useIsCoarsePointer, useIsMobile } from '@/hooks/use-mobile'
 import type { Collection, Post, PostTarget } from '@/lib/api'
@@ -70,6 +77,8 @@ import { useSetSchedule } from './use-schedule'
 
 // The post panel loads when an entry is opened, not with the calendar; the slot dialog ("+" on a future day
 // or hour) when it is first used.
+const VIEW_LABELS: Record<CalendarView, string> = { day: 'Day', week: 'Week', month: 'Month' }
+
 const SlotScheduleDialog = dynamic(() => import('./slot-schedule-dialog').then((m) => m.SlotScheduleDialog), {
   ssr: false,
 })
@@ -645,29 +654,6 @@ export function SchedulePage() {
 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2" data-testid="schedule-toolbar">
-      {/* As on the posts list: archived posts stay out of the calendar until this is on. */}
-      <span className="flex items-center gap-1.5 sm:mr-2">
-        <Switch
-          id="schedule-show-archived"
-          checked={showArchived}
-          onCheckedChange={(on) => {
-            const p = new URLSearchParams(params)
-
-            if (on) {
-              p.set('archived', '1')
-            } else {
-              p.delete('archived')
-            }
-
-            router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
-          }}
-          data-testid="schedule-show-archived"
-        />
-        <Label htmlFor="schedule-show-archived" className="text-xs font-normal text-muted-foreground">
-          <span className="sm:hidden">Archived</span>
-          <span className="max-sm:hidden">Show archived</span>
-        </Label>
-      </span>
       <ButtonGroup aria-label="Move the calendar">
         <Button
           variant="outline"
@@ -697,62 +683,68 @@ export function SchedulePage() {
         </Button>
       </ButtonGroup>
       <div className="flex items-center gap-2 sm:ml-2">
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          spacing={0}
-          value={view}
-          // A range that holds today opens the new view on today (October's month on its 1st would open a past week).
-          onValueChange={(v) =>
-            v &&
-            navigate({
-              view: v as CalendarView,
-              at: range.days.some((d) => dayKey(d) === today) ? dayFromKey(today) : undefined,
-            })
-          }
-          aria-label="Calendar view"
-          className="h-8 pointer-coarse:h-10"
-        >
-          {(['day', 'week', 'month'] as const).map((v) => (
-            <ToggleGroupItem
-              key={v}
-              value={v}
-              aria-label={v === 'day' ? 'Day' : v === 'week' ? 'Week' : 'Month'}
-              className="h-8 bg-background px-2.5 text-[0.8rem] text-foreground pointer-coarse:h-10 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+        {/* One menu for how the calendar shows (its view, its layout, archived posts), named by the view. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 pointer-coarse:h-10" data-testid="schedule-view-menu">
+              {layout === 'list' ? <List /> : <CalendarDays />}
+              {VIEW_LABELS[view]}
+              {showArchived && <span className="text-muted-foreground">· archived</span>}
+              <ChevronDown className="text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuRadioGroup
+              value={view}
+              // A range that holds today opens the new view on today (October's month on its 1st would open a past week).
+              onValueChange={(v) =>
+                navigate({
+                  view: v as CalendarView,
+                  at: range.days.some((d) => dayKey(d) === today) ? dayFromKey(today) : undefined,
+                })
+              }
             >
-              <span aria-hidden className="sm:hidden">
-                {v[0].toUpperCase()}
-              </span>
-              <span aria-hidden className="max-sm:hidden">
-                {v === 'day' ? 'Day' : v === 'week' ? 'Week' : 'Month'}
-              </span>
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          spacing={0}
-          value={layout}
-          onValueChange={(v) => v && navigate({ layout: v as Layout })}
-          aria-label="Layout"
-          className="hidden h-8 pointer-coarse:h-10 md:flex"
-        >
-          <ToggleGroupItem
-            value="grid"
-            aria-label="Calendar"
-            className="h-8 min-w-8 bg-background px-2 text-foreground pointer-coarse:h-10 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-          >
-            <CalendarDays />
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="list"
-            aria-label="List"
-            className="h-8 min-w-8 bg-background px-2 text-foreground pointer-coarse:h-10 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-          >
-            <List />
-          </ToggleGroupItem>
-        </ToggleGroup>
+              {(['day', 'week', 'month'] as const).map((v) => (
+                <DropdownMenuRadioItem key={v} value={v}>
+                  {VIEW_LABELS[v]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            {/* Phones read a week or a day as a list anyway: no layout to pick there. */}
+            {!narrow && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup value={layout} onValueChange={(v) => navigate({ layout: v as Layout })}>
+                  <DropdownMenuRadioItem value="grid">
+                    <CalendarDays /> Calendar
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="list">
+                    <List /> List
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </>
+            )}
+            <DropdownMenuSeparator />
+            {/* As on the posts list: archived posts stay out of the calendar until this is on. */}
+            <DropdownMenuCheckboxItem
+              checked={showArchived}
+              onCheckedChange={(on) => {
+                const p = new URLSearchParams(params)
+
+                if (on) {
+                  p.set('archived', '1')
+                } else {
+                  p.delete('archived')
+                }
+
+                router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
+              }}
+              data-testid="schedule-show-archived"
+            >
+              Show archived
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {/* The page's main action, as on Posts: a post for the next full hour, through the same dialog as "+" on a
             slot (pick a draft or write one). Just the icon on phones. */}
         <Button
