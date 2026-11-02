@@ -413,22 +413,27 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                 <FolderPlus /> <span className="max-sm:sr-only">New collection</span>
               </Button>
             )}
+            {/* Archived posts stay out of the lists until this is on (always here: every post may be archived). */}
+            <span className="flex items-center gap-1.5">
+              <Switch
+                id="show-archived-posts"
+                checked={showArchived}
+                onCheckedChange={(on) => setParam('archived_posts', on ? '1' : undefined)}
+              />
+              <Label htmlFor="show-archived-posts" className="text-xs font-normal text-muted-foreground">
+                <span className="max-sm:sr-only">Show</span> archived
+              </Label>
+            </span>
             <Button variant="outline" size="sm" onClick={() => settings.setOpen(true)}>
               <Settings2 /> <span className="max-sm:sr-only">Settings</span>
             </Button>
             {/* Search and the selects live behind one button; it shows only once there is something to filter. */}
             {showFilters && (
               <FilterButton
-                active={
-                  (q ? 1 : 0) +
-                  (status ? 1 : 0) +
-                  (channelIds.length ? 1 : 0) +
-                  (tags.length ? 1 : 0) +
-                  (showArchived ? 1 : 0)
-                }
+                active={(q ? 1 : 0) + (status ? 1 : 0) + (channelIds.length ? 1 : 0) + (tags.length ? 1 : 0)}
                 onClear={() => {
                   setSearch('')
-                  router.replace(`/posts?collection=${id}`, { scroll: false })
+                  router.replace(`/posts?collection=${id}${showArchived ? '&archived_posts=1' : ''}`, { scroll: false })
                 }}
               >
                 <div className="relative">
@@ -467,16 +472,6 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                   value={tags}
                   onChange={(v) => setParam('tag', v.join(',') || undefined)}
                 />
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="show-archived-posts"
-                    checked={showArchived}
-                    onCheckedChange={(on) => setParam('archived_posts', on ? '1' : undefined)}
-                  />
-                  <Label htmlFor="show-archived-posts" className="text-sm font-normal">
-                    Show archived posts
-                  </Label>
-                </div>
               </FilterButton>
             )}
             <Button size="sm" onClick={() => compose.setOpen(true)} disabled={c.archived} data-testid="new-post">
@@ -514,9 +509,6 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                 onRemove={() => setParam('tag', tags.filter((x) => x !== t).join(',') || undefined)}
               />
             ))}
-            {showArchived && (
-              <FilterChip label="Archived posts shown" onRemove={() => setParam('archived_posts', undefined)} />
-            )}
           </div>
         )}
       </div>
@@ -538,15 +530,9 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
               }
               action={
                 filtered ? undefined : (
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <Button onClick={() => compose.setOpen(true)} disabled={c.archived}>
-                      <Plus /> New post
-                    </Button>
-                    {/* Every post may be archived: the filters are hidden then, so the way to them is here. */}
-                    <Button variant="outline" onClick={() => setParam('archived_posts', '1')}>
-                      <Archive /> Show archived posts
-                    </Button>
-                  </div>
+                  <Button onClick={() => compose.setOpen(true)} disabled={c.archived}>
+                    <Plus /> New post
+                  </Button>
                 )
               }
             />

@@ -19,6 +19,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 
 import { ErrorState } from '@/components/common/error-state'
 import { PageIcon, pageSubtitle } from '@/components/common/page-header'
+import { PostSheet } from '@/components/posts/post-sheet-lazy'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -68,7 +69,6 @@ import { useSetSchedule } from './use-schedule'
 
 // The post panel loads when an entry is opened, not with the calendar; the slot dialog ("+" on a future day
 // or hour) when it is first used.
-const PostSheet = dynamic(() => import('@/components/posts/post-sheet').then((m) => m.PostSheet), { ssr: false })
 const SlotScheduleDialog = dynamic(() => import('./slot-schedule-dialog').then((m) => m.SlotScheduleDialog), {
   ssr: false,
 })

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -204,6 +204,16 @@ describe('analytics page', () => {
     expect(screen.getByTestId('best-times')).toHaveTextContent('low confidence')
   })
 
+  it('opens a top post in its drawer on the analytics page', async () => {
+    const api = setup()
+
+    renderWithProviders(<AnalyticsPage />, { mode: 'local' })
+    await userEvent.click(within(await screen.findByTestId('top-posts')).getByRole('link', { name: 'Launch day' }))
+    await waitFor(() => expect(api.find('GET', '/v1/posts/pst_top')).toHaveLength(1))
+    expect(nav.pathname).toBe('/analytics')
+    expect(nav.push).not.toHaveBeenCalled()
+  })
+
   it('keeps the range and filters in the URL', async () => {
     const api = setup()
 
@@ -277,7 +287,7 @@ describe('analytics page', () => {
     ).toBe('No data yet in this range')
     expect(
       numbersNote(channel({ metrics_coverage: { support: 'platform', published: 3, with_data: 0, updated_at: null } })),
-    ).toMatch(/Statistics tab/)
+    ).toMatch(/Insights tab/)
     expect(numbersNote(channel())).toBeNull()
   })
 

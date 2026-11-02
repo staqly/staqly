@@ -6,7 +6,7 @@
     "/posts/_": 415,
     "/channels": 393,
     "/channels/callback/_": 405,
-    "/analytics": 380,
+    "/analytics": 382,
     "/media": 380,
     "/activity": 375,
     "/schedule": 375,
@@ -19,6 +19,6 @@
     "/": 180
   },
   "cssGzKB": 42,
-  "totalJsGzKB": 1900,
+  "totalJsGzKB": 1950,
   "editorJsGzKB": 400
 }

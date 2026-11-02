@@ -153,7 +153,7 @@ describe('post sheet', () => {
 
     renderWithProviders(<PostSheet id="pst_1" onClose={() => {}} />, { mode: 'local' })
     // How each channel went is in the Delivery tab.
-    await user.click(await screen.findByRole('tab', { name: /Results/ }))
+    await user.click(await screen.findByRole('tab', { name: /Insights/ }))
     const list = await screen.findByRole('list', { name: 'Channels' })
     const rows = await within(list).findAllByTestId('post-target')
 

@@ -430,7 +430,7 @@ function BestTimes({ best, minSamples }: { best: TimeSlot[]; minSamples: number 
     return (
       <p className="text-sm text-muted-foreground" data-testid="best-times">
         Best times show up once posts in this range have numbers from their platforms (views, likes, replies). A
-        published post&apos;s Statistics tab reads them; some platforms don&apos;t report numbers to staqly yet.
+        published post&apos;s Insights tab reads them; some platforms don&apos;t report numbers to staqly yet.
       </p>
     )
   }

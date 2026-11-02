@@ -86,14 +86,14 @@ with a **Show past posts** button.
 
 Each row has its actions on the right: **Preview and feedback**, **Duplicate** and **Delete**
 (on hover; always on touch screens), and a menu with **Edit**, **Publish now** (with the same
-seconds-long Undo as in the post), **Cancel schedule**, **Open on** a platform, **Statistics** and
+seconds-long Undo as in the post), **Cancel schedule**, **Open on** a platform, **Insights** and
 **Copy link** and **Archive** (see [Archive](#archive)).
 
 ### Archive
 
 **Archive** in a row's menu (needs `posts:write`) takes an old post out of the list and the
 [calendar](/dashboard/schedule) without deleting it: a draft, a published post or a failed one stays as it
-is, with its numbers and comments. **Filter → Show archived posts** (and the archive button in the
+is, with its numbers and comments. The **Show archived** switch at the top of the list (and the archive button in the
 calendar's toolbar) brings archived posts back into view, marked *Archived*; **Unarchive** in their menu
 returns one for good. A scheduled or publishing post can't be archived (cancel its schedule first), and an
 archived post that is scheduled again shows like any other. The collection's counts leave archived posts
@@ -122,7 +122,7 @@ the schedule; posts that went out are never deleted) are skipped, and the messag
 
 Click a post to open it in the composer: the status badge, the collection and the time in the
 header, a row of icons next to them (hover for their names), and the sections **Post**,
-**Settings** (when a channel has platform options) and **Results** (once it was sent off):
+**Settings** (when a channel has platform options) and **Insights** (once it was sent off):
 
 | Icon | Does |
 |---|---|
@@ -134,7 +134,7 @@ header, a row of icons next to them (hover for their names), and the sections **
 
 A direct link such as `/posts/post_oalirbz67y4m4cqxq5dw` opens the same view.
 
-**Results** has a section per target: its status, and once published the link to the post on the
+**Insights** has a section per target: its status, and once published the link to the post on the
 platform, its numbers in one line and its audience comments; a failed one shows the platform's error and a
 **Retry** button that retries that channel alone; a target on your own automation shows how long it has
 waited of the collection's limit while **Publishing**. **Refresh numbers and comments** reads both now.
@@ -146,8 +146,8 @@ into a new draft.
 
 ### Unpublish
 
-**Unpublish** (needs `posts:publish`) deletes the post on the channels you pick. A job does it; **Results**
-shows each channel as *Published*, then *Unpublishing...*, *Unpublished* (with when), *Unpublish failed* (with the reason;
+**Unpublish** (needs `posts:publish`) deletes the post on the channels you pick. A job does it; **Insights**
+shows each channel as *Published*, then *Unpublishing* (while the job runs), *Unpublished* (with when), *Unpublish failed* (with the reason;
 unpublish again to retry) or *Remove by hand* (with a link to the post). Thread parts go first, newest first.
 
 | Channel | What happens |
@@ -157,13 +157,13 @@ unpublish again to retry) or *Remove by hand* (with a link to the post). Thread 
 | Instagram | Delete the post by hand: Meta has no API for it. Staqly still removes the comments of its thread |
 | Every other channel | *Remove by hand*, with a link to the post |
 
-Just before taking a channel down, staqly reads its numbers and comments one last time. **Results**
+Just before taking a channel down, staqly reads its numbers and comments one last time. **Insights**
 then keeps them as the post's history, says when it was unpublished and has no refresh button: nothing is read
 from the platform any more.
 
 ### Numbers
 
-**Results** (in the post, or **Statistics** in a row's menu) reads each published channel's numbers from its platform when the last
+**Insights** (in the post, or **Insights** in a row's menu) reads each published channel's numbers from its platform when the last
 ones are older than ten minutes, and **Refresh numbers and comments** reads them now. Each channel shows when its
 numbers were read.
 
@@ -184,7 +184,7 @@ Facebook also shows the **reactions by type**: like, love, haha, wow, sad and an
 
 ### Audience comments
 
-Under **Results** each published channel shows its comments: what people answered under it, with an AI
+Under **Insights** each published channel shows its comments: what people answered under it, with an AI
 reading of it; **Audience comments** on top reads all channels together: how many comments are positive, neutral or negative, a short summary, the
 themes and the questions people asked. Filter the comments by sentiment; **Refresh numbers and comments** reads them now.
 

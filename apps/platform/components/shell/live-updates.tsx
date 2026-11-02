@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { takeAwaitedOutcome } from '@/lib/publish-outcome'
+import { outcomeOf } from '@/lib/publish-outcome'
 import { isForeignEvent, qk, refreshEventLists, useRecentEvents } from '@/lib/queries'
 
 /** How often the dashboard looks for changes made elsewhere (agents, the scheduler, other tabs); paused in background tabs. */
@@ -90,17 +90,16 @@ export function LiveUpdates() {
 
     const fresh = list.filter((e) => e.seq > previous)
 
-    // How a post this tab published with Publish now went: the Undo toast said it is on its way.
+    // How a post this tab published (Publish now) or took down (Unpublish) went, once it has.
     for (const e of fresh) {
-      const title =
-        e.post_id && (e.type === 'post.published' || e.type === 'post.failed')
-          ? takeAwaitedOutcome(e.post_id)
-          : undefined
+      const done = outcomeOf(e)
 
-      if (title !== undefined && e.type === 'post.published') {
-        toast.success('Published', { description: title })
-      } else if (title !== undefined) {
-        toast.error("Couldn't publish", { description: `${title}: open it to see why and retry.` })
+      if (done?.ok) {
+        toast.success(done.unpublish ? 'Unpublished' : 'Published', { description: done.title })
+      } else if (done) {
+        toast.error(done.unpublish ? "Couldn't unpublish everywhere" : "Couldn't publish", {
+          description: `${done.title}: open it to see why.`,
+        })
       }
     }
 

@@ -25,6 +25,7 @@ import { api, type Post, type PostComment, type PreviewLink } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
 import { canUnpublish, liveTargets, postTitle, wentOut } from '@/lib/posts'
+import { awaitOutcome } from '@/lib/publish-outcome'
 import {
   invalidateAfterPostChange,
   qk,
@@ -289,6 +290,7 @@ export function UnpublishDialog({ post, onClose }: { post: Post; onClose: () => 
       syncPostInCache(qc, p)
       invalidateAfterPostChange(qc, p.id)
       namedToast(postTitle(p, 40), 'is being taken down')
+      awaitOutcome(p.id, postTitle(p, 60), true, (p.targets ?? []).filter((t) => t.removal === 'removing').length)
     },
     onError: (e) => toastApiError(e),
   })

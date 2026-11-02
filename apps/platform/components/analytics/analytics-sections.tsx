@@ -6,6 +6,7 @@ import { useState } from 'react'
 
 import { ChannelAvatar } from '@/components/channels/channel-avatars'
 import { ChannelStatusBadge } from '@/components/common/status-badge'
+import { PostSheet } from '@/components/posts/post-sheet-lazy'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { ProviderIcon } from '@/lib/providers'
 import { safeHttpUrl } from '@/lib/safe'
@@ -27,6 +28,23 @@ const td = 'px-2 py-2 align-top'
 const num = 'px-2 py-2 text-right align-top tabular-nums whitespace-nowrap'
 
 /** Why a channel shows no platform numbers: three different situations, three different messages. */
+
+/**
+ * A post opened in its drawer over the analytics, not on the posts page: `open` for a link's onClick (a plain
+ * click; Cmd/Ctrl/Shift-click and middle-click still follow the link), `sheet` to render once.
+ */
+function usePostDrawer() {
+  const [opened, setOpened] = useState<string | null>(null)
+  const open = (id: string) => (e: React.MouseEvent) => {
+    if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+      e.preventDefault()
+      setOpened(id)
+    }
+  }
+
+  return { open, sheet: <PostSheet id={opened} onClose={() => setOpened(null)} /> }
+}
+
 export function numbersNote(c: ChannelAnalytics): string | null {
   const cov = c.metrics_coverage
 
@@ -41,7 +59,7 @@ export function numbersNote(c: ChannelAnalytics): string | null {
   if (cov.with_data === 0) {
     return cov.support === 'automation'
       ? "Your automation hasn't reported numbers for these posts"
-      : "No numbers read yet: a published post's Statistics tab reads them"
+      : "No numbers read yet: a published post's Insights tab reads them"
   }
 
   return null
@@ -361,6 +379,7 @@ export function Performance({ data }: { data: Analytics }) {
 /** The most common failure reasons, each with the channels it hit and a way to the posts. */
 export function FailuresList({ data }: { data: Analytics }) {
   const names = new Map(data.channels.map((c) => [c.channel_id, c]))
+  const drawer = usePostDrawer()
 
   return (
     <section aria-labelledby="failures-heading" className={card}>
@@ -399,6 +418,7 @@ export function FailuresList({ data }: { data: Analytics }) {
                 })}
                 <Link
                   href={`/posts/${encodeURIComponent(f.sample_post_id)}`}
+                  onClick={drawer.open(f.sample_post_id)}
                   prefetch={false}
                   className="underline-offset-2 hover:text-foreground hover:underline pointer-coarse:-my-3 pointer-coarse:py-3"
                 >
@@ -410,6 +430,7 @@ export function FailuresList({ data }: { data: Analytics }) {
           ))}
         </ol>
       )}
+      {drawer.sheet}
     </section>
   )
 }
@@ -418,6 +439,7 @@ export function FailuresList({ data }: { data: Analytics }) {
 export function TopPosts({ data }: { data: Analytics }) {
   const { by, posts } = data.top_posts
   const names = new Map(data.channels.map((c) => [c.channel_id, c.name]))
+  const drawer = usePostDrawer()
 
   return (
     <section aria-labelledby="top-heading" className={card}>
@@ -440,6 +462,7 @@ export function TopPosts({ data }: { data: Analytics }) {
               <div className="flex items-start justify-between gap-3">
                 <Link
                   href={`/posts/${encodeURIComponent(p.post_id)}`}
+                  onClick={drawer.open(p.post_id)}
                   prefetch={false}
                   className="min-w-0 font-medium wrap-anywhere underline-offset-2 hover:underline"
                 >
@@ -481,6 +504,7 @@ export function TopPosts({ data }: { data: Analytics }) {
           ))}
         </ol>
       )}
+      {drawer.sheet}
     </section>
   )
 }
