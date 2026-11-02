@@ -553,8 +553,8 @@ export function SchedulePage() {
     const current = new Date()
 
     if (d.getTime() <= current.getTime()) {
-      // The hour that is running now: the next five-minute mark, never a time that has passed.
-      setSlot(roundUpMinutes(current, 5))
+      // The hour that is running now: at least five minutes ahead, on a five-minute mark.
+      setSlot(roundUpMinutes(new Date(current.getTime() + 5 * 60_000), 5))
 
       return
     }
