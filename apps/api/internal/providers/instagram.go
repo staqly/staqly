@@ -462,7 +462,7 @@ func instagramReply(ctx context.Context, g metaGraph, c Credentials, parentExter
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Instagram: nothing to comment on (the post has no id)"}
 	}
 	if len(p.Media) > 0 {
-		return Result{}, &Failure{Kind: ErrRejected, Msg: "Instagram comments take text only"}
+		return Result{}, commentTextOnly("Instagram")
 	}
 	req, err := g.post(ctx, token, "/"+post+"/comments", url.Values{"message": {p.Text}})
 	if err != nil {

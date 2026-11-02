@@ -52,7 +52,7 @@ const METRIC_LABELS: [Exclude<keyof NonNullable<TargetMetrics['metrics']>, 'reac
   ['clicks', 'Clicks', MousePointerClick],
   ['link_clicks', 'Link clicks', MousePointerClick],
   ['watch_minutes', 'Watch time', Clock],
-  ['avg_view_seconds', 'Average view', Timer],
+  ['avg_view_seconds', 'Avg. view', Timer],
   ['subscribers_gained', 'Subscribers gained', UserPlus],
   ['reach', 'Reach', Users],
   ['taps_forward', 'Taps forward', ChevronsRight],
