@@ -32,6 +32,8 @@ func TestPersonalNotifications(t *testing.T) {
 	}
 	ctx := context.Background()
 	owner := e.mustSignIn(ana, "")
+	clock := &testClock{t: time.Now().UTC()}
+	e.svc.Now = clock.now
 
 	// Defaults: every event on, my posts only.
 	var prefs app.NotificationPrefs
@@ -49,7 +51,7 @@ func TestPersonalNotifications(t *testing.T) {
 
 	var ch app.Channel
 	e.as(owner, "POST", "/v1/channels", map[string]any{"provider": "custom", "name": "My n8n"}, 201, &ch)
-	publish := func(content string) {
+	publishOnly := func(content string) {
 		t.Helper()
 		var post app.Post
 		e.as(owner, "POST", "/v1/posts", map[string]any{"title": "Post", "collection": "Default", "content": content,
@@ -57,9 +59,18 @@ func TestPersonalNotifications(t *testing.T) {
 		e.svc.RunDueJobsOnce(ctx)
 		e.as(owner, "POST", "/v1/posts/"+post.ID+"/targets/"+ch.ID+"/result",
 			map[string]any{"status": "published", "url": "https://example.com/p/" + post.ID}, 200, nil)
-		for range 3 { // notify_people, then notify_person
+	}
+	notify := func() { // notify_people, then notify_person after the digest window
+		e.svc.RunDueJobsOnce(ctx)
+		clock.add(2 * time.Minute)
+		for range 2 {
 			e.svc.RunDueJobsOnce(ctx)
 		}
+	}
+	publish := func(content string) {
+		t.Helper()
+		publishOnly(content)
+		notify()
 	}
 
 	publish("Launch day <b>is here</b>\nmore text")
@@ -135,9 +146,7 @@ func TestPersonalNotifications(t *testing.T) {
 			}
 		}
 	}
-	for range 3 { // the owner's "joined" email goes out first
-		e.svc.RunDueJobsOnce(ctx)
-	}
+	notify() // the owner's "joined" email goes out first
 	joined := false
 	for !joined {
 		select {
@@ -174,6 +183,28 @@ func TestPersonalNotifications(t *testing.T) {
 	select {
 	case m := <-inbox:
 		t.Fatalf("extra email to %v", m.To)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	// Posts published within a minute of each other make one email listing them.
+	publishOnly("Sixth post")
+	clock.add(20 * time.Second)
+	publishOnly("Seventh post")
+	notify()
+	select {
+	case m := <-inbox:
+		body := decodeQP(m.Data)
+		for _, want := range []string{"2 posts were published", "Sixth post", "Seventh post"} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("digest lacks %q:\n%s", want, body)
+			}
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no digest for two posts")
+	}
+	select {
+	case m := <-inbox:
+		t.Fatalf("second email for a burst: %s", decodeQP(m.Data))
 	case <-time.After(300 * time.Millisecond):
 	}
 }

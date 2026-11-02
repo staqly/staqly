@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/providers"
@@ -18,7 +19,9 @@ import (
 // address they sign in with) and whether it shows in the bell, and whether post events cover only their own
 // posts (default) or every post in the workspace. The emit hook only queues a notify_people job for the event
 // (inside its transaction); that job works out who gets it and queues one notify_person job per person, which
-// sends one email (the job key makes it once per event and person). Workspace alerts (Automation, Alerts) are
+// sends one email (the job key makes it once per event and person). Events of one kind that come in a burst
+// (three channels needing a reconnect, a schedule publishing five posts) go to a person as one email: see
+// personalDigestWindow. Workspace alerts (Automation, Alerts) are
 // separate and unchanged.
 
 // PersonalEvents are the events a person can get, in the order the settings list them.
@@ -257,7 +260,19 @@ func (s *Service) recipients(ctx context.Context, ev db.Event) ([]db.User, error
 	return out, nil
 }
 
-// runNotifyPeople is the notify_people job: one notify_person job per person who gets the event.
+// personalDigestWindow: events of one kind for one person less than this apart make one email, sent by the
+// first of them once none has come for this long (plus personalDigestSlack for transactions still committing).
+// Every personal email waits this long.
+const (
+	personalDigestWindow = time.Minute
+	personalDigestSlack  = 10 * time.Second
+	// shortcut: a burst over personalDigestMax events of one kind in a workspace loses the oldest ones from its
+	// email; page through ListEvents if a workspace ever sends that many at once.
+	personalDigestMax = 500
+)
+
+// runNotifyPeople is the notify_people job: one notify_person job per person who gets the event, after the
+// digest window.
 func (s *Service) runNotifyPeople(ctx context.Context, eventID string) error {
 	ev, err := s.Q.GetEvent(ctx, eventID)
 	if isNoRows(err) {
@@ -273,7 +288,7 @@ func (s *Service) runNotifyPeople(ctx context.Context, eventID string) error {
 	return s.tx(ctx, func(q *db.Queries) error {
 		for _, u := range users {
 			if err := s.enqueue(ctx, q, ev.WorkspaceID, "notify_person", "notify_person:"+ev.ID+":"+u.ID,
-				map[string]any{"event_id": ev.ID, "user_id": u.ID}, s.Now(), 0); err != nil {
+				map[string]any{"event_id": ev.ID, "user_id": u.ID}, s.Now().Add(personalDigestWindow+personalDigestSlack), 0); err != nil {
 				return err
 			}
 		}
@@ -300,7 +315,18 @@ func (s *Service) runNotifyPerson(ctx context.Context, eventID, userID string) e
 		return nil
 	}
 	u := users[i]
-	subject, d := s.personalEmail(ctx, ev, u)
+	burst, wait, err := s.personalBurst(ctx, ev, u.ID)
+	if err != nil {
+		return err
+	}
+	if !wait.IsZero() {
+		return s.enqueue(ctx, s.Q, ev.WorkspaceID, "notify_person", "notify_person:"+ev.ID+":"+u.ID,
+			map[string]any{"event_id": ev.ID, "user_id": u.ID}, wait, 0)
+	}
+	if len(burst) == 0 {
+		return nil // an earlier event's email lists this one
+	}
+	subject, d := s.personalDigest(ctx, ev.Type, burst, u)
 	if subject == "" {
 		return nil
 	}
@@ -312,6 +338,93 @@ func (s *Service) runNotifyPerson(ctx context.Context, eventID, userID string) e
 		"List-Unsubscribe":      "<" + oneClick + ">",
 		"List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
 	})
+}
+
+// personalBurst: the events of ev's kind that the person gets, in the burst ev leads (ev first); none when an
+// earlier one leads it, so that email lists ev. Events less than personalDigestWindow apart are one burst. A
+// non-zero wait: the burst may still grow, run again then.
+func (s *Service) personalBurst(ctx context.Context, ev db.Event, userID string) ([]db.Event, time.Time, error) {
+	at := func(e db.Event) time.Time { t, _ := time.Parse(timeFormat, e.CreatedAt); return t }
+	rows, err := s.Q.ListEvents(ctx, db.ListEventsParams{WorkspaceID: ev.WorkspaceID, Type: ev.Type,
+		FromTs: formatTime(at(ev).Add(-personalDigestWindow)), Lim: personalDigestMax})
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	slices.Reverse(rows) // oldest first
+	gets := func(e db.Event) bool {
+		users, err := s.recipients(ctx, e)
+		return err == nil && slices.ContainsFunc(users, func(u db.User) bool { return u.ID == userID })
+	}
+	burst := []db.Event{ev}
+	last := at(ev)
+	for _, e := range rows {
+		switch {
+		case e.Seq == ev.Seq:
+		case e.Seq < ev.Seq:
+			if gets(e) {
+				return nil, time.Time{}, nil
+			}
+		case at(e).Sub(last) <= personalDigestWindow: // <=: a later one exactly a window after counts itself as led (FromTs is inclusive)
+			if gets(e) {
+				burst, last = append(burst, e), at(e)
+			}
+		}
+	}
+	if quiet := last.Add(personalDigestWindow + personalDigestSlack); s.Now().Before(quiet) {
+		return nil, quiet, nil
+	}
+	return burst, time.Time{}, nil
+}
+
+// personalDigest writes one email for a burst of events of one kind: the event's own email when it is alone,
+// otherwise a list with a row per event.
+func (s *Service) personalDigest(ctx context.Context, typ string, events []db.Event, u db.User) (string, emailDoc) {
+	var docs []emailDoc
+	for _, e := range events {
+		if subject, d := s.personalEmail(ctx, e, u); subject != "" {
+			docs = append(docs, d)
+		}
+	}
+	switch len(docs) {
+	case 0:
+		return "", emailDoc{}
+	case 1:
+		return docs[0].Title, docs[0]
+	}
+	d := emailDoc{Title: digestTitle(typ, len(docs)), Footer: docs[0].Footer, Button: docs[0].Button}
+	shared := true
+	for _, one := range docs {
+		r := emailRow{Label: one.Title, Detail: firstNonEmpty(one.Quote, one.Error), Failed: one.Error != "" || typ == "post.failed", Link: one.Button}
+		d.Rows = append(d.Rows, r)
+		shared = shared && one.Button != nil && d.Button != nil && one.Button.URL == d.Button.URL
+	}
+	if shared { // one action for all (Reconnect the channel): the button, no link per row
+		for i := range d.Rows {
+			d.Rows[i].Link = nil
+		}
+	} else {
+		d.Button = nil
+	}
+	d.Preheader = d.Title
+	return d.Title, d
+}
+
+func digestTitle(typ string, n int) string {
+	switch typ {
+	case "post.published":
+		return fmt.Sprintf("%d posts were published", n)
+	case "post.failed":
+		return fmt.Sprintf("Publishing failed for %d posts", n)
+	case "post.feedback_added":
+		return fmt.Sprintf("%d new comments from reviewers", n)
+	case "channel.needs_reconnect":
+		return fmt.Sprintf("%d channels need reconnecting", n)
+	case "schedule.posts_requested":
+		return fmt.Sprintf("%d schedules are out of posts", n)
+	case "invitation.accepted":
+		return fmt.Sprintf("%d people joined", n)
+	}
+	return fmt.Sprintf("%d updates in staqly", n)
 }
 
 // personalEmail writes the email for an event; "" when there is nothing to say (the post is gone).
