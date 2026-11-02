@@ -22,9 +22,15 @@ At [tumblr.com/oauth/apps](https://www.tumblr.com/oauth/apps), register an appli
 
 | Field | Value |
 |---|---|
+| Default callback URL | the same URL as below (only OAuth 1.0a uses it, but the form requires it) |
 | OAuth2 redirect URLs | your dashboard's `/channels/callback/tumblr`, for example `http://localhost:8080/channels/callback/tumblr` locally or `https://staqly.example.com/channels/callback/tumblr` |
 
-Copy the **OAuth consumer key** and **secret key**.
+Tumblr turns down redirect URLs on another host than the default callback URL ("Domain is not
+valid for OAuth2"), even subdomains of the same domain: register one app per dashboard address,
+for example one for production and one for staging.
+
+Copy the **OAuth consumer key** and **secret key**. The "About Tumblr OAuth" box next to your apps
+describes only the older OAuth 1.0a; staqly signs in with OAuth 2.0 using the same two keys.
 
 </Step>
 <Step>
