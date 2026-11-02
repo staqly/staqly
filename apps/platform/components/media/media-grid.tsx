@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, FileText, Film, GalleryHorizontalEnd, Music } from 'lucide-react'
+import { Check, FileText, Film, GalleryHorizontalEnd, Image as ImageIcon, Music } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 
 import { MEDIA_DRAG, setMediaDragImage } from '@/components/media/media-folders'
@@ -225,6 +225,13 @@ const MediaTile = memo(function MediaTile({
             <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">
               <GalleryHorizontalEnd className="size-3" aria-hidden />
               {pages} pages
+            </span>
+          )}
+          {/* A multi-page design already says what it is with its page count. */}
+          {kind === 'image' && pages <= 1 && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white">
+              <ImageIcon className="size-3" aria-hidden />
+              Image
             </span>
           )}
           {kind === 'video' && (
