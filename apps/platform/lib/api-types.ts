@@ -5054,6 +5054,14 @@ export interface components {
             avg_view_seconds?: number;
             /** @description Subscribers the video brought (YouTube) */
             subscribers_gained?: number;
+            /** @description Accounts that saw it (Instagram stories) */
+            reach?: number;
+            /** @description Taps to the next story (Instagram stories) */
+            taps_forward?: number;
+            /** @description Taps back to the previous story (Instagram stories) */
+            taps_back?: number;
+            /** @description Times people left the stories here (Instagram stories) */
+            exits?: number;
             /** @description Reactions by emoji (Slack), with the names of who reacted when the platform gives them (at most 20 per emoji) */
             reactions?: {
                 /** @description The platform's name for it, e.g. thumbsup */

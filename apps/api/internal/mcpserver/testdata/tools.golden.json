@@ -2264,6 +2264,12 @@
           "description": "the custom channel the target is on",
           "type": "string"
         },
+        "exits": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
         "impressions": {
           "type": [
             "null",
@@ -2287,6 +2293,12 @@
           "type": "string"
         },
         "quotes": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "reach": {
           "type": [
             "null",
             "integer"
@@ -2342,6 +2354,18 @@
           ]
         },
         "subscribers_gained": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "taps_back": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "taps_forward": {
           "type": [
             "null",
             "integer"

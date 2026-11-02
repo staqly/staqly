@@ -342,6 +342,11 @@ type Metrics struct {
 	WatchMinutes      *int64 `json:"watch_minutes,omitempty"`
 	AvgViewSeconds    *int64 `json:"avg_view_seconds,omitempty"`
 	SubscribersGained *int64 `json:"subscribers_gained,omitempty"`
+	// Stories: accounts reached, taps forward and back, exits (Instagram, sent once when the story expires).
+	Reach       *int64 `json:"reach,omitempty"`
+	TapsForward *int64 `json:"taps_forward,omitempty"`
+	TapsBack    *int64 `json:"taps_back,omitempty"`
+	Exits       *int64 `json:"exits,omitempty"`
 	// Reactions by emoji, with who reacted where the platform says (Slack).
 	Reactions []Reaction `json:"reactions,omitempty"`
 }

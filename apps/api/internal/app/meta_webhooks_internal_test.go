@@ -48,3 +48,29 @@ func TestMetaWebhookQueuesACommentsRead(t *testing.T) {
 		t.Fatalf("someone else's post: %d %v", n, err)
 	}
 }
+
+// story_insights keeps an expired Instagram story's final numbers, and staqly asks the API for them no more.
+func TestMetaWebhookKeepsStoryInsights(t *testing.T) {
+	s, p, post, _, chans := publishedOn(t, "fakemetastory")
+	ctx := context.Background()
+	env := map[string]string{"META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret"}
+	s.Getenv = func(k string) string { return env[k] }
+	if _, err := s.DB.Exec(`UPDATE channels SET provider = 'instagram' WHERE id = ?`, chans[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`UPDATE post_targets SET settings = '{"post_type":"story"}', published_at = '2020-01-01T00:00:00Z' WHERE post_id = ?`, post.ID); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"object":"instagram","entry":[{"id":"1784","changes":[{"field":"story_insights","value":{"media_id":"post","views":120,"reach":90,"replies":2,"taps_forward":30,"taps_back":4,"exits":7}}]}]}`
+	if _, err := s.HandleMetaWebhook(ctx, []byte(body), metaSign("meta-secret", body)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.PostMetrics(ctx, p, post.ID, true)
+	if err != nil || len(got) != 1 || got[0].Metrics == nil {
+		t.Fatalf("metrics %+v %v", got, err)
+	}
+	m := got[0].Metrics
+	if *m.Impressions != 120 || *m.Reach != 90 || *m.Replies != 2 || *m.TapsForward != 30 || *m.TapsBack != 4 || *m.Exits != 7 || got[0].Error != "" {
+		t.Fatalf("story numbers %+v (error %q)", m, got[0].Error)
+	}
+}

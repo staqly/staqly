@@ -982,6 +982,11 @@ class PostMetrics(StaqlyModel):
     watch_minutes: int | None = None
     avg_view_seconds: int | None = None
     subscribers_gained: int | None = None
+    #: Instagram stories (final numbers when they expire): accounts reached, taps forward and back, exits.
+    reach: int | None = None
+    taps_forward: int | None = None
+    taps_back: int | None = None
+    exits: int | None = None
     #: Reactions by emoji (Slack).
     reactions: list[PostReaction] = Field(default_factory=list)
 

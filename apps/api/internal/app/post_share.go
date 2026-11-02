@@ -708,7 +708,9 @@ func (s *Service) PostMetrics(ctx context.Context, p Principal, postID string, r
 		m.Available = (ok && canRead) || t.Provider == "custom"
 		stale := !t.MetricsAt.Valid || t.MetricsAt.String < formatTime(s.Now().Add(-metricsFresh))
 		// A target taken down keeps the numbers read last (unpublish reads them once more before removing it).
-		if ok && canRead && t.Status == "published" && t.ExternalID != "" && t.Removal != "removing" && t.Removal != "removed" && (refresh || stale) {
+		// A story past its day keeps the final numbers Meta sent (story_insights): the API has none any more.
+		expired := storyExpired(t.Provider, t.Settings, t.PublishedAt, s.Now())
+		if ok && canRead && t.Status == "published" && t.ExternalID != "" && t.Removal != "removing" && t.Removal != "removed" && !expired && (refresh || stale) {
 			if fresh, err := s.readMetrics(ctx, p.WorkspaceID, t.ChannelID, e, reader, t.ExternalID); err != nil {
 				s.logger(ctx).Info("post metrics: not read", "post_id", postID, "channel_id", t.ChannelID, "provider", t.Provider, "err", err)
 				m.Error = readFailure(e.Name(), err)
@@ -781,7 +783,7 @@ func (s *Service) ReportTargetMetrics(ctx context.Context, p Principal, postID, 
 		return TargetMetrics{}, conflict("only channels on your own automation report their numbers; Staqly reads the others from the platform")
 	}
 	for _, v := range []*int64{m.Impressions, m.Likes, m.Reposts, m.Replies, m.Quotes, m.Bookmarks, m.LinkClicks,
-		m.Shares, m.WatchMinutes, m.AvgViewSeconds, m.SubscribersGained} {
+		m.Shares, m.WatchMinutes, m.AvgViewSeconds, m.SubscribersGained, m.Reach, m.TapsForward, m.TapsBack, m.Exits} {
 		if v != nil && *v < 0 {
 			return TargetMetrics{}, invalid("metrics", "numbers can't be negative")
 		}

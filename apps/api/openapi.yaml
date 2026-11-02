@@ -5683,6 +5683,10 @@ components:
         watch_minutes: { type: integer, minimum: 0, description: "Minutes watched in all (video)" }
         avg_view_seconds: { type: integer, minimum: 0, description: "How long a view lasts on average, in seconds (video)" }
         subscribers_gained: { type: integer, minimum: 0, description: "Subscribers the video brought (YouTube)" }
+        reach: { type: integer, minimum: 0, description: "Accounts that saw it (Instagram stories)" }
+        taps_forward: { type: integer, minimum: 0, description: "Taps to the next story (Instagram stories)" }
+        taps_back: { type: integer, minimum: 0, description: "Taps back to the previous story (Instagram stories)" }
+        exits: { type: integer, minimum: 0, description: "Times people left the stories here (Instagram stories)" }
         reactions:
           type: array
           description: Reactions by emoji (Slack), with the names of who reacted when the platform gives them (at most 20 per emoji)
