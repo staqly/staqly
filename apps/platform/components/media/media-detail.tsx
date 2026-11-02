@@ -492,7 +492,7 @@ function DetailForm({
                     <Link
                       href={`/posts/${u.post_id}`}
                       prefetch={false}
-                      className="min-w-0 flex-1 truncate underline-offset-4 hover:underline pointer-coarse:py-2.5"
+                      className="min-w-0 flex-1 truncate underline underline-offset-4 hover:no-underline pointer-coarse:py-2.5"
                     >
                       {u.title || 'Untitled post'}
                     </Link>
