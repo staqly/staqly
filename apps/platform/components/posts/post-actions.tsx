@@ -220,9 +220,9 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
       ))}
       {metrics.isPending ? (
         // The channels' cards as they will be, a line where the numbers come: nothing moves when they arrive.
-        <ul className="grid gap-3" aria-busy>
+        <ul className="grid gap-5" aria-busy>
           {(post.targets ?? []).map((t) => (
-            <li key={t.channel_id} className="rounded-xl border p-3">
+            <li key={t.channel_id}>
               <div className="flex items-center gap-2 text-sm">
                 <ProviderIcon id={t.provider} className="size-4" />
                 <span className="min-w-0 truncate font-medium">{t.channel_name}</span>
@@ -236,9 +236,10 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
       ) : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">This post has no channels yet.</p>
       ) : (
-        <ul className="grid gap-3">
+        // A section per channel (its name over its numbers), the numbers in one line where they fit.
+        <ul className="grid gap-5">
           {rows.map((t) => (
-            <li key={t.channel_id} className="rounded-xl border p-3">
+            <li key={t.channel_id}>
               <div className="flex items-center gap-2 text-sm">
                 <ProviderIcon id={t.provider} className="size-4" />
                 <span className="min-w-0 truncate font-medium">{t.channel_name}</span>
@@ -253,15 +254,15 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
               ) : t.status !== 'published' && !t.metrics ? (
                 <p className="mt-2 text-sm text-muted-foreground">Numbers appear once the post is published.</p>
               ) : t.metrics && METRIC_LABELS.some(([k]) => t.metrics?.[k] != null) ? (
-                <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <dl className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-2">
                   {METRIC_LABELS.filter(([k]) => t.metrics?.[k] != null).map(([k, label, Icon]) => (
                     // The label with its icon on top, the number under it, large: each one reads at a glance.
-                    <div key={k} className="grid gap-1 rounded-lg border bg-muted/30 px-3 py-2.5">
+                    <div key={k} className="grid gap-0.5 rounded-lg border bg-muted/30 px-3 py-2">
                       <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Icon aria-hidden className="size-3.5" />
                         {metricLabel(t.provider, k, label)}
                       </dt>
-                      <dd className="text-2xl font-semibold tracking-tight tabular-nums">
+                      <dd className="text-xl font-semibold tracking-tight tabular-nums">
                         {metricValue(k, t.metrics![k]!)}
                       </dd>
                     </div>
