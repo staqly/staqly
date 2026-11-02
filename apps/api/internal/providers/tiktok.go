@@ -30,7 +30,8 @@ var (
 const (
 	// user.info.profile gives the username (the channel's handle); video.publish posts directly. No video.upload:
 	// staqly publishes, it does not leave drafts in the TikTok inbox.
-	tiktokScopes = "user.info.basic,user.info.profile,video.publish"
+	// video.list reads a published video's numbers (Statistics); a channel connected before needs reconnecting for it.
+	tiktokScopes = "user.info.basic,user.info.profile,video.publish,video.list"
 	// TikTok's chunks: 5 to 64 MB, a file up to 64 MB in one; larger files in 10 MB chunks, the last one taking
 	// the rest (up to 128 MB).
 	tiktokSingleChunk = 64 << 20

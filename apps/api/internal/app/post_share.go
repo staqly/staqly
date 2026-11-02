@@ -783,7 +783,7 @@ func (s *Service) ReportTargetMetrics(ctx context.Context, p Principal, postID, 
 		return TargetMetrics{}, conflict("only channels on your own automation report their numbers; Staqly reads the others from the platform")
 	}
 	for _, v := range []*int64{m.Impressions, m.Likes, m.Reposts, m.Replies, m.Quotes, m.Bookmarks, m.LinkClicks,
-		m.Shares, m.WatchMinutes, m.AvgViewSeconds, m.SubscribersGained, m.Reach, m.TapsForward, m.TapsBack, m.Exits} {
+		m.Shares, m.WatchMinutes, m.AvgViewSeconds, m.SubscribersGained, m.Reach, m.TapsForward, m.TapsBack, m.Exits, m.Clicks} {
 		if v != nil && *v < 0 {
 			return TargetMetrics{}, invalid("metrics", "numbers can't be negative")
 		}

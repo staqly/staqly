@@ -175,8 +175,15 @@ numbers were read.
 | Instagram | Likes and comments; views, shares and saves with the insights permission. A story keeps its final numbers (views, reach, replies, taps forward and back, exits) when it expires, with [Meta's webhooks](/channels/instagram#comments-right-away) on |
 | Threads | Views, likes, replies, reposts, quotes and shares |
 | Slack | Reactions (per emoji, with who reacted) and the replies in the message's thread, added up over every Slack channel the post went to |
+| LinkedIn Page | Impressions, clicks, likes, comments and reposts |
+| Pinterest | Impressions, saves, pin clicks and outbound (link) clicks of the pin, over its lifetime |
+| TikTok | Views, likes, comments and shares of the video, once it is public (a channel connected before needs reconnecting once) |
+| Bluesky | Likes, reposts, replies and quotes |
+| Mastodon | Favourites, boosts and replies |
+| Reddit | Score and comments |
+| Tumblr | Notes (likes, reblogs and replies together) |
 | [Your own automation](/channels/your-own-automation) | What your automation sends with `PUT /v1/posts/{id}/targets/{channel}/metrics` (or the MCP tool `report_post_metrics`) |
-| Others | *Not available for this platform* for now |
+| Others | *Numbers are not available for this platform* (their APIs don't give a post's numbers) |
 
 If a platform can't be reached, the last numbers stay and the channel says why.
 

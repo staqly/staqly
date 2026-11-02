@@ -341,7 +341,9 @@ type Metrics struct {
 	Quotes      *int64 `json:"quotes,omitempty"`
 	Bookmarks   *int64 `json:"bookmarks,omitempty"`
 	LinkClicks  *int64 `json:"link_clicks,omitempty"`
-	Shares      *int64 `json:"shares,omitempty"`
+	// Clicks on the post itself, apart from its link (Pinterest: pin clicks).
+	Clicks *int64 `json:"clicks,omitempty"`
+	Shares *int64 `json:"shares,omitempty"`
 	// Video: minutes watched in all, the average view in seconds, subscribers the video brought (YouTube Analytics).
 	WatchMinutes      *int64 `json:"watch_minutes,omitempty"`
 	AvgViewSeconds    *int64 `json:"avg_view_seconds,omitempty"`
