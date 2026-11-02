@@ -234,6 +234,46 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
+  /v1/meta/deauthorize:
+    post:
+      operationId: metaDeauthorize
+      tags: [channels]
+      security: [{}]
+      summary: Meta's Deauthorize callback (Instagram, Facebook, Threads)
+      description: |
+        Meta posts a `signed_request` (signed with the app's secret) when someone removes the app from their
+        account; their channels turn **Needs reconnect**. Set as the app's Deauthorize callback URL.
+      requestBody: { required: true, content: { application/x-www-form-urlencoded: { schema: { type: object, required: [signed_request], properties: { signed_request: { type: string } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [channels], properties: { channels: { type: integer } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /v1/meta/data-deletion:
+    post:
+      operationId: metaDataDeletion
+      tags: [channels]
+      security: [{}]
+      summary: Meta's Data deletion request callback (Instagram, Facebook, Threads)
+      description: |
+        Meta posts a `signed_request` when someone asks for their data to be deleted. Their channels lose the
+        sign-in, picture and profile link, and the comments read under their posts; the answer is the status page
+        and confirmation code Meta shows them.
+      requestBody: { required: true, content: { application/x-www-form-urlencoded: { schema: { type: object, required: [signed_request], properties: { signed_request: { type: string } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [url, confirmation_code], properties: { url: { type: string }, confirmation_code: { type: string } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /v1/meta/data-deletion/{code}:
+    get:
+      operationId: metaDataDeletionStatus
+      tags: [channels]
+      security: [{}]
+      summary: The status page of a data deletion request
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "The request's status, in words", content: { text/plain: { schema: { type: string } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
   /v1/plans:
     get:
       operationId: listPlans

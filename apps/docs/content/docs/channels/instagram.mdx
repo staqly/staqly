@@ -125,7 +125,12 @@ you or Meta has Facebook Login unavailable for the app.
 
 1. In the Meta app's **Instagram** use case open **API setup with Instagram login**. Under **Set up Instagram
    business login → Business login settings** add the redirect URL `https://<your dashboard>/channels/callback/instagram`,
-   and copy the **Instagram app ID** and **Instagram app secret** (not the Meta app's keys).
+   and copy the **Instagram app ID** and **Instagram app secret** (not the Meta app's keys). In the same
+   settings set **Deauthorize callback URL** `https://<your API>/v1/meta/deauthorize` (someone removed the app:
+   their channel turns Needs reconnect) and **Data deletion request URL** `https://<your API>/v1/meta/data-deletion`
+   (their channel loses the sign-in, picture and the comments read under their posts; Meta shows them a status
+   page and a code). On staqly's cloud the API is `https://api.staqly.ai`; on your server it is the dashboard's
+   address with `/api` (`https://<your dashboard>/api/v1/meta/...`).
 2. Set both on the server and restart it:
 
    ```bash title=".env"

@@ -78,3 +78,14 @@ UPDATE channels SET comments = ? WHERE id = ?;
 -- ids kept in the sealed credentials.
 SELECT id, workspace_id, provider, credentials FROM channels
 WHERE provider IN ('facebook', 'instagram') AND status = 'connected' AND deleted_at IS NULL;
+
+-- name: MetaChannels :many
+-- Every workspace's Facebook, Instagram and Threads channels still kept: a Meta deauthorize or data deletion request
+-- names the person only by ids kept in the sealed credentials.
+SELECT * FROM channels WHERE provider IN ('facebook', 'instagram', 'threads') AND deleted_at IS NULL;
+
+-- name: WipeChannelAccount :exec
+-- A data deletion request from the platform: the channel keeps its row and name, loses what came from the account.
+UPDATE channels SET credentials = '', avatar_url = '', profile_url = '', status = 'needs_reconnect', last_error = @last_error,
+    updated_at = @updated_at
+WHERE id = @id;

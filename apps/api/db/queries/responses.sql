@@ -48,3 +48,6 @@ SELECT * FROM post_response_insights WHERE workspace_id = ? ORDER BY post_id, ch
 
 -- name: NewestResponseTime :one
 SELECT CAST(COALESCE(MAX(created_at), '') AS TEXT) AS newest FROM post_responses WHERE workspace_id = @workspace_id AND post_id = @post_id AND channel_id = @channel_id;
+
+-- name: DeleteChannelResponses :execrows
+DELETE FROM post_responses WHERE channel_id = ?;

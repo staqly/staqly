@@ -50,3 +50,28 @@ func TestMetaWebhookRoutes(t *testing.T) {
 		t.Fatalf("unsigned event: %d", code)
 	}
 }
+
+// Meta's account callbacks take a form (signed_request): a forged one is 403, not 415.
+func TestMetaAccountCallbackRoutes(t *testing.T) {
+	e := newEnv(t)
+	for _, path := range []string{"/v1/meta/deauthorize", "/v1/meta/data-deletion"} {
+		resp, err := http.Post(e.srv.URL+path, "application/x-www-form-urlencoded", strings.NewReader("signed_request=abc.def"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 403 {
+			t.Fatalf("%s: %d", path, resp.StatusCode)
+		}
+	}
+	e.do(nil, "GET", "/v1/meta/data-deletion/unknown", "", nil, 404, nil)
+	// Any other route still refuses a form.
+	resp, err := http.Post(e.srv.URL+"/v1/meta/webhook", "application/x-www-form-urlencoded", strings.NewReader("a=b"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 415 && resp.StatusCode != 404 {
+		t.Fatalf("webhook with a form: %d", resp.StatusCode)
+	}
+}

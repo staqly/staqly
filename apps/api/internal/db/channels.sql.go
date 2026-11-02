@@ -483,6 +483,52 @@ func (q *Queries) MarkChannelNeedsReconnect(ctx context.Context, arg MarkChannel
 	return result.RowsAffected()
 }
 
+const metaChannels = `-- name: MetaChannels :many
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE provider IN ('facebook', 'instagram', 'threads') AND deleted_at IS NULL
+`
+
+// Every workspace's Facebook, Instagram and Threads channels still kept: a Meta deauthorize or data deletion request
+// names the person only by ids kept in the sealed credentials.
+func (q *Queries) MetaChannels(ctx context.Context) ([]Channel, error) {
+	rows, err := q.db.QueryContext(ctx, metaChannels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Channel
+	for rows.Next() {
+		var i Channel
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.Name,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.ProfileUrl,
+			&i.Status,
+			&i.Credentials,
+			&i.Settings,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.GroupID,
+			&i.Comments,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setChannelComments = `-- name: SetChannelComments :exec
 UPDATE channels SET comments = ? WHERE id = ?
 `
@@ -588,5 +634,23 @@ func (q *Queries) UpsertProviderApp(ctx context.Context, arg UpsertProviderAppPa
 		arg.Credentials,
 		arg.UpdatedAt,
 	)
+	return err
+}
+
+const wipeChannelAccount = `-- name: WipeChannelAccount :exec
+UPDATE channels SET credentials = '', avatar_url = '', profile_url = '', status = 'needs_reconnect', last_error = ?1,
+    updated_at = ?2
+WHERE id = ?3
+`
+
+type WipeChannelAccountParams struct {
+	LastError string `json:"last_error"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+}
+
+// A data deletion request from the platform: the channel keeps its row and name, loses what came from the account.
+func (q *Queries) WipeChannelAccount(ctx context.Context, arg WipeChannelAccountParams) error {
+	_, err := q.db.ExecContext(ctx, wipeChannelAccount, arg.LastError, arg.UpdatedAt, arg.ID)
 	return err
 }
