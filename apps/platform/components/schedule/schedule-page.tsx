@@ -858,7 +858,7 @@ export function SchedulePage() {
   return (
     // The toolbar keeps the page padding; the grid runs to the left, right and bottom edges.
     <div className={cn('flex min-h-0 flex-col', isMobile ? 'flex-1' : 'h-svh')} data-testid="schedule">
-      <div className="grid gap-2 px-4 pt-4 pb-2 sm:px-6 lg:px-8">
+      <div className="grid gap-3 px-4 pt-4 pb-4 sm:px-6 lg:px-8">
         {header}
         {empty && emptyState}
       </div>
