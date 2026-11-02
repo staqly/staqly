@@ -23,6 +23,8 @@ coverage/
 
 .DS_Store
 .serena/
+.worktrees/
+.pnpm-store/
 
 # static export of apps/platform embedded into the Go binaries (make dashboard)
 /apps/api/web/*
