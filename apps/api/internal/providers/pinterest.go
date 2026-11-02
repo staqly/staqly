@@ -326,6 +326,10 @@ func pinterestError(status int, raw []byte) error {
 		return &Failure{Msg: "Pinterest rate limit reached; staqly tries again in a few minutes"}
 	case status >= 500, strings.Contains(detail, "Something went wrong on our end"):
 		return &Failure{Msg: fmt.Sprintf("Pinterest is unavailable (%s); staqly tries again in a few minutes", detail)}
+	case strings.Contains(detail, "must be approved"), strings.Contains(detail, "does not have access"):
+		// For whoever runs the server: a Pinterest app on Trial access writes only to the sandbox API; ask for Standard
+		// access in the app's settings on developers.pinterest.com.
+		return &Failure{Kind: ErrRejected, Msg: "Pinterest hasn't approved this server's app for publishing yet (it is on Trial access): " + detail}
 	case strings.Contains(detail, "Board not found"):
 		return &Failure{Kind: ErrRejected, Msg: "Pinterest: the board is not there any more; choose another"}
 	case status == http.StatusForbidden:

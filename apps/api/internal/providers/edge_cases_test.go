@@ -98,3 +98,11 @@ func TestFitMedia(t *testing.T) {
 		}
 	}
 }
+
+// A Pinterest app on Trial access says so, instead of blaming the board.
+func TestPinterestTrialAccess(t *testing.T) {
+	err := pinterestError(403, []byte(`{"code":29,"message":"Your application does not have access to read pinner data. Your application must be approved for pinner data access."}`))
+	if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "Trial access") {
+		t.Fatalf("%v", err)
+	}
+}

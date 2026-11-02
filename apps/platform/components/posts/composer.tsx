@@ -1462,7 +1462,15 @@ export function ComposerForm({
     })
     // A changed field is no longer what was refused: its error goes (the next save checks it again).
     setErrors((e) => {
-      const { [`targets.${channelId}.settings.${key}`]: _, ...rest } = e
+      const k = `targets.${channelId}.settings.${key}`
+
+      if (!(k in e)) {
+        return e // unchanged: the editors and cards keep their memo
+      }
+
+      const rest = { ...e }
+
+      delete rest[k]
 
       return rest
     })
