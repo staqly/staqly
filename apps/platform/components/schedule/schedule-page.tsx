@@ -746,9 +746,10 @@ export function SchedulePage() {
 
                 router.replace(`${pathname}?${p.toString()}`.replace(/\?$/, ''), { scroll: false })
               }}
+              // On: an amber row (text, icon, check), the same on hover; off: like its siblings, with an amber icon.
+              className={cn(showArchived && TONES.warning.picked)}
               data-testid="schedule-show-archived"
             >
-              {/* Like its siblings, but an amber icon: it changes which posts show, not how. */}
               <Archive className={TONES.warning.text} /> Show archived
             </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
