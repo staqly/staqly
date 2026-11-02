@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 
@@ -113,6 +114,9 @@ func (s *Service) HandleMetaWebhook(ctx context.Context, body []byte, signature 
 	if err := s.storeStoryInsights(ctx, payload); err != nil {
 		return 0, err
 	}
+	if m, _ := payload.(map[string]any); m["object"] == "permissions" {
+		return s.metaPermissionsChanged(ctx, body)
+	}
 	ids := map[string]bool{}
 	metaPostIDs(payload, ids)
 	queued := 0
@@ -209,4 +213,81 @@ func collectFields(v any, name string, out *[]map[string]any) {
 			collectFields(x, name, out)
 		}
 	}
+}
+
+// metaPermissionEvent is a Permissions webhook: entry.id is the Facebook user, a change names the permission
+// (field), granted or revoked (verb), and the Pages or Instagram accounts it was taken from when only some were.
+type metaPermissionEvent struct {
+	Entry []struct {
+		ID      string `json:"id"`
+		Changes []struct {
+			Field string `json:"field"`
+			Value struct {
+				Verb      string   `json:"verb"`
+				TargetIDs []string `json:"target_ids"`
+			} `json:"value"`
+		} `json:"changes"`
+	} `json:"entry"`
+}
+
+// metaPermissionProviders: the permissions a channel of a provider needs to publish or to comment.
+var metaPermissionProviders = map[string]string{
+	"pages_manage_posts": "facebook", "pages_manage_engagement": "facebook",
+	"instagram_content_publish": "instagram", "instagram_manage_comments": "instagram",
+}
+
+// metaPermissionsChanged queues a token check (refresh_channel) of every channel a permission taken away (or given
+// back) may touch: a Facebook Page connected by that person (and, when only some Pages are named, one of them), an
+// Instagram account named. The check asks Meta, so the event is only a hint, like a comment's. It returns how many
+// checks it queued.
+func (s *Service) metaPermissionsChanged(ctx context.Context, body []byte) (int, error) {
+	var ev metaPermissionEvent
+	if json.Unmarshal(body, &ev) != nil {
+		return 0, nil
+	}
+	type change struct {
+		user    string
+		targets []string
+	}
+	byProvider := map[string][]change{}
+	for _, e := range ev.Entry {
+		for _, c := range e.Changes {
+			if p := metaPermissionProviders[c.Field]; p != "" && (c.Value.Verb == "revoked" || c.Value.Verb == "granted") {
+				byProvider[p] = append(byProvider[p], change{e.ID, c.Value.TargetIDs})
+			}
+		}
+	}
+	if len(byProvider) == 0 {
+		return 0, nil
+	}
+	// shortcut: unseals every connected Facebook and Instagram channel, fine while permission changes are rare and channels
+	// number in the thousands; keep the account ids in a column when either grows.
+	rows, err := s.Q.ConnectedMetaChannels(ctx)
+	if err != nil {
+		return 0, err
+	}
+	queued := 0
+	for _, r := range rows {
+		var c providers.Credentials
+		if s.unseal(r.Credentials, &c) != nil {
+			continue
+		}
+		hit := false
+		for _, rv := range byProvider[r.Provider] {
+			switch r.Provider {
+			case "facebook": // the Page's token is the person's who connected it
+				hit = hit || (rv.user != "" && rv.user == c["authorized_by"] && (len(rv.targets) == 0 || slices.Contains(rv.targets, c["page_id"])))
+			case "instagram": // the sign-in is a business integration's, not the person's: only the account names it
+				hit = hit || slices.Contains(rv.targets, c["user_id"])
+			}
+		}
+		if !hit {
+			continue
+		}
+		if err := s.enqueue(ctx, s.W, r.WorkspaceID, "refresh_channel", "refresh_channel:"+r.ID, map[string]any{"channel_id": r.ID}, s.Now(), 3); err != nil {
+			return queued, err
+		}
+		queued++
+	}
+	return queued, nil
 }

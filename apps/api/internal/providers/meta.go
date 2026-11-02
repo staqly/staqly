@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -262,6 +263,56 @@ func metaGranted(ctx context.Context, g metaGraph, token string) (map[string]boo
 		}
 	}
 	return granted, nil
+}
+
+// metaPermissions checks, with the app's own token, that the sign-in behind token still holds the permission it
+// can't work without (need) for account (a Page, an Instagram account): someone may take one away in their
+// Facebook settings, for every account or for one. A missing need is ErrReauth; a missing comments permission
+// turns no_comments on in c (and off once it is back). Without the app's keys there is nothing to check with.
+func metaPermissions(ctx context.Context, g metaGraph, app App, token, account, need, comments string, c Credentials) error {
+	if app.ClientID == "" || app.ClientSecret == "" {
+		return nil
+	}
+	var out struct {
+		Data struct {
+			IsValid  bool     `json:"is_valid"`
+			Scopes   []string `json:"scopes"`
+			Granular []struct {
+				Scope     string   `json:"scope"`
+				TargetIDs []string `json:"target_ids"`
+			} `json:"granular_scopes"`
+		} `json:"data"`
+	}
+	if err := g.get(ctx, app.ClientID+"|"+app.ClientSecret, "/debug_token", url.Values{"input_token": {token}}, &out); err != nil {
+		// Not wrapped: a refused app token says nothing about this channel's sign-in.
+		return fmt.Errorf("%s: checking the permissions failed: %v", g.name, err)
+	}
+	if !out.Data.IsValid {
+		return &Failure{Kind: ErrReauth, Msg: g.name + "'s sign-in is no longer valid; reconnect the channel"}
+	}
+	if len(out.Data.Scopes) == 0 {
+		return nil // a token Meta lists no scopes for: nothing to tell from, not a missing permission
+	}
+	holds := func(scope string) bool {
+		if !slices.Contains(out.Data.Scopes, scope) {
+			return false
+		}
+		for _, gs := range out.Data.Granular {
+			if gs.Scope == scope && len(gs.TargetIDs) > 0 { // no targets: every account
+				return slices.Contains(gs.TargetIDs, account)
+			}
+		}
+		return true
+	}
+	if !holds(need) {
+		return &Failure{Kind: ErrReauth, Msg: g.name + " no longer allows staqly to post here (" + need + " was taken away); reconnect the channel"}
+	}
+	if holds(comments) {
+		delete(c, "no_comments")
+	} else {
+		c["no_comments"] = "true"
+	}
+	return nil
 }
 
 // metaPage is a Facebook Page as /me/accounts lists it.

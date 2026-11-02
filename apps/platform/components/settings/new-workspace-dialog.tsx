@@ -34,7 +34,7 @@ export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOp
       await api.switchWorkspace(w.id)
       writeWelcomeDraft({ workspace: w.id, named: true })
     },
-    onSuccess: () => window.location.assign(paid ? '/welcome' : '/schedule'),
+    onSuccess: () => window.location.assign(paid ? '/welcome?new=1' : '/schedule'),
     onError: (e) => setError(errorMessage(e)),
   })
 

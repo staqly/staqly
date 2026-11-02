@@ -72,3 +72,9 @@ DELETE FROM provider_apps WHERE workspace_id = ? AND provider = ?;
 
 -- name: SetChannelComments :exec
 UPDATE channels SET comments = ? WHERE id = ?;
+
+-- name: ConnectedMetaChannels :many
+-- Every workspace's connected Facebook and Instagram channels: a Meta webhook says whose permission changed only by
+-- ids kept in the sealed credentials.
+SELECT id, workspace_id, provider, credentials FROM channels
+WHERE provider IN ('facebook', 'instagram') AND status = 'connected' AND deleted_at IS NULL;

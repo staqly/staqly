@@ -309,4 +309,26 @@ describe('welcome redirect', () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(nav.replace).not.toHaveBeenCalled()
   })
+
+  it('sends someone who finished it on to the calendar, unless a plan is due or a new workspace is set up', async () => {
+    mockApi({ ...routes, 'GET /v1/billing': { enabled: true, subscription_status: 'active', suspended: false } })
+    render({ onboarded: true })
+    await waitFor(() => expect(nav.replace.mock.calls.map((c) => c[0])).toContain('/schedule'))
+    expect(screen.queryByRole('heading', { name: /Welcome/ })).toBeNull()
+  })
+
+  it('takes someone who finished it but has no plan straight to the plan', async () => {
+    mockApi({ ...routes, 'GET /v1/billing': { enabled: true, subscription_status: null, suspended: true } })
+    render({ onboarded: true })
+    expect(await screen.findByRole('heading', { name: /plan/i })).toBeInTheDocument()
+    expect(nav.replace.mock.calls.map((c) => c[0])).not.toContain('/schedule')
+  })
+
+  it('shows the whole welcome for a new workspace', async () => {
+    mockApi({ ...routes, 'GET /v1/billing': { enabled: true, subscription_status: 'active', suspended: false } })
+    nav.set('/welcome', 'new=1')
+    render({ onboarded: true })
+    expect(await screen.findByRole('heading', { name: 'Welcome to Staqly' })).toBeInTheDocument()
+    expect(nav.replace.mock.calls.map((c) => c[0])).not.toContain('/schedule')
+  })
 })

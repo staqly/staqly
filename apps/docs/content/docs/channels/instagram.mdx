@@ -163,6 +163,11 @@ comments within seconds of a new one:
 
 Meta signs every call with the Meta app's secret, which the server already has; a call it can't check is refused.
 
+The same webhook tells staqly when someone takes a permission away in their Facebook settings: under **Webhooks** →
+**Permissions**, with the same callback URL and verify token, subscribe to **instagram_content_publish** and **instagram_manage_comments**. Staqly then checks the
+account's sign-in with Meta right away: without the publishing permission the channel turns *Needs reconnecting* (and
+alerts) before its next post fails; without the comments one its comments turn off, and back on once it returns.
+
 ## Unpublishing
 
 Meta has no API to delete an Instagram post: delete it in the app (the target shows *Remove by hand*, with a link). Staqly still removes the comments of its thread.

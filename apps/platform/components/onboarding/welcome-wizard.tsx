@@ -108,7 +108,12 @@ export function WelcomeWizard() {
         ...(needsPlan || requested === 'plan' ? (['plan'] as const) : []),
         'done',
       ]
-  const [step, setStep] = useState<StepId>(requested && steps.includes(requested) ? requested : steps[0]!)
+  // Someone who finished (or skipped) the welcome sees it again only to pay for a plan (straight to that step) or to
+  // set up a new workspace (?new=1); any other way here (a sign-in from the sign-up page, a restored tab, a link) goes
+  // on to the calendar.
+  const returning = s?.onboarded === true && params.get('new') !== '1'
+  const [chosen, setStep] = useState<StepId>(requested && steps.includes(requested) ? requested : steps[0]!)
+  const step: StepId = returning && billingKnown && needsPlan && chosen !== 'done' ? 'plan' : chosen
   const heading = useRef<HTMLHeadingElement>(null)
   const index = steps.indexOf(step)
 
@@ -140,7 +145,15 @@ export function WelcomeWizard() {
     },
   })
 
-  if (!s) {
+  const leave = returning && billingKnown && !needsPlan && requested !== 'plan' && step !== 'done' && finish.isIdle
+
+  useEffect(() => {
+    if (leave) {
+      router.replace('/schedule')
+    }
+  }, [leave, router])
+
+  if (!s || leave) {
     return null
   }
 
