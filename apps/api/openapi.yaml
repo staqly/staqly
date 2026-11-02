@@ -6266,14 +6266,15 @@ components:
     ProviderLimits:
       type: object
       description: What the composer and the publish validation apply
-      required: [max_chars, max_media, needs_title, needs_media, needs_link, links, link_modes]
+      required: [max_chars, max_media, needs_title, needs_media, needs_link, comments_text_only, links, link_modes]
       properties:
         max_chars: { type: integer, description: 0 = no limit }
-        max_media: { type: integer, description: 0 = no media }
+        max_media: { type: integer, description: "0 = no media. A post with more files, or kinds not in media_kinds, goes out on this channel with the ones that fit, in order" }
         media_kinds: { type: array, items: { type: string, enum: [image, video, gif, file] } }
         needs_title: { type: boolean, description: A title setting is required }
         needs_media: { type: boolean, description: Text alone is not a post }
         needs_link: { type: boolean, description: A link setting is required }
+        comments_text_only: { type: boolean, description: "Its comments (thread parts) take no photos or videos: they go out as text" }
         links: { $ref: "#/components/schemas/LinksMode", description: "What a channel does with links unless its settings.links says otherwise" }
         link_modes: { type: array, items: { $ref: "#/components/schemas/LinksMode" }, description: "The links modes a channel on this platform may choose (X: remove, defang)" }
         image: { $ref: "#/components/schemas/ImageRules" }

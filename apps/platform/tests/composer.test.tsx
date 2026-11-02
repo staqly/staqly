@@ -41,7 +41,7 @@ vi.mock('@/components/posts/post-editor', () => ({
 const routes = {
   'GET /v1/collections': { data: [collection(), collection({ id: 'col_2', name: 'Blog' })] },
   'GET /v1/channels': {
-    data: [channel(), channel({ id: 'ch_2', name: 'Brand on Bluesky', provider: 'bluesky' })],
+    data: [channel({ comments: true }), channel({ id: 'ch_2', name: 'Brand on Bluesky', provider: 'bluesky' })],
   },
   'GET /v1/providers': {
     data: [
@@ -55,6 +55,7 @@ const routes = {
           media_kinds: ['image'],
           needs_title: false,
           needs_link: false,
+          comments_text_only: false,
           needs_media: false,
           links: 'keep',
           link_modes: ['keep', 'remove', 'defang'],
@@ -647,6 +648,67 @@ describe('composer', () => {
     await user.type(screen.getByTestId('post-content'), 'x')
     await user.click(screen.getByTestId('publish-now'))
     expect(await screen.findByText('Pinterest pins take one picture')).toBeVisible()
+  })
+
+  it('before publishing, lists what each channel leaves out, and publishes on Go on', async () => {
+    const api = mockApi({
+      ...routes,
+      'POST /v1/posts': post({ id: 'pst_9' }),
+      'POST /v1/posts/pst_9/schedule': post({ id: 'pst_9', status: 'scheduled' }),
+      'POST /v1/media': () => ({ id: 'med_v', mime_type: 'video/mp4', original_name: 'clip.mp4', size_bytes: 10 }),
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1', 'ch_2')
+    await user.type(screen.getByTestId('post-content'), 'Launch day')
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!
+
+    await user.upload(input, new File(['v'], 'clip.mp4', { type: 'video/mp4' }))
+    await screen.findByRole('img', { name: 'clip.mp4' })
+    await user.click(screen.getByTestId('publish-now'))
+    const review = await screen.findByTestId('publish-review')
+
+    expect(review).toHaveTextContent('Brand on Bluesky')
+    expect(review).toHaveTextContent('Takes pictures only, 4 files at most: leaves out clip.mp4')
+    expect(review).not.toHaveTextContent('Brand on Mastodon')
+    expect(api.find('POST', '/v1/posts')).toHaveLength(0)
+    await user.click(screen.getByTestId('publish-review-confirm'))
+    await waitFor(() => expect(api.find('POST', '/v1/posts')).toHaveLength(1))
+  })
+
+  it('with one channel, offers only what it takes: no comments where it posts none', async () => {
+    mockApi(routes)
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_2')
+    expect(screen.queryByTestId('add-comment')).not.toBeInTheDocument()
+    expect(screen.getByText('Brand on Bluesky posts no comments.')).toBeInTheDocument()
+    expect(document.querySelector('input[type="file"]')).toHaveAttribute('accept', 'image/*')
+  })
+
+  it('opens Settings when a setting is refused, even with the text refused too', async () => {
+    mockApi({
+      ...routes,
+      'POST /v1/posts': {
+        status: 422,
+        body: {
+          error: {
+            code: 'validation_failed',
+            message: 'validation failed',
+            fields: { 'targets.ch_1.content': 'too many files', 'targets.ch_1.settings.visibility': 'pick one' },
+          },
+        },
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1')
+    await user.type(screen.getByTestId('post-content'), 'x')
+    await user.click(screen.getByTestId('publish-now'))
+    await waitFor(() => expect(screen.getByTestId('tab-settings')).toHaveAttribute('data-state', 'active'))
   })
 
   it('a comment keeps every file uploaded at once, and text typed while they upload', async () => {

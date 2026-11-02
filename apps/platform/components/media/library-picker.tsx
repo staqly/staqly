@@ -24,12 +24,26 @@ import { api, type Media, type MediaLibraryItem } from '@/lib/api'
 const NONE: string[] = []
 const NO_MEDIA: MediaLibraryItem[] = []
 
-export function LibraryPickerButton({ onAdd, exclude = NONE }: { onAdd: (m: Media) => void; exclude?: string[] }) {
+export function LibraryPickerButton({
+  onAdd,
+  exclude = NONE,
+  disabled,
+}: {
+  onAdd: (m: Media) => void
+  exclude?: string[]
+  disabled?: boolean
+}) {
   const [open, setOpen] = useState(false)
 
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)} data-testid="media-from-library">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        data-testid="media-from-library"
+      >
         <LibraryBig /> From library
       </Button>
       {open && (

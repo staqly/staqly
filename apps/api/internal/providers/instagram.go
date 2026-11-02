@@ -32,7 +32,7 @@ const instagramVersion = "v24.0"
 
 func init() {
 	Register(Instagram{NewBase("instagram", "Instagram", AuthOAuth2,
-		Limits{MaxChars: 2200, MaxMedia: 10, MediaKinds: []string{"image", "video"}, NeedsMedia: true})}, StatusAvailable)
+		Limits{MaxChars: 2200, MaxMedia: 10, MediaKinds: []string{"image", "video"}, NeedsMedia: true, CommentsTextOnly: true})}, StatusAvailable)
 }
 
 func (Instagram) SettingsFields() []Field { return instagramFields }

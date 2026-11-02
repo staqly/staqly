@@ -108,6 +108,7 @@ export function provider(over: Partial<Provider> = {}): Provider {
       media_kinds: ['image', 'video'],
       needs_title: false,
       needs_link: false,
+      comments_text_only: false,
       needs_media: false,
       links: 'keep',
       link_modes: ['keep', 'remove', 'defang'],

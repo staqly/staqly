@@ -24,7 +24,7 @@ var linkedinPageRoles = map[string]bool{"ADMINISTRATOR": true, "CONTENT_ADMINIST
 
 func init() {
 	Register(LinkedInPage{NewBase("linkedin_page", "LinkedIn Page", AuthOAuth2,
-		Limits{MaxChars: 3000, MaxMedia: 9, MediaKinds: []string{"image", "gif", "video"}})}, StatusAvailable)
+		Limits{MaxChars: 3000, MaxMedia: 9, MediaKinds: []string{"image", "gif", "video"}, CommentsTextOnly: true})}, StatusAvailable)
 }
 
 var (

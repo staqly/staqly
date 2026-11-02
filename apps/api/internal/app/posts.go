@@ -432,7 +432,7 @@ func (s *Service) resolveTargets(ctx context.Context, q *db.Queries, workspaceID
 		}
 		text, _ = providers.ApplyLinks(channelLinks(ch), text)
 		settings := providers.WithPost(e.SettingsFields(), e.Limits(), title, tags, t.Settings)
-		if err := e.Validate(providers.PostContent{Text: text, Media: files}, settings); err != nil {
+		if err := e.Validate(providers.PostContent{Text: text, Media: providers.FitMedia(e.Limits(), files)}, settings); err != nil {
 			return nil, targetError(t.ChannelID, err)
 		}
 		if err := s.checkChannelSettings(ctx, q, workspaceID, ch, e.SettingsFields(), t.Settings); err != nil {
@@ -1359,7 +1359,7 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	for i := range thread {
 		thread[i].Text, _ = providers.ApplyLinks(links, thread[i].Text)
 	}
-	content := providers.PostContent{PostID: postID, ChannelID: channelID, Text: text, Media: files, Tags: tags, Thread: thread}
+	content := providers.PostContent{PostID: postID, ChannelID: channelID, Text: text, Media: providers.FitMedia(e.Limits(), files), Tags: tags, Thread: thread}
 	settings := providers.Settings{}
 	_ = json.Unmarshal([]byte(target.Settings), &settings)
 	settings = providers.WithPost(e.SettingsFields(), e.Limits(), row.Title, tags, settings)
@@ -1747,7 +1747,7 @@ func (s *Service) PreviewPost(ctx context.Context, p Principal, id string) (Post
 		}
 		if e, ok := providers.Get(t.Provider); ok {
 			settings := providers.WithPost(e.SettingsFields(), e.Limits(), post.Title, post.Tags, t.Settings)
-			if err := e.Validate(providers.PostContent{Text: text, Media: files}, settings); err != nil {
+			if err := e.Validate(providers.PostContent{Text: text, Media: providers.FitMedia(e.Limits(), files)}, settings); err != nil {
 				tp.Warnings, tp.OK = append(tp.Warnings, err.Error()), false
 			}
 		}

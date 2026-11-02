@@ -21,7 +21,7 @@ const instagramBusinessScopes = "instagram_basic,instagram_content_publish,insta
 
 func init() {
 	Register(InstagramBusiness{Instagram{NewBase("instagram_business", "Instagram (Facebook Business)", AuthOAuth2,
-		Limits{MaxChars: 2200, MaxMedia: 10, MediaKinds: []string{"image", "video"}, NeedsMedia: true})}}, StatusAvailable)
+		Limits{MaxChars: 2200, MaxMedia: 10, MediaKinds: []string{"image", "video"}, NeedsMedia: true, CommentsTextOnly: true})}}, StatusAvailable)
 }
 
 // CheckApp asks Facebook for an app token: the keys are the Meta app's.
