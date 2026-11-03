@@ -39,7 +39,6 @@ func init() {
 		{"listmonk", "ListMonk", AuthToken, Limits{MaxChars: 0, NeedsTitle: true}},
 		{"moltbook", "Moltbook", AuthToken, Limits{MaxChars: 40000, NeedsTitle: true}},
 		{"whop", "Whop", AuthToken, Limits{MaxChars: 5000, MaxMedia: 4, MediaKinds: imgVid}},
-		{"skool", "Skool", AuthToken, Limits{MaxChars: 5000, MaxMedia: 4, MediaKinds: img, NeedsTitle: true}},
 		{"tumblr", "Tumblr", AuthOAuth2, Limits{MaxChars: 4096, MaxMedia: 10, MediaKinds: imgVid}},
 	} {
 		if _, taken := registry[p.id]; taken {

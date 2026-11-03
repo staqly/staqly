@@ -73,7 +73,7 @@ const GROUPS: { title: string; ids: string[] }[] = [
   { title: 'Video and streaming', ids: ['youtube', 'tiktok', 'twitch', 'kick'] },
   {
     title: 'Communities and chat',
-    ids: ['reddit', 'discord', 'discord_webhook', 'slack', 'telegram', 'skool', 'whop', 'moltbook'],
+    ids: ['reddit', 'discord', 'discord_webhook', 'slack', 'telegram', 'whop', 'moltbook'],
   },
   { title: 'Blogs and newsletters', ids: ['wordpress', 'medium', 'devto', 'hashnode', 'listmonk'] },
   { title: 'Business and portfolio', ids: ['google_business', 'dribbble'] },

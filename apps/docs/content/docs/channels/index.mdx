@@ -105,8 +105,7 @@ listing them needs `channels:read`. Credentials are never returned by any call.
 
 `GET /v1/providers` (MCP `list_providers`, CLI `staqly channels providers`) lists every provider
 with its `auth`, `status`, `limits`, `credential_fields` and `settings_fields`. In this
-release every platform below is available except Skool, which stays `soon` and is greyed out (no way
-to publish to them that a person can set up alone). OAuth platforms are available once the server
+release every platform below is available. OAuth platforms are available once the server
 has their app keys; token platforms right away.
 
 | Provider | `id` | Connects with | Text limit | Media | Needs |
@@ -141,7 +140,6 @@ has their app keys; token platforms right away.
 | [listmonk](/channels/listmonk) | `listmonk` | token | none | — | a subject and lists |
 | [Moltbook](/channels/moltbook) | `moltbook` | token | 40,000 | — | a title |
 | [Whop](/channels/whop) | `whop` | token | 5,000 | 4 | — |
-| Skool <Badge tone="soon">soon</Badge> | `skool` | token | 5,000 | 4 images | a title |
 | [Tumblr](/channels/tumblr) | `tumblr` | OAuth, pick blogs | 4,096 | 10 pictures, at most 1 video | — |
 
 ### Platforms on a server

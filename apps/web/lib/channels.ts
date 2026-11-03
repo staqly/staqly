@@ -1,5 +1,5 @@
 // From the provider catalog (apps/api/internal/providers): [id, name], the ones registered with StatusAvailable,
-// the creator platforms first. Skool is still "soon" (catalog.go) and is never shown here.
+// the creator platforms first.
 export const CHANNELS: [string, string][] = [
   ['x', 'X'],
   ['linkedin', 'LinkedIn'],

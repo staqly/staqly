@@ -41,8 +41,6 @@ interface Look {
   color: string
   /** The badge letters when there is no icon. */
   letters?: string
-  /** One colour per letter when the brand's letters are coloured (Skool): they sit on white, like `parts`. */
-  inks?: string[]
   /** A line icon instead of letters (stays readable at 16 px, where letters like </> don't). */
   glyph?: LucideIcon
   /** The mark on the round tile when the icon is itself a filled circle (Facebook's): just its letter, centred. */
@@ -111,7 +109,6 @@ const LOOKS: Record<string, Look> = {
   listmonk: { icon: siListmonk, color: '#0055D4' },
   moltbook: { color: '#E11D48', letters: 'M' },
   whop: { color: '#FF6243', letters: 'W' },
-  skool: { color: '#C9473A', letters: 'sk', inks: ['#252F86', '#C9473A'] },
   tumblr: { icon: siTumblr, color: '#36465D' },
 }
 
@@ -200,9 +197,9 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
           ['size-4'],
           className,
         )}
-        style={{ background: look.inks ? '#ffffff' : look.color }}
+        style={{ background: look.color }}
       >
-        <span className="text-[55cqh]">{look.inks ? <Inked letters={letters} inks={look.inks} /> : letters}</span>
+        <span className="text-[55cqh]">{letters}</span>
       </span>
     )
   }
@@ -234,7 +231,7 @@ export function ProviderTile({ id, name, className }: { id: string; name?: strin
   const label = name ?? look.icon?.title ?? id
   // Like an app icon: the brand colour fills the tile and the mark is white (black on a very light colour).
   // A multi-colour mark (Slack) keeps its colours on white.
-  const background = look.parts || look.inks ? '#ffffff' : id.startsWith('instagram') ? INSTAGRAM : look.color
+  const background = look.parts ? '#ffffff' : id.startsWith('instagram') ? INSTAGRAM : look.color
   const ink = luminance(look.color) > 0.5 ? '#000000' : '#ffffff'
   let mark
 
@@ -253,11 +250,7 @@ export function ProviderTile({ id, name, className }: { id: string; name?: strin
   } else {
     const letters = look.letters ?? label.slice(0, 1).toUpperCase()
 
-    mark = (
-      <span className="text-[50cqh] leading-none font-bold">
-        {look.inks ? <Inked letters={letters} inks={look.inks} /> : letters}
-      </span>
-    )
+    mark = <span className="text-[50cqh] leading-none font-bold">{letters}</span>
   }
 
   return (
@@ -278,12 +271,3 @@ export function ProviderTile({ id, name, className }: { id: string; name?: strin
 }
 
 const INSTAGRAM = 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%)'
-
-/** Letters in the brand's own colours, one per letter (Skool's navy s and red k). */
-function Inked({ letters, inks }: { letters: string; inks: string[] }) {
-  return [...letters].map((l, i) => (
-    <span key={i} style={{ color: inks[i % inks.length] }}>
-      {l}
-    </span>
-  ))
-}
