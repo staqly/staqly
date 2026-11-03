@@ -523,6 +523,28 @@ func (s *Service) CreateAIJob(ctx context.Context, p Principal, in AIJobInput) (
 	}
 	var row db.AiJob
 	err = s.tx(ctx, func(q *db.Queries) error {
+		if in.IdempotencyKey != "" {
+			prev, err := q.GetAIJobByIdempotencyKey(ctx, db.GetAIJobByIdempotencyKeyParams{WorkspaceID: p.WorkspaceID, CreatedBy: actor, IdempotencyKey: in.IdempotencyKey})
+			if err == nil {
+				if prev.InputHash != hash {
+					return &Error{Code: "idempotency_mismatch", Status: 422, Message: "Idempotency-Key reused with a different request"}
+				}
+				row = prev
+				return nil
+			}
+			if !isNoRows(err) {
+				return err
+			}
+		}
+		// The earlier lookup is only a fast path: requests can race while saving their input files.
+		prev, err := q.FindLiveAIJob(ctx, db.FindLiveAIJobParams{WorkspaceID: p.WorkspaceID, CreatedBy: actor, InputHash: hash})
+		if err == nil {
+			row = prev
+			return nil
+		}
+		if !isNoRows(err) {
+			return err
+		}
 		n, err := q.CountLiveAIJobs(ctx, p.WorkspaceID)
 		if err != nil {
 			return err
@@ -564,6 +586,10 @@ func (s *Service) CreateAIJob(ctx context.Context, p Principal, in AIJobInput) (
 			}
 		}
 		return AIJob{}, false, err
+	}
+	if row.ID != id {
+		s.deleteAIFiles(ctx, p.WorkspaceID, id, inputs)
+		return toAIJob(row), false, nil
 	}
 	s.logger(ctx).Info("ai job queued", "ai_job_id", id, "op", op.ID, "provider", chain[0].prov.Name(), "model", chain[0].model.ID, "estimate_micros", estimate)
 	s.trackAs(nil, p, "ai_job_requested", "op", op.ID, "provider", chain[0].prov.Name(), "model", chain[0].model.ID)
@@ -640,12 +666,21 @@ func (s *Service) AcceptAIJob(ctx context.Context, p Principal, id string) (Medi
 	} else if row.ResultType == "image/jpeg" {
 		ext = ".jpg"
 	}
-	// ponytail: two accepts at the same moment make two library files; the editor sends one.
-	m, err := s.UploadMedia(ctx, p, aiFileName(row)+ext, f, false)
+	m, err := s.uploadMedia(ctx, p, aiFileName(row)+ext, f, false, func(q *db.Queries, mediaID string) error {
+		current, err := q.GetAIJob(ctx, db.GetAIJobParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if err != nil {
+			return err
+		}
+		if current.MediaID != "" || current.ResultKey != row.ResultKey {
+			return conflict("the AI result was already kept or discarded")
+		}
+		return q.SetAIJobMedia(ctx, db.SetAIJobMediaParams{MediaID: mediaID, WorkspaceID: p.WorkspaceID, ID: id})
+	})
 	if err != nil {
-		return Media{}, err
-	}
-	if err := s.W.SetAIJobMedia(ctx, db.SetAIJobMediaParams{MediaID: m.ID, WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+		// A concurrent accept may have won, including while this upload was checking storage limits.
+		if current, jerr := s.aiJob(ctx, p, id); jerr == nil && current.MediaID != "" {
+			return s.getMediaInfo(ctx, p, current.MediaID)
+		}
 		return Media{}, err
 	}
 	_ = s.Cfg.Blob.Delete(ctx, row.ResultKey)
@@ -730,6 +765,10 @@ func (s *Service) purgeAIJob(ctx context.Context, row db.AiJob) error {
 
 // sweepAIFiles deletes the files and prompts of jobs finished more than a day ago (the minute sweep).
 func (s *Service) sweepAIFiles(ctx context.Context) {
+	// Synchronous text calls have no queue job to rescue after a process crash; their HTTP call is bounded.
+	if err := s.W.FailStaleTextAIJobs(ctx, db.FailStaleTextAIJobsParams{FinishedAt: s.now(), CreatedBefore: formatTime(s.Now().Add(-assistantCallTimeout - time.Minute))}); err != nil {
+		s.logger(ctx).Error("ai interrupted text jobs sweep", "err", err)
+	}
 	rows, err := s.Q.ListAIJobsToPurge(ctx, formatTime(s.Now().Add(-aiFilesKept)))
 	if err != nil {
 		s.logger(ctx).Error("ai files sweep", "err", err)

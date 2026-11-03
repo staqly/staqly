@@ -54,3 +54,8 @@ ORDER BY created_at LIMIT 100;
 
 -- name: PurgeAIJobFiles :exec
 UPDATE ai_jobs SET files_purged = 1, prompt = '', inputs = '', result_key = '' WHERE id = ?;
+
+-- name: FailStaleTextAIJobs :exec
+-- Text calls run synchronously with a hard HTTP timeout; keep their estimate when their process disappears.
+UPDATE ai_jobs SET status = 'failed', error_code = 'ai_interrupted', error = 'The AI request was interrupted; try again.', finished_at = @finished_at
+WHERE kind = 'text' AND status IN ('queued', 'running') AND created_at < @created_before;

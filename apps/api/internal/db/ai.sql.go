@@ -73,6 +73,22 @@ func (q *Queries) CreateAIJob(ctx context.Context, arg CreateAIJobParams) error 
 	return err
 }
 
+const failStaleTextAIJobs = `-- name: FailStaleTextAIJobs :exec
+UPDATE ai_jobs SET status = 'failed', error_code = 'ai_interrupted', error = 'The AI request was interrupted; try again.', finished_at = ?1
+WHERE kind = 'text' AND status IN ('queued', 'running') AND created_at < ?2
+`
+
+type FailStaleTextAIJobsParams struct {
+	FinishedAt    string `json:"finished_at"`
+	CreatedBefore string `json:"created_before"`
+}
+
+// Text calls run synchronously with a hard HTTP timeout; keep their estimate when their process disappears.
+func (q *Queries) FailStaleTextAIJobs(ctx context.Context, arg FailStaleTextAIJobsParams) error {
+	_, err := q.db.ExecContext(ctx, failStaleTextAIJobs, arg.FinishedAt, arg.CreatedBefore)
+	return err
+}
+
 const findLiveAIJob = `-- name: FindLiveAIJob :one
 SELECT id, workspace_id, created_by, operation, kind, status, prompt, params, inputs, input_hash, idempotency_key, provider, model, fallback_from, submit_state, provider_request, result_key, result_type, result_width, result_height, media_id, error_code, error, cost_micros, duration_ms, created_at, started_at, finished_at, files_purged FROM ai_jobs
 WHERE workspace_id = ? AND created_by = ? AND input_hash = ? AND status IN ('queued', 'running')

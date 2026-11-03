@@ -188,6 +188,12 @@ func cleanOriginalName(name string) string {
 // UploadMedia validates size and type, then keeps the file in the store (disk or S3). With reuse, a file
 // identical to one already in the library (not in Deleted) is not stored again: the existing one is returned.
 func (s *Service) UploadMedia(ctx context.Context, p Principal, filename string, r io.Reader, reuse bool) (Media, error) {
+	return s.uploadMedia(ctx, p, filename, r, reuse, nil)
+}
+
+// attach runs with the library insert, so a generated result can be kept exactly once.
+// Like every transaction callback, it must only touch the database and may run again.
+func (s *Service) uploadMedia(ctx context.Context, p Principal, filename string, r io.Reader, reuse bool, attach func(*db.Queries, string) error) (Media, error) {
 	if err := p.require(ScopeMediaWrite); err != nil {
 		return Media{}, err
 	}
@@ -271,6 +277,11 @@ func (s *Service) UploadMedia(ctx context.Context, p Principal, filename string,
 	row := db.Medium{ID: id, WorkspaceID: p.WorkspaceID, StorageName: storage, OriginalName: cleanOriginalName(filename),
 		MimeType: mime, SizeBytes: n, Sha256: sum, CreatedAt: s.now(), Width: width, Height: height}
 	if err := s.tx(ctx, func(q *db.Queries) error {
+		if attach != nil {
+			if err := attach(q, row.ID); err != nil {
+				return err
+			}
+		}
 		// The subscription may change while the file is being uploaded.
 		plan, err := s.planFor(ctx, q, p.WorkspaceID)
 		if err != nil {
