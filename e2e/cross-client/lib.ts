@@ -628,6 +628,7 @@ export function normalize(v: unknown): unknown {
     'created_at',
     'updated_at',
     'published_at',
+    'attempted_at',
     'seq',
     'agent',
     // MCP's create_post takes no source (the server names the agent instead): the REST clients send 'xc'
