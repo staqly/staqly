@@ -37,6 +37,7 @@ Copy its **Client ID** and **Client Secret**.
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_DRIBBBLE_ENABLED=true
 PROVIDER_DRIBBBLE_CLIENT_ID=your-client-id
 PROVIDER_DRIBBBLE_CLIENT_SECRET=your-client-secret
 ```
@@ -46,7 +47,7 @@ PROVIDER_DRIBBBLE_CLIENT_SECRET=your-client-secret
   service keeps `PROVIDER_*` settings).
 
 Until both are set, Dribbble shows as **soon** in **Channels → Add channel**.
-`PROVIDER_DRIBBBLE_ENABLED=false` hides it altogether.
+It shows only with `PROVIDER_DRIBBBLE_ENABLED=true`; unset or `false` hides it, and `PROVIDER_DRIBBBLE_MAINTENANCE=true` shows it as **soon** while it is under maintenance.
 
 </Step>
 <Step>

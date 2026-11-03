@@ -174,8 +174,8 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 		if e.ID() == "instagram" && s.instagramLogin() {
 			info.Name = "Instagram (Standalone)"
 		}
-		if !info.AppConfigured {
-			info.Status = providers.StatusSoon // an OAuth platform waits for its app's keys in the environment
+		if !info.AppConfigured || s.providerMaintenance(e.ID()) {
+			info.Status = providers.StatusSoon // an OAuth platform waits for its app's keys in the environment, or maintenance ends
 		}
 		if _, bot := providers.TelegramBot(); e.ID() == "telegram" && bot != "" {
 			info.Bot, info.BotName = "@"+bot, providers.TelegramBotName()
@@ -185,10 +185,24 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 	return out, nil
 }
 
-// providerEnabled reads PROVIDER_<ID>_ENABLED (default true); false turns the platform off on this server.
+// ProvidersOnByDefault makes an unset PROVIDER_<ID>_ENABLED mean on, as PROVIDER_DEFAULT_ENABLED=true does. Unit
+// tests set it (their Getenv often stands in for the environment): most are not about the switch.
+var ProvidersOnByDefault bool
+
+// providerEnabled reads PROVIDER_<ID>_ENABLED: only true shows the platform on this server; unset means
+// PROVIDER_DEFAULT_ENABLED (default false), so a platform is hidden until it is turned on. Your own automation
+// (custom) is on unless PROVIDER_CUSTOM_ENABLED=false.
 func (s *Service) providerEnabled(providerID string) bool {
-	on, err := strconv.ParseBool(s.Env(providerEnv(providerID)+"ENABLED", "true"))
-	return err != nil || on
+	def := ProvidersOnByDefault || s.envFlag("PROVIDER_DEFAULT_ENABLED") || providerID == "custom"
+	on, _ := strconv.ParseBool(s.Env(providerEnv(providerID)+"ENABLED", strconv.FormatBool(def)))
+	return on
+}
+
+// providerMaintenance reads PROVIDER_<ID>_MAINTENANCE: true shows the platform as soon, refuses new accounts and
+// new posts to it, and holds its scheduled posts until it is false again.
+func (s *Service) providerMaintenance(providerID string) bool {
+	on, _ := strconv.ParseBool(s.Env(providerEnv(providerID)+"MAINTENANCE", "false"))
+	return on
 }
 
 // providerEnv is the prefix of a provider's settings: PROVIDER_X_, PROVIDER_LINKEDIN_PAGE_.
@@ -334,6 +348,9 @@ func (s *Service) availableProvider(id string) (providers.Entry, error) {
 	}
 	if e.Status != providers.StatusAvailable {
 		return e, &Error{Code: "provider_soon", Status: 409, Message: e.Name() + " is not available in this version yet"}
+	}
+	if s.providerMaintenance(id) {
+		return e, &Error{Code: "provider_maintenance", Status: 409, Message: e.Name() + " is under maintenance on this server; try again later"}
 	}
 	return e, nil
 }

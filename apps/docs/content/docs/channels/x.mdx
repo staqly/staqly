@@ -39,6 +39,7 @@ which are OAuth 1.0a).
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_X_ENABLED=true
 PROVIDER_X_CLIENT_ID=your-oauth2-client-id
 PROVIDER_X_CLIENT_SECRET=your-oauth2-client-secret
 ```
@@ -47,8 +48,9 @@ PROVIDER_X_CLIENT_SECRET=your-oauth2-client-secret
 - **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
   service keeps `PROVIDER_*` settings).
 
-Until both are set, X shows as **soon** in **Channels → Add channel**. `PROVIDER_X_ENABLED=false`
-hides it altogether.
+Until both are set, X shows as **soon** in **Channels → Add channel**. It shows only with
+`PROVIDER_X_ENABLED=true`; unset or `false` hides it, and `PROVIDER_X_MAINTENANCE=true` shows it as **soon**
+while it is under maintenance.
 
 </Step>
 <Step>

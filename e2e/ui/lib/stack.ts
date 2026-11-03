@@ -120,6 +120,8 @@ export async function startServer(
       env: {
         ...process.env,
         STAQLY_MODE: opts.mode,
+        // Every platform on (an unset PROVIDER_<ID>_ENABLED is off).
+        PROVIDER_DEFAULT_ENABLED: 'true',
         // Cloud without a Google client: the sign-in from before accounts (dev and tests only).
         AUTH_DEV_SIGNIN: 'true',
         // Test servers start every workspace on Pro so specs can invite people and make several keys.

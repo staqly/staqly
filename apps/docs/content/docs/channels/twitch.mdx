@@ -37,6 +37,7 @@ Then **Manage** the app, copy the **Client ID**, and **New Secret** for the **Cl
 ### Give staqly the keys
 
 ```bash title=".env"
+PROVIDER_TWITCH_ENABLED=true
 PROVIDER_TWITCH_CLIENT_ID=your-client-id
 PROVIDER_TWITCH_CLIENT_SECRET=your-client-secret
 ```
@@ -45,7 +46,7 @@ PROVIDER_TWITCH_CLIENT_SECRET=your-client-secret
 - **Binary:** export both in your shell, then run `staqly serve` or `staqly service install`.
 
 Until both are set, Twitch shows as **soon** in **Channels → Add channel**.
-`PROVIDER_TWITCH_ENABLED=false` hides it altogether.
+It shows only with `PROVIDER_TWITCH_ENABLED=true`; unset or `false` hides it, and `PROVIDER_TWITCH_MAINTENANCE=true` shows it as **soon** while it is under maintenance.
 
 </Step>
 <Step>

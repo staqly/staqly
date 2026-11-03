@@ -59,6 +59,7 @@ Copy the **Client ID** and **Client secret** of the client.
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_GOOGLE_BUSINESS_ENABLED=true
 PROVIDER_GOOGLE_BUSINESS_CLIENT_ID=your-client-id.apps.googleusercontent.com
 PROVIDER_GOOGLE_BUSINESS_CLIENT_SECRET=your-client-secret
 ```
@@ -68,7 +69,7 @@ PROVIDER_GOOGLE_BUSINESS_CLIENT_SECRET=your-client-secret
   service keeps `PROVIDER_*` settings).
 
 Until both are set, Google Business Profile shows as **soon** in **Channels → Add channel**.
-`PROVIDER_GOOGLE_BUSINESS_ENABLED=false` hides it altogether. The channel setup check asks Google
+It shows only with `PROVIDER_GOOGLE_BUSINESS_ENABLED=true`; unset or `false` hides it, and `PROVIDER_GOOGLE_BUSINESS_MAINTENANCE=true` shows it as **soon** while it is under maintenance. The channel setup check asks Google
 whether it takes the keys and whether media links are public.
 
 </Step>

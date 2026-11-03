@@ -37,6 +37,7 @@ Copy the **Client key** and **Client secret** from the app's page.
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_TIKTOK_ENABLED=true
 PROVIDER_TIKTOK_CLIENT_ID=your-client-key
 PROVIDER_TIKTOK_CLIENT_SECRET=your-client-secret
 ```
@@ -46,7 +47,7 @@ PROVIDER_TIKTOK_CLIENT_SECRET=your-client-secret
   service keeps `PROVIDER_*` settings).
 
 Until both are set, TikTok shows as **soon** in **Channels → Add channel**.
-`PROVIDER_TIKTOK_ENABLED=false` hides it altogether.
+It shows only with `PROVIDER_TIKTOK_ENABLED=true`; unset or `false` hides it, and `PROVIDER_TIKTOK_MAINTENANCE=true` shows it as **soon** while it is under maintenance.
 
 </Step>
 <Step>

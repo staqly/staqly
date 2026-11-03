@@ -16,6 +16,9 @@ import (
 	"github.com/staqly/staqly/apps/api/internal/providers"
 )
 
+// maintenanceWait is how often a post held by PROVIDER_<ID>_MAINTENANCE looks again.
+const maintenanceWait = 10 * time.Minute
+
 // Post statuses: draft (no time, or not yet scheduled) → scheduled → publishing → published | failed.
 var PostStatuses = []string{"draft", "scheduled", "publishing", "published", "failed"}
 
@@ -425,6 +428,9 @@ func (s *Service) resolveTargets(ctx context.Context, q *db.Queries, workspaceID
 		}
 		if !kept[t.ChannelID] && !s.providerEnabled(ch.Provider) {
 			return nil, &Error{Code: "provider_disabled", Status: 409, Message: e.Name() + " is turned off on this server"}
+		}
+		if !kept[t.ChannelID] && s.providerMaintenance(ch.Provider) {
+			return nil, &Error{Code: "provider_maintenance", Status: 409, Message: e.Name() + " is under maintenance on this server; try again later"}
 		}
 		text := content
 		if t.Content != nil {
@@ -1332,6 +1338,10 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	e, ok := providers.Get(ch.Provider)
 	if !ok {
 		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, "provider not available in this build")
+	}
+	if s.providerMaintenance(ch.Provider) {
+		// Held, not failed: the job snoozes without spending an attempt and looks again later.
+		return &providers.Failure{Msg: e.Name() + " is under maintenance on this server", RetryAt: s.Now().Add(maintenanceWait)}
 	}
 	var media []string
 	_ = json.Unmarshal([]byte(row.Media), &media)

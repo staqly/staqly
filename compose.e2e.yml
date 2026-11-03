@@ -10,6 +10,8 @@ services:
   staqly:
     container_name: staqly-e2e
     image: staqly-e2e:test
+    environment:
+      PROVIDER_DEFAULT_ENABLED: "true" # every platform on (unset PROVIDER_<ID>_ENABLED is off otherwise)
 
   # PostgreSQL for the scenarios that switch the api to cloud mode (07 onwards).
   postgres:

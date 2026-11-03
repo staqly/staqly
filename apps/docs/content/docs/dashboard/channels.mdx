@@ -18,9 +18,10 @@ Click **Add channel**. The drawer always opens at the platforms and shows the pl
 networks**, **Video and streaming**, **Communities and chat**, **Blogs and newsletters** and
 **Business and portfolio**: *Pick the platform. Greyed ones are on the way.* Platforms that are
 not ready on this server carry a **Soon** badge and cannot be picked: not built yet, or an OAuth
-platform whose app keys the server doesn't have. Platforms turned off on the server
-(`PROVIDER_<ID>_ENABLED=false`) are not shown at all. **Your own automation** is always available
-unless it is turned off the same way. Platforms that only connect over https (Facebook, Instagram, Threads,
+platform whose app keys the server doesn't have, or one under maintenance
+(`PROVIDER_<ID>_MAINTENANCE=true`). Platforms not turned on on the server (without
+`PROVIDER_<ID>_ENABLED=true`) are not shown at all. **Your own automation** is always available
+unless `PROVIDER_CUSTOM_ENABLED=false`. Platforms that only connect over https (Facebook, Instagram, Threads,
 TikTok, Slack) carry **Not available** when the dashboard is open at an `http://` address; see
 [Platforms that need https](/channels#platforms-that-need-https).
 

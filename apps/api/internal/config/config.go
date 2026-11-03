@@ -152,7 +152,7 @@ func env(k, def string) string {
 // default. Booleans are what strconv.ParseBool accepts (1/0, t/f, true/false in any case).
 var (
 	boolVars = []string{"AUTH_DEV_SIGNIN", "COOKIE_SECURE", "DASHBOARD_EXPOSED", "NOTIFY_ALLOW_LOOPBACK",
-		"NOTIFY_ALLOW_PRIVATE", "RATE_LIMIT_DISABLED", "S3_CREATE_BUCKET", "S3_FORCE_PATH_STYLE", "STRIPE_MANAGED_PAYMENTS",
+		"NOTIFY_ALLOW_PRIVATE", "PROVIDER_DEFAULT_ENABLED", "RATE_LIMIT_DISABLED", "S3_CREATE_BUCKET", "S3_FORCE_PATH_STYLE", "STRIPE_MANAGED_PAYMENTS",
 		"TRUST_PROXY", "WEBHOOK_ALLOW_LOOPBACK", "WEBHOOK_ALLOW_PRIVATE"}
 	positiveIntVars = []string{"JOB_CONCURRENCY", "MAIL_SMTP_PORT", "MAX_UPLOAD_MB", "NOTIFY_CONCURRENCY", "NOTIFY_MAX_ATTEMPTS",
 		"LINKEDIN_DAILY_API_CALLS", "YOUTUBE_DAILY_UPLOADS", "NOTIFY_MAX_FAILS", "RATE_LIMIT_AUTH_BURST", "RATE_LIMIT_AUTH_PER_MINUTE", "RATE_LIMIT_BURST", "RATE_LIMIT_PER_MINUTE"}
@@ -163,7 +163,14 @@ var (
 
 // checkEnv validates the settings above; unset or empty means the default.
 func checkEnv() error {
-	for _, k := range boolVars {
+	bools := slices.Clone(boolVars)
+	for _, kv := range os.Environ() { // each platform's PROVIDER_<ID>_ENABLED and PROVIDER_<ID>_MAINTENANCE
+		k, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(k, "PROVIDER_") && (strings.HasSuffix(k, "_ENABLED") || strings.HasSuffix(k, "_MAINTENANCE")) {
+			bools = append(bools, k)
+		}
+	}
+	for _, k := range bools {
 		if v := os.Getenv(k); v != "" {
 			if _, err := strconv.ParseBool(v); err != nil {
 				return fmt.Errorf("%s must be true or false (got %q)", k, v)

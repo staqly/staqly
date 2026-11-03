@@ -39,6 +39,7 @@ Copy the **Client ID** and **Client secret** of the client.
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_YOUTUBE_ENABLED=true
 PROVIDER_YOUTUBE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 PROVIDER_YOUTUBE_CLIENT_SECRET=your-client-secret
 ```
@@ -48,7 +49,7 @@ PROVIDER_YOUTUBE_CLIENT_SECRET=your-client-secret
   service keeps `PROVIDER_*` settings).
 
 Until both are set, YouTube shows as **soon** in **Channels → Add channel**.
-`PROVIDER_YOUTUBE_ENABLED=false` hides it altogether. The channel setup check asks Google whether it
+It shows only with `PROVIDER_YOUTUBE_ENABLED=true`; unset or `false` hides it, and `PROVIDER_YOUTUBE_MAINTENANCE=true` shows it as **soon** while it is under maintenance. The channel setup check asks Google whether it
 takes the keys, without connecting an account.
 
 </Step>

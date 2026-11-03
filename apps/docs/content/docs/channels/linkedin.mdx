@@ -38,6 +38,7 @@ Copy the **Client ID** and **Primary Client Secret** from the **Auth** tab.
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_LINKEDIN_ENABLED=true
 PROVIDER_LINKEDIN_CLIENT_ID=your-client-id
 PROVIDER_LINKEDIN_CLIENT_SECRET=your-client-secret
 ```
@@ -47,7 +48,7 @@ PROVIDER_LINKEDIN_CLIENT_SECRET=your-client-secret
   service keeps `PROVIDER_*` settings).
 
 Until both are set, LinkedIn shows as **soon** in **Channels → Add channel**.
-`PROVIDER_LINKEDIN_ENABLED=false` hides it altogether.
+It shows only with `PROVIDER_LINKEDIN_ENABLED=true`; unset or `false` hides it, and `PROVIDER_LINKEDIN_MAINTENANCE=true` shows it as **soon** while it is under maintenance.
 
 </Step>
 <Step>

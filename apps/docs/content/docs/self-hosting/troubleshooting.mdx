@@ -56,9 +56,11 @@ dashboard, another agent) edited it meanwhile. Reload the post and apply your ch
   (`PROVIDER_X_CLIENT_ID`, `PROVIDER_X_CLIENT_SECRET` in the server's environment), then restart
   ([Developer apps](/channels/developer-apps)).
 - `provider_soon`: the platform is in the catalog but not available in this build yet.
-- `provider_disabled`, or the platform is missing from **Add channel**: it is turned off with
-  `PROVIDER_<ID>_ENABLED=false`. Posts already scheduled on its channels still go out; new ones
-  are refused.
+- `provider_disabled`, or the platform is missing from **Add channel**: it is not turned on; set
+  `PROVIDER_<ID>_ENABLED=true` and restart. Posts already scheduled on its channels still go out; new
+  ones are refused.
+- `provider_maintenance`, or a platform you use shows as **soon**: `PROVIDER_<ID>_MAINTENANCE=true`.
+  Its scheduled posts wait and go out once it is `false` again.
 </Accordion>
 <Accordion title="A platform shows Not available, or: The connection did not start in this browser">
 The platform (Facebook, Instagram, Threads, TikTok, Slack) sends the browser back to

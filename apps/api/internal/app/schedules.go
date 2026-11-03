@@ -825,7 +825,7 @@ func (s *Service) fetchPostsFromEndpoint(ctx context.Context, sys Principal, r d
 	return out, nil
 }
 
-// enabledChannels keeps the channels that still exist and whose platform is not turned off on this server (a
+// enabledChannels keeps the channels that still exist and whose platform is not turned off or under maintenance on this server (a
 // schedule keeps naming a channel that was removed; publishing to it would fail every run).
 func (s *Service) enabledChannels(ctx context.Context, workspaceID string, ids []string) ([]string, error) {
 	if len(ids) == 0 {
@@ -837,7 +837,7 @@ func (s *Service) enabledChannels(ctx context.Context, workspaceID string, ids [
 	}
 	on := map[string]bool{}
 	for _, r := range rows {
-		on[r.ID] = s.providerEnabled(r.Provider)
+		on[r.ID] = s.providerEnabled(r.Provider) && !s.providerMaintenance(r.Provider)
 	}
 	return slices.DeleteFunc(slices.Clone(ids), func(id string) bool { return !on[id] }), nil
 }

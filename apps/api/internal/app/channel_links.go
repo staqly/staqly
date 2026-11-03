@@ -79,7 +79,7 @@ func (s *Service) channelLinkStatus(l db.ChannelLink) string {
 // linkPlatformOK: a link offers real platforms only (your own automation is the team's to set up).
 func (s *Service) linkPlatformOK(id string) bool {
 	e, ok := providers.Get(id)
-	return ok && id != "custom" && e.Status == providers.StatusAvailable && s.providerEnabled(id)
+	return ok && id != "custom" && e.Status == providers.StatusAvailable && s.providerEnabled(id) && !s.providerMaintenance(id)
 }
 
 // CreateChannelLink makes a connect link. channels:manage, like connecting a channel yourself: an API key with

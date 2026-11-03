@@ -49,6 +49,7 @@ Copy the **App ID** and **App secret** from **App settings → Basic** (the Meta
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_META_ENABLED=true
 PROVIDER_META_CLIENT_ID=your-meta-app-id
 PROVIDER_META_CLIENT_SECRET=your-meta-app-secret
 PROVIDER_INSTAGRAM_CONFIG_ID=your-configuration-id
@@ -59,8 +60,8 @@ PROVIDER_INSTAGRAM_CONFIG_ID=your-configuration-id
   service keeps `PROVIDER_*` settings). [Facebook Page](/channels/facebook) uses the same two keys.
 
 Until the ID and secret are set, Instagram shows as **soon** in **Channels → Add channel**; without
-the configuration ID, connecting says it is missing. `PROVIDER_INSTAGRAM_ENABLED=false` hides
-Instagram altogether. A workspace may instead save its own app over the API
+the configuration ID, connecting says it is missing. Instagram shows only with
+`PROVIDER_INSTAGRAM_ENABLED=true`; unset or `false` hides it. A workspace may instead save its own app over the API
 (`PUT /v1/providers/instagram/app` with `client_id`, `client_secret` and `config_id`).
 
 </Step>
