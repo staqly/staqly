@@ -224,7 +224,7 @@ function DeleteWorkspaceCard() {
           are removed. Every device is signed out. Earlier backups still contain the data.
         </p>
         {!viaSession && (
-          <p className="text-xs text-muted-foreground">Only a signed-in dashboard session can delete a workspace.</p>
+          <p className="text-xs text-muted-foreground">Only a signed-in app session can delete a workspace.</p>
         )}
         <div>
           <Button

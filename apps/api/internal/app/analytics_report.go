@@ -802,12 +802,12 @@ func delayStats(v []float64) (*float64, *float64) {
 	return &avg, &p90
 }
 
-// classifySource names where posts come from: the dashboard, an agent over MCP or the API (by the agents the
+// classifySource names where posts come from: the app (the dashboard), an agent over MCP or the API (by the agents the
 // workspace has seen), a schedule that fetches posts from an endpoint, a repeating post, or another client.
 func classifySource(src string, agentKinds map[string]string) (kind, label string) {
 	switch {
 	case src == "dashboard":
-		return "dashboard", "Dashboard"
+		return "dashboard", "App"
 	case src == "repeat":
 		return "repeat", "Repeating posts"
 	case strings.HasPrefix(src, "schedule:"):
@@ -827,13 +827,14 @@ var (
 	reFailSpace  = regexp.MustCompile(`\s+`)
 )
 
-// failureKey groups errors that differ only by numbers, ids or links; text is the first one, shortened.
+// failureKey groups errors that differ only by numbers, ids or links; text is the first one, whole enough for the
+// dashboard to show it in full (it clamps it in the list).
 func failureKey(msg string) (key, text string) {
 	msg = strings.TrimSpace(msg)
 	if msg == "" {
 		msg = "No reason recorded"
 	}
-	text = truncateRunes(reFailSpace.ReplaceAllString(msg, " "), 160)
+	text = truncateRunes(reFailSpace.ReplaceAllString(msg, " "), 2000)
 	key = strings.ToLower(reFailURL.ReplaceAllString(msg, "<url>"))
 	key = reFailNumber.ReplaceAllString(key, "#")
 	key = truncateRunes(reFailSpace.ReplaceAllString(key, " "), 120)

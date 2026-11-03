@@ -90,7 +90,7 @@ function report(over: Partial<Analytics> = {}): Analytics {
       {
         source: 'dashboard',
         kind: 'dashboard',
-        label: 'Dashboard',
+        label: 'App',
         posts_created: 5,
         posts_published: 4,
         targets_published: 8,
@@ -203,6 +203,19 @@ describe('analytics page', () => {
     )
     expect(screen.getByTestId('best-times')).toHaveTextContent('Tuesday 10:00')
     expect(screen.getByTestId('best-times')).toHaveTextContent('low confidence')
+  })
+
+  it('opens a failure reason whole in a dialog', async () => {
+    setup()
+    renderWithProviders(<AnalyticsPage />, { mode: 'local' })
+    await userEvent.click(
+      within(await screen.findByTestId('failures-list')).getByRole('button', {
+        name: 'rate limit hit, retry after 30 seconds',
+      }),
+    )
+    expect(await screen.findByRole('dialog', { name: 'Failure reason' })).toHaveTextContent(
+      'rate limit hit, retry after 30 seconds',
+    )
   })
 
   it('opens a top post in its drawer on the analytics page', async () => {

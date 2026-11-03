@@ -191,7 +191,7 @@ export function ConnectDevice() {
             </div>
             <Button asChild size="lg" className="h-11">
               <Link href="/schedule">
-                Try opening the dashboard <ArrowRight />
+                Try opening the app <ArrowRight />
               </Link>
             </Button>
           </>

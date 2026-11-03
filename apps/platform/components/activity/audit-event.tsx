@@ -174,7 +174,7 @@ function eventEntity(e: StashEvent): EventEntity | null {
 
 const ACTOR_KIND: Record<string, { label: string; Icon: Icon }> = {
   api_key: { label: 'API key', Icon: Bot },
-  session: { label: 'Dashboard', Icon: User },
+  session: { label: 'App', Icon: User },
   local: { label: 'Local', Icon: Laptop },
   system: { label: 'System', Icon: Cog },
 }

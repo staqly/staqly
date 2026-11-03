@@ -129,7 +129,7 @@ export function formatDay(key: string, opts: Intl.DateTimeFormatOptions = { mont
 
 /** Where posts come from, in words. */
 export const SOURCE_KINDS: Record<SourceAnalytics['kind'], string> = {
-  dashboard: 'Dashboard',
+  dashboard: 'App',
   api: 'API',
   mcp: 'MCP',
   schedule: 'Schedule',

@@ -1814,7 +1814,10 @@ export function ComposerForm({
                   <span className={DOT} title={formatDateTime(post.created_at)}>
                     created {timeAgo(post.created_at)}
                   </span>
-                  {post.source && <span className={DOT}>via {post.source}</span>}
+                  {post.source && (
+                    // The API records the app as "dashboard".
+                    <span className={DOT}>via {post.source === 'dashboard' ? 'app' : post.source}</span>
+                  )}
                 </div>
               </SheetDescription>
             ) : (
