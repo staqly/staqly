@@ -24,6 +24,9 @@ var youtubeQuotaZone = func() *time.Location {
 // client retains its SSRF and redirect guards. Connection/refresh calls use the capacity left in reserve.
 func (s *Service) publishingCtx(ctx context.Context, workspaceID string) context.Context {
 	ctx = s.providerCtx(ctx)
+	if s.AssistantAvailable() {
+		ctx = providers.WithChallengeSolver(ctx, s.moltbookSolver(workspaceID))
+	}
 	if s.Cfg.Mode == ModeLocal {
 		return ctx
 	}

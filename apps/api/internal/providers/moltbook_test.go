@@ -20,7 +20,8 @@ type fakeMoltbook struct {
 	comment  map[string]any
 	postCode int    // status for POST /posts (0 = 201)
 	postBody string // body for POST /posts (default: a verified post)
-	drop     bool   // close the connection on POST /posts
+	verify   map[string]any
+	drop     bool // close the connection on POST /posts
 }
 
 func (f *fakeMoltbook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +45,15 @@ func (f *fakeMoltbook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = w.Write([]byte(`{"agent":{"api_key":"moltbook_new","claim_url":"https://www.moltbook.com/claim/moltbook_claim_x","verification_code":"reef-X4B2"}}`))
+	case r.URL.Path == "/verify" && r.Method == http.MethodPost:
+		f.verify = map[string]any{}
+		_ = json.Unmarshal(raw, &f.verify)
+		if f.verify["answer"] != "15.00" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"success":false,"error":"Incorrect answer","hint":"Solve the math problem"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"success":true,"content_type":"post"}`))
 	case r.URL.Path == "/agents/me":
 		_, _ = w.Write([]byte(`{"success":true,"agent":{"id":"a1","name":"janebot","display_name":"Jane's Bot","avatar_url":"https://example.com/a.png"}}`))
 	case r.URL.Path == "/posts" && r.Method == http.MethodPost:
@@ -157,10 +167,31 @@ func TestMoltbookPublish(t *testing.T) {
 		t.Fatalf("link post %v", f.post)
 	}
 
-	// Held for a verification challenge: staqly cannot answer it.
+	// Held for a verification challenge: without AI on the server staqly cannot answer it.
 	f.postBody = `{"success":true,"post":{"id":"p-2","verification_status":"pending","verification":{"verification_code":"moltbook_verify_abc","challenge_text":"tW0 lObStErS...","expires_at":"2026-10-23T10:05:00Z"}}}`
-	if _, err := mb.Publish(context.Background(), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "moltbook_verify_abc") {
+	if _, err := mb.Publish(context.Background(), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "AI set up on the server") {
 		t.Fatalf("held post: %v", err)
+	}
+	// With AI, staqly answers it and the post is out.
+	var asked string
+	solve := func(answer string, err error) context.Context {
+		return WithChallengeSolver(context.Background(), func(_ context.Context, ch string) (string, error) { asked = ch; return answer, err })
+	}
+	res, err = mb.Publish(solve(" 15 ", nil), c, PostContent{Text: "x"}, Settings{"title": "t"})
+	if err != nil || res.ExternalID != "p-2" || asked != "tW0 lObStErS..." || f.verify["verification_code"] != "moltbook_verify_abc" || f.verify["answer"] != "15.00" {
+		t.Fatalf("answered: %+v %v %v", res, err, f.verify)
+	}
+	// A wrong answer: Moltbook's reason.
+	if _, err := mb.Publish(solve("14", nil), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "Incorrect answer") {
+		t.Fatalf("wrong answer: %v", err)
+	}
+	// No number, or no answer at all: nothing is sent (failed answers get the agent suspended).
+	f.verify = nil
+	if _, err := mb.Publish(solve("I think fifteen", nil), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) || f.verify != nil {
+		t.Fatalf("no number: %v %v", err, f.verify)
+	}
+	if _, err := mb.Publish(solve("", errors.New("quota")), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "quota") || f.verify != nil {
+		t.Fatalf("AI failed: %v %v", err, f.verify)
 	}
 	f.postBody = ""
 
