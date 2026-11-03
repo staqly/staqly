@@ -16,6 +16,7 @@ import {
   splitSound,
   transitionLength,
 } from '@/components/timeline/doc'
+import { drawFrame } from '@/components/timeline/render'
 
 const pic = (id: string) => newClip({ id, kind: 'image', src: `/m/${id}`, name: id, width: 1000, height: 1000 })
 
@@ -99,6 +100,28 @@ describe('the video and sound timeline', () => {
 
     expect(file.size).toBe(44 + 100 * 2 * 2)
     expect(head.startsWith('RIFF') && head.endsWith('WAVE')).toBe(true)
+  })
+})
+
+describe('drawing a frame', () => {
+  it('fits a video by its own size when the library stored none (no squashing into a square)', () => {
+    const t = newTimeline('video') // 1080 x 1920
+    const clip = newClip({ id: 'v', kind: 'video', src: '/m/v', name: 'v', width: 0, height: 0, duration: 3 })
+
+    clip.fit = 'contain'
+    t.clips = [clip]
+    const frame = { width: 1080, height: 1920 } as unknown as CanvasImageSource // a portrait video's frame
+    const calls: number[][] = []
+    const ctx = new Proxy(
+      {},
+      {
+        get: (_, k) => (k === 'drawImage' ? (...a: unknown[]) => calls.push(a.slice(1) as number[]) : () => {}),
+        set: () => true,
+      },
+    ) as CanvasRenderingContext2D
+
+    drawFrame(ctx, t, 0, () => frame)
+    expect(calls[0]).toEqual([0, 0, 1080, 1920])
   })
 })
 

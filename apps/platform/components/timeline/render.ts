@@ -7,6 +7,25 @@ export type FrameSource = (clip: Clip, local: number) => CanvasImageSource | nul
 
 const ZOOM = 0.12
 
+/**
+ * The picture's own size: the library knows no size for most videos (the clip falls back to a square), so a frame
+ * is fitted by what it really is, not by what was stored.
+ */
+function sourceSize(img: CanvasImageSource, clip: Clip): [number, number] {
+  const [w, h] =
+    img instanceof HTMLVideoElement
+      ? [img.videoWidth, img.videoHeight]
+      : img instanceof HTMLImageElement
+        ? [img.naturalWidth, img.naturalHeight]
+        : typeof VideoFrame !== 'undefined' && img instanceof VideoFrame
+          ? [img.displayWidth, img.displayHeight]
+          : 'width' in img && typeof img.width === 'number' && typeof img.height === 'number'
+            ? [img.width, img.height]
+            : [0, 0]
+
+  return w > 0 && h > 0 ? [w, h] : [clip.width, clip.height]
+}
+
 /** The clip's picture, fitted to the frame, moved by its motion at progress `q` (0 to 1). */
 function drawClip(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -17,7 +36,9 @@ function drawClip(
 ) {
   const W = t.width
   const H = t.height
-  const k = clip.fit === 'cover' ? Math.max(W / clip.width, H / clip.height) : Math.min(W / clip.width, H / clip.height)
+  const [cw, ch] = sourceSize(img, clip)
+  // Actual size: one pixel of the picture is one of the frame (a small logo stays small, a large photo is cropped).
+  const k = clip.fit === 'actual' ? 1 : clip.fit === 'cover' ? Math.max(W / cw, H / ch) : Math.min(W / cw, H / ch)
   let scale = 1
   let dx = 0
 
@@ -38,8 +59,8 @@ function drawClip(
       break
   }
 
-  const w = clip.width * k * scale
-  const h = clip.height * k * scale
+  const w = cw * k * scale
+  const h = ch * k * scale
 
   ctx.drawImage(img, (W - w) / 2 + dx, (H - h) / 2, w, h)
 }

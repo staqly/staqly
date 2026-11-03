@@ -544,6 +544,7 @@ const TRANSITIONS: { value: Transition; label: string }[] = [
 const FITS: { value: Fit; label: string }[] = [
   { value: 'cover', label: 'Fill the frame' },
   { value: 'contain', label: 'Show it whole' },
+  { value: 'actual', label: 'Actual size' },
 ]
 
 function ClipInspector({ ctx, c }: { ctx: Ctx; c: Clip }) {
