@@ -35,20 +35,27 @@ const twoLists = (call: Call) => ({
       ? [post({ id: 'pst_2', content: 'Went out', status: 'published' })]
       : call.query.get('status') === 'failed'
         ? []
-        : [post({ id: 'pst_1', content: 'Upcoming one', status: 'scheduled' })],
+        : call.query.get('status') === 'draft'
+          ? [post({ id: 'pst_4', content: 'Still a draft', status: 'draft' })]
+          : [post({ id: 'pst_1', content: 'Upcoming one', status: 'scheduled' })],
   next_cursor: null,
 })
 
 describe('upcoming and published posts in the posts list', () => {
-  it('shows two sections, each with its count, without a switch', async () => {
+  it('shows upcoming, drafts and published, each with its count, without a switch', async () => {
     const api = setupPosts(twoLists, { draft: 1, scheduled: 2, failed: 1, published: 5 })
 
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
     const upcoming = await screen.findByTestId('posts-upcoming')
+    const drafts = await screen.findByTestId('posts-drafts')
     const published = await screen.findByTestId('posts-published')
 
-    // Failed posts have their own section above (none here): Upcoming counts drafts, scheduled and publishing.
-    expect(within(upcoming).getByRole('heading', { name: 'Upcoming 3' })).toBeInTheDocument()
+    // Failed posts have their own section above (none here); drafts, with no time yet, are not upcoming.
+    expect(within(upcoming).getByRole('heading', { name: 'Upcoming 2' })).toBeInTheDocument()
+    expect(within(drafts).getByRole('heading', { name: 'Drafts 1' })).toBeInTheDocument()
+    expect(within(drafts).getByText('Still a draft')).toBeInTheDocument()
+    expect(within(upcoming).queryByText('Still a draft')).not.toBeInTheDocument()
+    expect(upcoming.compareDocumentPosition(drafts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByTestId('posts-failed')).not.toBeInTheDocument()
     expect(within(upcoming).getByText('Upcoming one')).toBeInTheDocument()
     expect(within(published).getByRole('heading', { name: 'Published 5' })).toBeInTheDocument()
@@ -59,9 +66,10 @@ describe('upcoming and published posts in the posts list', () => {
 
     expect(calls.map((c) => [c.query.get('hide_past'), c.query.get('status'), c.query.get('sort')]).toSorted()).toEqual(
       [
-        [null, 'draft,scheduled,publishing', 'created_desc'],
+        [null, 'draft', 'created_desc'],
         [null, 'failed', 'created_desc'],
         [null, 'published', 'publish_desc'],
+        [null, 'scheduled,publishing', 'created_desc'],
       ],
     )
   })
@@ -98,10 +106,17 @@ describe('upcoming and published posts in the posts list', () => {
     expect(hidePastOf(api.find('GET', '/v1/posts'))).toEqual([null])
   })
 
+  it('drafts alone: no empty Upcoming above them', async () => {
+    setupPosts((call) => (call.query.get('status') === 'draft' ? twoLists(call) : { data: [], next_cursor: null }))
+    renderWithProviders(<PostsWorkspace />, { mode: 'local' })
+    expect(within(await screen.findByTestId('posts-drafts')).getByText('Still a draft')).toBeInTheDocument()
+    expect(screen.queryByTestId('posts-upcoming')).not.toBeInTheDocument()
+  })
+
   it('nothing coming up says so above the published posts', async () => {
     setupPosts((call) => (call.query.get('status') === 'published' ? twoLists(call) : { data: [], next_cursor: null }))
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
-    expect(await screen.findByText('Nothing coming up: new drafts and scheduled posts show here.')).toBeInTheDocument()
+    expect(await screen.findByText('Nothing coming up: scheduled posts show here.')).toBeInTheDocument()
     expect(within(screen.getByTestId('posts-published')).getByText('Went out')).toBeInTheDocument()
   })
 
