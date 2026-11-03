@@ -21,9 +21,12 @@ class ChangesTest(unittest.TestCase):
 
     def test_api_schema_and_brand_dependents(self):
         self.assertEqual(selected_jobs(['apps/api/openapi.yaml']),
-                         {'api', 'cli', 'dashboard', 'docs', 'sdk_ts', 'e2e'})
+                         {'api', 'cli', 'dashboard', 'docs', 'sdk_ts', 'sdk_py', 'e2e'})
         self.assertEqual(selected_jobs(['packages/brand/logo.tsx']),
                          {'dashboard', 'docs', 'web', 'packages', 'e2e'})
+
+    def test_openapi_change_runs_python_model_contract(self):
+        self.assertIn('sdk_py', selected_jobs(['apps/api/openapi.yaml']))
 
     def test_main_and_full_runs_run_everything(self):
         self.assertIsNone(changed_files('push', {'before': '0' * 40}))
