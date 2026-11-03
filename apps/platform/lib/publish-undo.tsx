@@ -32,7 +32,7 @@ export function undoToast(saved: Post, onUndone: (draft: Post) => void) {
   const until = Date.now() + delay
 
   awaitOutcome(saved.id, postTitle(saved, 60))
-  toast(<Countdown until={until} />, {
+  toast.info(<Countdown until={until} />, {
     description: postTitle(saved, 60),
     duration: delay,
     action: {
