@@ -66,6 +66,7 @@ from .models import (
     MediaProject,
     MediaUse,
     Member,
+    MoltbookAgent,
     Plan,
     Post,
     PostComment,
@@ -1689,6 +1690,26 @@ class AsyncChannels(_Resource):
             )
         )
         return _model(TelegramConnect, r)
+
+    async def moltbook_register(
+        self,
+        *,
+        name: str,
+        description: str | None = None,
+        group_id: str | None = None,
+        request_options: RequestOptions | None = None,
+    ) -> MoltbookAgent:
+        """Registers a new Moltbook agent and connects it as a channel; its owner then opens ``claim_url`` to
+        claim it (Moltbook keeps an unclaimed agent from posting)."""
+        r = await self._http.request(
+            RequestSpec(
+                "POST",
+                "/v1/channels/moltbook/register",
+                json=clean({"name": name, "description": description, "group_id": group_id}),
+                options=_opts(request_options),
+            )
+        )
+        return _model(MoltbookAgent, r)
 
     async def telegram_connect_status(
         self, code: str, *, request_options: RequestOptions | None = None

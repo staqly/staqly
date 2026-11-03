@@ -1154,6 +1154,13 @@ const cases: Case[] = [
     path: '/v1/channels/telegram/connect/ABC123',
   },
   {
+    name: 'channels.moltbookRegister',
+    call: (c) => c.channels.moltbookRegister({ name: 'newbot', description: 'Posts for us' }),
+    method: 'POST',
+    path: '/v1/channels/moltbook/register',
+    body: { name: 'newbot', description: 'Posts for us' },
+  },
+  {
     name: 'providers.check',
     call: (c) => c.providers.check('instagram'),
     method: 'POST',

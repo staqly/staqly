@@ -6,6 +6,7 @@ import type {
   ChannelInput,
   ChannelOption,
   ChannelPatch,
+  MoltbookAgent,
   ChannelTestResult,
   DeveloperAppInput,
   Provider,
@@ -109,6 +110,17 @@ export class Channels extends APIResource {
    */
   telegramConnect(params: { group_id?: string } = {}, options?: RequestOptions): Promise<TelegramConnect> {
     return this.http.request({ method: 'POST', path: '/v1/channels/telegram/connect', body: params, options })
+  }
+
+  /**
+   * Registers a new Moltbook agent and connects it as a channel; its owner then opens `claim_url` to claim it
+   * (Moltbook keeps an unclaimed agent from posting). Needs `channels:manage`.
+   */
+  moltbookRegister(
+    params: { name: string; description?: string; group_id?: string },
+    options?: RequestOptions,
+  ): Promise<MoltbookAgent> {
+    return this.http.request({ method: 'POST', path: '/v1/channels/moltbook/register', body: params, options })
   }
 
   /** Whether the chat for a Telegram connect code is connected yet. */

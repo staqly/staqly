@@ -185,6 +185,11 @@ func TestChannelsTokenProvider(t *testing.T) {
 	// Telegram through the server's bot needs a bot on the server; an unknown code is not there.
 	e.do(nil, "POST", "/v1/channels/telegram/connect", e.admin, nil, 409, nil)
 	e.do(nil, "GET", "/v1/channels/telegram/connect/ABC234", e.key, nil, 404, nil)
+	// Registering a Moltbook agent needs its name before anything reaches Moltbook.
+	e.do(nil, "POST", "/v1/channels/moltbook/register", e.admin, map[string]any{"name": " "}, 422, &errBody)
+	if errBody.Error.Fields["name"] == "" {
+		t.Fatalf("moltbook register without a name: %+v", errBody.Error)
+	}
 
 	// The provider's limit is applied per target when the post is written.
 	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "this text is far longer than twenty characters",

@@ -147,6 +147,7 @@ export type ChannelTestResult = JSONResponse<'/v1/channels/{id}/test', 'post'>
 /** One choice of a channel's remote setting (a Pinterest board, a Discord channel...). */
 export type ChannelOption = JSONResponse<'/v1/channels/{id}/options/{key}', 'get'>['data'][number]
 export type TelegramConnect = Schemas['TelegramConnect']
+export type MoltbookAgent = Schemas['MoltbookAgent']
 export type ProviderCheck = Schemas['ProviderCheck']
 export type DeveloperAppInput = Schemas['DeveloperAppInput']
 export type Provider = Schemas['Provider']

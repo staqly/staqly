@@ -3269,6 +3269,39 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TelegramConnect" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /v1/channels/moltbook/register:
+    post:
+      operationId: registerMoltbookAgent
+      tags: [channels]
+      summary: Register a new Moltbook agent and connect it (channels:manage)
+      description: |
+        For someone without an agent's API key: the server registers the agent with Moltbook
+        (`POST /api/v1/agents/register`) and connects it at once as a `moltbook` channel (in `group_id`, else
+        Default), so the key Moltbook shows only once is kept sealed. The agent's owner then opens `claim_url` to
+        claim it; Moltbook keeps an unclaimed agent from posting. A name Moltbook refuses (taken, not allowed) is a
+        422 on `name`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100, description: "The agent's name on Moltbook (u/<name>)" }
+                description: { type: string, maxLength: 500 }
+                group_id: { type: string }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoltbookAgent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
   /v1/channels/{id}/options/{key}:
     parameters:
       - { $ref: "#/components/parameters/id" }
@@ -6327,6 +6360,14 @@ components:
         bot: { type: string, description: "Telegram: the server's own bot (@username). Present when a chat connects by adding it and sending /connect CODE there (POST /v1/channels/telegram/connect) instead of with credential_fields" }
         bot_name: { type: string, description: "Telegram: the server's bot's display name, shown beside its @username" }
         needs_https: { type: boolean, description: "The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise)" }
+
+    MoltbookAgent:
+      type: object
+      description: A Moltbook agent the server registered and connected, and where its owner claims it
+      required: [channel, claim_url]
+      properties:
+        channel: { $ref: "#/components/schemas/Channel" }
+        claim_url: { type: string, format: uri, description: "Where the agent's owner claims it on Moltbook; until then Moltbook keeps it from posting" }
 
     ScheduleRule:
       type: object

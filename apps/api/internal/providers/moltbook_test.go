@@ -35,6 +35,15 @@ func (f *fakeMoltbook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case r.URL.Path == "/agents/register" && r.Method == http.MethodPost:
+		f.post = map[string]any{}
+		_ = json.Unmarshal(raw, &f.post)
+		if f.post["name"] == "taken" {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"success":false,"error":"Agent name already taken"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"agent":{"api_key":"moltbook_new","claim_url":"https://www.moltbook.com/claim/moltbook_claim_x","verification_code":"reef-X4B2"}}`))
 	case r.URL.Path == "/agents/me":
 		_, _ = w.Write([]byte(`{"success":true,"agent":{"id":"a1","name":"janebot","display_name":"Jane's Bot","avatar_url":"https://example.com/a.png"}}`))
 	case r.URL.Path == "/posts" && r.Method == http.MethodPost:
@@ -104,6 +113,27 @@ func TestMoltbookConnect(t *testing.T) {
 	}
 }
 
+func TestMoltbookRegister(t *testing.T) {
+	f := useFakeMoltbook(t)
+	creds, profile, claim, err := MoltbookRegister(context.Background(), "newbot", "Posts for us")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.auth != "" || f.post["name"] != "newbot" || f.post["description"] != "Posts for us" {
+		t.Fatalf("auth %q body %v", f.auth, f.post)
+	}
+	if creds["api_key"] != "moltbook_new" || creds["agent"] != "newbot" || claim != "https://www.moltbook.com/claim/moltbook_claim_x" {
+		t.Fatalf("creds %v claim %q", creds, claim)
+	}
+	if profile.Handle != "u/newbot" || profile.ProfileURL != "https://www.moltbook.com/u/newbot" {
+		t.Fatalf("profile %+v", profile)
+	}
+	var ve *ValidationError
+	if _, _, _, err := MoltbookRegister(context.Background(), "taken", ""); !errors.As(err, &ve) || ve.Field != "name" || !strings.Contains(ve.Msg, "already taken") {
+		t.Fatalf("taken name: %v", err)
+	}
+}
+
 func TestMoltbookPublish(t *testing.T) {
 	f := useFakeMoltbook(t)
 	mb, _ := Get("moltbook")
@@ -147,6 +177,12 @@ func TestMoltbookPublish(t *testing.T) {
 	f.postCode, f.postBody = http.StatusNotFound, `{"success":false,"error":"Submolt not found"}`
 	if _, err := mb.Publish(context.Background(), c, PostContent{Text: "x"}, Settings{"title": "t", "submolt": "nope"}); !errors.Is(err, ErrRejected) {
 		t.Fatalf("unknown submolt: %v", err)
+	}
+	// Moltbook's newer answers: the reason is in message, error only says the status.
+	f.postCode, f.postBody = http.StatusForbidden, `{"statusCode":403,"message":"Agent has not been claimed yet","hint":"Visit the claim URL","error":"Forbidden"}`
+	if _, err := mb.Publish(context.Background(), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) ||
+		!strings.Contains(err.Error(), "Agent has not been claimed yet; Visit the claim URL") {
+		t.Fatalf("forbidden: %v", err)
 	}
 	// Outage: retried.
 	f.postCode, f.postBody = http.StatusBadGateway, `bad gateway`

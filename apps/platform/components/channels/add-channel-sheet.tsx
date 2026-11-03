@@ -21,8 +21,9 @@ import { clearOAuthReturn, setOAuthReturn } from '@/lib/welcome'
 import { fieldValues, ProviderFields } from './provider-fields'
 import { ProviderGrid } from './provider-grid'
 
-// Only for Telegram through the server's bot: loaded when that panel opens.
+// Only for Telegram through the server's bot and a new Moltbook agent: loaded when that panel opens.
 const TelegramConnect = dynamic(() => import('./telegram-connect').then((m) => m.TelegramConnect), { ssr: false })
+const MoltbookRegister = dynamic(() => import('./moltbook-register').then((m) => m.MoltbookRegister), { ssr: false })
 
 /**
  * The other way into a platform, offered under the form when it works on this server: Bluesky's sign-in goes
@@ -58,6 +59,8 @@ export function ConnectForm({
   const [errors, setErrors] = useState<Record<string, string | undefined>>({})
   // Telegram through the server's bot (/connect CODE in the chat), unless the person picks a bot of their own.
   const [ownBot, setOwnBot] = useState(false)
+  // Moltbook: a new agent registered here, unless the person has an agent's key already (or reconnects one).
+  const [ownKey, setOwnKey] = useState(false)
   // Nothing on the other side names your own automation, so the person does.
   const nameRequired = provider.auth === 'none'
   // A working channel opened from Edit connection (not a broken one being reconnected).
@@ -121,6 +124,10 @@ export function ConnectForm({
         onOwnBot={() => setOwnBot(true)}
       />
     )
+  }
+
+  if (provider.id === 'moltbook' && !reconnect && !ownKey) {
+    return <MoltbookRegister onDone={onDone} onOwnKey={() => setOwnKey(true)} />
   }
 
   if (provider.auth === 'oauth2') {
@@ -215,6 +222,9 @@ export function ConnectForm({
       />
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         {alternative && !reconnect && <AlternativeLink {...alternative} />}
+        {provider.id === 'moltbook' && !reconnect && (
+          <AlternativeLink label="No agent yet? Register a new one" onPick={() => setOwnKey(false)} />
+        )}
         <Button type="submit" disabled={connect.isPending} data-testid="connect-channel" className="ml-auto">
           <PlugZap /> {connect.isPending ? 'Saving...' : editing ? 'Save' : reconnect ? 'Reconnect' : 'Connect'}
         </Button>

@@ -45,6 +45,8 @@ interface Look {
   glyph?: LucideIcon
   /** The mark on the round tile when the icon is itself a filled circle (Facebook's): just its letter, centred. */
   tile?: string
+  /** A raster mark (Moltbook's mascot, which has no vector one): its file in the app's public/, shown as is on a white tile. */
+  image?: string
 }
 
 // Facebook's "f" alone, centred in a 24 x 24 box: its logo is a circle with the f cut out and resting on the
@@ -107,7 +109,7 @@ const LOOKS: Record<string, Look> = {
   hashnode: { icon: siHashnode, color: '#2962FF' },
   wordpress: { icon: siWordpress, color: '#21759B' },
   listmonk: { icon: siListmonk, color: '#0055D4' },
-  moltbook: { color: '#E11D48', letters: 'M' },
+  moltbook: { image: '/brand/moltbook.webp', color: '#E0453A' },
   whop: { color: '#FF6243', letters: 'W' },
   tumblr: { icon: siTumblr, color: '#36465D' },
 }
@@ -167,6 +169,12 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
         style={themed(look.color)}
         strokeWidth={2.25}
       />
+    )
+  }
+
+  if (look.image) {
+    return (
+      <img src={look.image} alt={name ?? id} className={classes('shrink-0 object-contain', ['size-4'], className)} />
     )
   }
 
@@ -231,11 +239,13 @@ export function ProviderTile({ id, name, className }: { id: string; name?: strin
   const label = name ?? look.icon?.title ?? id
   // Like an app icon: the brand colour fills the tile and the mark is white (black on a very light colour).
   // A multi-colour mark (Slack) keeps its colours on white.
-  const background = look.parts ? '#ffffff' : id.startsWith('instagram') ? INSTAGRAM : look.color
+  const background = look.parts || look.image ? '#ffffff' : id.startsWith('instagram') ? INSTAGRAM : look.color
   const ink = luminance(look.color) > 0.5 ? '#000000' : '#ffffff'
   let mark
 
-  if (look.parts) {
+  if (look.image) {
+    mark = <img src={look.image} alt="" className="size-[80%] object-contain" />
+  } else if (look.parts) {
     mark = <ProviderIcon id={id} className="size-[60%]" />
   } else if (look.glyph) {
     const Glyph = look.glyph

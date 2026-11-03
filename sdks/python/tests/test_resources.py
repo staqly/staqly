@@ -1629,6 +1629,16 @@ CASES = [
         check=lambda r: r.code == "ABC123",
     ),
     Case(
+        "channels.moltbook_register",
+        lambda c: c.channels.moltbook_register(name="newbot", description="Posts for us"),
+        "POST",
+        "/v1/channels/moltbook/register",
+        {"channel": CHANNEL, "claim_url": "https://www.moltbook.com/claim/moltbook_claim_x"},
+        201,
+        body={"name": "newbot", "description": "Posts for us"},
+        check=lambda r: r.claim_url.endswith("moltbook_claim_x") and r.channel.id == CHANNEL["id"],
+    ),
+    Case(
         "channels.telegram_connect_status",
         lambda c: c.channels.telegram_connect_status("ABC123"),
         "GET",
