@@ -498,3 +498,31 @@ func TestOutboundErrorsHideResolvedAddressesInCloud(t *testing.T) {
 	})
 	check("webhook refused destination", d[0].LastError)
 }
+
+func TestCreditReversalBeforeCheckoutDoesNotRestoreRefundedPosts(t *testing.T) {
+	for _, typ := range []string{"charge.refunded", "charge.dispute.created"} {
+		t.Run(typ, func(t *testing.T) {
+			e := newEnv(t)
+			f := withStripe(t, e)
+			ws := workspaceID(e)
+			session := map[string]any{"id": "cs_reversed", "mode": "payment", "payment_status": "paid", "payment_intent": "pi_reversed", "client_reference_id": ws,
+				"metadata": map[string]string{"workspace_id": ws, "staqly_kind": "credits", "staqly_provider": "x", "staqly_posts": "200"}}
+			f.set("GET /v1/checkout/sessions", func() (int, any) { return 200, map[string]any{"data": []any{session}} })
+			f.set("GET /v1/charges/ch_reversed", func() (int, any) {
+				return 200, map[string]any{"id": "ch_reversed", "payment_intent": "pi_reversed", "amount": 1000, "amount_refunded": 0}
+			})
+			reversal := map[string]any{"id": "ch_reversed", "charge": "ch_reversed", "payment_intent": "pi_reversed", "amount": 1000, "amount_refunded": 1000}
+			if status := e.stripeEvent("evt_reversed", typ, reversal, testWhsec); status != 200 {
+				t.Fatalf("reversal status %d", status)
+			}
+			if status := e.stripeEvent("evt_late_checkout", "checkout.session.completed", session, testWhsec); status != 200 {
+				t.Fatalf("checkout status %d", status)
+			}
+			var x app.XPosts
+			e.do(nil, "GET", "/v1/billing/x-posts", e.key, nil, 200, &x)
+			if x.CreditsLeft != 0 {
+				t.Fatalf("reversed purchase restored %d credits", x.CreditsLeft)
+			}
+		})
+	}
+}

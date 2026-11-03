@@ -1001,8 +1001,13 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 		if err != nil || cs == nil {
 			return err
 		}
+		expires := s.creditsExpiry(ctx, firstNonEmpty(cs.Metadata["workspace_id"], cs.ClientReferenceID))
 		return s.tx(ctx, func(q *db.Queries) error {
 			if n, err := q.InsertStripeEvent(ctx, db.InsertStripeEventParams{ID: ev.ID, CreatedAt: s.now()}); err != nil || n == 0 {
+				return err
+			}
+			// A refund can arrive before Checkout's paid event: create its grant before lowering it.
+			if err := s.grantCredits(ctx, q, *cs, expires); err != nil {
 				return err
 			}
 			return s.revokeCredits(ctx, q, *cs, r, ev.Type)
