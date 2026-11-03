@@ -99,6 +99,19 @@ export function channelFit(channel: Channel, provider: Provider | undefined, med
     notes.push(`${takesWords(limits)}: leaves out ${left.map((m) => m.original_name).join(', ')}`)
   }
 
+  // Dribbble takes 400x300 or 800x600 only; the server fits any other picture (not a GIF) into 800x600 when sending.
+  if (channel.provider === 'dribbble') {
+    for (const m of kept) {
+      const { width: w = 0, height: h = 0 } = m
+
+      if (m.mime_type !== 'image/gif' && w > 0 && !(w === 400 && h === 300) && !(w === 800 && h === 600)) {
+        const size = w <= 400 && h <= 300 ? '400x300' : '800x600'
+
+        notes.push(`Takes 400x300 or 800x600 pictures: ${m.original_name} (${w}x${h}) goes out fitted into ${size}`)
+      }
+    }
+  }
+
   const comments = thread.filter((p) => p.content.trim() || p.media.length)
 
   if (comments.length && !channel.comments) {
