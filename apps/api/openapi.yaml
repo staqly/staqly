@@ -5617,7 +5617,7 @@ components:
     PostTarget:
       type: object
       description: One channel a post goes to, with the result of publishing there
-      required: [channel_id, channel_name, provider, avatar_url, content, settings, status, external_id, external_url, error, attempts, published_at, removal, removal_error, removed_at, replies]
+      required: [channel_id, channel_name, provider, avatar_url, content, settings, status, external_id, external_url, error, attempts, published_at, removal, removal_error, removed_at, replies, attempted_at]
       properties:
         channel_id: { type: string }
         channel_name: { type: string }
@@ -5631,6 +5631,7 @@ components:
         error: { type: string }
         attempts: { type: integer }
         published_at: { type: [string, "null"], format: date-time }
+        attempted_at: { type: [string, "null"], format: date-time, description: "When the last try ended, published or failed (null before the first); editing the post later does not move it" }
         removal: { $ref: "#/components/schemas/TargetRemoval" }
         removal_error: { type: string, description: "Why taking it down failed" }
         removed_at: { type: [string, "null"], format: date-time, description: When it was taken down on the platform }

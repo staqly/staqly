@@ -871,6 +871,8 @@ class PostTarget(StaqlyModel):
     error: str = ""
     attempts: int = 0
     published_at: OptionalDatetime = None
+    #: When the last try ended, published or failed; editing the post later does not move it.
+    attempted_at: OptionalDatetime = None
     #: ``removing``, ``removed``, ``failed`` or ``manual`` once the post is taken down; empty otherwise.
     removal: str = ""
     removal_error: str = ""

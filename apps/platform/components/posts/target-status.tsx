@@ -68,7 +68,49 @@ export function RetryTarget({ post, target, className }: { post: Post; target: P
       onClick={() => retry.mutate()}
       disabled={retry.isPending}
     >
-      <RotateCcw /> Retry
+      <RotateCcw /> Retry now
+    </Button>
+  )
+}
+
+/** Retry now for every failed channel of the post at once (one request each), for a post sent to many. */
+export function RetryFailedTargets({ post, targets }: { post: Post; targets: PostTarget[] }) {
+  const qc = useQueryClient()
+  const retry = useMutation({
+    mutationFn: async () => {
+      let last: Post | undefined
+
+      for (const t of targets) {
+        last = await api.retryTarget(post.id, t.channel_id)
+      }
+
+      return last
+    },
+    onSuccess: (p) => {
+      if (p) {
+        syncPostInCache(qc, p)
+        invalidateAfterPostChange(qc, p.id)
+      }
+
+      namedToast(post.title, `is being retried on ${targets.length} channels`)
+    },
+    onError: (e) => {
+      // Some may have gone out again before the error: show what the server has now.
+      invalidateAfterPostChange(qc, post.id)
+      toastApiError(e)
+    },
+  })
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      onClick={() => retry.mutate()}
+      disabled={retry.isPending}
+      data-testid="retry-failed"
+    >
+      <RotateCcw /> Retry {targets.length} failed now
     </Button>
   )
 }
@@ -132,6 +174,12 @@ function TargetRemoval({ target }: { target: PostTarget }) {
  */
 export function TargetStatus({ post, target, retry = true }: { post: Post; target: PostTarget; retry?: boolean }) {
   const url = target.external_url ? safeHttpUrl(target.external_url) : undefined
+  const tried =
+    target.status === 'published'
+      ? (target.published_at ?? target.attempted_at)
+      : target.status === 'failed'
+        ? target.attempted_at
+        : null
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-testid="post-target">
@@ -147,9 +195,11 @@ export function TargetStatus({ post, target, retry = true }: { post: Post; targe
           <ExternalLink className="size-3 shrink-0" aria-hidden />
         </a>
       )}
-      {target.published_at && (
-        <span className="text-muted-foreground" title={formatDateTime(target.published_at)}>
-          {timeAgo(target.published_at)}
+      {tried && (
+        // When it went out or failed: history, the post's own time can't say it for each channel.
+        <span className="text-muted-foreground tabular-nums" title={timeAgo(tried)} data-testid="target-time">
+          {formatDateTime(tried)}
+          {target.status === 'failed' && target.attempts > 1 && ` · ${target.attempts} attempts`}
         </span>
       )}
       <TargetRemoval target={target} />
@@ -172,7 +222,8 @@ export function TargetStatus({ post, target, retry = true }: { post: Post; targe
                 >
                   {
                     {
-                      pending: 'Waiting',
+                      // Comments go under the post: with the post failed they wait for its retry.
+                      pending: target.status === 'failed' ? 'Not sent (goes with a retry)' : 'Waiting',
                       publishing: 'Publishing',
                       published: 'Published',
                       failed: 'Failed',

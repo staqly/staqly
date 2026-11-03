@@ -122,18 +122,25 @@ const channels = {
 }
 
 describe('post sheet', () => {
-  it('is the composer: each channel shows its state, link and error; Retry and Publish now', async () => {
+  it('a sent post that failed somewhere: its time is history, each channel says when it went, Retry now per channel', async () => {
     const failed = post({
       id: 'pst_1',
       status: 'failed',
+      publish_at: '2026-01-05T09:00:00Z',
       targets: [
-        target({ status: 'published', external_url: 'https://mastodon.social/@brand/1' }),
+        target({
+          status: 'published',
+          external_url: 'https://mastodon.social/@brand/1',
+          published_at: '2026-01-05T09:00:05Z',
+        }),
         target({
           channel_id: 'ch_2',
           channel_name: 'Brand on Bluesky',
           provider: 'bluesky',
           status: 'failed',
           error: 'Rate limited',
+          attempts: 3,
+          attempted_at: '2026-01-05T09:20:00Z',
         }),
       ],
     })
@@ -143,31 +150,90 @@ describe('post sheet', () => {
       'GET /v1/channels': channels,
       'GET /v1/providers': { data: [] },
       'POST /v1/posts/pst_1/targets/ch_2/retry': { ...failed, status: 'publishing' },
-      // The footer's Publish now saves the edits first, then publishes.
       'PATCH /v1/posts/pst_1': failed,
-      'POST /v1/posts/pst_1/schedule': { ...failed, status: 'scheduled' },
       'GET /v1/events': { data: [] },
       'GET /v1/posts/pst_1/comments': { data: [] },
     })
     const user = userEvent.setup()
 
     renderWithProviders(<PostSheet id="pst_1" onClose={() => {}} />, { mode: 'local' })
-    // How each channel went is in the Delivery tab.
-    await user.click(await screen.findByRole('tab', { name: /Insights/ }))
+    // Not "this time is in the past": how many channels failed, and the way to them.
+    expect(await screen.findByTestId('sent-failed')).toHaveTextContent('1 of 2 channels failed')
+    expect(screen.queryByTestId('publish-at-error')).toBeNull()
+    expect(screen.getByText(/^Sent/)).toBeInTheDocument()
+    // No sending the whole post again from the footer: that would repeat it where it went out.
+    expect(screen.queryByTestId('publish-now')).toBeNull()
+    expect(screen.queryByTestId('publish-at-chip')).toBeNull()
+    expect(screen.getByTestId('post-content')).toHaveValue(failed.content)
+    // Saving keeps the time it was sent at.
+    await user.click(screen.getByTestId('save-post'))
+    await waitFor(() => expect(api.find('PATCH', '/v1/posts/pst_1')).toHaveLength(1))
+    expect(api.find('PATCH', '/v1/posts/pst_1')[0]!.body).not.toHaveProperty('publish_at')
+
+    await user.click(screen.getByRole('button', { name: 'Show channels' }))
     const list = await screen.findByRole('list', { name: 'Channels' })
     const rows = await within(list).findAllByTestId('post-target')
 
     expect(rows).toHaveLength(2)
     expect(within(rows[0]!).getByRole('link')).toHaveAttribute('href', 'https://mastodon.social/@brand/1')
     expect(within(rows[1]!).getByText('Rate limited')).toBeInTheDocument()
-    expect(screen.getByTestId('post-content')).toHaveValue(failed.content)
-    // Publish now lives in the footer (the header row only has the post's own actions).
-    await user.click(screen.getByTestId('publish-now'))
-    // It saves, then schedules for a few seconds from now (the Undo window).
-    await waitFor(() => expect(api.find('POST', '/v1/posts/pst_1/schedule')).toHaveLength(1))
-    // Retry sits in the failed channel's card header, beside its name.
-    await user.click(within(within(list).getAllByRole('listitem')[1]!).getByRole('button', { name: 'Retry' }))
+    // Each channel says when it went out or failed.
+    expect(within(rows[0]!).getByTestId('target-time')).toHaveTextContent('2026')
+    expect(within(rows[1]!).getByTestId('target-time')).toHaveTextContent('3 attempts')
+    // Retry now sits in the failed channel's card header, beside its name.
+    await user.click(within(within(list).getAllByRole('listitem')[1]!).getByRole('button', { name: 'Retry now' }))
     await waitFor(() => expect(api.find('POST', '/v1/posts/pst_1/targets/ch_2/retry')).toHaveLength(1))
+  })
+
+  it('sent to many channels: a summary, the failed ones alone, and Retry for all failed at once', async () => {
+    const many = post({
+      id: 'pst_1',
+      status: 'failed',
+      publish_at: '2026-01-05T09:00:00Z',
+      targets: [
+        ...[1, 2, 3, 4].map((i) =>
+          target({
+            channel_id: `ch_ok${i}`,
+            channel_name: `Account ${i}`,
+            status: 'published',
+            published_at: '2026-01-05T09:00:05Z',
+          }),
+        ),
+        ...[5, 6].map((i) =>
+          target({
+            channel_id: `ch_bad${i}`,
+            channel_name: `Account ${i}`,
+            status: 'failed',
+            error: 'Rate limited',
+            attempted_at: '2026-01-05T09:01:00Z',
+          }),
+        ),
+      ],
+    })
+    const api = mockApi({
+      'GET /v1/posts/pst_1': many,
+      'GET /v1/collections': { data: [collection()] },
+      'GET /v1/channels': channels,
+      'GET /v1/providers': { data: [] },
+      'POST /v1/posts/pst_1/targets/ch_bad5/retry': { ...many, status: 'publishing' },
+      'POST /v1/posts/pst_1/targets/ch_bad6/retry': { ...many, status: 'publishing' },
+      'GET /v1/events': { data: [] },
+      'GET /v1/posts/pst_1/comments': { data: [] },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<PostSheet id="pst_1" onClose={() => {}} />, { mode: 'local' })
+    expect(await screen.findByTestId('sent-failed')).toHaveTextContent('2 of 6 channels failed')
+    await user.click(screen.getByRole('button', { name: 'Show channels' }))
+    const summary = await screen.findByTestId('delivery-summary')
+
+    expect(summary).toHaveTextContent('4 sent · 2 failed')
+    expect(within(screen.getByRole('list', { name: 'Channels' })).getAllByTestId('post-target')).toHaveLength(6)
+    await user.click(within(summary).getByRole('button', { name: 'Failed only' }))
+    expect(within(screen.getByRole('list', { name: 'Channels' })).getAllByTestId('post-target')).toHaveLength(2)
+    await user.click(within(summary).getByTestId('retry-failed'))
+    await waitFor(() => expect(api.find('POST', '/v1/posts/pst_1/targets/ch_bad6/retry')).toHaveLength(1))
+    expect(api.find('POST', '/v1/posts/pst_1/targets/ch_bad5/retry')).toHaveLength(1)
   })
 
   it('opens on the channel it was clicked for', async () => {

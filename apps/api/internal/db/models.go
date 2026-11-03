@@ -522,6 +522,7 @@ type PostTarget struct {
 	Removal      string         `json:"removal"`
 	RemovalError string         `json:"removal_error"`
 	RemovedAt    sql.NullString `json:"removed_at"`
+	AttemptedAt  sql.NullString `json:"attempted_at"`
 }
 
 type PreviewLink struct {

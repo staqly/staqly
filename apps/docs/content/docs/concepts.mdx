@@ -138,7 +138,8 @@ A target is the post on one channel. It has:
   Mastodon), described by the provider's `settings_fields`;
 - its own `status`: `pending`, `publishing`, `published` or `failed`, with `external_id` and
   `external_url` (where the post lives on the platform) once published, or `error` and
-  `attempts` when not.
+  `attempts` when not; `attempted_at` is when the last try ended, published or failed, and editing the
+  post later does not move it.
 
 The post settles when its last target does. A failed target is retried alone with
 `POST /v1/posts/{id}/targets/{channel}/retry`; the published ones are left as they are.

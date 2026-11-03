@@ -322,7 +322,7 @@ func (q *Queries) GetPostByID(ctx context.Context, id string) (Post, error) {
 }
 
 const getTarget = `-- name: GetTarget :one
-SELECT post_id, channel_id, content, settings, status, external_id, external_url, error, attempts, published_at, updated_at, replies, metrics, metrics_at, removal, removal_error, removed_at FROM post_targets WHERE post_id = ? AND channel_id = ?
+SELECT post_id, channel_id, content, settings, status, external_id, external_url, error, attempts, published_at, updated_at, replies, metrics, metrics_at, removal, removal_error, removed_at, attempted_at FROM post_targets WHERE post_id = ? AND channel_id = ?
 `
 
 type GetTargetParams struct {
@@ -351,12 +351,13 @@ func (q *Queries) GetTarget(ctx context.Context, arg GetTargetParams) (PostTarge
 		&i.Removal,
 		&i.RemovalError,
 		&i.RemovedAt,
+		&i.AttemptedAt,
 	)
 	return i, err
 }
 
 const listTargets = `-- name: ListTargets :many
-SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, t.removal, t.removal_error, t.removed_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
+SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, t.removal, t.removal_error, t.removed_at, t.attempted_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
 JOIN channels c ON c.id = t.channel_id WHERE t.post_id = ? ORDER BY c.name COLLATE NOCASE, c.id
 `
 
@@ -378,6 +379,7 @@ type ListTargetsRow struct {
 	Removal          string         `json:"removal"`
 	RemovalError     string         `json:"removal_error"`
 	RemovedAt        sql.NullString `json:"removed_at"`
+	AttemptedAt      sql.NullString `json:"attempted_at"`
 	ChannelName      string         `json:"channel_name"`
 	Provider         string         `json:"provider"`
 	ChannelStatus    string         `json:"channel_status"`
@@ -412,6 +414,7 @@ func (q *Queries) ListTargets(ctx context.Context, postID string) ([]ListTargets
 			&i.Removal,
 			&i.RemovalError,
 			&i.RemovedAt,
+			&i.AttemptedAt,
 			&i.ChannelName,
 			&i.Provider,
 			&i.ChannelStatus,
@@ -432,7 +435,7 @@ func (q *Queries) ListTargets(ctx context.Context, postID string) ([]ListTargets
 }
 
 const listTargetsForPosts = `-- name: ListTargetsForPosts :many
-SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, t.removal, t.removal_error, t.removed_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
+SELECT t.post_id, t.channel_id, t.content, t.settings, t.status, t.external_id, t.external_url, t.error, t.attempts, t.published_at, t.updated_at, t.replies, t.metrics, t.metrics_at, t.removal, t.removal_error, t.removed_at, t.attempted_at, c.name AS channel_name, c.provider, c.status AS channel_status, c.avatar_url AS channel_avatar_url, c.deleted_at AS channel_deleted_at FROM post_targets t
 JOIN channels c ON c.id = t.channel_id WHERE t.post_id IN (SELECT value FROM json_each(?1)) ORDER BY t.post_id, c.name COLLATE NOCASE, c.id
 `
 
@@ -454,6 +457,7 @@ type ListTargetsForPostsRow struct {
 	Removal          string         `json:"removal"`
 	RemovalError     string         `json:"removal_error"`
 	RemovedAt        sql.NullString `json:"removed_at"`
+	AttemptedAt      sql.NullString `json:"attempted_at"`
 	ChannelName      string         `json:"channel_name"`
 	Provider         string         `json:"provider"`
 	ChannelStatus    string         `json:"channel_status"`
@@ -488,6 +492,7 @@ func (q *Queries) ListTargetsForPosts(ctx context.Context, ids interface{}) ([]L
 			&i.Removal,
 			&i.RemovalError,
 			&i.RemovedAt,
+			&i.AttemptedAt,
 			&i.ChannelName,
 			&i.Provider,
 			&i.ChannelStatus,
@@ -734,7 +739,7 @@ func (q *Queries) RepeatOfPost(ctx context.Context, repeatOf string) (string, er
 }
 
 const resetTargets = `-- name: ResetTargets :exec
-UPDATE post_targets SET status = 'pending', external_id = '', external_url = '', error = '', attempts = 0, published_at = NULL, updated_at = ?
+UPDATE post_targets SET status = 'pending', external_id = '', external_url = '', error = '', attempts = 0, published_at = NULL, attempted_at = NULL, updated_at = ?
 WHERE post_id = ? AND status <> 'published'
 `
 
@@ -872,7 +877,8 @@ func (q *Queries) SetTargetReplies(ctx context.Context, arg SetTargetRepliesPara
 }
 
 const setTargetStatus = `-- name: SetTargetStatus :exec
-UPDATE post_targets SET status = ?, external_id = ?, external_url = ?, error = ?, attempts = ?, published_at = ?, updated_at = ?
+UPDATE post_targets SET status = ?, external_id = ?, external_url = ?, error = ?, attempts = ?, published_at = ?, updated_at = ?,
+  attempted_at = COALESCE(?, attempted_at)
 WHERE post_id = ? AND channel_id = ?
 `
 
@@ -884,10 +890,12 @@ type SetTargetStatusParams struct {
 	Attempts    int64          `json:"attempts"`
 	PublishedAt sql.NullString `json:"published_at"`
 	UpdatedAt   string         `json:"updated_at"`
+	AttemptedAt sql.NullString `json:"attempted_at"`
 	PostID      string         `json:"post_id"`
 	ChannelID   string         `json:"channel_id"`
 }
 
+// attempted_at: when a try ended (NULL keeps the last one, for a target going back to publishing).
 func (q *Queries) SetTargetStatus(ctx context.Context, arg SetTargetStatusParams) error {
 	_, err := q.db.ExecContext(ctx, setTargetStatus,
 		arg.Status,
@@ -897,6 +905,7 @@ func (q *Queries) SetTargetStatus(ctx context.Context, arg SetTargetStatusParams
 		arg.Attempts,
 		arg.PublishedAt,
 		arg.UpdatedAt,
+		arg.AttemptedAt,
 		arg.PostID,
 		arg.ChannelID,
 	)

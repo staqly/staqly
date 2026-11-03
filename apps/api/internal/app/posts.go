@@ -45,7 +45,9 @@ type PostTarget struct {
 	Error       string            `json:"error"`
 	Attempts    int64             `json:"attempts"`
 	PublishedAt *string           `json:"published_at"`
-	Replies     []Reply           `json:"replies"` // one per thread part
+	// AttemptedAt: when the last try ended, published or failed; it stays as it was however the post is edited later.
+	AttemptedAt *string `json:"attempted_at"`
+	Replies     []Reply `json:"replies"` // one per thread part
 	// Removal: what taking it down is doing: removing, removed, manual (delete it on the platform), failed.
 	Removal      string  `json:"removal"`
 	RemovalError string  `json:"removal_error"`
@@ -142,7 +144,7 @@ type PostPage struct {
 func targetOut(t db.ListTargetsRow) PostTarget {
 	out := PostTarget{ChannelID: t.ChannelID, ChannelName: t.ChannelName, Provider: t.Provider, AvatarURL: t.ChannelAvatarUrl, Content: ptr(t.Content),
 		Settings: map[string]string{}, Status: t.Status, ExternalID: t.ExternalID, ExternalURL: t.ExternalUrl, Error: t.Error,
-		Attempts: t.Attempts, PublishedAt: ptr(t.PublishedAt), Removal: t.Removal, RemovalError: t.RemovalError, RemovedAt: ptr(t.RemovedAt)}
+		Attempts: t.Attempts, PublishedAt: ptr(t.PublishedAt), AttemptedAt: ptr(t.AttemptedAt), Removal: t.Removal, RemovalError: t.RemovalError, RemovedAt: ptr(t.RemovedAt)}
 	_ = json.Unmarshal([]byte(t.Settings), &out.Settings)
 	return out
 }
@@ -1498,7 +1500,7 @@ func (s *Service) settleTarget(ctx context.Context, postID, channelID, status st
 			published = nullStr(now)
 		}
 		if err := q.SetTargetStatus(ctx, db.SetTargetStatusParams{Status: status, ExternalID: result.ExternalID, ExternalUrl: result.URL,
-			Error: truncateRunes(errMsg, 500), Attempts: max(t.Attempts, 1), PublishedAt: published, UpdatedAt: now, PostID: postID, ChannelID: channelID}); err != nil {
+			Error: truncateRunes(errMsg, 500), Attempts: max(t.Attempts, 1), PublishedAt: published, UpdatedAt: now, AttemptedAt: nullStr(now), PostID: postID, ChannelID: channelID}); err != nil {
 			return err
 		}
 		if err := s.cancelJobs(ctx, q, "target_timeout:"+postID+":"+channelID); err != nil {
