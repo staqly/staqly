@@ -536,6 +536,19 @@ type PreviewLink struct {
 	RevokedAt   sql.NullString `json:"revoked_at"`
 }
 
+type ProductFeedback struct {
+	ID             string `json:"id"`
+	WorkspaceID    string `json:"workspace_id"`
+	ReporterID     string `json:"reporter_id"`
+	Kind           string `json:"kind"`
+	Description    string `json:"description"`
+	PagePath       string `json:"page_path"`
+	Status         string `json:"status"`
+	AttachmentKey  string `json:"attachment_key"`
+	AttachmentType string `json:"attachment_type"`
+	CreatedAt      string `json:"created_at"`
+}
+
 type ProviderApp struct {
 	WorkspaceID string `json:"workspace_id"`
 	Provider    string `json:"provider"`

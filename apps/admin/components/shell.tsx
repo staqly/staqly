@@ -8,6 +8,7 @@ import {
   LayoutDashboardIcon,
   LogOutIcon,
   MenuIcon,
+  MessageSquareIcon,
   MoonIcon,
   ScrollTextIcon,
   ShieldCheckIcon,
@@ -35,6 +36,7 @@ const NAV = [
   { href: '/payments', label: 'Payments', icon: CreditCardIcon },
   { href: '/promo-codes', label: 'Promo codes', icon: TicketPercentIcon },
   { href: '/limits', label: 'Limits', icon: GaugeIcon },
+  { href: '/feedback', label: 'Feedback', icon: MessageSquareIcon },
   { href: '/audit', label: 'Audit log', icon: ScrollTextIcon },
   { href: '/admins', label: 'Admins', icon: ShieldCheckIcon },
 ]

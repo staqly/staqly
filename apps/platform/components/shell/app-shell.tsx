@@ -631,9 +631,14 @@ function SidebarNotifications() {
   )
 }
 
+const FeedbackDialog = dynamic(() => import('@/components/feedback/feedback-dialog').then((m) => m.FeedbackDialog), {
+  ssr: false,
+})
+
 // ---- sidebar ----
 
 function AppSidebar() {
+  const feedback = useLazyDialog()
   const pathname = usePathname()
   const { openCommandPalette } = useShell()
   const { setOpenMobile } = useSidebar()
@@ -764,15 +769,23 @@ function AppSidebar() {
       <SidebarFooter className="in-data-[mobile=true]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {/* Theme lives in Settings and ⌘K; collapsing in the sidebar edge (rail) and ⌘B. Phones have the bell in
             the top bar. Plan & usage is in the workspace menu. */}
-        <SidebarGroup className="p-0 in-data-[mobile=true]:hidden">
+        <SidebarGroup className="p-0">
           <SidebarGroupLabel>System</SidebarGroupLabel>
           <SidebarAssistant />
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton tooltip="Feedback" aria-label="Feedback" onClick={feedback.toggle}>
+                <PenSquare /> <span>Feedback</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
           <SidebarNotifications />
         </SidebarGroup>
         <SidebarTrial />
         <UserMenu />
       </SidebarFooter>
       <SidebarRail />
+      {feedback.used && <FeedbackDialog open={feedback.open} onOpenChange={feedback.setOpen} />}
     </Sidebar>
   )
 }

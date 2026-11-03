@@ -93,6 +93,46 @@ tags:
     description: Health, readiness and metrics
 
 paths:
+  /v1/feedback:
+    post:
+      operationId: createProductFeedback
+      tags: [auth]
+      summary: Report a problem or suggest a feature
+      description: |
+        Signed-in people (any workspace role) and local installs only; API keys are refused.
+        Up to 5 reports per person per hour. Only the page path is kept; query and fragment are stripped.
+        Screenshots use private storage and are readable only through the platform admin API.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, description, page_path]
+              properties:
+                kind: { type: string, enum: [problem, feature] }
+                description: { type: string, minLength: 1, maxLength: 5000 }
+                page_path: { type: string, maxLength: 2048 }
+                screenshot:
+                  type: string
+                  format: binary
+                  description: Optional PNG, JPEG or WebP, up to 5 MB and 20 megapixels.
+      responses:
+        "201":
+          description: Feedback saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { description: Screenshot too large }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { description: Too many feedback requests; Retry-After indicates when to retry }
   /health:
     get:
       operationId: health

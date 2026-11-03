@@ -48,6 +48,7 @@ type Server struct {
 	signups  *rateLimiter
 	codes    *rateLimiter // email codes sent per client IP (sign-in and linking)
 	passkeys *rateLimiter // passkey sign-in ceremonies per client IP
+	feedback *tokenBucket // feedback attempts, including invalid uploads
 	tests    *tokenBucket // POST .../test endpoints (outbound requests on demand), per principal
 }
 
@@ -82,7 +83,7 @@ func (s *Server) Log() *slog.Logger { return s.log }
 
 func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 	s := &Server{svc: svc, log: log, cfg: cfg, signups: newRateLimiter(5, time.Hour), codes: newRateLimiter(20, time.Hour),
-		passkeys: newRateLimiter(30, 10*time.Minute), tests: newTokenBucket(10, 5, 10_000)}
+		passkeys: newRateLimiter(30, 10*time.Minute), tests: newTokenBucket(10, 5, 10_000), feedback: newTokenBucket(2, 5, 10_000)}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, s.logRequests, recoverer, securityHeaders, cors(cfg.CORSOrigins))
 	for _, m := range middlewares {
@@ -449,6 +450,7 @@ func (s *Server) localHost(host string) bool {
 // connect a device to read, export or delete its data, and pay for a plan; and the account-level moves that
 // don't change it (switch to another workspace, make a new one), so a read-only workspace never traps anyone.
 var allowedWhileSuspended = []*regexp.Regexp{
+	regexp.MustCompile(`^POST /v1/feedback$`),
 	regexp.MustCompile(`^POST /v1/session/workspace$`),
 	regexp.MustCompile(`^POST /v1/account/workspaces$`),
 	regexp.MustCompile(`^DELETE /v1/sessions?(/[^/]+)?$`),
