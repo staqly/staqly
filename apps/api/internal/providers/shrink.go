@@ -5,7 +5,7 @@ import (
 	"image"
 	"image/color"
 	stdjpeg "image/jpeg"
-	_ "image/png" // decoders for shrinkJPEG
+	"image/png"
 	"math"
 
 	"golang.org/x/image/draw"
@@ -40,4 +40,31 @@ func shrinkJPEG(raw []byte, max int) (out []byte, ok bool) {
 		w, h = int(math.Round(float64(w)*0.8)), int(math.Round(float64(h)*0.8))
 	}
 	return nil, false
+}
+
+// fitPicture draws a JPEG, PNG or WebP picture whole in the middle of a w x h one, white around it, and encodes
+// it as a JPEG (a JPEG came in) or a PNG. GIFs and pictures over 50 megapixels are left alone: ok is false.
+func fitPicture(raw []byte, w, h int) (out []byte, ok bool) {
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil || format == "gif" || int64(cfg.Width)*int64(cfg.Height) > 50_000_000 {
+		return nil, false
+	}
+	src, _, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return nil, false
+	}
+	b := src.Bounds()
+	scale := math.Min(float64(w)/float64(b.Dx()), float64(h)/float64(b.Dy()))
+	sw, sh := max(1, int(math.Round(float64(b.Dx())*scale))), max(1, int(math.Round(float64(b.Dy())*scale)))
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(dst, dst.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	at := image.Rect((w-sw)/2, (h-sh)/2, (w-sw)/2+sw, (h-sh)/2+sh)
+	draw.CatmullRom.Scale(dst, at, src, b, draw.Over, nil)
+	var buf bytes.Buffer
+	if format == "jpeg" {
+		err = stdjpeg.Encode(&buf, dst, &stdjpeg.Options{Quality: 90})
+	} else {
+		err = png.Encode(&buf, dst)
+	}
+	return buf.Bytes(), err == nil
 }

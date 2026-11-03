@@ -34,7 +34,7 @@ const (
 func init() {
 	l := Limits{MaxChars: 1000, MaxMedia: 1, MediaKinds: []string{"image"}, NeedsTitle: true, NeedsMedia: true,
 		Image: &ImageRules{MaxBytes: 8 << 20, Formats: []string{"image/jpeg", "image/png", "image/gif"}, MinRatio: 4.0 / 3, MaxRatio: 4.0 / 3,
-			MinWidth: 400, MaxPixels: 800 * 600, Note: "Dribbble takes exactly 400x300 or 800x600 pixels."}}
+			MinWidth: 400, MaxPixels: 800 * 600, Note: "Dribbble takes exactly 400x300 or 800x600 pixels; other sizes are fitted into 800x600 when sent."}}
 	Register(Dribbble{NewBase("dribbble", "Dribbble", AuthOAuth2, l).WithSettings(soonSettings("dribbble", l)...)}, StatusAvailable)
 }
 
@@ -169,7 +169,16 @@ func (d Dribbble) Publish(ctx context.Context, c Credentials, p PostContent, s S
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Dribbble takes pictures up to 8 MB"}
 	}
 	if w, h, ok := imageSize(data); ok && !(w == 400 && h == 300) && !(w == 800 && h == 600) {
-		return Result{}, &Failure{Kind: ErrRejected, Msg: fmt.Sprintf("Dribbble takes pictures of exactly 400x300 or 800x600 pixels; %s is %dx%d (set that size in the design editor)", m.Name, w, h)}
+		// Other sizes go out fitted whole into 800x600 (400x300 when they fit in that), white around them.
+		fw, fh := 800, 600
+		if w <= 400 && h <= 300 {
+			fw, fh = 400, 300
+		}
+		fitted, ok := fitPicture(data, fw, fh)
+		if !ok || len(fitted) > 8<<20 {
+			return Result{}, &Failure{Kind: ErrRejected, Msg: fmt.Sprintf("Dribbble takes pictures of exactly 400x300 or 800x600 pixels; %s is %dx%d (set that size in the design editor)", m.Name, w, h)}
+		}
+		data = fitted
 	}
 	title := strings.TrimSpace(s["title"])
 	fields := [][2]string{{"title", title}}

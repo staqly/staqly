@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"image"
+	"image/color"
+	"image/gif"
 	"image/png"
 	"io"
 	"mime"
@@ -80,6 +83,9 @@ func (f *fakeDribbble) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			v := string(b)
 			if p.FileName() != "" {
 				v = p.FileName()
+				if cfg, _, err := image.DecodeConfig(bytes.NewReader(b)); err == nil {
+					f.shot["image_size"] = []string{fmt.Sprintf("%dx%d", cfg.Width, cfg.Height)}
+				}
 			}
 			f.shot[p.FormName()] = append(f.shot[p.FormName()], v)
 		}
@@ -174,9 +180,23 @@ func TestDribbblePublish(t *testing.T) {
 		}
 	})
 
-	t.Run("wrong size never leaves", func(t *testing.T) {
+	t.Run("other sizes are fitted", func(t *testing.T) {
+		for in, want := range map[[2]int]string{{1418, 2408}: "800x600", {1000, 750}: "800x600", {200, 100}: "400x300"} {
+			f := useFakeDribbble(t)
+			if _, err := db.Publish(ctx, c, PostContent{Media: []MediaFile{dribbbleShot(in[0], in[1])}}, s); err != nil || f.shot["image_size"][0] != want {
+				t.Fatalf("%v: %v %v, want %s", in, err, f.shot["image_size"], want)
+			}
+		}
+	})
+
+	t.Run("a GIF of another size never leaves", func(t *testing.T) {
 		f := useFakeDribbble(t)
-		if _, err := db.Publish(ctx, c, PostContent{Media: []MediaFile{dribbbleShot(1000, 750)}}, s); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "1000x750") || f.shots != 0 {
+		var b bytes.Buffer
+		_ = gif.Encode(&b, image.NewPaletted(image.Rect(0, 0, 1000, 750), color.Palette{color.White}), nil)
+		data := b.Bytes()
+		m := MediaFile{Name: "shot.gif", MimeType: "image/gif", Size: int64(len(data)),
+			Open: func(context.Context) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(data)), nil }}
+		if _, err := db.Publish(ctx, c, PostContent{Media: []MediaFile{m}}, s); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "1000x750") || f.shots != 0 {
 			t.Fatalf("wrong size: %v", err)
 		}
 	})
