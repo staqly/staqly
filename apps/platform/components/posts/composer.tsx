@@ -1523,9 +1523,11 @@ export function ComposerForm({
       return rest
     })
   })
-  const [openSettings, setOpenSettings] = useState<Record<string, boolean>>({})
+  // The open settings card: one at a time, opening one folds the others (undefined: none picked yet).
+  const [openSetting, setOpenSetting] = useState<string | null>()
   const [onSettingsOpen] = useState(
-    () => (channelId: string, open: boolean) => setOpenSettings((s) => ({ ...s, [channelId]: open })),
+    () => (channelId: string, open: boolean) =>
+      setOpenSetting((cur) => (open ? channelId : cur === channelId ? null : cur)),
   )
 
   function input(status: 'draft' | 'scheduled'): PostInput {
@@ -2133,10 +2135,10 @@ export function ComposerForm({
                   provider={providerOf(ch)}
                   values={overrides[ch.id]?.settings ?? NO_SETTINGS}
                   errors={errors}
-                  // One channel opens by default; with several each folds, and a setting with an error always shows.
+                  // One channel opens by default; with several one at a time, and a setting with an error always shows.
                   open={
                     Object.keys(errors).some((k) => k.startsWith(`targets.${ch.id}.settings.`)) ||
-                    (openSettings[ch.id] ?? settingsChannels.length === 1)
+                    (openSetting === undefined ? settingsChannels.length === 1 : openSetting === ch.id)
                   }
                   channels={channelList}
                   onOpenChange={onSettingsOpen}
