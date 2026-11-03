@@ -174,6 +174,8 @@ describe('post sheet', () => {
     const list = await screen.findByRole('list', { name: 'Channels' })
     const rows = await within(list).findAllByTestId('post-target')
 
+    // On Insights the alert pointing there is gone.
+    expect(screen.queryByRole('button', { name: 'Show channels' })).toBeNull()
     expect(rows).toHaveLength(2)
     expect(within(rows[0]!).getByRole('link')).toHaveAttribute('href', 'https://mastodon.social/@brand/1')
     expect(within(rows[1]!).getByText('Rate limited')).toBeInTheDocument()
