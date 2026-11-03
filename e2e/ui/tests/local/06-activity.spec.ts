@@ -42,7 +42,7 @@ test.describe('activity', () => {
     await expect(page.getByText(/No events|Nothing/i).first()).toBeVisible()
   })
 
-  test('posts in events link to their post; Data expands; the post filter narrows the feed', async ({ page, api }) => {
+  test('posts in events open in place; Data expands; the post filter narrows the feed', async ({ page, api }) => {
     const col = await freshCollection(api, { posts: 1 })
     const post = col.posts[0]!
     const title = titleOf(post.content)
@@ -53,9 +53,13 @@ test.describe('activity', () => {
     await expect(ev).toBeVisible()
     await ev.getByRole('button', { name: /Data/ }).click()
     await expect(ev.getByText('"content"').or(ev.getByText(title)).first()).toBeVisible()
+    await expect(ev.getByRole('link', { name: title })).toHaveAttribute('href', `/posts/${post.id}`)
     await ev.getByRole('link', { name: title }).click()
-    await expect(page).toHaveURL(new RegExp(`/posts/${post.id}`))
+    await expect(page).toHaveURL(/\/activity$/)
     await expect(page.getByRole('dialog').getByRole('heading', { name: title })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page).toHaveURL(/\/activity$/)
 
     // The post filter from the URL, as a link from the post would set it.
     await page.goto(`/activity?post=${post.id}`)

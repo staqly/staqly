@@ -243,3 +243,17 @@ test.describe('posts', () => {
     expect(titleOf(col.posts[0]!.content)).toBe(`${col.name} post 1`)
   })
 })
+
+test('post header actions wrap at phone and tablet widths', async ({ page, api }) => {
+  const col = await freshCollection(api, { posts: 1, name: `Header ${'long-name'.repeat(10)}` })
+
+  for (const width of [320, 768]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`/posts?collection=${col.id}`)
+    await ready(page, col.name)
+    await expect(page.getByRole('button', { name: 'New post', exact: true })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `overflow at ${width}px`).toBe(
+      0,
+    )
+  }
+})

@@ -431,7 +431,7 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
             </div>
             {c.description && <p className="mt-0.5 text-sm wrap-anywhere text-muted-foreground">{c.description}</p>}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">
             {/* Archived posts stay out of the lists until this is on (always here: every post may be archived). */}
             <span className="flex items-center gap-1.5">
               <Switch
