@@ -146,13 +146,13 @@ export function ConnectForm({
         <p className="text-sm text-muted-foreground">
           {provider.name} opens in this tab to ask which account to connect. You come back here when it is done.
         </p>
-        <div>
-          <Button type="submit" disabled={opening} aria-busy={opening} data-testid="oauth-start">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          {alternative && <AlternativeLink {...alternative} />}
+          <Button type="submit" disabled={opening} aria-busy={opening} data-testid="oauth-start" className="ml-auto">
             {opening ? <Loader2 className="animate-spin" aria-hidden /> : <PlugZap />}{' '}
             {opening ? `Opening ${provider.name}...` : `Connect with ${provider.name}`}
           </Button>
         </div>
-        {alternative && <AlternativeLink {...alternative} />}
       </form>
     )
   }
@@ -213,12 +213,12 @@ export function ConnectForm({
         onChange={(k, v) => setValues((vs) => ({ ...vs, [k]: v }))}
         errors={errors}
       />
-      <div className="flex justify-end">
-        <Button type="submit" disabled={connect.isPending} data-testid="connect-channel">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        {alternative && !reconnect && <AlternativeLink {...alternative} />}
+        <Button type="submit" disabled={connect.isPending} data-testid="connect-channel" className="ml-auto">
           <PlugZap /> {connect.isPending ? 'Saving...' : editing ? 'Save' : reconnect ? 'Reconnect' : 'Connect'}
         </Button>
       </div>
-      {alternative && !reconnect && <AlternativeLink {...alternative} />}
     </form>
   )
 }
@@ -332,7 +332,7 @@ function AlternativeLink({ label, onPick }: { label: string; onPick: () => void 
     <button
       type="button"
       onClick={onPick}
-      className="justify-self-start text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+      className="text-left text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground pointer-coarse:-my-3 pointer-coarse:py-3"
     >
       {label}
     </button>
