@@ -153,3 +153,8 @@ WHERE t.external_id = sqlc.arg(external_id) AND t.external_id <> '' AND t.status
 -- name: SetTargetExternalID :exec
 -- The platform gave a published post its lasting id and link (TikTok: once the video is public).
 UPDATE post_targets SET external_id = ?, external_url = ?, updated_at = ? WHERE post_id = ? AND channel_id = ?;
+
+-- name: RecordPendingTargetAttempt :execrows
+-- A result callback can settle the target before its endpoint request returns.
+UPDATE post_targets SET error = ?, attempts = attempts + 1, updated_at = ?
+WHERE post_id = ? AND channel_id = ? AND status = 'publishing';

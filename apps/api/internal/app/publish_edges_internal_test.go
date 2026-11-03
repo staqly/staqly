@@ -359,3 +359,54 @@ func TestStoredErrorsAreValidUTF8(t *testing.T) {
 		}
 	}
 }
+
+// An endpoint may report its final result before its publishing request returns (or times out).
+// Its late HTTP outcome must not turn the already settled target back into a pending one.
+type reportedBeforeReturnProvider struct {
+	providers.Base
+	report  func() error
+	outcome error
+}
+
+func (f reportedBeforeReturnProvider) Publish(context.Context, providers.Credentials, providers.PostContent, providers.Settings) (providers.Result, error) {
+	if err := f.report(); err != nil {
+		return providers.Result{}, err
+	}
+	return providers.Result{}, f.outcome
+}
+
+func TestReportedTargetSurvivesLateEndpointResponse(t *testing.T) {
+	for _, outcome := range []error{providers.ErrAsync, errors.New("endpoint connection lost after reporting")} {
+		t.Run(outcome.Error(), func(t *testing.T) {
+			s, p, post := publishTest(t)
+			ctx := t.Context()
+			channelID := post.Targets[0].ChannelID
+			if _, err := s.PublishPost(ctx, p, post.ID); err != nil {
+				t.Fatal(err)
+			}
+			original, _ := providers.Get("custom")
+			providers.Register(reportedBeforeReturnProvider{
+				Base: providers.NewBase("custom", "Own automation", providers.AuthNone, providers.Limits{MaxChars: 5000}),
+				report: func() error {
+					_, err := s.ReportTargetResult(ctx, p, post.ID, channelID, ResultInput{Status: "published", ExternalID: "already-live", URL: "https://example.com/already-live"})
+					return err
+				}, outcome: outcome,
+			}, providers.StatusAvailable)
+			t.Cleanup(func() { providers.Register(original.Provider, original.Status) })
+			if err := s.publishTarget(ctx, post.ID, channelID); err != nil {
+				t.Fatal(err)
+			}
+			got, err := s.GetPost(ctx, p, post.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := targetOf(t, got, channelID)
+			if got.Status != "published" || target.Status != "published" || target.ExternalID != "already-live" || target.ExternalURL != "https://example.com/already-live" {
+				t.Fatalf("late endpoint response overwrote the reported result: post=%s target=%+v", got.Status, target)
+			}
+			if jobs := jobsByKey(t, s, "target_timeout:"+post.ID+":"+channelID); len(jobs) != 0 {
+				t.Fatalf("settled target received a timeout job: %+v", jobs)
+			}
+		})
+	}
+}

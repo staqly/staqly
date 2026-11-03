@@ -1422,9 +1422,9 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 		timeout := s.processingTimeout(col)
 		return s.tx(wctx, func(q *db.Queries) error {
 			now := s.now()
-			if err := q.SetTargetStatus(wctx, db.SetTargetStatusParams{Status: "publishing", ExternalID: "", ExternalUrl: "", Error: "",
-				Attempts: target.Attempts + 1, PublishedAt: nullStr(""), UpdatedAt: now, PostID: postID, ChannelID: channelID}); err != nil {
-				return err
+			n, err := q.RecordPendingTargetAttempt(wctx, db.RecordPendingTargetAttemptParams{Error: "", UpdatedAt: now, PostID: postID, ChannelID: channelID})
+			if err != nil || n == 0 {
+				return err // a result report already settled it; do not announce or time it out again
 			}
 			data := s.postEventData(wctx, q, row.WorkspaceID, postID, map[string]any{
 				"channel": toChannelOut(ch), "target": map[string]any{"channel_id": channelID, "content": text, "settings": settings,
@@ -1440,8 +1440,13 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 			return nil
 		})
 	case err != nil:
-		_ = s.W.SetTargetStatus(wctx, db.SetTargetStatusParams{Status: "publishing", ExternalID: "", ExternalUrl: "",
-			Error: truncateRunes(err.Error(), 500), Attempts: target.Attempts + 1, PublishedAt: nullStr(""), UpdatedAt: s.now(), PostID: postID, ChannelID: channelID})
+		n, writeErr := s.W.RecordPendingTargetAttempt(wctx, db.RecordPendingTargetAttemptParams{Error: truncateRunes(err.Error(), 500), UpdatedAt: s.now(), PostID: postID, ChannelID: channelID})
+		if writeErr != nil {
+			return writeErr
+		}
+		if n == 0 {
+			return nil // the endpoint reported a final result before its HTTP request failed
+		}
 		return err // the job retries with backoff; the last failure settles the target (jobFailed)
 	}
 	return s.finishTarget(wctx, postID, channelID, "published", result, "")
