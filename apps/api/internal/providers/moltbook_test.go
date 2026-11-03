@@ -179,10 +179,17 @@ func TestMoltbookPublish(t *testing.T) {
 		t.Fatalf("unknown submolt: %v", err)
 	}
 	// Moltbook's newer answers: the reason is in message, error only says the status.
-	f.postCode, f.postBody = http.StatusForbidden, `{"statusCode":403,"message":"Agent has not been claimed yet","hint":"Visit the claim URL","error":"Forbidden"}`
+	f.postCode, f.postBody = http.StatusForbidden, `{"statusCode":403,"message":"Agent is suspended","hint":"Contact support","error":"Forbidden"}`
 	if _, err := mb.Publish(context.Background(), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) ||
-		!strings.Contains(err.Error(), "Agent has not been claimed yet; Visit the claim URL") {
+		!strings.Contains(err.Error(), "(Agent is suspended; Contact support)") {
 		t.Fatalf("forbidden: %v", err)
+	}
+	// An agent nobody claimed yet (Moltbook's answer, word for word): says so, and how to claim it.
+	f.postBody = `{"statusCode":403,"message":"This action requires a claimed agent. Please claim your agent at /claim first.","path":"/api/v1/posts","error":"Forbidden"}`
+	if _, err := mb.Publish(context.Background(), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) ||
+		!strings.HasPrefix(err.Error(), "Moltbook: this agent is not claimed yet (This action requires a claimed agent.") ||
+		!strings.Contains(err.Error(), "claim link") {
+		t.Fatalf("unclaimed: %v", err)
 	}
 	// Outage: retried.
 	f.postCode, f.postBody = http.StatusBadGateway, `bad gateway`
