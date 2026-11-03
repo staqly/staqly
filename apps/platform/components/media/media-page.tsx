@@ -799,6 +799,38 @@ export function MediaPage() {
     </div>
   )
 
+  // Backspace or Delete does what the bar's Delete does: to Deleted, or (in Deleted) asks before deleting for good.
+  useEffect(() => {
+    if (!selected.size || !canWrite) {
+      return
+    }
+
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+
+      if (
+        (e.key !== 'Backspace' && e.key !== 'Delete') ||
+        e.defaultPrevented ||
+        t?.closest('input, textarea, select, [contenteditable=true]') ||
+        document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
+      ) {
+        return
+      }
+
+      e.preventDefault()
+
+      if (trash) {
+        setPurgingIds([...selected])
+      } else if (!deleting) {
+        deleteSelected()
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected, canWrite, trash, deleting, deleteSelected])
+
   const editable = useMemo(() => picked.filter((m) => m.mime_type.startsWith('image/')), [picked])
   // Pictures and videos make a video (with the sounds picked as its music); sounds alone open the sound editor.
   const visualPicked = useMemo(() => picked.filter((m) => /^(image|video)\//.test(m.mime_type)), [picked])

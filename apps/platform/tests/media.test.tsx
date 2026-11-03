@@ -236,6 +236,21 @@ describe('media library page', () => {
     expect(screen.queryByText('1 file')).not.toBeInTheDocument()
   })
 
+  it("Backspace deletes the selected files like the bar's Delete", async () => {
+    const api = mockApi({
+      'GET /v1/media': { data: [SUNSET, CLIP] },
+      'POST /v1/media/delete': { deleted: ['med_sun'], missing: [] },
+      'GET /v1/workspace/usage': usage(PLANS[1]!),
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<MediaPage />, { mode: 'cloud' })
+    await user.click(await screen.findByRole('button', { name: 'Select Sunset.png' }))
+    await user.keyboard('{Backspace}')
+    expect(await screen.findByText('“Sunset.png” moved to Deleted')).toBeInTheDocument()
+    expect(api.find('POST', '/v1/media/delete')).toHaveLength(1)
+  })
+
   it('refuses a file over the plan limit before uploading, in plain words', async () => {
     mockApi({
       'GET /v1/media': { data: [] },
