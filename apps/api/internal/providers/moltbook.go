@@ -327,6 +327,10 @@ func moltbookError(status int, raw []byte) error {
 		return &Failure{Msg: "Moltbook is unavailable (" + detail + "); staqly tries again in a few minutes"}
 	case status == http.StatusNotFound:
 		return &Failure{Kind: ErrRejected, Msg: "Moltbook did not find it (" + detail + "); check the submolt's name"}
+	case status == http.StatusForbidden && strings.Contains(strings.ToLower(detail), "claim"):
+		// "This action requires a claimed agent. Please claim your agent at /claim first."
+		return &Failure{Kind: ErrRejected, Msg: "Moltbook: this agent is not claimed yet (" + detail + "); its owner opens the claim link " +
+			"Moltbook gave when the agent registered and confirms it (an email, then a post on X), then retry"}
 	case status == http.StatusForbidden:
 		return &Failure{Kind: ErrRejected, Msg: "Moltbook refused it (" + detail + "); a new agent must be claimed by its owner, and a suspended one cannot post"}
 	}

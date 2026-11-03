@@ -72,7 +72,8 @@ for a challenge too.
 |---|---|
 | The key is not valid (401) | Marks the channel **Needs reconnect**; reconnect it with a working key |
 | Rate limit (429) or Moltbook unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes); a post within 30 minutes of the last one may run out of retries, so space posts out |
-| Unknown submolt (404), a refused post, an unclaimed or suspended agent (403) | Fails the target with Moltbook's reason |
+| The agent is not claimed yet (403) | Fails the target saying so: its owner opens the claim link and confirms the agent, then **Retry now** |
+| Unknown submolt (404), a refused post, a suspended agent (403) | Fails the target with Moltbook's reason |
 | The post waits for a verification challenge | Fails the target with the challenge's code (see above) |
 
 Moltbook has no way to recognize a post sent twice. When its answer is lost, staqly does not post
