@@ -29,7 +29,10 @@ export function SlotScheduleDialog({ at, onOpenChange }: { at: Date; onOpenChang
   const query: PostQuery = useMemo(() => ({ status: 'draft', sort: 'created_desc', limit: 100 }), [])
   const list = usePostsInfinite(query, { refetchOnWindowFocus: false })
   const drafts = useMemo(() => {
-    const all = flattenPosts(list.data).filter((p) => !p.publish_at)
+    // A draft with a file in Deleted can't be scheduled until the file is restored: it isn't offered here.
+    const all = flattenPosts(list.data).filter(
+      (p) => !p.publish_at && ![...p.media_items, ...p.thread.flatMap((t) => t.media_items)].some((m) => m.deleted_at),
+    )
     const q = search.trim().toLowerCase()
 
     return q ? all.filter((p) => p.content.toLowerCase().includes(q)) : all
