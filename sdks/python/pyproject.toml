@@ -72,7 +72,7 @@ ignore = ["RUF022"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["PT011", "PT018", "B017"]
-"src/staqly/_client_sync.py" = ["UP028"]  # generated: async generators cannot `yield from`
+"src/staqly/_client_sync.py" = ["UP028", "SIM117"]  # generated: preserves async loops and mixed context managers
 
 [tool.mypy]
 strict = true

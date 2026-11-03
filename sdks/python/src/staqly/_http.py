@@ -11,6 +11,7 @@ import json
 import mimetypes
 import os
 import random
+import tempfile
 import time
 import uuid
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -103,9 +104,20 @@ def read_file(file: FileInput, filename: str | None, content_type: str | None) -
     return name, data, ctype
 
 
-def open_for_write(path: Path) -> IO[bytes]:
-    """Opens a download target (kept out of async code paths for linters; writes are small chunks)."""
-    return path.open("wb")
+@contextlib.contextmanager
+def atomic_download(path: Path) -> Iterator[IO[bytes]]:
+    """Replace the target only after a complete download, keeping the old file on failure."""
+    with tempfile.NamedTemporaryFile(
+        mode="wb", dir=path.parent, prefix=".staqly-download-", delete=False
+    ) as out:
+        temporary = Path(out.name)
+        try:
+            yield out
+            out.close()
+            temporary.replace(path)
+        finally:
+            out.close()
+            temporary.unlink(missing_ok=True)
 
 
 def backoff(attempt: int) -> float:

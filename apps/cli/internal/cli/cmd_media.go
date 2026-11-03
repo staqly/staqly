@@ -342,23 +342,27 @@ func download(c *Ctx, cl *Client, path string, q url.Values, output, fallback st
 	if output == "" {
 		output, exclusive = suggestedName(resp.Header.Get("Content-Disposition"), fallback), true
 	}
-	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
-	if exclusive {
-		flags = os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	}
-	f, err := os.OpenFile(output, flags, 0o600)
-	if errors.Is(err, fs.ErrExist) {
-		return &exitErr{code: ExitError, msg: fmt.Sprintf("%s already exists; pass --output to choose a file", output)}
-	}
+	f, err := os.CreateTemp(filepath.Dir(output), ".staqly-download-*")
 	if err != nil {
 		return err
 	}
+	defer os.Remove(f.Name())
 	n, err := io.Copy(f, resp.Body)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
-		_ = os.Remove(output)
+		return fmt.Errorf("write %s: %w", output, err)
+	}
+	if exclusive {
+		err = os.Link(f.Name(), output)
+	} else {
+		err = os.Rename(f.Name(), output)
+	}
+	if errors.Is(err, fs.ErrExist) {
+		return &exitErr{code: ExitError, msg: fmt.Sprintf("%s already exists; pass --output to choose a file", output)}
+	}
+	if err != nil {
 		return fmt.Errorf("write %s: %w", output, err)
 	}
 	if c.JSON {

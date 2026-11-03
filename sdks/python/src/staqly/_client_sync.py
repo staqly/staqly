@@ -26,8 +26,8 @@ from ._http import (
     HTTPClient,
     RequestOptions,
     RequestSpec,
+    atomic_download,
     clean,
-    open_for_write,
     read_file,
 )
 from .errors import ExportFailedError, WaitTimeoutError
@@ -2824,13 +2824,10 @@ class Exports(_Resource):
 
     def _save(self, spec: RequestSpec, path: str | PathLike[str]) -> Path:
         target = Path(path)
-        out = open_for_write(target)
-        try:
+        with atomic_download(target) as out:
             with self._http.stream(spec) as r:
                 for chunk in r.iter_bytes():
                     out.write(chunk)
-        finally:
-            out.close()
         return target
 
 

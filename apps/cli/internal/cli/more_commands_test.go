@@ -356,6 +356,28 @@ func TestEventsExport(t *testing.T) {
 
 // ---- workspace export ----
 
+func TestDownloadPreservesExistingFileOnInterruptedResponse(t *testing.T) {
+	f := newFake(t)
+	f.handle("GET /v1/workspace/exports/wex_1/download", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Length", "100")
+		fmt.Fprint(w, "partial zip")
+	})
+	dir := t.TempDir()
+	out := filepath.Join(dir, "export.zip")
+	if err := os.WriteFile(out, []byte("previous backup"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.run("workspace", "export", "download", "wex_1", "--output", out).mustCode(t, ExitError)
+	if b, err := os.ReadFile(out); err != nil || string(b) != "previous backup" {
+		t.Fatalf("existing backup was lost: %q, %v", b, err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "export.zip" {
+		t.Fatalf("temporary download was not cleaned up: %v, %v", entries, err)
+	}
+}
+
 func TestWorkspaceExport(t *testing.T) {
 	f := newFake(t)
 	exp := func(status string) map[string]any {
@@ -377,6 +399,9 @@ func TestWorkspaceExport(t *testing.T) {
 	}
 
 	out := filepath.Join(t.TempDir(), "export.zip")
+	if err := os.WriteFile(out, []byte("previous backup"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	r = f.run("workspace", "export", "start", "--output", out).mustCode(t, 0)
 	if b, _ := os.ReadFile(out); string(b) != "PK\x03\x04zip" {
 		t.Fatalf("zip = %q", b)

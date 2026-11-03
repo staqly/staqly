@@ -1,8 +1,8 @@
 // Node/Bun/Deno helpers that need the file system. Kept out of the main entry
 // so edge bundles never see `node:` imports.
 import { createWriteStream } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { mkdtemp, readFile, rename, rm } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
@@ -28,9 +28,17 @@ export async function saveResponse(res: Response, path: string): Promise<number>
     throw new Error('response has no body')
   }
 
-  const out = createWriteStream(path)
+  const temporary = await mkdtemp(join(dirname(path), '.staqly-download-'))
 
-  await pipeline(Readable.fromWeb(res.body as unknown as NodeReadableStream), out)
+  try {
+    const file = join(temporary, 'download')
+    const out = createWriteStream(file, { mode: 0o600 })
 
-  return out.bytesWritten
+    await pipeline(Readable.fromWeb(res.body as unknown as NodeReadableStream), out)
+    await rename(file, path)
+
+    return out.bytesWritten
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
 }
