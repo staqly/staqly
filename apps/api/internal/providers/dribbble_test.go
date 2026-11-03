@@ -69,6 +69,11 @@ func (f *fakeDribbble) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			shots = `{"id":471756,"title":"Long run","published_at":"` + time.Now().UTC().Format(time.RFC3339) + `"},` + shots
 		}
 		_, _ = w.Write([]byte(`[` + shots + `]`))
+	case r.URL.Path == "/v2/shots/471756":
+		_, _ = w.Write([]byte(`{"id":471756,"title":"Long run"}`))
+	case strings.HasPrefix(r.URL.Path, "/v2/shots/"):
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not found."}`))
 	case r.URL.Path == "/v2/shots":
 		f.shots++
 		_, params, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
@@ -254,5 +259,24 @@ func TestDribbbleValidate(t *testing.T) {
 	}
 	if l := db.Limits(); l.Image == nil || l.Image.MaxBytes != 8<<20 {
 		t.Fatalf("image rules %+v", l.Image)
+	}
+}
+
+func TestDribbbleExists(t *testing.T) {
+	useFakeDribbble(t)
+	e, _ := Get("dribbble")
+	x := e.Provider.(ExistenceChecker)
+	c := Credentials{"access_token": "dt-1"}
+	if err := x.Exists(context.Background(), c, "471756"); err != nil {
+		t.Fatalf("there: %v", err)
+	}
+	if err := x.Exists(context.Background(), c, "1"); !errors.Is(err, ErrGone) {
+		t.Fatalf("deleted: %v", err)
+	}
+	if err := x.Exists(context.Background(), Credentials{"access_token": "revoked"}, "471756"); !errors.Is(err, ErrReauth) {
+		t.Fatalf("revoked: %v", err)
+	}
+	if _, ok := e.Provider.(MetricsReader); ok {
+		t.Fatal("Dribbble gives no numbers")
 	}
 }

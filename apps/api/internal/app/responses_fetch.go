@@ -201,7 +201,7 @@ func (s *Service) queueRecentResponseReads(ctx context.Context) error {
 				return err
 			}
 		}
-		if _, can := e.Provider.(providers.MetricsReader); can && (!t.MetricsAt.Valid || t.MetricsAt.String < stale) {
+		if r, _ := numbersReader(e); r != nil && (!t.MetricsAt.Valid || t.MetricsAt.String < stale) {
 			if err := s.enqueue(ctx, s.W, t.WorkspaceID, "check_target", "check_target:"+t.PostID+":"+t.ChannelID,
 				map[string]any{"post_id": t.PostID, "channel_id": t.ChannelID}, s.Now(), 3); err != nil {
 				return err

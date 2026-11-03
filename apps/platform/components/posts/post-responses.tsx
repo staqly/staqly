@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, Heart } from 'lucide-react'
+import { ChevronDown, Heart, MessageSquare, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 
 import { ErrorState } from '@/components/common/error-state'
@@ -164,7 +164,7 @@ export function ChannelComments({
 
   if (!c.available) {
     return (
-      <p className="text-xs text-muted-foreground">{c.error || "This platform doesn't let staqly read comments"}</p>
+      <Unavailable icon={MessageSquare} what="Comments" why={c.error || "this platform doesn't let staqly read them"} />
     )
   }
 
@@ -222,5 +222,18 @@ export function ChannelComments({
         )}
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+/** What a channel can't show (numbers, comments): its own labelled row, so two of them don't read as one sentence. */
+export function Unavailable({ icon: Icon, what, why }: { icon: LucideIcon; what: string; why: string }) {
+  return (
+    <p className="flex items-start gap-2 rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs" data-testid="unavailable">
+      <Icon aria-hidden className="mt-px size-3.5 shrink-0 text-muted-foreground" />
+      <span>
+        <span className="font-medium">{what}</span>
+        <span className="text-muted-foreground">: {why}</span>
+      </span>
+    </p>
   )
 }

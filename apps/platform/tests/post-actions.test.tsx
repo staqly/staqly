@@ -130,7 +130,9 @@ describe('post actions', () => {
 
     expect(await within(stats).findByText('1,200')).toBeInTheDocument()
     expect(within(stats).getByText('Views')).toBeInTheDocument()
-    expect(within(stats).getByText('Numbers are not available for this platform.')).toBeInTheDocument()
+    expect(within(stats).getByTestId('unavailable')).toHaveTextContent(
+      "Numbers: this platform doesn't share them with staqly",
+    )
   })
 
   it('creates a preview link to copy and lists the feedback threads with emails, replies and resolves', async () => {
