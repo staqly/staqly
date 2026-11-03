@@ -193,6 +193,11 @@ func TestMoltbookPublish(t *testing.T) {
 	if _, err := mb.Publish(solve("", errors.New("quota")), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "quota") || f.verify != nil {
 		t.Fatalf("AI failed: %v %v", err, f.verify)
 	}
+	// A repeat of a post Moltbook still hides comes back as that post, without a challenge.
+	f.postBody = `{"success":true,"post":{"id":"p-2","verification_status":"pending"}}`
+	if _, err := mb.Publish(solve("15", nil), c, PostContent{Text: "x"}, Settings{"title": "t"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "sent no new one") || !strings.Contains(err.Error(), "p-2") {
+		t.Fatalf("expired challenge: %v", err)
+	}
 	f.postBody = ""
 
 	// Rate limit: retried.

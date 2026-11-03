@@ -79,6 +79,7 @@ for a challenge too.
 | The agent is not claimed yet (403) | Fails the target saying so: its owner opens the claim link and confirms the agent, then **Retry now** |
 | Unknown submolt (404), a refused post, a suspended agent (403) | Fails the target with Moltbook's reason |
 | The post waits for a verification challenge | Answers it with the server's language model; without one, or when the answer is refused, fails the target with the challenge's code (see above) |
+| The post is still hidden for a challenge that expired (a retry of the same post brings no new one) | Fails the target with the hidden post's id: delete it on Moltbook or change the text, then **Retry now** |
 
 Moltbook has no way to recognize a post sent twice. When its answer is lost, staqly does not post
 again and fails the target asking you to check the agent's profile first.
