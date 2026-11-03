@@ -6,6 +6,7 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -41,7 +42,7 @@ func feedbackPNG(t *testing.T) *bytes.Reader {
 func TestProductFeedbackPrivateAttachmentAndStatus(t *testing.T) {
 	s, p, a := feedbackTest(t)
 	ctx := context.Background()
-	id, err := s.CreateProductFeedback(ctx, p, ProductFeedbackInput{"problem", "  Something failed  ", "https://app.example/posts?token=secret#private"}, feedbackPNG(t))
+	id, err := s.CreateProductFeedback(ctx, p, ProductFeedbackInput{"problem", "  Something failed  ", "https://app.example/posts?token=secret#private"}, []io.Reader{feedbackPNG(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +54,7 @@ func TestProductFeedbackPrivateAttachmentAndStatus(t *testing.T) {
 	if r.ID != id || r.PagePath != "/posts" || r.ReporterID != p.UserID || r.WorkspaceID != p.WorkspaceID || !r.Attachment || r.Status != "new" || r.Description != "Something failed" || r.ReporterEmail == "" {
 		t.Fatalf("feedback: %+v", r)
 	}
-	f, ct, err := s.AdminOpenProductFeedbackAttachment(ctx, a, id)
+	f, ct, err := s.AdminOpenProductFeedbackAttachment(ctx, a, id, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +71,7 @@ func TestProductFeedbackPrivateAttachmentAndStatus(t *testing.T) {
 	feedbackStatus(t, s.AdminSetProductFeedbackStatus(ctx, a, "missing", "closed"), 404)
 	_, err = s.AdminListProductFeedback(ctx, Admin{Email: "feedback@Acme.io"}, "")
 	feedbackStatus(t, err, 403)
-	_, _, err = s.AdminOpenProductFeedbackAttachment(ctx, Admin{}, id)
+	_, _, err = s.AdminOpenProductFeedbackAttachment(ctx, Admin{}, id, 0)
 	feedbackStatus(t, err, 403)
 	feedbackStatus(t, s.AdminSetProductFeedbackStatus(ctx, Admin{}, id, "closed"), 403)
 	var n int
@@ -90,7 +91,7 @@ func TestProductFeedbackValidation(t *testing.T) {
 		feedbackStatus(t, err, 422)
 	}
 	for _, data := range [][]byte{[]byte("<svg><script>bad()</script></svg>"), bytes.Repeat([]byte("a"), MaxFeedbackAttachmentBytes+1), {}} {
-		_, err := s.CreateProductFeedback(ctx, p, valid, bytes.NewReader(data))
+		_, err := s.CreateProductFeedback(ctx, p, valid, []io.Reader{bytes.NewReader(data)})
 		feedbackStatus(t, err, 422)
 	}
 	key := p
@@ -161,5 +162,90 @@ func TestProductFeedbackCursor(t *testing.T) {
 			t.Fatal("duplicate")
 		}
 		seen[row.ID] = true
+	}
+}
+
+func TestProductFeedbackMultipleAttachments(t *testing.T) {
+	s, p, a := feedbackTest(t)
+	ctx := t.Context()
+	in := ProductFeedbackInput{"problem", "Multiple screenshots", "/posts"}
+	images := make([]io.Reader, MaxFeedbackAttachments)
+	for i := range images {
+		images[i] = feedbackPNG(t)
+	}
+	id, err := s.CreateProductFeedback(ctx, p, in, images)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := s.AdminListProductFeedback(ctx, a, "")
+	if err != nil || len(page.Items) != 1 || page.Items[0].AttachmentCount != 10 {
+		t.Fatalf("page: %+v %v", page, err)
+	}
+	for i := range images {
+		f, ct, err := s.AdminOpenProductFeedbackAttachment(ctx, a, id, int64(i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(f)
+		f.Close()
+		if err != nil || ct != "image/png" || !bytes.HasPrefix(data, []byte("\x89PNG")) {
+			t.Fatalf("attachment %d: %s %v", i, ct, err)
+		}
+		_, _, err = s.AdminOpenProductFeedbackAttachment(ctx, Admin{}, id, int64(i))
+		feedbackStatus(t, err, 403)
+	}
+	for _, index := range []int64{-1, 10} {
+		_, _, err = s.AdminOpenProductFeedbackAttachment(ctx, a, id, index)
+		feedbackStatus(t, err, 422)
+	}
+	_, _, err = s.AdminOpenProductFeedbackAttachment(ctx, a, "missing", 1)
+	feedbackStatus(t, err, 404)
+}
+
+func TestProductFeedbackAttachmentFailureCleanup(t *testing.T) {
+	for _, reason := range []string{"too_many", "invalid_later_image", "rate_limit"} {
+		t.Run(reason, func(t *testing.T) {
+			s, p, a := feedbackTest(t)
+			in := ProductFeedbackInput{"problem", "Description", "/"}
+			ctx := t.Context()
+			images := []io.Reader{feedbackPNG(t), strings.NewReader("invalid image")}
+			want := 422
+			switch reason {
+			case "too_many":
+				images = make([]io.Reader, 11)
+				for i := range images {
+					images[i] = feedbackPNG(t)
+				}
+			case "rate_limit":
+				for range 5 {
+					if _, err := s.CreateProductFeedback(ctx, p, in, nil); err != nil {
+						t.Fatal(err)
+					}
+				}
+				images = []io.Reader{feedbackPNG(t), feedbackPNG(t)}
+				want = 429
+			}
+			_, err := s.CreateProductFeedback(ctx, p, in, images)
+			feedbackStatus(t, err, want)
+			files := 0
+			if err := s.Cfg.Blob.Walk(ctx, workspaceKey(p.WorkspaceID)+"feedback/", func(string, int64) error { files++; return nil }); err != nil {
+				t.Fatal(err)
+			}
+			if files != 0 {
+				t.Fatalf("orphaned attachments: %d", files)
+			}
+			page, err := s.AdminListProductFeedback(ctx, a, "")
+			expected := 0
+			if reason == "rate_limit" {
+				expected = 5
+			}
+			if err != nil || len(page.Items) != expected {
+				t.Fatalf("partial feedback: %+v %v", page, err)
+			}
+			var count int
+			if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM product_feedback_attachments").Scan(&count); err != nil || count != 0 {
+				t.Fatalf("partial attachments: %d %v", count, err)
+			}
+		})
 	}
 }

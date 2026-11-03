@@ -10,7 +10,8 @@ import (
 )
 
 const adminListProductFeedback = `-- name: AdminListProductFeedback :many
-SELECT f.id, f.workspace_id, f.reporter_id, f.kind, f.description, f.page_path, f.status, f.attachment_key, f.attachment_type, f.created_at, COALESCE(u.name, '') AS reporter_name, COALESCE(u.email, '') AS reporter_email, w.name AS workspace_name
+SELECT f.id, f.workspace_id, f.reporter_id, f.kind, f.description, f.page_path, f.status, f.attachment_key, f.attachment_type, f.created_at, COALESCE(u.name, '') AS reporter_name, COALESCE(u.email, '') AS reporter_email, w.name AS workspace_name,
+    (SELECT COUNT(*) FROM product_feedback_attachments a WHERE a.feedback_id = f.id) AS attachment_count
 FROM product_feedback f
 JOIN workspaces w ON w.id = f.workspace_id
 LEFT JOIN users u ON u.id = f.reporter_id
@@ -26,19 +27,20 @@ type AdminListProductFeedbackParams struct {
 }
 
 type AdminListProductFeedbackRow struct {
-	ID             string `json:"id"`
-	WorkspaceID    string `json:"workspace_id"`
-	ReporterID     string `json:"reporter_id"`
-	Kind           string `json:"kind"`
-	Description    string `json:"description"`
-	PagePath       string `json:"page_path"`
-	Status         string `json:"status"`
-	AttachmentKey  string `json:"attachment_key"`
-	AttachmentType string `json:"attachment_type"`
-	CreatedAt      string `json:"created_at"`
-	ReporterName   string `json:"reporter_name"`
-	ReporterEmail  string `json:"reporter_email"`
-	WorkspaceName  string `json:"workspace_name"`
+	ID              string `json:"id"`
+	WorkspaceID     string `json:"workspace_id"`
+	ReporterID      string `json:"reporter_id"`
+	Kind            string `json:"kind"`
+	Description     string `json:"description"`
+	PagePath        string `json:"page_path"`
+	Status          string `json:"status"`
+	AttachmentKey   string `json:"attachment_key"`
+	AttachmentType  string `json:"attachment_type"`
+	CreatedAt       string `json:"created_at"`
+	ReporterName    string `json:"reporter_name"`
+	ReporterEmail   string `json:"reporter_email"`
+	WorkspaceName   string `json:"workspace_name"`
+	AttachmentCount int64  `json:"attachment_count"`
 }
 
 func (q *Queries) AdminListProductFeedback(ctx context.Context, arg AdminListProductFeedbackParams) ([]AdminListProductFeedbackRow, error) {
@@ -64,6 +66,7 @@ func (q *Queries) AdminListProductFeedback(ctx context.Context, arg AdminListPro
 			&i.ReporterName,
 			&i.ReporterEmail,
 			&i.WorkspaceName,
+			&i.AttachmentCount,
 		); err != nil {
 			return nil, err
 		}
@@ -142,6 +145,27 @@ func (q *Queries) CreateProductFeedback(ctx context.Context, arg CreateProductFe
 	return err
 }
 
+const createProductFeedbackAttachment = `-- name: CreateProductFeedbackAttachment :exec
+INSERT INTO product_feedback_attachments (feedback_id, position, storage_key, mime_type) VALUES (?, ?, ?, ?)
+`
+
+type CreateProductFeedbackAttachmentParams struct {
+	FeedbackID string `json:"feedback_id"`
+	Position   int64  `json:"position"`
+	StorageKey string `json:"storage_key"`
+	MimeType   string `json:"mime_type"`
+}
+
+func (q *Queries) CreateProductFeedbackAttachment(ctx context.Context, arg CreateProductFeedbackAttachmentParams) error {
+	_, err := q.db.ExecContext(ctx, createProductFeedbackAttachment,
+		arg.FeedbackID,
+		arg.Position,
+		arg.StorageKey,
+		arg.MimeType,
+	)
+	return err
+}
+
 const getProductFeedback = `-- name: GetProductFeedback :one
 SELECT id, workspace_id, reporter_id, kind, description, page_path, status, attachment_key, attachment_type, created_at FROM product_feedback WHERE id = ?
 `
@@ -160,6 +184,27 @@ func (q *Queries) GetProductFeedback(ctx context.Context, id string) (ProductFee
 		&i.AttachmentKey,
 		&i.AttachmentType,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getProductFeedbackAttachment = `-- name: GetProductFeedbackAttachment :one
+SELECT feedback_id, position, storage_key, mime_type FROM product_feedback_attachments WHERE feedback_id = ? AND position = ?
+`
+
+type GetProductFeedbackAttachmentParams struct {
+	FeedbackID string `json:"feedback_id"`
+	Position   int64  `json:"position"`
+}
+
+func (q *Queries) GetProductFeedbackAttachment(ctx context.Context, arg GetProductFeedbackAttachmentParams) (ProductFeedbackAttachment, error) {
+	row := q.db.QueryRowContext(ctx, getProductFeedbackAttachment, arg.FeedbackID, arg.Position)
+	var i ProductFeedbackAttachment
+	err := row.Scan(
+		&i.FeedbackID,
+		&i.Position,
+		&i.StorageKey,
+		&i.MimeType,
 	)
 	return i, err
 }

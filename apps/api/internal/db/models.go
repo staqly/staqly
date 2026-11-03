@@ -549,6 +549,13 @@ type ProductFeedback struct {
 	CreatedAt      string `json:"created_at"`
 }
 
+type ProductFeedbackAttachment struct {
+	FeedbackID string `json:"feedback_id"`
+	Position   int64  `json:"position"`
+	StorageKey string `json:"storage_key"`
+	MimeType   string `json:"mime_type"`
+}
+
 type ProviderApp struct {
 	WorkspaceID string `json:"workspace_id"`
 	Provider    string `json:"provider"`

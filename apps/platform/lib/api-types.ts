@@ -6411,11 +6411,8 @@ export interface operations {
                     kind: "problem" | "feature";
                     description: string;
                     page_path: string;
-                    /**
-                     * Format: binary
-                     * @description Optional PNG, JPEG or WebP, up to 5 MB and 20 megapixels.
-                     */
-                    screenshot?: string;
+                    /** @description Optional PNG, JPEG or WebP images, up to 10 files, 5 MB and 20 megapixels each. Repeat the screenshot field for each file. */
+                    screenshot?: string[];
                 };
             };
         };
