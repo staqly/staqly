@@ -45,6 +45,34 @@ async function showWeekOf(page: Page, day: Date) {
 }
 
 test.describe('the schedule', () => {
+  test('the view menu can reopen immediately after a selection and return keyboard focus', async ({ page }) => {
+    await page.goto('/schedule')
+    await ready(page, 'Schedule')
+    // Keep closing animations alive long enough to exercise reopening during their lifetime.
+    await page.addStyleTag({
+      content: '[data-slot="dropdown-menu-content"][data-state="closed"] { animation-duration: 1s !important }',
+    })
+    const trigger = page.getByTestId('schedule-view-menu')
+
+    for (let i = 0; i < 3; i++) {
+      await pickView(page, 'List')
+      await expect(page).toHaveURL(/list=1/)
+      await expect(page.getByTestId('schedule-list')).toBeVisible()
+      await trigger.click()
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+      await page.getByRole('menuitemradio', { name: 'Calendar', exact: true }).click()
+      await expect(page).toHaveURL((url) => !url.searchParams.has('list'))
+      await expect(page.getByTestId('schedule-grid')).toBeVisible()
+    }
+
+    await trigger.focus()
+    await page.keyboard.press('ArrowDown')
+    await expect(page.getByRole('menu')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('menu')).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+  })
+
   test('home: the week with the seeded posts, the count, day/week/month and list views, schedule runs as chips', async ({
     page,
     srv,
