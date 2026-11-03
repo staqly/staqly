@@ -92,6 +92,7 @@ func TestScheduleChangeWhileEndpointRunsWins(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			now = now.Add(10 * time.Minute) // the recurring schedule is due before the endpoint call starts
 			done := make(chan error, 1)
 			go func() { done <- s.runSchedule(ctx, sc.ID) }()
 			select {
@@ -142,5 +143,51 @@ func TestScheduleChangeWhileEndpointRunsWins(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A River run may already have been claimed when the user postpones the schedule.
+// Its stale dispatch must observe the new due time; Run now remains allowed explicitly.
+func TestClaimedScheduleRunHonorsPostponedDueTime(t *testing.T) {
+	s, p, post := publishTest(t)
+	ctx := t.Context()
+	draft, err := s.CreatePost(ctx, p, PostInput{Title: "Waiting", Collection: post.CollectionID, Content: "Ready for the schedule", Targets: []PostTargetInput{{ChannelID: post.Targets[0].ChannelID}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	post = draft
+	now := s.Now()
+	s.Now = func() time.Time { return now }
+	at := now.Add(5 * time.Minute).UTC().Format(time.RFC3339)
+	sc, err := s.CreateSchedule(ctx, p, ScheduleInput{Collection: &post.CollectionID, Name: ptrTo("Postponed"), Kind: ptrTo("once"), RunAt: &at})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(5 * time.Minute) // the original job has been claimed
+	later := now.Add(time.Hour).UTC().Format(time.RFC3339)
+	changed, err := s.UpdateSchedule(ctx, p, sc.ID, ScheduleInput{RunAt: &later})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.runSchedule(ctx, sc.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetSchedule(ctx, p, sc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := s.GetPost(ctx, p, post.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.NextRunAt == nil || changed.NextRunAt == nil || *got.NextRunAt != *changed.NextRunAt || got.LastRunAt != nil || !got.Enabled || row.Status != "draft" {
+		t.Fatalf("claimed job ran the postponed schedule: schedule=%+v post=%s", got, row.Status)
+	}
+	if _, err := s.RunScheduleNow(ctx, p, sc.ID); err != nil {
+		t.Fatal(err)
+	}
+	row, err = s.GetPost(ctx, p, post.ID)
+	if err != nil || row.Status != "publishing" {
+		t.Fatalf("explicit Run now should still publish: %s %v", row.Status, err)
 	}
 }
