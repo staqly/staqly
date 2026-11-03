@@ -519,7 +519,7 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
       if (e.key === ' ') {
         e.preventDefault()
         k.play()
-      } else if (mod && e.key.toLowerCase() === 'z') {
+      } else if (mod && e.key?.toLowerCase() === 'z') {
         e.preventDefault()
 
         if (e.shiftKey) {
@@ -527,7 +527,7 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
         } else {
           k.undo()
         }
-      } else if (!mod && e.key.toLowerCase() === 's') {
+      } else if (!mod && e.key?.toLowerCase() === 's') {
         e.preventDefault()
         k.split()
       } else if (e.key === 'Delete' || e.key === 'Backspace') {

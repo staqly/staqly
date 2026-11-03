@@ -315,7 +315,7 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
       } else if (
         canWrite &&
         (e.metaKey || e.ctrlKey) &&
-        e.key.toLowerCase() === 'a' &&
+        e.key?.toLowerCase() === 'a' &&
         !typing &&
         listRef.current.length
       ) {

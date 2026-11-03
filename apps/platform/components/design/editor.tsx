@@ -424,7 +424,7 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
       }
 
       const mod = e.metaKey || e.ctrlKey
-      const key = e.key.toLowerCase()
+      const key = e.key?.toLowerCase()
 
       if (mod && key === 'z') {
         e.preventDefault()

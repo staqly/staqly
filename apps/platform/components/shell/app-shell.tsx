@@ -965,12 +965,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         return
       }
 
-      if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
+      // Autofill and password managers send keydown events without a key.
+      const key = e.key?.toLowerCase()
+
+      if (key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         toggleCommand()
       }
 
-      if (e.key.toLowerCase() === 'j' && (e.metaKey || e.ctrlKey) && hasAssistant) {
+      if (key === 'j' && (e.metaKey || e.ctrlKey) && hasAssistant) {
         e.preventDefault()
         setAssistantOpen((o) => {
           const saved = o ? '0' : '1'
