@@ -291,10 +291,31 @@ export function clock(s: number, tenths = true) {
   return `${m}:${(tenths ? rest.toFixed(1) : Math.floor(rest).toString()).padStart(tenths ? 4 : 2, '0')}`
 }
 
-/** Frame sizes for a video, by where it goes. */
+/** Frame sizes for a video, with the platforms (of those staqly publishes video to) each one suits. */
 export const VIDEO_SIZES = [
-  { label: 'Story, Reel, TikTok, Short (9:16)', width: 1080, height: 1920 },
-  { label: 'Feed portrait (4:5)', width: 1080, height: 1350 },
-  { label: 'Square (1:1)', width: 1080, height: 1080 },
-  { label: 'Landscape, YouTube (16:9)', width: 1920, height: 1080 },
+  {
+    label: 'Vertical (9:16)',
+    where: 'TikTok, Instagram Reels and Stories, Facebook Reels and Stories, YouTube Shorts, Threads',
+    width: 1080,
+    height: 1920,
+  },
+  { label: 'Portrait (4:5)', where: 'Instagram and Facebook feed, Threads, LinkedIn, X', width: 1080, height: 1350 },
+  { label: 'Square (1:1)', where: 'Instagram, Facebook, LinkedIn, X', width: 1080, height: 1080 },
+  {
+    label: 'Landscape (16:9)',
+    where: 'YouTube, X, LinkedIn, Facebook, Reddit, Mastodon, Tumblr, Telegram, Discord, Slack',
+    width: 1920,
+    height: 1080,
+  },
+  { label: 'Landscape HD (16:9)', where: 'Smaller file, quicker to make and upload', width: 1280, height: 720 },
 ]
+
+/** A custom frame side: even (the encoders need it), within what browsers encode. */
+export const MIN_SIDE = 160
+export const MAX_SIDE = 3840
+
+export function frameSide(v: number) {
+  const n = Math.round(Math.min(MAX_SIDE, Math.max(MIN_SIDE, Number.isFinite(v) ? v : MIN_SIDE)))
+
+  return n - (n % 2)
+}

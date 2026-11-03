@@ -24,6 +24,9 @@ import {
   splitSound,
   uid,
   VIDEO_SIZES,
+  MAX_SIDE,
+  MIN_SIDE,
+  frameSide,
   type Caption,
   type Clip,
   type Fit,
@@ -488,14 +491,18 @@ export function AddPanelBody({ ctx, panel }: { ctx: Ctx; panel: AddPanel }) {
                     t.height = s.height
                   })
                 }
-                className="flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted aria-pressed:border-brand aria-pressed:bg-brand-soft"
+                className="flex flex-col gap-0.5 rounded-md border px-3 py-2 text-left text-sm hover:bg-muted aria-pressed:border-brand aria-pressed:bg-brand-soft"
               >
-                {s.label}
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {s.width} x {s.height}
+                <span className="flex w-full items-baseline justify-between gap-2">
+                  <span className="min-w-0">{s.label}</span>
+                  <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                    {s.width}×{s.height}
+                  </span>
                 </span>
+                <span className="text-xs text-muted-foreground">{s.where}</span>
               </button>
             ))}
+            <CustomFrame ctx={ctx} />
           </Section>
           <Section title="Behind pictures that don't fill it">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -524,6 +531,54 @@ export function AddPanelBody({ ctx, panel }: { ctx: Ctx; panel: AddPanel }) {
         </div>
       )
   }
+}
+
+/** Any frame size: applied when a side is left (Enter or moving on), evened and kept within what browsers encode. */
+function CustomFrame({ ctx }: { ctx: Ctx }) {
+  const preset = VIDEO_SIZES.some((s) => s.width === ctx.doc.width && s.height === ctx.doc.height)
+  const side = (key: 'width' | 'height', label: string) => (
+    <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+      {label}
+      <Input
+        // A new value from outside (a preset) replaces what was typed.
+        key={ctx.doc[key]}
+        type="number"
+        inputMode="numeric"
+        min={MIN_SIDE}
+        max={MAX_SIDE}
+        step={2}
+        defaultValue={ctx.doc[key]}
+        className="h-8 tabular-nums"
+        onBlur={(e) => {
+          const v = frameSide(e.currentTarget.valueAsNumber)
+
+          e.currentTarget.value = String(v)
+
+          if (v !== ctx.doc[key]) {
+            ctx.update((t) => void (t[key] = v))
+          }
+        }}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      />
+    </label>
+  )
+
+  return (
+    <div
+      data-testid="custom-frame"
+      aria-current={!preset || undefined}
+      className="flex flex-col gap-2 rounded-md border px-3 py-2 text-sm aria-[current]:border-brand aria-[current]:bg-brand-soft"
+    >
+      Custom
+      <div className="flex items-end gap-2">
+        {side('width', 'Width')}
+        <span className="pb-2 text-muted-foreground" aria-hidden>
+          ×
+        </span>
+        {side('height', 'Height')}
+      </div>
+    </div>
+  )
 }
 
 const MOTIONS: { value: Motion; label: string }[] = [
