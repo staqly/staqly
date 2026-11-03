@@ -62,6 +62,7 @@ NOT_IN_SDK = {
     ("POST", "/v1/billing/webhook"),
     ("GET", "/v1/meta/webhook"),  # Meta calls these, clients never do
     ("POST", "/v1/meta/webhook"),
+    ("POST", "/v1/tiktok/webhook"),  # TikTok calls it, clients never do
     ("POST", "/v1/meta/deauthorize"),
     ("POST", "/v1/meta/data-deletion"),
     ("GET", "/v1/meta/data-deletion/{}"),

@@ -826,6 +826,30 @@ func (q *Queries) SetPostThread(ctx context.Context, arg SetPostThreadParams) er
 	return err
 }
 
+const setTargetExternalID = `-- name: SetTargetExternalID :exec
+UPDATE post_targets SET external_id = ?, external_url = ?, updated_at = ? WHERE post_id = ? AND channel_id = ?
+`
+
+type SetTargetExternalIDParams struct {
+	ExternalID  string `json:"external_id"`
+	ExternalUrl string `json:"external_url"`
+	UpdatedAt   string `json:"updated_at"`
+	PostID      string `json:"post_id"`
+	ChannelID   string `json:"channel_id"`
+}
+
+// The platform gave a published post its lasting id and link (TikTok: once the video is public).
+func (q *Queries) SetTargetExternalID(ctx context.Context, arg SetTargetExternalIDParams) error {
+	_, err := q.db.ExecContext(ctx, setTargetExternalID,
+		arg.ExternalID,
+		arg.ExternalUrl,
+		arg.UpdatedAt,
+		arg.PostID,
+		arg.ChannelID,
+	)
+	return err
+}
+
 const setTargetReplies = `-- name: SetTargetReplies :exec
 UPDATE post_targets SET replies = ?, updated_at = ? WHERE post_id = ? AND channel_id = ?
 `
@@ -896,6 +920,51 @@ type StripMediaFromPostsParams struct {
 func (q *Queries) StripMediaFromPosts(ctx context.Context, arg StripMediaFromPostsParams) error {
 	_, err := q.db.ExecContext(ctx, stripMediaFromPosts, arg.MediaID, arg.UpdatedAt, arg.WorkspaceID)
 	return err
+}
+
+const tikTokTargetsByExternalID = `-- name: TikTokTargetsByExternalID :many
+SELECT t.post_id, t.channel_id, t.external_url, p.workspace_id
+FROM post_targets t
+JOIN posts p ON p.id = t.post_id
+JOIN channels c ON c.id = t.channel_id
+WHERE t.external_id = ?1 AND t.external_id <> '' AND t.status = 'published' AND t.removal = ''
+  AND c.provider = 'tiktok'
+`
+
+type TikTokTargetsByExternalIDRow struct {
+	PostID      string `json:"post_id"`
+	ChannelID   string `json:"channel_id"`
+	ExternalUrl string `json:"external_url"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+// A post's TikTok targets with this id there (the publish id until TikTok makes the video public), still published.
+func (q *Queries) TikTokTargetsByExternalID(ctx context.Context, externalID string) ([]TikTokTargetsByExternalIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, tikTokTargetsByExternalID, externalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TikTokTargetsByExternalIDRow
+	for rows.Next() {
+		var i TikTokTargetsByExternalIDRow
+		if err := rows.Scan(
+			&i.PostID,
+			&i.ChannelID,
+			&i.ExternalUrl,
+			&i.WorkspaceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updatePost = `-- name: UpdatePost :execrows

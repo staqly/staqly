@@ -89,3 +89,8 @@ SELECT * FROM channels WHERE provider IN ('facebook', 'instagram', 'instagram_bu
 UPDATE channels SET credentials = '', avatar_url = '', profile_url = '', status = 'needs_reconnect', last_error = @last_error,
     updated_at = @updated_at
 WHERE id = @id;
+
+-- name: ConnectedTikTokChannels :many
+-- Every workspace's connected TikTok channels: a TikTok webhook names the account only by the open_id kept in the
+-- sealed credentials.
+SELECT id, workspace_id, credentials FROM channels WHERE provider = 'tiktok' AND status = 'connected' AND deleted_at IS NULL;

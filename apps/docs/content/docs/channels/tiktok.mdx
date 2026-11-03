@@ -106,6 +106,18 @@ Over the API: `{"privacy_level": "FOLLOWER_OF_CREATOR", "allow_duet": "false"}` 
 
 TikTok's API cannot comment, so a post's thread is not sent to TikTok.
 
+## Webhooks
+
+A video TikTok publishes while it is still reviewing it has no public id yet: the post links to the profile and
+has no numbers. With TikTok's webhooks, staqly hears when the video becomes public, links the post to it and
+reads its numbers right away; it also hears when someone removes the app from their TikTok account and asks to
+reconnect that channel instead of waiting for the next publish to fail.
+
+In the [developer portal](https://developers.tiktok.com/apps), in the app's **Products**, add **Webhooks**, set
+**Callback URL** to `https://<your dashboard>/api/v1/tiktok/webhook` and press **Test URL**. TikTok signs every
+call with the app's client secret, which the server already has; a call it can't check is refused. Nothing else to
+set on the server.
+
 ## When publishing fails
 
 | TikTok says | Staqly does |
