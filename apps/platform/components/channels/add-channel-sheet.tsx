@@ -25,12 +25,15 @@ import { ProviderGrid } from './provider-grid'
 const TelegramConnect = dynamic(() => import('./telegram-connect').then((m) => m.TelegramConnect), { ssr: false })
 
 /**
- * Bluesky's sign-in goes through bluesky.social, so an account on a server of its own connects with an app
- * password: the one other way in, offered under the form. Elsewhere sign-in is the only way.
+ * The other way into a platform, offered under the form when it works on this server: Bluesky's sign-in goes
+ * through bluesky.social, so an account on a server of its own connects with an app password; someone who may not
+ * add the bot to a Discord server can still post to one of its channels through a webhook made there.
  */
 const ALTERNATIVES: Record<string, { id: string; label: string }> = {
   bluesky: { id: 'bluesky_app_password', label: 'Account on a server of your own? Use an app password' },
   bluesky_app_password: { id: 'bluesky', label: 'Sign in with Bluesky instead (no app password)' },
+  discord: { id: 'discord_webhook', label: "Can't add the bot to the server? Use a channel webhook instead" },
+  discord_webhook: { id: 'discord', label: 'Add the bot to a whole Discord server instead' },
 }
 
 /** Connect one account of a chosen provider: OAuth sends the browser to the platform; token providers take their fields here. */

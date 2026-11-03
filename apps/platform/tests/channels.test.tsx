@@ -173,6 +173,32 @@ describe('channels', () => {
     expect(await screen.findAllByText(/is connected/)).not.toHaveLength(0)
   })
 
+  it('Discord through the bot offers a channel webhook instead, for someone who may not add the bot', async () => {
+    const discord = provider({ id: 'discord', name: 'Discord' })
+    const webhook = provider({
+      id: 'discord_webhook',
+      name: 'Discord webhook',
+      auth: 'token',
+      credential_fields: [{ key: 'webhook_url', label: 'Webhook URL', kind: 'secret', required: true }],
+      settings_fields: [],
+    })
+
+    mockApi({ 'GET /v1/channels': { data: [] }, 'GET /v1/providers': { data: [discord, webhook] } })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+    await user.click(await screen.findByTestId('add-channel'))
+    const sheet = await screen.findByRole('dialog', { name: 'Add channel' })
+
+    // The bot works, so the grid shows Discord alone.
+    expect(within(sheet).queryByRole('button', { name: 'Discord webhook' })).not.toBeInTheDocument()
+    await user.click(within(sheet).getByRole('button', { name: 'Discord' }))
+    await user.click(await screen.findByRole('button', { name: /Use a channel webhook instead/ }))
+    expect(await screen.findByLabelText(/Webhook URL/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Add the bot to a whole Discord server instead/ }))
+    expect(await screen.findByTestId('oauth-start')).toBeInTheDocument()
+  })
+
   it('your own automation: edit the endpoint URL, method and headers of a connected channel', async () => {
     const custom = provider({
       id: 'custom',
