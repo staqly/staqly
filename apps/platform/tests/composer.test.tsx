@@ -670,7 +670,8 @@ describe('composer', () => {
     const review = await screen.findByTestId('publish-review')
 
     expect(review).toHaveTextContent('Brand on Bluesky')
-    expect(review).toHaveTextContent('Takes pictures only, 4 files at most: leaves out clip.mp4')
+    expect(review).toHaveTextContent('Takes pictures only, 4 files at most')
+    expect(review).toHaveTextContent('leaves out clip.mp4')
     expect(review).not.toHaveTextContent('Brand on Mastodon')
     expect(api.find('POST', '/v1/posts')).toHaveLength(0)
     await user.click(screen.getByTestId('publish-review-confirm'))
