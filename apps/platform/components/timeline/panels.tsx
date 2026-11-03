@@ -630,14 +630,16 @@ function ClipInspector({ ctx, c }: { ctx: Ctx; c: Clip }) {
         </Button>
         <Button
           variant="outline"
-          size="sm"
+          size="icon-sm"
           className="ml-auto text-red-700 dark:text-red-400"
+          aria-label="Delete"
+          title="Delete"
           onClick={() => {
             ctx.update((t) => void t.clips.splice(i, 1))
             ctx.onSelect(null)
           }}
         >
-          <Trash2 /> Delete
+          <Trash2 />
         </Button>
       </div>
     </div>
@@ -831,14 +833,16 @@ function SoundInspector({ ctx, s }: { ctx: Ctx; s: Sound }) {
         </Button>
         <Button
           variant="outline"
-          size="sm"
+          size="icon-sm"
           className="ml-auto text-red-700 dark:text-red-400"
+          aria-label="Delete"
+          title="Delete"
           onClick={() => {
             ctx.update((t) => void (t.sounds = t.sounds.filter((x) => x.id !== s.id)))
             ctx.onSelect(null)
           }}
         >
-          <Trash2 /> Delete
+          <Trash2 />
         </Button>
       </div>
     </div>
