@@ -14,7 +14,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/staqly/staqly/apps/api/internal/app"
@@ -76,9 +75,8 @@ func run(log *slog.Logger) error {
 		if _, err := svc.AuthenticateAPIKey(ctx, key); err != nil {
 			return fmt.Errorf("STAQLY_API_KEY is invalid or revoked")
 		}
-		// The process can live for days: re-check the key on every tool call
-		// (cached up to a minute) so revocation and expiry take effect.
-		return mcpserver.NewWithAuth(svc, mcpserver.KeyAuth(svc, key, time.Minute), version).Run(ctx, &mcp.StdioTransport{})
+		// Long-lived sessions must use the key and creator's current permissions on every call.
+		return mcpserver.NewWithAuth(svc, mcpserver.KeyAuth(svc, key), version).Run(ctx, &mcp.StdioTransport{})
 	case cfg.App.Mode == app.ModeLocal:
 		if err := svc.EnsureLocalWorkspace(ctx); err != nil {
 			return err
