@@ -3,11 +3,13 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeDevTo answers like dev.to/api.
@@ -57,6 +59,14 @@ func (f *fakeDevTo) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			{"id": 99, "title": "Hello", "url": "https://dev.to/janedoe/hello-99", "body_markdown": f.existing},
 		})
 		_, _ = w.Write(b)
+	case r.URL.Path == "/articles/101":
+		_, _ = w.Write([]byte(`{"id":101,"public_reactions_count":7,"comments_count":2}`))
+	case r.URL.Path == "/articles/me/published":
+		_, _ = w.Write([]byte(`[{"id":7,"page_views_count":1},{"id":101,"page_views_count":250}]`))
+	case r.URL.Path == "/comments" && r.URL.Query().Get("a_id") == "101":
+		_, _ = w.Write([]byte(`[{"id_code":"c1","created_at":"2026-11-03T10:00:00Z","body_html":"<p>Nice &amp; clear</p>","user":{"name":"Ann","username":"ann"},
+			"children":[{"id_code":"c2","created_at":"2026-11-03T11:00:00Z","body_html":"<p>Thanks!</p>","user":{"name":"Jane Doe","username":"janedoe"},"children":[]}]},
+			{"id_code":"c3","created_at":"2026-11-03T09:00:00Z","body_html":"<p>[deleted]</p>","user":{},"children":[]}]`))
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -169,5 +179,32 @@ func TestDevToValidate(t *testing.T) {
 	blogWantInvalid(t, d.Validate(PostContent{Text: "x", Media: []MediaFile{{MimeType: "video/mp4"}}}, Settings{"title": "T"}), "media")
 	if err := d.Validate(PostContent{Text: "x"}, Settings{"title": "T", "tags": "go, web dev"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDevToNumbersAndComments(t *testing.T) {
+	newFakeDevTo(t)
+	d, _ := Get("devto")
+	c := Credentials{"api_key": "good", "username": "janedoe"}
+	m, err := d.Provider.(MetricsReader).Metrics(context.Background(), c, "101")
+	if err != nil || *m.Likes != 7 || *m.Replies != 2 || m.Impressions == nil || *m.Impressions != 250 {
+		t.Fatalf("metrics %+v %v", m, err)
+	}
+	// Deleted (or unpublished) on Dev.to: gone.
+	if _, err := d.Provider.(MetricsReader).Metrics(context.Background(), c, "555"); !errors.Is(err, ErrGone) {
+		t.Fatalf("deleted article: %v", err)
+	}
+	rs, err := d.Provider.(ResponseReader).Responses(context.Background(), c, "101", time.Time{})
+	if err != nil || len(rs) != 2 {
+		t.Fatalf("responses %+v %v", rs, err)
+	}
+	if rs[0].ID != "c1" || rs[0].Text != "Nice & clear" || rs[0].AuthorHandle != "@ann" || rs[0].Own || rs[0].URL != "https://dev.to/ann/comment/c1" {
+		t.Fatalf("first %+v", rs[0])
+	}
+	if rs[1].ParentID != "c1" || !rs[1].Own {
+		t.Fatalf("reply %+v", rs[1])
+	}
+	if rs, _ := d.Provider.(ResponseReader).Responses(context.Background(), c, "101", time.Date(2026, 11, 3, 10, 30, 0, 0, time.UTC)); len(rs) != 1 || rs[0].ID != "c2" {
+		t.Fatalf("since: %+v", rs)
 	}
 }

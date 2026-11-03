@@ -1,12 +1,15 @@
 package providers
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -199,6 +202,83 @@ func devtoError(status int, raw []byte) error {
 		return &Failure{Kind: ErrRejected, Msg: "Dev.to: " + devtoDuplicateMsg + " (" + detail + "); change the title or the text to post it again"}
 	case status == http.StatusForbidden:
 		return &Failure{Kind: ErrRejected, Msg: "Dev.to refused it (" + detail + ")"}
+	case status == http.StatusNotFound: // ErrGone: reading the numbers of an article deleted or unpublished on Dev.to
+		return &Failure{Kind: ErrGone, Msg: "Dev.to: the article is not there any more (" + detail + ")"}
 	}
 	return &Failure{Kind: ErrRejected, Msg: "Dev.to: " + detail}
+}
+
+// Dev.to reports reactions, comments and (to the author) views, and its comments are public.
+var (
+	_ MetricsReader  = DevTo{}
+	_ ResponseReader = DevTo{}
+)
+
+// Metrics reads the article's reactions and comments, and its views from the author's own list. An article that
+// is no longer public (deleted or unpublished on Dev.to) answers 404: ErrGone.
+func (DevTo) Metrics(ctx context.Context, c Credentials, externalID string) (Metrics, error) {
+	key := c["api_key"]
+	if key == "" {
+		return Metrics{}, &Failure{Kind: ErrReauth, Msg: "Dev.to: no account stored; reconnect the account"}
+	}
+	var a struct {
+		Reactions int64 `json:"public_reactions_count"`
+		Comments  int64 `json:"comments_count"`
+	}
+	if err := devtoCall(ctx, key, http.MethodGet, "/articles/"+url.PathEscape(externalID), nil, &a); err != nil {
+		return Metrics{}, err
+	}
+	m := Metrics{Likes: &a.Reactions, Replies: &a.Comments}
+	// Views are only in the author's list; without them the other numbers still count.
+	var mine []struct {
+		ID    int64 `json:"id"`
+		Views int64 `json:"page_views_count"`
+	}
+	if devtoCall(ctx, key, http.MethodGet, "/articles/me/published?per_page=1000", nil, &mine) == nil {
+		for _, x := range mine {
+			if strconv.FormatInt(x.ID, 10) == externalID {
+				m.Impressions = &x.Views
+			}
+		}
+	}
+	return m, nil
+}
+
+// devtoComment is one comment of GET /comments?a_id=, with its replies nested.
+type devtoComment struct {
+	ID       string    `json:"id_code"`
+	Created  time.Time `json:"created_at"`
+	BodyHTML string    `json:"body_html"`
+	User     struct {
+		Name     string `json:"name"`
+		Username string `json:"username"`
+	} `json:"user"`
+	Children []devtoComment `json:"children"`
+}
+
+// Responses reads the article's comments (a public endpoint), flattening the threads.
+func (DevTo) Responses(ctx context.Context, c Credentials, externalID string, since time.Time) ([]Response, error) {
+	key := c["api_key"]
+	if key == "" {
+		return nil, &Failure{Kind: ErrReauth, Msg: "Dev.to: no account stored; reconnect the account"}
+	}
+	var tree []devtoComment
+	if err := devtoCall(ctx, key, http.MethodGet, "/comments?a_id="+url.QueryEscape(externalID), nil, &tree); err != nil {
+		return nil, err
+	}
+	var out []Response
+	var walk func(list []devtoComment, parent string)
+	walk = func(list []devtoComment, parent string) {
+		for _, d := range list {
+			// A deleted comment keeps its place in the thread with no author: its replies still count.
+			if len(out) < maxResponses && d.User.Username != "" && (since.IsZero() || d.Created.After(since)) {
+				out = append(out, Response{ID: d.ID, ParentID: parent, Author: cmp.Or(d.User.Name, d.User.Username),
+					AuthorHandle: "@" + d.User.Username, Text: mastodonText(d.BodyHTML), URL: "https://dev.to/" + d.User.Username + "/comment/" + d.ID,
+					CreatedAt: d.Created, Own: d.User.Username == c["username"]})
+			}
+			walk(d.Children, d.ID)
+		}
+	}
+	walk(tree, "")
+	return out, nil
 }
