@@ -96,7 +96,7 @@ describe('persistence', () => {
   })
 
   it('restores a backup: the database and secret.key go back, channels still work', async () => {
-    // Like scripts/backup.sh: a consistent snapshot while the server runs, copied out with the key.
+    // The database-only command supports a live snapshot; no media is deleted during this test.
     const dir = mkdtempSync(join(tmpdir(), 'staqly-e2e-backup-'))
 
     await server('backup', '/data/backups/e2e.db')

@@ -28,8 +28,10 @@ describe('backup card', () => {
     mockApi({})
     renderWithProviders(<BackupCard />, { mode: 'local' })
     expect(screen.getByText('staqly serve backup ~/staqly-backup.db')).toBeInTheDocument()
+    expect(screen.getByText(/Stop staqly until all of them have been copied/)).toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Docker' }))
-    expect(screen.getByText(/docker exec staqly server backup/)).toBeInTheDocument()
+    expect(screen.getByText(/docker stop -t 30 staqly/)).toHaveTextContent(/workspace\.db-wal/)
+    expect(screen.getByText(/docker start staqly/)).toHaveTextContent(/secret\.key notify_secret\.key access_token/)
   })
 
   it('cloud, paid: lists backups with Download and creates one', async () => {

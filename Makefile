@@ -112,7 +112,7 @@ lint-workflows: ## Lint the GitHub Actions workflows (actionlint + shellcheck, i
 gen: ## Regenerate sqlc queries, dashboard API types and the TypeScript SDK schema
 	pnpm turbo run gen
 
-backup: ## Back up the Compose install (container staqly, volume staqly_staqly-data) into ./backups/<timestamp>
+backup: ## Back up the stopped Compose install (container staqly, volume staqly_staqly-data) into ./backups/<timestamp>
 	./scripts/backup.sh
 
 restore: ## Restore the Compose install: make restore BACKUP=backups/<timestamp>
