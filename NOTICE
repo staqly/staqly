@@ -42,3 +42,6 @@ The video and sound editor (apps/platform/components/timeline) writes MP4 and M4
 packages/brand/fonts holds Geist and Geist Mono (https://github.com/vercel/geist-font), Copyright (c)
 2023 Vercel, in collaboration with basement.studio, SIL Open Font License 1.1
 (packages/brand/fonts/OFL.txt), subset to Latin for the docs and staqly.ai.
+
+The platforms' logos in apps/*/public/brand/providers come from svgl (https://svgl.app, MIT); each logo is a
+trademark of its owner, shown only to name the platform a channel publishes to.

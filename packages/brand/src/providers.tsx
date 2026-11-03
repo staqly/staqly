@@ -29,7 +29,8 @@ import {
 import { classes } from './classes'
 
 /**
- * How each provider looks (dashboard and landing page): its brand icon (simple-icons, CC0) and colour. The list of
+ * How each provider looks (app and landing page): its own full-colour logo on tiles where svgl has one, and its
+ * brand icon (simple-icons, CC0) and colour for small icons and the rest. The list of
  * providers itself comes from the API (`GET /providers`); this only decorates it. A provider without a brand
  * icon here gets a lettered badge in its colour.
  */
@@ -47,6 +48,12 @@ interface Look {
   tile?: string
   /** A raster mark (Moltbook's mascot, which has no vector one): its file in the app's public/, shown as is on a white tile. */
   image?: string
+  /**
+   * The platform's own full-colour logo (svgl.app), in the app's public/brand/providers/<logo>.svg: the tile shows it
+   * as the platform draws it. `dark`: a black mark has <logo>-dark.svg, a light one for dark backgrounds.
+   */
+  logo?: string
+  dark?: boolean
 }
 
 // Facebook's "f" alone, centred in a 24 x 24 box: its logo is a circle with the f cut out and resting on the
@@ -81,36 +88,36 @@ const SLACK = [
 
 const LOOKS: Record<string, Look> = {
   custom: { color: '#22c55e', glyph: Workflow },
-  x: { icon: siX, color: '#000000' },
-  linkedin: { icon: LINKEDIN, color: '#0A66C2' },
-  linkedin_page: { icon: LINKEDIN, color: '#0A66C2' },
-  reddit: { icon: siReddit, color: '#FF4500' },
-  instagram: { icon: siInstagram, color: '#FF0069' },
-  instagram_business: { icon: siInstagram, color: '#FF0069' },
-  facebook: { icon: siFacebook, color: '#0866FF', tile: FACEBOOK_F },
-  threads: { icon: siThreads, color: '#000000' },
-  youtube: { icon: siYoutube, color: '#FF0000' },
+  x: { icon: siX, color: '#000000', logo: 'x', dark: true },
+  linkedin: { icon: LINKEDIN, color: '#0A66C2', logo: 'linkedin' },
+  linkedin_page: { icon: LINKEDIN, color: '#0A66C2', logo: 'linkedin' },
+  reddit: { icon: siReddit, color: '#FF4500', logo: 'reddit' },
+  instagram: { icon: siInstagram, color: '#FF0069', logo: 'instagram' },
+  instagram_business: { icon: siInstagram, color: '#FF0069', logo: 'instagram' },
+  facebook: { icon: siFacebook, color: '#0866FF', tile: FACEBOOK_F, logo: 'facebook' },
+  threads: { icon: siThreads, color: '#000000', logo: 'threads', dark: true },
+  youtube: { icon: siYoutube, color: '#FF0000', logo: 'youtube' },
   google_business: { icon: siGoogle, color: '#4285F4' },
-  tiktok: { icon: siTiktok, color: '#000000' },
-  pinterest: { icon: siPinterest, color: '#BD081C' },
-  dribbble: { icon: siDribbble, color: '#EA4C89' },
-  discord: { icon: siDiscord, color: '#5865F2' },
-  discord_webhook: { icon: siDiscord, color: '#5865F2' },
-  slack: { parts: SLACK, color: '#4A154B' },
+  tiktok: { icon: siTiktok, color: '#000000', logo: 'tiktok', dark: true },
+  pinterest: { icon: siPinterest, color: '#BD081C', logo: 'pinterest' },
+  dribbble: { icon: siDribbble, color: '#EA4C89', logo: 'dribbble' },
+  discord: { icon: siDiscord, color: '#5865F2', logo: 'discord' },
+  discord_webhook: { icon: siDiscord, color: '#5865F2', logo: 'discord' },
+  slack: { parts: SLACK, color: '#4A154B', logo: 'slack' },
   kick: { icon: siKick, color: '#53FC19' },
-  twitch: { icon: siTwitch, color: '#9146FF' },
-  mastodon: { icon: siMastodon, color: '#6364FF' },
-  mastodon_token: { icon: siMastodon, color: '#6364FF' },
-  bluesky: { icon: siBluesky, color: '#1185FE' },
-  bluesky_app_password: { icon: siBluesky, color: '#1185FE' },
-  telegram: { icon: siTelegram, color: '#26A5E4' },
+  twitch: { icon: siTwitch, color: '#9146FF', logo: 'twitch' },
+  mastodon: { icon: siMastodon, color: '#6364FF', logo: 'mastodon' },
+  mastodon_token: { icon: siMastodon, color: '#6364FF', logo: 'mastodon' },
+  bluesky: { icon: siBluesky, color: '#1185FE', logo: 'bluesky' },
+  bluesky_app_password: { icon: siBluesky, color: '#1185FE', logo: 'bluesky' },
+  telegram: { icon: siTelegram, color: '#26A5E4', logo: 'telegram' },
   medium: { icon: siMedium, color: '#000000' },
   devto: { icon: siDevdotto, color: '#0A0A0A' },
-  hashnode: { icon: siHashnode, color: '#2962FF' },
-  wordpress: { icon: siWordpress, color: '#21759B' },
+  hashnode: { icon: siHashnode, color: '#2962FF', logo: 'hashnode' },
+  wordpress: { icon: siWordpress, color: '#21759B', logo: 'wordpress' },
   listmonk: { icon: siListmonk, color: '#0055D4' },
   moltbook: { image: '/brand/moltbook.webp', color: '#E0453A' },
-  whop: { color: '#FF6243', letters: 'W' },
+  whop: { color: '#FF6243', letters: 'W', logo: 'whop' },
   tumblr: { icon: siTumblr, color: '#36465D' },
 }
 
@@ -237,6 +244,29 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
 export function ProviderTile({ id, name, className }: { id: string; name?: string; className?: string }) {
   const look = providerLook(id)
   const label = name ?? look.icon?.title ?? id
+
+  if (look.logo) {
+    const src = `/brand/providers/${look.logo}.svg`
+
+    // The logo as the platform draws it, on no tile of ours; a black one swaps to its light version in dark mode.
+    return (
+      <span
+        role="img"
+        aria-label={label}
+        className={classes('inline-flex shrink-0 items-center justify-center', ['size-9'], className)}
+      >
+        <img src={src} alt="" className={`size-[90%] object-contain ${look.dark ? '[.dark_&]:hidden' : ''}`} />
+        {look.dark && (
+          <img
+            src={`/brand/providers/${look.logo}-dark.svg`}
+            alt=""
+            className="hidden size-[90%] object-contain [.dark_&]:block"
+          />
+        )}
+      </span>
+    )
+  }
+
   // Like an app icon: the brand colour fills the tile and the mark is white (black on a very light colour).
   // A multi-colour mark (Slack) keeps its colours on white.
   const background = look.parts || look.image ? '#ffffff' : id.startsWith('instagram') ? INSTAGRAM : look.color
