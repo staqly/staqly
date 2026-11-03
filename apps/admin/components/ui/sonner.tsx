@@ -28,7 +28,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           '--normal-border': 'var(--border)',
           '--border-radius': 'var(--radius)',
           // Sonner's 356 px fits a title and two buttons poorly: a long title wrapped to three lines.
-          '--width': '420px',
+          '--width': '480px',
           // Opaque: a light brand tint mixed into the popover colour (--brand-soft is translucent).
           '--success-bg': 'color-mix(in oklch, var(--brand) 14%, var(--popover))',
           '--success-border': 'color-mix(in oklch, var(--brand) 35%, transparent)',
