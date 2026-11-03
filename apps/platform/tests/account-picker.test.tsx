@@ -118,6 +118,6 @@ describe('picking accounts after a sign-in', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(window.location.search).toBe('')
     expect(window.location.hash).toBe('#tok_abc')
-    expect(await screen.findByRole('button', { name: /Facebook Page/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Facebook Page' })).toBeInTheDocument()
   })
 })
