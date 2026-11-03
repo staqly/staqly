@@ -474,3 +474,34 @@ func TestQuotaWait(t *testing.T) {
 		}
 	}
 }
+
+// The sweep's candidate can be updated after the scan but before its transaction starts.
+func TestJobsSweepDoesNotReplaceAConcurrentRequeue(t *testing.T) {
+	s, _ := queueTest(t)
+	ctx := t.Context()
+	old := db.UpsertJobRequeueParams{Key: "latest:1", WorkspaceID: "ws_test", Kind: "test_fast", Payload: `{"post_id":"old"}`, RunAt: formatTime(s.Now()), MaxAttempts: 3, CreatedAt: formatTime(s.Now().Add(-2 * time.Minute))}
+	if err := s.Q.UpsertJobRequeue(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := s.Q.GetJobRequeue(ctx, old.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	later := s.Now().Add(time.Hour)
+	newest := old
+	newest.Payload, newest.RunAt, newest.CreatedAt = `{"post_id":"newest"}`, formatTime(later), s.now()
+	if err := s.Q.UpsertJobRequeue(ctx, newest); err != nil {
+		t.Fatal(err)
+	}
+	if taken, err := s.sweepJobRequeue(ctx, candidate); err != nil || !taken {
+		t.Fatalf("sweep %v %v", taken, err)
+	}
+	jobs := jobsByKey(t, s, old.Key)
+	if len(jobs) != 1 {
+		t.Fatalf("jobs: %+v", jobs)
+	}
+	job := toJob(jobs[0])
+	if job.Payload.PostID != "newest" || jobs[0].ScheduledAt.Sub(later).Abs() > time.Millisecond {
+		t.Fatalf("sweep restored stale request over the latest one: %+v", job)
+	}
+}
