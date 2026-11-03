@@ -5,7 +5,9 @@ description: Back up your staqly database, files and keys together, and restore 
 
 Everything staqly knows (posts, channels, schedules, history, settings and uploaded files) lives in
 one data directory. Back it up regularly, and always before an [upgrade](/self-hosting/upgrades).
-Backups are taken while staqly keeps running; restoring needs a short stop.
+Database-only backups can run while staqly keeps serving requests. A full backup of the
+database, files and keys requires stopping every writer until all copies finish; restore also
+requires a stop.
 
 With `STORAGE_DRIVER=s3` the uploaded files are in a bucket, not in the data directory: back the
 bucket up with your provider's tools. See [Media storage](/self-hosting/storage#backups).
@@ -14,7 +16,7 @@ bucket up with your provider's tools. See [Media storage](/self-hosting/storage#
 
 | File | What it is |
 |---|---|
-| `workspace.db` | The SQLite database, the job queue included (scheduled posts and pending retries). Back it up with the backup command, never by copying the file. |
+| `workspace.db` | The SQLite database, the job queue included (scheduled posts and pending retries). Use the backup command, or copy it only from a cleanly stopped install after checking the WAL. |
 | `uploads/` | Uploaded media, one folder per workspace (`uploads/workspaces/<id>/`). Their `thumbs/` folders are a cache staqly rebuilds; you can skip them. |
 | `secret.key` | Decrypts channel credentials and developer app secrets. Only there if you haven't set `STAQLY_SECRET_KEY`. **Without it every channel has to be reconnected.** |
 | `notify_secret.key` | Decrypts alert secrets. Only there if you haven't set `NOTIFY_SECRET_KEY`. |
