@@ -116,7 +116,9 @@ message was deleted in the meantime still goes out, as a plain message.
 ## Through a webhook
 
 On a staqly server without a Discord bot, **Channels → Add channel** shows **Discord webhook**
-(provider `discord_webhook`). It needs nothing from whoever runs the server: anyone who may manage a
+(provider `discord_webhook`). With the bot, **Connect Discord** offers it under the button (*Can't add the
+bot to the server? Use a channel webhook instead*), for someone who may manage one channel's webhooks
+but not add a bot to the whole server; it needs `PROVIDER_DISCORD_WEBHOOK_ENABLED=true`. It needs nothing from whoever runs the server: anyone who may manage a
 Discord channel makes a webhook there in a minute. Every Discord channel connected before staqly had
 the bot is such a webhook channel, and keeps working as it was.
 
