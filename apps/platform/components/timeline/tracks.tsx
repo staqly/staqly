@@ -16,6 +16,10 @@ type Update = (fn: (t: Timeline) => void, coalesce?: string) => void
 const ROW = 52
 const LABEL = 92
 const MIN = 0.5
+// Widths (px) from which a block shows its icon, its name and its length; narrower, the tooltip says them.
+const ICON_MIN = 20
+const LABEL_MIN = 44
+const LENGTH_MIN = 64
 
 /** Follows the pointer from a press until it is let go, in seconds along the timeline (`pps` pixels each). */
 function dragSeconds(
@@ -203,6 +207,7 @@ export function Tracks({
         role="option"
         aria-selected={selected}
         aria-label={`${c.name}, ${c.duration.toFixed(1)} s`}
+        title={`${c.name}, ${c.duration.toFixed(1)} s`}
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && onSelect({ kind: 'clip', id: c.id })}
         className={cn(
@@ -247,21 +252,33 @@ export function Tracks({
         }}
       >
         {c.kind === 'image' ? (
-          <span
-            aria-hidden
-            className="absolute inset-0 bg-repeat-x opacity-70"
-            style={{ backgroundImage: `url(${mediaThumbUrl(c.mediaId, 160)})`, backgroundSize: 'auto 100%' }}
-          />
+          <>
+            <span
+              aria-hidden
+              className="absolute inset-0 bg-repeat-x opacity-70"
+              style={{ backgroundImage: `url(${mediaThumbUrl(c.mediaId, 160)})`, backgroundSize: 'auto 100%' }}
+            />
+            {/* Darker at the edges, where the name and the length sit, so they read over any picture. */}
+            <span aria-hidden className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/10 to-black/60" />
+          </>
         ) : (
           <span aria-hidden className="absolute inset-0 bg-gradient-to-r from-indigo-900 to-indigo-700 opacity-90" />
         )}
-        <span className="relative flex items-center gap-1 truncate px-2 pt-1 font-medium drop-shadow [&_svg]:size-3">
-          {c.kind === 'video' ? <Film /> : <ImageIcon />}
-          <span className="truncate">{c.name}</span>
+        {/* A narrow clip shows only its icon, then its name; the length once it fits beside nothing (the tooltip has both). */}
+        <span
+          className={cn(
+            'relative flex items-center gap-1 pt-1 font-medium drop-shadow [&_svg]:size-3 [&_svg]:shrink-0',
+            w < LABEL_MIN ? 'justify-center' : 'px-2',
+          )}
+        >
+          {w >= ICON_MIN && (c.kind === 'video' ? <Film /> : <ImageIcon />)}
+          {w >= LABEL_MIN && <span className="min-w-0 truncate">{c.name}</span>}
         </span>
-        <span className="absolute right-2 bottom-1 font-mono text-[10px] opacity-90 drop-shadow">
-          {c.duration.toFixed(1)} s
-        </span>
+        {w >= LENGTH_MIN && (
+          <span className="absolute right-2 bottom-1 font-mono text-[10px] opacity-90 drop-shadow">
+            {c.duration.toFixed(1)} s
+          </span>
+        )}
         <Handles
           onLeft={
             c.kind === 'video'
@@ -351,6 +368,7 @@ export function Tracks({
                     role="option"
                     aria-selected={selected}
                     aria-label={`Caption: ${c.text}`}
+                    title={c.text}
                     tabIndex={0}
                     onKeyDown={(e) => e.key === 'Enter' && onSelect({ kind: 'caption', id: c.id })}
                     className={cn(
@@ -375,7 +393,7 @@ export function Tracks({
                       )
                     }}
                   >
-                    {c.text}
+                    {(c.end - c.start) * pps >= LABEL_MIN && c.text}
                     <Handles
                       onLeft={(e) => {
                         const s0 = c.start
@@ -424,6 +442,7 @@ export function Tracks({
                       role="option"
                       aria-selected={selected}
                       aria-label={`${s.name}, ${s.duration.toFixed(1)} s`}
+                      title={`${s.name}, ${s.duration.toFixed(1)} s`}
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && onSelect({ kind: 'sound', id: s.id })}
                       className={cn(
@@ -460,7 +479,9 @@ export function Tracks({
                           style={{ width: s.fadeOut * pps }}
                         />
                       )}
-                      <span className="relative block truncate px-2 pt-0.5 font-medium drop-shadow">{s.name}</span>
+                      {w >= LABEL_MIN && (
+                        <span className="relative block truncate px-2 pt-0.5 font-medium drop-shadow">{s.name}</span>
+                      )}
                       <Handles
                         onLeft={(e) => {
                           const { start: st0, in: in0, duration: d0 } = s
