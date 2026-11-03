@@ -170,7 +170,7 @@ function TextFilter({
 
 const ACTOR_LABELS: Record<string, string> = {
   local: 'Local (you & local agents)',
-  session: 'Dashboard sessions',
+  session: 'App sessions',
   api_key: 'API keys (agents)',
   system: 'System',
 }

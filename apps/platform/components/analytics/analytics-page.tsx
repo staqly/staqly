@@ -196,8 +196,8 @@ export function AnalyticsPage() {
           <SourcesTable data={data} />
           <Performance data={data} />
           <PostingTimes data={data} />
-          <FailuresList data={data} />
           <TopPosts data={data} />
+          <FailuresList data={data} />
         </div>
       )}
     </PageContainer>

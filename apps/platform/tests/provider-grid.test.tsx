@@ -1,8 +1,9 @@
-import { render, screen, within } from '@testing-library/react'
+import { render as rtlRender, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import { ProviderGrid } from '@/components/channels/provider-grid'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 /** The Communities and chat tiles, with Discord's bot available or not. */
 const chatTiles = (discord: 'available' | 'soon') => {
@@ -24,6 +25,9 @@ const chatTiles = (discord: 'available' | 'soon') => {
 
   return ids
 }
+
+// The app's providers hold a TooltipProvider; the "?" needs one.
+const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvider })
 
 describe('ProviderGrid', () => {
   it('lists available platforms before the ones coming soon, keeping the catalog order within each', () => {
@@ -65,12 +69,21 @@ describe('ProviderGrid', () => {
 
     expect(screen.getByTestId('provider-whop')).toHaveAccessibleDescription("Posts to a Whop community's forum")
     await user.click(screen.getByRole('button', { name: 'What Whop publishes' }))
-    expect(await screen.findByRole('dialog')).toHaveTextContent("Posts to a Whop community's forum")
+    expect(await screen.findByRole('tooltip')).toHaveTextContent("Posts to a Whop community's forum")
   })
 
   it('a platform whose name says it all has no "?"', () => {
-    render(<ProviderGrid providers={[{ id: 'youtube', name: 'YouTube', status: 'available' }]} onPick={() => {}} />)
+    render(
+      <ProviderGrid
+        providers={[
+          { id: 'youtube', name: 'YouTube', status: 'available' },
+          { id: 'discord', name: 'Discord', status: 'available' },
+        ]}
+        onPick={() => {}}
+      />,
+    )
 
     expect(screen.queryByRole('button', { name: 'What YouTube publishes' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'What Discord publishes' })).toBeNull()
   })
 })

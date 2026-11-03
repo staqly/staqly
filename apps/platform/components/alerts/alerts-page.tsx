@@ -310,7 +310,7 @@ export function AlertsPage() {
       <section className="mt-6 grid grid-cols-1 gap-4" aria-label="Alerts">
         {/* How decisions from a channel behave: a note under the section's subtitle. */}
         <Callout tone="neutral" size="xs" className="text-muted-foreground">
-          Decisions from chat or links go through the same path as the dashboard: events and webhooks fire as usual.
+          Decisions from chat or links go through the same path as the app: events and webhooks fire as usual.
         </Callout>
 
         {channels.isLoading ? (

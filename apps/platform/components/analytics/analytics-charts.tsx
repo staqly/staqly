@@ -436,22 +436,45 @@ function BestTimes({ best, minSamples }: { best: TimeSlot[]; minSamples: number 
   }
 
   const confident = best.some((b) => !b.low_confidence)
+  const top = Math.max(...best.map((b) => b.avg_engagements ?? 0), 1)
 
   return (
-    <div className="grid gap-1 text-sm" data-testid="best-times">
-      <h3 className="font-medium">Best times by average engagement</h3>
-      <ol className="grid gap-0.5">
-        {best.map((b) => (
-          <li key={`${b.weekday}-${b.hour}`}>
-            {WEEKDAYS[b.weekday]} {hourLabel(b.hour)}: {b.avg_engagements} average engagements from {b.samples}{' '}
-            {b.samples === 1 ? 'post' : 'posts'}
-            {b.low_confidence && <span className="text-muted-foreground"> (low confidence)</span>}
+    <div className="grid gap-2 text-sm" data-testid="best-times">
+      <div>
+        <h3 className="font-medium">Best times to post</h3>
+        <p className="text-xs text-muted-foreground">Ranked by average engagements per post</p>
+      </div>
+      <ol className="grid max-w-xl gap-1.5">
+        {best.map((b, i) => (
+          <li
+            key={`${b.weekday}-${b.hour}`}
+            className="grid grid-cols-[1.25rem_8.5rem_minmax(3rem,1fr)_auto] items-center gap-3"
+          >
+            <span className="text-xs text-muted-foreground tabular-nums">{i + 1}.</span>
+            <span className="font-medium">
+              {WEEKDAYS[b.weekday]} {hourLabel(b.hour)}
+            </span>
+            <span className="h-2 rounded-full bg-muted" aria-hidden>
+              <span
+                className="block h-full rounded-full bg-(--heat-3)"
+                style={{ width: `${Math.max(2, ((b.avg_engagements ?? 0) / top) * 100)}%` }}
+              />
+            </span>
+            <span className="text-right whitespace-nowrap tabular-nums">
+              {b.avg_engagements ?? '—'} <span className="text-muted-foreground">avg</span>
+              <span className="text-xs text-muted-foreground">
+                {' '}
+                · {b.samples} {b.samples === 1 ? 'post' : 'posts'}
+                {/* With every slot thin the note below says it once; otherwise each thin slot says so. */}
+                {confident && b.low_confidence && ' · low confidence'}
+              </span>
+            </span>
           </li>
         ))}
       </ol>
       {!confident && (
         <p className="text-xs text-muted-foreground">
-          Every slot has fewer than {minSamples} posts with numbers, so treat these as hints, not advice.
+          Every slot has fewer than {minSamples} posts with numbers (low confidence): treat these as hints, not advice.
         </p>
       )}
     </div>
