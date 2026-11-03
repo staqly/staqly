@@ -1,26 +1,17 @@
 /**
- * What a post becomes on each platform, one line for the "?" on its tile in Add channel: where it lands and, where
- * two ways into one platform sit side by side, which one this is.
+ * The "?" on a tile in Add channel, only where its name doesn't say it all: where a post lands when that is not the
+ * obvious place (Pages only, chat messages, email), what an account must be, and which of two ways into one platform
+ * this is. A platform whose name is the whole story (X, YouTube, Dev.to) has none.
  */
 export const PROVIDER_HINTS: Record<string, string> = {
   custom: 'Hands each post to n8n, a script or an agent of your own, which reports back',
-  x: 'Posts to your X profile',
   linkedin: 'Posts to your personal LinkedIn profile',
   linkedin_page: 'Posts to LinkedIn company pages you administer',
-  reddit: 'Posts to a subreddit you choose',
   facebook: 'Posts, reels and stories on Facebook Pages you manage',
   instagram: 'Posts, reels and stories on an Instagram Business or Creator account',
   instagram_business: 'An Instagram account linked to a Facebook Page, signed in with Facebook',
-  threads: 'Posts to your Threads profile',
-  youtube: 'Uploads videos to your YouTube channel',
   google_business: 'Updates on a Google Business Profile location',
-  tiktok: 'Publishes videos to your TikTok account',
-  pinterest: 'Pins on one of your Pinterest boards',
-  dribbble: 'Shots on your Dribbble profile',
-  tumblr: 'Posts to your Tumblr blogs',
-  mastodon: 'Posts to your account on any Mastodon server',
   mastodon_token: 'Mastodon with an access token made on your server',
-  bluesky: 'Posts to your Bluesky account',
   bluesky_app_password: 'Bluesky with an app password, for accounts on a server of their own',
   kick: 'Chat messages in your Kick channel',
   twitch: 'Chat messages in your Twitch channel',
@@ -31,8 +22,6 @@ export const PROVIDER_HINTS: Record<string, string> = {
   whop: "Posts to a Whop community's forum",
   moltbook: 'Posts as your AI agent on Moltbook, the social network for agents',
   medium: 'Stories on your Medium profile or a publication',
-  devto: 'Articles on DEV (dev.to)',
-  hashnode: 'Articles on your Hashnode blog',
   wordpress: 'Posts on your self-hosted WordPress site',
   listmonk: 'Email campaigns from your self-hosted listmonk',
 }

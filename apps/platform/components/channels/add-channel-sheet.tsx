@@ -342,7 +342,8 @@ function AlternativeLink({ label, onPick }: { label: string; onPick: () => void 
     <button
       type="button"
       onClick={onPick}
-      className="text-left text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground pointer-coarse:-my-3 pointer-coarse:py-3"
+      // Shares the row with the button and wraps beside it, instead of a line of its own above it.
+      className="min-w-0 flex-1 basis-40 text-left text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground pointer-coarse:-my-3 pointer-coarse:py-3"
     >
       {label}
     </button>

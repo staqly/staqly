@@ -67,4 +67,10 @@ describe('ProviderGrid', () => {
     await user.click(screen.getByRole('button', { name: 'What Whop publishes' }))
     expect(await screen.findByRole('dialog')).toHaveTextContent("Posts to a Whop community's forum")
   })
+
+  it('a platform whose name says it all has no "?"', () => {
+    render(<ProviderGrid providers={[{ id: 'youtube', name: 'YouTube', status: 'available' }]} onPick={() => {}} />)
+
+    expect(screen.queryByRole('button', { name: 'What YouTube publishes' })).toBeNull()
+  })
 })
