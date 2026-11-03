@@ -1809,31 +1809,27 @@ export function ComposerForm({
         onValueChange={(v) => setSection(v as typeof section)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        {/* Post and Settings are always there (Settings waits for a channel with options); Insights once it went out. */}
+        {/* Post always; Settings while it can still change (it waits for a channel with options); Insights once it went out. */}
         <div className="overflow-x-auto px-4 pt-3 pb-1">
           <TabsList aria-label="Post sections">
             <TabsTrigger value="post">Post</TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              data-testid="tab-settings"
-              disabled={settingsChannels.length === 0}
-              title={
-                settingsChannels.length > 0
-                  ? undefined
-                  : locked
-                    ? 'It went out: its settings can no longer change'
-                    : 'Pick a channel with its own options first'
-              }
-            >
-              Settings
-              {settingsInvalid ? (
-                <span className="size-2 rounded-full bg-destructive" aria-label="has an error" role="img" />
-              ) : changedSettings > 0 ? (
-                <span className="rounded-full bg-muted px-1.5 text-[11px] leading-4 tabular-nums">
-                  {changedSettings}
-                </span>
-              ) : null}
-            </TabsTrigger>
+            {!locked && (
+              <TabsTrigger
+                value="settings"
+                data-testid="tab-settings"
+                disabled={settingsChannels.length === 0}
+                title={settingsChannels.length > 0 ? undefined : 'Pick a channel with its own options first'}
+              >
+                Settings
+                {settingsInvalid ? (
+                  <span className="size-2 rounded-full bg-destructive" aria-label="has an error" role="img" />
+                ) : changedSettings > 0 ? (
+                  <span className="rounded-full bg-muted px-1.5 text-[11px] leading-4 tabular-nums">
+                    {changedSettings}
+                  </span>
+                ) : null}
+              </TabsTrigger>
+            )}
             {deliveryTargets.length > 0 && (
               <TabsTrigger value="delivery" data-testid="tab-delivery">
                 Insights
