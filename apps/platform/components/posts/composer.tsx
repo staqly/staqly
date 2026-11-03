@@ -1926,7 +1926,7 @@ export function ComposerForm({
                     onChange={(e) => {
                       setTitle(e.target.value)
                       // A typed title is no longer the one refused: its error goes (the next save checks it again).
-                      setErrors(({ title: _, ...rest }) => rest)
+                      setErrors((cur) => (cur.title ? { ...cur, title: undefined } : cur))
                     }}
                     placeholder="What is this post about?"
                     maxLength={300}
