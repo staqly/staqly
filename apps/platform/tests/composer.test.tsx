@@ -707,6 +707,20 @@ describe('composer', () => {
     expect(within(screen.getByTestId('settings-ch_1')).getByText(/Needs Board/)).toBeInTheDocument()
   })
 
+  it('a post that went out has no Settings tab', async () => {
+    mockApi({
+      ...routes,
+      'GET /v1/providers': {
+        data: [provider({ settings_fields: [{ key: 'board', label: 'Board', kind: 'text', required: false }] })],
+      },
+    })
+    const sent = post({ id: 'pst_8', status: 'published', content: 'Out', targets: [target({ status: 'published' })] })
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} post={sent} />, { mode: 'local' })
+    expect(await screen.findByRole('tab', { name: 'Post' })).toBeInTheDocument()
+    expect(screen.queryByTestId('tab-settings')).not.toBeInTheDocument()
+  })
+
   it('marks every required setting left empty at once, in Settings, without sending', async () => {
     const api = mockApi({
       ...routes,
