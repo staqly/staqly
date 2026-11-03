@@ -171,19 +171,38 @@ func checkFolderPlace(folders []db.MediaFolder, id, parentID, name string) error
 	for _, f := range folders {
 		byID[f.ID] = f
 	}
+	depth := 1
 	if parentID != "" {
 		if _, ok := byID[parentID]; !ok {
 			return invalid("parent_id", "unknown folder")
 		}
-		depth := 1
 		for at := parentID; at != ""; at = byID[at].ParentID {
 			if at == id {
 				return invalid("parent_id", "a folder can't go inside itself or one of its own folders")
 			}
 			depth++
-			if depth > maxMediaFolderPath+1 {
+			if depth > maxMediaFolderPath {
 				return invalid("parent_id", fmt.Sprintf("folders nest at most %d deep", maxMediaFolderPath))
 			}
+		}
+	}
+	// Moving a subtree carries every descendant to the new depth too.
+	if id != "" {
+		level := []string{id}
+		for len(level) > 0 {
+			children := []string{}
+			for _, f := range folders {
+				if slices.Contains(level, f.ParentID) {
+					children = append(children, f.ID)
+				}
+			}
+			if len(children) > 0 {
+				depth++
+				if depth > maxMediaFolderPath {
+					return invalid("parent_id", fmt.Sprintf("folders nest at most %d deep", maxMediaFolderPath))
+				}
+			}
+			level = children
 		}
 	}
 	for _, f := range folders {
