@@ -158,6 +158,41 @@ func (q *Queries) ConnectedMetaChannels(ctx context.Context) ([]ConnectedMetaCha
 	return items, nil
 }
 
+const connectedTikTokChannels = `-- name: ConnectedTikTokChannels :many
+SELECT id, workspace_id, credentials FROM channels WHERE provider = 'tiktok' AND status = 'connected' AND deleted_at IS NULL
+`
+
+type ConnectedTikTokChannelsRow struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Credentials string `json:"credentials"`
+}
+
+// Every workspace's connected TikTok channels: a TikTok webhook names the account only by the open_id kept in the
+// sealed credentials.
+func (q *Queries) ConnectedTikTokChannels(ctx context.Context) ([]ConnectedTikTokChannelsRow, error) {
+	rows, err := q.db.QueryContext(ctx, connectedTikTokChannels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ConnectedTikTokChannelsRow
+	for rows.Next() {
+		var i ConnectedTikTokChannelsRow
+		if err := rows.Scan(&i.ID, &i.WorkspaceID, &i.Credentials); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countChannels = `-- name: CountChannels :one
 SELECT COUNT(*) FROM channels WHERE workspace_id = ? AND deleted_at IS NULL
 `

@@ -138,3 +138,16 @@ JOIN posts p ON p.id = t.post_id
 JOIN channels c ON c.id = t.channel_id
 WHERE t.external_id = sqlc.arg(external_id) AND t.external_id <> '' AND t.status = 'published' AND t.removal = ''
   AND c.provider IN ('instagram', 'instagram_business', 'facebook', 'threads');
+
+-- name: TikTokTargetsByExternalID :many
+-- A post's TikTok targets with this id there (the publish id until TikTok makes the video public), still published.
+SELECT t.post_id, t.channel_id, t.external_url, p.workspace_id
+FROM post_targets t
+JOIN posts p ON p.id = t.post_id
+JOIN channels c ON c.id = t.channel_id
+WHERE t.external_id = sqlc.arg(external_id) AND t.external_id <> '' AND t.status = 'published' AND t.removal = ''
+  AND c.provider = 'tiktok';
+
+-- name: SetTargetExternalID :exec
+-- The platform gave a published post its lasting id and link (TikTok: once the video is public).
+UPDATE post_targets SET external_id = ?, external_url = ?, updated_at = ? WHERE post_id = ? AND channel_id = ?;

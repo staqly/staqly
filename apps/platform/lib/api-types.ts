@@ -104,6 +104,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tiktok/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * An event from TikTok (a video made public or no longer public, the app removed from an account)
+         * @description The callback URL to enter in the TikTok developer portal (Webhooks) is `<dashboard>/api/v1/tiktok/webhook`.
+         *     Signed by TikTok with the app's client secret (`TikTok-Signature: t=<time>,s=<HMAC-SHA256 of "<time>.<body>">`);
+         *     off (404) until the server has `PROVIDER_TIKTOK_CLIENT_SECRET`. A video made public gets its id and link and its
+         *     numbers read; one no longer public is checked; a removed app queues a check of that account's channels. The
+         *     body is only a hint: the checks ask TikTok.
+         */
+        post: operations["receiveTikTokWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meta/deauthorize": {
         parameters: {
             query?: never;
@@ -6543,6 +6567,40 @@ export interface operations {
                     "application/json": {
                         /** @description Reads queued */
                         queued: number;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    receiveTikTokWebhook: {
+        parameters: {
+            query?: never;
+            header: {
+                "TikTok-Signature": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Posts or channels the event touched */
+                        handled: number;
                     };
                 };
             };
