@@ -181,13 +181,16 @@ describe.each(['local', 'cloud'] as const)('%s: method sweep', (name) => {
     expect(custom.limits.max_media).toBeGreaterThan(0)
     // The Python models fill optional fields with their defaults (a field's placeholder: None): compare what matters.
     expect(brief((await py.call('sync', pyc, 'providers.list')) as typeof providers)).toEqual(brief(providers))
-    // A token platform on the way (an OAuth one listed as soon only lacks its app keys on this server).
+    // A token platform under maintenance (PROVIDER_DEVTO_MAINTENANCE, lib.ts) is listed as soon; an OAuth one listed
+    // as soon only lacks its app keys on this server.
     const soon = providers.find((p) => p.status === 'soon' && p.auth !== 'oauth2')!
+
+    expect(soon.id).toBe('devto')
     const refused = await errorOf(c.channels.connect({ provider: soon.id, fields: { token: 'x' } }))
 
-    // A platform on the way is a 409 provider_soon, the same in both SDKs.
+    // Connecting it is a 409 provider_maintenance, the same in both SDKs.
     expect(refused).toBeInstanceOf(ConflictError)
-    expect(String(refused)).toMatch(/409 provider_soon/)
+    expect(String(refused)).toMatch(/409 provider_maintenance/)
     expect((await py.fail('async', pyc, 'channels.connect', [soon.id], { fields: { token: 'x' } })).type).toBe(
       'ConflictError',
     )
