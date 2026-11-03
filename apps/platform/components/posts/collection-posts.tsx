@@ -117,7 +117,8 @@ function PostSection({
         {/* Just the icon, on the title's line. */}
         <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
-          <h2 id={`${testId}-title`} className="flex items-center gap-2 text-sm font-semibold">
+          {/* min-h: the count's pill sets the line's height; without a count (a filter) the line keeps it. */}
+          <h2 id={`${testId}-title`} className="flex min-h-6 items-center gap-2 text-sm font-semibold">
             {title}{' '}
             {count !== undefined && (
               <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
@@ -513,8 +514,9 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
             className="mt-2"
           />
         )}
-        {/* Filters in use, as chips under the title (each one comes off with its ×). */}
-        {filtered && (
+        {/* Filters in use, as chips under the title (each one comes off with its ×). Show archived has its own
+            switch and no chip: alone it leaves no empty row that would push the list down. */}
+        {(!!q || !!status || channelIds.length > 0 || tags.length > 0) && (
           <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="post-filters">
             {q && <FilterChip label={`“${q}”`} onRemove={() => setSearch('')} />}
             {status && (
