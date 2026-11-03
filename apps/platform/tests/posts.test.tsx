@@ -61,9 +61,14 @@ describe('posts workspace', () => {
     renderWithProviders(<PostsWorkspace />, { mode: 'local' })
     expect(await screen.findByRole('heading', { level: 1, name: 'Blog' })).toBeInTheDocument()
     expect(await screen.findByTestId('post-link')).toHaveAttribute('href', '/posts/pst_9?collection=col_2')
-    // Only the post's collection was listed (its failed, its upcoming and its published posts), and no collection was fetched
+    // Only the post's collection was listed (its failed, upcoming, draft and published posts), and no collection was fetched
     // on its own.
-    expect(api.find('GET', '/v1/posts').map((c) => c.query.get('collection_id'))).toEqual(['col_2', 'col_2', 'col_2'])
+    expect(api.find('GET', '/v1/posts').map((c) => c.query.get('collection_id'))).toEqual([
+      'col_2',
+      'col_2',
+      'col_2',
+      'col_2',
+    ])
     expect(api.calls.filter((c) => c.path.startsWith('/v1/collections/'))).toHaveLength(0)
   })
 

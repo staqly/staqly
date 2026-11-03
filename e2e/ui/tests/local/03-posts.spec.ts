@@ -22,10 +22,13 @@ test.describe('posts', () => {
     await expect(pane.getByRole('link', { name: /Old campaigns/ })).toHaveCount(0)
     const list = rows(page)
 
-    // Upcoming posts first; the ones that went out in their own section under them.
+    // Upcoming posts first, then drafts; the ones that went out in their own section under them.
     await expect(
       page.getByTestId('posts-upcoming').getByTestId('post-row').filter({ hasText: 'Beach day' }),
     ).toContainText('Scheduled')
+    await expect(
+      page.getByTestId('posts-drafts').getByTestId('post-row').filter({ hasText: 'Draft carousel' }),
+    ).toContainText('Draft')
     await expect(
       page.getByTestId('posts-published').getByTestId('post-row').filter({ hasText: 'Posted yesterday' }),
     ).toContainText('Published')

@@ -4,12 +4,13 @@ import {
   Archive,
   BadgeCheck,
   CalendarClock,
-  CircleX,
+  FilePen,
   FolderPlus,
   PenSquare,
   Plus,
   Search,
   Settings2,
+  TriangleAlert,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -77,7 +78,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
   )
 }
 
-/** One part of the list (upcoming or published): a heading with its icon, count and subtitle, then its rows. */
+/** One part of the list (needs attention, upcoming, drafts or published): a heading with its icon, count and subtitle, then its rows. */
 function PostSection({
   icon: Icon,
   title,
@@ -179,7 +180,7 @@ function PostSection({
   )
 }
 
-/** A collection's posts: header, filters, then the upcoming posts and, under them, the published ones. */
+/** A collection's posts: header, filters, then failed, upcoming, draft and published posts, each in its section. */
 export function CollectionPosts({ id, onNewCollection }: { id: string; onNewCollection?: () => void }) {
   const router = useRouter()
   const params = useSearchParams()
@@ -194,10 +195,11 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
   const q = useDebounced(search.trim(), 300)
   // Archived posts stay out of the lists unless asked for (?archived_posts=1).
   const showArchived = params.get('archived_posts') === '1'
-  // Three lists: failed posts first (they need someone), what is still to come (drafts, scheduled, publishing) and
-  // what went out. A status filter shows the one it belongs to.
+  // Four lists: failed posts first (they need someone), what is coming (scheduled, publishing), drafts with no time
+  // yet and what went out. A status filter shows the one it belongs to.
   const showFailed = !status || status === 'failed'
-  const showUpcoming = status !== 'published' && status !== 'failed'
+  const showUpcoming = !status || status === 'scheduled' || status === 'publishing'
+  const showDrafts = !status || status === 'draft'
   const showPublished = !status || status === 'published'
   const base = useMemo(
     () => ({
@@ -211,13 +213,15 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
     [id, channelIds, tags, q, showArchived],
   )
   const upcomingQuery: PostQuery = useMemo(
-    () => ({ ...base, status: status || 'draft,scheduled,publishing', sort: 'created_desc' }),
+    () => ({ ...base, status: status || 'scheduled,publishing', sort: 'created_desc' }),
     [base, status],
   )
+  const draftsQuery: PostQuery = useMemo(() => ({ ...base, status: 'draft', sort: 'created_desc' }), [base])
   const failedQuery: PostQuery = useMemo(() => ({ ...base, status: 'failed', sort: 'created_desc' }), [base])
   const publishedQuery: PostQuery = useMemo(() => ({ ...base, status: 'published', sort: 'publish_desc' }), [base])
   const failed = usePostsInfinite(failedQuery, { enabled: showFailed, refetchOnWindowFocus: false })
   const upcoming = usePostsInfinite(upcomingQuery, { enabled: showUpcoming, refetchOnWindowFocus: false })
+  const drafts = usePostsInfinite(draftsQuery, { enabled: showDrafts, refetchOnWindowFocus: false })
   const published = usePostsInfinite(publishedQuery, { enabled: showPublished, refetchOnWindowFocus: false })
   // ?compose=1 (the getting-started checklist) opens the composer at once.
   const compose = useLazyDialog(params.get('compose') === '1')
@@ -225,6 +229,7 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
 
   const { refetch: refetchFailed } = failed
   const { refetch: refetchUpcoming } = upcoming
+  const { refetch: refetchDrafts } = drafts
   const { refetch: refetchPublished } = published
   const refetch = useCallback(() => {
     if (showFailed) {
@@ -235,10 +240,23 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
       void refetchUpcoming()
     }
 
+    if (showDrafts) {
+      void refetchDrafts()
+    }
+
     if (showPublished) {
       void refetchPublished()
     }
-  }, [showFailed, showUpcoming, showPublished, refetchFailed, refetchUpcoming, refetchPublished])
+  }, [
+    showFailed,
+    showUpcoming,
+    showDrafts,
+    showPublished,
+    refetchFailed,
+    refetchUpcoming,
+    refetchDrafts,
+    refetchPublished,
+  ])
 
   useRefetchOnForeignChange(refetch)
 
@@ -249,10 +267,11 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const failedList = showFailed ? flattenPosts(failed.data) : NO_POSTS
   const upcomingList = showUpcoming ? flattenPosts(upcoming.data) : NO_POSTS
+  const draftList = showDrafts ? flattenPosts(drafts.data) : NO_POSTS
   const publishedList = showPublished ? flattenPosts(published.data) : NO_POSTS
   const list = useMemo(
-    () => [...failedList, ...upcomingList, ...publishedList],
-    [failedList, upcomingList, publishedList],
+    () => [...failedList, ...upcomingList, ...draftList, ...publishedList],
+    [failedList, upcomingList, draftList, publishedList],
   )
 
   useRefreshDuePosts(list)
@@ -359,10 +378,15 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
   const showFilters = filtered || !!search || Object.values(c.status_counts ?? {}).some((n) => n > 0)
   const counts = c.status_counts ?? {}
   const loading =
-    (showFailed && failed.isLoading) || (showUpcoming && upcoming.isLoading) || (showPublished && published.isLoading)
-  const placeholder = failed.isPlaceholderData || upcoming.isPlaceholderData || published.isPlaceholderData
+    (showFailed && failed.isLoading) ||
+    (showUpcoming && upcoming.isLoading) ||
+    (showDrafts && drafts.isLoading) ||
+    (showPublished && published.isLoading)
+  const placeholder =
+    failed.isPlaceholderData || upcoming.isPlaceholderData || drafts.isPlaceholderData || published.isPlaceholderData
   // Counts per section come from the collection; with a filter they would not match the rows, so they hide.
-  const upcomingCount = filtered ? undefined : (counts.draft ?? 0) + (counts.scheduled ?? 0) + (counts.publishing ?? 0)
+  const upcomingCount = filtered ? undefined : (counts.scheduled ?? 0) + (counts.publishing ?? 0)
+  const draftCount = filtered ? undefined : (counts.draft ?? 0)
   const failedCount = filtered ? undefined : (counts.failed ?? 0)
   const publishedCount = filtered ? undefined : (counts.published ?? 0)
   // Shift+click ranges and the header's box work per section; the selection bar acts on both.
@@ -519,7 +543,7 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
           <div className="grid gap-2 px-4 sm:px-6 lg:px-8" data-testid="posts-loading">
             <SkeletonList count={6} className="h-12 rounded-lg" />
           </div>
-        ) : list.length === 0 && !failed.error && !upcoming.error && !published.error ? (
+        ) : list.length === 0 && !failed.error && !upcoming.error && !drafts.error && !published.error ? (
           <PageContainer>
             <EmptyState
               icon={<PenSquare />}
@@ -543,7 +567,7 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
             {/* Failed posts on top, and only when there are some: they wait for a retry or a new time. */}
             {showFailed && (failedList.length > 0 || !!failed.error || status === 'failed') && (
               <PostSection
-                icon={CircleX}
+                icon={TriangleAlert}
                 title="Needs attention"
                 count={failedCount}
                 posts={failed}
@@ -558,7 +582,8 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                 testId="posts-failed"
               />
             )}
-            {showUpcoming && (
+            {/* Upcoming gives way to drafts when nothing is scheduled; with no drafts either it says so. */}
+            {showUpcoming && (upcomingList.length > 0 || !!upcoming.error || !!status || draftList.length === 0) && (
               <PostSection
                 icon={CalendarClock}
                 title="Upcoming"
@@ -571,10 +596,25 @@ export function CollectionPosts({ id, onNewCollection }: { id: string; onNewColl
                 onSelect={canWrite ? selectSection : undefined}
                 onDrag={canWrite ? drag : undefined}
                 onAction={rowActions.onAction}
-                empty={
-                  filtered ? 'No upcoming posts match.' : 'Nothing coming up: new drafts and scheduled posts show here.'
-                }
+                empty={filtered ? 'No upcoming posts match.' : 'Nothing coming up: scheduled posts show here.'}
                 testId="posts-upcoming"
+              />
+            )}
+            {showDrafts && (draftList.length > 0 || !!drafts.error || status === 'draft') && (
+              <PostSection
+                icon={FilePen}
+                title="Drafts"
+                count={draftCount}
+                posts={drafts}
+                list={draftList}
+                selected={selected}
+                selecting={picked.length > 0}
+                onToggle={canWrite ? toggle : undefined}
+                onSelect={canWrite ? selectSection : undefined}
+                onDrag={canWrite ? drag : undefined}
+                onAction={rowActions.onAction}
+                empty="No drafts match."
+                testId="posts-drafts"
               />
             )}
             {/* Nothing went out yet: no empty Published section under the upcoming posts. */}
