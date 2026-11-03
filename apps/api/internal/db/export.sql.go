@@ -394,7 +394,7 @@ func (q *Queries) ExportEventsPage(ctx context.Context, arg ExportEventsPagePara
 }
 
 const exportMediaPage = `-- name: ExportMediaPage :many
-SELECT id, workspace_id, storage_name, original_name, mime_type, size_bytes, sha256, created_at, alt_text, width, height, duration_ms, folder_id, tags, deleted_at FROM media WHERE workspace_id = ?1 AND id > ?2 ORDER BY id LIMIT ?3
+SELECT id, workspace_id, storage_name, original_name, mime_type, size_bytes, sha256, created_at, alt_text, width, height, duration_ms, folder_id, tags, deleted_at, purge_started_at FROM media WHERE workspace_id = ?1 AND id > ?2 ORDER BY id LIMIT ?3
 `
 
 type ExportMediaPageParams struct {
@@ -428,6 +428,7 @@ func (q *Queries) ExportMediaPage(ctx context.Context, arg ExportMediaPageParams
 			&i.FolderID,
 			&i.Tags,
 			&i.DeletedAt,
+			&i.PurgeStartedAt,
 		); err != nil {
 			return nil, err
 		}

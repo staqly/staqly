@@ -58,12 +58,26 @@ func (s *Service) RestoreMedia(ctx context.Context, p Principal, id string) (Med
 	if err := p.require(ScopePostsDelete); err != nil {
 		return Media{}, err
 	}
-	if _, err := s.W.RestoreMedia(ctx, db.RestoreMediaParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
-		return Media{}, err
-	}
-	m, err := s.Q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
+	var m db.Medium
+	err := s.tx(ctx, func(q *db.Queries) error {
+		if _, err := q.RestoreMedia(ctx, db.RestoreMediaParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+			return err
+		}
+		var err error
+		m, err = q.GetMedia(ctx, db.GetMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
+		if isNoRows(err) {
+			return notFound("media")
+		}
+		if err != nil {
+			return err
+		}
+		if m.PurgeStartedAt.Valid {
+			return conflict("this file is already being permanently deleted")
+		}
+		return nil
+	})
 	if err != nil {
-		return Media{}, notFound("media")
+		return Media{}, err
 	}
 	return s.toMedia(m), nil
 }
@@ -130,13 +144,8 @@ func (s *Service) dedupePostMedia(ctx context.Context, q *db.Queries, ws, id, no
 	return nil
 }
 
-// purgeTrashedMedia removes files that have been in Deleted for longer than MediaTrashDays, for good: the file
-// first, then the record (posts referencing it lose it). A file the store can't delete keeps its record, so the
-// next run tries again.
-// ponytail: file before row, with no lock between: a file restored in the moment between the PurgeableMedia read
-// and its row's delete loses its file and record. The ceiling is that window (milliseconds, once per file, 30
-// days after it went to Deleted); a conditional delete that commits before the file goes would close it at the
-// cost of orphan files when the store fails.
+// purgeTrashedMedia claims expired trash before touching storage, so a concurrent restore either wins
+// first or is refused. Claims survive storage failures and process crashes; the next sweep retries them.
 func (s *Service) purgeTrashedMedia(ctx context.Context, now time.Time) (int64, error) {
 	cutoff := nullStr(formatTime(now.Add(-MediaTrashDays * 24 * time.Hour)))
 	var purged int64
@@ -147,19 +156,33 @@ func (s *Service) purgeTrashedMedia(ctx context.Context, now time.Time) (int64, 
 		}
 		done := 0
 		for _, r := range rows {
+			var claimed int64
+			err := s.tx(ctx, func(q *db.Queries) error {
+				var err error
+				claimed, err = q.ClaimMediaPurge(ctx, db.ClaimMediaPurgeParams{WorkspaceID: r.WorkspaceID, ID: r.ID, Cutoff: cutoff, StartedAt: nullStr(formatTime(now))})
+				return err
+			})
+			if err != nil {
+				return purged, err
+			}
+			if claimed == 0 {
+				continue // restored or removed after the batch was read
+			}
 			if err := s.removeMediaFiles(ctx, r.WorkspaceID, r.StorageName); err != nil && !errors.Is(err, blob.ErrNotExist) {
 				s.Log.Warn("deleted media file not removed, retrying next run", "media_id", r.ID, "err", err)
 				continue
 			}
+			var removed int64
 			if err := s.tx(ctx, func(q *db.Queries) error {
-				if _, err := q.DeleteMedia(ctx, db.DeleteMediaParams{WorkspaceID: r.WorkspaceID, ID: r.ID}); err != nil {
+				var err error
+				if removed, err = q.DeleteMedia(ctx, db.DeleteMediaParams{WorkspaceID: r.WorkspaceID, ID: r.ID}); err != nil {
 					return err
 				}
 				return s.stripMediaFromPosts(ctx, q, r.WorkspaceID, r.ID)
 			}); err != nil {
 				return purged, err
 			}
-			purged++
+			purged += removed
 			done++
 		}
 		// A batch where nothing could go (the store is down) stops the run instead of looping on the same rows.

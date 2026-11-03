@@ -81,7 +81,7 @@ func (q *Queries) DeleteUnreferencedMedia(ctx context.Context, arg DeleteUnrefer
 }
 
 const getMedia = `-- name: GetMedia :one
-SELECT id, workspace_id, storage_name, original_name, mime_type, size_bytes, sha256, created_at, alt_text, width, height, duration_ms, folder_id, tags, deleted_at FROM media WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, storage_name, original_name, mime_type, size_bytes, sha256, created_at, alt_text, width, height, duration_ms, folder_id, tags, deleted_at, purge_started_at FROM media WHERE workspace_id = ? AND id = ?
 `
 
 type GetMediaParams struct {
@@ -108,12 +108,13 @@ func (q *Queries) GetMedia(ctx context.Context, arg GetMediaParams) (Medium, err
 		&i.FolderID,
 		&i.Tags,
 		&i.DeletedAt,
+		&i.PurgeStartedAt,
 	)
 	return i, err
 }
 
 const mediaByIDs = `-- name: MediaByIDs :many
-SELECT media.id, media.workspace_id, media.storage_name, media.original_name, media.mime_type, media.size_bytes, media.sha256, media.created_at, media.alt_text, media.width, media.height, media.duration_ms, media.folder_id, media.tags, media.deleted_at FROM json_each(?1) AS j CROSS JOIN media WHERE media.id = j.value AND media.workspace_id = ?2
+SELECT media.id, media.workspace_id, media.storage_name, media.original_name, media.mime_type, media.size_bytes, media.sha256, media.created_at, media.alt_text, media.width, media.height, media.duration_ms, media.folder_id, media.tags, media.deleted_at, media.purge_started_at FROM json_each(?1) AS j CROSS JOIN media WHERE media.id = j.value AND media.workspace_id = ?2
 `
 
 type MediaByIDsParams struct {
@@ -148,6 +149,7 @@ func (q *Queries) MediaByIDs(ctx context.Context, arg MediaByIDsParams) ([]Mediu
 			&i.FolderID,
 			&i.Tags,
 			&i.DeletedAt,
+			&i.PurgeStartedAt,
 		); err != nil {
 			return nil, err
 		}

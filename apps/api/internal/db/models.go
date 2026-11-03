@@ -334,21 +334,22 @@ type MediaProject struct {
 }
 
 type Medium struct {
-	ID           string         `json:"id"`
-	WorkspaceID  string         `json:"workspace_id"`
-	StorageName  string         `json:"storage_name"`
-	OriginalName string         `json:"original_name"`
-	MimeType     string         `json:"mime_type"`
-	SizeBytes    int64          `json:"size_bytes"`
-	Sha256       string         `json:"sha256"`
-	CreatedAt    string         `json:"created_at"`
-	AltText      string         `json:"alt_text"`
-	Width        int64          `json:"width"`
-	Height       int64          `json:"height"`
-	DurationMs   int64          `json:"duration_ms"`
-	FolderID     string         `json:"folder_id"`
-	Tags         string         `json:"tags"`
-	DeletedAt    sql.NullString `json:"deleted_at"`
+	ID             string         `json:"id"`
+	WorkspaceID    string         `json:"workspace_id"`
+	StorageName    string         `json:"storage_name"`
+	OriginalName   string         `json:"original_name"`
+	MimeType       string         `json:"mime_type"`
+	SizeBytes      int64          `json:"size_bytes"`
+	Sha256         string         `json:"sha256"`
+	CreatedAt      string         `json:"created_at"`
+	AltText        string         `json:"alt_text"`
+	Width          int64          `json:"width"`
+	Height         int64          `json:"height"`
+	DurationMs     int64          `json:"duration_ms"`
+	FolderID       string         `json:"folder_id"`
+	Tags           string         `json:"tags"`
+	DeletedAt      sql.NullString `json:"deleted_at"`
+	PurgeStartedAt sql.NullString `json:"purge_started_at"`
 }
 
 type NotificationChannel struct {

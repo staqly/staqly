@@ -3187,7 +3187,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Take a file out of Deleted, back where it was (posts:delete) */
+        /**
+         * Take a file out of Deleted, back where it was (posts:delete)
+         * @description Returns 409 once retention has started permanently deleting the file.
+         */
         post: operations["restoreMedia"];
         delete?: never;
         options?: never;
@@ -12890,6 +12893,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
         };
     };
