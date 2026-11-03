@@ -28,9 +28,11 @@ export async function saveResponse(res: Response, path: string): Promise<number>
     throw new Error('response has no body')
   }
 
-  const temporary = await mkdtemp(join(dirname(path), '.staqly-download-'))
+  let temporary: string | undefined
 
   try {
+    temporary = await mkdtemp(join(dirname(path), '.staqly-download-'))
+
     const file = join(temporary, 'download')
     const out = createWriteStream(file, { mode: 0o600 })
 
@@ -39,6 +41,10 @@ export async function saveResponse(res: Response, path: string): Promise<number>
 
     return out.bytesWritten
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    if (temporary) {
+      await rm(temporary, { recursive: true, force: true })
+    } else {
+      await res.body.cancel().catch(() => undefined)
+    }
   }
 }

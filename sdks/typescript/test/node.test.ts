@@ -43,3 +43,21 @@ it('replaces an existing download only after the complete response is saved', as
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+it('cancels the response if the target directory cannot be opened', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'staqly-sdk-'))
+  let cancelled = false
+  const body = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true
+    },
+  })
+
+  try {
+    await expect(saveResponse(new Response(body), join(dir, 'missing', 'workspace.zip'))).rejects.toThrow()
+    expect(cancelled).toBe(true)
+    expect(await readdir(dir)).toEqual([])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
