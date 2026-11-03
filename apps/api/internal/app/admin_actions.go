@@ -164,7 +164,7 @@ func (s *Service) AdminDeleteWorkspace(ctx context.Context, a Admin, wsID, confi
 		return &Error{Code: "confirm_mismatch", Status: 400, Message: "type the workspace name to confirm"}
 	}
 	// The stored id, not the one from the request: it names the workspace's files.
-	if err := s.deleteWorkspace(ctx, ws.ID); err != nil {
+	if err := s.deleteWorkspace(ctx, ws.ID, ""); err != nil {
 		return err
 	}
 	return s.AdminAudit(ctx, a, "delete_workspace", ws.ID, ws.Name, map[string]any{"name": ws.Name})
@@ -178,15 +178,40 @@ func (s *Service) AdminDeleteUser(ctx context.Context, a Admin, userID, confirm 
 	if !strings.EqualFold(strings.TrimSpace(confirm), u.Email) {
 		return &Error{Code: "confirm_mismatch", Status: 400, Message: "type the person's email to confirm"}
 	}
-	wss, err := s.Q.ListUserWorkspaces(ctx, userID)
+	alone, err := userDeletionWorkspaces(ctx, s.Q, u)
 	if err != nil {
 		return err
 	}
-	var alone []string // workspaces that go with the person
-	for _, w := range wss {
-		members, err := s.Q.CountMembers(ctx, w.ID)
+	for _, id := range alone {
+		if err := s.deleteWorkspace(ctx, id, userID); err != nil {
+			return err
+		}
+	}
+	if err := s.tx(ctx, func(q *db.Queries) error {
+		remaining, err := userDeletionWorkspaces(ctx, q, u)
 		if err != nil {
 			return err
+		}
+		if len(remaining) > 0 {
+			return conflict("workspace membership changed; review the person's workspaces before deleting again")
+		}
+		return q.DeleteUserRow(ctx, userID)
+	}); err != nil {
+		return err
+	}
+	return s.AdminAudit(ctx, a, "delete_user", "", userID, map[string]any{"email": u.Email, "workspaces_deleted": len(alone)})
+}
+
+func userDeletionWorkspaces(ctx context.Context, q *db.Queries, u db.User) ([]string, error) {
+	wss, err := q.ListUserWorkspaces(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	var alone []string // workspaces that go with the person
+	for _, w := range wss {
+		members, err := q.CountMembers(ctx, w.ID)
+		if err != nil {
+			return nil, err
 		}
 		if members == 1 {
 			alone = append(alone, w.ID)
@@ -194,27 +219,19 @@ func (s *Service) AdminDeleteUser(ctx context.Context, a Admin, userID, confirm 
 		if w.Role != RoleOwner {
 			continue
 		}
-		owners, err := s.Q.CountOwners(ctx, w.ID)
+		owners, err := q.CountOwners(ctx, w.ID)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		b, err := s.Q.GetWorkspaceBilling(ctx, w.ID)
+		b, err := q.GetWorkspaceBilling(ctx, w.ID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if owners == 1 && (members > 1 || liveSubscription(b.SubscriptionStatus.String)) {
-			return &Error{Code: "sole_owner", Status: 409, Message: u.Email + " is the only owner of " + w.Name + ": hand it over or delete the workspace first"}
+			return nil, &Error{Code: "sole_owner", Status: 409, Message: u.Email + " is the only owner of " + w.Name + ": hand it over or delete the workspace first"}
 		}
 	}
-	for _, id := range alone {
-		if err := s.deleteWorkspace(ctx, id); err != nil {
-			return err
-		}
-	}
-	if err := s.W.DeleteUserRow(ctx, userID); err != nil {
-		return err
-	}
-	return s.AdminAudit(ctx, a, "delete_user", "", userID, map[string]any{"email": u.Email, "workspaces_deleted": len(alone)})
+	return alone, nil
 }
 
 type AdminAuditPage struct {

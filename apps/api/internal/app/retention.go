@@ -262,11 +262,12 @@ func (s *Service) DeleteWorkspace(ctx context.Context, p Principal, confirm stri
 	if confirm != ws.Name {
 		return invalid("confirm", "must be exactly the workspace name")
 	}
-	return s.deleteWorkspace(ctx, p.WorkspaceID)
+	return s.deleteWorkspace(ctx, p.WorkspaceID, "")
 }
 
-// deleteWorkspace removes a workspace with everything in it (the checks are the callers').
-func (s *Service) deleteWorkspace(ctx context.Context, wsID string) error {
+// deleteWorkspace removes a workspace with everything in it. When onlyMember is set (deleting a person),
+// membership is checked again inside the delete transaction, after the billing request.
+func (s *Service) deleteWorkspace(ctx context.Context, wsID, onlyMember string) error {
 	// A large workspace takes a while to cascade-delete; a client that gives
 	// up must not roll it back half way (or leave files behind).
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
@@ -283,6 +284,15 @@ func (s *Service) deleteWorkspace(ctx context.Context, wsID string) error {
 				return notFound("workspace")
 			}
 			return err
+		}
+		if onlyMember != "" {
+			members, err := q.ListMembers(ctx, wsID)
+			if err != nil {
+				return err
+			}
+			if len(members) != 1 || members[0].UserID != onlyMember {
+				return conflict("workspace membership changed; review the person's workspaces before deleting again")
+			}
 		}
 		var err error
 		if exports, err = q.ListWorkspaceExportIDs(ctx, wsID); err != nil {
