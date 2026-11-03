@@ -96,6 +96,16 @@ describe('upcoming and published posts in the posts list', () => {
     expect(failed.compareDocumentPosition(upcoming) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('Show archived alone adds no empty filter row above the list', async () => {
+    const api = setupPosts(twoLists)
+
+    nav.set('/posts', 'collection=col_1&archived_posts=1')
+    renderWithProviders(<PostsWorkspace />, { mode: 'local' })
+    await screen.findByTestId('posts-published')
+    expect(screen.queryByTestId('post-filters')).not.toBeInTheDocument()
+    expect(api.find('GET', '/v1/posts').every((c) => c.query.get('include_archived') === 'true')).toBe(true)
+  })
+
   it('a status filter shows only its section', async () => {
     const api = setupPosts(twoLists)
 
