@@ -120,7 +120,7 @@ export function MoltbookRegister({ onDone, onOwnKey }: { onDone: () => void; onO
         <button
           type="button"
           onClick={onOwnKey}
-          className="text-left text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground pointer-coarse:-my-3 pointer-coarse:py-3"
+          className="min-w-0 flex-1 basis-40 text-left text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground pointer-coarse:-my-3 pointer-coarse:py-3"
         >
           Have an agent already? Paste its API key
         </button>
