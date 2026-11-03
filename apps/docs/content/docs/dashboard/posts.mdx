@@ -134,15 +134,21 @@ header, a row of icons next to them (hover for their names), and the sections **
 
 A direct link such as `/posts/post_oalirbz67y4m4cqxq5dw` opens the same view.
 
-**Insights** has a section per target: its status, and once published the link to the post on the
-platform, its numbers in one line and its audience comments; a failed one shows the platform's error and a
-**Retry** button that retries that channel alone; a target on your own automation shows how long it has
-waited of the collection's limit while **Publishing**. **Refresh numbers and comments** reads both now.
+**Insights** has a section per target: its status and when it went out or failed (with the number of
+tries), and once published the link to the post on the platform, its numbers in one line and its audience
+comments; a failed one shows the platform's error and a **Retry now** button that sends to that channel
+alone; a target on your own automation shows how long it has waited of the collection's limit while
+**Publishing**. With several channels and a failure, a line on top counts what was sent and what failed,
+with **Retry N failed now** and, from six channels, **Failed only**. **Refresh numbers and comments** reads
+numbers and comments now.
 
 A draft or scheduled post is edited in place; the footer has **Save changes** (and **Publish
-now**) once it is scheduled. Editing a scheduled post keeps its time. A post that is publishing
-or published is read-only: **Duplicate** copies its content, media, tags, metadata and channels
-into a new draft.
+now**) once it is scheduled. Editing a scheduled post keeps its time. A post that was sent and failed on
+some channels says so at the top (**Show channels** opens Insights) instead of a time to change: the time
+it was sent at is history. Its footer has only **Save changes**, for the text a retry sends; failed
+channels are retried one by one, or all at once, in Insights, so the channels it went out on never get it
+twice. A post that is publishing or published is read-only: **Duplicate** copies its content, media, tags,
+metadata and channels into a new draft.
 
 ### Unpublish
 

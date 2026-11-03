@@ -85,12 +85,14 @@ JOIN channels c ON c.id = t.channel_id WHERE t.post_id IN (SELECT value FROM jso
 SELECT * FROM post_targets WHERE post_id = ? AND channel_id = ?;
 
 -- name: SetTargetStatus :exec
-UPDATE post_targets SET status = ?, external_id = ?, external_url = ?, error = ?, attempts = ?, published_at = ?, updated_at = ?
+-- attempted_at: when a try ended (NULL keeps the last one, for a target going back to publishing).
+UPDATE post_targets SET status = ?, external_id = ?, external_url = ?, error = ?, attempts = ?, published_at = ?, updated_at = ?,
+  attempted_at = COALESCE(?, attempted_at)
 WHERE post_id = ? AND channel_id = ?;
 
 -- name: ResetTargets :exec
 -- Back to pending (a cancelled schedule, a duplicate): links and errors of earlier tries are dropped.
-UPDATE post_targets SET status = 'pending', external_id = '', external_url = '', error = '', attempts = 0, published_at = NULL, updated_at = ?
+UPDATE post_targets SET status = 'pending', external_id = '', external_url = '', error = '', attempts = 0, published_at = NULL, attempted_at = NULL, updated_at = ?
 WHERE post_id = ? AND status <> 'published';
 
 -- name: PublishingPostsOfChannel :many

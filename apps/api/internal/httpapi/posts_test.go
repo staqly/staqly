@@ -235,15 +235,18 @@ func TestCustomTargetRoundTrip(t *testing.T) {
 	// The automation reports a failure, a person retries, the automation reports success.
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/targets/"+ch.ID+"/result", worker, map[string]any{"status": "nope"}, 422, nil)
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/targets/"+ch.ID+"/result", worker, map[string]any{"status": "failed", "error": "rate limited"}, 200, &got)
-	if got.Status != "failed" || got.Targets[0].Status != "failed" || got.Targets[0].Error != "rate limited" {
+	if got.Status != "failed" || got.Targets[0].Status != "failed" || got.Targets[0].Error != "rate limited" || got.Targets[0].AttemptedAt == nil {
 		t.Fatalf("failed: %+v", got)
 	}
+	failedAt := *got.Targets[0].AttemptedAt
 	e.do(nil, "GET", "/v1/work", worker, nil, 200, &work)
 	if len(work.Data) != 0 {
 		t.Fatalf("work after a result: %+v", work.Data)
 	}
 	e.do(nil, "POST", "/v1/posts/"+post.ID+"/targets/"+ch.ID+"/retry", e.key, nil, 202, &got)
-	if got.Status != "publishing" || got.Targets[0].Status != "publishing" || got.Targets[0].Error != "" {
+	// Going out again keeps when the last try ended until this one does.
+	if got.Status != "publishing" || got.Targets[0].Status != "publishing" || got.Targets[0].Error != "" ||
+		got.Targets[0].AttemptedAt == nil || *got.Targets[0].AttemptedAt != failedAt {
 		t.Fatalf("retrying: %+v", got)
 	}
 	e.svc.RunDueJobsOnce(ctx)

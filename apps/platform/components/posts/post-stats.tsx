@@ -35,7 +35,7 @@ import { deletedOutside, liveTargets } from '@/lib/posts'
 import { qk } from '@/lib/queries'
 
 import type { SentimentFilter } from './post-responses'
-import { RetryTarget, TargetStatus } from './target-status'
+import { RetryFailedTargets, RetryTarget, TargetStatus } from './target-status'
 
 // Only the post's Insights tab and the list's Insights dialog show them: their own chunk, loaded when they open.
 const CommentsOverview = dynamic(() => import('@/components/posts/post-responses').then((m) => m.CommentsOverview))
@@ -182,6 +182,11 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
   const deleted = deletedOutside(post)
   const frozen = (!!post.unpublished_at || deleted) && liveTargets(post).length === 0
   const failed = (rows ?? []).filter((t) => t.error)
+  // Sent to many channels: how it went on all of them in one line, the failed ones alone, and Retry for all of them.
+  const failedTargets = targets.filter((t) => t.status === 'failed')
+  const [onlyFailed, setOnlyFailed] = useState(false)
+  const shown = onlyFailed && failedTargets.length > 0 ? failedTargets : targets
+  const sentCount = targets.filter((t) => t.status === 'published').length
 
   return (
     <div className="grid gap-4" data-testid="post-stats">
@@ -217,11 +222,38 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
           <CommentsOverview postId={post.id} active={active} filter={filter} onFilter={setFilter} />
         </Suspense>
       )}
+      {failedTargets.length > 0 && targets.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="delivery-summary">
+          <p className="mr-auto text-sm">
+            <span className="font-medium">{sentCount} sent</span>
+            <span className="text-muted-foreground"> · </span>
+            <span className="font-medium text-destructive">{failedTargets.length} failed</span>
+            {targets.length - sentCount - failedTargets.length > 0 && (
+              <span className="text-muted-foreground">
+                {' '}
+                · {targets.length - sentCount - failedTargets.length} on the way
+              </span>
+            )}
+          </p>
+          {targets.length > 5 && (
+            <Button
+              type="button"
+              size="sm"
+              variant={onlyFailed ? 'secondary' : 'ghost'}
+              aria-pressed={onlyFailed}
+              onClick={() => setOnlyFailed((v) => !v)}
+            >
+              Failed only
+            </Button>
+          )}
+          {failedTargets.length > 1 && <RetryFailedTargets post={post} targets={failedTargets} />}
+        </div>
+      )}
       {targets.length === 0 ? (
         <p className="text-sm text-muted-foreground">This post has no channels yet.</p>
       ) : (
         <ul className="grid gap-3" aria-label="Channels">
-          {targets.map((t) => {
+          {shown.map((t) => {
             const m = rows?.find((r) => r.channel_id === t.channel_id)
             const published = t.status === 'published'
 

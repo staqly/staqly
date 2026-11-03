@@ -4976,6 +4976,11 @@ export interface components {
             attempts: number;
             /** Format: date-time */
             published_at: string | null;
+            /**
+             * Format: date-time
+             * @description When the last try ended, published or failed (null before the first); editing the post later does not move it
+             */
+            attempted_at: string | null;
             removal: components["schemas"]["TargetRemoval"];
             /** @description Why taking it down failed */
             removal_error: string;

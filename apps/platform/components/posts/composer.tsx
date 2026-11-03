@@ -1189,9 +1189,32 @@ function PublishTimeAlert({ locked, publishAt, error }: { locked: boolean; publi
   )
 }
 
+/**
+ * A post that was sent and failed on some channels: its time is history now, so instead of the time's problem the top
+ * says how many channels failed and leads to Insights, where each one is retried.
+ */
+function SentAlert({ failed, total, onShow }: { failed: number; total: number; onShow: () => void }) {
+  return (
+    <div className="px-4 pt-3">
+      <Callout tone="danger" size="xs" role="alert" data-testid="sent-failed">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <p>
+            {total > 1 ? `${failed} of ${total} channels failed.` : 'It failed on its channel.'} See why and retry them
+            in Insights.
+          </p>
+          <Button type="button" size="sm" variant="outline" onClick={onShow}>
+            Show channels
+          </Button>
+        </div>
+      </Callout>
+    </div>
+  )
+}
+
 function ComposerFooter({
   post,
   locked,
+  sent,
   live,
   busy,
   canSend,
@@ -1205,6 +1228,8 @@ function ComposerFooter({
 }: {
   post?: Post
   locked: boolean
+  /** Sent and failed somewhere: its time is history, failed channels are retried one by one in Insights. */
+  sent: boolean
   live: boolean
   busy: boolean
   canSend: boolean
@@ -1239,6 +1264,13 @@ function ComposerFooter({
             ? 'Going out now. The channels above show how it goes.'
             : 'This post went out and can no longer be edited. Duplicate it to post it again.'}
         </p>
+      ) : sent ? (
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          <p className="text-sm text-muted-foreground">Retries send the saved text.</p>
+          <Button type="submit" disabled={busy || !canSend} data-testid="save-post">
+            {busy ? 'Saving...' : 'Save changes'}
+          </Button>
+        </div>
       ) : (
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {publishAt && (
@@ -1518,9 +1550,11 @@ export function ComposerForm({
       let saved: Post
 
       if (post) {
-        const { collection: _c, status: _s, ...patch } = body
+        const { collection: _c, status: _s, publish_at, repeat_every, ...patch } = body
+        // A post that was sent keeps its time (history, and in the past): only its text and settings change.
+        const when = post.status === 'failed' ? {} : { publish_at, repeat_every }
 
-        saved = await api.updatePost(post.id, { ...patch, expected_version: post.version })
+        saved = await api.updatePost(post.id, { ...patch, ...when, expected_version: post.version })
       } else {
         saved = await api.createPost(body)
       }
@@ -1613,6 +1647,8 @@ export function ComposerForm({
 
   const [tab, setTab] = useState<string>(initialTab ?? 'all')
   const locked = !!post && isLocked(post)
+  // Sent and failed on some channels: its time is history; each failed channel is retried in Insights.
+  const sent = post?.status === 'failed'
   // Post (the content), Settings (each channel's platform settings) and, once it was sent off, Insights.
   const [section, setSection] = useState<'post' | 'settings' | 'delivery'>('post')
   const targetOf = (id: string) => post?.targets?.find((t) => t.channel_id === id)
@@ -1748,7 +1784,7 @@ export function ComposerForm({
       onSubmit={(e) => {
         e.preventDefault()
         // A draft's primary sends it (now or at the picked time); a post already on its way saves, keeping its time.
-        publish(publishAt ? 'schedule' : live ? 'draft' : 'now')
+        publish(sent ? 'draft' : publishAt ? 'schedule' : live ? 'draft' : 'now')
       }}
       className="flex min-h-0 flex-1 flex-col"
       noValidate
@@ -1771,7 +1807,7 @@ export function ComposerForm({
                   <span>{post.collection_name}</span>
                   {post.publish_at && (
                     <span className={DOT} title={formatDateTime(post.publish_at)}>
-                      {post.status === 'published' ? 'Published' : 'Goes out'}{' '}
+                      {post.status === 'published' ? 'Published' : sent ? 'Sent' : 'Goes out'}{' '}
                       <span className="font-semibold text-foreground">{formatSchedule(post.publish_at)}</span>
                     </span>
                   )}
@@ -1803,7 +1839,11 @@ export function ComposerForm({
           </div>
         </div>
       </SheetHeader>
-      <PublishTimeAlert locked={locked} publishAt={publishAt} error={errors.publish_at} />
+      {sent && failedTargets > 0 ? (
+        <SentAlert failed={failedTargets} total={deliveryTargets.length} onShow={() => setSection('delivery')} />
+      ) : (
+        <PublishTimeAlert locked={locked || sent} publishAt={publishAt} error={errors.publish_at} />
+      )}
       <Tabs
         value={shownSection}
         onValueChange={(v) => setSection(v as typeof section)}
@@ -2086,6 +2126,7 @@ export function ComposerForm({
       <ComposerFooter
         post={post}
         locked={locked}
+        sent={sent}
         live={live}
         busy={busy}
         canSend={canSend}
