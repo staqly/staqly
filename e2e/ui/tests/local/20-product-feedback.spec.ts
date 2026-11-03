@@ -1,6 +1,8 @@
 import { axe, expect, ready, test } from '../../lib/fixtures.js'
 
-test('feedback opens from the sidebar, retains a failed report and submits a private screenshot', async ({ page }) => {
+test('feedback opens from the sidebar, retains a failed report and submits ten private screenshots', async ({
+  page,
+}) => {
   await page.goto('/schedule?token=not-stored#private')
   await ready(page, 'Schedule')
   const feedback = page.getByRole('button', { name: 'Feedback', exact: true })
@@ -16,16 +18,23 @@ test('feedback opens from the sidebar, retains a failed report and submits a pri
   const dialog = page.getByRole('dialog', { name: 'Feedback', exact: true })
 
   await expect(dialog).toBeVisible()
+  await expect.poll(async () => (await dialog.boundingBox())!.width).toBeGreaterThanOrEqual(650)
+  expect(
+    (await dialog.getByRole('textbox', { name: 'Description', exact: true }).boundingBox())!.height,
+  ).toBeGreaterThanOrEqual(220)
   expect(await axe(page)).toEqual([])
   await dialog.getByRole('textbox', { name: 'Description', exact: true }).fill('The schedule did not show my post')
-  await dialog.getByLabel('Screenshot (optional)').setInputFiles({
-    name: 'screenshot.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4X8AAAAASUVORK5CYII=',
-      'base64',
-    ),
-  })
+  await dialog.getByLabel('Screenshots (optional)').setInputFiles(
+    Array.from({ length: 10 }, (_, index) => ({
+      name: `screenshot-${index}.png`,
+      mimeType: 'image/png',
+      buffer: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4X8AAAAASUVORK5CYII=',
+        'base64',
+      ),
+    })),
+  )
+  await expect(dialog.getByRole('button', { name: /Remove screenshot/ })).toHaveCount(10)
   await page.route('**/api/v1/feedback', (route) =>
     route.fulfill({
       status: 500,
@@ -64,6 +73,16 @@ test('feedback fits a phone and keeps keyboard focus inside the modal', async ({
   expect(bounds).not.toBeNull()
   expect(bounds!.x).toBeGreaterThanOrEqual(0)
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320)
+  await dialog.getByLabel('Screenshots (optional)').setInputFiles(
+    Array.from({ length: 10 }, (_, index) => ({
+      name: `screenshot-${index}-${'long-name'.repeat(12)}.png`,
+      mimeType: 'image/png',
+      buffer: Buffer.from('image'),
+    })),
+  )
+  await expect(dialog.getByRole('button', { name: /Remove screenshot/ })).toHaveCount(10)
+  expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  await expect(dialog.getByRole('button', { name: 'Send feedback' })).toBeInViewport()
   expect(await axe(page)).toEqual([])
   await page.keyboard.press('Tab')
   expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true)

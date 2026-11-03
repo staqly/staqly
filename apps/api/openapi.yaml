@@ -114,9 +114,10 @@ paths:
                 description: { type: string, minLength: 1, maxLength: 5000 }
                 page_path: { type: string, maxLength: 2048 }
                 screenshot:
-                  type: string
-                  format: binary
-                  description: Optional PNG, JPEG or WebP, up to 5 MB and 20 megapixels.
+                  type: array
+                  maxItems: 10
+                  items: { type: string, format: binary }
+                  description: Optional PNG, JPEG or WebP images, up to 10 files, 5 MB and 20 megapixels each. Repeat the screenshot field for each file.
       responses:
         "201":
           description: Feedback saved

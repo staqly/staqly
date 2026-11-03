@@ -21,7 +21,7 @@ type Feedback = {
   workspace_name: string
   created_at: string
   page_path: string
-  attachment: boolean
+  attachment_count: number
   status: string
 }
 type Page = { items: Feedback[]; next_cursor: string }
@@ -73,11 +73,15 @@ function FeedbackCard({ row }: { row: Feedback }) {
           <dd>{row.page_path}</dd>
         </div>
       </dl>
-      {row.attachment && (
-        <a className="w-fit py-2 text-sm underline" href={`/api/v1/admin/feedback/${row.id}/attachment`}>
-          Download screenshot
+      {Array.from({ length: row.attachment_count }, (_, index) => (
+        <a
+          key={index}
+          className="w-fit py-2 text-sm underline"
+          href={`/api/v1/admin/feedback/${row.id}/attachment?index=${index}`}
+        >
+          Download screenshot {index + 1}
         </a>
-      )}
+      ))}
       {update.isError && (
         <p role="alert" className="text-sm text-destructive">
           {errorText(update.error)}

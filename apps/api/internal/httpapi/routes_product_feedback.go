@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -16,30 +17,34 @@ func (s *Server) createProductFeedback(w http.ResponseWriter, r *http.Request) {
 	if !s.allowOutbound(w, r, s.feedback, "feedback requests") {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, app.MaxFeedbackAttachmentBytes+(64<<10))
-	if err := r.ParseMultipartForm(app.MaxFeedbackAttachmentBytes + (64 << 10)); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, app.MaxFeedbackAttachments*app.MaxFeedbackAttachmentBytes+(64<<10))
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		var sizeErr *http.MaxBytesError
 		if errors.As(err, &sizeErr) {
-			writeErr(w, r, &app.Error{Code: "payload_too_large", Status: 413, Message: "screenshot must be at most 5 MB"})
+			writeErr(w, r, &app.Error{Code: "payload_too_large", Status: 413, Message: "attach at most 10 images of up to 5 MB each"})
 		} else {
 			writeErr(w, r, &app.Error{Code: "bad_request", Status: 400, Message: "expected multipart/form-data"})
 		}
 		return
 	}
 	defer r.MultipartForm.RemoveAll()
-	file, _, err := r.FormFile("screenshot")
-	if err != nil && !errors.Is(err, http.ErrMissingFile) {
-		writeErr(w, r, &app.Error{Code: "bad_request", Status: 400, Message: "invalid screenshot"})
+	headers := r.MultipartForm.File["screenshot"]
+	if len(headers) > app.MaxFeedbackAttachments {
+		writeErr(w, r, &app.Error{Code: "validation_failed", Status: 422, Message: "attach at most 10 images"})
 		return
 	}
-	var id string
-	in := app.ProductFeedbackInput{Kind: r.FormValue("kind"), Description: r.FormValue("description"), PagePath: r.FormValue("page_path")}
-	if file != nil {
+	files := make([]io.Reader, 0, len(headers))
+	for _, header := range headers {
+		file, err := header.Open()
+		if err != nil {
+			writeErr(w, r, &app.Error{Code: "bad_request", Status: 400, Message: "invalid screenshot"})
+			return
+		}
 		defer file.Close()
-		id, err = s.svc.CreateProductFeedback(r.Context(), principal(r), in, file)
-	} else {
-		id, err = s.svc.CreateProductFeedback(r.Context(), principal(r), in, nil)
+		files = append(files, file)
 	}
+	in := app.ProductFeedbackInput{Kind: r.FormValue("kind"), Description: r.FormValue("description"), PagePath: r.FormValue("page_path")}
+	id, err := s.svc.CreateProductFeedback(r.Context(), principal(r), in, files)
 	if err != nil {
 		if ae, ok := err.(*app.Error); ok && ae.Status == 429 {
 			w.Header().Set("Retry-After", "3600")

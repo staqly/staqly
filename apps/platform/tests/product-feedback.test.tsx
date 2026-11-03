@@ -25,11 +25,12 @@ describe('product feedback', () => {
     })
     const close = renderFeedback()
     const user = userEvent.setup()
+    const second = new File(['second'], 'second.webp', { type: 'image/webp' })
     const screenshot = new File(['image'], 'screenshot.png', { type: 'image/png' })
 
     window.history.replaceState({}, '', '/schedule?token=private#secret')
     await user.type(screen.getByLabelText(/Description/), 'The schedule is blank')
-    await user.upload(screen.getByLabelText(/Screenshot/), screenshot)
+    await user.upload(screen.getByLabelText(/Screenshot/), [screenshot, second])
     await user.click(screen.getByRole('button', { name: 'Send feedback' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Please try again')
     expect(screen.getByLabelText(/Description/)).toHaveValue('The schedule is blank')
@@ -46,7 +47,7 @@ describe('product feedback', () => {
     expect(body.get('page_path')).toBe('/schedule')
     expect(body.get('description')).toBe('The schedule is blank')
     expect(body.get('kind')).toBe('problem')
-    expect(body.get('screenshot')).toBe(screenshot)
+    expect(body.getAll('screenshot')).toEqual([screenshot, second])
     expect(calls[1].headers['X-CSRF-Token']).toBeTruthy()
   })
 
@@ -96,5 +97,29 @@ describe('product feedback', () => {
     await user.click(screen.getByRole('button', { name: 'Send feedback' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('up to 5 MB')
     expect(api.find('POST', '/v1/feedback')).toHaveLength(0)
+  })
+  it('limits selection to ten screenshots and allows removing and adding files', async () => {
+    const api = mockApi({ 'POST /v1/feedback': { status: 201, body: { id: 'fb_3' } } })
+
+    renderFeedback()
+    const user = userEvent.setup()
+    const input = screen.getByLabelText(/Screenshot/)
+    const files = Array.from({ length: 10 }, (_, i) => new File(['image'], `shot-${i}.png`, { type: 'image/png' }))
+    const extra = new File(['extra'], 'extra.png', { type: 'image/png' })
+
+    await user.type(screen.getByLabelText(/Description/), 'Problem')
+    await user.upload(input, files)
+    expect(screen.getAllByRole('button', { name: /Remove screenshot/ })).toHaveLength(10)
+    await user.upload(input, extra)
+    expect(await screen.findByRole('alert')).toHaveTextContent('at most 10')
+    expect(screen.getAllByRole('button', { name: /Remove screenshot/ })).toHaveLength(10)
+    await user.click(screen.getByRole('button', { name: 'Remove screenshot 1: shot-0.png' }))
+    await user.upload(input, extra)
+    await user.click(screen.getByRole('button', { name: 'Send feedback' }))
+    await waitFor(() => expect(api.find('POST', '/v1/feedback')).toHaveLength(1))
+    expect((api.find('POST', '/v1/feedback')[0].body as FormData).getAll('screenshot')).toEqual([
+      ...files.slice(1),
+      extra,
+    ])
   })
 })

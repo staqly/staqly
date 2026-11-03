@@ -21,7 +21,7 @@ var importOrder = []string{
 	"channels", "provider_apps", "posts", "post_targets", "preview_links", "post_comments", "post_responses", "post_response_insights", "schedules", "jobs",
 	"job_requeues", "channel_links", "pending_connections", "ai_jobs", "assistant_chats", "telegram_connect_codes", "oauth_clients",
 	"trial_fingerprints", "workspace_trials", "admins", "admin_codes", "admin_sessions", "admin_audit",
-	"limits", "limit_plans", "limit_workspaces", "product_feedback",
+	"limits", "limit_plans", "limit_workspaces", "product_feedback", "product_feedback_attachments",
 }
 
 // seededTables: tables a migration fills (the plan limits); a fresh database has their rows, which the import

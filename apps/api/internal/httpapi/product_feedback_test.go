@@ -3,10 +3,14 @@ package httpapi_test
 import (
 	"bytes"
 	"encoding/json"
+	"image"
+	"image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"testing"
+
+	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
 func TestProductFeedbackSubmission(t *testing.T) {
@@ -102,6 +106,57 @@ func TestProductFeedbackAccountRolesAndIdentity(t *testing.T) {
 		}
 		if row.WorkspaceID == "forged" || row.PagePath != "/schedule" {
 			t.Fatalf("metadata: %+v", row)
+		}
+	}
+}
+
+func TestProductFeedbackMultipartAttachments(t *testing.T) {
+	e := newEnv(t)
+	for _, count := range []int{10, 11} {
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		_ = mw.WriteField("kind", "problem")
+		_ = mw.WriteField("description", "Multiple screenshots")
+		_ = mw.WriteField("page_path", "/posts")
+		for range count {
+			part, err := mw.CreateFormFile("screenshot", "screenshot.png")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := png.Encode(part, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_ = mw.Close()
+		req, _ := http.NewRequest("POST", e.srv.URL+"/v1/feedback", &body)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.Header.Set("X-CSRF-Token", e.csrf)
+		res, err := e.browser.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		want := 201
+		if count == 11 {
+			want = 422
+		}
+		if res.StatusCode != want {
+			t.Fatalf("%d files: status %d want %d: %s", count, res.StatusCode, want, data)
+		}
+		if count == 10 {
+			var out struct {
+				ID string `json:"id"`
+			}
+			if err := json.Unmarshal(data, &out); err != nil {
+				t.Fatal(err)
+			}
+			for i := range count {
+				row, err := e.svc.Q.GetProductFeedbackAttachment(t.Context(), db.GetProductFeedbackAttachmentParams{FeedbackID: out.ID, Position: int64(i)})
+				if err != nil || row.MimeType != "image/png" {
+					t.Fatalf("attachment %d: %+v %v", i, row, err)
+				}
+			}
 		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -15,6 +16,7 @@ import (
 )
 
 const MaxFeedbackAttachmentBytes = 5 << 20
+const MaxFeedbackAttachments = 10
 
 // Product feedback belongs to the platform operator, not the workspace's media library or event stream.
 type ProductFeedbackInput struct {
@@ -24,22 +26,23 @@ type ProductFeedbackInput struct {
 }
 
 type ProductFeedback struct {
-	ID            string `json:"id"`
-	WorkspaceID   string `json:"workspace_id"`
-	WorkspaceName string `json:"workspace_name"`
-	ReporterID    string `json:"reporter_id"`
-	ReporterName  string `json:"reporter_name"`
-	ReporterEmail string `json:"reporter_email"`
-	Kind          string `json:"kind"`
-	Description   string `json:"description"`
-	PagePath      string `json:"page_path"`
-	Status        string `json:"status"`
-	CreatedAt     string `json:"created_at"`
-	Attachment    bool   `json:"attachment"`
+	ID              string `json:"id"`
+	WorkspaceID     string `json:"workspace_id"`
+	WorkspaceName   string `json:"workspace_name"`
+	ReporterID      string `json:"reporter_id"`
+	ReporterName    string `json:"reporter_name"`
+	ReporterEmail   string `json:"reporter_email"`
+	Kind            string `json:"kind"`
+	Description     string `json:"description"`
+	PagePath        string `json:"page_path"`
+	Status          string `json:"status"`
+	CreatedAt       string `json:"created_at"`
+	Attachment      bool   `json:"attachment"`
+	AttachmentCount int64  `json:"attachment_count"`
 }
 
 // CreateProductFeedback accepts people (all workspace roles) and local installs; API keys cannot submit as a person.
-func (s *Service) CreateProductFeedback(ctx context.Context, p Principal, in ProductFeedbackInput, screenshot io.Reader) (string, error) {
+func (s *Service) CreateProductFeedback(ctx context.Context, p Principal, in ProductFeedbackInput, screenshots []io.Reader) (string, error) {
 	if p.WorkspaceID == "" {
 		return "", ErrUnauthorized
 	}
@@ -66,9 +69,20 @@ func (s *Service) CreateProductFeedback(ctx context.Context, p Principal, in Pro
 	if reporter == "" {
 		reporter = p.Kind + ":" + p.ID
 	}
+	if len(screenshots) > MaxFeedbackAttachments {
+		return "", invalid("screenshot", "attach at most 10 images")
+	}
 	id := newID("fb")
-	key, ct := "", ""
-	if screenshot != nil {
+	attachments := make([]db.CreateProductFeedbackAttachmentParams, 0, len(screenshots))
+	saved := false
+	defer func() {
+		if !saved {
+			for _, attachment := range attachments {
+				_ = s.Cfg.Blob.Delete(context.WithoutCancel(ctx), attachment.StorageKey)
+			}
+		}
+	}()
+	for i, screenshot := range screenshots {
 		data, err := io.ReadAll(io.LimitReader(screenshot, MaxFeedbackAttachmentBytes+1))
 		if err != nil {
 			return "", err
@@ -76,13 +90,14 @@ func (s *Service) CreateProductFeedback(ctx context.Context, p Principal, in Pro
 		if len(data) == 0 || len(data) > MaxFeedbackAttachmentBytes {
 			return "", invalid("screenshot", "use an image up to 5 MB")
 		}
-		ct = http.DetectContentType(data)
+		ct := http.DetectContentType(data)
 		ext := map[string]string{"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}[ct]
 		cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 		if ext == "" || err != nil || cfg.Width < 1 || cfg.Height < 1 || int64(cfg.Width)*int64(cfg.Height) > 20_000_000 {
 			return "", invalid("screenshot", "use a PNG, JPEG or WebP image up to 20 megapixels")
 		}
-		key = workspaceKey(p.WorkspaceID) + "feedback/" + id + ext
+		key := workspaceKey(p.WorkspaceID) + "feedback/" + id + "/" + strconv.Itoa(i) + ext
+		attachments = append(attachments, db.CreateProductFeedbackAttachmentParams{FeedbackID: id, Position: int64(i), StorageKey: key, MimeType: ct})
 		if err := s.Cfg.Blob.Put(ctx, key, bytes.NewReader(data), int64(len(data)), ct); err != nil {
 			return "", err
 		}
@@ -98,11 +113,17 @@ func (s *Service) CreateProductFeedback(ctx context.Context, p Principal, in Pro
 		if n >= 5 {
 			return &Error{Code: "rate_limited", Status: 429, Message: "send at most 5 feedback reports per hour; try again later"}
 		}
-		return q.CreateProductFeedback(ctx, db.CreateProductFeedbackParams{ID: id, WorkspaceID: p.WorkspaceID, ReporterID: reporter, Kind: in.Kind, Description: in.Description, PagePath: pagePath, AttachmentKey: key, AttachmentType: ct, CreatedAt: s.now()})
+		if err := q.CreateProductFeedback(ctx, db.CreateProductFeedbackParams{ID: id, WorkspaceID: p.WorkspaceID, ReporterID: reporter, Kind: in.Kind, Description: in.Description, PagePath: pagePath, CreatedAt: s.now()}); err != nil {
+			return err
+		}
+		for _, attachment := range attachments {
+			if err := q.CreateProductFeedbackAttachment(ctx, attachment); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
-	if err != nil && key != "" {
-		_ = s.Cfg.Blob.Delete(context.WithoutCancel(ctx), key)
-	}
+	saved = err == nil
 	return id, err
 }
 
@@ -144,7 +165,7 @@ func (s *Service) AdminListProductFeedback(ctx context.Context, a Admin, cursor 
 		page.NextCursor = encodeCursor(last.CreatedAt, last.ID)
 	}
 	for _, r := range rows {
-		page.Items = append(page.Items, ProductFeedback{ID: r.ID, WorkspaceID: r.WorkspaceID, WorkspaceName: r.WorkspaceName, ReporterID: r.ReporterID, ReporterName: r.ReporterName, ReporterEmail: r.ReporterEmail, Kind: r.Kind, Description: r.Description, PagePath: r.PagePath, Status: r.Status, CreatedAt: r.CreatedAt, Attachment: r.AttachmentKey != ""})
+		page.Items = append(page.Items, ProductFeedback{ID: r.ID, WorkspaceID: r.WorkspaceID, WorkspaceName: r.WorkspaceName, ReporterID: r.ReporterID, ReporterName: r.ReporterName, ReporterEmail: r.ReporterEmail, Kind: r.Kind, Description: r.Description, PagePath: r.PagePath, Status: r.Status, CreatedAt: r.CreatedAt, Attachment: r.AttachmentCount > 0, AttachmentCount: r.AttachmentCount})
 	}
 	return page, nil
 }
@@ -171,17 +192,20 @@ func (s *Service) AdminSetProductFeedbackStatus(ctx context.Context, a Admin, id
 	})
 }
 
-func (s *Service) AdminOpenProductFeedbackAttachment(ctx context.Context, a Admin, id string) (io.ReadSeekCloser, string, error) {
+func (s *Service) AdminOpenProductFeedbackAttachment(ctx context.Context, a Admin, id string, index int64) (io.ReadSeekCloser, string, error) {
 	if err := s.requireFeedbackAdmin(ctx, a); err != nil {
 		return nil, "", err
 	}
-	row, err := s.Q.GetProductFeedback(ctx, id)
-	if isNoRows(err) || (err == nil && row.AttachmentKey == "") {
+	if index < 0 || index >= MaxFeedbackAttachments {
+		return nil, "", invalid("index", "choose an attachment from 0 to 9")
+	}
+	row, err := s.Q.GetProductFeedbackAttachment(ctx, db.GetProductFeedbackAttachmentParams{FeedbackID: id, Position: index})
+	if isNoRows(err) {
 		return nil, "", notFound("attachment")
 	}
 	if err != nil {
 		return nil, "", err
 	}
-	file, err := s.Cfg.Blob.Open(ctx, row.AttachmentKey)
-	return file, row.AttachmentType, err
+	file, err := s.Cfg.Blob.Open(ctx, row.StorageKey)
+	return file, row.MimeType, err
 }
