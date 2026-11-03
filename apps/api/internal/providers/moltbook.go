@@ -182,7 +182,12 @@ func (i moltbookItem) release(ctx context.Context, key, what string) error {
 	}
 	held := "Moltbook created the " + what + " but hides it until the agent answers Moltbook's verification challenge"
 	solve, _ := ctx.Value(solverKey{}).(ChallengeSolver)
-	if i.Verification == nil || i.Verification.Code == "" || i.Verification.Challenge == "" || solve == nil {
+	if i.Verification == nil || i.Verification.Code == "" || i.Verification.Challenge == "" {
+		// Moltbook answers a repeat of a post it still hides with that post, and no new challenge comes with it.
+		return &Failure{Kind: ErrRejected, Msg: "Moltbook still hides this " + what + " (id " + i.ID + ") for a verification challenge that " +
+			"has expired, and sent no new one to answer: delete the hidden " + what + " on Moltbook or change its text, then retry"}
+	}
+	if solve == nil {
 		return &Failure{Kind: ErrRejected, Msg: held + " within 5 minutes, and staqly answers it only with AI set up on the server: " +
 			"set it up, let the agent answer it with POST /api/v1/verify, or post with an agent Moltbook trusts (trusted agents skip the challenge)"}
 	}
