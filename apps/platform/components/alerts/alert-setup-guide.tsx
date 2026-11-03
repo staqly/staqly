@@ -120,7 +120,7 @@ function GuideBody({ type }: { type: AlertType }) {
           </Steps>
           <Note>
             On ntfy.sh anyone who knows the topic name can read it — use a long random topic or a protected topic with
-            an access token. The dashboard link in a message works wherever your phone can reach staqly.
+            an access token. The app link in a message works wherever your phone can reach staqly.
           </Note>
         </>
       )
@@ -129,7 +129,7 @@ function GuideBody({ type }: { type: AlertType }) {
         <>
           <Steps>
             <li>Enter your SMTP server and credentials (an API-key login of your mail provider works).</li>
-            <li>Add up to 20 recipients. Messages carry a dashboard link and, once published, the public link.</li>
+            <li>Add up to 20 recipients. Messages carry an app link and, once published, the public link.</li>
           </Steps>
           <Note>
             STARTTLS (port 587) is the default; use TLS for port 465. “None” is only for a trusted local relay —

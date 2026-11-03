@@ -153,7 +153,7 @@ function RecentActivity({ agent, onShowAll }: { agent: Agent | null; onShowAll: 
             {agent
               ? 'What this agent did lately.'
               : isLocal
-                ? 'Latest events from agents and the dashboard.'
+                ? 'Latest events from agents and the app.'
                 : 'Events triggered with API keys.'}
           </p>
         </div>

@@ -6,6 +6,14 @@ import { useState } from 'react'
 
 import { ChannelAvatar } from '@/components/channels/channel-avatars'
 import { ChannelStatusBadge } from '@/components/common/status-badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { ProviderIcon } from '@/lib/providers'
 import { safeHttpUrl } from '@/lib/safe'
@@ -253,9 +261,12 @@ export function SourcesTable({ data }: { data: Analytics }) {
                   <tr key={s.source} className="border-b last:border-0" data-testid="source-row">
                     <th scope="row" className={cn(td, 'max-w-56 text-left font-normal')}>
                       <span className="mr-2 font-medium wrap-anywhere">{s.label}</span>
-                      <span className="rounded-md border px-1.5 text-xs whitespace-nowrap text-muted-foreground">
-                        {SOURCE_KINDS[s.kind]}
-                      </span>
+                      {/* The kind tells a named source apart (n8n over the API); the app needs no second "App". */}
+                      {s.label !== SOURCE_KINDS[s.kind] && (
+                        <span className="rounded-md border px-1.5 text-xs whitespace-nowrap text-muted-foreground">
+                          {SOURCE_KINDS[s.kind]}
+                        </span>
+                      )}
                     </th>
                     <td className={num}>{formatCount(s.posts_created)}</td>
                     <td className={num}>{formatCount(s.posts_published)}</td>
@@ -380,7 +391,7 @@ export function FailuresList({ data }: { data: Analytics }) {
           {data.failures.map((f) => (
             <li key={f.reason + f.last_at} className="grid gap-1 rounded-lg border px-3 py-2 text-sm">
               <div className="flex items-start justify-between gap-3">
-                <span className="min-w-0 wrap-anywhere">{f.reason}</span>
+                <FailureReason reason={f.reason} />
                 <span className="shrink-0 font-semibold tabular-nums">{formatCount(f.count)}×</span>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -412,6 +423,31 @@ export function FailuresList({ data }: { data: Analytics }) {
         </ol>
       )}
     </section>
+  )
+}
+
+/** A failure reason clamped to two lines; a click opens it whole. */
+function FailureReason({ reason }: { reason: string }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className="line-clamp-2 min-w-0 cursor-pointer text-left wrap-anywhere hover:underline hover:underline-offset-2"
+          title="Show the whole reason"
+        >
+          {reason}
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Failure reason</DialogTitle>
+          <DialogDescription className="text-sm whitespace-pre-wrap text-foreground wrap-anywhere">
+            {reason}
+          </DialogDescription>
+        </DialogHeader>
+      </DialogContent>
+    </Dialog>
   )
 }
 
