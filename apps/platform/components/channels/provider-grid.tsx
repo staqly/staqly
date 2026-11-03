@@ -1,10 +1,10 @@
 'use client'
 
 import { Check, CircleHelp } from 'lucide-react'
-import { useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 
 import { Badge } from '@/components/ui/badge'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PROVIDER_HINTS } from '@/lib/provider-hints'
 import { ProviderTile } from '@/lib/providers'
 import { cn } from '@/lib/utils'
@@ -210,18 +210,7 @@ export function ProviderGrid({
                         {hint}
                       </span>
                       {/* Beside the tile, not in it (a button can't hold one); the Soon badge keeps its corner. */}
-                      <Popover>
-                        <PopoverTrigger
-                          aria-label={`What ${p.name} publishes`}
-                          className={cn(
-                            'absolute top-1 flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5',
-                            label ? 'left-1' : 'right-1',
-                          )}
-                        >
-                          <CircleHelp className="size-4" />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-64 p-3 text-xs">{hint}</PopoverContent>
-                      </Popover>
+                      <HintTip name={p.name} hint={hint} className={label ? 'left-1' : 'right-1'} />
                     </>
                   )}
                 </li>
@@ -231,5 +220,31 @@ export function ProviderGrid({
         </section>
       ))}
     </div>
+  )
+}
+
+/** The "?" with its hint as a tooltip: on hover or focus, and on a tap for touch screens. */
+function HintTip({ name, hint, className }: { name: string; hint: string; className: string }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger
+        type="button"
+        aria-label={`What ${name} publishes`}
+        onClick={(e) => {
+          // Radix closes a tooltip on click; here a tap is how touch screens open it (a mouse has opened it already).
+          e.preventDefault()
+          setOpen(true)
+        }}
+        className={cn(
+          'absolute top-1 flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5',
+          className,
+        )}
+      >
+        <CircleHelp className="size-4" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64 text-xs">{hint}</TooltipContent>
+    </Tooltip>
   )
 }
