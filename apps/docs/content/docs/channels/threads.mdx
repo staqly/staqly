@@ -42,6 +42,7 @@ app's own ID).
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_THREADS_ENABLED=true
 PROVIDER_THREADS_CLIENT_ID=your-threads-app-id
 PROVIDER_THREADS_CLIENT_SECRET=your-threads-app-secret
 ```
@@ -51,7 +52,7 @@ PROVIDER_THREADS_CLIENT_SECRET=your-threads-app-secret
   service keeps `PROVIDER_*` settings).
 
 Until both are set, Threads shows as **soon** in **Channels → Add channel**.
-`PROVIDER_THREADS_ENABLED=false` hides it altogether. A workspace may instead save its own app over
+It shows only with `PROVIDER_THREADS_ENABLED=true`; unset or `false` hides it, and `PROVIDER_THREADS_MAINTENANCE=true` shows it as **soon** while it is under maintenance. A workspace may instead save its own app over
 the API (`PUT /v1/providers/threads/app`).
 
 </Step>

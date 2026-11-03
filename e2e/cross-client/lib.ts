@@ -82,6 +82,8 @@ export async function startServer(
       env: {
         ...process.env,
         STAQLY_MODE: opts.mode,
+        // Every platform on (an unset PROVIDER_<ID>_ENABLED is off).
+        PROVIDER_DEFAULT_ENABLED: 'true',
         // Cloud without a Google client: the sign-in from before accounts (dev and tests only).
         AUTH_DEV_SIGNIN: 'true',
         // New workspaces start on Pro so suites can make several keys and export; the Starter trial test

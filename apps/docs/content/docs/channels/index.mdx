@@ -149,14 +149,18 @@ has their app keys; token platforms right away.
 Every platform has a switch in the server's environment, locally and in the cloud:
 
 ```bash title=".env"
-PROVIDER_X_ENABLED=true            # false: turned off on this server
+PROVIDER_X_ENABLED=true            # unset or false: hidden on this server
 PROVIDER_X_CLIENT_ID=...           # OAuth platforms: the developer app
 PROVIDER_X_CLIENT_SECRET=...
 ```
 
-- `PROVIDER_<ID>_ENABLED=false` hides the platform from the catalog and the dashboard and refuses
-  connecting it and new posts on its channels (`409 provider_disabled`). Posts already scheduled
-  on its channels still publish, and can still be edited.
+- Only `PROVIDER_<ID>_ENABLED=true` shows a platform; unset or `false` hides it from the catalog and
+  the dashboard and refuses connecting it and new posts on its channels (`409 provider_disabled`).
+  Posts already scheduled on its channels still publish, and can still be edited.
+  `PROVIDER_DEFAULT_ENABLED=true` turns on every platform not set otherwise; your own automation is on
+  unless `PROVIDER_CUSTOM_ENABLED=false`.
+- `PROVIDER_<ID>_MAINTENANCE=true` shows the platform as **soon** and refuses connecting it and new
+  posts on its channels (`409`); posts already scheduled there wait and go out once it is `false` again.
 - Enabled but without `_CLIENT_ID` and `_CLIENT_SECRET`, an OAuth platform is listed as **soon**.
 - Restart the server after changing them. `.env.example` has a block for every platform.
 

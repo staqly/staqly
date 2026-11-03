@@ -32,8 +32,9 @@ change. See [Channels](/channels#managing-channels).
 
 ### Platforms on a server
 
-Each platform can be turned off for a whole server with `PROVIDER_<ID>_ENABLED=false` in its
-environment, in the Community Edition and in the cloud. A turned-off platform leaves the catalog and the
+A platform is on for a whole server only with `PROVIDER_<ID>_ENABLED=true` in its environment, in the
+Community Edition and in the cloud (`PROVIDER_DEFAULT_ENABLED=true` turns on every platform not set
+otherwise; your own automation is on unless `PROVIDER_CUSTOM_ENABLED=false`). A platform that is not on leaves the catalog and the
 dashboard, connecting it answers `409 provider_disabled`, and new posts or new targets on its
 channels are refused the same way. Posts that already had one of its channels keep it: they can
 still be edited and publish as planned. An OAuth platform without its app's keys

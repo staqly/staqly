@@ -40,6 +40,7 @@ Application**, name it (the bot shows with this name and icon on every message).
 Put all three in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_DISCORD_ENABLED=true
 PROVIDER_DISCORD_CLIENT_ID=your-client-id
 PROVIDER_DISCORD_CLIENT_SECRET=your-client-secret
 PROVIDER_DISCORD_BOT_TOKEN=your-bot-token
@@ -50,8 +51,8 @@ PROVIDER_DISCORD_BOT_TOKEN=your-bot-token
   service keeps `PROVIDER_*` settings).
 
 Until all three are set, **Channels → Add channel → Discord** connects a webhook instead.
-`PROVIDER_DISCORD_ENABLED=false` hides the bot; `PROVIDER_DISCORD_WEBHOOK_ENABLED=false` the
-webhook. **Settings → System → Platforms** tells which of the three is missing and
+The bot shows only with `PROVIDER_DISCORD_ENABLED=true`, the webhook only with
+`PROVIDER_DISCORD_WEBHOOK_ENABLED=true`. **Settings → System → Platforms** tells which of the three is missing and
 whether Discord takes the keys.
 
 A channel stores only its Discord server's id: the bot's token is read from the environment each

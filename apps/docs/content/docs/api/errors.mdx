@@ -31,7 +31,7 @@ Switch on `error.code`; the `message` is for humans and may change.
 |---|---|
 | `validation_failed`, `bad_request`, `connect_failed` | Fix the request (see `fields` and the message); don't retry as is |
 | `unauthorized`, `forbidden`, `csrf_failed` | Fix the credentials, the key's [scopes](/api/authentication#scopes) or sign in again |
-| `conflict`, `already_*`, `app_not_configured`, `provider_soon`, `provider_disabled` | Reload; the state already changed, or the platform is not ready on this server |
+| `conflict`, `already_*`, `app_not_configured`, `provider_soon`, `provider_disabled`, `provider_maintenance` | Reload; the state already changed, or the platform is not ready on this server |
 | `rate_limited`, `code_cooldown`, `busy`, `unavailable`, `idempotency_in_progress` | Wait (`Retry-After` when present) and retry |
 | `plan_limit_exceeded`, `ai_limit_reached`, `x_posts_exhausted`, `linkedin_posts_exhausted`, `linkedin_videos_exhausted` | Don't retry: the plan, the month or the bought X posts have to change |
 | `payment_failed` | Don't retry as is: the card or the bank has to confirm the payment first (`details.reason`, `details.pay_url`) |
@@ -104,6 +104,7 @@ Grouped by what they are about. Every code keeps its HTTP status.
 | 409 | `conflict` | The post is published or publishing, or two edits raced; see [below](#409-conflict) |
 | 409 | `post_changed` | The post changed since your `expected_version` (*post was modified (version 3, expected 2)*): reload it and apply your edit again |
 | 409 | `provider_disabled` | A new post or a new target on a channel whose platform is turned off on this server. Targets the post already had keep working |
+| 409 | `provider_maintenance` | Connecting, or a new post or a new target on a channel, whose platform is under maintenance (`PROVIDER_<ID>_MAINTENANCE=true`). Targets the post already had wait and go out after it |
 | 422 | `validation_failed` | A target over its platform's limits is keyed `targets.<channel_id>.content` or `targets.<channel_id>.settings.<key>`; see [below](#422-on-posts-and-targets) |
 
 A target that fails while publishing doesn't answer an error code: the post's target turns
@@ -114,7 +115,7 @@ A target that fails while publishing doesn't answer an error code: the post's ta
 | Status | `code` | When |
 |---|---|---|
 | 409 | `provider_soon` | The platform is in the catalog but not available in this build yet, or an OAuth platform has no app keys on this server |
-| 409 | `provider_disabled` | The platform is turned off on this server (`PROVIDER_<ID>_ENABLED=false`) |
+| 409 | `provider_disabled` | The platform is not turned on on this server (`PROVIDER_<ID>_ENABLED` unset or `false`) |
 | 409 | `app_not_configured` | An OAuth sign-in started for a platform without a developer app; see [Developer apps](/channels/developer-apps) |
 | 410 | `state_expired` | The platform's sign-in took too long; start again |
 | 410 | `link_revoked` | A [connect link](/channels/connect-links) was turned off; ask for a new one |

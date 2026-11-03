@@ -40,6 +40,7 @@ Copy the **Client ID** and **Client Secret** from **Basic Information → App Cr
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_SLACK_ENABLED=true
 PROVIDER_SLACK_CLIENT_ID=your-client-id
 PROVIDER_SLACK_CLIENT_SECRET=your-client-secret
 ```
@@ -49,7 +50,7 @@ PROVIDER_SLACK_CLIENT_SECRET=your-client-secret
   service keeps `PROVIDER_*` settings).
 
 Until both are set, Slack shows as **soon** in **Channels → Add channel**.
-`PROVIDER_SLACK_ENABLED=false` hides it altogether.
+It shows only with `PROVIDER_SLACK_ENABLED=true`; unset or `false` hides it, and `PROVIDER_SLACK_MAINTENANCE=true` shows it as **soon** while it is under maintenance.
 
 </Step>
 <Step>

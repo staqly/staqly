@@ -34,10 +34,13 @@ PROVIDER_X_CLIENT_ID=your-oauth2-client-id
 PROVIDER_X_CLIENT_SECRET=your-oauth2-client-secret
 ```
 
-`PROVIDER_<ID>_ENABLED` (default `true`, every platform has one, including `PROVIDER_CUSTOM_ENABLED`)
-turns a platform off on this server when `false`: it leaves the catalog and the dashboard, and
-connecting it or a new post on one of its channels answers `409 provider_disabled`. Posts that
-already target its channels still publish as planned. Enabled but without its app's keys, an OAuth
+`PROVIDER_<ID>_ENABLED` (every platform has one) turns a platform on on this server when `true`;
+unset or `false`, it is not in the catalog or the dashboard, and connecting it or a new post on one of
+its channels answers `409 provider_disabled`. Posts that already target its channels still publish as
+planned. `PROVIDER_DEFAULT_ENABLED=true` turns on every platform not set otherwise; your own automation
+(`PROVIDER_CUSTOM_ENABLED`) is on unless `false`. `PROVIDER_<ID>_MAINTENANCE=true` shows a platform as
+`soon` while you fix something: no connecting and no new posts, and its scheduled posts wait until it is
+`false` again. Enabled but without its app's keys, an OAuth
 platform is listed as `soon`.
 `.env.example` has a block for every platform.
 

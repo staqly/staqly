@@ -438,6 +438,7 @@ var notExercised = map[string]bool{
 }
 
 func TestMain(m *testing.M) {
+	app.ProvidersOnByDefault = true // unset PROVIDER_<ID>_ENABLED means off; most tests are not about that
 	code := m.Run()
 	// Only a full run reaches every operation.
 	if f := flag.Lookup("test.run"); code == 0 && f != nil && f.Value.String() == "" {

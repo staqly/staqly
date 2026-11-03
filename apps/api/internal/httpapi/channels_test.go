@@ -521,6 +521,87 @@ func TestProviderDisabled(t *testing.T) {
 	}
 }
 
+// An unset PROVIDER_<ID>_ENABLED is off like false: no tile, no connecting. Your own automation is always on.
+func TestProviderUnsetIsOff(t *testing.T) {
+	e := newEnv(t)
+	app.ProvidersOnByDefault = false
+	t.Cleanup(func() { app.ProvidersOnByDefault = true })
+	var out struct{ Data []app.ProviderInfo }
+	e.do(nil, "GET", "/v1/providers", e.key, nil, 200, &out)
+	if len(out.Data) != 1 || out.Data[0].ID != "custom" {
+		t.Fatalf("unset: %+v", out.Data)
+	}
+	var errBody struct{ Error app.Error }
+	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "faketoken", "fields": map[string]string{"token": "good"}}, 409, &errBody)
+	if errBody.Error.Code != "provider_disabled" {
+		t.Fatalf("connect: %+v", errBody.Error)
+	}
+	e.svc.Getenv = func(k string) string {
+		if k == "PROVIDER_FAKETOKEN_ENABLED" {
+			return "true"
+		}
+		return ""
+	}
+	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "faketoken", "fields": map[string]string{"token": "good"}}, 201, nil)
+}
+
+// PROVIDER_<ID>_MAINTENANCE=true shows the platform as soon, refuses new accounts and new posts to it, and holds
+// what was already scheduled there until maintenance ends; then it goes out.
+func TestProviderMaintenance(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c := e.collection("Social")
+	var ch app.Channel
+	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "faketoken", "fields": map[string]string{"token": "good"}}, 201, &ch)
+	var post app.Post
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "scheduled",
+		"targets": []map[string]any{{"channel_id": ch.ID}}}, 201, &post)
+
+	prev := e.svc.Getenv
+	maintenance := true
+	e.svc.Getenv = func(k string) string {
+		if k == "PROVIDER_FAKETOKEN_MAINTENANCE" && maintenance {
+			return "true"
+		}
+		if prev != nil {
+			return prev(k)
+		}
+		return ""
+	}
+	var out struct{ Data []app.ProviderInfo }
+	e.do(nil, "GET", "/v1/providers", e.key, nil, 200, &out)
+	for _, p := range out.Data {
+		if p.ID == "faketoken" && p.Status != "soon" {
+			t.Fatalf("under maintenance: %+v", p)
+		}
+	}
+	var errBody struct{ Error app.Error }
+	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "faketoken", "fields": map[string]string{"token": "good"}}, 409, &errBody)
+	if errBody.Error.Code != "provider_maintenance" {
+		t.Fatalf("connect under maintenance: %+v", errBody.Error)
+	}
+	e.do(nil, "POST", "/v1/posts", e.key, map[string]any{"title": "Post", "collection": c.ID, "content": "new",
+		"targets": []map[string]any{{"channel_id": ch.ID}}}, 409, &errBody)
+	if errBody.Error.Code != "provider_maintenance" {
+		t.Fatalf("new post under maintenance: %+v", errBody.Error)
+	}
+
+	// The post that already had the channel waits, then goes out once maintenance ends.
+	e.do(nil, "POST", "/v1/posts/"+post.ID+"/publish", e.key, nil, 202, nil)
+	e.svc.RunDueJobsOnce(ctx)
+	e.do(nil, "GET", "/v1/posts/"+post.ID, e.key, nil, 200, &post)
+	if post.Status == "published" || post.Status == "failed" {
+		t.Fatalf("held post: %+v", post)
+	}
+	maintenance = false
+	e.svc.Now = func() time.Time { return time.Now().Add(time.Hour) }
+	e.svc.RunDueJobsOnce(ctx)
+	e.do(nil, "GET", "/v1/posts/"+post.ID, e.key, nil, 200, &post)
+	if post.Status != "published" {
+		t.Fatalf("after maintenance: %+v", post)
+	}
+}
+
 // Activity: the last published post and time, the next scheduled one and the 30-day count come with list and
 // get, read from the targets, and only for the workspace's own channels.
 func TestChannelActivity(t *testing.T) {

@@ -45,6 +45,7 @@ Copy the **App ID** and **App secret** from **App settings → Basic**.
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_META_ENABLED=true
 PROVIDER_META_CLIENT_ID=your-meta-app-id
 PROVIDER_META_CLIENT_SECRET=your-meta-app-secret
 # or a Meta app for Facebook alone (both set: Facebook uses it, Instagram keeps the one above)
@@ -57,7 +58,7 @@ PROVIDER_META_CLIENT_SECRET=your-meta-app-secret
   service keeps `PROVIDER_*` settings).
 
 Until both are set, Facebook Page shows as **soon** in **Channels → Add channel**.
-`PROVIDER_FACEBOOK_ENABLED=false` hides it altogether. The same Meta app, with the same keys, also serves
+It shows only with `PROVIDER_FACEBOOK_ENABLED=true`; unset or `false` hides it, and `PROVIDER_FACEBOOK_MAINTENANCE=true` shows it as **soon** while it is under maintenance. The same Meta app, with the same keys, also serves
 [Instagram](/channels/instagram) (which adds a login configuration).
 A workspace may instead save its own app over the API (`PUT /v1/providers/facebook/app`).
 

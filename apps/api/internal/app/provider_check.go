@@ -54,6 +54,8 @@ func (s *Service) CheckProvider(ctx context.Context, p Principal, providerID str
 	switch {
 	case !s.providerEnabled(providerID):
 		add(SetupCheck{Key: "keys", Label: "App keys", Detail: e.Name() + " is turned off on this server"})
+	case s.providerMaintenance(providerID):
+		add(SetupCheck{Key: "keys", Label: "App keys", Detail: e.Name() + " is under maintenance on this server"})
 	case appErr != nil:
 		add(SetupCheck{Key: "keys", Label: "App keys", Detail: "No app keys yet: register an app with " + e.Name() + " and give this server its keys"})
 	default:

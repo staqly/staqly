@@ -38,6 +38,7 @@ The app's **id** is the string under its name; the **secret** is next to it.
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_REDDIT_ENABLED=true
 PROVIDER_REDDIT_CLIENT_ID=your-app-id
 PROVIDER_REDDIT_CLIENT_SECRET=your-app-secret
 ```
@@ -47,7 +48,7 @@ PROVIDER_REDDIT_CLIENT_SECRET=your-app-secret
   service keeps `PROVIDER_*` settings).
 
 Until both are set, Reddit shows as **soon** in **Channels → Add channel**.
-`PROVIDER_REDDIT_ENABLED=false` hides it altogether.
+It shows only with `PROVIDER_REDDIT_ENABLED=true`; unset or `false` hides it, and `PROVIDER_REDDIT_MAINTENANCE=true` shows it as **soon** while it is under maintenance.
 
 </Step>
 <Step>

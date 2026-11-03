@@ -40,6 +40,7 @@ describes only the older OAuth 1.0a; staqly signs in with OAuth 2.0 using the sa
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_TUMBLR_ENABLED=true
 PROVIDER_TUMBLR_CLIENT_ID=your-oauth-consumer-key
 PROVIDER_TUMBLR_CLIENT_SECRET=your-secret-key
 ```
@@ -49,7 +50,7 @@ PROVIDER_TUMBLR_CLIENT_SECRET=your-secret-key
   service keeps `PROVIDER_*` settings).
 
 Until both are set, Tumblr shows as **soon** in **Channels → Add channel**.
-`PROVIDER_TUMBLR_ENABLED=false` hides it altogether.
+It shows only with `PROVIDER_TUMBLR_ENABLED=true`; unset or `false` hides it, and `PROVIDER_TUMBLR_MAINTENANCE=true` shows it as **soon** while it is under maintenance.
 
 </Step>
 <Step>

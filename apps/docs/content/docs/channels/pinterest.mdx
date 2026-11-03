@@ -35,6 +35,7 @@ Copy the **App id** and the **App secret key**.
 Put them in the server's environment and restart it:
 
 ```bash title=".env"
+PROVIDER_PINTEREST_ENABLED=true
 PROVIDER_PINTEREST_CLIENT_ID=your-app-id
 PROVIDER_PINTEREST_CLIENT_SECRET=your-app-secret-key
 ```
@@ -44,7 +45,7 @@ PROVIDER_PINTEREST_CLIENT_SECRET=your-app-secret-key
   service keeps `PROVIDER_*` settings).
 
 Until both are set, Pinterest shows as **soon** in **Channels → Add channel**.
-`PROVIDER_PINTEREST_ENABLED=false` hides it altogether.
+It shows only with `PROVIDER_PINTEREST_ENABLED=true`; unset or `false` hides it, and `PROVIDER_PINTEREST_MAINTENANCE=true` shows it as **soon** while it is under maintenance.
 
 </Step>
 <Step>
