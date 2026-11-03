@@ -238,7 +238,7 @@ function HintTip({ name, hint, className }: { name: string; hint: string; classN
           setOpen(true)
         }}
         className={cn(
-          'absolute top-1 flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5',
+          'absolute top-1 flex size-6 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2',
           className,
         )}
       >

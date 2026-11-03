@@ -44,8 +44,11 @@ test('welcome: a new account goes through the wizard once', async ({ page }) => 
 
   // The platforms are only picked here; they are connected at the end.
   await ready(page, 'Where do you post?')
-  await page.getByRole('button', { name: 'Your own automation' }).click()
-  await expect(page.getByRole('button', { name: 'Your own automation' })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: 'Your own automation', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Your own automation', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
   await page.getByRole('button', { name: /Continue/ }).click()
 
   // The agents goal puts the agent first; a workspace that can write gets its key here, in the command to paste.

@@ -38,12 +38,17 @@ test.describe('notification bell', () => {
     await openNotifications(page)
     await page.getByTestId('notifications-all').click()
     await expect(page).toHaveURL(/\/notifications/)
-    await page
+    const link = page
       .getByTestId('notifications-page-list')
       .getByRole('link', { name: `“${title}” is out on ${col.channel.name}` })
-      .click()
-    await expect(page).toHaveURL(new RegExp(`/posts/${post.id}`))
+
+    await expect(link).toHaveAttribute('href', `/posts/${post.id}`)
+    await link.click()
+    await expect(page).toHaveURL(/\/notifications$/)
     await expect(page.getByRole('dialog').getByRole('heading', { name: title })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await expect(page).toHaveURL(/\/notifications$/)
   })
 
   test('a failed post and a request to the automation are listed too', async ({ page, api }) => {
