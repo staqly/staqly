@@ -5,6 +5,7 @@ import {
   clipAt,
   clipStarts,
   clock,
+  frameSide,
   gainAt,
   length,
   newClip,
@@ -122,6 +123,15 @@ describe('drawing a frame', () => {
 
     drawFrame(ctx, t, 0, () => frame)
     expect(calls[0]).toEqual([0, 0, 1080, 1920])
+  })
+})
+
+describe('a custom frame size', () => {
+  it('is even and within what browsers encode', () => {
+    expect(frameSide(1081)).toBe(1080)
+    expect(frameSide(5)).toBe(160)
+    expect(frameSide(9999)).toBe(3840)
+    expect(frameSide(Number.NaN)).toBe(160)
   })
 })
 
