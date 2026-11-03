@@ -372,6 +372,12 @@ type MetricsReader interface {
 	Metrics(ctx context.Context, c Credentials, externalID string) (Metrics, error)
 }
 
+// ExistenceChecker is implemented by platforms that give no numbers but can say whether a published post is still
+// there: Exists returns nil when it is, an ErrGone Failure when it was deleted on the platform.
+type ExistenceChecker interface {
+	Exists(ctx context.Context, c Credentials, externalID string) error
+}
+
 // Remover is implemented by platforms that can take a published post (or one part of its thread) down again.
 // externalID is what Publish or Reply returned. Remove returns nil also when the platform says the item is
 // already gone, a *Failure with ErrManual when the platform has no way to delete it through its API (the person

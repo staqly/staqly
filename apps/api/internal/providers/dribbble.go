@@ -317,3 +317,31 @@ func dribbbleError(status int, raw []byte) error {
 	}
 	return &Failure{Kind: ErrRejected, Msg: "Dribbble refused the shot: " + detail}
 }
+
+var _ ExistenceChecker = Dribbble{}
+
+// Exists asks for the shot: Dribbble's API gives no numbers for it, but a deleted shot answers 404.
+func (Dribbble) Exists(ctx context.Context, c Credentials, externalID string) error {
+	if c["access_token"] == "" {
+		return &Failure{Kind: ErrReauth, Msg: "Dribbble: no account stored; reconnect the account"}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dribbbleAPI+"/v2/shots/"+url.PathEscape(externalID), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c["access_token"])
+	resp, err := httpClient(ctx).Do(req)
+	if err != nil {
+		return fmt.Errorf("Dribbble could not be reached (%s)", req.URL.Host)
+	}
+	resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return &Failure{Kind: ErrGone, Msg: "Dribbble: the shot is not there any more"}
+	case resp.StatusCode == http.StatusUnauthorized:
+		return &Failure{Kind: ErrReauth, Msg: "Dribbble no longer accepts the sign-in; reconnect the account"}
+	case resp.StatusCode >= 300:
+		return fmt.Errorf("Dribbble answered %d", resp.StatusCode)
+	}
+	return nil
+}

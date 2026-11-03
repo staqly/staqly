@@ -704,8 +704,9 @@ func (s *Service) PostMetrics(ctx context.Context, p Principal, postID string, r
 			m.UpdatedAt = &t.MetricsAt.String
 		}
 		e, ok := providers.Get(t.Provider)
-		reader, canRead := e.Provider.(providers.MetricsReader)
-		m.Available = (ok && canRead) || t.Provider == "custom"
+		reader, numbers := numbersReader(e)
+		canRead := reader != nil
+		m.Available = (ok && numbers) || t.Provider == "custom"
 		stale := !t.MetricsAt.Valid || t.MetricsAt.String < formatTime(s.Now().Add(-metricsFresh))
 		// A target taken down keeps the numbers read last (unpublish reads them once more before removing it).
 		// A story past its day keeps the final numbers Meta sent (story_insights): the API has none any more.
@@ -718,6 +719,11 @@ func (s *Service) PostMetrics(ctx context.Context, p Principal, postID string, r
 			} else if err != nil {
 				s.logger(ctx).Info("post metrics: not read", "post_id", postID, "channel_id", t.ChannelID, "provider", t.Provider, "err", err)
 				m.Error = readFailure(e.Name(), err)
+			} else if !numbers { // still there; nothing to show but when it was checked
+				now := s.now()
+				if err := s.Q.SetTargetMetrics(ctx, db.SetTargetMetricsParams{MetricsAt: nullStr(now), PostID: postID, ChannelID: t.ChannelID}); err != nil {
+					return nil, err
+				}
 			} else {
 				now := s.now()
 				fresh = withoutOwnParts(fresh, t.Provider, t.Replies)
@@ -784,8 +790,8 @@ func (s *Service) checkTarget(ctx context.Context, postID, channelID string) err
 		return nil
 	}
 	e, ok := providers.Get(ch.Provider)
-	reader, canRead := e.Provider.(providers.MetricsReader)
-	if !ok || !canRead || storyExpired(ch.Provider, t.Settings, t.PublishedAt, s.Now()) {
+	reader, numbers := numbersReader(e)
+	if !ok || reader == nil || storyExpired(ch.Provider, t.Settings, t.PublishedAt, s.Now()) {
 		return nil
 	}
 	m, err := s.readMetrics(ctx, row.WorkspaceID, channelID, e, reader, t.ExternalID)
@@ -796,8 +802,29 @@ func (s *Service) checkTarget(ctx context.Context, postID, channelID string) err
 		s.logger(ctx).Info("check target: numbers not read", "post_id", postID, "channel_id", channelID, "err", err)
 		return nil
 	}
+	if !numbers {
+		return s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{MetricsAt: nullStr(s.now()), PostID: postID, ChannelID: channelID})
+	}
 	return s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(withoutOwnParts(m, ch.Provider, t.Replies)),
 		MetricsAt: nullStr(s.now()), PostID: postID, ChannelID: channelID})
+}
+
+// numbersReader reads a target: its numbers, or, on a platform that gives none (Dribbble), only whether the post
+// is still there (numbers false: an empty read that fails with ErrGone once it was deleted).
+func numbersReader(e providers.Entry) (r providers.MetricsReader, numbers bool) {
+	if r, ok := e.Provider.(providers.MetricsReader); ok {
+		return r, true
+	}
+	if c, ok := e.Provider.(providers.ExistenceChecker); ok {
+		return existsReader{c}, false
+	}
+	return nil, false
+}
+
+type existsReader struct{ c providers.ExistenceChecker }
+
+func (x existsReader) Metrics(ctx context.Context, c providers.Credentials, externalID string) (providers.Metrics, error) {
+	return providers.Metrics{}, x.c.Exists(ctx, c, externalID)
 }
 
 // withoutOwnParts takes the account's own thread parts out of the platform's reply count, so Replies matches the

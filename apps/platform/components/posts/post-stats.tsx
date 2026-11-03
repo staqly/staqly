@@ -4,6 +4,7 @@ import { ProviderIcon } from '@staqly/brand/providers'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bookmark,
+  ChartColumn,
   ChevronsLeft,
   ChevronsRight,
   Clock,
@@ -34,7 +35,7 @@ import { toastApiError } from '@/lib/notify'
 import { deletedOutside, liveTargets } from '@/lib/posts'
 import { qk } from '@/lib/queries'
 
-import type { SentimentFilter } from './post-responses'
+import { Unavailable, type SentimentFilter } from './post-responses'
 import { RetryFailedTargets, RetryTarget, TargetStatus } from './target-status'
 
 // Only the post's Insights tab and the list's Insights dialog show them: their own chunk, loaded when they open.
@@ -281,13 +282,15 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
                   ) : m ? (
                     m.available && m.metrics && hasNumbers(m) ? (
                       <MetricTiles t={{ ...m, metrics: m.metrics }} />
+                    ) : !m.available ? (
+                      <Unavailable
+                        icon={ChartColumn}
+                        what="Numbers"
+                        why="this platform doesn't share them with staqly"
+                      />
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        {!m.available
-                          ? 'Numbers are not available for this platform.'
-                          : m.provider === 'custom'
-                            ? 'Your automation has not sent numbers yet.'
-                            : 'No numbers yet.'}
+                        {m.provider === 'custom' ? 'Your automation has not sent numbers yet.' : 'No numbers yet.'}
                       </p>
                     )
                   ) : null)}

@@ -394,6 +394,54 @@ func TestTargetDeletedOutside(t *testing.T) {
 	}
 }
 
+// fakeShot gives no numbers but can say whether the post is still there (Dribbble): here, until gone is set.
+type fakeShot struct {
+	*fakeRemovable
+	gone bool
+}
+
+func (f *fakeShot) Exists(context.Context, providers.Credentials, string) error {
+	if f.gone {
+		return &providers.Failure{Kind: providers.ErrGone, Msg: "deleted"}
+	}
+	return nil
+}
+
+// A platform without numbers still finds a post deleted on it: Refresh (and the background check) asks whether it
+// is there, shows no numbers, and records it Deleted once it is gone.
+func TestTargetDeletedOutsideWithoutNumbers(t *testing.T) {
+	s, p, post := publishTest(t)
+	ctx := context.Background()
+	f := &fakeShot{fakeRemovable: &fakeRemovable{Base: providers.NewBase("fakeshot", "Fakeshot", providers.AuthNone, providers.Limits{MaxChars: 280})}}
+	providers.Register(f, providers.StatusAvailable)
+	t.Cleanup(func() { providers.Unregister("fakeshot") })
+	e, _ := providers.Get("fakeshot")
+	ch, err := s.saveChannel(ctx, p, e, "fakeshot", providers.Credentials{}, providers.Profile{}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := []PostTargetInput{{ChannelID: ch.ID}}
+	if _, err := s.UpdatePost(ctx, p, post.ID, PostPatch{Targets: &targets}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PublishPost(ctx, p, post.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.RunDueJobsOnce(ctx)
+	got, err := s.PostMetrics(ctx, p, post.ID, true)
+	if err != nil || len(got) != 1 || got[0].Available || got[0].Metrics != nil || got[0].Error != "" {
+		t.Fatalf("still there %+v %v", got, err)
+	}
+	f.gone = true
+	if _, err := s.PostMetrics(ctx, p, post.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := s.GetPost(ctx, p, post.ID)
+	if tg := targetOf(t, after, ch.ID); tg.Removal != "deleted" {
+		t.Fatalf("target %+v", tg)
+	}
+}
+
 // Replies leaves out the account's own thread parts the platform counts: every comment-style part, or a chain's first.
 func TestWithoutOwnParts(t *testing.T) {
 	parts := func(ids ...string) string {
