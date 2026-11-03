@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  CircleHelp,
   Trash2,
   MessageSquarePlus,
   MonitorSmartphone,
@@ -42,13 +43,14 @@ import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { FieldDescription, FieldError } from '@/components/ui/field'
+import { FieldError } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Label, RequiredMark } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useIsPast } from '@/hooks/use-is-past'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import {
@@ -1358,6 +1360,8 @@ const DOT = "before:mr-3 before:content-['·']"
  * text, the editor with Upload and a counter per channel, the platform's settings folded under it.
  * Footer: the collection, the time, Repeat, tags, Save draft and Schedule or Publish now.
  */
+const TITLE_HINT = 'YouTube, Reddit, Pinterest and blogs publish it; the other platforms only show it in staqly.'
+
 export function Composer({
   open,
   onOpenChange,
@@ -1899,23 +1903,42 @@ export function ComposerForm({
               {/* Title and, for a new post, its collection side by side (4:1); stacked on phones. */}
               <div className={cn('grid gap-4', !post && 'sm:grid-cols-[minmax(0,4fr)_minmax(0,1fr)]')}>
                 <div className="grid min-w-0 content-start gap-2">
-                  <Label htmlFor="post-title" required>
-                    Title
-                  </Label>
+                  <div className="flex items-center gap-1">
+                    <Label htmlFor="post-title" required>
+                      Title
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Where the title is published"
+                          className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2"
+                        >
+                          <CircleHelp className="size-3.5" aria-hidden />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-64">{TITLE_HINT}</TooltipContent>
+                    </Tooltip>
+                  </div>
                   <Input
                     id="post-title"
                     value={title}
-                    onChange={(e) => setTitle(e.target.value)}
+                    onChange={(e) => {
+                      setTitle(e.target.value)
+                      // A typed title is no longer the one refused: its error goes (the next save checks it again).
+                      setErrors(({ title: _, ...rest }) => rest)
+                    }}
                     placeholder="What is this post about?"
                     maxLength={300}
                     disabled={locked}
                     aria-required
                     aria-invalid={!!errors.title}
+                    aria-describedby="post-title-hint"
                     data-testid="post-title"
                   />
-                  <FieldDescription>
-                    YouTube, Reddit, Pinterest and blogs publish it; the other platforms only show it in staqly.
-                  </FieldDescription>
+                  <span id="post-title-hint" className="sr-only">
+                    {TITLE_HINT}
+                  </span>
                   <FieldError>{errors.title}</FieldError>
                 </div>
                 {!post && (
