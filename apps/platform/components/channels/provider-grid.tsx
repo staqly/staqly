@@ -1,9 +1,11 @@
 'use client'
 
-import { Check } from 'lucide-react'
+import { Check, CircleHelp } from 'lucide-react'
 import { useSyncExternalStore } from 'react'
 
 import { Badge } from '@/components/ui/badge'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { PROVIDER_HINTS } from '@/lib/provider-hints'
 import { ProviderTile } from '@/lib/providers'
 import { cn } from '@/lib/utils'
 
@@ -164,9 +166,10 @@ export function ProviderGrid({
             {g.items.map((p) => {
               const soon = p.status !== 'available'
               const label = soon ? 'Soon' : p.blocked ? 'Not available' : ''
+              const hint = PROVIDER_HINTS[p.id]
 
               return (
-                <li key={p.id}>
+                <li key={p.id} className="relative">
                   <button
                     type="button"
                     onClick={() => onPick(p)}
@@ -175,6 +178,7 @@ export function ProviderGrid({
                     // Contains the visible text in its order (the name, then the Soon badge): speech input can name it.
                     aria-label={label ? `${p.name}, ${label.toLowerCase()}` : p.name}
                     title={p.blocked ? `${p.name} only connects over a secure (https) address` : undefined}
+                    aria-describedby={hint ? `hint-${p.id}` : undefined}
                     data-testid={`provider-${p.id}`}
                     className={cn(
                       'relative flex h-28 w-full flex-col items-center justify-center gap-1.5 rounded-xl border bg-card px-2 pt-4 pb-2 text-center text-xs font-medium transition-colors outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
@@ -200,6 +204,26 @@ export function ProviderGrid({
                       </Badge>
                     )}
                   </button>
+                  {hint && (
+                    <>
+                      <span id={`hint-${p.id}`} className="sr-only">
+                        {hint}
+                      </span>
+                      {/* Beside the tile, not in it (a button can't hold one); the Soon badge keeps its corner. */}
+                      <Popover>
+                        <PopoverTrigger
+                          aria-label={`What ${p.name} publishes`}
+                          className={cn(
+                            'absolute top-1 flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5',
+                            label ? 'left-1' : 'right-1',
+                          )}
+                        >
+                          <CircleHelp className="size-4" />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-3 text-xs">{hint}</PopoverContent>
+                      </Popover>
+                    </>
+                  )}
                 </li>
               )
             })}
