@@ -529,3 +529,40 @@ func TestEmailChannelSMTP(t *testing.T) {
 		t.Fatal("no dashboard link")
 	}
 }
+
+// A fresh event on a channel must not pull an older retry forward or steal a row leased by another sender.
+func TestNotifyFreshEventDoesNotSendDeferredRows(t *testing.T) {
+	for _, reason := range []string{"retry_backoff", "other_sender_lease"} {
+		t.Run(reason, func(t *testing.T) {
+			fake := newFakeChat(t)
+			e, vars := newNotifyEnv(t, fake)
+			vars.m["NOTIFY_RETRY_BASE"] = "1h"
+			col := e.collection("Deferred notifications")
+			ch := e.channel(map[string]any{"name": "Push", "type": "ntfy", "events": []string{"post.created"}, "config": map[string]any{"server_url": fake.srv.URL + "/ntfy", "topic": "audit"}}, 201)
+			old := e.post(col.ID, map[string]any{"content": "deferred-old-entry"})
+			if reason == "retry_backoff" {
+				fake.fail.Store(-1)
+				e.process()
+				fake.fail.Store(0)
+			} else {
+				if _, err := e.svc.DB.Exec(`UPDATE notification_outbox SET next_attempt_at = ? WHERE channel_id = ? AND item_id = ?`, time.Now().Add(2*time.Minute).UTC().Format(time.RFC3339Nano), ch.ID, old.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			e.post(col.ID, map[string]any{"content": "fresh-new-entry"})
+			e.process()
+			reqs := fake.find("/ntfy")
+			if len(reqs) == 0 {
+				t.Fatal("fresh notification was not sent")
+			}
+			body := jsonBody(t, reqs[len(reqs)-1])
+			if strings.Contains(body["message"].(string), "deferred-old-entry") || !strings.Contains(body["message"].(string), "fresh-new-entry") {
+				t.Fatalf("sent a deferred notification alongside the fresh one: %v", body)
+			}
+			var status string
+			if err := e.svc.DB.QueryRow(`SELECT status FROM notification_outbox WHERE channel_id = ? AND item_id = ?`, ch.ID, old.ID).Scan(&status); err != nil || status != "pending" {
+				t.Fatalf("deferred row: %s %v", status, err)
+			}
+		})
+	}
+}

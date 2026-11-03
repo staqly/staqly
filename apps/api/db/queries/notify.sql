@@ -63,7 +63,7 @@ WHERE o.status = 'pending' AND o.next_attempt_at <= ? AND c.enabled = 1
 LIMIT ?;
 
 -- name: PendingNotifyOutbox :many
-SELECT * FROM notification_outbox WHERE channel_id = ? AND status = 'pending' ORDER BY created_at, id LIMIT ?;
+SELECT * FROM notification_outbox WHERE channel_id = ? AND status = 'pending' AND next_attempt_at <= ? ORDER BY created_at, id LIMIT ?;
 
 -- name: FinishNotifyOutbox :exec
 UPDATE notification_outbox

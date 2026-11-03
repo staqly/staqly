@@ -454,16 +454,17 @@ func (q *Queries) ListNotifyOutbox(ctx context.Context, arg ListNotifyOutboxPara
 }
 
 const pendingNotifyOutbox = `-- name: PendingNotifyOutbox :many
-SELECT id, workspace_id, channel_id, event_id, event_type, item_id, status, attempts, next_attempt_at, last_error, sent_at, created_at FROM notification_outbox WHERE channel_id = ? AND status = 'pending' ORDER BY created_at, id LIMIT ?
+SELECT id, workspace_id, channel_id, event_id, event_type, item_id, status, attempts, next_attempt_at, last_error, sent_at, created_at FROM notification_outbox WHERE channel_id = ? AND status = 'pending' AND next_attempt_at <= ? ORDER BY created_at, id LIMIT ?
 `
 
 type PendingNotifyOutboxParams struct {
-	ChannelID string `json:"channel_id"`
-	Limit     int64  `json:"limit"`
+	ChannelID     string `json:"channel_id"`
+	NextAttemptAt string `json:"next_attempt_at"`
+	Limit         int64  `json:"limit"`
 }
 
 func (q *Queries) PendingNotifyOutbox(ctx context.Context, arg PendingNotifyOutboxParams) ([]NotificationOutbox, error) {
-	rows, err := q.db.QueryContext(ctx, pendingNotifyOutbox, arg.ChannelID, arg.Limit)
+	rows, err := q.db.QueryContext(ctx, pendingNotifyOutbox, arg.ChannelID, arg.NextAttemptAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

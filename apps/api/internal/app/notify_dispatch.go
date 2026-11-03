@@ -201,7 +201,7 @@ func (s *Service) processChannel(ctx context.Context, channelID string) {
 		return
 	}
 	ctx = logctx.With(ctx, "workspace_id", r.WorkspaceID, "channel_id", channelID)
-	rows, err := s.Q.PendingNotifyOutbox(ctx, db.PendingNotifyOutboxParams{ChannelID: channelID, Limit: 50})
+	rows, err := s.Q.PendingNotifyOutbox(ctx, db.PendingNotifyOutboxParams{ChannelID: channelID, NextAttemptAt: s.now(), Limit: 50})
 	if err != nil || len(rows) == 0 {
 		return
 	}
