@@ -310,7 +310,8 @@ function ChannelPicker({
             group: groupName(c),
             hint: off
               ? `${platform(c)}, ${c.status === 'disabled' ? 'turned off' : 'needs reconnecting'}`
-              : [platform(c), c.handle].filter(Boolean).join(' · '),
+              : // Not a dot: platform names carry one (Dev.to), and the handle would read as part of it.
+                [platform(c), c.handle].filter(Boolean).join(' | '),
             icon: <ChannelAvatar channel={c} className="size-6" />,
             disabled: off,
             testId: `pick-channel-${c.id}`,

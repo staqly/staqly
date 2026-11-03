@@ -301,7 +301,8 @@ function rawErrorMessage(err: unknown): string {
       return 'Too many requests.' + wait
     }
 
-    if (err.fields && Object.keys(err.fields).length) {
+    // invalid() already puts a single field's reason in the message ("media: x is in Deleted"): no second copy.
+    if (err.fields && Object.values(err.fields).some((v) => !err.message.includes(v))) {
       const detail = Object.entries(err.fields)
         .map(([k, v]) => `${k} ${v}`)
         .join('; ')
