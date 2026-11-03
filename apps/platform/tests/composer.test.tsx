@@ -708,6 +708,33 @@ describe('composer', () => {
     expect(within(screen.getByTestId('settings-ch_1')).getByText(/Needs Board/)).toBeInTheDocument()
   })
 
+  it('opens one channel settings card at a time', async () => {
+    const fields = [{ key: 'board', label: 'Board', kind: 'text' as const, required: false }]
+
+    mockApi({
+      ...routes,
+      'GET /v1/providers': {
+        data: [
+          provider({ settings_fields: fields }),
+          provider({ id: 'bluesky', name: 'Bluesky', settings_fields: fields }),
+        ],
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1', 'ch_2')
+    await user.click(screen.getByTestId('tab-settings'))
+    const first = screen.getByTestId('settings-ch_1')
+    const second = screen.getByTestId('settings-ch_2')
+
+    await user.click(within(first).getByRole('button', { expanded: false }))
+    expect(within(first).getByRole('button', { expanded: true })).toBeInTheDocument()
+    await user.click(within(second).getByRole('button', { expanded: false }))
+    expect(within(second).getByRole('button', { expanded: true })).toBeInTheDocument()
+    expect(within(first).getByRole('button', { expanded: false })).toBeInTheDocument()
+  })
+
   it('a post that went out has no Settings tab', async () => {
     mockApi({
       ...routes,
