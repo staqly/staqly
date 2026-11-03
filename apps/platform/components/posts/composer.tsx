@@ -1840,7 +1840,10 @@ export function ComposerForm({
         </div>
       </SheetHeader>
       {sent && failedTargets > 0 ? (
-        <SentAlert failed={failedTargets} total={deliveryTargets.length} onShow={() => setSection('delivery')} />
+        // Insights already lists the failed channels: the alert only points there.
+        shownSection !== 'delivery' && (
+          <SentAlert failed={failedTargets} total={deliveryTargets.length} onShow={() => setSection('delivery')} />
+        )
       ) : (
         <PublishTimeAlert locked={locked || sent} publishAt={publishAt} error={errors.publish_at} />
       )}
