@@ -241,6 +241,11 @@ class HTTPClient(BaseHTTPClient):
             try:
                 request = self._client.build_request(**kwargs, timeout=timeout)
                 response = self._client.send(request, stream=stream)
+                if stream and not response.is_success:
+                    try:
+                        response.read()
+                    finally:
+                        response.close()
             except httpx.TransportError as exc:
                 if attempt < max_retries and idempotent:
                     self._sleep(backoff(attempt))
@@ -249,9 +254,6 @@ class HTTPClient(BaseHTTPClient):
                 raise self._connection_error(exc, spec) from exc
             if response.is_success:
                 return response
-            if stream:
-                response.read()
-                response.close()
             error = make_api_error(response)
             delay = self._retry_delay(error, idempotent, attempt) if attempt < max_retries else None
             if delay is None:
@@ -298,6 +300,11 @@ class AsyncHTTPClient(BaseHTTPClient):
             try:
                 request = self._client.build_request(**kwargs, timeout=timeout)
                 response = await self._client.send(request, stream=stream)
+                if stream and not response.is_success:
+                    try:
+                        await response.aread()
+                    finally:
+                        await response.aclose()
             except httpx.TransportError as exc:
                 if attempt < max_retries and idempotent:
                     await self._sleep(backoff(attempt))
@@ -306,9 +313,6 @@ class AsyncHTTPClient(BaseHTTPClient):
                 raise self._connection_error(exc, spec) from exc
             if response.is_success:
                 return response
-            if stream:
-                await response.aread()
-                await response.aclose()
             error = make_api_error(response)
             delay = self._retry_delay(error, idempotent, attempt) if attempt < max_retries else None
             if delay is None:
