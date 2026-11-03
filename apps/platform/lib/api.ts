@@ -254,7 +254,14 @@ export class ApiError extends Error {
     fallback?: string,
     retryAfter?: number,
   ) {
-    super(body?.message || fallback || `Request failed (${status})`)
+    super(
+      body?.message ||
+        // The proxy in front of the API answers these without an error of ours (an empty or plain-text body): the
+        // server is down or restarting, which says more than its "Bad Gateway".
+        (status === 502 || status === 503 || status === 504
+          ? "the staqly server isn't answering right now (it may be restarting); try again in a moment"
+          : fallback || `Request failed (${status})`),
+    )
     this.name = 'ApiError'
     this.status = status
     this.code = body?.code || (status === 0 ? 'network_error' : 'http_' + status)

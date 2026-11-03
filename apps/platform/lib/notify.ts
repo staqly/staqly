@@ -115,10 +115,13 @@ export function toastApiError(err: unknown, fallbackTitle?: string) {
     return
   }
 
+  // The same error from several requests at once (a refresh of every channel) shows once.
+  const msg = errorMessage(err)
+
   if (fallbackTitle) {
-    toast.error(fallbackTitle, { description: errorMessage(err) })
+    toast.error(fallbackTitle, { id: `${fallbackTitle}: ${msg}`, description: msg })
   } else {
-    toast.error(errorMessage(err))
+    toast.error(msg, { id: msg })
   }
 }
 

@@ -24,3 +24,19 @@ describe('errorMessage', () => {
     expect(errorMessage(err)).toBe('Invalid input: name is required')
   })
 })
+
+describe('a gateway error', () => {
+  it('says the server is not answering instead of a bare status or the proxy text', () => {
+    for (const status of [502, 503, 504]) {
+      expect(errorMessage(new ApiError(status, undefined, 'Bad Gateway'))).toBe(
+        "The staqly server isn't answering right now (it may be restarting); try again in a moment",
+      )
+    }
+  })
+
+  it("keeps the API's own message when it sent one", () => {
+    expect(errorMessage(new ApiError(503, { code: 'maintenance', message: 'down for maintenance' }))).toBe(
+      'Down for maintenance',
+    )
+  })
+})
