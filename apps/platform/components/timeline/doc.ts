@@ -2,7 +2,7 @@
 // back, each fading or sliding into the next), captions over it and sound clips under it; a sound is the sound clips
 // alone. Plain JSON, saved as a media project (/v1/media-projects) next to the file it exports.
 
-export type Fit = 'cover' | 'contain'
+export type Fit = 'cover' | 'contain' | 'actual'
 
 /** How a picture moves while it is on screen (the "Ken Burns" look). */
 export type Motion = 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right'
