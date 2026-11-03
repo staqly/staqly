@@ -173,6 +173,53 @@ describe('channels', () => {
     expect(await screen.findAllByText(/is connected/)).not.toHaveLength(0)
   })
 
+  it('Moltbook registers a new agent and shows its claim link, or takes the key of an agent you have', async () => {
+    const moltbook = provider({
+      id: 'moltbook',
+      name: 'Moltbook',
+      auth: 'token',
+      credential_fields: [{ key: 'api_key', label: 'API key', kind: 'secret', required: true }],
+      settings_fields: [],
+    })
+    const api = mockApi({
+      'GET /v1/channels': { data: [] },
+      'GET /v1/providers': { data: [moltbook] },
+      'POST /v1/channels/moltbook/register': {
+        channel: channel({ id: 'ch_7', provider: 'moltbook', name: 'newbot', handle: 'u/newbot' }),
+        claim_url: 'https://www.moltbook.com/claim/moltbook_claim_x',
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+    await user.click(await screen.findByTestId('add-channel'))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Add channel' })).getByRole('button', { name: 'Moltbook' }),
+    )
+
+    // An agent you have: its key, and back to registering.
+    await user.click(await screen.findByRole('button', { name: /Paste its API key/ }))
+    expect(await screen.findByLabelText(/API key/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Register a new one/ }))
+
+    await user.click(await screen.findByTestId('moltbook-register'))
+    expect(await screen.findByText('Agent name is required')).toBeInTheDocument()
+    await user.type(screen.getByLabelText(/Agent name/), 'newbot')
+    await user.type(screen.getByLabelText(/Description/), 'Posts for us')
+    await user.click(screen.getByTestId('moltbook-register'))
+    await waitFor(() => expect(api.find('POST', '/v1/channels/moltbook/register')).toHaveLength(1))
+    expect(api.find('POST', '/v1/channels/moltbook/register')[0].body).toEqual({
+      name: 'newbot',
+      description: 'Posts for us',
+    })
+    const claim = await screen.findByTestId('moltbook-claim')
+
+    expect(within(claim).getByRole('link', { name: /Open claim page/ })).toHaveAttribute(
+      'href',
+      'https://www.moltbook.com/claim/moltbook_claim_x',
+    )
+  })
+
   it('Discord through the bot offers a channel webhook instead, for someone who may not add the bot', async () => {
     const discord = provider({ id: 'discord', name: 'Discord' })
     const webhook = provider({

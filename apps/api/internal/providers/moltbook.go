@@ -2,6 +2,7 @@ package providers
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -94,6 +95,45 @@ func (Moltbook) Connect(ctx context.Context, f map[string]string) (Credentials, 
 		AvatarURL:  a.Avatar,
 		ProfileURL: moltbookWeb + "/u/" + url.PathEscape(a.Name),
 	}, nil
+}
+
+// MoltbookRegister registers a new agent with Moltbook (POST /agents/register, no key needed) and returns what Connect
+// would for its key, plus the link its owner opens to claim it: Moltbook keeps an unclaimed agent from posting.
+// The profile is built from the answer, not read with /agents/me, so an agent not yet claimed connects too and its key,
+// which Moltbook shows only once, is never lost.
+func MoltbookRegister(ctx context.Context, name, description string) (Credentials, Profile, string, error) {
+	body, _ := json.Marshal(map[string]string{"name": name, "description": description})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, moltbookAPI+"/agents/register", bytes.NewReader(body))
+	if err != nil {
+		return nil, Profile{}, "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	var out struct {
+		Agent struct {
+			Name     string `json:"name"`
+			APIKey   string `json:"api_key"`
+			ClaimURL string `json:"claim_url"`
+		} `json:"agent"`
+	}
+	if err := moltbookDo(ctx, req, &out); err != nil {
+		var f *Failure
+		if errors.As(err, &f) && f.Kind == ErrRejected {
+			return nil, Profile{}, "", invalid("name", f.Msg) // a name taken or not allowed
+		}
+		return nil, Profile{}, "", err
+	}
+	a := out.Agent
+	if a.APIKey == "" || a.ClaimURL == "" {
+		return nil, Profile{}, "", &Failure{Kind: ErrRejected, Msg: "Moltbook registered no key or claim link for the agent"}
+	}
+	if a.Name == "" {
+		a.Name = name
+	}
+	return Credentials{"api_key": a.APIKey, "agent": a.Name}, Profile{
+		Handle:     "u/" + a.Name,
+		Name:       a.Name,
+		ProfileURL: moltbookWeb + "/u/" + url.PathEscape(a.Name),
+	}, a.ClaimURL, nil
 }
 
 // Refresh checks the key still works (keys do not expire, but an agent can be suspended or its key reset).
@@ -252,13 +292,15 @@ func moltbookDo(ctx context.Context, req *http.Request, out any) error {
 
 // moltbookError maps Moltbook's {"success":false,"error":"...","hint":"..."} answers to what staqly does next.
 func moltbookError(status int, raw []byte) error {
+	// Moltbook's newer answers give the reason in message and only the status text in error ("Forbidden").
 	var e struct {
+		Message    string `json:"message"`
 		Error      string `json:"error"`
 		Hint       string `json:"hint"`
 		RetryAfter int    `json:"retry_after_seconds"`
 	}
 	_ = json.Unmarshal(raw, &e)
-	detail := e.Error
+	detail := cmp.Or(e.Message, e.Error)
 	if detail == "" {
 		detail = strings.TrimSpace(string(raw))
 		if len(detail) > 200 {

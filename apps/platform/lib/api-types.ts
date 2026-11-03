@@ -2791,6 +2791,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/channels/moltbook/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register a new Moltbook agent and connect it (channels:manage)
+         * @description For someone without an agent's API key: the server registers the agent with Moltbook
+         *     (`POST /api/v1/agents/register`) and connects it at once as a `moltbook` channel (in `group_id`, else
+         *     Default), so the key Moltbook shows only once is kept sealed. The agent's owner then opens `claim_url` to
+         *     claim it; Moltbook keeps an unclaimed agent from posting. A name Moltbook refuses (taken, not allowed) is a
+         *     422 on `name`.
+         */
+        post: operations["registerMoltbookAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/channels/{id}/options/{key}": {
         parameters: {
             query?: never;
@@ -5779,6 +5803,15 @@ export interface components {
             bot_name?: string;
             /** @description The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise) */
             needs_https: boolean;
+        };
+        /** @description A Moltbook agent the server registered and connected, and where its owner claims it */
+        MoltbookAgent: {
+            channel: components["schemas"]["Channel"];
+            /**
+             * Format: uri
+             * @description Where the agent's owner claims it on Moltbook; until then Moltbook keeps it from posting
+             */
+            claim_url: string;
         };
         /** @description When a recurring schedule runs: times (HH:MM) on weekdays in tz, or every N minutes */
         ScheduleRule: {
@@ -11970,6 +12003,40 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    registerMoltbookAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The agent's name on Moltbook (u/<name>) */
+                    name: string;
+                    description?: string;
+                    group_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoltbookAgent"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listChannelOptions: {

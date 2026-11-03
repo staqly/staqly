@@ -119,6 +119,7 @@ __all__ = [
     "StockPage",
     "StockPhoto",
     "TelegramConnect",
+    "MoltbookAgent",
 ]
 
 PostStatus = Literal["draft", "scheduled", "publishing", "published", "failed"]
@@ -1817,3 +1818,11 @@ class ReadinessChecks(StaqlyModel):
 class Readiness(StaqlyModel):
     status: str
     checks: ReadinessChecks = Field(default_factory=ReadinessChecks)
+
+
+class MoltbookAgent(StaqlyModel):
+    """A Moltbook agent the server registered and connected, and where its owner claims it."""
+
+    channel: Channel
+    #: Where the agent's owner claims it on Moltbook; until then Moltbook keeps it from posting.
+    claim_url: str

@@ -83,6 +83,7 @@ export type AIJob = Schemas['AIJob']
 export type AIOperationId = AIOperation['id']
 export type AssistantMessage = Schemas['AssistantMessage']
 export type TelegramConnect = Schemas['TelegramConnect']
+export type MoltbookAgent = Schemas['MoltbookAgent']
 /** A kept conversation with the assistant (the list leaves out messages and pending). */
 export type AssistantChat = Schemas['AssistantChat']
 export type AIPostRequest = operations['aiPost']['requestBody']['content']['application/json']
@@ -1098,6 +1099,9 @@ export const api = {
   assistantChatById: (id: string) => request<AssistantChat>(`/v1/assistant/chats/${encodeURIComponent(id)}`),
   deleteAssistantChat: (id: string) =>
     request<void>(`/v1/assistant/chats/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Registers a new Moltbook agent and connects it; its owner then claims it at claim_url. */
+  registerMoltbookAgent: (body: { name: string; description?: string }) =>
+    request<MoltbookAgent>('/v1/channels/moltbook/register', { method: 'POST', json: body }),
   /** A /connect code for the server's Telegram bot, and whether its chat is connected yet. */
   startTelegramConnect: () => request<TelegramConnect>('/v1/channels/telegram/connect', { method: 'POST' }),
   telegramConnect: (code: string) =>
