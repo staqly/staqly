@@ -10,13 +10,15 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
 // Moltbook, the social network for AI agents, over its REST API (https://www.moltbook.com/skill.md): the agent's API
 // key as a bearer token, a post (title plus text, or a link) into a submolt, the thread as comments. Moltbook takes
 // no media through its API. It may hold a new post or comment until the agent answers a verification challenge (an
-// obfuscated arithmetic puzzle meant for the agent itself); staqly does not answer those and says so.
+// obfuscated arithmetic puzzle meant for an AI agent); staqly answers it with the server's language model when one is
+// set up, and otherwise says so.
 type Moltbook struct{ Base }
 
 // Endpoints, variables so tests point them at httptest. Always the www host: moltbook.com without it redirects and
@@ -161,18 +163,51 @@ type moltbookItem struct {
 	} `json:"verification"`
 }
 
-// held says why Moltbook keeps the item hidden, or "" when it is out. what is "post" or "comment".
-func (i moltbookItem) held(what string) string {
+// ChallengeSolver answers a Moltbook verification challenge (an obfuscated arithmetic word problem) with the
+// number only; the app hands one in when the server has a language model set up.
+type ChallengeSolver func(ctx context.Context, challenge string) (string, error)
+
+type solverKey struct{}
+
+// WithChallengeSolver lets Moltbook answer the challenge it holds a new post or comment with.
+func WithChallengeSolver(ctx context.Context, f ChallengeSolver) context.Context {
+	return context.WithValue(ctx, solverKey{}, f)
+}
+
+// release gets a held item out: staqly's language model answers the challenge, and Moltbook checks the answer.
+// It returns nil when the item is out. what is "post" or "comment".
+func (i moltbookItem) release(ctx context.Context, key, what string) error {
 	if i.Verification == nil && i.VerificationStatus != "pending" {
-		return ""
+		return nil
 	}
-	code := ""
-	if i.Verification != nil && i.Verification.Code != "" {
-		code = " (code " + i.Verification.Code + ")"
+	held := "Moltbook created the " + what + " but hides it until the agent answers Moltbook's verification challenge"
+	solve, _ := ctx.Value(solverKey{}).(ChallengeSolver)
+	if i.Verification == nil || i.Verification.Code == "" || i.Verification.Challenge == "" || solve == nil {
+		return &Failure{Kind: ErrRejected, Msg: held + " within 5 minutes, and staqly answers it only with AI set up on the server: " +
+			"set it up, let the agent answer it with POST /api/v1/verify, or post with an agent Moltbook trusts (trusted agents skip the challenge)"}
 	}
-	return "Moltbook created the " + what + " but hides it until the agent answers Moltbook's verification challenge" + code +
-		" within 5 minutes, and staqly cannot answer it for the agent: let the agent answer it with POST /api/v1/verify, " +
-		"or post with an agent Moltbook trusts (trusted agents skip the challenge)"
+	held += " (code " + i.Verification.Code + ")"
+	answer, err := solve(ctx, i.Verification.Challenge)
+	if err != nil {
+		return &Failure{Kind: ErrRejected, Msg: held + ", and staqly's AI could not answer it (" + err.Error() + ")"}
+	}
+	// Ten failed answers in a row suspend the agent: an answer that is not a number is never sent.
+	n, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(answer), "."), 64)
+	if err != nil {
+		return &Failure{Kind: ErrRejected, Msg: held + ", and staqly's AI gave no number to answer it with"}
+	}
+	var out struct {
+		Success *bool  `json:"success"`
+		Error   string `json:"error"`
+	}
+	body := map[string]string{"verification_code": i.Verification.Code, "answer": strconv.FormatFloat(n, 'f', 2, 64)}
+	if err := moltbookCall(ctx, key, http.MethodPost, "/verify", body, &out); err != nil {
+		return &Failure{Kind: ErrRejected, Msg: held + "; Moltbook refused staqly's answer: " + err.Error()}
+	}
+	if out.Success != nil && !*out.Success {
+		return &Failure{Kind: ErrRejected, Msg: held + "; Moltbook refused staqly's answer (" + cmp.Or(out.Error, "no reason given") + ")"}
+	}
+	return nil
 }
 
 func (m Moltbook) Publish(ctx context.Context, c Credentials, p PostContent, s Settings) (Result, error) {
@@ -202,8 +237,8 @@ func (m Moltbook) Publish(ctx context.Context, c Credentials, p PostContent, s S
 	if out.Post.ID == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Moltbook published the post but did not say its id; check the agent's profile"}
 	}
-	if why := out.Post.held("post"); why != "" {
-		return Result{}, &Failure{Kind: ErrRejected, Msg: why}
+	if err := out.Post.release(ctx, key, "post"); err != nil {
+		return Result{}, err
 	}
 	return Result{ExternalID: out.Post.ID, URL: moltbookWeb + "/post/" + url.PathEscape(out.Post.ID)}, nil
 }
@@ -243,8 +278,8 @@ func (Moltbook) Reply(ctx context.Context, c Credentials, parentExternalID strin
 	if out.Comment.ID == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Moltbook published the comment but did not say its id; check the post"}
 	}
-	if why := out.Comment.held("comment"); why != "" {
-		return Result{}, &Failure{Kind: ErrRejected, Msg: why}
+	if err := out.Comment.release(ctx, key, "comment"); err != nil {
+		return Result{}, err
 	}
 	return Result{ExternalID: "comment:" + post + ":" + out.Comment.ID, URL: moltbookWeb + "/post/" + url.PathEscape(post)}, nil
 }
