@@ -4,6 +4,28 @@
  */
 
 export interface paths {
+    "/v1/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a problem or suggest a feature
+         * @description Signed-in people (any workspace role) and local installs only; API keys are refused.
+         *     Up to 5 reports per person per hour. Only the page path is kept; query and fragment are stripped.
+         *     Screenshots use private storage and are readable only through the platform admin API.
+         */
+        post: operations["createProductFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -6375,6 +6397,60 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    createProductFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @enum {string} */
+                    kind: "problem" | "feature";
+                    description: string;
+                    page_path: string;
+                    /**
+                     * Format: binary
+                     * @description Optional PNG, JPEG or WebP, up to 5 MB and 20 megapixels.
+                     */
+                    screenshot?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Feedback saved */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Screenshot too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            422: components["responses"]["ValidationFailed"];
+            /** @description Too many feedback requests; Retry-After indicates when to retry */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     health: {
         parameters: {
             query?: never;

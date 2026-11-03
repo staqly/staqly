@@ -100,6 +100,18 @@ export function routes({
       when: (w) => w >= 768,
       open: (p) => click(p, '[data-testid=user-menu-trigger]:visible'),
     },
+    {
+      name: 'feedback',
+      path: '/schedule',
+      open: async (p) => {
+        if ((p.viewportSize()?.width ?? 0) < 768) {
+          await p.getByRole('button', { name: 'More', exact: true }).click()
+        }
+
+        await p.getByRole('button', { name: 'Feedback', exact: true }).click()
+        await p.getByRole('dialog', { name: 'Feedback', exact: true }).waitFor()
+      },
+    },
     { name: 'not found', path: '/does-not-exist' },
     { name: 'missing post', path: '/posts/post_doesnotexist' },
     // overlays

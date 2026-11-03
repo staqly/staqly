@@ -51,6 +51,7 @@ SPEC = ROOT.parents[1] / "apps" / "api" / "openapi.yaml"
 # members and invitations (people are managed by people, never by keys), billing, the public pages behind a
 # link's token, the dashboard's assistant and OAuth account picker, and endpoints for other servers.
 NOT_IN_SDK = {
+    ("POST", "/v1/feedback"),  # signed-in people submit from the dashboard; API keys cannot
     ("GET", "/v1/workspaces"),
     ("PATCH", "/v1/account"),
     ("POST", "/v1/account/workspaces"),
