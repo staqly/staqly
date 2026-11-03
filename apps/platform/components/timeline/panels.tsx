@@ -679,15 +679,18 @@ function ClipInspector({ ctx, c }: { ctx: Ctx; c: Clip }) {
         </Button>
         <Button
           variant="outline"
-          size="sm"
+          size="icon-sm"
+          className="ml-auto"
+          aria-label="Duplicate"
+          title="Duplicate"
           onClick={() => ctx.update((t) => void t.clips.splice(i + 1, 0, { ...structuredClone(c), id: uid() }))}
         >
-          <Copy /> Duplicate
+          <Copy />
         </Button>
         <Button
           variant="outline"
           size="icon-sm"
-          className="ml-auto text-red-700 dark:text-red-400"
+          className="text-red-700 dark:text-red-400"
           aria-label="Delete"
           title="Delete"
           onClick={() => {
