@@ -44,7 +44,7 @@ export function offerDraft<T>(key: string, parse: (text: string) => T | null, re
     return
   }
 
-  toast(`Unsaved changes from ${formatDateTime(new Date(d.at).toJSON())}`, {
+  toast.info(`Unsaved changes from ${formatDateTime(new Date(d.at).toJSON())}`, {
     description: 'The editor kept them when it was closed.',
     duration: 30_000,
     action: { label: 'Restore', onClick: () => restore(d.doc) },
