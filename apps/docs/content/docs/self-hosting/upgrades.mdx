@@ -155,6 +155,13 @@ the older version.
 - Database migrations (goose) are **embedded in the binary** — in `staqly` and in the
   `ghcr.io/staqly/staqly` image alike — and run automatically at startup, each in its own transaction.
 - If a start is interrupted, the next start resumes from the last fully applied migration.
+- The migration history was squashed into `00001_init.sql` on 1 November 2026. Installations on
+  the old chain must first upgrade to `v0.13.0` (old migration version 76), stop it, and then
+  start the current release. The server rebaselines version 76 without rewriting application data;
+  it refuses older incomplete chains with an upgrade instruction.
+- Stop every old application and worker process before starting a release that changes publishing
+  state or queue schemas. An older binary does not undo migrations: restore a compatible database
+  backup, media and sealing keys before an incompatible rollback.
 - There is no separate migration command. `/readyz` reports `migrations: pending` until they
   are all applied — see [Monitoring](/self-hosting/monitoring#health-endpoints).
 - Media files stored before workspace folders are moved once into `workspaces/<id>/` of the
