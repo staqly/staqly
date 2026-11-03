@@ -1104,7 +1104,8 @@ func (s *Service) ChannelOptions(ctx context.Context, p Principal, id, key strin
 	defer cancel()
 	out, err := lister.Options(cctx, creds, key)
 	if err != nil {
-		return nil, connectError(err)
+		// The platform's own reason: nothing was typed, so "did not accept these details" would mislead.
+		return nil, &Error{Code: "connect_failed", Status: 422, Message: truncateRunes(err.Error(), 500)}
 	}
 	return out, nil
 }

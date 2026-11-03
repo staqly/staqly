@@ -290,7 +290,7 @@ function ChannelPicker({
             {picked.map((c) => (
               <span
                 key={c.id}
-                className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 py-0.5 pr-2.5 pl-0.5 text-sm"
+                className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 pr-2.5 pl-px text-sm"
               >
                 <ChannelAvatar channel={c} className="size-5" />
                 {c.name}
@@ -2037,7 +2037,9 @@ export function ComposerForm({
                   errors={errors}
                   locked={locked}
                   noComments={
-                    only && !only.comments && only.provider !== 'custom' ? `${only.name} posts no comments.` : undefined
+                    only && !only.comments && only.provider !== 'custom'
+                      ? `${providerOf(only)?.name ?? 'This platform'} has no comments under a post, so this one is published alone.`
+                      : undefined
                   }
                   textOnly={!!onlyLimits?.comments_text_only}
                 />

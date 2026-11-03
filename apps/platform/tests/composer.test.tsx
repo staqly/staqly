@@ -684,7 +684,9 @@ describe('composer', () => {
     renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
     await pickChannels(user, 'ch_2')
     expect(screen.queryByTestId('add-comment')).not.toBeInTheDocument()
-    expect(screen.getByText('Brand on Bluesky posts no comments.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Bluesky has no comments under a post, so this one is published alone.'),
+    ).toBeInTheDocument()
     expect(document.querySelector('input[type="file"]')).toHaveAttribute('accept', 'image/*')
   })
 

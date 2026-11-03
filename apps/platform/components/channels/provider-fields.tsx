@@ -4,6 +4,7 @@ import { LogoMark } from '@staqly/brand/logo'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
+import { Callout } from '@/components/common/callout'
 import { MultiSelect, type MultiOption } from '@/components/common/multi-select'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -160,6 +161,15 @@ function RemoteField({
         disabled={loading}
       />
     )
+  } else if (remote) {
+    // The platform gave no choices (none on the account, or the list failed): nothing to pick, the reason shows below.
+    control = (
+      <Select disabled>
+        <SelectTrigger id={id} className="w-fit max-w-full min-w-48" aria-invalid={!!error} aria-label={f.label}>
+          <SelectValue placeholder={options.isError ? 'Not available' : 'None on this account'} />
+        </SelectTrigger>
+      </Select>
+    )
   } else {
     control = (
       <Input
@@ -181,7 +191,9 @@ function RemoteField({
       {control}
       {f.help && <FieldDescription className="text-xs">{f.help}</FieldDescription>}
       {options.isError && (
-        <FieldDescription className="text-xs">The list did not load: {options.error.message}</FieldDescription>
+        <Callout tone="danger" size="xs" role="alert">
+          The list of choices did not load. {options.error.message}
+        </Callout>
       )}
       <FieldError>{error}</FieldError>
     </Field>
