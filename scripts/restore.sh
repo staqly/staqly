@@ -25,6 +25,7 @@ if [ ! -f "$dir/workspace.db" ]; then
   echo "missing $dir/workspace.db" >&2
   exit 1
 fi
+dir=$(cd -- "$dir" && pwd -P)
 
 # ── Confirm ──────────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ docker stop "$container" >/dev/null
 
 docker run --rm \
   -v "$volume:/data" \
-  -v "$PWD/$dir:/backup:ro" \
+  -v "$dir:/backup:ro" \
   alpine:3.24 sh -ec '
     umask 077
 

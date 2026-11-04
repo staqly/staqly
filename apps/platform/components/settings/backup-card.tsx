@@ -19,11 +19,24 @@ import { SettingsCard as Card } from './settings-card'
 import { SettingsNav } from './settings-nav'
 
 // The single staqly container: no repository needed.
-const DOCKER_BACKUP = `docker exec staqly server backup /data/backups/staqly-backup.db
-docker cp staqly:/data/backups/staqly-backup.db ./staqly-backup.db
-docker exec staqly rm /data/backups/staqly-backup.db`
-const DOCKER_UPLOADS = `docker run --rm --volumes-from staqly:ro -v "$PWD":/out alpine \\
-  tar czf /out/staqly-uploads.tar.gz -C /data uploads`
+const DOCKER_BACKUP = `umask 077
+docker stop -t 30 staqly
+docker run --rm --volumes-from staqly:ro alpine sh -ec \\
+  '[ ! -s /data/workspace.db-wal ] || { echo "Nonempty WAL: start and stop staqly cleanly first" >&2; exit 1; }' && \\
+  docker cp staqly:/data/workspace.db ./staqly-backup.db
+chmod 600 ./staqly-backup.db`
+const DOCKER_UPLOADS = `docker run --rm --volumes-from staqly:ro -v "$PWD":/out \\
+  -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" alpine sh -ec '
+    umask 077
+    cd /data
+    files="uploads"
+    for key in secret.key notify_secret.key access_token; do
+      if [ -f "$key" ]; then files="$files $key"; fi
+    done
+    tar czf /out/staqly-uploads.tar.gz --exclude="uploads/workspaces/*/thumbs" $files
+    chown "$HOST_UID:$HOST_GID" /out/staqly-uploads.tar.gz
+  '
+docker start staqly`
 
 /**
  * Backups. Local: the commands from the backup guide (binary or Docker). Cloud: the workspace's backups (ZIP
@@ -39,7 +52,7 @@ export function BackupCard() {
       <Card
         title="Backup & restore"
         icon={<DatabaseBackup />}
-        description="Your whole workspace is one database file plus the uploaded media. You can back it up while staqly keeps running."
+        description="A complete backup includes the database, uploaded media and keys. Stop staqly until all of them have been copied."
       >
         <Tabs defaultValue="binary" className="grid gap-3 text-sm">
           <TabsList>
@@ -51,13 +64,17 @@ export function BackupCard() {
             <CodeBlock code="staqly serve backup ~/staqly-backup.db" language="bash" />
             <p className="text-muted-foreground">
               Pass the same <code>--data</code> you run staqly with. Media files are in the uploads folder of that
-              directory; copy it too.
+              directory; archive it and the keys before starting staqly again. The database-only command also works
+              while staqly runs, but that does not keep a later media archive consistent with it.
             </p>
           </TabsContent>
           <TabsContent value="docker" className="grid gap-2">
-            <p className="text-muted-foreground">A consistent copy of the database, out of the container:</p>
+            <p className="text-muted-foreground">Stop the container, then copy its cleanly closed database:</p>
             <CodeBlock code={DOCKER_BACKUP} language="bash" />
-            <p className="text-muted-foreground">Media files (uploads) from the data volume:</p>
+            <p className="text-muted-foreground">
+              Keep every container using this data volume stopped. After the database copy succeeds, archive media and
+              keys, then start staqly again:
+            </p>
             <CodeBlock code={DOCKER_UPLOADS} language="bash" />
           </TabsContent>
           <p className="text-muted-foreground">

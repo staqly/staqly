@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
-# Back up a running staqly install started with Compose from this checkout
+# Back up a stopped staqly install started with Compose from this checkout
 # (`make dev`, `make up`). Running the image with `docker run`
 # instead? The same steps as plain docker commands are in the docs
 # (Self-hosting -> Backup & restore, Docker tab); no checkout needed.
 #
 # Usage:
 #   make backup              (or: scripts/backup.sh)
+# Stop the container first; start it again after the backup completes.
 #
 # Output: backups/<UTC timestamp>/
 #   workspace.db      consistent copy of the SQLite database
@@ -31,22 +32,24 @@ volume="${STAQLY_VOLUME:-staqly_staqly-data}"
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 out="backups/$timestamp"
 
-mkdir -p "$out"
-chmod 700 backups "$out"
+# A database-only VACUUM INTO can run online, but a later uploads archive can
+# miss a file permanently deleted after that snapshot. Keep all writers stopped
+# through both copies, including workers in another container on this volume.
+if [ "$(docker inspect --format '{{.State.Running}}' "$container")" != "false" ]; then
+  echo "Stop $container before a full backup: docker stop -t 30 $container. Start it again after the backup." >&2
+  exit 1
+fi
+if [ -n "$(docker ps --filter "volume=$volume" --format '{{.ID}}')" ]; then
+  echo "Stop all containers using $volume before a full backup." >&2
+  exit 1
+fi
 
-# ── 1. Database ──────────────────────────────────────────────────────────────
-# `server backup` uses SQLite's VACUUM INTO: a consistent snapshot taken while
-# the server keeps writing. It is written inside the container, copied out,
-# then removed from the volume.
+mkdir -p backups
+chmod 700 backups
+mkdir "$out"
+chmod 700 "$out"
 
-snapshot="/data/backups/workspace-$timestamp.db"
-
-docker exec "$container" server backup "$snapshot" >/dev/null
-docker cp "$container:$snapshot" "$out/workspace.db"
-docker exec "$container" rm -f "$snapshot"
-chmod 600 "$out/workspace.db"
-
-# ── 2. Uploads and the keys (and local mode's access token, so agents keep theirs) ──
+# ── Database, uploads and keys (and local mode's access token) ──────────────────
 # A throwaway container mounts the volume read-only. It runs as root so it can
 # read every file, then hands the archive back to you (uid/gid) as 0600.
 
@@ -59,6 +62,14 @@ docker run --rm \
     umask 077
     cd /data
 
+    # A forced stop can leave committed changes in WAL. Refuse a partial copy:
+    # restart staqly, let it recover, then stop it cleanly before trying again.
+    if [ -s workspace.db-wal ]; then
+      echo "Nonempty SQLite WAL: start staqly and stop it cleanly before a full backup." >&2
+      exit 1
+    fi
+    cp workspace.db /backup/workspace.db
+
     files="uploads"
     for key in secret.key notify_secret.key access_token; do
       if [ -f "$key" ]; then
@@ -68,9 +79,10 @@ docker run --rm \
 
     # Thumbnails (uploads/workspaces/*/thumbs) are a cache the API rebuilds on demand.
     tar czf /backup/uploads.tar.gz --exclude='uploads/workspaces/*/thumbs' $files
-    chown "$HOST_UID:$HOST_GID" /backup/uploads.tar.gz
-    chmod 600 /backup/uploads.tar.gz
+    chown "$HOST_UID:$HOST_GID" /backup/workspace.db /backup/uploads.tar.gz
+    chmod 600 /backup/workspace.db /backup/uploads.tar.gz
   '
 
 echo "Backup written to $out"
+echo "Start $container again when ready: docker start $container"
 ls -lh "$out"
