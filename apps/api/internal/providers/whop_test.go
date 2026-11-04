@@ -96,6 +96,8 @@ func (f *fakeWhop) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		b, _ := json.Marshal(h)
 		_, _ = w.Write(b)
+	case r.URL.Path == "/experiences/exp_A":
+		_, _ = w.Write([]byte(`{"id":"exp_A","company":{"id":"biz_1","title":"Staqly","route":"staqly"}}`))
 	case r.URL.Path == "/accounts/me":
 		_, _ = w.Write([]byte(`{"id":"biz_1","title":"Acme Studio","route":"acme-studio","logo_url":"https://example.com/logo.png"}`))
 	case r.URL.Path == "/forums":
@@ -396,6 +398,11 @@ func TestWhopSignIn(t *testing.T) {
 	// whopTwoForums: each business has two forums here, so the label names the forum too.
 	if len(opts) == 0 || opts[0].Icon != "https://img.example/s.png" || !strings.HasPrefix(opts[0].Label, "Staqly: ") {
 		t.Fatalf("options %+v", opts)
+	}
+	// A sign-in's channel has no business of its own: the post links to the page of the business picked for it.
+	res, err := wh.Publish(ctx, creds, PostContent{Text: "hi"}, Settings{"forum": "exp_A"})
+	if err != nil || res.URL != "https://whop.com/staqly/" {
+		t.Fatalf("post %+v %v", res, err)
 	}
 	if _, _, err := wh.Exchange(ctx, App{ClientID: "app_1", ClientSecret: "wrong"}, "r", "code", map[string]string{"code_verifier": "v"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "server's app") {
 		t.Fatalf("bad secret: %v", err)

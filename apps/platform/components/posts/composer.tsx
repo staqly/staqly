@@ -1225,7 +1225,7 @@ function PublishTimeAlert({ locked, publishAt, error }: { locked: boolean; publi
 function SentAlert({ failed, total, onShow }: { failed: number; total: number; onShow: () => void }) {
   return (
     <div className="px-4 pt-3">
-      <Callout tone="danger" size="xs" role="alert" data-testid="sent-failed">
+      <Callout tone="danger" size="xs" role="alert" className="items-center" data-testid="sent-failed">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <p>
             {total > 1 ? `${failed} of ${total} channels failed.` : 'It failed on its channel.'} See why and retry them
