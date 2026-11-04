@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -20,8 +21,9 @@ type fakeListMonk struct {
 	statuses   []string       // status changes sent
 	createCode int
 	createBody string
-	dropCreate bool // make the campaign, then close the connection
-	dropStatus bool // start it, then close the connection
+	dropCreate bool     // make the campaign, then close the connection
+	dropStatus bool     // start it, then close the connection
+	uploads    []string // file name / content type / bytes of each picture uploaded
 	srv        *httptest.Server
 }
 
@@ -52,6 +54,16 @@ func (f *fakeListMonk) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		b, _ := json.Marshal(map[string]any{"data": map[string]any{"results": out}})
 		_, _ = w.Write(b)
+	case r.URL.Path == "/api/media" && r.Method == http.MethodPost:
+		file, hdr, err := r.FormFile("file")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		b, _ := io.ReadAll(file)
+		f.uploads = append(f.uploads, hdr.Filename+" "+hdr.Header.Get("Content-Type")+" "+string(b))
+		out, _ := json.Marshal(map[string]any{"data": map[string]any{"id": len(f.uploads), "url": "https://lists.example.com/uploads/" + hdr.Filename}})
+		_, _ = w.Write(out)
 	case r.URL.Path == "/api/campaigns" && r.Method == http.MethodPost:
 		f.created = nil
 		_ = json.NewDecoder(r.Body).Decode(&f.created)
@@ -224,10 +236,36 @@ func TestListMonkValidate(t *testing.T) {
 	l, _ := Get("listmonk")
 	blogWantInvalid(t, l.Validate(PostContent{Text: "x"}, Settings{"lists": "1"}), "title")
 	blogWantInvalid(t, l.Validate(PostContent{Text: "x"}, Settings{"title": "T"}), "lists")
-	blogWantInvalid(t, l.Validate(PostContent{Text: "x", Media: []MediaFile{{MimeType: "image/png"}}}, Settings{"title": "T", "lists": "1"}), "media")
+	blogWantInvalid(t, l.Validate(PostContent{Text: "x", Media: make([]MediaFile, 11)}, Settings{"title": "T", "lists": "1"}), "media")
+	// Email shows pictures only: a video or a sound is left out of the post (FitMedia).
+	if got := FitMedia(l.Limits(), []MediaFile{{MimeType: "image/png"}, {MimeType: "video/mp4"}, {MimeType: "audio/wav"}, {MimeType: "image/gif"}}); len(got) != 2 {
+		t.Fatalf("fit %+v", got)
+	}
 	blogWantInvalid(t, l.Validate(PostContent{Text: " "}, Settings{"title": "T", "lists": "1"}), "content")
 	blogWantInvalid(t, l.Validate(PostContent{Text: "x"}, Settings{"title": "T", "lists": "1", "template_id": "1.5"}), "template_id")
 	if err := l.Validate(PostContent{Text: "x"}, Settings{"title": "T", "lists": "1"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A post's pictures go to listmonk's media library and into the email below the text, in order.
+func TestListMonkPictures(t *testing.T) {
+	f := newFakeListMonk(t)
+	l, _ := Get("listmonk")
+	creds := Credentials{"url": f.srv.URL, "username": "staqly", "token": "tok"}
+	s := Settings{"title": "Photos", "lists": "1"}
+	post := PostContent{PostID: "pst_2", Text: "Look", Media: []MediaFile{chatMedia("sunset [1].png", "image/png", "png-bytes"), chatMedia("dance.gif", "image/gif", "gif-bytes")}}
+	if err := l.Validate(post, s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Publish(context.Background(), creds, post, s); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.uploads) != 2 || f.uploads[0] != "sunset [1].png image/png png-bytes" || f.uploads[1] != "dance.gif image/gif gif-bytes" {
+		t.Fatalf("uploads %q", f.uploads)
+	}
+	want := "Look\n\n![sunset 1](https://lists.example.com/uploads/sunset%20[1].png)\n\n![dance](https://lists.example.com/uploads/dance.gif)"
+	if f.created["body"] != want {
+		t.Fatalf("body %q", f.created["body"])
 	}
 }

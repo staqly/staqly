@@ -37,6 +37,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    # Pictures uploaded to listmonk's media library (a ListMonk channel puts a post's pictures there).
+    volumes:
+      - staqly-listmonk-uploads:/listmonk/uploads
     depends_on:
       listmonk-db:
         condition: service_healthy
@@ -61,3 +64,4 @@ services:
 
 volumes:
   staqly-listmonk-db:
+  staqly-listmonk-uploads:
