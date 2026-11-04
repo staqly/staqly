@@ -162,6 +162,11 @@ func TestHashnodeFailures(t *testing.T) {
 	_, err = h.Publish(context.Background(), creds, post, s)
 	blogWantKind(t, err, nil, "unavailable")
 
+	// A blog without Pro: Hashnode redirects every API call to its announcement.
+	f.httpCode, f.answer = http.StatusMovedPermanently, `<html><head><title>301 Moved Permanently</title></head></html>`
+	_, err = h.Publish(context.Background(), creds, post, s)
+	blogWantKind(t, err, ErrRejected, "Pro plan")
+
 	f.httpCode, f.answer, f.drop = 0, "", true
 	_, err = h.Publish(context.Background(), creds, post, s)
 	blogWantKind(t, err, ErrRejected, "may have published")

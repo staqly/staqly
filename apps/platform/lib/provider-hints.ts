@@ -11,4 +11,5 @@ export const PROVIDER_HINTS: Record<string, string> = {
   bluesky_app_password: 'Bluesky with an app password, for accounts on a server of their own',
   discord_webhook: 'Messages in one Discord channel, through a webhook made there',
   whop: "Posts to a Whop community's forum",
+  hashnode: 'Needs a blog on Hashnode Pro: since May 2026 Hashnode opens its API only to Pro blogs',
 }
