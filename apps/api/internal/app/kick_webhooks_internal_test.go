@@ -82,3 +82,49 @@ func TestKickWebhookChatReply(t *testing.T) {
 		t.Fatalf("unknown channel: %v", err)
 	}
 }
+
+// Follows and subscriptions from Kick count in the analytics' Audience, per day; a report without a Kick channel
+// in its filter has none.
+func TestKickWebhookAudience(t *testing.T) {
+	s, p, _, _, chans := publishedOn(t, "fakekickaud", "fakeother")
+	ctx := context.Background()
+	if _, err := s.DB.Exec(`UPDATE channels SET provider = 'kick', profile_url = 'https://kick.com/jane-doe' WHERE id = ?`, chans[0]); err != nil {
+		t.Fatal(err)
+	}
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	t.Cleanup(providers.UseKickKey(&key.PublicKey))
+	ts := s.Now().UTC().Format(time.RFC3339)
+	b := `"broadcaster":{"user_id":4242,"channel_slug":"jane-doe"}`
+	for i, ev := range []struct{ typ, body string }{
+		{"channel.followed", `{` + b + `,"follower":{"user_id":1}}`},
+		{"channel.followed", `{` + b + `,"follower":{"user_id":2}}`},
+		{"channel.subscription.new", `{` + b + `,"subscriber":{"user_id":3},"duration":1}`},
+		{"channel.subscription.renewal", `{` + b + `,"subscriber":{"user_id":4},"duration":3}`},
+		{"channel.subscription.gifts", `{` + b + `,"gifter":{"user_id":5},"giftees":[{"user_id":6},{"user_id":7},{"user_id":8}]}`},
+	} {
+		id := "01AUD" + string(rune('A'+i))
+		if n, err := s.HandleKickWebhook(ctx, kickCall(t, key, id, ts, ev.typ, ev.body), []byte(ev.body)); err != nil || n != 1 {
+			t.Fatalf("%s: %d %v", ev.typ, n, err)
+		}
+	}
+	// Kick sends an event again: it counts once.
+	again := `{` + b + `,"follower":{"user_id":1}}`
+	if n, err := s.HandleKickWebhook(ctx, kickCall(t, key, "01AUDA", ts, "channel.followed", again), []byte(again)); err != nil || n != 0 {
+		t.Fatalf("again: %d %v", n, err)
+	}
+	rep, err := s.Analytics(ctx, p, AnalyticsQuery{Days: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := AudienceCounts{Follows: 2, Subscriptions: 1, Renewals: 1, Gifted: 3}
+	if rep.Audience == nil || rep.Audience.Totals != want || len(rep.Audience.Channels) != 1 {
+		t.Fatalf("audience %+v", rep.Audience)
+	}
+	if last := rep.Audience.Daily[len(rep.Audience.Daily)-1]; last.AudienceCounts != want || last.Date != rep.Range.To {
+		t.Fatalf("today %+v", last)
+	}
+	other, err := s.Analytics(ctx, p, AnalyticsQuery{Days: 7, Channels: []string{chans[1]}})
+	if err != nil || other.Audience != nil {
+		t.Fatalf("without Kick: %+v %v", other.Audience, err)
+	}
+}

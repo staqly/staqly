@@ -15,7 +15,7 @@ import (
 // Kick's webhooks: once a channel connects, staqly subscribes it to providers.KickEvents (sync_events, again daily
 // as Kick drops a subscription whose webhook kept failing for a day). Kick sends every event to the webhook URL set
 // on the app, the API's /v1/kick/webhook, signed with Kick's key. A chat reply to a post's message becomes a comment
-// under the post.
+// under the post; follows and subscriptions count in the analytics' Audience (channel_activity).
 //
 // An event for a channel staqly no longer has answers 410: Kick drops that subscription after a day of those.
 
@@ -38,21 +38,24 @@ type KickCall struct {
 
 var errKickChannelGone = &Error{Code: "channel_gone", Status: 410, Message: "staqly has no channel for this Kick account"}
 
-// HandleKickWebhook checks the signature and acts on the event. It returns how many posts it touched.
+// HandleKickWebhook checks the signature and acts on the event. It returns how many posts or channels it touched.
 func (s *Service) HandleKickWebhook(ctx context.Context, call KickCall, body []byte) (int, error) {
 	if !providers.KickSigned(ctx, call.MessageID, call.Timestamp, body, call.Signature) {
 		return 0, forbidden("the signature doesn't match Kick's key")
 	}
-	if at, err := time.Parse(time.RFC3339, call.Timestamp); err != nil || s.Now().Sub(at) > kickEventMaxAge {
+	at, err := time.Parse(time.RFC3339, call.Timestamp)
+	if err != nil || s.Now().Sub(at) > kickEventMaxAge {
 		return 0, forbidden("the event is too old")
 	}
 	var ev struct {
-		Broadcaster providers.KickUser `json:"broadcaster"`
+		Broadcaster providers.KickUser   `json:"broadcaster"`
+		Giftees     []providers.KickUser `json:"giftees"`
 	}
+	var channels []db.Channel
 	if json.Unmarshal(body, &ev) != nil || ev.Broadcaster.ChannelSlug == "" {
 		return 0, nil
 	}
-	channels, err := s.Q.ChannelsByProfileURL(ctx, db.ChannelsByProfileURLParams{Provider: "kick",
+	channels, err = s.Q.ChannelsByProfileURL(ctx, db.ChannelsByProfileURLParams{Provider: "kick",
 		ProfileUrl: "https://kick.com/" + strings.ToLower(ev.Broadcaster.ChannelSlug)})
 	if err != nil {
 		return 0, err
@@ -75,9 +78,33 @@ func (s *Service) HandleKickWebhook(ctx context.Context, call KickCall, body []b
 			n, err = s.kickReply(ctx, q, channels, m)
 			return err
 		}
+		if kind, count := kickActivity(call.Type, len(ev.Giftees)); kind != "" {
+			for _, ch := range channels {
+				if err := q.AddChannelActivity(ctx, db.AddChannelActivityParams{WorkspaceID: ch.WorkspaceID, ChannelID: ch.ID,
+					Kind: kind, Count: count, At: formatTime(at)}); err != nil {
+					return err
+				}
+				n++
+			}
+		}
 		return nil
 	})
 	return n, err
+}
+
+// kickActivity is what a Kick event adds to the channel's audience numbers: the kind and how many.
+func kickActivity(event string, giftees int) (string, int64) {
+	switch event {
+	case "channel.followed":
+		return "follow", 1
+	case "channel.subscription.new":
+		return "subscription", 1
+	case "channel.subscription.renewal":
+		return "renewal", 1
+	case "channel.subscription.gifts":
+		return "gift", int64(max(giftees, 1))
+	}
+	return "", 0
 }
 
 // kickReply stores a chat reply to a post's message as a comment under the post. The channel's own messages (the

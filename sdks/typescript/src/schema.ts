@@ -5297,6 +5297,18 @@ export interface components {
                 targets_failed: number;
                 success_rate: number | null;
             }[];
+            /** @description Follows and subscriptions on the channels whose platform reports them (Kick, through its webhook); null when no channel in the filter can */
+            audience: null | {
+                totals: components["schemas"]["AudienceCounts"];
+                previous: components["schemas"]["AudienceCounts"];
+                /** @description Every day of the range, in the workspace's time zone */
+                daily: (components["schemas"]["AudienceCounts"] & {
+                    /** Format: date */
+                    date: string;
+                })[];
+                /** @description The channels counted */
+                channels: string[];
+            };
             posting_times: {
                 /** @description Weekday and hour slots with published targets, in the workspace's time zone */
                 cells: components["schemas"]["AnalyticsTimeSlot"][];
@@ -5347,6 +5359,14 @@ export interface components {
                 /** @description Threads open now */
                 open: number;
             };
+        };
+        AudienceCounts: {
+            follows: number;
+            /** @description New subscriptions */
+            subscriptions: number;
+            renewals: number;
+            /** @description Subscriptions given as gifts */
+            gifted: number;
         };
         AnalyticsTotals: {
             posts_created: number;

@@ -140,6 +140,14 @@ type Channel struct {
 	DeletedAt   sql.NullString `json:"deleted_at"`
 }
 
+type ChannelActivity struct {
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	Kind        string `json:"kind"`
+	Count       int64  `json:"count"`
+	At          string `json:"at"`
+}
+
 type ChannelGroup struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`

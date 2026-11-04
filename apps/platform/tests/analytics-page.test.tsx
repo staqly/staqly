@@ -144,6 +144,7 @@ function report(over: Partial<Analytics> = {}): Analytics {
       },
     ],
     feedback: { opened: 1, resolved: 1, open: 0 },
+    audience: null,
     ...over,
   }
 }
@@ -162,6 +163,41 @@ function setup(data: Analytics = report()) {
 
 describe('analytics page', () => {
   beforeEach(() => nav.set('/analytics'))
+
+  it('shows Kick follows and subscriptions in Audience only when a channel reports them', async () => {
+    const zero = { follows: 0, subscriptions: 0, renewals: 0, gifted: 0 }
+    const base = report()
+    const daily = base.daily.map((d) => ({ date: d.date, ...zero }))
+
+    daily[2] = { date: daily[2].date, follows: 5, subscriptions: 1, renewals: 0, gifted: 0 }
+    setup({
+      ...base,
+      audience: {
+        totals: { follows: 7, subscriptions: 1, renewals: 2, gifted: 3 },
+        previous: { follows: 4, subscriptions: 1, renewals: 2, gifted: 0 },
+        daily,
+        channels: ['ch_k'],
+      },
+    })
+    renderWithProviders(<AnalyticsPage />, { mode: 'local' })
+
+    const audience = await screen.findByTestId('audience')
+    const tiles = within(audience).getAllByTestId('kpi-tile')
+
+    expect(audience).toHaveTextContent('your Kick channel')
+    expect(tiles[0]).toHaveTextContent('New followers')
+    expect(tiles[0]).toHaveTextContent('+3 vs previous 7 days')
+    expect(tiles[1]).toHaveTextContent('no change')
+    expect(tiles[3]).toHaveTextContent('Gifted subs')
+  })
+
+  it('has no Audience without a channel that reports it', async () => {
+    setup()
+    renderWithProviders(<AnalyticsPage />, { mode: 'local' })
+    await screen.findAllByTestId('kpi-tile')
+
+    expect(screen.queryByTestId('audience')).toBeNull()
+  })
 
   it('shows the tiles with real comparisons, the chart summary, channels, sources, failures and top posts', async () => {
     const api = setup()

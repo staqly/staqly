@@ -52,6 +52,42 @@ type AnalyticsReport struct {
 	Top      TopPosts          `json:"top_posts"`
 	Failures []FailureReason   `json:"failures"`
 	Feedback FeedbackStats     `json:"feedback"`
+	// Audience: follows and subscriptions on the channels whose platform tells staqly about them (Kick); null when
+	// no channel in the filter can.
+	Audience *AudienceStats `json:"audience"`
+}
+
+// AudienceStats sums channel_activity over the range, per day in the workspace's time zone.
+type AudienceStats struct {
+	Totals   AudienceCounts `json:"totals"`
+	Previous AudienceCounts `json:"previous"` // the period of the same length right before
+	Daily    []AudienceDay  `json:"daily"`
+	Channels []string       `json:"channels"` // the channels counted (ids)
+}
+
+type AudienceCounts struct {
+	Follows       int64 `json:"follows"`
+	Subscriptions int64 `json:"subscriptions"` // new ones
+	Renewals      int64 `json:"renewals"`
+	Gifted        int64 `json:"gifted"` // subscriptions given as gifts
+}
+
+type AudienceDay struct {
+	Date string `json:"date"`
+	AudienceCounts
+}
+
+func (c *AudienceCounts) add(kind string, n int64) {
+	switch kind {
+	case "follow":
+		c.Follows += n
+	case "subscription":
+		c.Subscriptions += n
+	case "renewal":
+		c.Renewals += n
+	case "gift":
+		c.Gifted += n
+	}
 }
 
 type AnalyticsRange struct {
@@ -745,6 +781,9 @@ func (s *Service) Analytics(ctx context.Context, p Principal, in AnalyticsQuery)
 		}
 	}
 
+	if out.Audience, err = s.analyticsAudience(ctx, p.WorkspaceID, channels, matchChannel, loc, out.Daily, prevFrom, from, to); err != nil {
+		return AnalyticsReport{}, err
+	}
 	if out.Channels == nil {
 		out.Channels = []ChannelStats{}
 	}
@@ -844,4 +883,46 @@ func failureKey(msg string) (key, text string) {
 func excerpt(content string) string {
 	content = strings.Join(strings.Fields(content), " ")
 	return truncateRunes(content, 140)
+}
+
+// analyticsAudience sums the follows and subscriptions of the filtered channels whose platform reports them; nil
+// when none does.
+func (s *Service) analyticsAudience(ctx context.Context, workspaceID string, channels []db.Channel, match func(string) bool,
+	loc *time.Location, days []AnalyticsDay, prevFrom, from, to string) (*AudienceStats, error) {
+	out := &AudienceStats{Channels: []string{}, Daily: make([]AudienceDay, len(days))}
+	for _, c := range channels {
+		if e, ok := providers.Get(c.Provider); ok && match(c.ID) {
+			if _, reports := e.Provider.(providers.EventSubscriber); reports {
+				out.Channels = append(out.Channels, c.ID)
+			}
+		}
+	}
+	if len(out.Channels) == 0 {
+		return nil, nil
+	}
+	dayIndex := map[string]int{}
+	for i, d := range days {
+		out.Daily[i].Date = d.Date
+		dayIndex[d.Date] = i
+	}
+	rows, err := s.Q.AnalyticsAudience(ctx, db.AnalyticsAudienceParams{WorkspaceID: workspaceID, FromAt: prevFrom, ToAt: to})
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		if !slices.Contains(out.Channels, r.ChannelID) {
+			continue
+		}
+		if r.Minute < from[:16] {
+			out.Previous.add(r.Kind, r.N)
+			continue
+		}
+		out.Totals.add(r.Kind, r.N)
+		if minute, err := time.Parse("2006-01-02T15:04", r.Minute); err == nil {
+			if i, ok := dayIndex[minute.In(loc).Format("2006-01-02")]; ok {
+				out.Daily[i].add(r.Kind, r.N)
+			}
+		}
+	}
+	return out, nil
 }

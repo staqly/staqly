@@ -108,3 +108,13 @@ INSERT INTO inbound_events (provider, id, received_at) VALUES (?, ?, ?) ON CONFL
 
 -- name: PruneInboundEvents :exec
 DELETE FROM inbound_events WHERE received_at < ?;
+
+-- name: AddChannelActivity :exec
+INSERT INTO channel_activity (workspace_id, channel_id, kind, count, at) VALUES (?, ?, ?, ?, ?);
+
+-- name: AnalyticsAudience :many
+-- The workspace's channel activity in [from, to), per channel, kind and minute (the report's days are local).
+SELECT channel_id, kind, substr(at, 1, 16) AS minute, CAST(SUM(count) AS INTEGER) AS n
+FROM channel_activity
+WHERE workspace_id = sqlc.arg(workspace_id) AND at >= sqlc.arg(from_at) AND at < sqlc.arg(to_at)
+GROUP BY channel_id, kind, substr(at, 1, 16);

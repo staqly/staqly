@@ -56,6 +56,7 @@ PAIRS: dict[str, type[models.StaqlyModel]] = {
     "BillingURL": models.BillingURL,
     "Analytics": models.Analytics,
     "AnalyticsTotals": models.AnalyticsTotals,
+    "AudienceCounts": models.AudienceCounts,
     "AnalyticsMetrics": models.AnalyticsMetrics,
     "ChannelAnalytics": models.ChannelAnalytics,
     "AnalyticsTimeSlot": models.AnalyticsTimeSlot,
