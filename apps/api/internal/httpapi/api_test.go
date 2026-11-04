@@ -1548,6 +1548,13 @@ func TestSetupStatusAnalytics(t *testing.T) {
 	if !strings.Contains(body, `"analytics":{"environment":"test","host":"https://eu.i.posthog.com","key":"phc_test","release":`) {
 		t.Fatalf("setup status: %s", body)
 	}
+	if strings.Contains(body, "google_analytics") {
+		t.Fatalf("Google Analytics without GOOGLE_ANALYTICS_ID: %s", body)
+	}
+	svc.Cfg.GoogleAnalyticsID = "G-TEST123"
+	if _, body := localReqWith(t, srv, "GET", "/v1/setup", "", "", "", ""); !strings.Contains(body, `"google_analytics":{"measurement_id":"G-TEST123"}`) {
+		t.Fatalf("setup status with GA: %s", body)
+	}
 }
 
 // Bluesky's client metadata is public and lives at its own address, which is the client id; without an https

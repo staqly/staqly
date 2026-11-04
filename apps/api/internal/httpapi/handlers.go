@@ -58,6 +58,9 @@ func (s *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
 		// project token only sends events; nothing that reads data ever reaches the browser.
 		out["analytics"] = map[string]any{"key": ph.Key, "host": ph.Host, "environment": ph.Environment, "release": s.cfg.Version}
 	}
+	if id := s.svc.Cfg.GoogleAnalyticsID; id != "" {
+		out["google_analytics"] = map[string]any{"measurement_id": id}
+	}
 	writeJSON(w, 200, out)
 }
 

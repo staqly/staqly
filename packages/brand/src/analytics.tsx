@@ -1,19 +1,27 @@
 'use client'
 
 import { useEffect } from 'react'
+import ReactGA from 'react-ga4'
 
 // The project's public token (it only sends events). Cookieless: nothing is stored in the browser and the project
-// counts visitors from a daily hash, so the sites need no consent banner.
+// counts visitors from a daily hash, so PostHog needs no consent banner.
 const POSTHOG_TOKEN = 'phc_pMwZQ0lfoTklsPLfB1W3RD4GUDOBVN2FDVMcgKmZHSO'
 
-// Page views, clicks and web vitals for staqly.ai and docs.staqly.ai. Off everywhere else (local dev, previews, forks),
-// and loaded after hydration so it stays out of the first bundle.
+// Google Analytics (GA4). Page views of client-side navigation come from its enhanced measurement (history changes).
+const GA_ID = 'G-JQGZS84PME'
+
+// Every analytics tool of staqly.ai and docs.staqly.ai: PostHog (page views, clicks, web vitals) and Google Analytics.
+// Off everywhere else (local dev, previews, forks), and loaded after hydration so it stays out of the first bundle.
 export function Analytics() {
   useEffect(() => {
     const { hostname } = window.location
 
     if (hostname !== 'staqly.ai' && !hostname.endsWith('.staqly.ai')) {
       return
+    }
+
+    if (!ReactGA.isInitialized) {
+      ReactGA.initialize(GA_ID)
     }
 
     // The extensions ship in the bundle: fetched from the relay at runtime they are blocked by ad blockers by file

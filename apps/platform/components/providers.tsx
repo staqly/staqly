@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { startAnalytics } from '@/lib/analytics'
+import { startAnalytics, startGoogleAnalytics, trackPage } from '@/lib/analytics'
 import { api, ApiError, onUnauthorized } from '@/lib/api'
 import { captureLinkToken, scrubLinkToken } from '@/lib/local-token'
 import { setNavigator } from '@/lib/notify'
@@ -78,16 +78,31 @@ function checkLocalSession(client: QueryClient) {
   }
 }
 
-/** Starts the dashboard's analytics when the server has them on (POSTHOG_KEY); self-hosted installs send nothing. */
+/**
+ * Starts the dashboard's analytics when the server has them on (POSTHOG_KEY, GOOGLE_ANALYTICS_ID); self-hosted
+ * installs send nothing.
+ */
 function Analytics() {
   const setup = useQuery({ queryKey: SETUP_KEY, queryFn: api.setupStatus, staleTime: 30_000 })
   const cfg = setup.data?.analytics
+  const gaId = setup.data?.google_analytics?.measurement_id
+  const pathname = usePathname()
 
   useEffect(() => {
     if (cfg) {
       startAnalytics(cfg)
     }
   }, [cfg])
+
+  useEffect(() => {
+    if (gaId) {
+      startGoogleAnalytics(gaId)
+    }
+  }, [gaId])
+
+  useEffect(() => {
+    trackPage(pathname)
+  }, [pathname])
 
   return null
 }

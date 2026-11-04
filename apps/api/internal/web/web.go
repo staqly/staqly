@@ -122,7 +122,8 @@ const RelayHeader = "X-Staqly-Relay"
 // takes the browser's address from the right-most X-Forwarded-For entry set by
 // your own reverse proxy instead of the TCP peer. relayToken ("" = none) is a
 // secret shared with an API in the same process, sent as RelayHeader. analyticsHost (POSTHOG_HOST when
-// POSTHOG_KEY is set) is the one other origin the dashboard's pages may send to.
+// POSTHOG_KEY is set, GoogleAnalytics when GOOGLE_ANALYTICS_ID is) are the other origins the dashboard's pages may
+// send to.
 // webLLM opens the pages to the assistant's model on the device (AI_ASSISTANT_BROWSER_MODEL set).
 func Handler(site fs.FS, upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken string, webLLM bool, analyticsHost ...string) http.Handler {
 	mux := http.NewServeMux()
@@ -269,10 +270,21 @@ func errorJSON(w http.ResponseWriter, status int, code, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": code, "message": msg}})
 }
 
-// withConnect: headers with connect-src opened to the PostHog host (its https origin only), if there is one.
+// GoogleAnalytics, as an analytics host, opens the pages to Google Analytics (GOOGLE_ANALYTICS_ID): gtag.js from
+// Google Tag Manager and its collection endpoints.
+const GoogleAnalytics = "google-analytics"
+
+// withConnect: headers with connect-src opened to the PostHog host (its https origin only), if there is one, and
+// to Google Analytics when asked.
 func withConnect(headers map[string]string, hosts []string) map[string]string {
 	h := maps.Clone(headers)
 	for _, host := range hosts {
+		if host == GoogleAnalytics {
+			csp := strings.Replace(h["Content-Security-Policy"], "script-src 'self'", "script-src 'self' https://www.googletagmanager.com", 1)
+			h["Content-Security-Policy"] = strings.Replace(csp, "connect-src 'self'",
+				"connect-src 'self' https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com", 1)
+			continue
+		}
 		if u, err := url.Parse(host); err == nil && u.Scheme == "https" && u.Host != "" {
 			h["Content-Security-Policy"] = strings.Replace(h["Content-Security-Policy"], "connect-src 'self'",
 				"connect-src 'self' https://"+u.Host, 1)

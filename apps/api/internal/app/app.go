@@ -196,6 +196,9 @@ type Config struct {
 	// PostHog: the operator's own PostHog project for product analytics and error reporting (POSTHOG_KEY);
 	// empty Key = off, so an install sends nothing unless its operator sets it (analytics.go).
 	PostHog PostHogConfig
+	// GoogleAnalyticsID: the operator's GA4 measurement id for the dashboard's page views (GOOGLE_ANALYTICS_ID,
+	// G-...); empty = off, so an install sends nothing to Google unless its operator sets it.
+	GoogleAnalyticsID string
 	// Analytics receives the product events (server.Main makes it from PostHog); nil = off.
 	Analytics posthog.EnqueueClient
 	// AI: the design editor's AI tools, called with each workspace's own provider key (see ai.go).

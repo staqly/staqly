@@ -17,7 +17,7 @@ func clearEnv(t *testing.T) {
 		"GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URL", "GOOGLE_ISSUER", "AUTH_DEV_SIGNIN", "PUBLIC_DASHBOARD_URL", "PUBLIC_MEDIA_URL",
 		"MAIL_SMTP_HOST", "MAIL_FROM", "STORAGE_DRIVER", "S3_ENDPOINT", "S3_REGION",
 		"S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_FORCE_PATH_STYLE", "S3_PREFIX", "S3_PUBLIC_URL", "S3_SIGN_ENDPOINT",
-		"POSTHOG_KEY", "POSTHOG_HOST", "POSTHOG_ENVIRONMENT"} {
+		"POSTHOG_KEY", "POSTHOG_HOST", "POSTHOG_ENVIRONMENT", "GOOGLE_ANALYTICS_ID"} {
 		t.Setenv(k, "")
 	}
 }
@@ -224,6 +224,22 @@ func TestStripePricePlaceholdersAreIgnored(t *testing.T) {
 	got := stripePrices()
 	if _, ok := got["plus_month"]; ok || got["plus_year"] != "price_1QabcDEF234" || len(got) != 1 {
 		t.Fatalf("prices: %v", got)
+	}
+}
+
+// Google Analytics is off unless GOOGLE_ANALYTICS_ID is set, and it must be a GA4 measurement id.
+func TestGoogleAnalyticsConfig(t *testing.T) {
+	clearEnv(t)
+	if c, err := Load(); err != nil || c.App.GoogleAnalyticsID != "" {
+		t.Fatalf("default: %q %v", c.App.GoogleAnalyticsID, err)
+	}
+	t.Setenv("GOOGLE_ANALYTICS_ID", "G-JQGZS84PME")
+	if c, err := Load(); err != nil || c.App.GoogleAnalyticsID != "G-JQGZS84PME" {
+		t.Fatalf("set: %q %v", c.App.GoogleAnalyticsID, err)
+	}
+	t.Setenv("GOOGLE_ANALYTICS_ID", "UA-123'; script-src *")
+	if _, err := Load(); err == nil {
+		t.Fatal("a value that is not a measurement id must be refused")
 	}
 }
 

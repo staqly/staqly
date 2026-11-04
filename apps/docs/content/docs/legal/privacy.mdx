@@ -3,7 +3,7 @@ title: Privacy Policy
 description: What personal data staqly cloud processes, why, for how long, and your rights.
 ---
 
-Last updated: 2026-10-29
+Last updated: 2026-11-04
 
 This policy explains how **staqly, Switzerland** ("staqly", "we", "us") processes
 personal data when you use **staqly cloud** (the hosted dashboard, API and MCP endpoint), the website
@@ -98,6 +98,14 @@ address, user agent and the site, with a secret that changes daily, so the same 
 recognised on another day or across the two sites. We do not record sessions or what you type.
 Legal basis: legitimate interest in improving the sites. You can block these events with any
 content blocker.
+
+Both sites also load **Google Analytics** (Google Ireland Limited): the pages you visit, how you
+found us (referring site, search, campaign tags), your browser, device type and approximate
+location from your IP address. It sets its own cookies (`_ga`, `_ga_*`, up to two years) to tell
+returning visits apart. Advertising features are off. Legal basis: legitimate interest in
+understanding how people find the sites. You can opt out with Google's
+[opt-out add-on](https://tools.google.com/dlpage/gaoptout), by blocking cookies for staqly.ai, or
+with any content blocker.
 The API playground keeps the API key you enter in your browser only and sends requests directly
 from your browser to the instance you choose.
 
@@ -122,6 +130,11 @@ reports:
 - **Page views and load times** of the dashboard, **without cookies** or anything stored in
   your browser and not linked to your account: counted the same anonymous way as on our
   websites (section 3).
+- **Google Analytics** (Google Ireland Limited) page views of the dashboard: only the page's
+  path (never its query string or fragment, so no codes, tokens or searches) and a generic page
+  title, with your browser, device type and approximate location from your IP address. It sets
+  its cookies (`_ga`, `_ga_*`, up to two years) to tell returning visits apart, and is not linked to
+  your account. Opt out as described in section 3.
 
 We do **not** record sessions, clicks or what you type, and never send access tokens, API keys,
 passwords, cookies or payment details. Revenue figures come from Stripe, not from these events.
@@ -132,8 +145,11 @@ the dashboard's events with any content blocker; to object to the server's event
 ## Cookies
 
 The dashboard uses only what it needs to work: an HttpOnly **session cookie** (valid for up to
-30 days) and a CSRF token, plus a few display preferences (such as the theme) in your browser's local storage. No advertising or tracking
-cookies.
+30 days) and a CSRF token, plus a few display preferences (such as the theme) in your browser's local storage, and
+in staqly cloud Google Analytics' cookies (section 4). No advertising cookies.
+
+staqly.ai and this documentation site set Google Analytics cookies (`_ga`, `_ga_*`); see
+[section 3](#3-staqlyai-and-this-documentation-site) for what they hold and how to opt out.
 
 ## Who else processes data
 
@@ -141,6 +157,8 @@ cookies.
   email provider that delivers sign-in codes and invitations, under data processing agreements. Ask us at support@staqly.ai for the current list.
 - **Analytics and error reports:** PostHog (EU cloud), for staqly.ai and docs.staqly.ai
   (section 3) and staqly cloud (section 4); the software you run yourself sends us nothing.
+- **Website analytics:** Google Analytics (Google Ireland Limited), for staqly.ai and
+  docs.staqly.ai only (section 3).
 - **Payments:** Stripe, once payments are available. Stripe receives your card details
   directly; we never see them.
 - **Services you connect:** when you connect a channel, set up webhooks, alerts or schedule endpoints,
@@ -172,6 +190,7 @@ on standard contractual clauses recognised under the FADP and GDPR.
   deleted.
 - **Analytics events and error reports** (sections 3 and 4) are kept in PostHog for at most
   the retention of our PostHog plan, currently 12 months.
+- **Google Analytics data** (section 3) is kept for 14 months.
 - **Billing records** are kept as long as accounting law requires (in Switzerland, 10 years).
 - **Free trial fingerprints** ([Free trial checks](#free-trial-checks)) are deleted within a day once the workspace
   pays, and with the workspace when it is deleted. After a free trial that ended without a payment they are kept for

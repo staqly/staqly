@@ -220,6 +220,9 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 		if cfg.App.PostHog.Key != "" {
 			analyticsHost = append(analyticsHost, cfg.App.PostHog.Host)
 		}
+		if cfg.App.GoogleAnalyticsID != "" {
+			analyticsHost = append(analyticsHost, web.GoogleAnalytics)
+		}
 		dash := &http.Server{Handler: web.Handler(site, web.DialURL(ln.Addr().String()), log, cfg.TrustProxy, relay, cfg.App.AI.AssistantBrowserModel != "", analyticsHost...),
 			ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Minute, IdleTimeout: 120 * time.Second}
 		servers = append(servers, dash)

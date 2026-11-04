@@ -48,10 +48,14 @@ func main() {
 	}
 	site, _ := fs.Sub(api.Web, "web")
 	// No WriteTimeout: long-polls, MCP streams and downloads pass through.
-	// The pages may send analytics where the API says (GET /v1/setup): the same POSTHOG_KEY / POSTHOG_HOST.
+	// The pages may send analytics where the API says (GET /v1/setup): the same POSTHOG_KEY / POSTHOG_HOST and
+	// GOOGLE_ANALYTICS_ID.
 	var analyticsHost []string
 	if os.Getenv("POSTHOG_KEY") != "" {
 		analyticsHost = append(analyticsHost, env("POSTHOG_HOST", "https://eu.i.posthog.com"))
+	}
+	if os.Getenv("GOOGLE_ANALYTICS_ID") != "" {
+		analyticsHost = append(analyticsHost, web.GoogleAnalytics)
 	}
 	srv := &http.Server{Addr: env("ADDR", ":8080"), Handler: web.Handler(site, upstream, log, trustProxy, "", os.Getenv("AI_ASSISTANT_BROWSER_MODEL") != "", analyticsHost...),
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Minute, IdleTimeout: 120 * time.Second}

@@ -28,6 +28,7 @@
   "dependencies": {
     "cn": "^0.5.1",
     "posthog-js": "1.444.0",
+    "react-ga4": "3.0.1",
     "simple-icons": "16.36.0"
   },
   "peerDependencies": {

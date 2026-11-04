@@ -6597,6 +6597,11 @@ export interface operations {
                             /** @description The server's version */
                             release: string;
                         };
+                        /** @description GOOGLE_ANALYTICS_ID set: the GA4 measurement id the dashboard sends its page views to. Absent when off. */
+                        google_analytics?: {
+                            /** @description GA4 measurement id (G-...) */
+                            measurement_id: string;
+                        };
                     };
                 };
             };
