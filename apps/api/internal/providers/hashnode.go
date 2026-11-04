@@ -244,6 +244,11 @@ type hashnodeGQLError struct {
 
 // hashnodeError maps an HTTP error reply (often still GraphQL-shaped) to what staqly does next.
 func hashnodeError(status int, raw []byte) error {
+	// Since May 2026 Hashnode's API answers only publications on a Pro plan; the others get a redirect to the
+	// announcement (https://hashnode.com/announcements/graphql-api).
+	if status >= 300 && status < 400 {
+		return &Failure{Kind: ErrRejected, Msg: "Hashnode's API works only for blogs on a Pro plan (since May 2026): upgrade the blog under Billing → Upgrade to Pro on Hashnode, then connect again"}
+	}
 	var e struct {
 		Errors []hashnodeGQLError `json:"errors"`
 	}
