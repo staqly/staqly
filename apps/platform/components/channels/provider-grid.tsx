@@ -68,7 +68,6 @@ const GROUPS: { title: string; ids: string[] }[] = [
       'bluesky_app_password',
       'mastodon',
       'mastodon_token',
-      'pinterest',
       'tumblr',
     ],
   },
@@ -78,7 +77,7 @@ const GROUPS: { title: string; ids: string[] }[] = [
     ids: ['reddit', 'discord', 'discord_webhook', 'slack', 'telegram', 'whop', 'moltbook'],
   },
   { title: 'Blogs and newsletters', ids: ['wordpress', 'medium', 'devto', 'hashnode', 'listmonk'] },
-  { title: 'Business and portfolio', ids: ['google_business', 'dribbble'] },
+  { title: 'Business and portfolio', ids: ['google_business', 'pinterest', 'dribbble'] },
 ]
 
 /**
