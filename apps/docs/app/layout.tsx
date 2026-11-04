@@ -1,5 +1,4 @@
 import { Analytics } from '@staqly/brand/analytics'
-import { GoogleTag } from '@staqly/brand/consent'
 import type { Metadata, Viewport } from 'next'
 
 import { Provider } from '@/components/provider'
@@ -39,7 +38,6 @@ export default function Layout({ children }: LayoutProps<'/'>) {
       <body className="flex min-h-screen flex-col">
         <Provider>{children}</Provider>
         <Analytics />
-        <GoogleTag />
       </body>
     </html>
   )

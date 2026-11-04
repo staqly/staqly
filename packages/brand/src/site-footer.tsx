@@ -2,7 +2,6 @@ import { ArrowRight, ChevronDown, Heart } from 'lucide-react'
 import { Fragment } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 
-import { CookieSettings } from './consent'
 import { Logo, LogoMark } from './logo'
 import { TOOLS } from './tools'
 
@@ -150,7 +149,6 @@ export function SiteFooter({ web, docs, basePath, link: Link = A }: SiteFooterPr
           <p className="inline-flex items-center gap-2 text-foreground">
             <LogoMark className="size-5" basePath={basePath} colorway="dark" /> © 2026 Staqly. All rights reserved.
           </p>
-          <CookieSettings className="min-h-6 transition-colors hover:text-brand-strong pointer-coarse:min-h-10" />
           <p className="inline-flex items-center gap-1.5">
             Hosted cloud + open source
             <Heart aria-label="with love" className="size-3.5 fill-red-500 text-red-500" />

@@ -10,7 +10,6 @@
   ],
   "exports": {
     "./analytics": "./src/analytics.tsx",
-    "./consent": "./src/consent.tsx",
     "./logo": "./src/logo.tsx",
     "./hero-demo": "./src/hero-demo.tsx",
     "./tokens.css": "./tokens.css",
@@ -29,6 +28,7 @@
   "dependencies": {
     "cn": "^0.5.1",
     "posthog-js": "1.444.0",
+    "react-ga4": "3.0.1",
     "simple-icons": "16.36.0"
   },
   "peerDependencies": {
