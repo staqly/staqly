@@ -276,7 +276,25 @@ func (Whop) send(ctx context.Context, c Credentials, s Settings, media []MediaFi
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Whop published the " + what + " but did not say its id; check the forum"}
 	}
 	// Whop's API gives no address for a forum post; the target links to the business's page.
-	return Result{ExternalID: out.ID, URL: whopBusinessURL(c["route"])}, nil
+	route := c["route"]
+	if route == "" {
+		route = whopForumRoute(ctx, key, exp)
+	}
+	return Result{ExternalID: out.ID, URL: whopBusinessURL(route)}, nil
+}
+
+// whopForumRoute: the address name of the business a forum belongs to (a sign-in picks it per post), "" when Whop
+// does not say; the post is out by then, so a failed lookup only costs the link.
+func whopForumRoute(ctx context.Context, key, exp string) string {
+	var out struct {
+		Company struct {
+			Route string `json:"route"`
+		} `json:"company"`
+	}
+	if whopCall(ctx, key, http.MethodGet, "/experiences/"+url.PathEscape(exp), nil, &out) != nil {
+		return ""
+	}
+	return out.Company.Route
 }
 
 // whopUpload creates a file, sends its bytes to the address Whop hands out and waits until Whop has it.
