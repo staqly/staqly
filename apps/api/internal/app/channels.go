@@ -669,21 +669,6 @@ func (s *Service) beginOAuth(ctx context.Context, e providers.Entry, app provide
 			extra[k] = v
 		}
 	}
-	if c, ok := e.Provider.(providers.OAuthCarrier); ok {
-		carry := map[string]string{}
-		if st.Carry != "" {
-			if err := s.unseal(st.Carry, &carry); err != nil {
-				return "", err
-			}
-		}
-		for _, k := range c.CarryKeys() {
-			carry[k] = strings.TrimSpace(extra[k])
-		}
-		var err error
-		if st.Carry, err = s.seal(carry); err != nil {
-			return "", err
-		}
-	}
 	state, err := s.signState(st)
 	if err != nil {
 		return "", err
