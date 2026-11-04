@@ -28,17 +28,27 @@ export function SlotScheduleDialog({ at, onOpenChange }: { at: Date; onOpenChang
   const [composing, setComposing] = useState(false)
   const query: PostQuery = useMemo(() => ({ status: 'draft', sort: 'created_desc', limit: 100 }), [])
   const list = usePostsInfinite(query, { refetchOnWindowFocus: false })
+  // A draft with a file in Deleted can't be scheduled until the file is restored: it isn't offered here.
+  const all = useMemo(
+    () =>
+      flattenPosts(list.data).filter(
+        (p) =>
+          !p.publish_at && ![...p.media_items, ...p.thread.flatMap((t) => t.media_items)].some((m) => m.deleted_at),
+      ),
+    [list.data],
+  )
   const drafts = useMemo(() => {
-    // A draft with a file in Deleted can't be scheduled until the file is restored: it isn't offered here.
-    const all = flattenPosts(list.data).filter(
-      (p) => !p.publish_at && ![...p.media_items, ...p.thread.flatMap((t) => t.media_items)].some((m) => m.deleted_at),
-    )
     const q = search.trim().toLowerCase()
 
     return q ? all.filter((p) => p.content.toLowerCase().includes(q)) : all
-  }, [list.data, search])
+  }, [all, search])
   const setSchedule = useSetSchedule({ onDone: () => onOpenChange(false) })
   const pick = (p: Post) => setSchedule.mutate({ post: p, publishAt: at.toISOString() })
+
+  // No draft to pick: straight to the composer. Latched in state, so a draft the composer saves never swaps it back.
+  if (!composing && list.isSuccess && all.length === 0) {
+    setComposing(true)
+  }
 
   if (composing) {
     return (
@@ -82,7 +92,7 @@ export function SlotScheduleDialog({ at, onOpenChange }: { at: Date; onOpenChang
               </div>
             ) : drafts.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">
-                {search ? 'No draft matches this search.' : 'No drafts waiting. Write a new post below.'}
+                {search ? 'No draft matches this search.' : 'No drafts waiting.'}
               </p>
             ) : (
               <ul className="grid gap-1.5">

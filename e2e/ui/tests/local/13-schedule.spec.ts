@@ -223,8 +223,15 @@ test.describe('the schedule', () => {
     // The add button shows on focus (a click on the cell's empty space does the same).
     await slot2.getByTestId('slot-add').focus()
     await page.keyboard.press('Enter')
-    await page.getByRole('dialog').getByRole('button', { name: 'New post for this time' }).click()
     const composer = page.getByRole('dialog', { name: 'New post' })
+    const newPost = page.getByRole('dialog').getByRole('button', { name: 'New post for this time' })
+
+    // With no draft left to pick the slot opens the composer straight away.
+    await expect(newPost.or(composer)).toBeVisible()
+
+    if (await newPost.isVisible()) {
+      await newPost.click()
+    }
 
     await expect(composer.getByTestId('publish-at-chip')).toContainText(/\d/)
     await composer.getByRole('combobox', { name: 'Collection' }).click()
