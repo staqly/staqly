@@ -33,6 +33,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
           '--success-bg': 'color-mix(in oklch, var(--brand) 14%, var(--popover))',
           '--success-border': 'color-mix(in oklch, var(--brand) 35%, transparent)',
           '--success-text': 'var(--brand-strong)',
+          // Sonner's own info blue is navy on near-black in dark mode, too faint to notice; the same tint as success.
+          '--info-bg': 'color-mix(in oklch, var(--chart-3) 18%, var(--popover))',
+          '--info-border': 'color-mix(in oklch, var(--chart-3) 45%, transparent)',
+          '--info-text': 'color-mix(in oklch, var(--chart-3) 55%, var(--popover-foreground))',
         } as React.CSSProperties
       }
       toastOptions={{
