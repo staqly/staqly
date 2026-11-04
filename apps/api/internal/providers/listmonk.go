@@ -1,12 +1,17 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -17,10 +22,15 @@ import (
 //
 // Campaigns are named after the post ("<subject> [staqly <post id>]"), so an attempt after one whose answer was lost
 // finds the campaign it made instead of making a second one.
+//
+// Pictures go to listmonk's media library and into the email below the text; email shows no video or audio, so a post's
+// other files stay out (the dashboard says so before publishing).
 type ListMonk struct{ Base }
 
+var listmonkLimits = Limits{MaxChars: 0, MaxMedia: 10, MediaKinds: []string{"image", "gif"}, NeedsTitle: true}
+
 func init() {
-	Register(ListMonk{NewBase("listmonk", "ListMonk", AuthToken, Limits{MaxChars: 0, NeedsTitle: true}).WithSettings(
+	Register(ListMonk{NewBase("listmonk", "ListMonk", AuthToken, listmonkLimits).WithSettings(
 		Field{Key: "title", Label: "Subject", Kind: "text", Required: true, MaxLength: 500},
 		Field{Key: "lists", Label: "Lists", Kind: "list", Required: true, Placeholder: "Newsletter",
 			Help: "Names or ids of the listmonk lists the campaign goes to."},
@@ -165,13 +175,26 @@ func (ListMonk) Publish(ctx context.Context, c Credentials, p PostContent, s Set
 		if err != nil {
 			return Result{}, blogRetry(err)
 		}
+		// shortcut: a retry after a lost answer uploads the pictures again (copies in listmonk's library), harmless
+		// while retries are rare; look them up by name first if libraries fill up.
+		text := p.Text
+		for _, m := range p.Media {
+			link, err := site.upload(ctx, m)
+			if err != nil {
+				return Result{}, blogRetry(err)
+			}
+			alt := strings.NewReplacer("[", "", "]", "", "\n", " ").Replace(strings.TrimSuffix(m.Name, path.Ext(m.Name)))
+			// A Markdown link ends at a space or a parenthesis.
+			link = strings.NewReplacer(" ", "%20", "(", "%28", ")", "%29").Replace(link)
+			text += "\n\n![" + alt + "](" + link + ")"
+		}
 		body := map[string]any{
 			"name":         name,
 			"subject":      subject,
 			"lists":        ids,
 			"type":         "regular",
 			"content_type": "markdown",
-			"body":         p.Text,
+			"body":         text,
 		}
 		if v := strings.TrimSpace(s["template_id"]); v != "" && v != "0" {
 			n, _ := strconv.Atoi(v)
@@ -289,4 +312,49 @@ func listmonkError(status int, raw []byte) error {
 		return &Failure{Kind: ErrRejected, Msg: "listmonk's API did not answer at this address (" + detail + "); check the address"}
 	}
 	return &Failure{Kind: ErrRejected, Msg: "listmonk: " + detail}
+}
+
+// upload puts a picture in listmonk's media library and returns the address it is served from.
+func (s listmonkSite) upload(ctx context.Context, m MediaFile) (string, error) {
+	r, err := m.Reader(ctx)
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", m.Name, err)
+	}
+	defer r.Close()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	h := textproto.MIMEHeader{}
+	name := strings.NewReplacer(`"`, "", "\r", "", "\n", "", "/", "_").Replace(m.Name)
+	if name == "" {
+		name = "image"
+	}
+	h.Set("Content-Disposition", `form-data; name="file"; filename="`+name+`"`)
+	h.Set("Content-Type", m.MimeType)
+	part, err := w.CreatePart(h)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(part, r); err != nil {
+		return "", fmt.Errorf("reading %s: %w", m.Name, err)
+	}
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.base+"/api/media", &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	var out struct {
+		Data struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	}
+	if err := listmonkDo(ctx, s, req, &out); err != nil {
+		return "", err
+	}
+	if out.Data.URL == "" {
+		return "", &Failure{Kind: ErrRejected, Msg: "listmonk took " + m.Name + " but did not say where it is served from"}
+	}
+	return out.Data.URL, nil
 }

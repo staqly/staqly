@@ -32,7 +32,9 @@ smtp.update({"enabled": True, "host": "mailpit", "port": 1025, "auth_protocol": 
   "tls_type": "none", "tls_skip_verify": True})
 smtp["msg_retry_delay"] = smtp.get("msg_retry_delay") or "10s"
 s["smtp"] = [smtp] + s["smtp"][1:]
-print(json.dumps(s))' | api -X PUT "$BASE/api/settings" -d @- >/dev/null
+# Uploaded pictures are linked from here (listmonk defaults to port 9000).
+s["app.root_url"] = sys.argv[1]
+print(json.dumps(s))' "$BASE" | api -X PUT "$BASE/api/settings" -d @- >/dev/null
 
 # The API user, fresh: an existing one is removed first.
 id=$(api "$BASE/api/users" | python3 -c '
