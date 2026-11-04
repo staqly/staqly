@@ -160,8 +160,8 @@ function Tile({
 }
 
 /**
- * Follows and subscriptions on the channels whose platform reports them (Kick, through its webhook). Absent when
- * no channel in the filter can.
+ * Follows and subscriptions on the channels whose platform reports them through its webhook: Kick's follows and
+ * subscriptions, Whop's members and memberships. Absent when no channel in the filter can.
  */
 export function AudienceTiles({ data }: { data: Analytics }) {
   const audience = data.audience
@@ -176,6 +176,15 @@ export function AudienceTiles({ data }: { data: Analytics }) {
     daily.reduce<(typeof daily)[number] | null>((b, d) => (d[key] > (b?.[key] ?? 0) ? d : b), null)
   const bestFollows = best('follows')
   const bestSubs = best('subscriptions')
+  // What the counts are called follows the platforms counted: Kick has followers and subscribers, Whop members.
+  const platforms = new Set(
+    data.channels.filter((c) => audience.channels.includes(c.channel_id)).map((c) => c.provider),
+  )
+  const kick = platforms.has('kick')
+  const whop = platforms.has('whop')
+  const names = [kick && 'Kick', whop && 'Whop'].filter(Boolean).join(' and ')
+  const followers = kick && whop ? 'New followers and members' : whop ? 'New members' : 'New followers'
+  const subscribers = kick && whop ? 'New subscriptions' : whop ? 'New memberships' : 'New subscribers'
 
   return (
     <section aria-labelledby="audience-heading" className="grid gap-3" data-testid="audience">
@@ -184,13 +193,14 @@ export function AudienceTiles({ data }: { data: Analytics }) {
           Audience
         </h2>
         <p className="text-xs text-muted-foreground">
-          Follows and subscriptions on {audience.channels.length === 1 ? 'your Kick channel' : 'your Kick channels'}, as
-          Kick reports them
+          {whop && !kick ? 'Members and memberships' : 'Follows and subscriptions'} on your {names}{' '}
+          {audience.channels.length === 1 ? 'channel' : 'channels'}, as{' '}
+          {kick && whop ? 'they report' : names + ' reports'} them
         </p>
       </div>
       <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile
-          label="New followers"
+          label={followers}
           kind="Period total"
           value={formatCount(t.follows)}
           detail={
@@ -202,7 +212,7 @@ export function AudienceTiles({ data }: { data: Analytics }) {
           prevLabel={prevLabel}
         />
         <Tile
-          label="New subscribers"
+          label={subscribers}
           kind="Period total"
           value={formatCount(t.subscriptions)}
           detail={

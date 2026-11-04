@@ -172,6 +172,10 @@ describe('analytics page', () => {
     daily[2] = { date: daily[2].date, follows: 5, subscriptions: 1, renewals: 0, gifted: 0 }
     setup({
       ...base,
+      channels: [
+        ...base.channels,
+        { ...base.channels[0]!, channel_id: 'ch_k', provider: 'kick', name: 'Jane on Kick' },
+      ],
       audience: {
         totals: { follows: 7, subscriptions: 1, renewals: 2, gifted: 3 },
         previous: { follows: 4, subscriptions: 1, renewals: 2, gifted: 0 },
@@ -189,6 +193,30 @@ describe('analytics page', () => {
     expect(tiles[0]).toHaveTextContent('+3 vs previous 7 days')
     expect(tiles[1]).toHaveTextContent('no change')
     expect(tiles[3]).toHaveTextContent('Gifted subs')
+  })
+
+  it('calls Whop counts members and memberships', async () => {
+    const zero = { follows: 0, subscriptions: 0, renewals: 0, gifted: 0 }
+    const base = report()
+
+    setup({
+      ...base,
+      channels: [...base.channels, { ...base.channels[0]!, channel_id: 'ch_w', provider: 'whop', name: 'Community' }],
+      audience: {
+        totals: { follows: 3, subscriptions: 2, renewals: 0, gifted: 0 },
+        previous: zero,
+        daily: base.daily.map((d) => ({ date: d.date, ...zero })),
+        channels: ['ch_w'],
+      },
+    })
+    renderWithProviders(<AnalyticsPage />, { mode: 'local' })
+
+    const audience = await screen.findByTestId('audience')
+    const tiles = within(audience).getAllByTestId('kpi-tile')
+
+    expect(audience).toHaveTextContent('Members and memberships on your Whop channel, as Whop reports them')
+    expect(tiles[0]).toHaveTextContent('New members')
+    expect(tiles[1]).toHaveTextContent('New memberships')
   })
 
   it('has no Audience without a channel that reports it', async () => {

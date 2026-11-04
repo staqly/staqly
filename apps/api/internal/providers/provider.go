@@ -388,10 +388,13 @@ type PushedResponses interface{ PushesResponses() }
 // stream.online receiver; YouTube, TikTok: not yet).
 type LiveNotifier interface{ NotifiesLive() }
 
-// EventSubscriber: a platform that sends a connected channel's events to staqly's webhook once subscribed (Kick).
-// staqly subscribes when the channel connects and again daily, as the platform may drop subscriptions.
+// EventSubscriber: a platform that sends a connected channel's events to staqly's webhook once subscribed (Kick,
+// Whop). staqly subscribes when the channel connects and again daily, as the platform may drop subscriptions.
+// hookURL is the channel's own address on staqly's API, for a platform whose webhook is made per channel (Whop);
+// "" when the server has no public API address. Credentials come back when the subscription changed what must be
+// kept (Whop: the webhook's id and signing secret); nil leaves them as they are.
 type EventSubscriber interface {
-	SubscribeEvents(ctx context.Context, c Credentials) error
+	SubscribeEvents(ctx context.Context, c Credentials, hookURL string) (Credentials, error)
 }
 
 // Remover is implemented by platforms that can take a published post (or one part of its thread) down again.

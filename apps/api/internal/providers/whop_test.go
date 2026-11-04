@@ -2,11 +2,15 @@ package providers
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -26,6 +30,8 @@ type fakeWhop struct {
 	postCode int
 	postBody string
 	drop     bool
+	hooks    map[string]map[string]any // webhooks by id
+	hookSeq  int
 }
 
 func (f *fakeWhop) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +50,36 @@ func (f *fakeWhop) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case r.URL.Path == "/webhooks" && r.Method == http.MethodPost:
+		var in map[string]any
+		_ = json.Unmarshal(raw, &in)
+		if f.hooks == nil {
+			f.hooks = map[string]map[string]any{}
+		}
+		f.hookSeq++
+		id := "hook_" + strconv.Itoa(f.hookSeq)
+		h := map[string]any{"id": id, "url": in["url"], "events": in["events"], "resource_id": in["resource_id"], "enabled": true}
+		f.hooks[id] = h
+		out := map[string]any{"webhook_secret": "ws_secret_" + id}
+		for k, v := range h {
+			out[k] = v
+		}
+		b, _ := json.Marshal(out)
+		_, _ = w.Write(b)
+	case strings.HasPrefix(r.URL.Path, "/webhooks/"):
+		h, ok := f.hooks[strings.TrimPrefix(r.URL.Path, "/webhooks/")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"type":"not_found","message":"Webhook not found"}}`))
+			return
+		}
+		if r.Method == http.MethodPatch {
+			var in map[string]any
+			_ = json.Unmarshal(raw, &in)
+			h["enabled"] = in["enabled"]
+		}
+		b, _ := json.Marshal(h)
+		_, _ = w.Write(b)
 	case r.URL.Path == "/accounts/me":
 		_, _ = w.Write([]byte(`{"id":"biz_1","title":"Acme Studio","route":"acme-studio","logo_url":"https://example.com/logo.png"}`))
 	case r.URL.Path == "/forums":
@@ -247,5 +283,58 @@ func TestWhopValidate(t *testing.T) {
 	}
 	if err := wh.Validate(PostContent{Text: "hi", Media: make([]MediaFile, 5)}, nil); !errors.As(err, &ve) || ve.Field != "media" {
 		t.Fatalf("too many files: %v", err)
+	}
+}
+
+// A Whop channel's webhook is made once with its secret, kept while it exists, turned back on when Whop disabled it, and
+// made again when it is gone or pointed elsewhere.
+func TestWhopSubscribeEvents(t *testing.T) {
+	f := useFakeWhop(t)
+	ctx := context.Background()
+	creds := Credentials{"api_key": "good", "account_id": "biz_1", "experience_id": "exp_1"}
+	hook := "https://api.example.com/v1/whop/webhook/ch_1"
+	if _, err := (Whop{}).SubscribeEvents(ctx, creds, ""); !errors.Is(err, ErrRejected) {
+		t.Fatalf("no public address: %v", err)
+	}
+	got, err := Whop{}.SubscribeEvents(ctx, creds, hook)
+	if err != nil || got["webhook_id"] != "hook_1" || got["webhook_secret"] != "ws_secret_hook_1" || got["api_key"] != "good" {
+		t.Fatalf("made: %v %v", got, err)
+	}
+	if h := f.hooks["hook_1"]; h["url"] != hook || h["resource_id"] != "biz_1" || len(h["events"].([]any)) != len(WhopEvents) {
+		t.Fatalf("webhook %v", h)
+	}
+	if again, err := (Whop{}).SubscribeEvents(ctx, got, hook); err != nil || again != nil {
+		t.Fatalf("kept: %v %v", again, err)
+	}
+	f.hooks["hook_1"]["enabled"] = false
+	if again, err := (Whop{}).SubscribeEvents(ctx, got, hook); err != nil || again != nil || f.hooks["hook_1"]["enabled"] != true {
+		t.Fatalf("turned back on: %v %v %v", again, err, f.hooks["hook_1"])
+	}
+	delete(f.hooks, "hook_1")
+	if again, err := (Whop{}).SubscribeEvents(ctx, got, hook); err != nil || again["webhook_id"] != "hook_2" {
+		t.Fatalf("made again: %v %v", again, err)
+	}
+	if _, err := (Whop{}).SubscribeEvents(ctx, Credentials{"api_key": "revoked", "account_id": "biz_1"}, hook); !errors.Is(err, ErrReauth) {
+		t.Fatalf("revoked: %v", err)
+	}
+}
+
+func TestWhopSigned(t *testing.T) {
+	sign := func(key []byte, id, ts, body string) string {
+		m := hmac.New(sha256.New, key)
+		m.Write([]byte(id + "." + ts + "." + body))
+		return "v1," + base64.StdEncoding.EncodeToString(m.Sum(nil))
+	}
+	body := `{"type":"member.created"}`
+	sig := sign([]byte("ws_abc"), "msg_1", "1700000000", body)
+	if !WhopSigned("ws_abc", "msg_1", "1700000000", []byte(body), "v1,AAAA "+sig) {
+		t.Fatal("a signature among several must pass")
+	}
+	if WhopSigned("ws_abc", "msg_1", "1700000001", []byte(body), sig) || WhopSigned("ws_other", "msg_1", "1700000000", []byte(body), sig) ||
+		WhopSigned("", "msg_1", "1700000000", []byte(body), sig) {
+		t.Fatal("another time, secret or none must fail")
+	}
+	if !WhopSigned("whsec_"+base64.StdEncoding.EncodeToString([]byte("raw-key")), "m", "1", []byte("b"), sign([]byte("raw-key"), "m", "1", "b")) {
+		t.Fatal("the spec's whsec_ form")
 	}
 }

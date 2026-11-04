@@ -325,6 +325,29 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "410": { description: No channel for this Kick account, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
+  /v1/whop/webhook/{channel}:
+    post:
+      operationId: receiveWhopWebhook
+      tags: [channels]
+      security: [{}]
+      summary: An event from a Whop channel's webhook (someone joined the business, a membership started)
+      description: |
+        Each connected Whop channel gets its own webhook on Whop, made by staqly (the channel's API key needs
+        `developer:manage_webhook` and `webhook_receive:memberships`), at `<api>/v1/whop/webhook/<channel id>`. Signed
+        with that webhook's secret (Standard Webhooks: `webhook-id`, `webhook-timestamp`, `webhook-signature`); a call
+        more than 5 minutes off is refused and each `webhook-id` is handled once. `member.created` and
+        `membership.activated` count in the analytics' audience. A channel the server doesn't have answers 410.
+      parameters:
+        - { name: channel, in: path, required: true, schema: { type: string } }
+        - { name: webhook-id, in: header, required: true, schema: { type: string } }
+        - { name: webhook-timestamp, in: header, required: true, schema: { type: string } }
+        - { name: webhook-signature, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [handled], properties: { handled: { type: integer, description: Channels the event counted on } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "410": { description: No Whop channel here, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
   /v1/meta/deauthorize:
     post:
       operationId: metaDeauthorize
@@ -5964,7 +5987,7 @@ components:
               targets_failed: { type: integer, minimum: 0 }
               success_rate: { type: [number, "null"], minimum: 0, maximum: 1 }
         audience:
-          description: Follows and subscriptions on the channels whose platform reports them (Kick, through its webhook); null when no channel in the filter can
+          description: Follows and subscriptions on the channels whose platform reports them (Kick follows and subscriptions; Whop members as follows and activated memberships as subscriptions, through their webhooks); null when no channel in the filter can
           oneOf:
             - type: "null"
             - type: object
