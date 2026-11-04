@@ -957,6 +957,55 @@ func (q *Queries) StripMediaFromPosts(ctx context.Context, arg StripMediaFromPos
 	return err
 }
 
+const targetsByExternalID = `-- name: TargetsByExternalID :many
+SELECT t.post_id, t.channel_id, t.replies, p.workspace_id
+FROM post_targets t
+JOIN posts p ON p.id = t.post_id
+WHERE t.channel_id = ?1 AND t.external_id = ?2 AND t.external_id <> ''
+  AND t.status = 'published' AND t.removal = ''
+`
+
+type TargetsByExternalIDParams struct {
+	ChannelID  string `json:"channel_id"`
+	ExternalID string `json:"external_id"`
+}
+
+type TargetsByExternalIDRow struct {
+	PostID      string `json:"post_id"`
+	ChannelID   string `json:"channel_id"`
+	Replies     string `json:"replies"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+// A channel's published targets with this id on the platform (Kick: the chat message a reply answers).
+func (q *Queries) TargetsByExternalID(ctx context.Context, arg TargetsByExternalIDParams) ([]TargetsByExternalIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, targetsByExternalID, arg.ChannelID, arg.ExternalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TargetsByExternalIDRow
+	for rows.Next() {
+		var i TargetsByExternalIDRow
+		if err := rows.Scan(
+			&i.PostID,
+			&i.ChannelID,
+			&i.Replies,
+			&i.WorkspaceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const tikTokTargetsByExternalID = `-- name: TikTokTargetsByExternalID :many
 SELECT t.post_id, t.channel_id, t.external_url, p.workspace_id
 FROM post_targets t

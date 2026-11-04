@@ -94,3 +94,17 @@ WHERE id = @id;
 -- Every workspace's connected TikTok channels: a TikTok webhook names the account only by the open_id kept in the
 -- sealed credentials.
 SELECT id, workspace_id, credentials FROM channels WHERE provider = 'tiktok' AND status = 'connected' AND deleted_at IS NULL;
+
+-- name: ChannelsByProfileURL :many
+-- A platform's channels (not removed) with this profile link: a Kick webhook names the channel by its slug.
+SELECT * FROM channels WHERE provider = ? AND profile_url = ? AND deleted_at IS NULL;
+
+-- name: ConnectedChannelsOfProvider :many
+SELECT id, workspace_id FROM channels WHERE provider = ? AND status = 'connected' AND deleted_at IS NULL;
+
+-- name: MarkInboundEvent :execrows
+-- Records a webhook call by its id; 0 rows when it was handled before.
+INSERT INTO inbound_events (provider, id, received_at) VALUES (?, ?, ?) ON CONFLICT (provider, id) DO NOTHING;
+
+-- name: PruneInboundEvents :exec
+DELETE FROM inbound_events WHERE received_at < ?;

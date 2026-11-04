@@ -3,16 +3,22 @@ package providers
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,8 +34,13 @@ var (
 )
 
 // kickScopes: the account's name and picture (user:read), its channel's slug for links (channel:read), sending
-// chat messages (chat:write).
-const kickScopes = "user:read channel:read chat:write"
+// chat messages (chat:write), and its channel's events sent to staqly's webhook (events:subscribe).
+const kickScopes = "user:read channel:read chat:write events:subscribe"
+
+// KickEvents are the events staqly subscribes a connected channel to (all version 1): chat messages (replies to its
+// posts become comments), the stream going live, follows and subscriptions.
+var KickEvents = []string{"chat.message.sent", "livestream.status.updated", "channel.followed",
+	"channel.subscription.new", "channel.subscription.renewal", "channel.subscription.gifts"}
 
 func init() {
 	Register(Kick{NewBase("kick", "Kick", AuthOAuth2, Limits{MaxChars: 500})}, StatusAvailable)
@@ -277,4 +288,189 @@ func (Kick) CheckApp(ctx context.Context, app App, _ string) (bool, error) {
 		return false, errors.New("Kick did not accept the app keys: check the Client ID and Client Secret in your Kick developer settings")
 	}
 	return false, unexpected("Kick", status, body)
+}
+
+// Kick sends replies to a post (chat replies) to the webhook instead of being read.
+var (
+	_ EventSubscriber = Kick{}
+	_ PushedResponses = Kick{}
+)
+
+func (Kick) PushesResponses() {}
+
+// SubscribeEvents subscribes the account's channel to KickEvents it isn't subscribed to yet: Kick drops a
+// subscription whose webhook kept failing for a day, so this runs again daily. Kick sends the events to the webhook
+// URL set on the app.
+func (Kick) SubscribeEvents(ctx context.Context, c Credentials) error {
+	token := c["access_token"]
+	if token == "" {
+		return &Failure{Kind: ErrReauth, Msg: "Kick: no account stored; reconnect it"}
+	}
+	var list struct {
+		Data []struct {
+			Event string `json:"event"`
+		} `json:"data"`
+	}
+	if err := kickGet(ctx, token, "/public/v1/events/subscriptions", &list); err != nil {
+		return kickSubscribeError(err)
+	}
+	have := map[string]bool{}
+	for _, d := range list.Data {
+		have[d.Event] = true
+	}
+	type event struct {
+		Name    string `json:"name"`
+		Version int    `json:"version"`
+	}
+	missing := []event{}
+	for _, name := range KickEvents {
+		if !have[name] {
+			missing = append(missing, event{Name: name, Version: 1})
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	// With a user token Kick takes the broadcaster from the token.
+	b, _ := json.Marshal(map[string]any{"events": missing, "method": "webhook"})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, kickAPI+"/public/v1/events/subscriptions", bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	var out struct {
+		Data []struct {
+			Name  string `json:"name"`
+			Error string `json:"error"`
+		} `json:"data"`
+	}
+	if err := kickDo(ctx, req, &out); err != nil {
+		return kickSubscribeError(err)
+	}
+	for _, d := range out.Data {
+		if d.Error != "" {
+			return &Failure{Kind: ErrRejected, Msg: "Kick did not subscribe to " + d.Name + " (" + d.Error + ")"}
+		}
+	}
+	return nil
+}
+
+// kickSubscribeError: a refused subscription (403: a channel connected before staqly asked for events:subscribe)
+// needs the account connected again; other failures pass through.
+func kickSubscribeError(err error) error {
+	var f *Failure
+	if errors.As(err, &f) && f.Kind == ErrRejected {
+		return &Failure{Kind: ErrRejected, Msg: "Kick did not let staqly follow the channel's events (" + f.Msg + "); reconnect the channel to allow it"}
+	}
+	return err
+}
+
+// kickKey caches Kick's webhook public key; Kick may rotate it, so a signature that doesn't match fetches it again
+// (at most every kickKeyRetry).
+var kickKey struct {
+	sync.Mutex
+	key *rsa.PublicKey
+	at  time.Time
+}
+
+const kickKeyRetry = 10 * time.Minute
+
+// KickSigned checks a webhook call: Kick-Event-Signature is the base64 RSA PKCS#1 v1.5 signature (SHA-256) of
+// "<Kick-Event-Message-Id>.<Kick-Event-Message-Timestamp>.<body>" with Kick's key.
+func KickSigned(ctx context.Context, messageID, timestamp string, body []byte, signature string) bool {
+	sig, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil || messageID == "" || timestamp == "" {
+		return false
+	}
+	sum := sha256.Sum256(append([]byte(messageID+"."+timestamp+"."), body...))
+	kickKey.Lock()
+	defer kickKey.Unlock()
+	for attempt := 0; attempt < 2; attempt++ {
+		if kickKey.key != nil && rsa.VerifyPKCS1v15(kickKey.key, crypto.SHA256, sum[:], sig) == nil {
+			return true
+		}
+		if !kickKey.at.IsZero() && time.Since(kickKey.at) < kickKeyRetry {
+			return false
+		}
+		key, err := kickPublicKey(ctx)
+		kickKey.at = time.Now()
+		if err != nil {
+			return false
+		}
+		kickKey.key = key
+	}
+	return false
+}
+
+func kickPublicKey(ctx context.Context) (*rsa.PublicKey, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kickAPI+"/public/v1/public-key", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Data struct {
+			PublicKey string `json:"public_key"`
+		} `json:"data"`
+	}
+	if err := kickDo(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode([]byte(out.Data.PublicKey))
+	if block == nil {
+		return nil, errors.New("Kick's public key is not PEM")
+	}
+	k, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	rk, ok := k.(*rsa.PublicKey)
+	if !ok {
+		return nil, errors.New("Kick's public key is not RSA")
+	}
+	return rk, nil
+}
+
+// KickUser is a person in a Kick event.
+type KickUser struct {
+	UserID      int64  `json:"user_id"`
+	Username    string `json:"username"`
+	ChannelSlug string `json:"channel_slug"`
+}
+
+// KickChat is a chat.message.sent event.
+type KickChat struct {
+	MessageID   string    `json:"message_id"`
+	Broadcaster KickUser  `json:"broadcaster"`
+	Sender      KickUser  `json:"sender"`
+	Content     string    `json:"content"`
+	CreatedAt   time.Time `json:"created_at"`
+	RepliesTo   *struct {
+		MessageID string `json:"message_id"`
+	} `json:"replies_to"`
+}
+
+// kickEmote is an emote in a chat message: [emote:<id>:<name>].
+var kickEmote = regexp.MustCompile(`\[emote:\d+:([^\]]+)\]`)
+
+// KickText is a chat message's text with emotes as their names.
+func KickText(content string) string {
+	return kickEmote.ReplaceAllString(content, "$1")
+}
+
+// UseKickKey sets Kick's webhook key, as if read just now (tests in other packages sign their own calls); nil makes
+// the next check read it from Kick. It returns a function that puts back what was there.
+func UseKickKey(key *rsa.PublicKey) func() {
+	kickKey.Lock()
+	defer kickKey.Unlock()
+	old, oldAt := kickKey.key, kickKey.at
+	kickKey.key, kickKey.at = key, time.Time{}
+	if key != nil {
+		kickKey.at = time.Now()
+	}
+	return func() {
+		kickKey.Lock()
+		defer kickKey.Unlock()
+		kickKey.key, kickKey.at = old, oldAt
+	}
 }

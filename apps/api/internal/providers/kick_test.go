@@ -2,9 +2,14 @@ package providers
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +27,10 @@ type fakeKick struct {
 	chatCode int            // status for /public/v1/chat (0 = 200)
 	chatBody string
 	notSent  bool
+	subs     []string // subscribed events
+	subCode  int      // status for /public/v1/events/subscriptions (0 = 200)
+	pubKey   string   // PEM at /public/v1/public-key
+	keyReads int
 	drop     bool
 	srv      *httptest.Server
 }
@@ -48,6 +57,41 @@ func (f *fakeKick) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			_, _ = w.Write([]byte(`{"access_token":"a1","refresh_token":"r1","expires_in":7200,"scope":"user:read channel:read chat:write"}`))
 		}
+	case "/public/v1/public-key":
+		f.keyReads++
+		b, _ := json.Marshal(map[string]any{"data": map[string]string{"public_key": f.pubKey}, "message": "OK"})
+		_, _ = w.Write(b)
+	case "/public/v1/events/subscriptions":
+		if f.subCode != 0 {
+			w.WriteHeader(f.subCode)
+			_, _ = w.Write([]byte(`{"data":null,"message":"missing scope events:subscribe"}`))
+			return
+		}
+		if r.Method == http.MethodPost {
+			var body struct {
+				Events []struct {
+					Name string `json:"name"`
+				} `json:"events"`
+				Method string `json:"method"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			out := []map[string]string{}
+			for _, e := range body.Events {
+				if body.Method == "webhook" {
+					f.subs = append(f.subs, e.Name)
+				}
+				out = append(out, map[string]string{"name": e.Name, "subscription_id": "s-" + e.Name})
+			}
+			b, _ := json.Marshal(map[string]any{"data": out, "message": "OK"})
+			_, _ = w.Write(b)
+			return
+		}
+		list := []map[string]any{}
+		for _, e := range f.subs {
+			list = append(list, map[string]any{"event": e, "method": "webhook", "version": 1})
+		}
+		b, _ := json.Marshal(map[string]any{"data": list, "message": "OK"})
+		_, _ = w.Write(b)
 	case "/public/v1/users":
 		_, _ = w.Write([]byte(`{"data":[{"user_id":4242,"name":"Jane_Doe","profile_picture":"https://files.example.com/jane.webp"}],"message":"OK"}`))
 	case "/public/v1/channels":
@@ -207,5 +251,59 @@ func TestKickValidate(t *testing.T) {
 	}
 	if err := k.Validate(PostContent{Text: "a", Media: []MediaFile{chatMedia("a.jpg", "image/jpeg", "a")}}, Settings{}); err == nil {
 		t.Fatal("media on Kick")
+	}
+}
+
+func TestKickSubscribeEvents(t *testing.T) {
+	f := useFakeKick(t)
+	ctx := context.Background()
+	f.subs = []string{"chat.message.sent"}
+	if err := (Kick{}).SubscribeEvents(ctx, kickCreds()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.subs) != len(KickEvents) {
+		t.Fatalf("subscribed %v", f.subs)
+	}
+	// Everything subscribed: nothing more is created.
+	if err := (Kick{}).SubscribeEvents(ctx, kickCreds()); err != nil || len(f.subs) != len(KickEvents) {
+		t.Fatalf("again: %v %v", err, f.subs)
+	}
+	// A channel connected before staqly asked for events:subscribe.
+	f.subCode = http.StatusForbidden
+	if err := (Kick{}).SubscribeEvents(ctx, kickCreds()); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "reconnect") {
+		t.Fatalf("no scope: %v", err)
+	}
+	f.subCode = http.StatusUnauthorized
+	if err := (Kick{}).SubscribeEvents(ctx, kickCreds()); !errors.Is(err, ErrReauth) {
+		t.Fatalf("expired: %v", err)
+	}
+}
+
+func TestKickSigned(t *testing.T) {
+	f := useFakeKick(t)
+	ctx := context.Background()
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	der, _ := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	f.pubKey = string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
+	t.Cleanup(UseKickKey(nil))
+	body := []byte(`{"message_id":"m-2"}`)
+	sum := sha256.Sum256([]byte("01ABC.2026-11-04T10:00:00Z." + string(body)))
+	raw, _ := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, sum[:])
+	sig := base64.StdEncoding.EncodeToString(raw)
+	if !KickSigned(ctx, "01ABC", "2026-11-04T10:00:00Z", body, sig) || f.keyReads != 1 {
+		t.Fatalf("a call Kick signed must pass (key reads %d)", f.keyReads)
+	}
+	if KickSigned(ctx, "01ABC", "2026-11-04T10:00:00Z", []byte(`{"message_id":"m-3"}`), sig) {
+		t.Fatal("a changed body must fail")
+	}
+	if KickSigned(ctx, "01ABD", "2026-11-04T10:00:00Z", body, sig) || KickSigned(ctx, "01ABC", "2026-11-04T10:00:00Z", body, "not base64!") {
+		t.Fatal("a changed id or a broken signature must fail")
+	}
+	// A bad signature right after reading the key doesn't read it again and again.
+	if f.keyReads != 1 {
+		t.Fatalf("key read %d times", f.keyReads)
+	}
+	if got := KickText("hi [emote:4148074:HYPERCLAP] there"); got != "hi HYPERCLAP there" {
+		t.Fatal(got)
 	}
 }

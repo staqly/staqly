@@ -158,3 +158,11 @@ UPDATE post_targets SET external_id = ?, external_url = ?, updated_at = ? WHERE 
 -- A result callback can settle the target before its endpoint request returns.
 UPDATE post_targets SET error = ?, attempts = attempts + 1, updated_at = ?
 WHERE post_id = ? AND channel_id = ? AND status = 'publishing';
+
+-- name: TargetsByExternalID :many
+-- A channel's published targets with this id on the platform (Kick: the chat message a reply answers).
+SELECT t.post_id, t.channel_id, t.replies, p.workspace_id
+FROM post_targets t
+JOIN posts p ON p.id = t.post_id
+WHERE t.channel_id = sqlc.arg(channel_id) AND t.external_id = sqlc.arg(external_id) AND t.external_id <> ''
+  AND t.status = 'published' AND t.removal = '';

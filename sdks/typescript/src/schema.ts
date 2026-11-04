@@ -150,6 +150,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/kick/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * An event from Kick (a chat message, the stream going live, a follow or subscription)
+         * @description The webhook URL to enter in the Kick app's settings is `<api>/v1/kick/webhook` (`<dashboard>/api/v1/kick/webhook`).
+         *     Signed with Kick's key (`Kick-Event-Signature`: RSA SHA-256 of `<message id>.<timestamp>.<body>`); off (404)
+         *     until the server has `PROVIDER_KICK_CLIENT_ID`. Each message id is handled once. A chat reply to a post's message
+         *     becomes a comment under the post. An event for a channel the server no longer has answers 410, so Kick drops
+         *     that subscription.
+         */
+        post: operations["receiveKickWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meta/deauthorize": {
         parameters: {
             query?: never;
@@ -6720,6 +6744,52 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    receiveKickWebhook: {
+        parameters: {
+            query?: never;
+            header: {
+                "Kick-Event-Message-Id": string;
+                "Kick-Event-Message-Timestamp": string;
+                "Kick-Event-Signature": string;
+                "Kick-Event-Type": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Posts the event touched */
+                        handled: number;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description No channel for this Kick account */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             413: components["responses"]["PayloadTooLarge"];
         };
     };
