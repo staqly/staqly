@@ -73,7 +73,7 @@ test.describe('assistant', () => {
 
     await page.goto(`/posts?collection=${col.id}`)
     await ready(page, col.name)
-    await page.getByTestId('assistant-toggle').click()
+    await page.getByRole('button', { name: 'AI Assistant', exact: true }).click()
     const panel = page.getByTestId('assistant')
 
     await panel.getByLabel('Message to the assistant').fill('Create a private preview link')
