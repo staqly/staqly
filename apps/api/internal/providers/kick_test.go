@@ -258,23 +258,23 @@ func TestKickSubscribeEvents(t *testing.T) {
 	f := useFakeKick(t)
 	ctx := context.Background()
 	f.subs = []string{"chat.message.sent"}
-	if err := (Kick{}).SubscribeEvents(ctx, kickCreds()); err != nil {
+	if err := kickSubscribe(ctx, kickCreds()); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.subs) != len(KickEvents) {
 		t.Fatalf("subscribed %v", f.subs)
 	}
 	// Everything subscribed: nothing more is created.
-	if err := (Kick{}).SubscribeEvents(ctx, kickCreds()); err != nil || len(f.subs) != len(KickEvents) {
+	if err := kickSubscribe(ctx, kickCreds()); err != nil || len(f.subs) != len(KickEvents) {
 		t.Fatalf("again: %v %v", err, f.subs)
 	}
 	// A channel connected before staqly asked for events:subscribe.
 	f.subCode = http.StatusForbidden
-	if err := (Kick{}).SubscribeEvents(ctx, kickCreds()); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "reconnect") {
+	if err := kickSubscribe(ctx, kickCreds()); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "reconnect") {
 		t.Fatalf("no scope: %v", err)
 	}
 	f.subCode = http.StatusUnauthorized
-	if err := (Kick{}).SubscribeEvents(ctx, kickCreds()); !errors.Is(err, ErrReauth) {
+	if err := kickSubscribe(ctx, kickCreds()); !errors.Is(err, ErrReauth) {
 		t.Fatalf("expired: %v", err)
 	}
 }

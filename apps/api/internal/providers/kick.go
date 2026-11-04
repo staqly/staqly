@@ -306,7 +306,11 @@ func (Kick) NotifiesLive() {}
 // SubscribeEvents subscribes the account's channel to KickEvents it isn't subscribed to yet: Kick drops a
 // subscription whose webhook kept failing for a day, so this runs again daily. Kick sends the events to the webhook
 // URL set on the app.
-func (Kick) SubscribeEvents(ctx context.Context, c Credentials) error {
+func (Kick) SubscribeEvents(ctx context.Context, c Credentials, _ string) (Credentials, error) {
+	return nil, kickSubscribe(ctx, c)
+}
+
+func kickSubscribe(ctx context.Context, c Credentials) error {
 	token := c["access_token"]
 	if token == "" {
 		return &Failure{Kind: ErrReauth, Msg: "Kick: no account stored; reconnect it"}

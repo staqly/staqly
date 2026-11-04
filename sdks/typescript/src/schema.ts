@@ -174,6 +174,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/whop/webhook/{channel}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * An event from a Whop channel's webhook (someone joined the business, a membership started)
+         * @description Each connected Whop channel gets its own webhook on Whop, made by staqly (the channel's API key needs
+         *     `developer:manage_webhook` and `webhook_receive:memberships`), at `<api>/v1/whop/webhook/<channel id>`. Signed
+         *     with that webhook's secret (Standard Webhooks: `webhook-id`, `webhook-timestamp`, `webhook-signature`); a call
+         *     more than 5 minutes off is refused and each `webhook-id` is handled once. `member.created` and
+         *     `membership.activated` count in the analytics' audience. A channel the server doesn't have answers 410.
+         */
+        post: operations["receiveWhopWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meta/deauthorize": {
         parameters: {
             query?: never;
@@ -5312,7 +5336,7 @@ export interface components {
                 targets_failed: number;
                 success_rate: number | null;
             }[];
-            /** @description Follows and subscriptions on the channels whose platform reports them (Kick, through its webhook); null when no channel in the filter can */
+            /** @description Follows and subscriptions on the channels whose platform reports them (Kick follows and subscriptions; Whop members as follows and activated memberships as subscriptions, through their webhooks); null when no channel in the filter can */
             audience: null | {
                 totals: components["schemas"]["AudienceCounts"];
                 previous: components["schemas"]["AudienceCounts"];
@@ -6824,6 +6848,52 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /** @description No channel for this Kick account */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+        };
+    };
+    receiveWhopWebhook: {
+        parameters: {
+            query?: never;
+            header: {
+                "webhook-id": string;
+                "webhook-timestamp": string;
+                "webhook-signature": string;
+            };
+            path: {
+                channel: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Channels the event counted on */
+                        handled: number;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description No Whop channel here */
             410: {
                 headers: {
                     [name: string]: unknown;

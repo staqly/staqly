@@ -198,8 +198,22 @@ func (s *Service) syncEvents(ctx context.Context, channelID string) error {
 		return err
 	}
 	pctx, cancel := context.WithTimeout(s.publishingCtx(ctx, ch.WorkspaceID), 30*time.Second)
-	err = sub.SubscribeEvents(pctx, creds)
+	hookURL := ""
+	if base := strings.TrimRight(s.Cfg.PublicURL, "/"); base != "" {
+		hookURL = base + "/v1/" + ch.Provider + "/webhook/" + ch.ID // Whop's webhook is made per channel
+	}
+	updated, err := sub.SubscribeEvents(pctx, creds, hookURL)
 	cancel()
+	if err == nil && updated != nil {
+		// The platform made a webhook whose secret it shows once: kept sealed with the channel.
+		sealed, serr := s.seal(updated)
+		if serr != nil {
+			return serr
+		}
+		wctx, wcancel := context.WithTimeout(context.WithoutCancel(ctx), jobWriteTimeout)
+		defer wcancel()
+		return s.W.SetChannelCredentials(wctx, db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: ch.ID})
+	}
 	switch {
 	case errors.Is(err, providers.ErrReauth):
 		wctx, wcancel := context.WithTimeout(context.WithoutCancel(ctx), jobWriteTimeout)

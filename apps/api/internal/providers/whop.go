@@ -3,6 +3,9 @@ package providers
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -383,4 +386,121 @@ func whopError(status int, raw []byte) error {
 		return &Failure{Kind: ErrRejected, Msg: "Whop did not find the forum or post (" + detail + "); reconnect the channel if the forum was removed"}
 	}
 	return &Failure{Kind: ErrRejected, Msg: "Whop refused it (" + detail + ")"}
+}
+
+// WhopEvents are the events a Whop channel's webhook asks for: someone joined the business, a membership started.
+// They count in the analytics' Audience (members, memberships).
+var WhopEvents = []string{"member.created", "membership.activated"}
+
+// Whop sends the business's member events to staqly's webhook, one per channel.
+var _ EventSubscriber = Whop{}
+
+// SubscribeEvents keeps a webhook for this channel on Whop: the one made before when it still exists (turned back on
+// when Whop disabled it after failures), else a new one, whose id and signing secret come back to be stored. Whop shows
+// a webhook's secret only when it is made.
+//
+// shortcut: two forums of one business have a webhook each, so its members count once per connected forum; share one
+// webhook per business when that matters.
+func (Whop) SubscribeEvents(ctx context.Context, c Credentials, hookURL string) (Credentials, error) {
+	key, account := c["api_key"], c["account_id"]
+	if key == "" || account == "" {
+		return nil, &Failure{Kind: ErrReauth, Msg: "Whop: no API key stored; reconnect the forum"}
+	}
+	if hookURL == "" {
+		return nil, &Failure{Kind: ErrRejected, Msg: "Whop: this server has no public API address (PUBLIC_API_URL) for Whop's webhook"}
+	}
+	type hook struct {
+		ID      string `json:"id"`
+		URL     string `json:"url"`
+		Enabled bool   `json:"enabled"`
+		Secret  string `json:"webhook_secret"`
+	}
+	if id := c["webhook_id"]; id != "" && c["webhook_secret"] != "" {
+		var h hook
+		found, err := whopFind(ctx, key, "/webhooks/"+url.PathEscape(id), &h)
+		switch {
+		case err != nil:
+			return nil, whopWebhookError(err)
+		case found && h.URL == hookURL && h.Enabled:
+			return nil, nil
+		case found && h.URL == hookURL:
+			return nil, whopWebhookError(whopCall(ctx, key, http.MethodPatch, "/webhooks/"+url.PathEscape(id), map[string]any{"enabled": true}, nil))
+		}
+		// Gone, or for another address (the server moved): make a new one.
+	}
+	var h hook
+	body := map[string]any{"url": hookURL, "events": WhopEvents, "resource_id": account, "title": "staqly"}
+	if err := whopCall(ctx, key, http.MethodPost, "/webhooks", body, &h); err != nil {
+		return nil, whopWebhookError(err)
+	}
+	if h.ID == "" || h.Secret == "" {
+		return nil, &Failure{Kind: ErrRejected, Msg: "Whop made the webhook but did not give its id and signing secret"}
+	}
+	out := Credentials{}
+	for k, v := range c {
+		out[k] = v
+	}
+	out["webhook_id"], out["webhook_secret"] = h.ID, h.Secret
+	return out, nil
+}
+
+// whopWebhookError: a refused webhook call (403: a key made before staqly asked for webhooks) says which permissions
+// the key needs; the rest passes through.
+func whopWebhookError(err error) error {
+	var f *Failure
+	if errors.As(err, &f) && f.Kind == ErrRejected {
+		return &Failure{Kind: ErrRejected, Msg: "Whop did not let staqly make its webhook (" + f.Msg + "); give the API key developer:manage_webhook and webhook_receive:memberships, then reconnect"}
+	}
+	return err
+}
+
+// WhopSigned checks a webhook call (Standard Webhooks): webhook-signature holds one or more "v1,<base64>" HMAC-SHA256
+// signatures of "<webhook-id>.<webhook-timestamp>.<body>", keyed with the webhook's secret as Whop gives it.
+func WhopSigned(secret, id, timestamp string, body []byte, header string) bool {
+	if secret == "" || id == "" || timestamp == "" {
+		return false
+	}
+	key := []byte(secret)
+	if rest, ok := strings.CutPrefix(secret, "whsec_"); ok { // the spec's own form: the key base64 encoded
+		if k, err := base64.StdEncoding.DecodeString(rest); err == nil {
+			key = k
+		}
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(id + "." + timestamp + "."))
+	mac.Write(body)
+	want := mac.Sum(nil)
+	for _, part := range strings.Fields(header) {
+		v, sig, ok := strings.Cut(part, ",")
+		if !ok || v != "v1" {
+			continue
+		}
+		if got, err := base64.StdEncoding.DecodeString(sig); err == nil && hmac.Equal(got, want) {
+			return true
+		}
+	}
+	return false
+}
+
+// whopFind reads one object; found is false when Whop answers 404 (deleted).
+func whopFind(ctx context.Context, key, p string, out any) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, whopAPI+p, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	req.Header.Set("Accept", "application/json")
+	resp, err := httpClient(ctx).Do(req)
+	if err != nil {
+		return false, fmt.Errorf("Whop could not be reached (%s)", req.URL.Host)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return false, nil
+	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+		return true, json.Unmarshal(raw, out)
+	}
+	return false, whopError(resp.StatusCode, raw)
 }
