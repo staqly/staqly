@@ -10,6 +10,7 @@
   ],
   "exports": {
     "./analytics": "./src/analytics.tsx",
+    "./consent": "./src/consent.tsx",
     "./logo": "./src/logo.tsx",
     "./hero-demo": "./src/hero-demo.tsx",
     "./tokens.css": "./tokens.css",

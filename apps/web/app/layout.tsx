@@ -1,4 +1,5 @@
 import { Analytics } from '@staqly/brand/analytics'
+import { GoogleTag } from '@staqly/brand/consent'
 import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
 
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <ClosingCta />
         <Footer />
         <Analytics />
+        <GoogleTag />
       </body>
     </html>
   )
