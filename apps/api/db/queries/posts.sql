@@ -166,3 +166,10 @@ FROM post_targets t
 JOIN posts p ON p.id = t.post_id
 WHERE t.channel_id = sqlc.arg(channel_id) AND t.external_id = sqlc.arg(external_id) AND t.external_id <> ''
   AND t.status = 'published' AND t.removal = '';
+
+-- name: SetPostPublishOn :exec
+UPDATE posts SET publish_on = ? WHERE id = ?;
+
+-- name: PostsWaitingOn :many
+-- Scheduled posts waiting for this event (publish_on), oldest first.
+SELECT id, workspace_id, collection_id FROM posts WHERE publish_on = ? AND status = 'scheduled' ORDER BY created_at;

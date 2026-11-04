@@ -122,6 +122,9 @@ type ProviderInfo struct {
 	Bot string `json:"bot,omitempty"`
 	// BotName: that bot's display name ("Staqly"), when it has one.
 	BotName string `json:"bot_name,omitempty"`
+	// LiveTrigger: the platform says when a channel's stream starts, so a post can be scheduled for it
+	// (publish_on {"event":"live"}).
+	LiveTrigger bool `json:"live_trigger"`
 }
 
 func providerInfo(e providers.Entry, appConfigured bool) ProviderInfo {
@@ -139,6 +142,7 @@ func providerInfo(e providers.Entry, appConfigured bool) ProviderInfo {
 	if n, ok := e.Provider.(providers.Needer); ok {
 		info.NeedsHTTPS = n.Needs().HTTPS
 	}
+	_, info.LiveTrigger = e.Provider.(providers.LiveNotifier)
 	return info
 }
 
@@ -1025,6 +1029,9 @@ func (s *Service) DeleteChannel(ctx context.Context, p Principal, id string) err
 			return err
 		}
 		if err := s.cancelJobs(ctx, q, "refresh_channel:"+id); err != nil {
+			return err
+		}
+		if err := s.unwaitChannel(ctx, q, p, id); err != nil {
 			return err
 		}
 		for _, postID := range publishing {

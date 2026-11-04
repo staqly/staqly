@@ -692,9 +692,20 @@ func (s *Server) deletePost(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) schedulePost(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		PublishAt string `json:"publish_at"`
+		PublishAt string         `json:"publish_at"`
+		PublishOn *app.PublishOn `json:"publish_on"`
 	}
 	if !decode(w, r, &in) {
+		return
+	}
+	if in.PublishOn != nil {
+		if in.PublishAt != "" {
+			respond(w, r, 0, nil, &app.Error{Code: "validation_failed", Status: 422, Message: "publish_on: send publish_at or publish_on, not both",
+				Fields: map[string]string{"publish_on": "send publish_at or publish_on, not both"}})
+			return
+		}
+		out, err := s.svc.SchedulePostOn(r.Context(), principal(r), chi.URLParam(r, "id"), *in.PublishOn)
+		respond(w, r, 200, out, err)
 		return
 	}
 	out, err := s.svc.SchedulePost(r.Context(), principal(r), chi.URLParam(r, "id"), in.PublishAt)

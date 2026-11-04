@@ -27,6 +27,8 @@ export type Post = Schemas['Post']
 export type PostTarget = Schemas['PostTarget']
 export type PostTargetInput = Schemas['PostTargetInput']
 export type PostInput = Schemas['PostInput']
+/** What a scheduled post waits for instead of a time: `{ event: 'live', channel_id }`, that channel's next stream start. */
+export type PublishOn = Schemas['PublishOn']
 /** '' (no repeat), 1d to 6d, 1w, 2w or 1mo: once published, a copy is scheduled that much later. */
 export type RepeatEvery = Schemas['RepeatEvery']
 /** A reply published under the post (a thread part): content and/or media, delay_seconds after the part before. */

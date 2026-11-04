@@ -346,7 +346,7 @@
       "idempotentHint": false,
       "readOnlyHint": false
     },
-    "description": "Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. Requires posts:write.",
+    "description": "Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, or publish_on {event: live, channel_id}: when that channel's stream starts, for channels whose platform has live_trigger in list_providers; and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. Requires posts:write.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -384,6 +384,28 @@
         "publish_now": {
           "description": "publish right away",
           "type": "boolean"
+        },
+        "publish_on": {
+          "additionalProperties": false,
+          "description": "instead of publish_at: publish when this channel's stream starts",
+          "properties": {
+            "channel_id": {
+              "description": "channel ID (ch_...) whose stream start publishes the post; its platform has live_trigger",
+              "type": "string"
+            },
+            "event": {
+              "description": "live",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "channel_id"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
         },
         "repeat_every": {
           "description": "repeat after publishing: 1d to 6d, 1w, 2w or 1mo (empty: no repeat)",
@@ -2728,7 +2750,7 @@
       "idempotentHint": false,
       "readOnlyHint": false
     },
-    "description": "Set when a post goes out (RFC3339, in the future) and make it scheduled; the post needs at least one target. Requires posts:publish.",
+    "description": "Set when a post goes out (publish_at, RFC3339 in the future; or publish_on {event: live, channel_id}: when that channel's stream starts) and make it scheduled; the post needs at least one target. Requires posts:publish.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -2739,11 +2761,32 @@
         "publish_at": {
           "description": "RFC3339, in the future",
           "type": "string"
+        },
+        "publish_on": {
+          "additionalProperties": false,
+          "description": "instead of publish_at: publish when this channel's stream starts",
+          "properties": {
+            "channel_id": {
+              "description": "channel ID (ch_...) whose stream start publishes the post; its platform has live_trigger",
+              "type": "string"
+            },
+            "event": {
+              "description": "live",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "channel_id"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
         }
       },
       "required": [
-        "post_id",
-        "publish_at"
+        "post_id"
       ],
       "type": "object"
     },
@@ -3356,6 +3399,28 @@
         },
         "publish_at": {
           "description": "RFC3339 in the future, or an empty string to clear it (back to a draft)"
+        },
+        "publish_on": {
+          "additionalProperties": false,
+          "description": "wait for this channel's stream start instead of a time (replaces publish_at)",
+          "properties": {
+            "channel_id": {
+              "description": "channel ID (ch_...) whose stream start publishes the post; its platform has live_trigger",
+              "type": "string"
+            },
+            "event": {
+              "description": "live",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "channel_id"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
         },
         "repeat_every": {
           "description": "1d to 6d, 1w, 2w or 1mo; an empty string stops repeating",

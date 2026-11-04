@@ -382,6 +382,12 @@ type ExistenceChecker interface {
 // staqly shows them like read ones.
 type PushedResponses interface{ PushesResponses() }
 
+// LiveNotifier: a streaming platform that tells staqly when a connected channel's stream starts (Kick: its
+// livestream.status.updated webhook), so a post can wait for that instead of a time (publish_on). The platform's own
+// receiver calls the app's channelWentLive; a platform joins by implementing this and calling it (Twitch: an EventSub
+// stream.online receiver; YouTube, TikTok: not yet).
+type LiveNotifier interface{ NotifiesLive() }
+
 // EventSubscriber: a platform that sends a connected channel's events to staqly's webhook once subscribed (Kick).
 // staqly subscribes when the channel connects and again daily, as the platform may drop subscriptions.
 type EventSubscriber interface {

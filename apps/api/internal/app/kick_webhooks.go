@@ -15,7 +15,8 @@ import (
 // Kick's webhooks: once a channel connects, staqly subscribes it to providers.KickEvents (sync_events, again daily
 // as Kick drops a subscription whose webhook kept failing for a day). Kick sends every event to the webhook URL set
 // on the app, the API's /v1/kick/webhook, signed with Kick's key. A chat reply to a post's message becomes a comment
-// under the post; follows and subscriptions count in the analytics' Audience (channel_activity).
+// under the post; follows and subscriptions count in the analytics' Audience (channel_activity); the stream going
+// live publishes the posts waiting for it (publish_on.go).
 //
 // An event for a channel staqly no longer has answers 410: Kick drops that subscription after a day of those.
 
@@ -77,6 +78,21 @@ func (s *Service) HandleKickWebhook(ctx context.Context, call KickCall, body []b
 			}
 			n, err = s.kickReply(ctx, q, channels, m)
 			return err
+		case "livestream.status.updated":
+			var live struct {
+				IsLive bool `json:"is_live"`
+			}
+			if json.Unmarshal(body, &live) != nil || !live.IsLive {
+				return nil
+			}
+			for _, ch := range channels {
+				started, err := s.channelWentLive(ctx, q, ch.ID)
+				if err != nil {
+					return err
+				}
+				n += started
+			}
+			return nil
 		}
 		if kind, count := kickActivity(call.Type, len(ev.Giftees)); kind != "" {
 			for _, ch := range channels {

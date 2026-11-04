@@ -80,6 +80,7 @@ from .models import (
     PreviewLink,
     Provider,
     ProviderCheck,
+    PublishOn,
     PurgeResult,
     Readiness,
     RecoveryKey,
@@ -344,6 +345,13 @@ def _targets(targets: Sequence[PostTargetInput | JSONMapping] | None) -> list[di
     return [t.model_dump(exclude_none=True) if isinstance(t, PostTargetInput) else dict(t) for t in targets]
 
 
+def _publish_on(on: PublishOn | JSONMapping | None) -> dict[str, Any] | None:
+    """What a post waits for, as the JSON body expects it."""
+    if on is None:
+        return None
+    return on.model_dump() if isinstance(on, PublishOn) else dict(on)
+
+
 def _thread(thread: Sequence[ThreadPart | JSONMapping] | None) -> list[dict[str, Any]] | None:
     """Thread parts as the JSON body expects them ([] clears the thread)."""
     if thread is None:
@@ -460,6 +468,7 @@ class Posts(_Resource):
         media: Sequence[str] | None = None,
         targets: Sequence[PostTargetInput | JSONMapping] | None = None,
         publish_at: TimeFilter | None = None,
+        publish_on: PublishOn | JSONMapping | None = None,
         status: str | None = None,
         publish_now: bool | None = None,
         tags: Sequence[str] | None = None,
@@ -472,7 +481,9 @@ class Posts(_Resource):
     ) -> Post:
         """Creates a post in a collection (id or exact name) with a ``title`` (required; platforms
         with a title publish it, the others show it in staqly): a draft unless ``status="scheduled"``
-        (needs ``publish_at`` in the future and a target) or ``publish_now=True``.
+        (needs ``publish_at`` in the future, or ``publish_on`` to wait for a stream, and a target)
+        or ``publish_now=True``. ``publish_on={"event": "live", "channel_id": ...}`` publishes it when that
+        channel's stream starts (a platform with ``live_trigger``), once.
         ``repeat_every`` (``1d``..``6d``, ``1w``, ``2w``, ``1mo``) schedules a copy that much later
         each time the post is published. ``thread`` holds replies published under the post (each
         ``{"content", "media", "delay_seconds"}`` or :class:`~staqly.models.ThreadPart`).
@@ -490,6 +501,7 @@ class Posts(_Resource):
                 "media": list(media) if media is not None else None,
                 "targets": _targets(targets),
                 "publish_at": _when(publish_at),
+                "publish_on": _publish_on(publish_on),
                 "status": status,
                 "publish_now": publish_now,
                 "tags": list(tags) if tags is not None else None,
@@ -514,6 +526,8 @@ class Posts(_Resource):
         targets: Sequence[PostTargetInput | JSONMapping] | None = None,
         publish_at: TimeFilter | None = None,
         clear_publish_at: bool = False,
+        publish_on: PublishOn | JSONMapping | None = None,
+        clear_publish_on: bool = False,
         tags: Sequence[str] | None = None,
         metadata: JSONMapping | None = None,
         external_ref: str | None = None,
@@ -524,7 +538,8 @@ class Posts(_Resource):
     ) -> Post:
         """Edits a draft, scheduled or failed post. Fields left out stay as they are; ``targets``,
         ``media`` and ``tags`` replace the list; ``clear_publish_at=True`` drops the time (a
-        scheduled post becomes a draft); ``collection`` moves the post. ``expected_version`` makes
+        scheduled post becomes a draft); ``publish_on`` waits for a stream instead of the time
+        (``clear_publish_on=True`` drops it); ``collection`` moves the post. ``expected_version`` makes
         the edit conditional (409 ``post_changed``). ``repeat_every=""`` stops repeating; ``thread`` replaces
         the replies (``[]`` clears them). A published
         or publishing post is not editable (409 ``not_editable``)."""
@@ -536,6 +551,7 @@ class Posts(_Resource):
                 "media": list(media) if media is not None else None,
                 "targets": _targets(targets),
                 "publish_at": _when(publish_at),
+                "publish_on": _publish_on(publish_on),
                 "tags": list(tags) if tags is not None else None,
                 "metadata": dict(metadata) if metadata is not None else None,
                 "external_ref": external_ref,
@@ -546,6 +562,8 @@ class Posts(_Resource):
         )
         if clear_publish_at:
             body["publish_at"] = None
+        if clear_publish_on:
+            body["publish_on"] = None
         r = self._http.request(
             RequestSpec("PATCH", f"/v1/posts/{_q(post_id)}", json=body, options=_opts(request_options))
         )
@@ -580,14 +598,20 @@ class Posts(_Resource):
         return _model(PurgeResult, r)
 
     def schedule(
-        self, post_id: str, publish_at: TimeFilter, *, request_options: RequestOptions | None = None
+        self,
+        post_id: str,
+        publish_at: TimeFilter | None = None,
+        *,
+        publish_on: PublishOn | JSONMapping | None = None,
+        request_options: RequestOptions | None = None,
     ) -> Post:
-        """Sets the publish time and makes the post scheduled (from draft, scheduled or failed)."""
+        """Makes the post scheduled (from draft, scheduled or failed): at ``publish_at``, or waiting for
+        ``publish_on`` (``{"event": "live", "channel_id": ...}``: that channel's next stream start)."""
         r = self._http.request(
             RequestSpec(
                 "POST",
                 f"/v1/posts/{_q(post_id)}/schedule",
-                json={"publish_at": _when(publish_at)},
+                json=clean({"publish_at": _when(publish_at), "publish_on": _publish_on(publish_on)}),
                 options=_opts(request_options),
             )
         )

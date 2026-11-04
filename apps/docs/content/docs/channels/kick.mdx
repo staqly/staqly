@@ -78,6 +78,7 @@ signature and handles each event once.
   with the AI summary like other platforms. Replies from the channel itself (a post's thread) are not
   comments.
 - Follows, new and renewed subscriptions and gifted subscriptions count in **Analytics → Audience**.
+- The stream starting publishes the posts scheduled for it (`publish_on: {"event": "live", "channel_id": ...}`), once each, on all their channels.
 - An event for a channel staqly no longer has is refused, so Kick stops sending it after a day.
 
 A channel connected before the webhook came along lacks `events:subscribe`: reconnect it once from

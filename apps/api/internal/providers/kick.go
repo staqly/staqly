@@ -298,6 +298,11 @@ var (
 
 func (Kick) PushesResponses() {}
 
+// Kick says when the stream starts (livestream.status.updated), so a post can wait for it.
+var _ LiveNotifier = Kick{}
+
+func (Kick) NotifiesLive() {}
+
 // SubscribeEvents subscribes the account's channel to KickEvents it isn't subscribed to yet: Kick drops a
 // subscription whose webhook kept failing for a day, so this runs again daily. Kick sends the events to the webhook
 // URL set on the app.

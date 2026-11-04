@@ -165,7 +165,7 @@ Get one post with its targets (status, link, error per channel). *Read-only* · 
 | `post_id` | string | <Required /> | Post ID (post_...) |
 
 ### `create_post`
-Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. · `posts:write`
+Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, or publish_on `{event: live, channel_id}`: when that channel's stream starts, for channels whose platform has live_trigger in list_providers; and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. · `posts:write`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -176,6 +176,7 @@ Create a post in a collection: content, media (ids from upload_media), targets (
 | `metadata` | object | No | Free JSON for your own use |
 | `publish_at` | string | No | RFC3339, in the future |
 | `publish_now` | boolean | No | Publish right away |
+| `publish_on` | object | No | Instead of publish_at: publish when this channel's stream starts (`event`: live, `channel_id`) |
 | `repeat_every` | string | No | Repeat after publishing: 1d to 6d, 1w, 2w or 1mo (empty: no repeat) |
 | `status` | string | No | Draft (default) or scheduled |
 | `tags` | string[] | No |  |
@@ -196,6 +197,7 @@ Edit a draft, scheduled or failed post: content, media, targets (the full list r
 | `metadata` | object | No |  |
 | `post_id` | string | <Required /> | Post ID (post_...) |
 | `publish_at` | object | No | RFC3339 in the future, or an empty string to clear it (back to a draft) |
+| `publish_on` | object | No | Wait for this channel's stream start instead of a time (replaces publish_at) |
 | `repeat_every` | string | No | 1d to 6d, 1w, 2w or 1mo; an empty string stops repeating |
 | `tags` | string[] | No |  |
 | `thread` | object[] | No | Replaces the replies; [] clears them |
@@ -203,12 +205,13 @@ Edit a draft, scheduled or failed post: content, media, targets (the full list r
 | `title` | string | No | The post's title (can't be emptied) |
 
 ### `schedule_post`
-Set when a post goes out (RFC3339, in the future) and make it scheduled; the post needs at least one target. · `posts:publish`
+Set when a post goes out (publish_at, RFC3339 in the future; or publish_on `{event: live, channel_id}`: when that channel's stream starts) and make it scheduled; the post needs at least one target. · `posts:publish`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `post_id` | string | <Required /> | Post ID (post_...) |
-| `publish_at` | string | <Required /> | RFC3339, in the future |
+| `publish_at` | string | No | RFC3339, in the future |
+| `publish_on` | object | No | Instead of publish_at: publish when this channel's stream starts |
 
 ### `publish_post`
 Publish a draft, scheduled or failed post now. · `posts:publish`

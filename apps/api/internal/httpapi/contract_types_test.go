@@ -230,7 +230,8 @@ func TestRequestSchemasMatchGoTypes(t *testing.T) {
 		{schemaPtr("components/schemas/AlertConfig"), reflect.TypeOf(app.AlertConfig{})},
 		{body("/v1/api-keys", "post"), reflect.TypeOf(app.CreateAPIKeyInput{})},
 		{body("/v1/posts/{id}/schedule", "post"), reflect.TypeOf(struct {
-			PublishAt string `json:"publish_at"`
+			PublishAt string         `json:"publish_at"`
+			PublishOn *app.PublishOn `json:"publish_on"`
 		}{})},
 		{body("/v1/posts/{id}/targets/{channel}/result", "post"), reflect.TypeOf(app.ResultInput{})},
 	}
