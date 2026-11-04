@@ -42,7 +42,7 @@ UPDATE media SET tags = @tags WHERE workspace_id = @workspace_id AND id = @id;
 UPDATE media SET deleted_at = @deleted_at WHERE workspace_id = @workspace_id AND id = @id AND deleted_at IS NULL;
 
 -- name: RestoreMedia :execrows
-UPDATE media SET deleted_at = NULL WHERE workspace_id = @workspace_id AND id = @id AND deleted_at IS NOT NULL;
+UPDATE media SET deleted_at = NULL WHERE workspace_id = @workspace_id AND id = @id AND deleted_at IS NOT NULL AND purge_started_at IS NULL;
 
 -- name: TrashedMediaCount :one
 SELECT COUNT(*) FROM media WHERE workspace_id = ? AND deleted_at IS NOT NULL;
@@ -74,3 +74,7 @@ SELECT id, media, thread FROM posts WHERE workspace_id = @workspace_id AND (inst
 
 -- name: SetPostMediaLists :exec
 UPDATE posts SET media = @media, thread = @thread, updated_at = @updated_at WHERE workspace_id = @workspace_id AND id = @id;
+
+-- name: ClaimMediaPurge :execrows
+UPDATE media SET purge_started_at = COALESCE(purge_started_at, @started_at)
+WHERE workspace_id = @workspace_id AND id = @id AND deleted_at IS NOT NULL AND deleted_at < @cutoff;

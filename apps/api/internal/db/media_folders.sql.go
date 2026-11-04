@@ -10,6 +10,31 @@ import (
 	"database/sql"
 )
 
+const claimMediaPurge = `-- name: ClaimMediaPurge :execrows
+UPDATE media SET purge_started_at = COALESCE(purge_started_at, ?1)
+WHERE workspace_id = ?2 AND id = ?3 AND deleted_at IS NOT NULL AND deleted_at < ?4
+`
+
+type ClaimMediaPurgeParams struct {
+	StartedAt   sql.NullString `json:"started_at"`
+	WorkspaceID string         `json:"workspace_id"`
+	ID          string         `json:"id"`
+	Cutoff      sql.NullString `json:"cutoff"`
+}
+
+func (q *Queries) ClaimMediaPurge(ctx context.Context, arg ClaimMediaPurgeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, claimMediaPurge,
+		arg.StartedAt,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.Cutoff,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const createMediaFolder = `-- name: CreateMediaFolder :exec
 INSERT INTO media_folders (id, workspace_id, parent_id, name, position, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -350,7 +375,7 @@ func (q *Queries) RepointPostMedia(ctx context.Context, arg RepointPostMediaPara
 }
 
 const restoreMedia = `-- name: RestoreMedia :execrows
-UPDATE media SET deleted_at = NULL WHERE workspace_id = ?1 AND id = ?2 AND deleted_at IS NOT NULL
+UPDATE media SET deleted_at = NULL WHERE workspace_id = ?1 AND id = ?2 AND deleted_at IS NOT NULL AND purge_started_at IS NULL
 `
 
 type RestoreMediaParams struct {
