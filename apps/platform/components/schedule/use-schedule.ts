@@ -20,7 +20,12 @@ export function useSetSchedule(opts?: { onDone?: (post: Post) => void }) {
     mutationFn: ({ post, publishAt }: { post: Post; publishAt: string | null }) =>
       publishAt ? api.schedulePost(post.id, publishAt) : api.cancelPost(post.id),
     onMutate: ({ post, publishAt }) => {
-      syncPostInCache(qc, { ...post, publish_at: publishAt, status: publishAt ? 'scheduled' : 'draft' })
+      syncPostInCache(qc, {
+        ...post,
+        publish_at: publishAt,
+        publish_on: publishAt ? null : post.publish_on,
+        status: publishAt ? 'scheduled' : 'draft',
+      })
     },
     onSuccess: (updated, { publishAt }) => {
       syncPostInCache(qc, updated)
