@@ -4,7 +4,7 @@
   "private": true,
   "description": "staqly monorepo: API, CLI, dashboard, docs, landing page, SDKs (Turborepo + pnpm)",
   "packageManager": "pnpm@12.16.1",
-  "engines": { "node": "^26.13.0" },
+  "engines": { "node": "26.x" },
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
