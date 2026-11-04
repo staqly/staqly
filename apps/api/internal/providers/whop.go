@@ -36,7 +36,7 @@ var (
 var whopLimits = Limits{MaxChars: 5000, MaxMedia: 4, MediaKinds: []string{"image", "video"}}
 
 func init() {
-	Register(Whop{NewBase("whop", "Whop", AuthOAuth2, whopLimits).WithSettings(append([]Field{whopForumField}, whopSettings()...)...)}, StatusAvailable)
+	Register(Whop{NewBase("whop", "Whop", AuthOAuth2, whopLimits).WithSettings(append([]Field{whopBusinessField, whopForumField}, whopSettings()...)...)}, StatusAvailable)
 	Register(WhopKey{Whop{NewBase("whop_key", "Whop (API key)", AuthToken, whopLimits).WithSettings(whopSettings()...)}}, StatusAvailable)
 }
 
@@ -225,7 +225,7 @@ func (w Whop) Publish(ctx context.Context, c Credentials, p PostContent, s Setti
 	if s["pinned"] == "true" {
 		body["pinned"] = true
 	}
-	return w.send(ctx, c, s["forum"], p.Media, body, "post")
+	return w.send(ctx, c, s, p.Media, body, "post")
 }
 
 // Reply comments under the post (parentExternalID: the post, or from the second part on the comment before).
@@ -233,20 +233,18 @@ func (w Whop) Reply(ctx context.Context, c Credentials, parentExternalID string,
 	if parentExternalID == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Whop: nothing to comment on (the post has no id)"}
 	}
-	return w.send(ctx, c, s["forum"], p.Media, map[string]any{"content": p.Text, "parent_id": parentExternalID}, "comment")
+	return w.send(ctx, c, s, p.Media, map[string]any{"content": p.Text, "parent_id": parentExternalID}, "comment")
 }
 
 // send uploads the files and creates the forum post or comment.
-func (Whop) send(ctx context.Context, c Credentials, forum string, media []MediaFile, body map[string]any, what string) (Result, error) {
-	key, exp := whopBearer(c), forum
-	if exp == "" {
-		exp = c["experience_id"]
-	}
+func (Whop) send(ctx context.Context, c Credentials, s Settings, media []MediaFile, body map[string]any, what string) (Result, error) {
+	key := whopBearer(c)
 	if key == "" {
 		return Result{}, &Failure{Kind: ErrReauth, Msg: "Whop: no sign-in stored; reconnect it"}
 	}
-	if exp == "" {
-		return Result{}, &Failure{Kind: ErrRejected, Msg: "Whop: pick the forum the post goes to"}
+	exp, err := whopPostForum(ctx, c, s)
+	if err != nil {
+		return Result{}, err
 	}
 	body["experience_id"] = exp
 	var files []map[string]string
@@ -573,9 +571,12 @@ var (
 	whopOAuth               = "https://api.whop.com/oauth"
 	_          OptionLister = Whop{}
 	whopScopes              = "openid profile company:basic:read forum:read forum:post:create"
-	// Not required: a channel connected with an API key (before Whop had sign-in, or as Whop (API key)) is one forum.
-	whopForumField = Field{Key: "forum", Label: "Forum", Kind: "remote",
-		Help: "Which of your businesses' forums the post goes to."}
+	// The business a post goes to, and its forum when it has several. Not required: a channel connected with an API key
+	// (before Whop had sign-in, or as Whop (API key)) is one forum.
+	whopBusinessField = Field{Key: "business", Label: "Business", Kind: "remote", MaxItems: 1,
+		Help: "Which of your businesses the post goes to."}
+	whopForumField = Field{Key: "forum", Label: "Forum", Kind: "remote", MaxItems: 1,
+		Help: "Only when the business has more than one forum."}
 )
 
 func (Whop) AuthURL(app App, redirect, state string, extra map[string]string) (string, error) {
@@ -689,9 +690,9 @@ func (Whop) Exchange(ctx context.Context, app App, redirect, code string, extra 
 	return creds, Profile{Name: name, Handle: me.Username, AvatarURL: me.Picture}, nil
 }
 
-// Options lists the forums of every business the person runs (the forum setting).
+// Options lists the businesses the person runs (business), or their forums (forum, each named with its business).
 func (Whop) Options(ctx context.Context, c Credentials, key string) ([]Option, error) {
-	if key != whopForumField.Key {
+	if key != whopBusinessField.Key && key != whopForumField.Key {
 		return nil, nil
 	}
 	token := whopBearer(c)
@@ -703,6 +704,10 @@ func (Whop) Options(ctx context.Context, c Credentials, key string) ([]Option, e
 	}
 	var opts []Option
 	for _, biz := range out.Data {
+		if key == whopBusinessField.Key {
+			opts = append(opts, Option{Value: biz.ID, Label: biz.Title, Icon: biz.Logo})
+			continue
+		}
 		forums, err := whopForumsOf(ctx, token, biz.ID)
 		if err != nil {
 			return nil, err
@@ -712,7 +717,32 @@ func (Whop) Options(ctx context.Context, c Credentials, key string) ([]Option, e
 		}
 	}
 	if len(opts) == 0 {
-		return nil, &Failure{Kind: ErrRejected, Msg: "Whop lists no forum of a business you run: add the Forums app to one of its products"}
+		return nil, &Failure{Kind: ErrRejected, Msg: "Whop lists no business with a forum that you run: add the Forums app to one of its products"}
 	}
 	return opts, nil
+}
+
+// whopPostForum is the forum a post goes to: the one picked, else the picked business's only forum, else the
+// channel's own (a channel connected with an API key).
+func whopPostForum(ctx context.Context, c Credentials, s Settings) (string, error) {
+	if f := strings.TrimSpace(s["forum"]); f != "" {
+		return f, nil
+	}
+	if biz := strings.TrimSpace(s["business"]); biz != "" {
+		forums, err := whopForumsOf(ctx, whopBearer(c), biz)
+		if err != nil {
+			return "", err
+		}
+		switch len(forums) {
+		case 0:
+			return "", &Failure{Kind: ErrRejected, Msg: "Whop: this business has no forum; add the Forums app to one of its products"}
+		case 1:
+			return forums[0].Experience.ID, nil
+		}
+		return "", &Failure{Kind: ErrRejected, Msg: "Whop: this business has several forums; pick the forum in the post's settings"}
+	}
+	if c["experience_id"] != "" {
+		return c["experience_id"], nil
+	}
+	return "", &Failure{Kind: ErrRejected, Msg: "Whop: pick the business the post goes to in the post's settings"}
 }

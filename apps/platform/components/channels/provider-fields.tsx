@@ -155,7 +155,8 @@ function RemoteField({
         className="w-full"
         value={items}
         onChange={(v) => onChange(f.key, (f.max_items ? v.slice(0, f.max_items) : v).join(','))}
-        options={list}
+        // The platform's pictures are addresses: drawn as pictures, never as their text.
+        options={list.map((o) => ({ ...o, icon: o.icon ? <OptionIcon icon={o.icon} /> : undefined }))}
         invalid={!!error}
         placeholder={loading ? 'Loading...' : 'Choose'}
         disabled={loading}
