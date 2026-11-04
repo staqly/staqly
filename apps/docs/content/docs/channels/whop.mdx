@@ -91,7 +91,7 @@ turned off after failures is turned on again, a deleted one is made again.
 
 - Someone joining the business (`member.created`) and a membership starting
   (`membership.activated`) count in **Analytics → Audience** as new members and new memberships.
-- Whop sends nothing for forum posts, so their numbers and comments don't come this way.
+- Whop sends nothing for forum posts; staqly reads their numbers and comments instead (see below).
 
 Without the webhook permissions publishing works as before; the Audience stays empty. Two forums of
 one business each have a webhook, so the business's members count once per connected forum.
@@ -117,6 +117,12 @@ Over the API: `{"title": "Week 42", "notify": "true"}` in the target's `settings
 
 A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments, each answering the
 one before it, in order and after their delays. Comments take pictures and videos too.
+
+## Numbers and comments
+
+**Insights** reads a published post's views, likes and comments from Whop, and the comments under it with their
+first replies (the `forum:read` permission). A sign-in reads the forum it posted to; posts published before
+staqly kept the forum with the post read their numbers only.
 
 ## When publishing fails
 

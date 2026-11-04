@@ -233,7 +233,120 @@ func (w Whop) Reply(ctx context.Context, c Credentials, parentExternalID string,
 	if parentExternalID == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Whop: nothing to comment on (the post has no id)"}
 	}
-	return w.send(ctx, c, s, p.Media, map[string]any{"content": p.Text, "parent_id": parentExternalID}, "comment")
+	exp, parent := whopPostID(c, parentExternalID)
+	rs := Settings{}
+	for k, v := range s {
+		rs[k] = v
+	}
+	if exp != "" {
+		rs["forum"] = exp // the comment goes to the forum of the post it answers
+	}
+	return w.send(ctx, c, rs, p.Media, map[string]any{"content": p.Text, "parent_id": parent}, "comment")
+}
+
+// whopPostID splits an external id into the forum (experience) and the post. Posts are stored as "<exp>:<post>": a
+// sign-in picks the forum per post, and Whop lists comments by forum. An older bare post id is in the channel's forum.
+func whopPostID(c Credentials, externalID string) (exp, post string) {
+	if e, p, ok := strings.Cut(externalID, ":"); ok && strings.HasPrefix(e, "exp_") {
+		return e, p
+	}
+	return c["experience_id"], externalID
+}
+
+type whopPost struct {
+	ID        string    `json:"id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	Views     *int64    `json:"view_count"`
+	Likes     *int64    `json:"like_count"`
+	Comments  *int64    `json:"comment_count"`
+	User      struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+		Name     string `json:"name"`
+	} `json:"user"`
+}
+
+var (
+	_ MetricsReader  = Whop{}
+	_ ResponseReader = Whop{}
+)
+
+// Metrics reads the post's views, likes and comments (GET /forum_posts/{id}).
+func (Whop) Metrics(ctx context.Context, c Credentials, externalID string) (Metrics, error) {
+	key := whopBearer(c)
+	if key == "" {
+		return Metrics{}, &Failure{Kind: ErrReauth, Msg: "Whop: no sign-in stored; reconnect it"}
+	}
+	_, id := whopPostID(c, externalID)
+	var p whopPost
+	if err := whopCall(ctx, key, http.MethodGet, "/forum_posts/"+url.PathEscape(id), nil, &p); err != nil {
+		return Metrics{}, err
+	}
+	return Metrics{Impressions: p.Views, Likes: p.Likes, Replies: p.Comments}, nil
+}
+
+// Responses reads the comments under the post and the replies to them (GET /forum_posts?parent_id=).
+// shortcut: one level of replies under each comment; deeper threads are not read, add recursion if Whop users nest.
+func (Whop) Responses(ctx context.Context, c Credentials, externalID string, since time.Time) ([]Response, error) {
+	key := whopBearer(c)
+	if key == "" {
+		return nil, &Failure{Kind: ErrReauth, Msg: "Whop: no sign-in stored; reconnect it"}
+	}
+	exp, id := whopPostID(c, externalID)
+	if exp == "" {
+		return nil, &Failure{Kind: ErrRejected, Msg: "Whop: this post's forum is not known, so its comments can't be read"}
+	}
+	var out []Response
+	list := func(parent, under string) ([]whopPost, error) {
+		var all []whopPost
+		after := ""
+		for page := 0; page < 10 && len(out) < 500; page++ {
+			q := url.Values{"experience_id": {exp}, "parent_id": {parent}, "first": {"50"}}
+			if after != "" {
+				q.Set("after", after)
+			}
+			var res struct {
+				Data     []whopPost `json:"data"`
+				PageInfo struct {
+					EndCursor   string `json:"end_cursor"`
+					HasNextPage bool   `json:"has_next_page"`
+				} `json:"page_info"`
+			}
+			if err := whopCall(ctx, key, http.MethodGet, "/forum_posts?"+q.Encode(), nil, &res); err != nil {
+				return nil, err
+			}
+			for _, p := range res.Data {
+				all = append(all, p)
+				if !p.CreatedAt.After(since) || len(out) >= 500 {
+					continue
+				}
+				name := p.User.Name
+				if name == "" {
+					name = p.User.Username
+				}
+				out = append(out, Response{ID: p.ID, ParentID: under, Author: name, AuthorHandle: p.User.Username,
+					Text: p.Content, CreatedAt: p.CreatedAt, Likes: p.Likes, Own: p.User.ID != "" && p.User.ID == c["user_id"]})
+			}
+			if !res.PageInfo.HasNextPage || res.PageInfo.EndCursor == "" {
+				break
+			}
+			after = res.PageInfo.EndCursor
+		}
+		return all, nil
+	}
+	top, err := list(id, "")
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range top {
+		if p.Comments != nil && *p.Comments > 0 && len(out) < 500 {
+			if _, err := list(p.ID, p.ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return out, nil
 }
 
 // send uploads the files and creates the forum post or comment.
@@ -280,7 +393,7 @@ func (Whop) send(ctx context.Context, c Credentials, s Settings, media []MediaFi
 	if route == "" {
 		route = whopForumRoute(ctx, key, exp)
 	}
-	return Result{ExternalID: out.ID, URL: whopBusinessURL(route)}, nil
+	return Result{ExternalID: exp + ":" + out.ID, URL: whopBusinessURL(route)}, nil
 }
 
 // whopForumRoute: the address name of the business a forum belongs to (a sign-in picks it per post), "" when Whop
