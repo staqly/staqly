@@ -191,8 +191,9 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 var ProvidersOnByDefault bool
 
 // providerEnabled reads PROVIDER_<ID>_ENABLED: only true shows the platform on this server; unset means
-// PROVIDER_DEFAULT_ENABLED (default false), so a platform is hidden until it is turned on. Your own automation
-// (custom) is on unless PROVIDER_CUSTOM_ENABLED=false.
+// PROVIDER_DEFAULT_ENABLED (default false), so a platform is hidden until it is turned on. Existing targets still
+// publish; only connecting and new targets are refused. Your own automation (custom) is on unless
+// PROVIDER_CUSTOM_ENABLED=false.
 func (s *Service) providerEnabled(providerID string) bool {
 	def := ProvidersOnByDefault || s.envFlag("PROVIDER_DEFAULT_ENABLED") || providerID == "custom"
 	on, _ := strconv.ParseBool(s.Env(providerEnv(providerID)+"ENABLED", strconv.FormatBool(def)))
