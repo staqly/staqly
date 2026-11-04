@@ -1,4 +1,4 @@
-.PHONY: help dashboard release up dev dev-tunnel site dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi lint-workflows gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
+.PHONY: help dashboard release up dev dev-tunnel site channels dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi lint-workflows gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -8,7 +8,7 @@ up: ## compose.yml alone with the released image (contributors; users run the im
 	docker compose up -d --wait
 	@$(MAKE) --no-print-directory open
 
-DEV := docker compose -f compose.yml -f compose.dev.yml
+DEV := docker compose -f compose.yml -f compose.dev.yml -f compose.channels.yml
 
 dev: ## Build from this checkout with the dev stack (debug logs, mailpit :8025, Stripe CLI with COMPOSE_PROFILES=stripe)
 	$(DEV) up -d --build --wait
@@ -43,8 +43,12 @@ site: ## Landing page (http://localhost:8070) and docs (http://localhost:8090) f
 	NEXT_PUBLIC_APP_URL=http://localhost:8080 NEXT_PUBLIC_DOCS_URL=http://localhost:8090 NEXT_PUBLIC_WEB_URL=http://localhost:8070 \
 		pnpm turbo run dev --filter=@staqly/web --filter=@staqly/docs
 
+channels: ## Self-hosted platforms for channels in the dev stack (compose.channels.yml: listmonk) and how to connect them
+	$(DEV) --profile listmonk up -d --wait listmonk
+	@scripts/dev-listmonk.sh
+
 dev-down: ## Stop the dev stack (data volume kept) and a dev-tunnel
-	$(DEV) --profile stripe down
+	$(DEV) --profile stripe --profile listmonk down
 	@pkill -f "cloudflared tunnel --no-autoupdate --config" || true
 
 stripe-secret: ## Print the webhook signing secret of the Stripe CLI (put it in .env as STRIPE_WEBHOOK_SECRET)
