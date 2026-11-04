@@ -35,6 +35,23 @@ function setup(extra: Record<string, unknown> = {}) {
 const row = (text: string) => screen.getAllByTestId('post-row').find((r) => r.textContent?.includes(text))!
 
 describe('posts list', () => {
+  it('a post waiting for a stream says so instead of a time', async () => {
+    const waiting = post({
+      id: 'pst_live',
+      content: 'Going live',
+      status: 'scheduled',
+      publish_at: null,
+      publish_on: { event: 'live', channel_id: 'ch_k' },
+      targets: [target({ channel_id: 'ch_k', channel_name: 'Jane on Kick', provider: 'kick' })],
+    })
+
+    setup({ 'GET /v1/posts': (call: Call) => ({ data: byStatus([waiting], call), next_cursor: null }) })
+    renderWithProviders(<PostsWorkspace />, { mode: 'local' })
+    await screen.findAllByTestId('post-row')
+
+    expect(within(row('Going live')).getByTestId('post-waits-live')).toHaveTextContent('When Jane on Kick goes live')
+  })
+
   it('selects posts (Shift+click for a range) and deletes them from the bar after a confirmation', async () => {
     const api = setup({ 'POST /v1/posts/delete': { deleted: ['pst_1', 'pst_2', 'pst_3'], missing: [], kept: [] } })
     const user = userEvent.setup()

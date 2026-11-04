@@ -9,6 +9,20 @@ import { displayZone, fromWall, startOfDay, wallOf, type Wall } from './zone'
 
 export type ScheduleState = 'scheduled' | 'publishing' | 'published' | 'failed'
 
+/**
+ * What a post waiting for a stream says instead of a time (publish_on): the channel's name when the post goes there
+ * too, or the stream alone; null when it waits for nothing.
+ */
+export function liveLabel(post: Pick<Post, 'publish_on' | 'targets'>, channelName?: string): string | null {
+  if (!post.publish_on) {
+    return null
+  }
+
+  const name = channelName ?? post.targets?.find((t) => t.channel_id === post.publish_on?.channel_id)?.channel_name
+
+  return name ? `When ${name} goes live` : 'When the stream starts'
+}
+
 /** What a post on the calendar is doing right now; null for posts without a time. */
 export function scheduleState(post: Pick<Post, 'publish_at' | 'status'>): ScheduleState | null {
   if (!post.publish_at) {

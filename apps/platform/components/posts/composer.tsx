@@ -20,6 +20,7 @@ import {
   X,
   Palette,
   Pencil,
+  Radio,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
@@ -83,7 +84,7 @@ import {
   useTags,
   useXPosts,
 } from '@/lib/queries'
-import { dateFormats, formatSchedule, formatTime, nextFullHour } from '@/lib/schedule'
+import { dateFormats, formatSchedule, formatTime, liveLabel, nextFullHour } from '@/lib/schedule'
 import { appendHashtags, hashtagsFor, normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 import { xPostsWarning } from '@/lib/x-posts'
@@ -848,12 +849,17 @@ function ScheduleMenu({
   value,
   repeat,
   disabled,
+  streams,
   onApply,
+  onApplyLive,
 }: {
   value: Date | null
   repeat: string
   disabled?: boolean
+  /** Channels whose platform says when a stream starts (live_trigger): the post can wait for one instead. */
+  streams: Channel[]
   onApply: (at: Date, repeat: string) => void
+  onApplyLive: (channelId: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [at, setAt] = useState<Date | null>(null)
@@ -896,6 +902,26 @@ function ScheduleMenu({
         className="w-auto max-w-[calc(100vw-1rem)] gap-0 p-0 text-sm"
         aria-label="Pick a date and time"
       >
+        {streams.length > 0 && (
+          <div className="grid gap-0.5 border-b p-1.5" data-testid="schedule-live">
+            <p className="px-2 pt-1 pb-0.5 text-xs text-muted-foreground">Or when a stream starts</p>
+            {streams.map((c) => (
+              <Button
+                key={c.id}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="justify-start"
+                onClick={() => {
+                  setOpen(false)
+                  onApplyLive(c.id)
+                }}
+              >
+                <Radio /> <span className="truncate">When {c.name} goes live</span>
+              </Button>
+            ))}
+          </div>
+        )}
         <DateTimeFields key={opening} id="post-publish-at" value={at} onChange={setAt} />
         <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">
           <Select value={rep || 'never'} onValueChange={(v) => setRep(v === 'never' ? '' : v)}>
@@ -1223,11 +1249,14 @@ function ComposerFooter({
   canSend,
   canSaveDraft,
   publishAt,
+  waitsFor,
+  streams,
   repeatEvery,
   error,
   onClearSchedule,
   onSave,
   onApplySchedule,
+  onApplyLive,
 }: {
   post?: Post
   locked: boolean
@@ -1238,11 +1267,15 @@ function ComposerFooter({
   canSend: boolean
   canSaveDraft: boolean
   publishAt: Date | null
+  /** What the post waits for instead of a time ("When Kick goes live"), or null. */
+  waitsFor: string | null
+  streams: Channel[]
   repeatEvery: string
   error?: string
   onClearSchedule: () => void
   onSave: (mode: 'draft' | 'now') => void
   onApplySchedule: (at: Date, repeat: string) => void
+  onApplyLive: (channelId: string) => void
 }) {
   const inPast = useIsPast(publishAt)
   // The time's problem (shown at the top by PublishTimeAlert): the chip turns red and points at it.
@@ -1305,6 +1338,28 @@ function ComposerFooter({
               </Button>
             </span>
           )}
+          {waitsFor && (
+            <span
+              role="group"
+              aria-label={`Publish: ${waitsFor}`}
+              className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border pr-1 pl-3 text-sm"
+              data-testid="publish-on-chip"
+              title={waitsFor}
+            >
+              <Radio className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{waitsFor}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="rounded-full"
+                aria-label="Clear schedule"
+                onClick={onClearSchedule}
+              >
+                <X />
+              </Button>
+            </span>
+          )}
           {!live && (
             <Button type="button" variant="outline" onClick={() => onSave('draft')} disabled={busy || !canSaveDraft}>
               Save draft
@@ -1343,7 +1398,14 @@ function ComposerFooter({
                 <Send /> {busy ? 'Saving...' : 'Publish now'}
               </Button>
             )}
-            <ScheduleMenu value={publishAt} repeat={repeatEvery} disabled={busy} onApply={onApplySchedule} />
+            <ScheduleMenu
+              value={publishAt}
+              repeat={repeatEvery}
+              disabled={busy}
+              streams={streams}
+              onApply={onApplySchedule}
+              onApplyLive={onApplyLive}
+            />
           </ButtonGroup>
         </div>
       )}
@@ -1460,6 +1522,7 @@ export function ComposerForm({
 
     return iso ? new Date(iso) : null
   })
+  const [publishOn, setPublishOn] = useState<Post['publish_on']>(post?.publish_on ?? null)
   const [errors, setErrors] = useState<Record<string, string | undefined>>({})
   const channelList = channels.data ?? NO_CHANNELS
   // A platform's title and tags come from the post's own fields: the channel settings leave them out.
@@ -1473,6 +1536,17 @@ export function ComposerForm({
   )
   const [title, setTitle] = useState(post?.title ?? '')
   const picked = useMemo(() => channelList.filter((c) => selected.has(c.id)), [channelList, selected])
+  // Channels a post can wait for: connected, on a platform that says when a stream starts.
+  const streams = useMemo(
+    () =>
+      channelList.filter(
+        (c) => c.status === 'connected' && providerList.some((p) => p.id === c.provider && p.live_trigger),
+      ),
+    [channelList, providerList],
+  )
+  const waitsFor = publishOn
+    ? `When ${channelList.find((c) => c.id === publishOn.channel_id)?.name ?? 'the channel'} goes live`
+    : null
   const providerOf = (ch: Channel) => providerList.find((p) => p.id === ch.provider)
   const textFor = (ch: Channel) => overrides[ch.id]?.content ?? content
 
@@ -1541,7 +1615,8 @@ export function ComposerForm({
         content: overrides[ch.id]?.content?.trim() ? overrides[ch.id]!.content : null,
         settings: overrides[ch.id]?.settings ?? {},
       })),
-      publish_at: publishAt ? publishAt.toISOString() : null,
+      publish_at: publishAt && !publishOn ? publishAt.toISOString() : null,
+      publish_on: publishOn,
       tags,
       repeat_every: repeatEvery as PostInput['repeat_every'],
       thread: thread
@@ -1557,9 +1632,9 @@ export function ComposerForm({
       let saved: Post
 
       if (post) {
-        const { collection: _c, status: _s, publish_at, repeat_every, ...patch } = body
+        const { collection: _c, status: _s, publish_at, publish_on, repeat_every, ...patch } = body
         // A post that was sent keeps its time (history, and in the past): only its text and settings change.
-        const when = post.status === 'failed' ? {} : { publish_at, repeat_every }
+        const when = post.status === 'failed' ? {} : { publish_at, publish_on, repeat_every }
 
         saved = await api.updatePost(post.id, { ...patch, ...when, expected_version: post.version })
       } else {
@@ -1574,8 +1649,10 @@ export function ComposerForm({
             ? publishAt?.toISOString()
             : undefined
 
-      if (at) {
-        saved = await api.schedulePost(saved.id, at).catch((e: unknown) => {
+      const scheduleOn = mode === 'schedule' && post && publishOn ? { publish_on: publishOn } : undefined
+
+      if (at || scheduleOn) {
+        saved = await api.schedulePost(saved.id, at ?? scheduleOn!).catch((e: unknown) => {
           // The first write committed: retain its id/version and expose it even if this drawer closes.
           setSavedPost(saved)
 
@@ -1791,7 +1868,7 @@ export function ComposerForm({
       onSubmit={(e) => {
         e.preventDefault()
         // A draft's primary sends it (now or at the picked time); a post already on its way saves, keeping its time.
-        publish(sent ? 'draft' : publishAt ? 'schedule' : live ? 'draft' : 'now')
+        publish(sent ? 'draft' : publishAt || publishOn ? 'schedule' : live ? 'draft' : 'now')
       }}
       className="flex min-h-0 flex-1 flex-col"
       noValidate
@@ -1812,6 +1889,17 @@ export function ComposerForm({
                     deleted={deletedOutside(post)}
                   />
                   <span>{post.collection_name}</span>
+                  {post.publish_on && !post.publish_at && post.status === 'scheduled' && (
+                    <span className={DOT}>
+                      Goes out{' '}
+                      <span className="font-semibold text-foreground">
+                        {liveLabel(post, channelList.find((c) => c.id === post.publish_on?.channel_id)?.name)?.replace(
+                          /^When/,
+                          'when',
+                        )}
+                      </span>
+                    </span>
+                  )}
                   {post.publish_at && (
                     <span className={DOT} title={formatDateTime(post.publish_at)}>
                       {post.status === 'published' ? 'Published' : sent ? 'Sent' : 'Goes out'}{' '}
@@ -2163,14 +2251,31 @@ export function ComposerForm({
         busy={busy}
         canSend={canSend}
         canSaveDraft={!!collection && !!content.trim()}
-        publishAt={publishAt}
+        publishAt={publishOn ? null : publishAt}
+        waitsFor={waitsFor}
+        streams={streams}
         repeatEvery={repeatEvery}
-        error={errors.publish_at}
-        onClearSchedule={() => setPublishAt(null)}
+        error={errors.publish_at ?? errors.publish_on}
+        onClearSchedule={() => {
+          setPublishAt(null)
+          setPublishOn(null)
+        }}
         onSave={publish}
+        onApplyLive={(channelId) => {
+          flushSync(() => {
+            setPublishOn({ event: 'live', channel_id: channelId })
+            setPublishAt(null)
+            setRepeatEvery('') // a post that waits for a stream doesn't repeat
+          })
+
+          if (canSend) {
+            formRef.current?.requestSubmit()
+          }
+        }}
         onApplySchedule={(at, rep) => {
           flushSync(() => {
             setPublishAt(at)
+            setPublishOn(null)
             setRepeatEvery(rep)
           })
 

@@ -19,6 +19,7 @@ import {
   Trash2,
   Undo2,
   X,
+  Radio,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
@@ -74,7 +75,7 @@ import {
   useTags,
 } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
-import { formatSchedule } from '@/lib/schedule'
+import { formatSchedule, liveLabel } from '@/lib/schedule'
 import { normalizeTag } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 
@@ -169,6 +170,7 @@ export const PostRow = memo(function PostRow({
     avatar_url: t.avatar_url,
   }))
   const at = post.published_at ?? post.publish_at
+  const waitsFor = !at && post.status === 'scheduled' ? liveLabel(post) : null
   // Published and publishing posts can't move (the selection bar's Move skips them too).
   const draggable = !!onDrag && !isLocked(post)
 
@@ -267,6 +269,17 @@ export const PostRow = memo(function PostRow({
                 title={`${formatDateTime(at)} (${timeAgo(at)})`}
               >
                 {formatSchedule(at)}
+              </span>
+              <span aria-hidden>·</span>
+            </>
+          )}
+          {waitsFor && (
+            <>
+              <span
+                className="flex shrink-0 items-center gap-1 font-medium text-foreground"
+                data-testid="post-waits-live"
+              >
+                <Radio aria-hidden className="size-3" /> {waitsFor}
               </span>
               <span aria-hidden>·</span>
             </>

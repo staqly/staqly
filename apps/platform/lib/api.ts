@@ -976,8 +976,12 @@ export const api = {
       method: 'POST',
       json: { ids },
     }),
-  schedulePost: (id: string, publish_at: string) =>
-    request<Post>(`/v1/posts/${encodeURIComponent(id)}/schedule`, { method: 'POST', json: { publish_at } }),
+  /** At a time, or waiting for a stream (`{ publish_on }`). */
+  schedulePost: (id: string, when: string | { publish_on: NonNullable<Post['publish_on']> }) =>
+    request<Post>(`/v1/posts/${encodeURIComponent(id)}/schedule`, {
+      method: 'POST',
+      json: typeof when === 'string' ? { publish_at: when } : when,
+    }),
   cancelPost: (id: string) => request<Post>(`/v1/posts/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   archivePost: (id: string, archived: boolean) =>
     request<Post>(`/v1/posts/${encodeURIComponent(id)}/${archived ? 'archive' : 'unarchive'}`, { method: 'POST' }),
