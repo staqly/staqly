@@ -85,10 +85,15 @@ type whopBiz struct {
 	Logo  string `json:"logo_url"`
 }
 
-// whopBusiness reads the business a key or a sign-in acts for, and its forums.
-func whopBusiness(ctx context.Context, token string) (whopBiz, []whopForum, error) {
+// whopBusiness reads a business and its forums: the key's own (id ""), or one a sign-in may act for. A sign-in is the
+// person's (Whop: "user tokens do not have a requesting account"), so it names the business.
+func whopBusiness(ctx context.Context, token, id string) (whopBiz, []whopForum, error) {
 	var biz whopBiz
-	if err := whopCall(ctx, token, http.MethodGet, "/accounts/me", nil, &biz); err != nil {
+	path := "/accounts/me"
+	if id != "" {
+		path = "/accounts/" + url.PathEscape(id)
+	}
+	if err := whopCall(ctx, token, http.MethodGet, path, nil, &biz); err != nil {
 		return biz, nil, err
 	}
 	if biz.ID == "" {
@@ -139,7 +144,7 @@ func (WhopKey) Connect(ctx context.Context, f map[string]string) (Credentials, P
 	if key == "" {
 		return nil, Profile{}, invalid("api_key", "paste the business's Account API key")
 	}
-	biz, forums, err := whopBusiness(ctx, key)
+	biz, forums, err := whopBusiness(ctx, key, "")
 	if err != nil {
 		if errors.Is(err, ErrReauth) {
 			return nil, Profile{}, invalid("api_key", "Whop did not accept this API key")
@@ -640,46 +645,97 @@ func (Whop) Exchange(ctx context.Context, app App, redirect, code string, extra 
 		return nil, Profile{}, err
 	}
 	creds := t.into(Credentials{}, time.Now())
-	biz, _, err := whopBusiness(ctx, creds["access_token"])
+	// The sign-in is the person; the businesses they run come with Accounts.
+	var me struct {
+		Sub      string `json:"sub"`
+		Name     string `json:"name"`
+		Username string `json:"preferred_username"`
+		Picture  string `json:"picture"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, whopOAuth+"/userinfo", nil)
 	if err != nil {
 		return nil, Profile{}, err
 	}
-	creds["account_id"], creds["route"] = biz.ID, biz.Route
-	return creds, Profile{Name: biz.Title, Handle: biz.Route, AvatarURL: biz.Logo, ProfileURL: whopBusinessURL(biz.Route)}, nil
+	req.Header.Set("Authorization", "Bearer "+creds["access_token"])
+	if err := whopDo(ctx, req, &me); err != nil {
+		return nil, Profile{}, err
+	}
+	creds["user_id"] = me.Sub
+	name := me.Name
+	if name == "" {
+		name = me.Username
+	}
+	return creds, Profile{Name: name, Handle: me.Username, AvatarURL: me.Picture}, nil
 }
 
-// Accounts are the business's forums.
+// whopBusinesses lists the businesses a sign-in may act for.
+func whopBusinesses(ctx context.Context, token string) ([]whopBiz, error) {
+	var out struct {
+		Data []whopBiz `json:"data"`
+	}
+	if err := whopCall(ctx, token, http.MethodGet, "/accounts?first=50&status=active", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Data, nil
+}
+
+// whopForums lists the forums of every business the sign-in may act for, each with its business.
+func whopForums(ctx context.Context, token string) ([]whopBiz, [][]whopForum, error) {
+	list, err := whopBusinesses(ctx, token)
+	if err != nil {
+		return nil, nil, err
+	}
+	var bizs []whopBiz
+	var forums [][]whopForum
+	for _, b := range list {
+		biz, fs, err := whopBusiness(ctx, token, b.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		bizs, forums = append(bizs, biz), append(forums, fs)
+	}
+	return bizs, forums, nil
+}
+
+// Accounts are the forums of the businesses the person runs.
 func (Whop) Accounts(ctx context.Context, c Credentials) ([]Account, error) {
-	biz, forums, err := whopBusiness(ctx, whopBearer(c))
+	bizs, forums, err := whopForums(ctx, whopBearer(c))
 	if err != nil {
 		return nil, err
 	}
-	if len(forums) == 0 {
-		return nil, &Failure{Kind: ErrRejected, Msg: biz.Title + " has no forum on Whop: add the Forums app to one of its products, then connect again"}
+	var out []Account
+	for i, biz := range bizs {
+		for _, f := range forums[i] {
+			p := whopProfile(biz, f)
+			out = append(out, Account{ID: f.Experience.ID, Name: p.Name, Handle: p.Handle, AvatarURL: p.AvatarURL, ProfileURL: p.ProfileURL})
+		}
 	}
-	out := make([]Account, 0, len(forums))
-	for _, f := range forums {
-		p := whopProfile(biz, f)
-		out = append(out, Account{ID: f.Experience.ID, Name: p.Name, Handle: p.Handle, AvatarURL: p.AvatarURL, ProfileURL: p.ProfileURL})
+	if len(out) == 0 {
+		if len(bizs) == 0 {
+			return nil, &Failure{Kind: ErrRejected, Msg: "Whop lists no business for this account: sign in with the account that runs the business"}
+		}
+		return nil, &Failure{Kind: ErrRejected, Msg: "your Whop businesses have no forum: add the Forums app to one of their products, then connect again"}
 	}
 	return out, nil
 }
 
-// UseAccount narrows the sign-in to one forum.
+// UseAccount narrows the sign-in to one forum (and its business).
 func (Whop) UseAccount(ctx context.Context, c Credentials, accountID string) (Credentials, Profile, error) {
-	biz, forums, err := whopBusiness(ctx, whopBearer(c))
+	bizs, forums, err := whopForums(ctx, whopBearer(c))
 	if err != nil {
 		return nil, Profile{}, err
 	}
-	for _, f := range forums {
-		if f.Experience.ID == accountID {
-			out := Credentials{}
-			for k, v := range c {
-				out[k] = v
+	for i, biz := range bizs {
+		for _, f := range forums[i] {
+			if f.Experience.ID == accountID {
+				out := Credentials{}
+				for k, v := range c {
+					out[k] = v
+				}
+				out["account_id"], out["route"], out["experience_id"] = biz.ID, biz.Route, f.Experience.ID
+				return out, whopProfile(biz, f), nil
 			}
-			out["account_id"], out["route"], out["experience_id"] = biz.ID, biz.Route, f.Experience.ID
-			return out, whopProfile(biz, f), nil
 		}
 	}
-	return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: accountID + " is not one of " + biz.Title + "'s forums"}
+	return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: accountID + " is not a forum of your Whop businesses"}
 }
