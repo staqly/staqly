@@ -184,7 +184,7 @@ stories have none.
 By default staqly reads the comments under recent posts every 30 minutes. With Meta's webhooks it reads a post's
 comments within seconds of a new one:
 
-1. On the server, set `META_WEBHOOK_VERIFY_TOKEN` to any random string and restart it.
+1. On the server, set `PROVIDER_META_WEBHOOK_VERIFY_TOKEN` to any random string and restart it.
 2. In [Meta for Developers](https://developers.facebook.com/apps), in the app's **Instagram** use case → **API setup with Unified login** (or with Instagram login) → **Configure webhooks**: **Callback URL**
    `https://<your dashboard>/api/v1/meta/webhook`, **Verify token** the same string, then **Verify and save**.
 3. Subscribe to the **comments** field (and **live_comments** if you go live), and to **story_insights**: when

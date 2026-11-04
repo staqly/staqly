@@ -15,7 +15,7 @@ import (
 func TestMetaWebhookRoutes(t *testing.T) {
 	e := newEnv(t)
 	e.do(nil, "GET", "/v1/meta/webhook?hub.mode=subscribe&hub.verify_token=tok&hub.challenge=42", "", nil, 404, nil)
-	env := map[string]string{"META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_THREADS_CLIENT_SECRET": "th-secret"}
+	env := map[string]string{"PROVIDER_META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_THREADS_CLIENT_SECRET": "th-secret"}
 	e.svc.Getenv = func(k string) string { return env[k] }
 
 	resp, err := http.Get(e.srv.URL + "/v1/meta/webhook?hub.mode=subscribe&hub.verify_token=tok&hub.challenge=42")

@@ -23,20 +23,25 @@ import (
 // odd event can at most queue a read of a post that is ours.
 //
 // Set up per app in Meta for Developers (Webhooks): the callback URL is the dashboard's /api/v1/meta/webhook and the
-// verify token META_WEBHOOK_VERIFY_TOKEN. Meta signs every call with the app's secret (X-Hub-Signature-256).
+// verify token PROVIDER_META_WEBHOOK_VERIFY_TOKEN. Meta signs every call with the app's secret (X-Hub-Signature-256).
 
 // metaWebhookDelay: Meta calls before its API shows the new comment, and a burst of comments makes one read.
 const metaWebhookDelay = 10 * time.Second
 
 // MetaWebhookEnabled: the operator set a verify token; without one the endpoint answers 404.
-func (s *Service) MetaWebhookEnabled() bool { return s.Env("META_WEBHOOK_VERIFY_TOKEN", "") != "" }
+func (s *Service) MetaWebhookEnabled() bool { return s.metaVerifyToken() != "" }
+
+// metaVerifyToken: PROVIDER_META_WEBHOOK_VERIFY_TOKEN, or META_WEBHOOK_VERIFY_TOKEN as servers set before it was renamed.
+func (s *Service) metaVerifyToken() string {
+	return s.Env("PROVIDER_META_WEBHOOK_VERIFY_TOKEN", s.Env("META_WEBHOOK_VERIFY_TOKEN", ""))
+}
 
 // VerifyMetaWebhook answers Meta's subscription check (GET ?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...):
 // the challenge when the token is ours.
 func (s *Service) VerifyMetaWebhook(mode, token, challenge string) (string, error) {
-	want := s.Env("META_WEBHOOK_VERIFY_TOKEN", "")
+	want := s.metaVerifyToken()
 	if want == "" || mode != "subscribe" || subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
-		return "", forbidden("the verify token doesn't match META_WEBHOOK_VERIFY_TOKEN")
+		return "", forbidden("the verify token doesn't match PROVIDER_META_WEBHOOK_VERIFY_TOKEN")
 	}
 	return challenge, nil
 }
