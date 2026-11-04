@@ -17,6 +17,10 @@ type fakeTwitch struct {
 	mu       sync.Mutex
 	token    url.Values
 	chat     map[string]string
+	announce url.Values        // the query of the last announcement
+	annBody  map[string]string // and its body
+	annCode  int
+	annBody2 string
 	clientID string // the Client-Id of the last Helix call
 	chatCode int
 	chatBody string
@@ -75,6 +79,16 @@ func (f *fakeTwitch) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = w.Write([]byte(`{"data":[{"message_id":"abc-123","is_sent":true,"drop_reason":null}]}`))
+	case "/helix/chat/announcements":
+		f.clientID = r.Header.Get("Client-Id")
+		f.announce, f.annBody = r.URL.Query(), nil
+		_ = json.NewDecoder(r.Body).Decode(&f.annBody)
+		if f.annCode != 0 {
+			w.WriteHeader(f.annCode)
+			_, _ = w.Write([]byte(f.annBody2))
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -102,7 +116,7 @@ func TestTwitchConnect(t *testing.T) {
 
 	u, _ := tw.AuthURL(app, "https://app.example/cb", "st", nil)
 	q, _ := url.ParseQuery(u[strings.Index(u, "?")+1:])
-	if q.Get("scope") != "user:write:chat" || q.Get("client_id") != "cid" || q.Get("redirect_uri") != "https://app.example/cb" {
+	if q.Get("scope") != "user:write:chat moderator:manage:announcements" || q.Get("client_id") != "cid" || q.Get("redirect_uri") != "https://app.example/cb" {
 		t.Fatalf("auth url %s", u)
 	}
 	creds, profile, err := tw.Exchange(ctx, app, "https://app.example/cb", "code", nil)
@@ -152,6 +166,44 @@ func TestTwitchPublish(t *testing.T) {
 	}
 	if _, err := (Twitch{}).Reply(ctx, twitchCreds(), "abc-123", PostContent{Text: "Come say hi"}, Settings{}); err != nil || f.chat["reply_parent_message_id"] != "abc-123" {
 		t.Fatalf("reply %v %v", err, f.chat)
+	}
+}
+
+func TestTwitchAnnouncement(t *testing.T) {
+	f := useFakeTwitch(t)
+	ctx := context.Background()
+	res, err := Twitch{}.Publish(ctx, twitchCreds(), PostContent{Text: "Live now!\n\nCome hang out"}, Settings{"send_as": "announcement", "color": "purple"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(res.ExternalID, twitchAnnounced) || res.URL != "https://www.twitch.tv/janedoe" {
+		t.Fatalf("%+v", res)
+	}
+	if f.announce.Get("broadcaster_id") != "141981764" || f.announce.Get("moderator_id") != "141981764" ||
+		f.annBody["message"] != "Live now! Come hang out" || f.annBody["color"] != "purple" || f.clientID != "cid" {
+		t.Fatalf("announcement %v %v", f.announce, f.annBody)
+	}
+	// The thread under an announcement goes out as plain messages: there is no message to reply to.
+	if _, err := (Twitch{}).Reply(ctx, twitchCreds(), res.ExternalID, PostContent{Text: "Link in bio"}, Settings{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, threaded := f.chat["reply_parent_message_id"]; threaded || f.chat["message"] != "Link in bio" {
+		t.Fatalf("reply %v", f.chat)
+	}
+	// Connected before staqly asked for announcements: reconnecting grants the scope.
+	f.annCode, f.annBody2 = 401, `{"error":"Unauthorized","status":401,"message":"Missing scope: moderator:manage:announcements"}`
+	if _, err := (Twitch{}).Publish(ctx, twitchCreds(), PostContent{Text: "Live"}, Settings{"send_as": "announcement"}); !errors.Is(err, ErrReauth) || !strings.Contains(err.Error(), "permission") {
+		t.Fatalf("missing scope: %v", err)
+	}
+	if f.annBody["color"] != "primary" {
+		t.Fatalf("default color %v", f.annBody)
+	}
+	if _, err := (Twitch{}).Publish(ctx, twitchCreds(), PostContent{Text: " \n "}, Settings{}); !errors.Is(err, ErrRejected) {
+		t.Fatalf("empty: %v", err)
+	}
+	tw, _ := Get("twitch")
+	if err := tw.Validate(PostContent{Text: "a"}, Settings{"send_as": "announcement", "color": "red"}); err == nil {
+		t.Fatal("red is not a Twitch announcement color")
 	}
 }
 
