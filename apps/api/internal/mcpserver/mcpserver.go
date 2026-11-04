@@ -8,8 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"sync"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/staqly/staqly/apps/api/internal/app"
@@ -153,25 +151,14 @@ func (t *tools) principal(ctx context.Context) app.Principal {
 	return t.principalOf(ctx)
 }
 
-// KeyAuth re-authenticates an API key at most once per ttl, so a revoked or
-// expired key stops working in a long-lived stdio session within ttl.
-func KeyAuth(svc *app.Service, key string, ttl time.Duration) func(context.Context) app.Principal {
-	var (
-		mu      sync.Mutex
-		p       app.Principal
-		checked time.Time
-	)
+// KeyAuth re-authenticates every call so revocation, expiry and the creator's
+// current role take effect in long-lived stdio sessions just as they do over HTTP.
+func KeyAuth(svc *app.Service, key string) func(context.Context) app.Principal {
 	return func(ctx context.Context) app.Principal {
-		mu.Lock()
-		defer mu.Unlock()
-		if !checked.IsZero() && time.Since(checked) < ttl {
-			return p
-		}
-		np, err := svc.AuthenticateAPIKey(ctx, key)
+		p, err := svc.AuthenticateAPIKey(ctx, key)
 		if err != nil {
-			np = app.Principal{}
+			return app.Principal{}
 		}
-		p, checked = np, time.Now()
 		return p
 	}
 }
