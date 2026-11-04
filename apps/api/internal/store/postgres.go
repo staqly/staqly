@@ -44,6 +44,7 @@ func OpenPostgres(ctx context.Context, url string) (*sql.DB, error) {
 }
 
 // OpenPostgresRaw connects without migrating (tools and tests).
+// Use a direct connection or session pooling: OAuth refreshes need session advisory locks.
 func OpenPostgresRaw(ctx context.Context, url string) (*sql.DB, error) {
 	if !strings.HasPrefix(url, "postgres://") && !strings.HasPrefix(url, "postgresql://") {
 		return nil, errors.New("DATABASE_URL must be a postgres:// URL")
@@ -56,7 +57,7 @@ func OpenPostgresRaw(ctx context.Context, url string) (*sql.DB, error) {
 	db := sql.OpenDB(&pgConnector{inner: stdlib.GetConnector(*cfg)})
 	db.SetMaxOpenConns(20)
 	db.SetMaxIdleConns(10)
-	// Recycle connections: a pooler (PgBouncer) or a failover may drop or move them under us.
+	// Recycle connections: a session pooler or a failover may drop them under us.
 	db.SetConnMaxLifetime(30 * time.Minute)
 	db.SetConnMaxIdleTime(5 * time.Minute)
 	if err := db.PingContext(ctx); err != nil {

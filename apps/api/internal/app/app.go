@@ -283,7 +283,8 @@ type Service struct {
 	// Instance names this process in job leases (jobs.go).
 	Instance string
 	// pg: the database is PostgreSQL (cloud mode); otherwise SQLite.
-	pg bool
+	pg           bool
+	refreshSlots chan struct{}
 }
 
 func New(database *sql.DB, log *slog.Logger, cfg Config) *Service {
@@ -320,6 +321,12 @@ func New(database *sql.DB, log *slog.Logger, cfg Config) *Service {
 		// and retried on serialization failures (tx).
 		svc.pg = true
 		svc.W = db.New(database)
+		// Advisory lock holders still need connections to read and save renewed credentials.
+		slots := 4
+		if max := database.Stats().MaxOpenConnections; max > 0 {
+			slots = min(slots, max/2)
+		}
+		svc.refreshSlots = make(chan struct{}, max(1, slots))
 	} else {
 		svc.W = db.New(gatedDB{database, svc.writes})
 	}
