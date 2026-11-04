@@ -64,6 +64,7 @@ type Post struct {
 	MediaItems     []Media         `json:"media_items"`
 	Status         string          `json:"status"`
 	PublishAt      *string         `json:"publish_at"`
+	PublishOn      *PublishOn      `json:"publish_on"` // what a scheduled post waits for instead of a time
 	PublishedAt    *string         `json:"published_at"`
 	Tags           []string        `json:"tags"`
 	Metadata       json.RawMessage `json:"metadata"`
@@ -99,7 +100,8 @@ type PostInput struct {
 	Media       []string          `json:"media"`
 	Targets     []PostTargetInput `json:"targets"`
 	PublishAt   *string           `json:"publish_at"`
-	Status      string            `json:"status"` // draft (default) or scheduled (needs publish_at and a target)
+	PublishOn   *PublishOn        `json:"publish_on"` // instead of publish_at: wait for an event (publish_on.go)
+	Status      string            `json:"status"`     // draft (default) or scheduled (needs publish_at or publish_on, and a target)
 	PublishNow  bool              `json:"publish_now"`
 	Tags        []string          `json:"tags"`
 	Metadata    json.RawMessage   `json:"metadata"`
@@ -118,6 +120,7 @@ type PostPatch struct {
 	Media           *[]string          `json:"media"`
 	Targets         *[]PostTargetInput `json:"targets"`
 	PublishAt       json.RawMessage    `json:"publish_at"` // a time, or null to clear
+	PublishOn       json.RawMessage    `json:"publish_on"` // an event to wait for, or null to clear
 	Tags            *[]string          `json:"tags"`
 	Metadata        json.RawMessage    `json:"metadata"`
 	ExternalRef     *string            `json:"external_ref"`
@@ -152,7 +155,7 @@ func targetOut(t db.ListTargetsRow) PostTarget {
 // toPost builds a post for the API; media holds its files and its thread's (postsMedia), an id missing there is left out.
 func (s *Service) toPost(p db.Post, targets []db.ListTargetsRow, collectionName string, media map[string]db.Medium) Post {
 	out := Post{ID: p.ID, CollectionID: p.CollectionID, CollectionName: collectionName, Title: p.Title, Content: p.Content, Media: []string{}, MediaItems: []Media{},
-		Status: p.Status, PublishAt: ptr(p.PublishAt), PublishedAt: ptr(p.PublishedAt), Tags: []string{},
+		Status: p.Status, PublishAt: ptr(p.PublishAt), PublishOn: publishOnOf(p.PublishOn), PublishedAt: ptr(p.PublishedAt), Tags: []string{},
 		Metadata: json.RawMessage(p.Metadata), Source: p.Source, ExternalRef: p.ExternalRef, RepeatEvery: p.RepeatEvery, Version: p.Version,
 		Thread: s.threadPartsOut(parseThread(p.Thread), media), Targets: []PostTarget{}, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 		UnpublishedAt: ptr(p.UnpublishedAt), UnpublishedBy: p.UnpublishedBy, ArchivedAt: ptr(p.ArchivedAt)}
@@ -591,6 +594,12 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 			return Post{}, err
 		}
 	}
+	if in.PublishOn != nil && (publishAt != "" || in.PublishNow) {
+		return Post{}, invalid("publish_on", "send publish_on, publish_at or publish_now, one of them")
+	}
+	if in.PublishOn != nil && repeatEvery != "" {
+		return Post{}, invalid("publish_on", "a post that waits for a stream can't repeat")
+	}
 	if in.Status == "scheduled" || in.PublishNow {
 		if err := p.require(ScopePostsPublish); err != nil {
 			return Post{}, err
@@ -600,8 +609,8 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 		}
 	}
 	if in.Status == "scheduled" {
-		if publishAt == "" {
-			return Post{}, invalid("publish_at", "a scheduled post needs a time")
+		if publishAt == "" && in.PublishOn == nil {
+			return Post{}, invalid("publish_at", "a scheduled post needs a time or publish_on")
 		}
 		if len(in.Targets) == 0 {
 			return Post{}, invalid("targets", "a scheduled post needs at least one channel")
@@ -641,6 +650,12 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 		if err := checkThreadLimits(thread, chans); err != nil {
 			return err
 		}
+		var publishOn string
+		if in.PublishOn != nil {
+			if publishOn, err = s.checkPublishOn(ctx, q, p.WorkspaceID, *in.PublishOn); err != nil {
+				return err
+			}
+		}
 		if err := s.usePostQuota(ctx, q, p.WorkspaceID); err != nil {
 			return err
 		}
@@ -661,13 +676,22 @@ func (s *Service) CreatePost(ctx context.Context, p Principal, in PostInput) (Po
 				return err
 			}
 		}
+		if publishOn != "" {
+			if err := q.SetPostPublishOn(ctx, db.SetPostPublishOnParams{PublishOn: publishOn, ID: row.ID}); err != nil {
+				return err
+			}
+		}
 		if err := s.writeTargets(ctx, q, row.ID, in.Targets, now); err != nil {
 			return err
 		}
 		if _, err := s.emit(ctx, q, p, "post.created", col.ID, row.ID, s.postEventData(ctx, q, p.WorkspaceID, row.ID, nil)); err != nil {
 			return err
 		}
-		if row.Status == "scheduled" {
+		if row.Status == "scheduled" && publishOn != "" {
+			if err := s.waitFor(ctx, q, p, row.WorkspaceID, row.ID, publishOn); err != nil {
+				return err
+			}
+		} else if row.Status == "scheduled" {
 			if err := s.schedulePublish(ctx, q, p, row.WorkspaceID, row.ID, publishAt, nil); err != nil {
 				return err
 			}
@@ -914,7 +938,28 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 					previous = &prev
 				}
 				row.PublishAt = nullStr(at)
+				row.PublishOn = "" // a time replaces the event the post waited for
 			}
+		}
+		if len(in.PublishOn) > 0 {
+			if string(in.PublishOn) == "null" {
+				row.PublishOn = ""
+			} else {
+				var on PublishOn
+				if err := json.Unmarshal(in.PublishOn, &on); err != nil {
+					return invalid("publish_on", `must be {"event":"live","channel_id":"..."} or null`)
+				}
+				if len(in.PublishAt) > 0 && string(in.PublishAt) != "null" && string(in.PublishAt) != `""` {
+					return invalid("publish_on", "send publish_at or publish_on, not both")
+				}
+				if row.PublishOn, err = s.checkPublishOn(ctx, q, p.WorkspaceID, on); err != nil {
+					return err
+				}
+				row.PublishAt = nullStr("") // an event replaces the time
+			}
+		}
+		if row.PublishOn != "" && row.RepeatEvery != "" {
+			return invalid("publish_on", "a post that waits for a stream can't repeat")
 		}
 		// Targets: the current ones re-validated against the new content, or the new list.
 		current, err := q.ListTargets(ctx, id)
@@ -971,8 +1016,8 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 			return err
 		}
 		if row.Status == "scheduled" {
-			if !row.PublishAt.Valid {
-				row.Status = "draft" // the time went away: no longer scheduled
+			if !row.PublishAt.Valid && row.PublishOn == "" {
+				row.Status = "draft" // the time (or the event) went away: no longer scheduled
 			}
 			if len(targets) == 0 {
 				return invalid("targets", "a scheduled post needs at least one channel")
@@ -993,6 +1038,11 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 				return err
 			}
 		}
+		if row.PublishOn != before.PublishOn {
+			if err := q.SetPostPublishOn(ctx, db.SetPostPublishOnParams{PublishOn: row.PublishOn, ID: id}); err != nil {
+				return err
+			}
+		}
 		if in.Targets != nil {
 			if err := s.writeTargets(ctx, q, id, append(slices.Clone(targets), history...), row.UpdatedAt); err != nil {
 				return err
@@ -1008,7 +1058,9 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 			}
 			_, err = s.emit(ctx, q, p, "post.unscheduled", row.CollectionID, id, s.postEventData(ctx, q, p.WorkspaceID, id, nil))
 			return err
-		case row.Status == "scheduled" && before.PublishAt != row.PublishAt:
+		case row.Status == "scheduled" && row.PublishOn != "" && row.PublishOn != before.PublishOn:
+			return s.waitFor(ctx, q, p, p.WorkspaceID, id, row.PublishOn)
+		case row.Status == "scheduled" && row.PublishAt.Valid && before.PublishAt != row.PublishAt:
 			return s.schedulePublish(ctx, q, p, p.WorkspaceID, id, row.PublishAt.String, previous)
 		}
 		return nil
@@ -1024,14 +1076,27 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 	if err := p.require(ScopePostsPublish); err != nil {
 		return Post{}, err
 	}
-	if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
-		return Post{}, err
-	}
 	at, err := s.parsePublishAt(publishAt)
 	if err != nil {
 		return Post{}, err
 	}
-	err = s.tx(ctx, func(q *db.Queries) error {
+	return s.schedulePost(ctx, p, id, at, nil)
+}
+
+// SchedulePostOn makes the post scheduled to wait for an event instead of a time (from draft, scheduled or failed).
+func (s *Service) SchedulePostOn(ctx context.Context, p Principal, id string, on PublishOn) (Post, error) {
+	if err := p.require(ScopePostsPublish); err != nil {
+		return Post{}, err
+	}
+	return s.schedulePost(ctx, p, id, "", &on)
+}
+
+// schedulePost: at a time (at), or waiting for an event (on).
+func (s *Service) schedulePost(ctx context.Context, p Principal, id, at string, on *PublishOn) (Post, error) {
+	if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
+		return Post{}, err
+	}
+	err := s.tx(ctx, func(q *db.Queries) error {
 		row, err := q.GetPost(ctx, db.GetPostParams{WorkspaceID: p.WorkspaceID, ID: id})
 		if isNoRows(err) {
 			return notFound("post")
@@ -1055,6 +1120,15 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 		if err := checkNoDeletedMedia(ctx, q, p.WorkspaceID, row); err != nil {
 			return err
 		}
+		publishOn := ""
+		if on != nil {
+			if row.RepeatEvery != "" {
+				return invalid("publish_on", "a post that waits for a stream can't repeat")
+			}
+			if publishOn, err = s.checkPublishOn(ctx, q, p.WorkspaceID, *on); err != nil {
+				return err
+			}
+		}
 		var previous *string
 		if row.PublishAt.Valid {
 			prev := row.PublishAt.String
@@ -1073,6 +1147,12 @@ func (s *Service) SchedulePost(ctx context.Context, p Principal, id, publishAt s
 				err = conflict("post was modified concurrently")
 			}
 			return err
+		}
+		if err := q.SetPostPublishOn(ctx, db.SetPostPublishOnParams{PublishOn: publishOn, ID: id}); err != nil {
+			return err
+		}
+		if publishOn != "" {
+			return s.waitFor(ctx, q, p, p.WorkspaceID, id, publishOn)
 		}
 		return s.schedulePublish(ctx, q, p, p.WorkspaceID, id, at, previous)
 	})

@@ -73,6 +73,7 @@ __all__ = [
     "PostingTimes",
     "PostTarget",
     "PostTargetInput",
+    "PublishOn",
     "Reply",
     "ThreadPart",
     "ThreadPartOut",
@@ -899,6 +900,14 @@ class PostTargetInput(StaqlyModel):
     settings: dict[str, str] | None = None
 
 
+class PublishOn(StaqlyModel):
+    """What a scheduled post waits for instead of a time: ``event="live"``, the next stream start of
+    ``channel_id`` (a channel whose platform has ``live_trigger``). It goes out once."""
+
+    event: str = "live"
+    channel_id: str
+
+
 class Post(StaqlyModel):
     """Something that goes out: text, media and the channels it goes to."""
 
@@ -916,6 +925,8 @@ class Post(StaqlyModel):
     status: str
     #: When it goes out (scheduled), or the time it kept as a note (draft after cancel).
     publish_at: OptionalDatetime = None
+    #: What a scheduled post waits for instead of a time (``publish_at`` is then None).
+    publish_on: PublishOn | None = None
     published_at: OptionalDatetime = None
     unpublished_at: OptionalDatetime = None
     unpublished_by: str = ""
@@ -1552,6 +1563,8 @@ class Provider(StaqlyModel):
     docs_url: str = ""
     #: The platform calls back over https only: connecting needs the dashboard on an https address.
     needs_https: bool = False
+    #: The platform says when a channel's stream starts, so a post can wait for it (``publish_on``).
+    live_trigger: bool = False
     #: Telegram: the server's own bot (@username) that connects a chat with /connect CODE.
     bot: str = ""
     #: That bot's display name.

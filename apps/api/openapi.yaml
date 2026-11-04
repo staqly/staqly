@@ -2032,7 +2032,7 @@ paths:
       tags: [posts]
       summary: Create a post (posts:write; scheduling or publishing it right away also needs posts:publish)
       description: |
-        A draft unless `status` is `scheduled` (needs `publish_at` in the future and at least one target)
+        A draft unless `status` is `scheduled` (needs `publish_at` in the future, or `publish_on` to wait for a stream, and at least one target)
         or `publish_now` is true (needs a target). `collection` is an id or an exact name. Media ids come
         from POST /v1/media. Each target is a channel the post goes to, with optional text of its own and
         provider settings; a target that breaks its provider's limits is a 422 keyed
@@ -2141,11 +2141,20 @@ paths:
     post:
       operationId: schedulePost
       tags: [posts]
-      summary: Set the publish time and make the post scheduled (posts:publish)
+      summary: Set the publish time (or the stream to wait for) and make the post scheduled (posts:publish)
       description: "From draft, scheduled or failed; the post needs at least one target and a time in the future (at most a year ahead). A post carrying a file in Deleted is refused (422 on `media`): restore the file first."
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [publish_at], properties: { publish_at: { type: string, format: date-time } } } } } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: publish_at or publish_on, one of them
+              properties:
+                publish_at: { type: string, format: date-time }
+                publish_on: { $ref: "#/components/schemas/PublishOn" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Post" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -5673,6 +5682,14 @@ components:
         status: { $ref: "#/components/schemas/PostStatus" }
         publish_at: { type: string, format: date-time }
 
+    PublishOn:
+      type: object
+      additionalProperties: false
+      required: [event, channel_id]
+      properties:
+        event: { type: string, enum: [live], description: "live: the channel's next stream start" }
+        channel_id: { type: string, description: "A channel of the workspace whose platform has live_trigger" }
+
     PostStatus:
       type: string
       description: "draft (being written), scheduled (goes out at publish_at), publishing (a job is at work), published (every target is), failed (a target is; retry it or edit and publish again)"
@@ -5755,7 +5772,7 @@ components:
 
     Post:
       type: object
-      required: [id, collection_id, collection_name, title, content, media, media_items, status, publish_at, published_at, unpublished_at, unpublished_by, archived_at, tags, metadata, source, external_ref, repeat_every, thread, version, targets, created_at, updated_at, created_by, open_comments]
+      required: [id, collection_id, collection_name, title, content, media, media_items, status, publish_at, publish_on, published_at, unpublished_at, unpublished_by, archived_at, tags, metadata, source, external_ref, repeat_every, thread, version, targets, created_at, updated_at, created_by, open_comments]
       properties:
         id: { type: string }
         collection_id: { type: string }
@@ -5766,6 +5783,11 @@ components:
         media_items: { type: array, items: { $ref: "#/components/schemas/Media" }, description: "The same media, resolved" }
         status: { $ref: "#/components/schemas/PostStatus" }
         publish_at: { type: [string, "null"], format: date-time, description: "When it goes out (scheduled), or the time it kept as a note (draft after cancel)" }
+        publish_on:
+          description: "What a scheduled post waits for instead of a time (publish_at null): the next stream start of a channel whose platform has live_trigger. It goes out once."
+          oneOf:
+            - type: "null"
+            - { $ref: "#/components/schemas/PublishOn" }
         published_at: { type: [string, "null"], format: date-time }
         unpublished_at: { type: [string, "null"], format: date-time, description: When it was taken down from its channels }
         unpublished_by: { type: string, description: "Who took it down: a person or the API key" }
@@ -5806,7 +5828,12 @@ components:
         media: { type: array, maxItems: 20, items: { type: string }, description: Media ids from POST /v1/media }
         targets: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/PostTargetInput" } }
         publish_at: { type: [string, "null"], format: date-time, description: "In the future, at most a year ahead" }
-        status: { type: string, enum: [draft, scheduled], description: "Default draft; scheduled needs publish_at and a target" }
+        publish_on:
+          description: "Instead of publish_at: wait for an event (not with publish_at, publish_now or repeat_every)"
+          oneOf:
+            - type: "null"
+            - { $ref: "#/components/schemas/PublishOn" }
+        status: { type: string, enum: [draft, scheduled], description: "Default draft; scheduled needs publish_at or publish_on, and a target" }
         publish_now: { type: boolean, description: Publish right away (needs a target) }
         tags: { type: array, maxItems: 20, items: { type: string, maxLength: 40 } }
         metadata: { type: object, additionalProperties: true }
@@ -5824,7 +5851,12 @@ components:
         content: { type: string, maxLength: 50000 }
         media: { type: array, maxItems: 20, items: { type: string } }
         targets: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/PostTargetInput" }, description: Replaces the whole list }
-        publish_at: { type: [string, "null"], format: date-time, description: "A time in the future, or null to clear it (a scheduled post becomes a draft)" }
+        publish_at: { type: [string, "null"], format: date-time, description: "A time in the future, or null to clear it (a scheduled post becomes a draft); replaces publish_on" }
+        publish_on:
+          description: "An event to wait for (replaces publish_at), or null to clear it (a scheduled post becomes a draft)"
+          oneOf:
+            - type: "null"
+            - { $ref: "#/components/schemas/PublishOn" }
         tags: { type: array, maxItems: 20, items: { type: string, maxLength: 40 } }
         metadata: { type: object, additionalProperties: true }
         external_ref: { type: string, maxLength: 200 }
@@ -6446,7 +6478,7 @@ components:
     Provider:
       type: object
       description: A platform staqly can publish to
-      required: [id, name, auth, status, limits, credential_fields, settings_fields, app_configured, docs_url, needs_https]
+      required: [id, name, auth, status, limits, credential_fields, settings_fields, app_configured, docs_url, needs_https, live_trigger]
       properties:
         id: { type: string, examples: [custom, telegram, bluesky, mastodon] }
         name: { type: string }
@@ -6460,6 +6492,7 @@ components:
         bot: { type: string, description: "Telegram: the server's own bot (@username). Present when a chat connects by adding it and sending /connect CODE there (POST /v1/channels/telegram/connect) instead of with credential_fields" }
         bot_name: { type: string, description: "Telegram: the server's bot's display name, shown beside its @username" }
         needs_https: { type: boolean, description: "The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise)" }
+        live_trigger: { type: boolean, description: "The platform says when a channel's stream starts, so a post can wait for it (publish_on, event live). Kick today" }
 
     MoltbookAgent:
       type: object

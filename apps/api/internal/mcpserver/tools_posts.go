@@ -33,14 +33,14 @@ func (t *tools) addPostTools(s *mcp.Server) {
 	add(s, t, &mcp.Tool{Name: "test_channel", Description: "Check a channel's stored credentials against its platform. Rate-limited. Requires channels:manage.", Annotations: wr()}, t.testChannel)
 	add(s, t, &mcp.Tool{Name: "list_channel_options", Description: "The choices of a channel's remote setting (a settings_fields entry of kind remote), from its platform right now: for Slack, key channel lists the workspace's channels a post can go to. Requires channels:read.", Annotations: ro()}, t.listChannelOptions)
 
-	add(s, t, &mcp.Tool{Name: "create_post", Description: "Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. Requires posts:write.",
+	add(s, t, &mcp.Tool{Name: "create_post", Description: "Create a post in a collection: content, media (ids from upload_media), targets (one per channel, each with an optional content override and settings: the provider's settings_fields from list_providers, as strings, e.g. X reply_settings, made_with_ai, thread_finisher, reposters as comma-separated channel ids), tags, metadata. status draft (default) or scheduled (needs publish_at, RFC3339 in the future, or publish_on {event: live, channel_id}: when that channel's stream starts, for channels whose platform has live_trigger in list_providers; and a target); publish_now true publishes at once. repeat_every (1d to 6d, 1w, 2w, 1mo) schedules a copy that long after each time the post is published. thread: follow-up parts (content, media, delay_seconds) published as replies under the post on platforms that take replies (X); your own automation receives them with the request. Requires posts:write.",
 		Annotations: wr()}, t.createPost)
 	add(s, t, &mcp.Tool{Name: "get_post", Description: "Get one post with its targets (status, link, error per channel).", Annotations: ro()}, t.getPost)
 	add(s, t, &mcp.Tool{Name: "list_posts", Description: "List posts, optionally by collection, status, channel or tag. Default order is by publish time (unscheduled last); publish_after/publish_before make it the calendar; hide_past leaves out posts that went out; archived posts are left out unless include_archived is true; sort created_desc lists the newest first.", Annotations: ro()}, t.listPosts)
 	add(s, t, &mcp.Tool{Name: "search_posts", Description: "Find posts whose content contains a text, with the same filters as list_posts.", Annotations: ro()}, t.searchPosts)
 	add(s, t, &mcp.Tool{Name: "update_post", Description: "Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (an empty string clears it), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. Requires posts:write.",
 		Annotations: wr()}, t.updatePost)
-	add(s, t, &mcp.Tool{Name: "schedule_post", Description: "Set when a post goes out (RFC3339, in the future) and make it scheduled; the post needs at least one target. Requires posts:publish.",
+	add(s, t, &mcp.Tool{Name: "schedule_post", Description: "Set when a post goes out (publish_at, RFC3339 in the future; or publish_on {event: live, channel_id}: when that channel's stream starts) and make it scheduled; the post needs at least one target. Requires posts:publish.",
 		Annotations: wr()}, t.schedulePost)
 	add(s, t, &mcp.Tool{Name: "publish_post", Description: "Publish a draft, scheduled or failed post now. Requires posts:publish.", Annotations: wr()}, t.publishPost)
 	add(s, t, &mcp.Tool{Name: "unpublish_post", Description: "Take a published post down from its channels: all the channels it is published on, or only channel_ids. The post stays as history; each target shows removal removing, then removed, failed (the platform refused) or manual (the platform has no delete: remove it yourself). Requires posts:publish.", Annotations: destructive()}, t.unpublishPost)
@@ -222,6 +222,7 @@ type createPostIn struct {
 	Media       []string       `json:"media,omitempty" jsonschema:"media IDs (med_...) in order"`
 	Targets     []targetIn     `json:"targets,omitempty"`
 	PublishAt   string         `json:"publish_at,omitempty" jsonschema:"RFC3339, in the future"`
+	PublishOn   *publishOnIn   `json:"publish_on,omitempty" jsonschema:"instead of publish_at: publish when this channel's stream starts"`
 	Status      string         `json:"status,omitempty" jsonschema:"draft (default) or scheduled"`
 	PublishNow  bool           `json:"publish_now,omitempty" jsonschema:"publish right away"`
 	Tags        []string       `json:"tags,omitempty"`
@@ -237,10 +238,19 @@ func (t *tools) createPost(ctx context.Context, _ *mcp.CallToolRequest, in creat
 	if in.PublishAt != "" {
 		pi.PublishAt = &in.PublishAt
 	}
+	if in.PublishOn != nil {
+		pi.PublishOn = &app.PublishOn{Event: in.PublishOn.Event, ChannelID: in.PublishOn.ChannelID}
+	}
 	if in.Metadata != nil {
 		pi.Metadata, _ = json.Marshal(in.Metadata)
 	}
 	return nil0(t.svc.CreatePost(ctx, t.principal(ctx), pi))
+}
+
+// publishOnIn: what a scheduled post waits for instead of a time.
+type publishOnIn struct {
+	Event     string `json:"event" jsonschema:"live"`
+	ChannelID string `json:"channel_id" jsonschema:"channel ID (ch_...) whose stream start publishes the post; its platform has live_trigger"`
 }
 
 type postRef struct {
@@ -303,6 +313,7 @@ type updatePostIn struct {
 	Media           *[]string      `json:"media,omitempty"`
 	Targets         *[]targetIn    `json:"targets,omitempty" jsonschema:"replaces the whole list"`
 	PublishAt       any            `json:"publish_at,omitempty" jsonschema:"RFC3339 in the future, or an empty string to clear it (back to a draft)"`
+	PublishOn       *publishOnIn   `json:"publish_on,omitempty" jsonschema:"wait for this channel's stream start instead of a time (replaces publish_at)"`
 	Tags            *[]string      `json:"tags,omitempty"`
 	Metadata        map[string]any `json:"metadata,omitempty"`
 	ExternalRef     *string        `json:"external_ref,omitempty"`
@@ -320,6 +331,9 @@ func (t *tools) updatePost(ctx context.Context, _ *mcp.CallToolRequest, in updat
 	if in.PublishAt != nil {
 		pp.PublishAt, _ = json.Marshal(in.PublishAt)
 	}
+	if in.PublishOn != nil {
+		pp.PublishOn, _ = json.Marshal(app.PublishOn{Event: in.PublishOn.Event, ChannelID: in.PublishOn.ChannelID})
+	}
 	if in.Metadata != nil {
 		pp.Metadata, _ = json.Marshal(in.Metadata)
 	}
@@ -334,11 +348,18 @@ func (t *tools) updatePost(ctx context.Context, _ *mcp.CallToolRequest, in updat
 }
 
 type schedulePostIn struct {
-	PostID    string `json:"post_id" jsonschema:"post ID (post_...)"`
-	PublishAt string `json:"publish_at" jsonschema:"RFC3339, in the future"`
+	PostID    string       `json:"post_id" jsonschema:"post ID (post_...)"`
+	PublishAt string       `json:"publish_at,omitempty" jsonschema:"RFC3339, in the future"`
+	PublishOn *publishOnIn `json:"publish_on,omitempty" jsonschema:"instead of publish_at: publish when this channel's stream starts"`
 }
 
 func (t *tools) schedulePost(ctx context.Context, _ *mcp.CallToolRequest, in schedulePostIn) (*mcp.CallToolResult, any, error) {
+	if in.PublishOn != nil {
+		if in.PublishAt != "" {
+			return nil, nil, &app.Error{Code: "validation_failed", Status: 422, Message: "publish_on: send publish_at or publish_on, not both"}
+		}
+		return nil0(t.svc.SchedulePostOn(ctx, t.principal(ctx), in.PostID, app.PublishOn{Event: in.PublishOn.Event, ChannelID: in.PublishOn.ChannelID}))
+	}
 	return nil0(t.svc.SchedulePost(ctx, t.principal(ctx), in.PostID, in.PublishAt))
 }
 

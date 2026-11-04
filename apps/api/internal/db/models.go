@@ -465,6 +465,7 @@ type Post struct {
 	UnpublishedAt sql.NullString `json:"unpublished_at"`
 	UnpublishedBy string         `json:"unpublished_by"`
 	ArchivedAt    sql.NullString `json:"archived_at"`
+	PublishOn     string         `json:"publish_on"`
 }
 
 type PostComment struct {

@@ -13,6 +13,7 @@ import type {
   PostPreview,
   PostResponses,
   PreviewLink,
+  PublishOn,
   PurgeResult,
   RequestOptions,
   Tag,
@@ -106,14 +107,20 @@ export class Posts extends APIResource {
     return this.http.request({ method: 'POST', path: `/v1/posts/${enc(id)}/purge`, options })
   }
 
-  /** Sets the publish time and makes the post scheduled (from draft, scheduled or failed). */
-  schedule(id: string, publishAt: string | Date, options?: RequestOptions): Promise<Post> {
-    return this.http.request({
-      method: 'POST',
-      path: `/v1/posts/${enc(id)}/schedule`,
-      body: { publish_at: typeof publishAt === 'string' ? publishAt : publishAt.toISOString() },
-      options,
-    })
+  /**
+   * Makes the post scheduled (from draft, scheduled or failed): at a time, or waiting for an event
+   * (`{ publish_on: { event: 'live', channel_id } }`: that channel's next stream start, on a platform with
+   * `live_trigger`).
+   */
+  schedule(id: string, when: string | Date | { publish_on: PublishOn }, options?: RequestOptions): Promise<Post> {
+    const body =
+      typeof when === 'string'
+        ? { publish_at: when }
+        : when instanceof Date
+          ? { publish_at: when.toISOString() }
+          : { publish_on: when.publish_on }
+
+    return this.http.request({ method: 'POST', path: `/v1/posts/${enc(id)}/schedule`, body, options })
   }
 
   /**

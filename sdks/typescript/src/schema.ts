@@ -1583,7 +1583,7 @@ export interface paths {
         put?: never;
         /**
          * Create a post (posts:write; scheduling or publishing it right away also needs posts:publish)
-         * @description A draft unless `status` is `scheduled` (needs `publish_at` in the future and at least one target)
+         * @description A draft unless `status` is `scheduled` (needs `publish_at` in the future, or `publish_on` to wait for a stream, and at least one target)
          *     or `publish_now` is true (needs a target). `collection` is an id or an exact name. Media ids come
          *     from POST /v1/media. Each target is a channel the post goes to, with optional text of its own and
          *     provider settings; a target that breaks its provider's limits is a 422 keyed
@@ -1659,7 +1659,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Set the publish time and make the post scheduled (posts:publish)
+         * Set the publish time (or the stream to wait for) and make the post scheduled (posts:publish)
          * @description From draft, scheduled or failed; the post needs at least one target and a time in the future (at most a year ahead). A post carrying a file in Deleted is refused (422 on `media`): restore the file first.
          */
         post: operations["schedulePost"];
@@ -4991,6 +4991,15 @@ export interface components {
             /** Format: date-time */
             publish_at?: string;
         };
+        PublishOn: {
+            /**
+             * @description live: the channel's next stream start
+             * @enum {string}
+             */
+            event: "live";
+            /** @description A channel of the workspace whose platform has live_trigger */
+            channel_id: string;
+        };
         /**
          * @description draft (being written), scheduled (goes out at publish_at), publishing (a job is at work), published (every target is), failed (a target is; retry it or edit and publish again)
          * @enum {string}
@@ -5095,6 +5104,8 @@ export interface components {
              * @description When it goes out (scheduled), or the time it kept as a note (draft after cancel)
              */
             publish_at: string | null;
+            /** @description What a scheduled post waits for instead of a time (publish_at null): the next stream start of a channel whose platform has live_trigger. It goes out once. */
+            publish_on: null | components["schemas"]["PublishOn"];
             /** Format: date-time */
             published_at: string | null;
             /**
@@ -5152,8 +5163,10 @@ export interface components {
              * @description In the future, at most a year ahead
              */
             publish_at?: string | null;
+            /** @description Instead of publish_at: wait for an event (not with publish_at, publish_now or repeat_every) */
+            publish_on?: null | components["schemas"]["PublishOn"];
             /**
-             * @description Default draft; scheduled needs publish_at and a target
+             * @description Default draft; scheduled needs publish_at or publish_on, and a target
              * @enum {string}
              */
             status?: "draft" | "scheduled";
@@ -5181,9 +5194,11 @@ export interface components {
             targets?: components["schemas"]["PostTargetInput"][];
             /**
              * Format: date-time
-             * @description A time in the future, or null to clear it (a scheduled post becomes a draft)
+             * @description A time in the future, or null to clear it (a scheduled post becomes a draft); replaces publish_on
              */
             publish_at?: string | null;
+            /** @description An event to wait for (replaces publish_at), or null to clear it (a scheduled post becomes a draft) */
+            publish_on?: null | components["schemas"]["PublishOn"];
             tags?: string[];
             metadata?: {
                 [key: string]: unknown;
@@ -5877,6 +5892,8 @@ export interface components {
             bot_name?: string;
             /** @description The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise) */
             needs_https: boolean;
+            /** @description The platform says when a channel's stream starts, so a post can wait for it (publish_on, event live). Kick today */
+            live_trigger: boolean;
         };
         /** @description A Moltbook agent the server registered and connected, and where its owner claims it */
         MoltbookAgent: {
@@ -9947,7 +9964,8 @@ export interface operations {
             content: {
                 "application/json": {
                     /** Format: date-time */
-                    publish_at: string;
+                    publish_at?: string;
+                    publish_on?: components["schemas"]["PublishOn"];
                 };
             };
         };

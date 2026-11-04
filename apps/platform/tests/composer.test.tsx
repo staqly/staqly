@@ -274,6 +274,44 @@ describe('composer', () => {
     await waitFor(() => expect(select).toHaveTextContent('Default'))
   })
 
+  it('Schedule offers the channels that say when a stream starts: picking one schedules the post for it', async () => {
+    const live = {
+      'GET /v1/channels': {
+        data: [...routes['GET /v1/channels'].data, channel({ id: 'ch_k', name: 'Jane on Kick', provider: 'kick' })],
+      },
+      'GET /v1/providers': {
+        data: [
+          ...routes['GET /v1/providers'].data,
+          provider({ id: 'kick', name: 'Kick', live_trigger: true, settings_fields: [] }),
+        ],
+      },
+    }
+    const api = mockApi({ ...routes, ...live, 'POST /v1/posts': post({ id: 'pst_9', status: 'scheduled' }) })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1')
+    await user.type(screen.getByTestId('post-title'), 'Live now')
+    await user.type(screen.getByTestId('post-content'), 'Come hang out')
+    await user.click(screen.getByRole('button', { name: 'Schedule for later' }))
+    const picker = await screen.findByRole('dialog', { name: 'Pick a date and time' })
+    const streams = within(picker).getByTestId('schedule-live')
+
+    // Only Kick says when a stream starts.
+    expect(within(streams).getAllByRole('button')).toHaveLength(1)
+    await user.click(within(streams).getByRole('button', { name: 'When Jane on Kick goes live' }))
+    await waitFor(() => expect(api.find('POST', '/v1/posts')).toHaveLength(1))
+    const body = api.find('POST', '/v1/posts')[0].body as {
+      status: string
+      publish_at: string | null
+      publish_on: unknown
+    }
+
+    expect(body.status).toBe('scheduled')
+    expect(body.publish_at).toBeNull()
+    expect(body.publish_on).toEqual({ event: 'live', channel_id: 'ch_k' })
+  })
+
   it('Schedule opens the calendar: a quick pick and Schedule send the post for that time', async () => {
     const api = mockApi({ ...routes, 'POST /v1/posts': post({ id: 'pst_9', status: 'scheduled' }) })
     const user = userEvent.setup()
