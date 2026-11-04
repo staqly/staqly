@@ -433,26 +433,46 @@ func (s *Service) sweepJobRequeues(ctx context.Context) int {
 	}
 	swept := 0
 	for _, r := range rows {
-		err := s.tx(ctx, func(q *db.Queries) error {
-			n, err := q.DeleteJobRequeue(ctx, r.Key)
-			if err != nil || n == 0 {
-				return err // taken by a run meanwhile
-			}
-			runAt, perr := time.Parse(timeFormat, r.RunAt)
-			if perr != nil {
-				runAt = s.Now()
-			}
-			var pl jobPayload
-			_ = json.Unmarshal([]byte(r.Payload), &pl)
-			return s.enqueue(ctx, q, r.WorkspaceID, r.Kind, r.Key, pl, runAt, r.MaxAttempts)
-		})
+		taken, err := s.sweepJobRequeue(ctx, r)
 		if err != nil {
 			s.logger(ctx).Warn("job requeue sweep: not queued", "key", r.Key, "err", err)
 			continue
 		}
-		swept++
+		if taken {
+			swept++
+		}
 	}
 	return swept
+}
+
+func (s *Service) sweepJobRequeue(ctx context.Context, candidate db.JobRequeue) (bool, error) {
+	taken := false
+	err := s.tx(ctx, func(q *db.Queries) error {
+		taken = false
+		r, err := q.GetJobRequeue(ctx, candidate.Key)
+		if isNoRows(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		n, err := q.DeleteJobRequeue(ctx, r.Key)
+		if err != nil || n == 0 {
+			return err
+		}
+		runAt, perr := time.Parse(timeFormat, r.RunAt)
+		if perr != nil {
+			runAt = s.Now()
+		}
+		var pl jobPayload
+		_ = json.Unmarshal([]byte(r.Payload), &pl)
+		if err := s.enqueue(ctx, q, r.WorkspaceID, r.Kind, r.Key, pl, runAt, r.MaxAttempts); err != nil {
+			return err
+		}
+		taken = true
+		return nil
+	})
+	return taken, err
 }
 
 // riverRescuedError is the error River's rescuer records on a job it found still running long after it

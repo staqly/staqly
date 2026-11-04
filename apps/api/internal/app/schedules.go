@@ -546,8 +546,8 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 	if err != nil {
 		return err
 	}
-	if r.Enabled != 1 && advance {
-		return nil
+	if advance && (r.Enabled != 1 || !r.NextRunAt.Valid || r.NextRunAt.String > s.now()) {
+		return nil // an already claimed job may have been postponed before it read the schedule
 	}
 	sys := Principal{WorkspaceID: r.WorkspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler", Scopes: AdminKeyScopes}
 	var channels, postIDs []string

@@ -725,6 +725,32 @@ func (q *Queries) PublishingPostsOfChannel(ctx context.Context, channelID string
 	return items, nil
 }
 
+const recordPendingTargetAttempt = `-- name: RecordPendingTargetAttempt :execrows
+UPDATE post_targets SET error = ?, attempts = attempts + 1, updated_at = ?
+WHERE post_id = ? AND channel_id = ? AND status = 'publishing'
+`
+
+type RecordPendingTargetAttemptParams struct {
+	Error     string `json:"error"`
+	UpdatedAt string `json:"updated_at"`
+	PostID    string `json:"post_id"`
+	ChannelID string `json:"channel_id"`
+}
+
+// A result callback can settle the target before its endpoint request returns.
+func (q *Queries) RecordPendingTargetAttempt(ctx context.Context, arg RecordPendingTargetAttemptParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, recordPendingTargetAttempt,
+		arg.Error,
+		arg.UpdatedAt,
+		arg.PostID,
+		arg.ChannelID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const repeatOfPost = `-- name: RepeatOfPost :one
 SELECT id FROM posts WHERE repeat_of = ? AND repeat_of <> '' LIMIT 1
 `
