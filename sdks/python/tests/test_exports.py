@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 
-from staqly import AsyncStaqly, ExportFailedError, InternalServerError, Staqly, WaitTimeoutError
+from staqly import (
+    APIConnectionError,
+    AsyncStaqly,
+    ExportFailedError,
+    InternalServerError,
+    NotFoundError,
+    Staqly,
+    WaitTimeoutError,
+)
 
 from .conftest import Mock, jsonr
 
@@ -59,9 +68,66 @@ def test_stream_errors_are_typed_and_retried(client: Staqly, mock: Mock) -> None
 
 def test_save_events_csv(client: Staqly, mock: Mock, tmp_path: Path) -> None:
     mock.reply(httpx.Response(200, content=b"created_at,id\n1,2\n", headers={"Content-Type": "text/csv"}))
+    (tmp_path / "events.csv").write_bytes(b"previous export")
     out = client.exports.save_events(tmp_path / "events.csv", format="csv", post_id="pst_1")
     assert out.read_bytes() == b"created_at,id\n1,2\n"
     assert mock.last.url.params["format"] == "csv"
+
+
+class InterruptedStream(httpx.SyncByteStream, httpx.AsyncByteStream):
+    closed = False
+
+    def __iter__(self) -> Iterator[bytes]:
+        yield b"partial zip"
+        raise httpx.ReadError("connection interrupted")
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        yield b"partial zip"
+        raise httpx.ReadError("connection interrupted")
+
+    def close(self) -> None:
+        self.closed = True
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.parametrize("failure", ["not_found", "connection", "stream"])
+def test_failed_download_preserves_existing_file(
+    client: Staqly, mock: Mock, tmp_path: Path, failure: str
+) -> None:
+    _failed_download(mock, failure)
+    target = tmp_path / "backup.zip"
+    target.write_bytes(b"previous backup")
+    with pytest.raises((NotFoundError, APIConnectionError)):
+        client.exports.save_workspace_export("expired", target, request_options={"max_retries": 0})
+    _assert_preserved(target)
+
+
+@pytest.mark.parametrize("failure", ["not_found", "connection", "stream"])
+async def test_failed_download_preserves_existing_file_async(
+    aclient: AsyncStaqly, mock: Mock, tmp_path: Path, failure: str
+) -> None:
+    _failed_download(mock, failure)
+    target = tmp_path / "backup.zip"
+    target.write_bytes(b"previous backup")
+    with pytest.raises((NotFoundError, APIConnectionError)):
+        await aclient.exports.save_workspace_export("expired", target, request_options={"max_retries": 0})
+    _assert_preserved(target)
+
+
+def _assert_preserved(target: Path) -> None:
+    assert target.read_bytes() == b"previous backup"
+    assert list(target.parent.iterdir()) == [target]
+
+
+def _failed_download(mock: Mock, failure: str) -> None:
+    if failure == "not_found":
+        mock.reply(jsonr({"error": {"code": "not_found", "message": "expired"}}, 404))
+    elif failure == "connection":
+        mock.reply(httpx.ConnectError("connection refused"))
+    else:
+        mock.route.side_effect = lambda _: httpx.Response(200, stream=InterruptedStream())
 
 
 def test_export_workspace_waits_and_saves(client: Staqly, mock: Mock, tmp_path: Path) -> None:
@@ -84,6 +150,7 @@ def test_export_workspace_waits_and_saves(client: Staqly, mock: Mock, tmp_path: 
 
 async def test_export_workspace_async(aclient: AsyncStaqly, mock: Mock, tmp_path: Path) -> None:
     mock.reply(job("pending"), job("ready"), httpx.Response(200, content=b"PK"))
+    (tmp_path / "a.zip").write_bytes(b"previous backup")
     await aclient.exports.export_workspace(tmp_path / "a.zip", poll_interval=0.01)
     assert (tmp_path / "a.zip").read_bytes() == b"PK"
 

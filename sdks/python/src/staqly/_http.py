@@ -11,6 +11,7 @@ import json
 import mimetypes
 import os
 import random
+import tempfile
 import time
 import uuid
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -103,9 +104,20 @@ def read_file(file: FileInput, filename: str | None, content_type: str | None) -
     return name, data, ctype
 
 
-def open_for_write(path: Path) -> IO[bytes]:
-    """Opens a download target (kept out of async code paths for linters; writes are small chunks)."""
-    return path.open("wb")
+@contextlib.contextmanager
+def atomic_download(path: Path) -> Iterator[IO[bytes]]:
+    """Replace the target only after a complete download, keeping the old file on failure."""
+    with tempfile.NamedTemporaryFile(
+        mode="wb", dir=path.parent, prefix=".staqly-download-", delete=False
+    ) as out:
+        temporary = Path(out.name)
+        try:
+            yield out
+            out.close()
+            temporary.replace(path)
+        finally:
+            out.close()
+            temporary.unlink(missing_ok=True)
 
 
 def backoff(attempt: int) -> float:
@@ -229,6 +241,11 @@ class HTTPClient(BaseHTTPClient):
             try:
                 request = self._client.build_request(**kwargs, timeout=timeout)
                 response = self._client.send(request, stream=stream)
+                if stream and not response.is_success:
+                    try:
+                        response.read()
+                    finally:
+                        response.close()
             except httpx.TransportError as exc:
                 if attempt < max_retries and idempotent:
                     self._sleep(backoff(attempt))
@@ -237,9 +254,6 @@ class HTTPClient(BaseHTTPClient):
                 raise self._connection_error(exc, spec) from exc
             if response.is_success:
                 return response
-            if stream:
-                response.read()
-                response.close()
             error = make_api_error(response)
             delay = self._retry_delay(error, idempotent, attempt) if attempt < max_retries else None
             if delay is None:
@@ -286,6 +300,11 @@ class AsyncHTTPClient(BaseHTTPClient):
             try:
                 request = self._client.build_request(**kwargs, timeout=timeout)
                 response = await self._client.send(request, stream=stream)
+                if stream and not response.is_success:
+                    try:
+                        await response.aread()
+                    finally:
+                        await response.aclose()
             except httpx.TransportError as exc:
                 if attempt < max_retries and idempotent:
                     await self._sleep(backoff(attempt))
@@ -294,9 +313,6 @@ class AsyncHTTPClient(BaseHTTPClient):
                 raise self._connection_error(exc, spec) from exc
             if response.is_success:
                 return response
-            if stream:
-                await response.aread()
-                await response.aclose()
             error = make_api_error(response)
             delay = self._retry_delay(error, idempotent, attempt) if attempt < max_retries else None
             if delay is None:
