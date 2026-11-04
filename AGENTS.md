@@ -159,5 +159,7 @@ every job sets `timeout-minutes` and only the `permissions:` it uses.
   installs will diverge.
 * Node: the current LTS, pinned to a patched release in `.nvmrc` (CI), the root
   `Dockerfile` (dashboard build stage) and `compose.e2e.yml` (test receiver).
-  Update these pins together, including security patches, and keep the private
-  packages' `engines.node` minimum aligned. Bump the major when a new LTS lands.
+  Update these pins together, including security patches. `engines.node` in the root and private
+  packages names the major only (`26.x`): the landing page's host builds from the root `package.json`
+  with a buildpack whose Node list lags behind patch releases, and fails on a patch it doesn't have
+  yet. Bump the major everywhere when a new LTS lands.
