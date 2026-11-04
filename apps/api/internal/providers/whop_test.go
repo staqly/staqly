@@ -123,6 +123,22 @@ func (f *fakeWhop) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			_, _ = w.Write([]byte(`{"upload_status":"ready"}`))
 		}
+	case r.URL.Path == "/forum_posts/post_9":
+		_, _ = w.Write([]byte(`{"id":"post_9","view_count":12,"like_count":3,"comment_count":2}`))
+	case r.URL.Path == "/forum_posts" && r.Method == http.MethodGet:
+		if r.URL.Query().Get("experience_id") != "exp_A" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		switch r.URL.Query().Get("parent_id") {
+		case "post_9":
+			_, _ = w.Write([]byte(`{"data":[{"id":"c1","content":"Nice","created_at":"2026-11-04T18:00:00Z","comment_count":1,"user":{"id":"user_2","username":"ann","name":"Ann"}},` +
+				`{"id":"c2","content":"Thanks","created_at":"2026-11-04T19:00:00Z","comment_count":0,"user":{"id":"user_1","username":"pete","name":null}}],"page_info":{"has_next_page":false}}`))
+		case "c1":
+			_, _ = w.Write([]byte(`{"data":[{"id":"r1","content":"+1","created_at":"2026-11-04T18:10:00Z","comment_count":0,"user":{"id":"user_3","username":"bob","name":"Bob"}}],"page_info":{"has_next_page":false}}`))
+		default:
+			_, _ = w.Write([]byte(`{"data":[],"page_info":{"has_next_page":false}}`))
+		}
 	case r.URL.Path == "/forum_posts":
 		if f.drop {
 			hj, _ := w.(http.Hijacker)
@@ -222,7 +238,7 @@ func TestWhopPublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.ExternalID != "post_1" || res.URL != "https://whop.com/acme-studio/" {
+	if res.ExternalID != "exp_A:post_1" || res.URL != "https://whop.com/acme-studio/" {
 		t.Fatalf("result %+v", res)
 	}
 	p := f.posts[0]
@@ -285,8 +301,35 @@ func TestWhopReply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.ExternalID != "post_1" || f.posts[0]["parent_id"] != "post_9" || f.posts[0]["experience_id"] != "exp_A" || f.posts[0]["content"] != "a comment" {
+	if res.ExternalID != "exp_A:post_1" || f.posts[0]["parent_id"] != "post_9" || f.posts[0]["experience_id"] != "exp_A" || f.posts[0]["content"] != "a comment" {
 		t.Fatalf("comment %+v %v", res, f.posts)
+	}
+	// A post stored with its forum: the comment goes to that forum, under the bare post id.
+	if _, err := wh.Provider.(Replier).Reply(context.Background(), Credentials{"access_token": "user-tok"}, "exp_B:post_9", PostContent{Text: "b"}, nil); err != nil ||
+		f.posts[1]["parent_id"] != "post_9" || f.posts[1]["experience_id"] != "exp_B" {
+		t.Fatalf("comment in the post's forum %v %v", err, f.posts)
+	}
+}
+
+func TestWhopMetricsAndResponses(t *testing.T) {
+	useFakeWhop(t)
+	wh, _ := Get("whop")
+	ctx := context.Background()
+	creds := Credentials{"access_token": "user-tok", "user_id": "user_1"}
+	m, err := wh.Provider.(MetricsReader).Metrics(ctx, creds, "exp_A:post_9")
+	if err != nil || m.Impressions == nil || *m.Impressions != 12 || *m.Likes != 3 || *m.Replies != 2 {
+		t.Fatalf("metrics %+v %v", m, err)
+	}
+	rs, err := wh.Provider.(ResponseReader).Responses(ctx, creds, "exp_A:post_9", time.Time{})
+	if err != nil || len(rs) != 3 {
+		t.Fatalf("responses %+v %v", rs, err)
+	}
+	if rs[0].ID != "c1" || rs[0].ParentID != "" || rs[0].Author != "Ann" || !rs[1].Own || rs[2].ID != "r1" || rs[2].ParentID != "c1" {
+		t.Fatalf("responses %+v", rs)
+	}
+	// since: only newer comments.
+	if rs, _ := wh.Provider.(ResponseReader).Responses(ctx, creds, "exp_A:post_9", time.Date(2026, 11, 4, 18, 30, 0, 0, time.UTC)); len(rs) != 1 || rs[0].ID != "c2" {
+		t.Fatalf("since %+v", rs)
 	}
 }
 
