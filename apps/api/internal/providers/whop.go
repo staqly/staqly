@@ -189,7 +189,8 @@ func whopBusinessURL(route string) string {
 // checks it still works (keys do not expire, but they can be deleted).
 func (Whop) Refresh(ctx context.Context, app App, c Credentials) (Credentials, error) {
 	if c["refresh_token"] != "" {
-		t, err := whopToken(ctx, app, map[string]string{"grant_type": "refresh_token", "refresh_token": c["refresh_token"]})
+		// A token made for a business is renewed for the same business.
+		t, err := whopToken(ctx, app, map[string]string{"grant_type": "refresh_token", "refresh_token": c["refresh_token"], "company_id": c["account_id"]})
 		if err != nil {
 			return nil, err
 		}
@@ -557,10 +558,25 @@ var (
 	_         AccountLister = Whop{}
 )
 
+// The sign-in acts for one business: Whop makes a token for it only when the business is named up front (a token
+// without one is the person's, which can read none of the business's forums).
+var _ OAuthCarrier = Whop{}
+
+func (Whop) CarryKeys() []string { return []string{"company_id"} }
+
+func (Whop) CredentialFields() []Field {
+	return []Field{{Key: "company_id", Label: "Whop business", Kind: "text", Required: true, Placeholder: "biz_XXXXXXXXXXXXXX",
+		Help: "The business's id: whop.com/dashboard/biz_… in the address bar while you are in its dashboard."}}
+}
+
 func (Whop) AuthURL(app App, redirect, state string, extra map[string]string) (string, error) {
 	verifier := extra["code_verifier"]
 	if verifier == "" {
 		return "", errors.New("Whop needs a PKCE code verifier")
+	}
+	company := strings.TrimSpace(extra["company_id"])
+	if !strings.HasPrefix(company, "biz_") {
+		return "", invalid("company_id", "enter the business's id (biz_…), from whop.com/dashboard/biz_… in the address bar")
 	}
 	sum := sha256.Sum256([]byte(verifier))
 	q := url.Values{
@@ -572,6 +588,7 @@ func (Whop) AuthURL(app App, redirect, state string, extra map[string]string) (s
 		"nonce":                 {state},
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(sum[:])},
 		"code_challenge_method": {"S256"},
+		"company_id":            {company},
 	}
 	return whopOAuth + "/authorize?" + q.Encode(), nil
 }
@@ -645,7 +662,8 @@ func (Whop) Exchange(ctx context.Context, app App, redirect, code string, extra 
 		return nil, Profile{}, err
 	}
 	creds := t.into(Credentials{}, time.Now())
-	// The sign-in is the person; the businesses they run come with Accounts.
+	creds["account_id"] = strings.TrimSpace(extra["company_id"])
+	// The person who signed in; the business's forums come with Accounts.
 	var me struct {
 		Sub      string `json:"sub"`
 		Name     string `json:"name"`
@@ -697,9 +715,21 @@ func whopForums(ctx context.Context, token string) ([]whopBiz, [][]whopForum, er
 	return bizs, forums, nil
 }
 
-// Accounts are the forums of the businesses the person runs.
+// whopSignInForums: the forums of the business the sign-in was made for, or of every business it may act for.
+func whopSignInForums(ctx context.Context, c Credentials) ([]whopBiz, [][]whopForum, error) {
+	if id := c["account_id"]; id != "" {
+		biz, fs, err := whopBusiness(ctx, whopBearer(c), id)
+		if err != nil {
+			return nil, nil, err
+		}
+		return []whopBiz{biz}, [][]whopForum{fs}, nil
+	}
+	return whopForums(ctx, whopBearer(c))
+}
+
+// Accounts are the forums of the business the sign-in acts for.
 func (Whop) Accounts(ctx context.Context, c Credentials) ([]Account, error) {
-	bizs, forums, err := whopForums(ctx, whopBearer(c))
+	bizs, forums, err := whopSignInForums(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -721,7 +751,7 @@ func (Whop) Accounts(ctx context.Context, c Credentials) ([]Account, error) {
 
 // UseAccount narrows the sign-in to one forum (and its business).
 func (Whop) UseAccount(ctx context.Context, c Credentials, accountID string) (Credentials, Profile, error) {
-	bizs, forums, err := whopForums(ctx, whopBearer(c))
+	bizs, forums, err := whopSignInForums(ctx, c)
 	if err != nil {
 		return nil, Profile{}, err
 	}

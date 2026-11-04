@@ -382,6 +382,10 @@ type ExistenceChecker interface {
 // staqly shows them like read ones.
 type PushedResponses interface{ PushesResponses() }
 
+// OAuthCarrier: a platform whose sign-in needs a field the person fills in before it (Whop: the business) again when
+// the platform sends them back. Those fields travel sealed in the sign-in's state and reach Exchange in extra.
+type OAuthCarrier interface{ CarryKeys() []string }
+
 // LiveNotifier: a streaming platform that tells staqly when a connected channel's stream starts (Kick: its
 // livestream.status.updated webhook), so a post can wait for that instead of a time (publish_on). The platform's own
 // receiver calls the app's channelWentLive; a platform joins by implementing this and calling it (Twitch: an EventSub
