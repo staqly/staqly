@@ -536,6 +536,7 @@ func (s *Service) saveChannel(ctx context.Context, p Principal, e providers.Entr
 		return Channel{}, err
 	}
 	s.scheduleRefresh(ctx, row, creds)
+	s.queueEventSync(ctx, row)
 	return toChannelOut(row), nil
 }
 
@@ -783,6 +784,7 @@ func (s *Service) reconnectChannel(ctx context.Context, p Principal, row db.Chan
 		return Channel{}, err
 	}
 	s.scheduleRefresh(ctx, row, creds)
+	s.queueEventSync(ctx, row)
 	return toChannelOut(row), nil
 }
 

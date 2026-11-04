@@ -378,6 +378,16 @@ type ExistenceChecker interface {
 	Exists(ctx context.Context, c Credentials, externalID string) error
 }
 
+// PushedResponses: a platform whose replies to a post come to staqly's webhook (Kick's chat) instead of being read;
+// staqly shows them like read ones.
+type PushedResponses interface{ PushesResponses() }
+
+// EventSubscriber: a platform that sends a connected channel's events to staqly's webhook once subscribed (Kick).
+// staqly subscribes when the channel connects and again daily, as the platform may drop subscriptions.
+type EventSubscriber interface {
+	SubscribeEvents(ctx context.Context, c Credentials) error
+}
+
 // Remover is implemented by platforms that can take a published post (or one part of its thread) down again.
 // externalID is what Publish or Reply returned. Remove returns nil also when the platform says the item is
 // already gone, a *Failure with ErrManual when the platform has no way to delete it through its API (the person

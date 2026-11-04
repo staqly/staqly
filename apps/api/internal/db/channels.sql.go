@@ -116,6 +116,88 @@ func (q *Queries) ChannelsByIDs(ctx context.Context, arg ChannelsByIDsParams) ([
 	return items, nil
 }
 
+const channelsByProfileURL = `-- name: ChannelsByProfileURL :many
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE provider = ? AND profile_url = ? AND deleted_at IS NULL
+`
+
+type ChannelsByProfileURLParams struct {
+	Provider   string `json:"provider"`
+	ProfileUrl string `json:"profile_url"`
+}
+
+// A platform's channels (not removed) with this profile link: a Kick webhook names the channel by its slug.
+func (q *Queries) ChannelsByProfileURL(ctx context.Context, arg ChannelsByProfileURLParams) ([]Channel, error) {
+	rows, err := q.db.QueryContext(ctx, channelsByProfileURL, arg.Provider, arg.ProfileUrl)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Channel
+	for rows.Next() {
+		var i Channel
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Provider,
+			&i.Name,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.ProfileUrl,
+			&i.Status,
+			&i.Credentials,
+			&i.Settings,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.GroupID,
+			&i.Comments,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const connectedChannelsOfProvider = `-- name: ConnectedChannelsOfProvider :many
+SELECT id, workspace_id FROM channels WHERE provider = ? AND status = 'connected' AND deleted_at IS NULL
+`
+
+type ConnectedChannelsOfProviderRow struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+func (q *Queries) ConnectedChannelsOfProvider(ctx context.Context, provider string) ([]ConnectedChannelsOfProviderRow, error) {
+	rows, err := q.db.QueryContext(ctx, connectedChannelsOfProvider, provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ConnectedChannelsOfProviderRow
+	for rows.Next() {
+		var i ConnectedChannelsOfProviderRow
+		if err := rows.Scan(&i.ID, &i.WorkspaceID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const connectedMetaChannels = `-- name: ConnectedMetaChannels :many
 SELECT id, workspace_id, provider, credentials FROM channels
 WHERE provider IN ('facebook', 'instagram', 'instagram_business') AND status = 'connected' AND deleted_at IS NULL
@@ -518,6 +600,25 @@ func (q *Queries) MarkChannelNeedsReconnect(ctx context.Context, arg MarkChannel
 	return result.RowsAffected()
 }
 
+const markInboundEvent = `-- name: MarkInboundEvent :execrows
+INSERT INTO inbound_events (provider, id, received_at) VALUES (?, ?, ?) ON CONFLICT (provider, id) DO NOTHING
+`
+
+type MarkInboundEventParams struct {
+	Provider   string `json:"provider"`
+	ID         string `json:"id"`
+	ReceivedAt string `json:"received_at"`
+}
+
+// Records a webhook call by its id; 0 rows when it was handled before.
+func (q *Queries) MarkInboundEvent(ctx context.Context, arg MarkInboundEventParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markInboundEvent, arg.Provider, arg.ID, arg.ReceivedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const metaChannels = `-- name: MetaChannels :many
 SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE provider IN ('facebook', 'instagram', 'instagram_business', 'threads') AND deleted_at IS NULL
 `
@@ -562,6 +663,15 @@ func (q *Queries) MetaChannels(ctx context.Context) ([]Channel, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const pruneInboundEvents = `-- name: PruneInboundEvents :exec
+DELETE FROM inbound_events WHERE received_at < ?
+`
+
+func (q *Queries) PruneInboundEvents(ctx context.Context, receivedAt string) error {
+	_, err := q.db.ExecContext(ctx, pruneInboundEvents, receivedAt)
+	return err
 }
 
 const setChannelComments = `-- name: SetChannelComments :exec

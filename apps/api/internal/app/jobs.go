@@ -122,6 +122,8 @@ func (s *Service) execJob(ctx context.Context, kind string, a jobArgs) error {
 		return s.checkTarget(ctx, p.PostID, p.ChannelID)
 	case "analyze_responses":
 		return s.analyzeResponses(ctx, a.WorkspaceID, p.PostID)
+	case "sync_events":
+		return s.syncEvents(ctx, p.ChannelID)
 	}
 	if run, ok := testJobKinds[kind]; ok {
 		return run(ctx, a)

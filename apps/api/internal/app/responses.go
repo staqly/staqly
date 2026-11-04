@@ -98,6 +98,10 @@ func (s *Service) PostResponses(ctx context.Context, p Principal, postID, channe
 		}
 		found = true
 		_, can := providerResponseReader(t.Provider)
+		if e, ok := providers.Get(t.Provider); ok {
+			_, pushed := e.Provider.(providers.PushedResponses)
+			can = can || pushed
+		}
 		ch := ChannelResponses{ChannelID: t.ChannelID, ChannelName: t.ChannelName, Provider: t.Provider, Available: can,
 			Error: failed[t.ChannelID], Insight: byChannel[t.ChannelID], Responses: []PostResponse{}}
 		for _, r := range rows {

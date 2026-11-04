@@ -295,6 +295,30 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
+  /v1/kick/webhook:
+    post:
+      operationId: receiveKickWebhook
+      tags: [channels]
+      security: [{}]
+      summary: An event from Kick (a chat message, the stream going live, a follow or subscription)
+      description: |
+        The webhook URL to enter in the Kick app's settings is `<api>/v1/kick/webhook` (`<dashboard>/api/v1/kick/webhook`).
+        Signed with Kick's key (`Kick-Event-Signature`: RSA SHA-256 of `<message id>.<timestamp>.<body>`); off (404)
+        until the server has `PROVIDER_KICK_CLIENT_ID`. Each message id is handled once. A chat reply to a post's message
+        becomes a comment under the post. An event for a channel the server no longer has answers 410, so Kick drops
+        that subscription.
+      parameters:
+        - { name: Kick-Event-Message-Id, in: header, required: true, schema: { type: string } }
+        - { name: Kick-Event-Message-Timestamp, in: header, required: true, schema: { type: string } }
+        - { name: Kick-Event-Signature, in: header, required: true, schema: { type: string } }
+        - { name: Kick-Event-Type, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [handled], properties: { handled: { type: integer, description: Posts the event touched } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { description: No channel for this Kick account, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
   /v1/meta/deauthorize:
     post:
       operationId: metaDeauthorize

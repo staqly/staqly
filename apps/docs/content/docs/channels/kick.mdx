@@ -1,6 +1,6 @@
 ---
 title: Kick
-description: Send a post as a chat message in your Kick channel's chat, with replies as comments. What to register in Kick's developer settings.
+description: Send a post as a chat message in your Kick channel's chat, with replies as comments, and get chat replies back as comments through Kick's webhook. What to register in Kick's developer settings.
 ---
 
 Staqly publishes to **Kick** as a **chat message** in the connected account's own channel: it signs
@@ -25,7 +25,8 @@ On kick.com, open **Settings → Developer** (two-factor authentication must be 
 | Field | Value |
 |---|---|
 | **Redirect URL** | your dashboard's `/channels/callback/kick`, for example `http://localhost:8080/channels/callback/kick` locally or `https://staqly.example.com/channels/callback/kick` |
-| **Scopes** | **Read user information**, **Read channel information**, **Write to Chat feed** |
+| **Scopes** | **Read user information**, **Read channel information**, **Write to Chat feed**, **Subscribe to events** |
+| **Enable webhooks** | On, with the URL `https://<your dashboard>/api/v1/kick/webhook` (or the API's own address + `/v1/kick/webhook`) |
 
 Copy the **Client ID** and **Client Secret**.
 
@@ -59,11 +60,28 @@ for these scopes:
 | `user:read` | Read the account's name and picture |
 | `channel:read` | Read the channel's address, to link to it |
 | `chat:write` | Send chat messages |
+| `events:subscribe` | Get the channel's events (chat messages, the stream going live, follows, subscriptions) at the webhook |
 
 The channel shows the account's name, `@channel` and picture.
 
 </Step>
 </Steps>
+
+## Webhook
+
+Once a channel connects, staqly subscribes it to Kick's events, and again daily, since Kick drops a
+subscription whose webhook kept failing for a day. Kick sends them to the webhook URL set on the app
+(one per app: a test server needs an app of its own), signed with Kick's key; staqly checks the
+signature and handles each event once.
+
+- A chat reply to a post's message shows under the post as a comment (**Insights → Comments**),
+  with the AI summary like other platforms. Replies from the channel itself (a post's thread) are not
+  comments.
+- An event for a channel staqly no longer has is refused, so Kick stops sending it after a day.
+
+A channel connected before the webhook came along lacks `events:subscribe`: reconnect it once from
+the row's menu. Publishing works either way. Kick allows an unverified app 1,000 channels with chat
+events.
 
 ## Limits
 

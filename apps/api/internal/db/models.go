@@ -251,6 +251,12 @@ type IdempotencyKey struct {
 	CreatedAt    string        `json:"created_at"`
 }
 
+type InboundEvent struct {
+	Provider   string `json:"provider"`
+	ID         string `json:"id"`
+	ReceivedAt string `json:"received_at"`
+}
+
 type Installation struct {
 	ID          int64  `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
