@@ -47,6 +47,28 @@ func (Tumblr) Remove(ctx context.Context, c Credentials, externalID string) erro
 	return removeSend(req, "Tumblr", tumblrError)
 }
 
+var _ Remover = Moltbook{}
+
+// Remove deletes the post (DELETE /api/v1/posts/{id}) or, for a thread part ("comment:<post>:<comment>"), the
+// comment (DELETE /api/v1/comments/{id}).
+func (Moltbook) Remove(ctx context.Context, c Credentials, externalID string) error {
+	key := c["api_key"]
+	if key == "" {
+		return &Failure{Kind: ErrReauth, Msg: "Moltbook: no API key stored; reconnect the agent"}
+	}
+	path := "/posts/" + url.PathEscape(externalID)
+	if rest, ok := strings.CutPrefix(externalID, "comment:"); ok {
+		_, comment, _ := strings.Cut(rest, ":")
+		path = "/comments/" + url.PathEscape(comment)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, moltbookAPI+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	return removeSend(req, "Moltbook", moltbookError)
+}
+
 var _ Remover = Pinterest{}
 
 // Remove deletes the pin (DELETE /v5/pins/{id}).
