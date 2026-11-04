@@ -144,6 +144,14 @@ export function routes({
     },
     { name: 'composer', path: collection, open: (p) => click(p, '[data-testid=new-post]:visible') },
     {
+      name: 'composer channel picker',
+      path: collection,
+      open: async (p) => {
+        await click(p, '[data-testid=new-post]:visible')
+        await p.getByRole('dialog').getByRole('button', { name: 'Channels' }).click({ timeout: 3_000 })
+      },
+    },
+    {
       name: 'composer with channels',
       path: collection,
       open: async (p) => {

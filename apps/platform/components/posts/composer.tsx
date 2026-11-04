@@ -1914,7 +1914,7 @@ export function ComposerForm({
                         <button
                           type="button"
                           aria-label="Where the title is published"
-                          className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2"
+                          className="relative inline-flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5"
                         >
                           <CircleHelp className="size-3.5" aria-hidden />
                         </button>
