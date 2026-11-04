@@ -1,11 +1,11 @@
 ---
 title: Twitch
-description: Send a post as a chat message in your Twitch channel's chat, with replies as comments. What to register in the Twitch developer console.
+description: Send a post as a chat message or an announcement in your Twitch channel's chat, with replies as comments. What to register in the Twitch developer console.
 ---
 
 Staqly publishes to **Twitch** as a **chat message** the connected account sends in its own
-channel's chat: it signs in with OAuth 2.0 and sends the text with the Helix API
-(`POST /helix/chat/messages`). Twitch chat takes text only. A chat message is not a lasting post:
+channel's chat, or as a highlighted **announcement**: it signs in with OAuth 2.0 and sends the text with the
+Helix API (`POST /helix/chat/messages`, `POST /helix/chat/announcements`). Twitch chat takes text only. A chat message is not a lasting post:
 it shows in the live chat (for example an announcement when you go live) and scrolls away; the
 target links to the channel.
 
@@ -54,17 +54,31 @@ It shows only with `PROVIDER_TWITCH_ENABLED=true`; unset or `false` hides it, an
 ### Connect the account
 
 **Connect with Twitch** opens twitch.tv, where the person signs in (Twitch always asks which
-account) and allows the app. Staqly asks for one scope:
+account) and allows the app. Staqly asks for two scopes:
 
 | Scope | Why |
 |---|---|
 | `user:write:chat` | Send chat messages as the account |
+| `moderator:manage:announcements` | Send announcements in the account's own chat |
 
 The channel shows the account's display name, `@login` and picture. Messages go to the account's
 own channel.
 
 </Step>
 </Steps>
+
+## Settings
+
+| Setting | What it does |
+|---|---|
+| **Send as** | **Chat message** (default) or **Announcement**: highlighted in the chat with a colored bar |
+| **Announcement color** | **Channel color** (default), blue, green, orange or purple |
+
+Chat is one line: line breaks in the text become spaces. An announcement has no message id, so a
+thread under it goes out as plain chat messages, not replies.
+
+A channel connected before announcements came along lacks their scope: the first announcement marks it
+**Needs reconnect**; reconnect it once and it works.
 
 ## Limits
 
@@ -82,7 +96,7 @@ message before it, after its delay.
 
 | Twitch says | Staqly does |
 |---|---|
-| The sign-in expired or was revoked (401, a refused refresh) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| The sign-in expired or was revoked (401, a refused refresh), or a scope is missing | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
 | Rate limit (429) or Twitch unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
 | The message was dropped (AutoMod, a duplicate within 30 seconds, chat settings) or refused (a ban) | Fails the target with Twitch's reason; retrying would not help, so it does not |
 | The answer never came back (a dropped connection) | Fails the target saying the message **may have been published**: check the chat before you retry |

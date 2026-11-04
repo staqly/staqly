@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -16,7 +17,9 @@ import (
 // Twitch over the Helix API: OAuth 2.0 (authorization code) on id.twitch.tv, refreshable tokens, and a "post" is a
 // chat message the account sends in its own channel's chat (POST /helix/chat/messages, broadcaster = sender = the
 // account). Chat takes text only and a message is not a lasting post: it scrolls away and has no link of its own.
-// A post's thread goes out as chat replies. Every Helix call names the app (Client-Id) next to the token.
+// A post's thread goes out as chat replies. A post can instead go out as an announcement (POST
+// /helix/chat/announcements): highlighted in the chat, in a color, with no message id of its own, so its thread
+// follows as plain messages. Every Helix call names the app (Client-Id) next to the token.
 type Twitch struct{ Base }
 
 // Endpoints, variables so tests point them at httptest.
@@ -25,11 +28,24 @@ var (
 	twitchAPI = "https://api.twitch.tv"
 )
 
-// twitchScopes: send chat messages as the account.
-const twitchScopes = "user:write:chat"
+// twitchScopes: send chat messages as the account, and announcements in its own chat (it moderates it).
+const twitchScopes = "user:write:chat moderator:manage:announcements"
+
+// twitchAnnounced is the ExternalID prefix of an announcement: Twitch gives it no id, and a reply to it can't be
+// threaded, so the thread's first part goes out as a plain message.
+const twitchAnnounced = "announcement:"
+
+var twitchSettings = []Field{
+	{Key: "send_as", Label: "Send as", Kind: "select", Default: "message", Options: []Option{
+		{Value: "message", Label: "Chat message"}, {Value: "announcement", Label: "Announcement (highlighted)"}}},
+	{Key: "color", Label: "Announcement color", Kind: "select", Default: "primary", Options: []Option{
+		{Value: "primary", Label: "Channel color"}, {Value: "blue", Label: "Blue"}, {Value: "green", Label: "Green"},
+		{Value: "orange", Label: "Orange"}, {Value: "purple", Label: "Purple"}},
+		When: &Condition{Key: "send_as", Value: "announcement"}},
+}
 
 func init() {
-	Register(Twitch{NewBase("twitch", "Twitch", AuthOAuth2, Limits{MaxChars: 500})}, StatusAvailable)
+	Register(Twitch{NewBase("twitch", "Twitch", AuthOAuth2, Limits{MaxChars: 500}).WithSettings(twitchSettings...)}, StatusAvailable)
 }
 
 func (Twitch) AuthURL(app App, redirect, state string, _ map[string]string) (string, error) {
@@ -129,7 +145,10 @@ func (tw Twitch) Refresh(ctx context.Context, app App, c Credentials) (Credentia
 // Twitch publishes a post's thread as chat replies.
 var _ Replier = Twitch{}
 
-func (tw Twitch) Publish(ctx context.Context, c Credentials, p PostContent, _ Settings) (Result, error) {
+func (tw Twitch) Publish(ctx context.Context, c Credentials, p PostContent, s Settings) (Result, error) {
+	if s["send_as"] == "announcement" {
+		return tw.announce(ctx, c, p, s["color"])
+	}
 	return tw.chat(ctx, c, p, "")
 }
 
@@ -138,18 +157,71 @@ func (tw Twitch) Reply(ctx context.Context, c Credentials, parentExternalID stri
 	if parentExternalID == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Twitch: nothing to reply to (the post has no id)"}
 	}
+	if strings.HasPrefix(parentExternalID, twitchAnnounced) {
+		parentExternalID = ""
+	}
 	return tw.chat(ctx, c, p, parentExternalID)
 }
 
-func (Twitch) chat(ctx context.Context, c Credentials, p PostContent, replyTo string) (Result, error) {
-	token, user := c["access_token"], c["user_id"]
-	if token == "" || user == "" || c["client_id"] == "" {
-		return Result{}, &Failure{Kind: ErrReauth, Msg: "Twitch: no account stored; reconnect it"}
+// twitchText checks what every Twitch send needs: a stored account, text only, and text at all. Chat is one
+// line, so line breaks become spaces instead of Twitch cutting or refusing the message.
+func twitchText(c Credentials, p PostContent) (string, error) {
+	if c["access_token"] == "" || c["user_id"] == "" || c["client_id"] == "" {
+		return "", &Failure{Kind: ErrReauth, Msg: "Twitch: no account stored; reconnect it"}
 	}
 	if len(p.Media) > 0 {
-		return Result{}, &Failure{Kind: ErrRejected, Msg: "Twitch chat takes text only"}
+		return "", &Failure{Kind: ErrRejected, Msg: "Twitch chat takes text only"}
 	}
-	body := map[string]string{"broadcaster_id": user, "sender_id": user, "message": p.Text}
+	lines := strings.FieldsFunc(p.Text, func(r rune) bool { return r == '\n' || r == '\r' })
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+	}
+	text := strings.Join(slices.DeleteFunc(lines, func(l string) bool { return l == "" }), " ")
+	if text == "" {
+		return "", &Failure{Kind: ErrRejected, Msg: "Twitch: the message is empty"}
+	}
+	return text, nil
+}
+
+func (Twitch) announce(ctx context.Context, c Credentials, p PostContent, color string) (Result, error) {
+	text, err := twitchText(c, p)
+	if err != nil {
+		return Result{}, err
+	}
+	if color == "" {
+		color = "primary"
+	}
+	user := c["user_id"]
+	q := url.Values{"broadcaster_id": {user}, "moderator_id": {user}}
+	b, _ := json.Marshal(map[string]string{"message": text, "color": color})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, twitchAPI+"/helix/chat/announcements?"+q.Encode(), bytes.NewReader(b))
+	if err != nil {
+		return Result{}, err
+	}
+	twitchAuth(req, c["client_id"], c["access_token"])
+	req.Header.Set("Content-Type", "application/json")
+	if err := twitchDo(ctx, req, nil); err != nil {
+		return Result{}, twitchLost(err, "announcement")
+	}
+	return Result{ExternalID: twitchAnnounced + time.Now().UTC().Format(time.RFC3339Nano), URL: "https://www.twitch.tv/" + c["login"]}, nil
+}
+
+// twitchLost: Helix takes no idempotency key, so sending again after an answer that never came could post twice.
+func twitchLost(err error, what string) error {
+	var f *Failure
+	if !errors.As(err, &f) {
+		return &Failure{Kind: ErrRejected, Msg: "Twitch may have published the " + what + ", but its answer was lost (" + err.Error() + "); check the chat before posting it again"}
+	}
+	return err
+}
+
+func (Twitch) chat(ctx context.Context, c Credentials, p PostContent, replyTo string) (Result, error) {
+	text, err := twitchText(c, p)
+	if err != nil {
+		return Result{}, err
+	}
+	token, user := c["access_token"], c["user_id"]
+	body := map[string]string{"broadcaster_id": user, "sender_id": user, "message": text}
 	if replyTo != "" {
 		body["reply_parent_message_id"] = replyTo
 	}
@@ -171,12 +243,7 @@ func (Twitch) chat(ctx context.Context, c Credentials, p PostContent, replyTo st
 		} `json:"data"`
 	}
 	if err := twitchDo(ctx, req, &out); err != nil {
-		// Helix takes no idempotency key: sending again after an answer that never came could post twice.
-		var f *Failure
-		if !errors.As(err, &f) {
-			return Result{}, &Failure{Kind: ErrRejected, Msg: "Twitch may have published the message, but its answer was lost (" + err.Error() + "); check the chat before posting it again"}
-		}
-		return Result{}, err
+		return Result{}, twitchLost(err, "message")
 	}
 	if len(out.Data) == 0 {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Twitch did not say whether the message was sent; check the chat"}
@@ -234,6 +301,9 @@ func twitchError(status int, raw []byte) error {
 		return &Failure{Msg: "Twitch rate limit reached; staqly tries again in a few minutes"}
 	case status >= 500:
 		return &Failure{Msg: fmt.Sprintf("Twitch is unavailable (%d); staqly tries again in a few minutes", status)}
+	case strings.Contains(lower, "missing scope"):
+		// Connected before staqly asked for this permission (announcements): a new sign-in grants it.
+		return &Failure{Kind: ErrReauth, Msg: "Twitch needs a permission this connection doesn't have yet (" + detail + "); reconnect the account"}
 	case status == http.StatusUnauthorized, strings.Contains(lower, "invalid refresh token"):
 		return &Failure{Kind: ErrReauth, Msg: "Twitch no longer accepts this account's sign-in (" + detail + "); reconnect it"}
 	case strings.Contains(lower, "invalid client"), strings.Contains(lower, "client secret"):
