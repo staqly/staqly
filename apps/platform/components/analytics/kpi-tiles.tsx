@@ -4,7 +4,7 @@ import { formatDateTime } from '@/lib/format'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
-import { formatCount, formatDelay, formatRate, type Analytics } from './analytics-data'
+import { formatCount, formatDay, formatDelay, formatRate, type Analytics } from './analytics-data'
 
 interface Delta {
   /** The change against the previous period, already formatted with its sign ("+12", "-3.5 pts"). */
@@ -156,5 +156,78 @@ function Tile({
         </span>
       )}
     </li>
+  )
+}
+
+/**
+ * Follows and subscriptions on the channels whose platform reports them (Kick, through its webhook). Absent when
+ * no channel in the filter can.
+ */
+export function AudienceTiles({ data }: { data: Analytics }) {
+  const audience = data.audience
+
+  if (!audience) {
+    return null
+  }
+
+  const { totals: t, previous: p, daily } = audience
+  const prevLabel = `vs previous ${data.range.days} days`
+  const best = (key: 'follows' | 'subscriptions') =>
+    daily.reduce<(typeof daily)[number] | null>((b, d) => (d[key] > (b?.[key] ?? 0) ? d : b), null)
+  const bestFollows = best('follows')
+  const bestSubs = best('subscriptions')
+
+  return (
+    <section aria-labelledby="audience-heading" className="grid gap-3" data-testid="audience">
+      <div className="grid">
+        <h2 id="audience-heading" className="text-base font-semibold">
+          Audience
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Follows and subscriptions on {audience.channels.length === 1 ? 'your Kick channel' : 'your Kick channels'}, as
+          Kick reports them
+        </p>
+      </div>
+      <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Tile
+          label="New followers"
+          kind="Period total"
+          value={formatCount(t.follows)}
+          detail={
+            bestFollows
+              ? `Most on ${formatDay(bestFollows.date, { month: 'short', day: 'numeric' })}`
+              : 'None in this period'
+          }
+          delta={countDelta(t.follows, p.follows, true)}
+          prevLabel={prevLabel}
+        />
+        <Tile
+          label="New subscribers"
+          kind="Period total"
+          value={formatCount(t.subscriptions)}
+          detail={
+            bestSubs ? `Most on ${formatDay(bestSubs.date, { month: 'short', day: 'numeric' })}` : 'None in this period'
+          }
+          delta={countDelta(t.subscriptions, p.subscriptions, true)}
+          prevLabel={prevLabel}
+        />
+        <Tile
+          label="Renewals"
+          kind="Period total"
+          value={formatCount(t.renewals)}
+          detail="Subscriptions renewed"
+          delta={countDelta(t.renewals, p.renewals, true)}
+          prevLabel={prevLabel}
+        />
+        <Tile
+          label="Gifted subs"
+          kind="Period total"
+          value={formatCount(t.gifted)}
+          detail="Subscriptions given as gifts"
+          delta={countDelta(t.gifted, p.gifted, true)}
+          prevLabel={prevLabel}
+        />
+      </ul>
+    </section>
   )
 }

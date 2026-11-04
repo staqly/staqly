@@ -5868,7 +5868,7 @@ components:
     Analytics:
       type: object
       additionalProperties: false
-      required: [range, totals, previous, queue, daily, channels, sources, posting_times, top_posts, failures, feedback]
+      required: [range, totals, previous, queue, daily, channels, sources, posting_times, top_posts, failures, feedback, audience]
       properties:
         range:
           type: object
@@ -5925,6 +5925,24 @@ components:
               targets_published: { type: integer, minimum: 0 }
               targets_failed: { type: integer, minimum: 0 }
               success_rate: { type: [number, "null"], minimum: 0, maximum: 1 }
+        audience:
+          description: Follows and subscriptions on the channels whose platform reports them (Kick, through its webhook); null when no channel in the filter can
+          oneOf:
+            - type: "null"
+            - type: object
+              additionalProperties: false
+              required: [totals, previous, daily, channels]
+              properties:
+                totals: { $ref: "#/components/schemas/AudienceCounts" }
+                previous: { $ref: "#/components/schemas/AudienceCounts" }
+                daily:
+                  type: array
+                  description: Every day of the range, in the workspace's time zone
+                  items:
+                    allOf:
+                      - { $ref: "#/components/schemas/AudienceCounts" }
+                      - { type: object, required: [date], properties: { date: { type: string, format: date } } }
+                channels: { type: array, items: { type: string }, description: The channels counted }
         posting_times:
           type: object
           additionalProperties: false
@@ -5984,6 +6002,14 @@ components:
             opened: { type: integer, minimum: 0, description: Threads started in the range }
             resolved: { type: integer, minimum: 0, description: Threads resolved in the range }
             open: { type: integer, minimum: 0, description: Threads open now }
+    AudienceCounts:
+      type: object
+      required: [follows, subscriptions, renewals, gifted]
+      properties:
+        follows: { type: integer, minimum: 0 }
+        subscriptions: { type: integer, minimum: 0, description: New subscriptions }
+        renewals: { type: integer, minimum: 0 }
+        gifted: { type: integer, minimum: 0, description: Subscriptions given as gifts }
     AnalyticsTotals:
       type: object
       additionalProperties: false

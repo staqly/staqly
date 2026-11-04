@@ -26,6 +26,7 @@ __all__ = [
     "Analytics",
     "AnalyticsDay",
     "AnalyticsFailure",
+    "AnalyticsAudience",
     "AnalyticsFeedback",
     "AnalyticsMetrics",
     "AnalyticsQueue",
@@ -120,6 +121,8 @@ __all__ = [
     "StockPhoto",
     "TelegramConnect",
     "MoltbookAgent",
+    "AudienceCounts",
+    "AudienceDay",
 ]
 
 PostStatus = Literal["draft", "scheduled", "publishing", "published", "failed"]
@@ -1228,6 +1231,32 @@ class AnalyticsFeedback(StaqlyModel):
     open: int = 0
 
 
+class AudienceCounts(StaqlyModel):
+    """Follows and subscriptions (Kick, through its webhook)."""
+
+    follows: int = 0
+    #: New subscriptions.
+    subscriptions: int = 0
+    renewals: int = 0
+    #: Subscriptions given as gifts.
+    gifted: int = 0
+
+
+class AudienceDay(AudienceCounts):
+    date: str
+
+
+class AnalyticsAudience(StaqlyModel):
+    """Follows and subscriptions on the channels whose platform reports them."""
+
+    totals: AudienceCounts
+    previous: AudienceCounts
+    #: Every day of the range, in the workspace's time zone.
+    daily: list[AudienceDay] = Field(default_factory=list)
+    #: The channels counted.
+    channels: list[str] = Field(default_factory=list)
+
+
 class Analytics(StaqlyModel):
     """How publishing went over a range of days (``analytics.get``)."""
 
@@ -1247,6 +1276,8 @@ class Analytics(StaqlyModel):
     #: The most common failure reasons; errors that differ only by numbers, ids or links count as one.
     failures: list[AnalyticsFailure] = Field(default_factory=list)
     feedback: AnalyticsFeedback
+    #: None when no channel in the filter reports follows and subscriptions (Kick).
+    audience: AnalyticsAudience | None = None
 
 
 class PreviewLink(StaqlyModel):

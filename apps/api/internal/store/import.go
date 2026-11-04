@@ -18,7 +18,7 @@ var importOrder = []string{
 	"media_folders", "media", "media_projects", "events", "webhooks", "webhook_deliveries", "idempotency_keys",
 	"usage_counters", "usage_events", "credit_grants", "publishing_allowance_reservations", "device_links", "notification_channels",
 	"notification_outbox", "workspace_exports", "stripe_events", "inbound_events", "agents", "channel_groups",
-	"channels", "provider_apps", "posts", "post_targets", "preview_links", "post_comments", "post_responses", "post_response_insights", "schedules", "jobs",
+	"channels", "channel_activity", "provider_apps", "posts", "post_targets", "preview_links", "post_comments", "post_responses", "post_response_insights", "schedules", "jobs",
 	"job_requeues", "channel_links", "pending_connections", "ai_jobs", "assistant_chats", "telegram_connect_codes", "oauth_clients",
 	"trial_fingerprints", "workspace_trials", "admins", "admin_codes", "admin_sessions", "admin_audit",
 	"limits", "limit_plans", "limit_workspaces", "product_feedback", "product_feedback_attachments",

@@ -10,6 +10,78 @@ import (
 	"database/sql"
 )
 
+const addChannelActivity = `-- name: AddChannelActivity :exec
+INSERT INTO channel_activity (workspace_id, channel_id, kind, count, at) VALUES (?, ?, ?, ?, ?)
+`
+
+type AddChannelActivityParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	Kind        string `json:"kind"`
+	Count       int64  `json:"count"`
+	At          string `json:"at"`
+}
+
+func (q *Queries) AddChannelActivity(ctx context.Context, arg AddChannelActivityParams) error {
+	_, err := q.db.ExecContext(ctx, addChannelActivity,
+		arg.WorkspaceID,
+		arg.ChannelID,
+		arg.Kind,
+		arg.Count,
+		arg.At,
+	)
+	return err
+}
+
+const analyticsAudience = `-- name: AnalyticsAudience :many
+SELECT channel_id, kind, substr(at, 1, 16) AS minute, CAST(SUM(count) AS INTEGER) AS n
+FROM channel_activity
+WHERE workspace_id = ?1 AND at >= ?2 AND at < ?3
+GROUP BY channel_id, kind, substr(at, 1, 16)
+`
+
+type AnalyticsAudienceParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	FromAt      string `json:"from_at"`
+	ToAt        string `json:"to_at"`
+}
+
+type AnalyticsAudienceRow struct {
+	ChannelID string `json:"channel_id"`
+	Kind      string `json:"kind"`
+	Minute    string `json:"minute"`
+	N         int64  `json:"n"`
+}
+
+// The workspace's channel activity in [from, to), per channel, kind and minute (the report's days are local).
+func (q *Queries) AnalyticsAudience(ctx context.Context, arg AnalyticsAudienceParams) ([]AnalyticsAudienceRow, error) {
+	rows, err := q.db.QueryContext(ctx, analyticsAudience, arg.WorkspaceID, arg.FromAt, arg.ToAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AnalyticsAudienceRow
+	for rows.Next() {
+		var i AnalyticsAudienceRow
+		if err := rows.Scan(
+			&i.ChannelID,
+			&i.Kind,
+			&i.Minute,
+			&i.N,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const channelActivity = `-- name: ChannelActivity :many
 SELECT c.id AS channel_id,
   CAST(COALESCE((SELECT MAX(t.published_at) FROM post_targets t WHERE t.channel_id = c.id AND t.status = 'published'), '') AS TEXT) AS last_published_at,

@@ -20,7 +20,7 @@ import { cn, hrefWithParams } from '@/lib/utils'
 import { DailyChart, PostingTimes } from './analytics-charts'
 import { fetchAnalytics, PRESETS, type Analytics, type AnalyticsParams } from './analytics-data'
 import { ChannelsTable, FailuresList, Performance, SourcesTable, TopPosts } from './analytics-sections'
-import { KpiTiles } from './kpi-tiles'
+import { AudienceTiles, KpiTiles } from './kpi-tiles'
 
 const NONE: string[] = []
 
@@ -191,6 +191,7 @@ export function AnalyticsPage() {
           aria-busy={isPlaceholderData}
         >
           <KpiTiles data={data} />
+          <AudienceTiles data={data} />
           <DailyChart data={data} />
           <ChannelsTable data={data} />
           <SourcesTable data={data} />
