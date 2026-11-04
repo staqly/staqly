@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/staqly/staqly/apps/api/internal/app"
@@ -143,5 +144,45 @@ func TestMediaFolders(t *testing.T) {
 	}
 	if _, err := e.svc.CreateMediaFolder(ctx, other, app.MediaFolderInput{Name: ptrTo("X"), ParentID: &acme.ID}); err == nil {
 		t.Fatal("other workspace nested a folder under this workspace's folder")
+	}
+}
+
+func TestMediaFolderDepthLimitIncludesMovedDescendants(t *testing.T) {
+	for _, operation := range []string{"create", "move_subtree"} {
+		t.Run(operation, func(t *testing.T) {
+			e := newEnv(t)
+			e.paid()
+			create := func(name, parent string, status int) app.MediaFolder {
+				t.Helper()
+				var f app.MediaFolder
+				e.do(nil, "POST", "/v1/media-folders", e.key, map[string]any{"name": name, "parent_id": parent}, status, &f)
+				return f
+			}
+			parents := []string{""}
+			for i := range 10 {
+				f := create(fmt.Sprintf("Level %d", i+1), parents[i], 201)
+				parents = append(parents, f.ID)
+			}
+			if operation == "create" {
+				create("Too deep", parents[10], 422)
+				return
+			}
+			root := create("Subtree", "", 201)
+			child := create("Child", root.ID, 201)
+			// The moved root fits at level 10, but its child would be level 11.
+			e.do(nil, "PATCH", "/v1/media-folders/"+root.ID, e.key, map[string]any{"parent_id": parents[9]}, 422, nil)
+			var tree app.MediaFolders
+			e.do(nil, "GET", "/v1/media-folders", e.key, nil, 200, &tree)
+			for _, f := range tree.Data {
+				if f.ID == root.ID && f.ParentID != "" {
+					t.Fatal("refused move changed subtree root")
+				}
+				if f.ID == child.ID && f.ParentID != root.ID {
+					t.Fatal("refused move changed descendant")
+				}
+			}
+			// A boundary move whose deepest descendant reaches exactly ten still works.
+			e.do(nil, "PATCH", "/v1/media-folders/"+root.ID, e.key, map[string]any{"parent_id": parents[8]}, 200, nil)
+		})
 	}
 }
