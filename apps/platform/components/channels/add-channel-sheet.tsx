@@ -28,13 +28,16 @@ const MoltbookRegister = dynamic(() => import('./moltbook-register').then((m) =>
 /**
  * The other way into a platform, offered under the form when it works on this server: Bluesky's sign-in goes
  * through bluesky.social, so an account on a server of its own connects with an app password; someone who may not
- * add the bot to a Discord server can still post to one of its channels through a webhook made there.
+ * add the bot to a Discord server can still post to one of its channels through a webhook made there; a Whop business
+ * can connect with an Account API key instead of signing in.
  */
 const ALTERNATIVES: Record<string, { id: string; label: string }> = {
   bluesky: { id: 'bluesky_app_password', label: 'Account on a server of your own? Use an app password' },
   bluesky_app_password: { id: 'bluesky', label: 'Sign in with Bluesky instead (no app password)' },
   discord: { id: 'discord_webhook', label: "Can't add the bot to the server? Use a channel webhook instead" },
   discord_webhook: { id: 'discord', label: 'Add the bot to a whole Discord server instead' },
+  whop: { id: 'whop_key', label: 'Use an Account API key instead' },
+  whop_key: { id: 'whop', label: 'Sign in with Whop instead' },
 }
 
 /** Connect one account of a chosen provider: OAuth sends the browser to the platform; token providers take their fields here. */

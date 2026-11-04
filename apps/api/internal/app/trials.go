@@ -78,6 +78,7 @@ var providerFamilies = map[string]string{
 	"bluesky_app_password": "bluesky",
 	"mastodon_token":       "mastodon",
 	"discord_webhook":      "discord",
+	"whop_key":             "whop",
 }
 
 // accountIDKeys: for personal accounts, the credentials that carry the platform's own id for the account, which
@@ -110,7 +111,7 @@ var sharedSpaces = map[string]func(providers.Credentials) string{
 	},
 	"discord":         func(providers.Credentials) string { return "" }, // a bot added to a server; a webhook
 	"telegram":        func(providers.Credentials) string { return "" }, // a bot in a chat (/connect or a token)
-	"whop":            func(providers.Credentials) string { return "" }, // a company's API key
+	"whop":            func(providers.Credentials) string { return "" }, // a company's forum (a sign-in or its API key)
 	"facebook":        func(c providers.Credentials) string { return c["authorized_by"] },
 	"linkedin_page":   func(c providers.Credentials) string { return c["person_id"] },
 	"google_business": func(c providers.Credentials) string { return c["google_id"] },

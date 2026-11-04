@@ -28,7 +28,7 @@ type WhopCall struct {
 // it touched. A channel staqly no longer has answers 410, so Whop stops sending after its retries.
 func (s *Service) HandleWhopWebhook(ctx context.Context, channelID string, call WhopCall, body []byte) (int, error) {
 	ch, err := s.Q.GetChannelByID(ctx, channelID)
-	if isNoRows(err) || (err == nil && (ch.Provider != "whop" || ch.DeletedAt.Valid)) {
+	if isNoRows(err) || (err == nil && ((ch.Provider != "whop" && ch.Provider != "whop_key") || ch.DeletedAt.Valid)) {
 		return 0, &Error{Code: "channel_gone", Status: 410, Message: "staqly has no Whop channel here"}
 	}
 	if err != nil {

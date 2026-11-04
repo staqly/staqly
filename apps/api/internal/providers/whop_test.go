@@ -140,8 +140,8 @@ func useFakeWhop(t *testing.T) *fakeWhop {
 
 func TestWhopConnect(t *testing.T) {
 	f := useFakeWhop(t)
-	wh, _ := Get("whop")
-	if wh.Status != StatusAvailable || wh.Auth() != AuthToken {
+	wh, _ := Get("whop_key")
+	if o, _ := Get("whop"); wh.Status != StatusAvailable || wh.Auth() != AuthToken || o.Auth() != AuthOAuth2 {
 		t.Fatalf("whop is %q/%q", wh.Status, wh.Auth())
 	}
 	ctx := context.Background()

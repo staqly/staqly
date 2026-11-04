@@ -211,8 +211,12 @@ func (s *Service) providerMaintenance(providerID string) bool {
 	return on
 }
 
-// providerEnv is the prefix of a provider's settings: PROVIDER_X_, PROVIDER_LINKEDIN_PAGE_.
+// providerEnv is the prefix of a provider's settings: PROVIDER_X_, PROVIDER_LINKEDIN_PAGE_. Whop with an API key is
+// turned on and off with Whop (PROVIDER_WHOP_ENABLED).
 func providerEnv(providerID string) string {
+	if providerID == "whop_key" {
+		providerID = "whop"
+	}
 	return "PROVIDER_" + strings.ToUpper(providerID) + "_"
 }
 

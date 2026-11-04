@@ -74,7 +74,7 @@ const GROUPS: { title: string; ids: string[] }[] = [
   { title: 'Video and streaming', ids: ['youtube', 'tiktok', 'twitch', 'kick'] },
   {
     title: 'Communities and chat',
-    ids: ['reddit', 'discord', 'discord_webhook', 'slack', 'telegram', 'whop', 'moltbook'],
+    ids: ['reddit', 'discord', 'discord_webhook', 'slack', 'telegram', 'whop', 'whop_key', 'moltbook'],
   },
   { title: 'Blogs and newsletters', ids: ['wordpress', 'medium', 'devto', 'hashnode', 'listmonk'] },
   { title: 'Business and portfolio', ids: ['google_business', 'pinterest', 'dribbble'] },
@@ -89,6 +89,7 @@ const FALLBACKS: Record<string, string> = {
   discord_webhook: 'discord',
   bluesky_app_password: 'bluesky',
   mastodon_token: 'mastodon',
+  whop_key: 'whop',
 }
 
 /** The catalog without the tiles a fallback settles: the fallback when its platform is available, else the platform. */

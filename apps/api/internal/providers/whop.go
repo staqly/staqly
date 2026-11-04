@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -31,16 +32,28 @@ var (
 	whopPoll = 2 * time.Second
 )
 
+// whopLimits and whopSettings are shared by both ways in: Whop (OAuth, the server's Whop app) and Whop with an API key.
+var whopLimits = Limits{MaxChars: 5000, MaxMedia: 4, MediaKinds: []string{"image", "video"}}
+
 func init() {
-	Register(Whop{NewBase("whop", "Whop", AuthToken, Limits{MaxChars: 5000, MaxMedia: 4, MediaKinds: []string{"image", "video"}}).WithSettings(
-		Field{Key: "title", Label: "Title", Kind: "text", MaxLength: 200, Help: "The post's headline in the forum (optional)."},
-		Field{Key: "notify", Label: "Notify members", Kind: "boolean", Default: "false",
-			Help: "Whop sends a mention notification to members of the forum who allow them."},
-		Field{Key: "pinned", Label: "Pin to the top", Kind: "boolean", Default: "false"},
-	)}, StatusAvailable)
+	Register(Whop{NewBase("whop", "Whop", AuthOAuth2, whopLimits).WithSettings(whopSettings()...)}, StatusAvailable)
+	Register(WhopKey{Whop{NewBase("whop_key", "Whop (API key)", AuthToken, whopLimits).WithSettings(whopSettings()...)}}, StatusAvailable)
 }
 
-func (Whop) CredentialFields() []Field {
+// WhopKey connects a forum with a business's Account API key instead of signing in (the same publishing, numbers and
+// webhook as Whop). Channels connected before Whop had OAuth are Whop channels holding an api_key: they keep working.
+type WhopKey struct{ Whop }
+
+func whopSettings() []Field {
+	return []Field{
+		{Key: "title", Label: "Title", Kind: "text", MaxLength: 200, Help: "The post's headline in the forum (optional)."},
+		{Key: "notify", Label: "Notify members", Kind: "boolean", Default: "false",
+			Help: "Whop sends a mention notification to members of the forum who allow them."},
+		{Key: "pinned", Label: "Pin to the top", Kind: "boolean", Default: "false"},
+	}
+}
+
+func (WhopKey) CredentialFields() []Field {
 	return []Field{
 		{Key: "api_key", Label: "Account API key", Kind: "secret", Required: true,
 			Help: "Whop dashboard → Developer → Account API keys → Create, with the forum permissions (read forums, create forum posts)."},
@@ -65,26 +78,21 @@ type whopForum struct {
 	} `json:"experience"`
 }
 
-// Connect checks the key, reads the business and picks the forum: the one named, or the only one.
-func (Whop) Connect(ctx context.Context, f map[string]string) (Credentials, Profile, error) {
-	key := strings.TrimSpace(f["api_key"])
-	if key == "" {
-		return nil, Profile{}, invalid("api_key", "paste the business's Account API key")
-	}
-	var biz struct {
-		ID    string `json:"id"`
-		Title string `json:"title"`
-		Route string `json:"route"`
-		Logo  string `json:"logo_url"`
-	}
-	if err := whopCall(ctx, key, http.MethodGet, "/accounts/me", nil, &biz); err != nil {
-		if errors.Is(err, ErrReauth) {
-			return nil, Profile{}, invalid("api_key", "Whop did not accept this API key")
-		}
-		return nil, Profile{}, err
+type whopBiz struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Route string `json:"route"`
+	Logo  string `json:"logo_url"`
+}
+
+// whopBusiness reads the business a key or a sign-in acts for, and its forums.
+func whopBusiness(ctx context.Context, token string) (whopBiz, []whopForum, error) {
+	var biz whopBiz
+	if err := whopCall(ctx, token, http.MethodGet, "/accounts/me", nil, &biz); err != nil {
+		return biz, nil, err
 	}
 	if biz.ID == "" {
-		return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: "Whop did not say which business this key belongs to; use an Account API key"}
+		return biz, nil, &Failure{Kind: ErrRejected, Msg: "Whop did not say which business this sign-in acts for"}
 	}
 	var forums []whopForum
 	after := ""
@@ -100,14 +108,43 @@ func (Whop) Connect(ctx context.Context, f map[string]string) (Credentials, Prof
 				HasNextPage bool   `json:"has_next_page"`
 			} `json:"page_info"`
 		}
-		if err := whopCall(ctx, key, http.MethodGet, "/forums?"+q.Encode(), nil, &out); err != nil {
-			return nil, Profile{}, err
+		if err := whopCall(ctx, token, http.MethodGet, "/forums?"+q.Encode(), nil, &out); err != nil {
+			return biz, nil, err
 		}
 		forums = append(forums, out.Data...)
 		if !out.PageInfo.HasNextPage || out.PageInfo.EndCursor == "" {
 			break
 		}
 		after = out.PageInfo.EndCursor
+	}
+	return biz, forums, nil
+}
+
+// whopProfile is a forum's channel: the business's name, logo and page, and the forum.
+func whopProfile(biz whopBiz, forum whopForum) Profile {
+	name := forum.Experience.Name
+	if biz.Title != "" {
+		name = biz.Title + ": " + name
+	}
+	handle := biz.Route
+	if handle == "" {
+		handle = biz.ID
+	}
+	return Profile{Handle: handle + "/" + forum.Experience.ID, Name: name, AvatarURL: biz.Logo, ProfileURL: whopBusinessURL(biz.Route)}
+}
+
+// Connect checks the key, reads the business and picks the forum: the one named, or the only one.
+func (WhopKey) Connect(ctx context.Context, f map[string]string) (Credentials, Profile, error) {
+	key := strings.TrimSpace(f["api_key"])
+	if key == "" {
+		return nil, Profile{}, invalid("api_key", "paste the business's Account API key")
+	}
+	biz, forums, err := whopBusiness(ctx, key)
+	if err != nil {
+		if errors.Is(err, ErrReauth) {
+			return nil, Profile{}, invalid("api_key", "Whop did not accept this API key")
+		}
+		return nil, Profile{}, err
 	}
 	want := strings.TrimSpace(f["experience_id"])
 	var forum *whopForum
@@ -132,21 +169,8 @@ func (Whop) Connect(ctx context.Context, f map[string]string) (Credentials, Prof
 		}
 		return nil, Profile{}, invalid("experience_id", msg+strings.Join(names, ", "))
 	}
-	name := forum.Experience.Name
-	if biz.Title != "" {
-		name = biz.Title + ": " + name
-	}
-	handle := biz.Route
-	if handle == "" {
-		handle = biz.ID
-	}
 	return Credentials{"api_key": key, "account_id": biz.ID, "route": biz.Route, "experience_id": forum.Experience.ID},
-		Profile{
-			Handle:     handle + "/" + forum.Experience.ID,
-			Name:       name,
-			AvatarURL:  biz.Logo,
-			ProfileURL: whopBusinessURL(biz.Route),
-		}, nil
+		whopProfile(biz, *forum), nil
 }
 
 func whopBusinessURL(route string) string {
@@ -156,8 +180,16 @@ func whopBusinessURL(route string) string {
 	return whopWeb + "/" + url.PathEscape(route) + "/"
 }
 
-// Refresh checks the key still works (keys do not expire, but they can be deleted).
-func (Whop) Refresh(ctx context.Context, _ App, c Credentials) (Credentials, error) {
+// Refresh renews a sign-in (Whop rotates the refresh token on every use, so the pair is kept together), or for a key
+// checks it still works (keys do not expire, but they can be deleted).
+func (Whop) Refresh(ctx context.Context, app App, c Credentials) (Credentials, error) {
+	if c["refresh_token"] != "" {
+		t, err := whopToken(ctx, app, map[string]string{"grant_type": "refresh_token", "refresh_token": c["refresh_token"]})
+		if err != nil {
+			return nil, err
+		}
+		return t.into(c, time.Now()), nil
+	}
 	if c["api_key"] == "" {
 		return nil, &Failure{Kind: ErrReauth, Msg: "Whop: no API key stored; reconnect the forum"}
 	}
@@ -194,7 +226,7 @@ func (w Whop) Reply(ctx context.Context, c Credentials, parentExternalID string,
 
 // send uploads the files and creates the forum post or comment.
 func (Whop) send(ctx context.Context, c Credentials, media []MediaFile, body map[string]any, what string) (Result, error) {
-	key, exp := c["api_key"], c["experience_id"]
+	key, exp := whopBearer(c), c["experience_id"]
 	if key == "" || exp == "" {
 		return Result{}, &Failure{Kind: ErrReauth, Msg: "Whop: no forum stored; reconnect it"}
 	}
@@ -402,7 +434,7 @@ var _ EventSubscriber = Whop{}
 // shortcut: two forums of one business have a webhook each, so its members count once per connected forum; share one
 // webhook per business when that matters.
 func (Whop) SubscribeEvents(ctx context.Context, c Credentials, hookURL string) (Credentials, error) {
-	key, account := c["api_key"], c["account_id"]
+	key, account := whopBearer(c), c["account_id"]
 	if key == "" || account == "" {
 		return nil, &Failure{Kind: ErrReauth, Msg: "Whop: no API key stored; reconnect the forum"}
 	}
@@ -503,4 +535,151 @@ func whopFind(ctx context.Context, key, p string, out any) (bool, error) {
 		return true, json.Unmarshal(raw, out)
 	}
 	return false, whopError(resp.StatusCode, raw)
+}
+
+// whopBearer is what a channel calls Whop with: its sign-in's access token, or its Account API key.
+func whopBearer(c Credentials) string {
+	if c["access_token"] != "" {
+		return c["access_token"]
+	}
+	return c["api_key"]
+}
+
+// OAuth: the person signs in on Whop and approves the server's Whop app (a B2B app, PKCE); the token acts for the
+// business the app is installed on. Its forums are the accounts to pick (one channel each), sharing the sign-in.
+var (
+	whopOAuth               = "https://api.whop.com/oauth"
+	_         AccountLister = Whop{}
+)
+
+func (Whop) AuthURL(app App, redirect, state string, extra map[string]string) (string, error) {
+	verifier := extra["code_verifier"]
+	if verifier == "" {
+		return "", errors.New("Whop needs a PKCE code verifier")
+	}
+	sum := sha256.Sum256([]byte(verifier))
+	q := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {app.ClientID},
+		"redirect_uri":          {redirect},
+		"scope":                 {"openid profile"},
+		"state":                 {state},
+		"nonce":                 {state},
+		"code_challenge":        {base64.RawURLEncoding.EncodeToString(sum[:])},
+		"code_challenge_method": {"S256"},
+	}
+	return whopOAuth + "/authorize?" + q.Encode(), nil
+}
+
+type whopTokenReply struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+}
+
+func (t whopTokenReply) into(c Credentials, now time.Time) Credentials {
+	out := Credentials{}
+	for k, v := range c {
+		out[k] = v
+	}
+	out["access_token"] = t.AccessToken
+	if t.RefreshToken != "" {
+		out["refresh_token"] = t.RefreshToken
+	}
+	if t.ExpiresIn > 0 {
+		out["expires_at"] = now.Add(time.Duration(t.ExpiresIn) * time.Second).UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
+// whopToken calls Whop's token endpoint (JSON; a confidential app sends its secret too).
+func whopToken(ctx context.Context, app App, body map[string]string) (whopTokenReply, error) {
+	var t whopTokenReply
+	body["client_id"], body["client_secret"] = app.ClientID, app.ClientSecret
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, whopOAuth+"/token", bytes.NewReader(raw))
+	if err != nil {
+		return t, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := httpClient(ctx).Do(req)
+	if err != nil {
+		return t, fmt.Errorf("Whop could not be reached (%s)", req.URL.Host)
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && json.Unmarshal(out, &t) == nil && t.AccessToken != "" {
+		return t, nil
+	}
+	var e struct {
+		Error       string `json:"error"`
+		Description string `json:"error_description"`
+	}
+	_ = json.Unmarshal(out, &e)
+	detail := e.Description
+	if detail == "" {
+		detail = blogSnippet(out)
+	}
+	switch {
+	case e.Error == "invalid_grant", resp.StatusCode == http.StatusUnauthorized && e.Error != "invalid_client":
+		return t, &Failure{Kind: ErrReauth, Msg: "Whop no longer accepts this sign-in (" + detail + "); reconnect the forum"}
+	case e.Error == "invalid_client":
+		// For whoever runs the server: PROVIDER_WHOP_CLIENT_ID and _SECRET are on the app's OAuth page in Whop's dashboard.
+		return t, &Failure{Kind: ErrRejected, Msg: "Whop did not accept this server's app (" + detail + ")"}
+	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
+		return t, &Failure{Msg: "Whop is unavailable (" + strconv.Itoa(resp.StatusCode) + "); try again in a minute"}
+	}
+	return t, &Failure{Kind: ErrRejected, Msg: "Whop refused the sign-in (" + detail + ")"}
+}
+
+func (Whop) Exchange(ctx context.Context, app App, redirect, code string, extra map[string]string) (Credentials, Profile, error) {
+	t, err := whopToken(ctx, app, map[string]string{"grant_type": "authorization_code", "code": code, "redirect_uri": redirect,
+		"code_verifier": extra["code_verifier"]})
+	if err != nil {
+		return nil, Profile{}, err
+	}
+	creds := t.into(Credentials{}, time.Now())
+	biz, _, err := whopBusiness(ctx, creds["access_token"])
+	if err != nil {
+		return nil, Profile{}, err
+	}
+	creds["account_id"], creds["route"] = biz.ID, biz.Route
+	return creds, Profile{Name: biz.Title, Handle: biz.Route, AvatarURL: biz.Logo, ProfileURL: whopBusinessURL(biz.Route)}, nil
+}
+
+// Accounts are the business's forums.
+func (Whop) Accounts(ctx context.Context, c Credentials) ([]Account, error) {
+	biz, forums, err := whopBusiness(ctx, whopBearer(c))
+	if err != nil {
+		return nil, err
+	}
+	if len(forums) == 0 {
+		return nil, &Failure{Kind: ErrRejected, Msg: biz.Title + " has no forum on Whop: add the Forums app to one of its products, then connect again"}
+	}
+	out := make([]Account, 0, len(forums))
+	for _, f := range forums {
+		p := whopProfile(biz, f)
+		out = append(out, Account{ID: f.Experience.ID, Name: p.Name, Handle: p.Handle, AvatarURL: p.AvatarURL, ProfileURL: p.ProfileURL})
+	}
+	return out, nil
+}
+
+// UseAccount narrows the sign-in to one forum.
+func (Whop) UseAccount(ctx context.Context, c Credentials, accountID string) (Credentials, Profile, error) {
+	biz, forums, err := whopBusiness(ctx, whopBearer(c))
+	if err != nil {
+		return nil, Profile{}, err
+	}
+	for _, f := range forums {
+		if f.Experience.ID == accountID {
+			out := Credentials{}
+			for k, v := range c {
+				out[k] = v
+			}
+			out["account_id"], out["route"], out["experience_id"] = biz.ID, biz.Route, f.Experience.ID
+			return out, whopProfile(biz, f), nil
+		}
+	}
+	return nil, Profile{}, &Failure{Kind: ErrRejected, Msg: accountID + " is not one of " + biz.Title + "'s forums"}
 }
