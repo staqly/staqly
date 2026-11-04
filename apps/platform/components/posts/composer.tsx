@@ -1990,10 +1990,11 @@ export function ComposerForm({
           {/* Every section stays mounted (hidden when inactive), so switching never loses what was typed. */}
           <div className="grid min-h-0 content-start overflow-y-auto overscroll-contain p-4">
             <TabsContent value="post" forceMount className="grid content-start gap-4 data-[state=inactive]:hidden">
-              {/* Title and, for a new post, its collection side by side (4:1); stacked on phones. */}
-              <div className={cn('grid gap-4', !post && 'sm:grid-cols-[minmax(0,4fr)_minmax(0,1fr)]')}>
+              {/* Title and, for a new post, its collection side by side; stacked on phones. Both labels sit on a row of
+                  the same height, so the title's help button doesn't push its field below the collection's. */}
+              <div className={cn('grid gap-4', !post && 'sm:grid-cols-[minmax(0,1fr)_minmax(12rem,15rem)]')}>
                 <div className="grid min-w-0 content-start gap-2">
-                  <div className="flex items-center gap-1">
+                  <div className="flex h-5 items-center gap-1">
                     <Label htmlFor="post-title" required>
                       Title
                     </Label>
@@ -2033,9 +2034,11 @@ export function ComposerForm({
                 </div>
                 {!post && (
                   <div className="grid min-w-0 content-start gap-2">
-                    <Label htmlFor="post-collection" required>
-                      Collection
-                    </Label>
+                    <div className="flex h-5 items-center">
+                      <Label htmlFor="post-collection" required>
+                        Collection
+                      </Label>
+                    </div>
                     <Select value={collection} onValueChange={setCollection}>
                       <SelectTrigger
                         id="post-collection"
