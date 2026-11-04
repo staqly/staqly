@@ -550,6 +550,12 @@ class SetupAnalytics(StaqlyModel):
     release: str
 
 
+class SetupGoogleAnalytics(StaqlyModel):
+    """The server's Google Analytics measurement id for the dashboard's page views."""
+
+    measurement_id: str
+
+
 class SetupStatus(StaqlyModel):
     """Result of ``setup()``: server mode and whether a workspace can be created."""
 
@@ -573,6 +579,7 @@ class SetupStatus(StaqlyModel):
     passkey_sign_in: bool = False
     #: ``POSTHOG_KEY`` set: where the dashboard sends its page views, web vitals and errors.
     analytics: SetupAnalytics | None = None
+    google_analytics: SetupGoogleAnalytics | None = None
 
 
 class Liveness(StaqlyModel):

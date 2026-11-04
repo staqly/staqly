@@ -130,6 +130,11 @@ reports:
 - **Page views and load times** of the dashboard, **without cookies** or anything stored in
   your browser and not linked to your account: counted the same anonymous way as on our
   websites (section 3).
+- **Google Analytics** (Google Ireland Limited) page views of the dashboard: only the page's
+  path (never its query string or fragment, so no codes, tokens or searches) and a generic page
+  title, with your browser, device type and approximate location from your IP address. It sets
+  its cookies (`_ga`, `_ga_*`, up to two years) to tell returning visits apart, and is not linked to
+  your account. Opt out as described in section 3.
 
 We do **not** record sessions, clicks or what you type, and never send access tokens, API keys,
 passwords, cookies or payment details. Revenue figures come from Stripe, not from these events.
@@ -140,8 +145,8 @@ the dashboard's events with any content blocker; to object to the server's event
 ## Cookies
 
 The dashboard uses only what it needs to work: an HttpOnly **session cookie** (valid for up to
-30 days) and a CSRF token, plus a few display preferences (such as the theme) in your browser's local storage. No advertising or tracking
-cookies in the dashboard.
+30 days) and a CSRF token, plus a few display preferences (such as the theme) in your browser's local storage, and
+in staqly cloud Google Analytics' cookies (section 4). No advertising cookies.
 
 staqly.ai and this documentation site set Google Analytics cookies (`_ga`, `_ga_*`); see
 [section 3](#3-staqlyai-and-this-documentation-site) for what they hold and how to opt out.

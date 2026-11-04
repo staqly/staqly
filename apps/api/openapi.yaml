@@ -187,6 +187,12 @@ paths:
                       host: { type: string, description: POSTHOG_HOST }
                       environment: { type: string, description: POSTHOG_ENVIRONMENT }
                       release: { type: string, description: The server's version }
+                  google_analytics:
+                    type: object
+                    description: "GOOGLE_ANALYTICS_ID set: the GA4 measurement id the dashboard sends its page views to. Absent when off."
+                    required: [measurement_id]
+                    properties:
+                      measurement_id: { type: string, description: "GA4 measurement id (G-...)" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
 

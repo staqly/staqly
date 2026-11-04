@@ -293,6 +293,17 @@ func TestAnalyticsHostInCSP(t *testing.T) {
 		Header().Get("Content-Security-Policy"); !strings.Contains(csp, "connect-src 'self';") {
 		t.Fatalf("a bad host opened the CSP: %s", csp)
 	}
+	if strings.Contains(off, "googletagmanager") {
+		t.Fatalf("Google Analytics without GOOGLE_ANALYTICS_ID: %s", off)
+	}
+	ga := Handler(site, nowhere, slog.New(slog.DiscardHandler), false, "", false, GoogleAnalytics)
+	for _, path := range []string{"/", "/media/edit"} {
+		csp := do(ga, "GET", path, nil, nil).Header().Get("Content-Security-Policy")
+		if !strings.Contains(csp, "script-src 'self' https://www.googletagmanager.com") ||
+			!strings.Contains(csp, "connect-src 'self' https://www.googletagmanager.com https://*.google-analytics.com") {
+			t.Fatalf("Google Analytics %s: %s", path, csp)
+		}
+	}
 }
 
 // With AI_ASSISTANT_BROWSER_MODEL every page (the editor's too) may run WebAssembly and fetch the model; without it

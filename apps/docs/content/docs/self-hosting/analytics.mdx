@@ -16,6 +16,22 @@ POSTHOG_ENVIRONMENT=production            # default; use development or test on 
 
 Pass them like any other [setting](/self-hosting/configuration#how-to-change-a-setting).
 
+## Google Analytics
+
+`GOOGLE_ANALYTICS_ID` (a GA4 measurement id, `G-...`) also sends the dashboard's page views to
+Google Analytics; off when empty, and staqly cloud sets its own. Each page view carries the
+path alone (no query string or fragment, a generic title), and the dashboard's
+Content-Security-Policy opens to Google's tag and collection hosts only while it is set. GA sets
+its cookies (`_ga`, `_ga_*`), so check what your visitors' law asks of you before you turn it on.
+
+Give the dashboard a web data stream of its own, and turn off **Enhanced measurement** there (at
+least page changes based on browser history, site search and outbound clicks): staqly sends its
+own page views, and GA's would read the full address.
+
+```bash
+GOOGLE_ANALYTICS_ID=G-ABC123XYZ
+```
+
 ## What is sent
 
 | Source | What | How |

@@ -259,6 +259,9 @@ func ParseMode(v string) (string, error) {
 // Load reads the environment. Settings whose safe default differs by mode
 // (bind address, cookie Secure flag, private webhook targets) are resolved
 // here; invalid values refuse to start rather than fall back silently.
+// gaID is a GA4 measurement id (GOOGLE_ANALYTICS_ID).
+var gaID = regexp.MustCompile(`^G-[A-Z0-9]{4,20}$`)
+
 func Load() (Config, error) {
 	mode, err := ParseMode(os.Getenv("STAQLY_MODE"))
 	if err != nil {
@@ -267,6 +270,9 @@ func Load() (Config, error) {
 	local := mode == app.ModeLocal
 	if err := checkEnv(); err != nil {
 		return Config{}, err
+	}
+	if id := os.Getenv("GOOGLE_ANALYTICS_ID"); id != "" && !gaID.MatchString(id) {
+		return Config{}, errors.New("GOOGLE_ANALYTICS_ID must be a GA4 measurement id such as G-ABC123XYZ")
 	}
 	if k := os.Getenv("NOTIFY_SECRET_KEY"); k != "" && len(k) < app.MinNotifySecretKeyLen {
 		return Config{}, fmt.Errorf("NOTIFY_SECRET_KEY must be at least %d bytes (e.g. `openssl rand -hex 32`)", app.MinNotifySecretKeyLen)
@@ -310,7 +316,8 @@ func Load() (Config, error) {
 		SentryDSN:         os.Getenv("SENTRY_DSN"),
 		SentryEnvironment: env("SENTRY_ENVIRONMENT", "production"),
 		App: app.Config{
-			Mode: mode,
+			Mode:              mode,
+			GoogleAnalyticsID: os.Getenv("GOOGLE_ANALYTICS_ID"),
 			PostHog: app.PostHogConfig{Key: os.Getenv("POSTHOG_KEY"), Host: strings.TrimRight(env("POSTHOG_HOST", "https://eu.i.posthog.com"), "/"),
 				Environment: env("POSTHOG_ENVIRONMENT", "production")},
 			// AI tools on the server's own provider accounts (ai.go); aiConfig reads the rest.

@@ -1,4 +1,5 @@
 import type { CaptureResult, PostHog } from 'posthog-js'
+import type ReactGA from 'react-ga4'
 
 /** What GET /v1/setup says when the server sets POSTHOG_KEY (staqly cloud). Absent: analytics are off. */
 export type AnalyticsConfig = { key: string; host: string; environment: string; release: string }
@@ -81,4 +82,42 @@ export function startAnalytics(cfg: AnalyticsConfig) {
 /** Reports an error an error boundary caught (window errors and rejections are captured by themselves). */
 export function captureError(error: unknown, boundary: string) {
   client?.captureException(error, { boundary })
+}
+
+let ga: typeof ReactGA | undefined
+
+/**
+ * Google Analytics (GOOGLE_ANALYTICS_ID, staqly cloud): page views only, sent by trackPage with the path alone. The
+ * location GA would read itself (query strings with codes and searches, fragments with tokens) never reaches it:
+ * page_location and page_title are set from the path, and GA's own first page view is off.
+ */
+export function startGoogleAnalytics(measurementId: string) {
+  if (ga) {
+    return
+  }
+
+  void import('react-ga4').then(({ default: g }) => {
+    if (!g.isInitialized) {
+      g.initialize(measurementId, { gtagOptions: { send_page_view: false, page_location: safeLocation() } })
+    }
+
+    ga = g
+    trackPage(window.location.pathname)
+  })
+}
+
+function safeLocation(path = window.location.pathname): string {
+  return window.location.origin + path
+}
+
+/** A page view of a path (no query or fragment: the router's pathname). */
+export function trackPage(path: string) {
+  if (!ga) {
+    return
+  }
+
+  const location = safeLocation(path)
+
+  ga.set({ page_location: location, page_title: 'staqly' })
+  ga.send({ hitType: 'pageview', page: path, location, title: 'staqly' })
 }

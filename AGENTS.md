@@ -118,7 +118,9 @@ every job sets `timeout-minutes` and only the `permissions:` it uses.
 * **Analytics are opt-in and content-free.** Product events and error reports go to PostHog only
   when the operator sets `POSTHOG_KEY` (staqly cloud does; installs send nothing, the dashboard
   doesn't even load posthog-js). Server events are sent after their transaction commits
-  (`internal/app/analytics.go`); the dashboard is cookieless, no autocapture, no session replay.
+  (`internal/app/analytics.go`); PostHog in the dashboard is cookieless, no autocapture, no session replay.
+  `GOOGLE_ANALYTICS_ID` (staqly cloud) adds Google Analytics page views to the dashboard: the path only
+  (`lib/analytics.ts` `trackPage`), never a query string or fragment.
   Never put post text, names, emails, URLs or secrets in an event. Catalog and how to add one:
   `apps/docs/content/docs/self-hosting/analytics.mdx`.
 * **How users run it.** Locally: the binary (`staqly serve`, `staqly service
