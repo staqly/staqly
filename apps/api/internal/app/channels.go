@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql/driver"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -1052,7 +1053,11 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		return nil, conflict("this channel's provider is not part of this build")
 	}
 	if e.Auth() == providers.AuthOAuth2 {
-		defer lockRefresh(row)() // a refresh rotates the refresh token: read it under the lock
+		unlock, err := s.lockRefresh(ctx, row)
+		if err != nil {
+			return nil, err
+		}
+		defer unlock() // a refresh rotates the refresh token: read it under the lock
 	}
 	_, creds, err := s.storedCredentials(ctx, row.ID)
 	if err != nil {
@@ -1180,7 +1185,11 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 		return err
 	}
 	// The credentials are read (again) under the lock: a publish or a sibling may have just refreshed them.
-	defer lockRefresh(row)()
+	unlock, err := s.lockRefresh(ctx, row)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if row, err = s.Q.GetChannelByID(ctx, channelID); isNoRows(err) {
 		return nil
 	} else if err != nil {
@@ -1229,19 +1238,63 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	return nil
 }
 
-// refreshLocks: one token refresh at a time in this process for a workspace's channels of one platform.
-// Platforms like X rotate refresh tokens (each works once), so two runs refreshing with the same one would
-// fail the second and mark the channel needs_reconnect; channels made from one sign-in share its refresh token
-// (shareRefresh) and their refresh jobs come due together. ponytail: per process and never pruned (one small
-// mutex per workspace and platform ever refreshed); several servers on one database would need a row lock or
-// an advisory lock.
-var refreshLocks sync.Map // workspace id + ":" + provider -> *sync.Mutex
+// A rotating sign-in is shared by a workspace's sibling channels. PostgreSQL also serializes separate
+// server processes; no transaction stays open while the provider is called. The local gates avoid reserving
+// a pool connection for every waiter. ponytail: one small gate per workspace/platform is never pruned.
+var refreshLocks sync.Map // workspace id + ":" + provider -> chan struct{}
 
-func lockRefresh(row db.Channel) func() {
-	m, _ := refreshLocks.LoadOrStore(row.WorkspaceID+":"+row.Provider, &sync.Mutex{})
-	mu := m.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
+const refreshAdvisoryKey = "hashtextextended(current_schema() || ':staqly:oauth:' || ?, 0)"
+
+func (s *Service) lockRefresh(ctx context.Context, row db.Channel) (func(), error) {
+	v, _ := refreshLocks.LoadOrStore(row.WorkspaceID+":"+row.Provider, make(chan struct{}, 1))
+	gate := v.(chan struct{})
+	select {
+	case gate <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	unlock := func() { <-gate }
+	if !s.pg {
+		return unlock, nil
+	}
+	if s.DB.Stats().MaxOpenConnections == 1 {
+		unlock()
+		return nil, errors.New("OAuth refresh needs at least two PostgreSQL connections")
+	}
+	select {
+	case s.refreshSlots <- struct{}{}:
+	case <-ctx.Done():
+		unlock()
+		return nil, ctx.Err()
+	}
+	release := func() {
+		<-s.refreshSlots
+		unlock()
+	}
+	conn, err := s.DB.Conn(ctx)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	key := row.WorkspaceID + ":" + row.Provider
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock("+refreshAdvisoryKey+")", key); err != nil {
+		// A canceled acquire may have reached the server: closing the physical session is definitive.
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		_ = conn.Close()
+		release()
+		return nil, err
+	}
+	return func() {
+		defer release()
+		defer conn.Close()
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), jobWriteTimeout)
+		defer cancel()
+		if _, err := conn.ExecContext(cleanup, "SELECT pg_advisory_unlock("+refreshAdvisoryKey+")", key); err != nil {
+			// Conn.Close alone returns it to the pool, potentially still owning a session lock.
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+			s.logger(cleanup).Warn("OAuth refresh lock release failed", "err", err)
+		}
+	}, nil
 }
 
 // storedCredentials reads a channel's credentials as saved now (another run may have refreshed them).
@@ -1267,7 +1320,11 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if e.Auth() != providers.AuthOAuth2 || !due(creds) {
 		return creds, nil
 	}
-	defer lockRefresh(row)()
+	unlock, err := s.lockRefresh(ctx, row)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	if _, stored, err := s.storedCredentials(ctx, row.ID); err == nil {
 		if !due(stored) {
 			return stored, nil // refreshed by another run while this one waited

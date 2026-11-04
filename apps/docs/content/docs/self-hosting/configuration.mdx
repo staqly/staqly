@@ -78,6 +78,11 @@ Invalid values refuse to start instead of falling back silently: staqly exits wi
 | `DASHBOARD_ADDR` | — | Also serve the dashboard from the API process on this address. `staqly serve` sets it; the Docker image sets `:8080`. |
 | `DASHBOARD_EXPOSED` | `true` if `DASHBOARD_ADDR` is not loopback, else `false`; `true` in the Docker image | The dashboard is open to the network: *Connect a device* links opened as `localhost` point at this computer's Wi-Fi address instead. With the binary this follows `--expose`. |
 
+For hosted-mode operators, `DATABASE_URL` must connect directly to PostgreSQL or use a session-mode
+pooler. Transaction/statement pooling is unsupported because OAuth refreshes hold session advisory locks
+across the provider request and credential save. The application pool defaults to 20 connections;
+a custom pool needs at least two.
+
 ## URLs and ports
 
 | Variable | Default | Description |

@@ -33,6 +33,11 @@ STAQLY_MODE=cloud DATABASE_URL=postgres://... AUTH_DEV_SIGNIN=true go run ./cmd/
 sqlc generate                       # after editing db/queries or migrations (~/go/bin/sqlc)
 ```
 
+PostgreSQL needs a direct connection or a session-mode pooler. Transaction/statement
+pooling is unsupported: OAuth refreshes hold session advisory locks across the provider
+request and credential save. Keep at least two connections in the application pool
+(the default is 20); refresh lock holders reserve at most half the configured limit.
+
 ## Conventions
 
 * **Schema change** = one new `db/migrations/0000N_*.sql` (never edit an applied
