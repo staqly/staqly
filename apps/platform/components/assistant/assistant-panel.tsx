@@ -54,6 +54,7 @@ import { timeAgo } from '@/lib/format'
 import { useSession } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
+import { AssistantPrivateResult } from './assistant-private-result'
 import { answerOnDevice, canRunOnDevice } from './on-device'
 
 // The assistant: a chat docked on the right (a sheet on phones) that works on the workspace with staqly's tools,
@@ -374,23 +375,25 @@ function Conversation({
               const failed = res?.startsWith('Error:') || res?.startsWith('The person declined')
 
               return (
-                <p
-                  key={c.id}
-                  className={cn(
-                    'ml-9 flex w-fit items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground',
-                    failed && 'line-through',
-                  )}
-                  title={failed ? res : undefined}
-                >
-                  {res === undefined ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : failed ? (
-                    <X className="size-3.5 text-destructive" />
-                  ) : (
-                    <Check className="size-3.5 text-brand" />
-                  )}
-                  {toolLabel(c.name)}
-                </p>
+                <div key={c.id} className="ml-9 min-w-0">
+                  <p
+                    className={cn(
+                      'flex w-fit items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground',
+                      failed && 'line-through',
+                    )}
+                    title={failed ? res : undefined}
+                  >
+                    {res === undefined ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : failed ? (
+                      <X className="size-3.5 text-destructive" />
+                    ) : (
+                      <Check className="size-3.5 text-brand" />
+                    )}
+                    {toolLabel(c.name)}
+                  </p>
+                  <AssistantPrivateResult name={c.name} result={res} />
+                </div>
               )
             })}
           </Fragment>
