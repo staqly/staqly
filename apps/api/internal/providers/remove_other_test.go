@@ -41,6 +41,21 @@ func TestRemoveTumblr(t *testing.T) {
 	}
 }
 
+func TestRemoveMoltbook(t *testing.T) {
+	srv, calls := removeCodeServer(t, http.StatusOK)
+	old := moltbookAPI
+	moltbookAPI = srv.URL
+	t.Cleanup(func() { moltbookAPI = old })
+	for _, id := range []string{"comment:p1:c2", "p1"} {
+		if err := (Moltbook{}).Remove(context.Background(), Credentials{"api_key": "k"}, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if (*calls)[0] != "DELETE /comments/c2 " || (*calls)[1] != "DELETE /posts/p1 " {
+		t.Fatal(*calls)
+	}
+}
+
 func TestRemovePinterestGone(t *testing.T) {
 	srv, calls := removeCodeServer(t, http.StatusNotFound)
 	old := pinterestAPI
