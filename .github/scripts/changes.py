@@ -15,7 +15,7 @@ JOBS = {
     'web': r'^(apps/web/|packages/)',
     'packages': r'^packages/',
     'sdk_ts': r'^(sdks/typescript/|apps/api/openapi\.yaml$)',
-    'sdk_py': r'^sdks/python/',
+    'sdk_py': r'^(sdks/python/|apps/api/openapi\.yaml$)',
     # The image embeds the dashboard, so frontend/shared changes need the Docker check too.
     'e2e': r'^(apps/(api|cli|platform)/|packages/|sdks/|scripts/|e2e/|Dockerfile$|\.dockerignore$|compose)',
 }
