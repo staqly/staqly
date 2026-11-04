@@ -108,7 +108,7 @@ export interface paths {
         /**
          * Meta's webhook subscription check (Instagram, Facebook Pages, Threads)
          * @description Meta for Developers calls this when you save the callback URL (`<dashboard>/api/v1/meta/webhook`).
-         *     It answers the challenge when `hub.verify_token` is the server's `META_WEBHOOK_VERIFY_TOKEN`; without
+         *     It answers the challenge when `hub.verify_token` is the server's `PROVIDER_META_WEBHOOK_VERIFY_TOKEN`; without
          *     that setting the endpoint is off (404).
          */
         get: operations["verifyMetaWebhook"];

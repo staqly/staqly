@@ -10,7 +10,7 @@ import (
 )
 
 // Meta's webhooks (Instagram, Facebook Pages, Threads) call /v1/meta/webhook: GET checks the subscription, POST
-// brings an event, signed with the app's secret. Off (404) until META_WEBHOOK_VERIFY_TOKEN is set.
+// brings an event, signed with the app's secret. Off (404) until PROVIDER_META_WEBHOOK_VERIFY_TOKEN is set.
 
 // maxMetaWebhookBytes: Meta's events are small; a larger body is not one.
 const maxMetaWebhookBytes = 1 << 20

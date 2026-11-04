@@ -24,7 +24,7 @@ func metaSign(secret, body string) string {
 func TestMetaWebhookQueuesACommentsRead(t *testing.T) {
 	s, p, _, _, chans := publishedOn(t, "fakemetaig")
 	ctx := context.Background()
-	env := map[string]string{"META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret"}
+	env := map[string]string{"PROVIDER_META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret"}
 	s.Getenv = func(k string) string { return env[k] }
 	if _, err := s.DB.Exec(`UPDATE channels SET provider = 'instagram' WHERE id = ?`, chans[0]); err != nil {
 		t.Fatal(err)
@@ -58,7 +58,7 @@ func TestMetaWebhookQueuesACommentsRead(t *testing.T) {
 func TestMetaWebhookKeepsStoryInsights(t *testing.T) {
 	s, p, post, _, chans := publishedOn(t, "fakemetastory")
 	ctx := context.Background()
-	env := map[string]string{"META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret"}
+	env := map[string]string{"PROVIDER_META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret"}
 	s.Getenv = func(k string) string { return env[k] }
 	if _, err := s.DB.Exec(`UPDATE channels SET provider = 'instagram' WHERE id = ?`, chans[0]); err != nil {
 		t.Fatal(err)
@@ -94,7 +94,7 @@ func (f *fakeMetaPermissions) Refresh(_ context.Context, _ providers.App, c prov
 func TestMetaWebhookPermissionRevokedChecksTheChannel(t *testing.T) {
 	s, p, _ := publishTest(t)
 	ctx := context.Background()
-	env := map[string]string{"META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret", "PROVIDER_META_CLIENT_ID": "cid"}
+	env := map[string]string{"PROVIDER_META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret", "PROVIDER_META_CLIENT_ID": "cid"}
 	s.Getenv = func(k string) string { return env[k] }
 	for _, id := range []string{"facebook", "instagram"} {
 		orig, _ := providers.Get(id)
@@ -136,6 +136,20 @@ func TestMetaWebhookPermissionRevokedChecksTheChannel(t *testing.T) {
 		row, err := s.Q.GetChannelByID(ctx, id)
 		if err != nil || row.Comments != want || row.Status != "connected" {
 			t.Fatalf("%s: comments %d status %q, want comments %d: %v", id, row.Comments, row.Status, want, err)
+		}
+	}
+}
+
+// PROVIDER_META_WEBHOOK_VERIFY_TOKEN turns the webhook on; META_WEBHOOK_VERIFY_TOKEN, its name before, still does.
+func TestMetaVerifyTokenNames(t *testing.T) {
+	s, _, _ := publishTest(t)
+	for _, key := range []string{"PROVIDER_META_WEBHOOK_VERIFY_TOKEN", "META_WEBHOOK_VERIFY_TOKEN"} {
+		s.Getenv = func(k string) string { return map[string]string{key: "tok"}[k] }
+		if !s.MetaWebhookEnabled() {
+			t.Fatalf("%s did not turn it on", key)
+		}
+		if got, err := s.VerifyMetaWebhook("subscribe", "tok", "c"); err != nil || got != "c" {
+			t.Fatalf("%s: %q %v", key, got, err)
 		}
 	}
 }
