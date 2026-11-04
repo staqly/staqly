@@ -200,7 +200,7 @@ func (s *Service) syncEvents(ctx context.Context, channelID string) error {
 	pctx, cancel := context.WithTimeout(s.publishingCtx(ctx, ch.WorkspaceID), 30*time.Second)
 	hookURL := ""
 	if base := strings.TrimRight(s.Cfg.PublicURL, "/"); base != "" {
-		hookURL = base + "/v1/" + ch.Provider + "/webhook/" + ch.ID // Whop's webhook is made per channel
+		hookURL = base + "/v1/" + strings.TrimSuffix(ch.Provider, "_key") + "/webhook/" + ch.ID // Whop's webhook is made per channel
 	}
 	updated, err := sub.SubscribeEvents(pctx, creds, hookURL)
 	cancel()

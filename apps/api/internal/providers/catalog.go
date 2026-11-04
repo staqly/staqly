@@ -38,7 +38,7 @@ func init() {
 		{"wordpress", "WordPress", AuthToken, Limits{MaxChars: 0, MaxMedia: 1, MediaKinds: img, NeedsTitle: true}},
 		{"listmonk", "ListMonk", AuthToken, listmonkLimits},
 		{"moltbook", "Moltbook", AuthToken, Limits{MaxChars: 40000, NeedsTitle: true}},
-		{"whop", "Whop", AuthToken, Limits{MaxChars: 5000, MaxMedia: 4, MediaKinds: imgVid}},
+		{"whop", "Whop", AuthOAuth2, whopLimits},
 		{"tumblr", "Tumblr", AuthOAuth2, Limits{MaxChars: 4096, MaxMedia: 10, MediaKinds: imgVid}},
 	} {
 		if _, taken := registry[p.id]; taken {

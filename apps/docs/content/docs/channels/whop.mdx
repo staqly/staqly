@@ -1,16 +1,60 @@
 ---
 title: Whop
-description: Publish to a Whop forum with text, a title, pictures and videos, pinned posts, member notifications and comments. Where to create the Account API key.
+description: Publish to a Whop forum with text, a title, pictures and videos, pinned posts, member notifications and comments. Sign in with Whop, or connect with an Account API key.
 ---
 
-Staqly publishes to a **forum of your Whop business** through Whop's REST API: it sends the
-business's Account API key, uploads pictures and videos to Whop, and posts with
+Staqly publishes to a **forum of your Whop business** through Whop's REST API, signed in
+with Whop (or with the business's Account API key), uploads pictures and videos to Whop, and posts with
 `POST /api/v1/forum_posts`. Each forum is its own channel. A published target links to the
 business's page on whop.com (Whop's API gives no address for a single post).
 
-## What you need
+## Sign in with Whop
 
-An **Account API key** of the business that owns the forum. Nothing is registered on the server.
+**Channels → Add channel → Whop** sends you to Whop, where you pick the business and approve staqly's
+Whop app. The business's forums come back as a list: pick one or more, each becomes a channel, and
+they share the sign-in (Whop renews it every hour and rotates its refresh token, so staqly keeps one
+for all of them).
+
+This needs a Whop app on the server, registered once:
+
+<Steps>
+<Step>
+
+### Register the app
+
+On [whop.com/dashboard](https://whop.com/dashboard), **Developer → Apps → Create app**, type **B2B
+app**. Under **OAuth**: client mode **Confidential**, and the redirect URL your dashboard's
+`/channels/callback/whop` (`https://staqly.example.com/channels/callback/whop`). Under
+**Permissions**, add as required:
+
+| Permission | Why |
+|---|---|
+| `company:basic:read` | Show the business's name and logo |
+| `forum:read` | List the forums to post into |
+| `forum:post:create` | Publish posts and comments, with their files |
+| `developer:manage_webhook` | Make the channel's webhook (see [Webhook](#webhook)) |
+| `webhook_receive:memberships`, `member:basic:read` | New members and memberships in **Analytics → Audience** |
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+```bash title=".env"
+PROVIDER_WHOP_ENABLED=true
+PROVIDER_WHOP_CLIENT_ID=app_...
+PROVIDER_WHOP_CLIENT_SECRET=...
+```
+
+Until both are set, **Whop** connects with an API key only.
+
+</Step>
+</Steps>
+
+## Or connect with an Account API key
+
+Under the sign-in, **Use an Account API key instead** opens **Whop (API key)**: nothing is
+registered on the server, and each forum brings the business's key.
 
 <Steps>
 <Step>
@@ -19,39 +63,29 @@ An **Account API key** of the business that owns the forum. Nothing is registere
 
 On [whop.com/dashboard](https://whop.com/dashboard), pick the business, open the **Developer**
 page and, under **Account API keys**, click **Create**. Give it a name (for example `staqly`) and
-these permissions:
-
-| Permission | Why |
-|---|---|
-| Read the business (`company:basic:read`) | Show the business's name and logo |
-| Read forums (`forum:read`) | List the forums to post into |
-| Create forum posts (`forum:post:create`) | Publish posts and comments, with their files |
-| Manage webhooks (`developer:manage_webhook`) | Make the channel's webhook (see [Webhook](#webhook)) |
-| Receive membership webhooks (`webhook_receive:memberships`), and member webhooks when listed | New members and memberships in **Analytics → Audience** |
-| Read members (`member:basic:read`) | What Whop needs to send member events |
-
-Copy the key: Whop shows it once. A key with the **Admin** role works too.
+the permissions in the table above. Copy the key: Whop shows it once.
 
 </Step>
 <Step>
 
 ### Connect a forum
 
-In **Channels → Add channel → Whop**, paste the key. When the business has one forum, staqly uses
-it; with several, it lists them (`General (exp_...)`) and asks for the **Forum** id. To connect
-another forum, add the channel again with the same key and the other id. The channel shows the
-business's name and logo and the forum's name.
+Paste the key. When the business has one forum, staqly uses it; with several, it lists them
+(`General (exp_...)`) and asks for the **Forum** id. To connect another forum, add the channel again
+with the same key and the other id. The channel shows the business's name and logo and the forum's
+name.
 
 </Step>
 </Steps>
 
-The key does not expire. If you delete it on Whop, the channel turns **Needs reconnect**.
+A key does not expire. If you delete it on Whop, or a sign-in is revoked (the app removed from the
+business), the channel turns **Needs reconnect**.
 
 ## Webhook
 
 Once the channel connects (and again daily), staqly makes a webhook on Whop for it, pointed at
 `https://<your API>/v1/whop/webhook/<channel id>` (`PUBLIC_API_URL`; Whop refuses `localhost` and
-private addresses), and keeps its signing secret with the channel's key. Whop signs every event
+private addresses), and keeps its signing secret with the channel's sign-in or key. Whop signs every event
 with it; staqly refuses a call more than five minutes off and handles each one once. A webhook Whop
 turned off after failures is turned on again, a deleted one is made again.
 

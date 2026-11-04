@@ -118,6 +118,7 @@ const LOOKS: Record<string, Look> = {
   listmonk: { icon: siListmonk, color: '#0055D4' },
   moltbook: { image: '/brand/moltbook.webp', color: '#E0453A' },
   whop: { color: '#FF6243', letters: 'W', logo: 'whop' },
+  whop_key: { color: '#FF6243', letters: 'W', logo: 'whop' },
   tumblr: { icon: siTumblr, color: '#36465D' },
 }
 
