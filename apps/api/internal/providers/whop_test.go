@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +32,7 @@ type fakeWhop struct {
 	postBody string
 	drop     bool
 	hooks    map[string]map[string]any // webhooks by id
+	token    map[string]string         // the last token request
 	hookSeq  int
 }
 
@@ -50,6 +52,20 @@ func (f *fakeWhop) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case r.URL.Path == "/oauth/token":
+		var in map[string]string
+		_ = json.Unmarshal(raw, &in)
+		f.token = in
+		if in["client_secret"] != "secret" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"invalid_client","error_description":"client_secret lacks oauth:token_exchange permission"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"access_token":"user-tok","refresh_token":"r2","expires_in":3600,"token_type":"bearer"}`))
+	case r.URL.Path == "/oauth/userinfo":
+		_, _ = w.Write([]byte(`{"sub":"user_1","name":"Pete K.","preferred_username":"pete","picture":"https://img.example/p.png"}`))
+	case r.URL.Path == "/accounts" && r.Header.Get("Authorization") == "Bearer user-tok":
+		_, _ = w.Write([]byte(`{"data":[{"id":"biz_1","title":"Staqly","route":"staqly","logo_url":"https://img.example/s.png"},{"id":"biz_2","title":"Other","route":"other"}]}`))
 	case r.URL.Path == "/webhooks" && r.Method == http.MethodPost:
 		var in map[string]any
 		_ = json.Unmarshal(raw, &in)
@@ -83,11 +99,14 @@ func (f *fakeWhop) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/accounts/me":
 		_, _ = w.Write([]byte(`{"id":"biz_1","title":"Acme Studio","route":"acme-studio","logo_url":"https://example.com/logo.png"}`))
 	case r.URL.Path == "/forums":
-		if r.URL.Query().Get("account_id") != "biz_1" {
+		switch r.URL.Query().Get("account_id") {
+		case "biz_1":
+			_, _ = w.Write([]byte(`{"data":[` + f.forums + `],"page_info":{"has_next_page":false}}`))
+		case "biz_2": // a business without a forum
+			_, _ = w.Write([]byte(`{"data":[],"page_info":{"has_next_page":false}}`))
+		default:
 			w.WriteHeader(http.StatusBadRequest)
-			return
 		}
-		_, _ = w.Write([]byte(`{"data":[` + f.forums + `],"page_info":{"has_next_page":false}}`))
 	case r.URL.Path == "/files" && r.Method == http.MethodPost:
 		var body map[string]string
 		_ = json.Unmarshal(raw, &body)
@@ -129,11 +148,11 @@ func useFakeWhop(t *testing.T) *fakeWhop {
 	t.Helper()
 	f := &fakeWhop{puts: map[string]string{}, forums: whopTwoForums}
 	f.srv = httptest.NewServer(f)
-	api, poll := whopAPI, whopPoll
-	whopAPI, whopPoll = f.srv.URL, time.Millisecond
+	api, poll, oauth := whopAPI, whopPoll, whopOAuth
+	whopAPI, whopPoll, whopOAuth = f.srv.URL, time.Millisecond, f.srv.URL+"/oauth"
 	t.Cleanup(func() {
 		f.srv.Close()
-		whopAPI, whopPoll = api, poll
+		whopAPI, whopPoll, whopOAuth = api, poll, oauth
 	})
 	return f
 }
@@ -271,14 +290,22 @@ func TestWhopReply(t *testing.T) {
 
 func TestWhopValidate(t *testing.T) {
 	wh, _ := Get("whop")
-	if err := wh.Validate(PostContent{Text: "hi"}, Settings{"notify": "true"}); err != nil {
+	var ve *ValidationError
+	// A sign-in posts where the post says: the business is required.
+	if err := wh.Validate(PostContent{Text: "hi"}, Settings{"notify": "true"}); !errors.As(err, &ve) || ve.Field != "forum" {
+		t.Fatalf("no business: %v", err)
+	}
+	if err := wh.Validate(PostContent{Text: "hi"}, Settings{"forum": "exp_1", "notify": "true"}); err != nil {
 		t.Fatal(err)
 	}
-	var ve *ValidationError
-	if err := wh.Validate(PostContent{Text: strings.Repeat("a", 5001)}, nil); !errors.As(err, &ve) || ve.Field != "content" {
+	// An API-key channel is one forum: nothing to pick.
+	if wk, _ := Get("whop_key"); wk.Validate(PostContent{Text: "hi"}, Settings{"notify": "true"}) != nil {
+		t.Fatal("whop_key needs no business")
+	}
+	if err := wh.Validate(PostContent{Text: strings.Repeat("a", 5001)}, Settings{"forum": "exp_1"}); !errors.As(err, &ve) || ve.Field != "content" {
 		t.Fatalf("too long: %v", err)
 	}
-	if err := wh.Validate(PostContent{Text: "hi"}, Settings{"notify": "yes"}); !errors.As(err, &ve) || ve.Field != "notify" {
+	if err := wh.Validate(PostContent{Text: "hi"}, Settings{"forum": "exp_1", "notify": "yes"}); !errors.As(err, &ve) || ve.Field != "notify" {
 		t.Fatalf("bad boolean: %v", err)
 	}
 	if err := wh.Validate(PostContent{Text: "hi", Media: make([]MediaFile, 5)}, nil); !errors.As(err, &ve) || ve.Field != "media" {
@@ -336,5 +363,41 @@ func TestWhopSigned(t *testing.T) {
 	}
 	if !WhopSigned("whsec_"+base64.StdEncoding.EncodeToString([]byte("raw-key")), "m", "1", []byte("b"), sign([]byte("raw-key"), "m", "1", "b")) {
 		t.Fatal("the spec's whsec_ form")
+	}
+}
+
+// Signing in with Whop: the authorize link asks for the permissions on all the person's businesses, the channel is the
+// person, and the business setting lists their businesses' forums, named after the business.
+func TestWhopSignIn(t *testing.T) {
+	f := useFakeWhop(t)
+	ctx := context.Background()
+	wh, _ := Get("whop")
+	app := App{ClientID: "app_1", ClientSecret: "secret"}
+	u, err := wh.AuthURL(app, "https://app.example/channels/callback/whop", "st", map[string]string{"code_verifier": "v"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, _ := url.ParseQuery(u[strings.Index(u, "?")+1:])
+	if !strings.Contains(q.Get("scope"), "forum:post:create") || q.Get("code_challenge_method") != "S256" || q.Has("company_id") {
+		t.Fatalf("authorize %s", u)
+	}
+	creds, profile, err := wh.Exchange(ctx, app, "https://app.example/channels/callback/whop", "code", map[string]string{"code_verifier": "v"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds["access_token"] != "user-tok" || creds["refresh_token"] != "r2" || f.token["client_secret"] != "secret" || f.token["code_verifier"] != "v" ||
+		profile.Name != "Pete K." || profile.Handle != "pete" {
+		t.Fatalf("exchange %v %+v %v", creds, profile, f.token)
+	}
+	opts, err := wh.Provider.(OptionLister).Options(ctx, creds, "forum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// whopTwoForums: each business has two forums here, so the label names the forum too.
+	if len(opts) == 0 || opts[0].Icon != "https://img.example/s.png" || !strings.HasPrefix(opts[0].Label, "Staqly: ") {
+		t.Fatalf("options %+v", opts)
+	}
+	if _, _, err := wh.Exchange(ctx, App{ClientID: "app_1", ClientSecret: "wrong"}, "r", "code", map[string]string{"code_verifier": "v"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "server's app") {
+		t.Fatalf("bad secret: %v", err)
 	}
 }
