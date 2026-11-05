@@ -4,6 +4,7 @@ import { PlugZap } from 'lucide-react'
 import { useState } from 'react'
 
 import { ChannelAvatar } from '@/components/channels/channel-avatars'
+import { ChannelStatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -34,6 +35,9 @@ export function AccountPicker({
 }) {
   const [chosen, setChosen] = useState<string[]>([])
   const toggle = (id: string, on: boolean) => setChosen((c) => (on ? [...c, id] : c.filter((x) => x !== id)))
+  // Picking an account that is a channel already reconnects it (a fresh sign-in), it never makes a second one.
+  const reconnecting = chosen.length > 0 && chosen.every((id) => accounts.find((a) => a.id === id)?.channel_status)
+  const anyConnected = accounts.some((a) => a.channel_status)
 
   return (
     <Dialog
@@ -48,7 +52,8 @@ export function AccountPicker({
         <DialogHeader>
           <DialogTitle>Pick the {name} accounts to connect</DialogTitle>
           <DialogDescription>
-            Your sign-in can post as each of these. Every account you pick becomes its own channel.
+            Your sign-in can post as each of these. Every account you pick becomes its own channel
+            {anyConnected ? '; one that is a channel already (its status shown) is reconnected instead.' : '.'}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -92,6 +97,7 @@ export function AccountPicker({
                     <span className="truncate text-sm font-medium">{a.name}</span>
                     {a.handle && <span className="truncate text-xs text-muted-foreground">{a.handle}</span>}
                   </span>
+                  {a.channel_status && <ChannelStatusBadge status={a.channel_status} className="ml-auto shrink-0" />}
                 </label>
               )
             })}
@@ -109,7 +115,15 @@ export function AccountPicker({
             )}
             <Button type="submit" disabled={busy || chosen.length === 0} data-testid="accounts-connect">
               <PlugZap />{' '}
-              {busy ? 'Connecting...' : chosen.length > 1 ? `Connect ${chosen.length} accounts` : 'Connect account'}
+              {busy
+                ? 'Connecting...'
+                : reconnecting
+                  ? chosen.length > 1
+                    ? `Reconnect ${chosen.length} accounts`
+                    : 'Reconnect account'
+                  : chosen.length > 1
+                    ? `Connect ${chosen.length} accounts`
+                    : 'Connect account'}
             </Button>
           </div>
         </form>

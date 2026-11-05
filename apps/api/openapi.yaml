@@ -6242,6 +6242,7 @@ components:
         handle: { type: string }
         avatar_url: { type: string }
         profile_url: { type: string }
+        channel_status: { $ref: "#/components/schemas/ChannelStatus", description: "The status of the workspace's channel for this account, when it has one; picking the account again reconnects that channel" }
     ChannelLinkPublic:
       type: object
       required: [workspace, note, providers, expires_at, uses_left]

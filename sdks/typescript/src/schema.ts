@@ -5595,6 +5595,8 @@ export interface components {
             handle?: string;
             avatar_url?: string;
             profile_url?: string;
+            /** @description The status of the workspace's channel for this account, when it has one; picking the account again reconnects that channel */
+            channel_status?: components["schemas"]["ChannelStatus"];
         };
         ChannelLinkPublic: {
             /** @description The workspace's name */

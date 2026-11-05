@@ -102,6 +102,27 @@ func (s *Service) useAccount(ctx context.Context, p Principal, e providers.Entry
 	return s.saveOrReconnect(ctx, p, e, c, profile, groupID)
 }
 
+// markConnected marks the accounts the workspace already has as channels (with the channel's status), matched as saveOrReconnect matches them
+// (provider and handle), so the picker can say that picking one reconnects it.
+func (s *Service) markConnected(ctx context.Context, pc PendingConnection, workspaceID string) (PendingConnection, error) {
+	rows, err := s.Q.ListChannels(ctx, workspaceID)
+	if err != nil {
+		return pc, err
+	}
+	status := map[string]string{}
+	for _, r := range rows {
+		if r.Provider == pc.Provider && r.Handle != "" {
+			status[r.Handle] = r.Status
+		}
+	}
+	for i, a := range pc.Accounts {
+		if a.Handle != "" {
+			pc.Accounts[i].ChannelStatus = status[a.Handle]
+		}
+	}
+	return pc, nil
+}
+
 // pendingRow reads a pending connection that has not run out.
 func (s *Service) pendingRow(ctx context.Context, workspaceID, id string) (db.PendingConnection, error) {
 	row, err := s.Q.GetPendingConnection(ctx, db.GetPendingConnectionParams{WorkspaceID: workspaceID, ID: strings.TrimSpace(id), Now: s.now()})
@@ -129,7 +150,7 @@ func (s *Service) GetPendingConnection(ctx context.Context, p Principal, id stri
 	if row.LinkID != "" {
 		return PendingConnection{}, notFound("pending connection")
 	}
-	return toPending(row), nil
+	return s.markConnected(ctx, toPending(row), row.WorkspaceID)
 }
 
 // FinishPendingConnection connects the accounts the person picked, each as its own channel (an account already
@@ -224,7 +245,7 @@ func (s *Service) GetPendingConnectionViaLink(ctx context.Context, token, id str
 	if row.LinkID != l.ID {
 		return PendingConnection{}, notFound("pending connection")
 	}
-	return toPending(row), nil
+	return s.markConnected(ctx, toPending(row), row.WorkspaceID)
 }
 
 // FinishPendingConnectionViaLink connects the accounts a customer picked; every account takes one use of the link.
