@@ -19,7 +19,7 @@ const Composer = dynamic(() => import('@/components/posts/composer').then((m) =>
 
 /**
  * "+" on a future slot of the calendar: the composer with that time. When drafts (posts without a time) are waiting,
- * **From drafts** loads one into it instead, keeping the slot's time.
+ * **Load a draft** (an icon in its header) loads one into it instead, keeping the slot's time.
  */
 export function SlotScheduleDialog({ at, onOpenChange }: { at: Date; onOpenChange: (open: boolean) => void }) {
   const [search, setSearch] = useState('')
@@ -44,8 +44,16 @@ export function SlotScheduleDialog({ at, onOpenChange }: { at: Date; onOpenChang
 
   // shortcut: loading a draft replaces what was typed in the new post without asking; ask first if people lose text.
   const fromDrafts = !draft && all.length > 0 && (
-    <Button type="button" size="sm" variant="outline" onClick={() => setPicking(true)}>
-      <FileText /> From drafts
+    // An icon like Live preview next to it: Write with AI stays the one labelled button up there.
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="ghost"
+      aria-label="Load a draft"
+      tooltip={`Load a draft (${all.length} waiting)`}
+      onClick={() => setPicking(true)}
+    >
+      <FileText />
     </Button>
   )
 

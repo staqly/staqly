@@ -1444,7 +1444,7 @@ export function Composer({
   defaultPublishAt?: string
   /** Files to start with (the media library's "New post with this"). */
   defaultMedia?: Media[]
-  /** Buttons in the header (the calendar's "From drafts"). */
+  /** Buttons in the header (the calendar's "Load a draft"). */
   headerActions?: React.ReactNode
   onSaved?: (post: Post) => void
 }) {
