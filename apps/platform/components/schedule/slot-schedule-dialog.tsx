@@ -1,6 +1,6 @@
 'use client'
 
-import { CalendarPlus, PenSquare, Search } from 'lucide-react'
+import { FileText, Search } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useMemo, useState } from 'react'
 
@@ -14,18 +14,17 @@ import { postTitle } from '@/lib/posts'
 import { flattenPosts, usePostsInfinite } from '@/lib/queries'
 import { formatPicked } from '@/lib/schedule'
 
-import { useSetSchedule } from './use-schedule'
-
-// The composer (large) loads only when "New post" is chosen.
+// The composer (large) loads only when a slot's "+" is used.
 const Composer = dynamic(() => import('@/components/posts/composer').then((m) => m.Composer), { ssr: false })
 
 /**
- * "+" on a future slot of the calendar: give a draft (a post without a time) this time, or write a new post
- * that starts with it.
+ * "+" on a future slot of the calendar: the composer with that time. When drafts (posts without a time) are waiting,
+ * **From drafts** loads one into it instead, keeping the slot's time.
  */
 export function SlotScheduleDialog({ at, onOpenChange }: { at: Date; onOpenChange: (open: boolean) => void }) {
   const [search, setSearch] = useState('')
-  const [composing, setComposing] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const [draft, setDraft] = useState<Post>()
   const query: PostQuery = useMemo(() => ({ status: 'draft', sort: 'created_desc', limit: 100 }), [])
   const list = usePostsInfinite(query, { refetchOnWindowFocus: false })
   // A draft with a file in Deleted can't be scheduled until the file is restored: it isn't offered here.
@@ -42,36 +41,20 @@ export function SlotScheduleDialog({ at, onOpenChange }: { at: Date; onOpenChang
 
     return q ? all.filter((p) => p.content.toLowerCase().includes(q)) : all
   }, [all, search])
-  const setSchedule = useSetSchedule({ onDone: () => onOpenChange(false) })
-  const pick = (p: Post) => setSchedule.mutate({ post: p, publishAt: at.toISOString() })
 
-  // No draft to pick: straight to the composer. Latched in state, so a draft the composer saves never swaps it back.
-  if (!composing && list.isSuccess && all.length === 0) {
-    setComposing(true)
-  }
+  // shortcut: loading a draft replaces what was typed in the new post without asking; ask first if people lose text.
+  const fromDrafts = !draft && all.length > 0 && (
+    <Button type="button" size="sm" variant="outline" onClick={() => setPicking(true)}>
+      <FileText /> From drafts
+    </Button>
+  )
 
-  if (composing) {
-    return (
-      <Composer
-        open
-        onOpenChange={(o) => {
-          if (!o) {
-            onOpenChange(false)
-          }
-        }}
-        defaultPublishAt={at.toISOString()}
-      />
-    )
-  }
-
-  return (
-    <Dialog open onOpenChange={onOpenChange}>
+  const picker = picking && (
+    <Dialog open onOpenChange={setPicking}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CalendarPlus className="size-4 text-muted-foreground" aria-hidden /> {formatPicked(at)}
-          </DialogTitle>
-          <DialogDescription>Pick a draft to publish at this time, or write a new post for it.</DialogDescription>
+          <DialogTitle>Load a draft</DialogTitle>
+          <DialogDescription>It opens in the composer, set for {formatPicked(at)}.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
           <div className="relative">
@@ -91,17 +74,17 @@ export function SlotScheduleDialog({ at, onOpenChange }: { at: Date; onOpenChang
                 <Skeleton className="h-12" />
               </div>
             ) : drafts.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                {search ? 'No draft matches this search.' : 'No drafts waiting.'}
-              </p>
+              <p className="py-4 text-center text-sm text-muted-foreground">No draft matches this search.</p>
             ) : (
               <ul className="grid gap-1.5">
                 {drafts.map((p) => (
                   <li key={p.id}>
                     <button
                       type="button"
-                      onClick={() => pick(p)}
-                      disabled={setSchedule.isPending}
+                      onClick={() => {
+                        setDraft(p)
+                        setPicking(false)
+                      }}
                       className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
                     >
                       <span className="min-w-0">
@@ -126,13 +109,25 @@ export function SlotScheduleDialog({ at, onOpenChange }: { at: Date; onOpenChang
               </ul>
             )}
           </div>
-          <div className="flex justify-end border-t pt-3">
-            <Button variant="outline" onClick={() => setComposing(true)}>
-              <PenSquare /> New post for this time
-            </Button>
-          </div>
         </div>
       </DialogContent>
     </Dialog>
+  )
+
+  return (
+    <>
+      <Composer
+        open
+        onOpenChange={(o) => {
+          if (!o) {
+            onOpenChange(false)
+          }
+        }}
+        post={draft}
+        defaultPublishAt={at.toISOString()}
+        headerActions={fromDrafts || undefined}
+      />
+      {picker}
+    </>
   )
 }

@@ -1431,6 +1431,7 @@ export function Composer({
   post,
   defaultPublishAt,
   defaultMedia,
+  headerActions,
   onSaved,
 }: {
   open: boolean
@@ -1443,13 +1444,18 @@ export function Composer({
   defaultPublishAt?: string
   /** Files to start with (the media library's "New post with this"). */
   defaultMedia?: Media[]
+  /** Buttons in the header (the calendar's "From drafts"). */
+  headerActions?: React.ReactNode
   onSaved?: (post: Post) => void
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-4xl">
-        {/* Mounted with the drawer's content: it stays while the drawer slides out and starts fresh on each opening. */}
+        {/* Mounted with the drawer's content: it stays while the drawer slides out and starts fresh on each opening,
+            and on another post (a draft loaded from the calendar). */}
         <ComposerForm
+          key={post?.id}
+          headerActions={headerActions}
           collectionId={collectionId}
           post={post}
           defaultPublishAt={defaultPublishAt}
