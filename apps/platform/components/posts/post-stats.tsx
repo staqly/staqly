@@ -77,6 +77,8 @@ function metricValue(key: string, n: number) {
 /** What a platform calls a number when it isn't the usual word (Slack has reactions, not likes). */
 const LABELS: Record<string, Record<string, string>> = {
   slack: { likes: 'Reactions' },
+  // Every reaction counts (the chips below split them by type); a post's comments are Facebook's word.
+  facebook: { likes: 'Reactions', replies: 'Comments' },
   pinterest: {
     bookmarks: 'Saves',
     clicks: 'Pin clicks',
