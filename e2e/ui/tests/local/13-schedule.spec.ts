@@ -191,7 +191,7 @@ test.describe('the schedule', () => {
       await expect(page.getByTestId(`schedule-slot-${dayKey(yesterday)}-9`).getByTestId('slot-add')).toHaveCount(0)
     }
 
-    // + on a future slot: pick a waiting draft for that time.
+    // + on a future slot: the composer with that time; From drafts loads a waiting draft into it.
     await showWeekOf(page, when)
     const slot = page.getByTestId(`schedule-slot-${dayKey(when)}-16`)
 
@@ -199,15 +199,22 @@ test.describe('the schedule', () => {
     // The add button shows on focus (a click on the cell's empty space does the same).
     await slot.getByTestId('slot-add').focus()
     await page.keyboard.press('Enter')
-    const dialog = page.getByRole('dialog')
+    await page.getByRole('dialog', { name: 'New post' }).getByRole('button', { name: 'From drafts' }).click()
+    const picker = page.getByRole('dialog', { name: 'Load a draft' })
 
-    await expect(dialog).toContainText('Pick a draft to publish at this time')
-    await dialog.getByRole('textbox', { name: 'Search drafts' }).fill(titleOf(draft.content))
-    await dialog
+    await picker.getByRole('textbox', { name: 'Search drafts' }).fill(titleOf(draft.content))
+    await picker
       .getByTestId('slot-drafts')
       .getByRole('button', { name: new RegExp(titleOf(draft.content)) })
       .click()
-    await expect(dialog).toBeHidden()
+    await expect(picker).toBeHidden()
+    // The draft opens with the slot's time; Schedule sends it.
+    const loaded = page.getByRole('dialog').filter({ has: page.getByTestId('date-time-picker') })
+
+    await expect(loaded.getByTestId('publish-at-chip')).toContainText(/\d/)
+    await loaded.getByTestId('date-time-picker').click()
+    await page.getByRole('dialog', { name: 'Pick a date and time' }).getByRole('button', { name: 'Schedule' }).click()
+    await expect(loaded).toBeHidden()
     await expect.poll(async () => (await getPost(api, draft.id)).status).toBe('scheduled')
     expect(new Date((await getPost(api, draft.id)).publish_at!).getHours()).toBe(16)
     // The grid re-reads its range on a reload.
@@ -216,7 +223,7 @@ test.describe('the schedule', () => {
     await expect(slot.getByTestId('schedule-entry')).toHaveCount(1)
     await dismissToasts(page)
 
-    // + then "New post for this time": the composer with the time set; Schedule puts it in the slot.
+    // + again: the composer with the time set; Schedule puts the new post in the slot.
     const slot2 = page.getByTestId(`schedule-slot-${dayKey(when)}-18`)
 
     await slot2.hover()
@@ -224,14 +231,6 @@ test.describe('the schedule', () => {
     await slot2.getByTestId('slot-add').focus()
     await page.keyboard.press('Enter')
     const composer = page.getByRole('dialog', { name: 'New post' })
-    const newPost = page.getByRole('dialog').getByRole('button', { name: 'New post for this time' })
-
-    // With no draft left to pick the slot opens the composer straight away.
-    await expect(newPost.or(composer)).toBeVisible()
-
-    if (await newPost.isVisible()) {
-      await newPost.click()
-    }
 
     await expect(composer.getByTestId('publish-at-chip')).toContainText(/\d/)
     await composer.getByRole('combobox', { name: 'Collection' }).click()
