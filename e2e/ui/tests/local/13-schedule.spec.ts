@@ -191,7 +191,7 @@ test.describe('the schedule', () => {
       await expect(page.getByTestId(`schedule-slot-${dayKey(yesterday)}-9`).getByTestId('slot-add')).toHaveCount(0)
     }
 
-    // + on a future slot: the composer with that time; From drafts loads a waiting draft into it.
+    // + on a future slot: the composer with that time; Load a draft loads a waiting draft into it.
     await showWeekOf(page, when)
     const slot = page.getByTestId(`schedule-slot-${dayKey(when)}-16`)
 
@@ -199,7 +199,7 @@ test.describe('the schedule', () => {
     // The add button shows on focus (a click on the cell's empty space does the same).
     await slot.getByTestId('slot-add').focus()
     await page.keyboard.press('Enter')
-    await page.getByRole('dialog', { name: 'New post' }).getByRole('button', { name: 'From drafts' }).click()
+    await page.getByRole('dialog', { name: 'New post' }).getByRole('button', { name: 'Load a draft' }).click()
     const picker = page.getByRole('dialog', { name: 'Load a draft' })
 
     await picker.getByRole('textbox', { name: 'Search drafts' }).fill(titleOf(draft.content))
