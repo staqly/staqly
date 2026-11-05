@@ -96,6 +96,14 @@ function metricLabel(provider: string, key: string, label: string) {
 
 // Slack names its emoji; the common ones as themselves, the rest (custom ones too) by name.
 const EMOJI: Record<string, string> = {
+  // Facebook's reaction types.
+  like: '👍',
+  love: '❤️',
+  care: '🥰',
+  haha: '😆',
+  wow: '😮',
+  sad: '😢',
+  angry: '😡',
   '+1': '👍',
   thumbsup: '👍',
   '-1': '👎',
@@ -122,6 +130,9 @@ const hasNumbers = (t: TargetMetrics) => !!t.metrics && METRIC_LABELS.some(([k])
 
 /** A channel's numbers in one line where they fit, a tile each. */
 function MetricTiles({ t }: { t: TargetMetrics & { metrics: NonNullable<TargetMetrics['metrics']> } }) {
+  // Facebook counts every type, none too: only the ones someone used.
+  const reactions = (t.metrics.reactions ?? []).filter((r) => r.count > 0)
+
   return (
     <dl className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-2">
       {METRIC_LABELS.filter(([k]) => t.metrics?.[k] != null).map(([k, label, Icon]) => (
@@ -134,9 +145,9 @@ function MetricTiles({ t }: { t: TargetMetrics & { metrics: NonNullable<TargetMe
           <dd className="text-xl font-semibold tracking-tight tabular-nums">{metricValue(k, t.metrics![k]!)}</dd>
         </div>
       ))}
-      {(t.metrics.reactions?.length ?? 0) > 0 && (
+      {reactions.length > 0 && (
         <div className="col-span-full flex flex-wrap gap-1.5" aria-label="Reactions">
-          {t.metrics.reactions!.map((r) => (
+          {reactions.map((r) => (
             <span
               key={r.emoji}
               className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-sm"

@@ -80,11 +80,6 @@ func (f Facebook) Validate(p PostContent, s Settings) error {
 			return invalid("media", "a Facebook post takes up to 10 pictures or one video, not both")
 		}
 	}
-	for _, part := range p.Thread {
-		if len(part.Media) > 1 || (len(part.Media) == 1 && !strings.HasPrefix(part.Media[0].MimeType, "image/")) {
-			return invalid("media", "a Facebook comment takes text and at most one picture")
-		}
-	}
 	return CheckFields(f.SettingsFields(), s)
 }
 
@@ -502,6 +497,10 @@ func facebookPermalink(ctx context.Context, token, id string) string {
 
 // Reply comments under the post as the Page. parentExternalID is the post or, from the second part on, the comment
 // before ("comment:<post>:<comment>"); every part becomes a comment on the post itself, in order.
+// facebookCommentLimits: a comment takes text and one picture; the rest of a thread part's files (videos, more
+// pictures) are left out, as a post leaves out what its channel doesn't take.
+var facebookCommentLimits = Limits{MaxMedia: 1, MediaKinds: []string{"image"}}
+
 func (Facebook) Reply(ctx context.Context, c Credentials, parentExternalID string, p PostContent, s Settings) (Result, error) {
 	token := c["access_token"]
 	if token == "" {
@@ -517,11 +516,13 @@ func (Facebook) Reply(ctx context.Context, c Credentials, parentExternalID strin
 	if post == "" {
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Facebook: nothing to comment on (the post has no id)"}
 	}
+	p.Media = FitMedia(facebookCommentLimits, p.Media)
+	if strings.TrimSpace(p.Text) == "" && len(p.Media) == 0 {
+		return Result{}, &Failure{Kind: ErrRejected, Msg: "a Facebook comment takes text and at most one picture: this one had only a video, which Facebook doesn't take"}
+	}
 	var req *http.Request
 	var err error
 	switch {
-	case len(p.Media) > 1, len(p.Media) == 1 && !strings.HasPrefix(p.Media[0].MimeType, "image/"):
-		return Result{}, &Failure{Kind: ErrRejected, Msg: "a Facebook comment takes text and at most one picture"}
 	case len(p.Media) == 1:
 		req, err = fbGraph.multipart(ctx, fbGraph.url("/"+post+"/comments"), token, url.Values{"message": {p.Text}}, "source", p.Media[0])
 	default:
