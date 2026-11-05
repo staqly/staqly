@@ -144,11 +144,14 @@ export function ChannelComments({
   channelId,
   active,
   filter,
+  quietError,
 }: {
   postId: string
   channelId: string
   active: boolean
   filter: SentimentFilter
+  /** The channel's card already says its read failed (the numbers'): no second message for the comments. */
+  quietError?: boolean
 }) {
   const q = useResponses(postId, active)
   const [all, setAll] = useState(false)
@@ -179,7 +182,7 @@ export function ChannelComments({
         <ChevronDown aria-hidden className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2 grid gap-3">
-        {c.error && (
+        {c.error && !quietError && (
           <p className="text-xs text-amber-700 dark:text-amber-400">Couldn&apos;t refresh the comments: {c.error}</p>
         )}
         {c.insight && <InsightView i={c.insight} quiet={!!c.error} />}

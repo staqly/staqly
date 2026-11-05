@@ -193,7 +193,6 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
   // Taken down everywhere it went out: the numbers and comments read last stay, nothing reads them again.
   const deleted = deletedOutside(post)
   const frozen = (!!post.unpublished_at || deleted) && liveTargets(post).length === 0
-  const failed = (rows ?? []).filter((t) => t.error)
   // Sent to many channels: how it went on all of them in one line, the failed ones alone, and Retry for all of them.
   const failedTargets = targets.filter((t) => t.status === 'failed')
   const [onlyFailed, setOnlyFailed] = useState(false)
@@ -219,15 +218,6 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
           </p>
         </Callout>
       )}
-      {failed.map((t) => (
-        <Callout key={t.channel_id} tone="warning" size="xs" data-testid="metrics-error">
-          <p className="font-medium">Couldn&apos;t read the latest numbers from {t.channel_name}</p>
-          <p className="mt-0.5 text-muted-foreground">
-            {t.error}
-            {t.metrics ? ' The numbers below are the last ones read.' : ''}
-          </p>
-        </Callout>
-      ))}
       {metrics.error && <ErrorState error={metrics.error} onRetry={() => metrics.refetch()} />}
       {out && (
         <Suspense fallback={null}>
@@ -286,6 +276,16 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
                   {t.status === 'failed' && <RetryTarget post={post} target={t} className="ml-auto shrink-0" />}
                 </div>
                 <TargetStatus post={post} target={t} retry={false} />
+                {published && m?.error && (
+                  // In the channel's card, once: a refused read usually fails its comments the same way.
+                  <Callout tone="warning" size="xs" data-testid="metrics-error">
+                    <p className="font-medium">Couldn&apos;t read the latest from {t.channel_name}</p>
+                    <p className="mt-0.5 text-muted-foreground">
+                      {m.error}
+                      {m.metrics ? ' The numbers and comments below are the last ones read.' : ''}
+                    </p>
+                  </Callout>
+                )}
                 {published &&
                   (metrics.isPending && active ? (
                     // Where the numbers come: nothing moves when they arrive.
@@ -307,7 +307,13 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
                   ) : null)}
                 {published && (
                   <Suspense fallback={<Skeleton className="h-4 w-28" />}>
-                    <ChannelComments postId={post.id} channelId={t.channel_id} active={active} filter={filter} />
+                    <ChannelComments
+                      postId={post.id}
+                      channelId={t.channel_id}
+                      active={active}
+                      filter={filter}
+                      quietError={!!m?.error}
+                    />
                   </Suspense>
                 )}
               </li>
