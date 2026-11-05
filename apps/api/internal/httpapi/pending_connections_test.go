@@ -36,7 +36,7 @@ func (fakePages) Accounts(_ context.Context, c providers.Credentials) ([]provide
 	case "ut_one":
 		return []providers.Account{{ID: "p1", Name: "Page One"}}, nil
 	}
-	return []providers.Account{{ID: "p1", Name: "Page One", Handle: "@pageone"}, {ID: "p2", Name: "Page Two", Handle: "@pagetwo"}}, nil
+	return []providers.Account{{ID: "p1", Name: "Page One", Handle: "@pagep1"}, {ID: "p2", Name: "Page Two", Handle: "@pagep2"}}, nil
 }
 
 func (fakePages) UseAccount(_ context.Context, c providers.Credentials, id string) (providers.Credentials, providers.Profile, error) {
@@ -109,8 +109,12 @@ func TestPendingConnections(t *testing.T) {
 	}
 	var pc app.PendingConnection
 	e.do(e.browser, "GET", "/v1/pending-connections/"+id, "", nil, 200, &pc)
-	if pc.Provider != "fakepages" || len(pc.Accounts) != 2 || pc.Accounts[1].Handle != "@pagetwo" || pc.ExpiresAt == "" {
+	if pc.Provider != "fakepages" || len(pc.Accounts) != 2 || pc.Accounts[1].Handle != "@pagep2" || pc.ExpiresAt == "" {
 		t.Fatalf("pending: %+v", pc)
+	}
+	// p1 is a channel already (the one-account sign-in): the picker says picking it reconnects it.
+	if pc.Accounts[0].ChannelStatus != "connected" || pc.Accounts[1].ChannelStatus != "" {
+		t.Fatalf("connected marks: %+v", pc.Accounts)
 	}
 	var sealed string
 	if err := e.svc.DB.QueryRow(`SELECT credentials FROM pending_connections WHERE id = ?`, id).Scan(&sealed); err != nil || strings.Contains(sealed, "ut_two") {

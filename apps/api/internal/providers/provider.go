@@ -307,6 +307,9 @@ type Account struct {
 	Handle     string `json:"handle,omitempty"`
 	AvatarURL  string `json:"avatar_url,omitempty"`
 	ProfileURL string `json:"profile_url,omitempty"`
+	// ChannelStatus is set by the app, not the provider: the status of the workspace's channel for this account
+	// when it has one (picking the account again reconnects that channel); "" when it has none.
+	ChannelStatus string `json:"channel_status,omitempty"`
 }
 
 // AccountLister is implemented by OAuth platforms whose sign-in may publish as several accounts. After Exchange
