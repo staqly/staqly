@@ -65,7 +65,7 @@ describe('post responses', () => {
     expect(screen.getByText('Love it <b>x</b>')).toBeInTheDocument()
     expect(screen.getByTestId('unavailable')).toHaveTextContent("Comments: this platform doesn't let staqly read them")
 
-    await user.click(screen.getByRole('button', { name: 'negative' }))
+    await user.click(screen.getByRole('button', { name: /^negative/ }))
     expect(screen.queryByText('Love it <b>x</b>')).not.toBeInTheDocument()
     expect(within(screen.getByTestId('responses-ch_f')).getByText('Meh')).toBeInTheDocument()
 

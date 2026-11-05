@@ -13,6 +13,7 @@ import { api, type PostResponses as Responses } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { qk } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
+import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 type Insight = NonNullable<Responses['overall']>
@@ -21,29 +22,38 @@ const FILTERS = ['all', 'positive', 'neutral', 'negative'] as const
 const SHOWN = 50
 const WAITING = "This month's AI allowance is used up; the comments are kept and analysed once it renews."
 
-// Sentiment colours: positive green, neutral muted, negative destructive.
-const BAR = { positive: 'bg-emerald-500', neutral: 'bg-muted-foreground/40', negative: 'bg-destructive' }
+const SENTIMENTS = ['positive', 'neutral', 'negative'] as const
+const SENTIMENT_TONE = { positive: TONES.success, neutral: TONES.neutral, negative: TONES.danger }
 
+/** The sentiments that came up, as dots with counts; the split bar only once there is more than one to split. */
 function SentimentBar({ i }: { i: Insight }) {
   const total = i.positive + i.neutral + i.negative
+  const present = SENTIMENTS.filter((k) => i[k] > 0)
 
   if (total === 0) {
     return null
   }
 
   return (
-    <div className="grid gap-1">
-      <div
-        className="flex h-2 overflow-hidden rounded-full bg-muted"
-        role="img"
-        aria-label={`${i.positive} positive, ${i.neutral} neutral, ${i.negative} negative`}
-      >
-        {(['positive', 'neutral', 'negative'] as const).map((k) => (
-          <div key={k} className={BAR[k]} style={{ width: `${(i[k] / total) * 100}%` }} />
+    <div className="grid gap-1.5">
+      {present.length > 1 && (
+        <div
+          className="flex h-1.5 gap-0.5 overflow-hidden rounded-full"
+          role="img"
+          aria-label={`${i.positive} positive, ${i.neutral} neutral, ${i.negative} negative`}
+        >
+          {present.map((k) => (
+            <div key={k} className={SENTIMENT_TONE[k].fill} style={{ width: `${(i[k] / total) * 100}%` }} />
+          ))}
+        </div>
+      )}
+      <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
+        {present.map((k) => (
+          <span key={k} className="inline-flex items-center gap-1.5">
+            <span aria-hidden className={cn('size-2 rounded-full', SENTIMENT_TONE[k].dot)} />
+            {i[k]} {k}
+          </span>
         ))}
-      </div>
-      <p className="text-xs text-muted-foreground tabular-nums">
-        {i.positive} positive · {i.neutral} neutral · {i.negative} negative
       </p>
     </div>
   )
@@ -115,25 +125,32 @@ export function CommentsOverview({
     return null
   }
 
+  const o = d.overall
+  const count = (f: SentimentFilter) => (o ? (f === 'all' ? o.positive + o.neutral + o.negative : o[f]) : 0)
+  // Filtering is worth it once the comments differ: a sentiment nobody had is no filter.
+  const filters = FILTERS.filter((f) => f === 'all' || count(f) > 0)
+
   return (
     <section className="grid gap-3 rounded-xl border p-3" aria-label="Audience comments" data-testid="post-responses">
       <h3 className="text-sm font-semibold">Audience comments</h3>
-      {d.overall && <InsightView i={d.overall} />}
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by sentiment">
-        {FILTERS.map((f) => (
-          <Button
-            key={f}
-            type="button"
-            size="sm"
-            variant={filter === f ? 'default' : 'outline'}
-            aria-pressed={filter === f}
-            onClick={() => onFilter(f)}
-            className="capitalize"
-          >
-            {f}
-          </Button>
-        ))}
-      </div>
+      {o && <InsightView i={o} />}
+      {filters.length > 2 && (
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by sentiment">
+          {filters.map((f) => (
+            <Button
+              key={f}
+              type="button"
+              size="sm"
+              variant={filter === f ? 'secondary' : 'ghost'}
+              aria-pressed={filter === f}
+              onClick={() => onFilter(f)}
+              className="capitalize"
+            >
+              {f} <span className="text-muted-foreground tabular-nums">{count(f)}</span>
+            </Button>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
@@ -156,6 +173,8 @@ export function ChannelComments({
   const q = useResponses(postId, active)
   const [all, setAll] = useState(false)
   const c = q.data?.channels.find((x) => x.channel_id === channelId)
+  // With one channel commented on, the overview above already reads its comments: no second reading here.
+  const readsOwn = !q.data?.overall || q.data.channels.filter((x) => x.responses.length > 0).length > 1
 
   if (q.isPending) {
     return <Skeleton className="h-4 w-28" />
@@ -185,7 +204,7 @@ export function ChannelComments({
         {c.error && !quietError && (
           <p className="text-xs text-amber-700 dark:text-amber-400">Couldn&apos;t refresh the comments: {c.error}</p>
         )}
-        {c.insight && <InsightView i={c.insight} quiet={!!c.error} />}
+        {c.insight && readsOwn && <InsightView i={c.insight} quiet={!!c.error} />}
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No comments yet</p>
         ) : (
