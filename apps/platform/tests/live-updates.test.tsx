@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { LiveUpdates } from '@/components/shell/live-updates'
 import { api, type Post, type StashEvent } from '@/lib/api'
-import { awaitOutcome } from '@/lib/publish-outcome'
+import { awaitOutcome, progressOf } from '@/lib/publish-outcome'
 import { undoToast } from '@/lib/publish-undo'
 import { qk } from '@/lib/queries'
 
@@ -109,7 +109,7 @@ describe('live updates', () => {
     const initial = [event(1)]
     const success = vi.spyOn(toast, 'success').mockImplementation(() => 1)
 
-    undoToast({ id: 'pst_mine', title: 'Test 1', content: 'x' } as Post, () => {})
+    undoToast({ id: 'pst_mine', title: 'Test 1', content: 'x', targets: [{}, {}] } as Post, () => {})
     qc.setQueryData(qk.recentEvents, initial)
     const fetchEvents = vi.spyOn(api, 'events').mockResolvedValue({ data: initial })
     const { unmount } = render(
@@ -120,12 +120,28 @@ describe('live updates', () => {
     const published = (seq: number, postId: string) =>
       ({ ...event(seq, 'post.published'), post_id: postId }) as StashEvent
 
+    // A channel reports back: the toast's progress moves, and it isn't over yet.
     await act(async () => {
-      qc.setQueryData(qk.recentEvents, [published(3, 'pst_other'), published(2, 'pst_mine'), ...initial])
+      qc.setQueryData(qk.recentEvents, [
+        { ...event(2, 'post.target_published'), post_id: 'pst_mine' } as StashEvent,
+        ...initial,
+      ])
     })
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Published', { description: 'Test 1' }))
+    await waitFor(() => expect(progressOf('pst_mine')).toEqual({ done: 1, failed: 0, total: 2 }))
+    expect(success).not.toHaveBeenCalled()
     await act(async () => {
-      qc.setQueryData(qk.recentEvents, [published(4, 'pst_mine'), published(3, 'pst_other'), ...initial])
+      qc.setQueryData(qk.recentEvents, [published(4, 'pst_other'), published(3, 'pst_mine'), ...initial])
+    })
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('Published', {
+        id: 'publish:pst_mine',
+        description: 'Test 1',
+        duration: 5000,
+      }),
+    )
+    expect(progressOf('pst_mine')).toBeUndefined()
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [published(5, 'pst_mine'), published(4, 'pst_other'), ...initial])
     })
     expect(success).toHaveBeenCalledTimes(1)
     unmount()
@@ -156,7 +172,9 @@ describe('live updates', () => {
     await act(async () => {
       qc.setQueryData(qk.recentEvents, [removed(3), removed(2), ...initial])
     })
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Unpublished', { description: 'Down' }))
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('Unpublished', { id: undefined, description: 'Down', duration: 5000 }),
+    )
     unmount()
     qc.clear()
     fetchEvents.mockRestore()

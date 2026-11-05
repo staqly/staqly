@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { outcomeOf } from '@/lib/publish-outcome'
+import { outcomeOf, publishToastId } from '@/lib/publish-outcome'
 import { isForeignEvent, qk, refreshEventLists, useRecentEvents } from '@/lib/queries'
 
 /** How often the dashboard looks for changes made elsewhere (agents, the scheduler, other tabs); paused in background tabs. */
@@ -94,11 +94,16 @@ export function LiveUpdates() {
     for (const e of fresh) {
       const done = outcomeOf(e)
 
+      // A publish ends the toast that followed it (publish-undo); unpublishing has none.
+      const id = done && !done.unpublish && e.post_id ? publishToastId(e.post_id) : undefined
+
       if (done?.ok) {
-        toast.success(done.unpublish ? 'Unpublished' : 'Published', { description: done.title })
+        toast.success(done.unpublish ? 'Unpublished' : 'Published', { id, description: done.title, duration: 5000 })
       } else if (done) {
         toast.error(done.unpublish ? "Couldn't unpublish everywhere" : "Couldn't publish", {
+          id,
           description: `${done.title}: open it to see why.`,
+          duration: 8000,
         })
       }
     }

@@ -466,6 +466,17 @@ func TestFacebookReply(t *testing.T) {
 	if f.form("/p1_100/comments", 1).Get("message") != "Second" || files(f)["/p1_100/comments"][0] != "C" {
 		t.Fatalf("comments %v", forms(f))
 	}
+	// A video (and a second file) is left out: the comment goes with its text and the picture.
+	vid := bytesFile("v.mp4", "video/mp4", "V")
+	if _, err := r.Reply(ctx, pageCreds, first.ExternalID, PostContent{Text: "Third", Media: []MediaFile{vid, bytesFile("d.jpg", "image/jpeg", "D"), bytesFile("e.jpg", "image/jpeg", "E")}}, Settings{}); err != nil {
+		t.Fatal(err)
+	}
+	if f.form("/p1_100/comments", 2).Get("message") != "Third" || files(f)["/p1_100/comments"][1] != "D" || len(files(f)["/p1_100/comments"]) != 2 {
+		t.Fatalf("comment with a video: %v %v", forms(f), files(f))
+	}
+	if _, err := r.Reply(ctx, pageCreds, first.ExternalID, PostContent{Media: []MediaFile{vid}}, Settings{}); !errors.Is(err, ErrRejected) {
+		t.Fatalf("only a video: %v", err)
+	}
 	if _, err := r.Reply(ctx, pageCreds, "s1", PostContent{Text: "x"}, Settings{"post_type": "story"}); !errors.Is(err, ErrRejected) {
 		t.Fatalf("story comment: %v", err)
 	}
@@ -490,7 +501,7 @@ func TestFacebookValidate(t *testing.T) {
 		{"story", []MediaFile{pic}, Settings{"post_type": "story"}, nil, true},
 		{"story without media", nil, Settings{"post_type": "story"}, nil, false},
 		{"unknown type", nil, Settings{"post_type": "carousel"}, nil, false},
-		{"comment with a video", nil, Settings{}, []ThreadPart{{Text: "c", Media: []MediaFile{vid}}}, false},
+		{"comment with a video (left out)", nil, Settings{}, []ThreadPart{{Text: "c", Media: []MediaFile{vid}}}, true},
 		{"pdf", []MediaFile{{Name: "a.pdf", MimeType: "application/pdf"}}, Settings{}, nil, false},
 	} {
 		err := fb.Validate(PostContent{Text: "x", Media: c.media, Thread: c.thread}, c.s)
