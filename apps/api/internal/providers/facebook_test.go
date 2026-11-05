@@ -595,3 +595,38 @@ func files(f *fakeFacebook) map[string][]string     { a, _, _, _ := f.snapshot()
 func headers(f *fakeFacebook) []http.Header         { _, b, _, _ := f.snapshot(); return b }
 func polls(f *fakeFacebook) int                     { _, _, c, _ := f.snapshot(); return c }
 func forms(f *fakeFacebook) map[string][]url.Values { _, _, _, d := f.snapshot(); return d }
+
+// A Page subscribes the app to its feed, so Meta's webhook brings its comments; without pages_manage_metadata Meta
+// refuses, which only leaves the comments to the 30-minute read.
+func TestFacebookSubscribeEvents(t *testing.T) {
+	allowed := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if r.Method != http.MethodPost || r.URL.Path != "/v24.0/p1/subscribed_apps" || r.PostForm.Get("subscribed_fields") != "feed" ||
+			r.PostForm.Get("access_token") != "ptok" {
+			t.Errorf("subscribe: %s %s %v", r.Method, r.URL.Path, r.PostForm)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if !allowed {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"message":"(#200) Requires pages_manage_metadata","code":200}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer srv.Close()
+	old := facebookGraph
+	facebookGraph = srv.URL
+	defer func() { facebookGraph = old }()
+	c := Credentials{"access_token": "ptok", "page_id": "p1"}
+	if updated, err := (Facebook{}).SubscribeEvents(context.Background(), c, ""); err != nil || updated != nil {
+		t.Fatalf("subscribe: %v %v", updated, err)
+	}
+	allowed = false
+	if _, err := (Facebook{}).SubscribeEvents(context.Background(), c, ""); !errors.Is(err, ErrRejected) {
+		t.Fatalf("without the permission: %v", err)
+	}
+	if _, err := (Facebook{}).SubscribeEvents(context.Background(), Credentials{}, ""); !errors.Is(err, ErrReauth) {
+		t.Fatalf("no Page: %v", err)
+	}
+}

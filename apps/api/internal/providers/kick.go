@@ -292,11 +292,14 @@ func (Kick) CheckApp(ctx context.Context, app App, _ string) (bool, error) {
 
 // Kick sends replies to a post (chat replies) to the webhook instead of being read.
 var (
-	_ EventSubscriber = Kick{}
-	_ PushedResponses = Kick{}
+	_ EventSubscriber  = Kick{}
+	_ AudienceReporter = Kick{}
+	_ PushedResponses  = Kick{}
 )
 
 func (Kick) PushesResponses() {}
+
+func (Kick) ReportsAudience() {}
 
 // Kick says when the stream starts (livestream.status.updated), so a post can wait for it.
 var _ LiveNotifier = Kick{}

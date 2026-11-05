@@ -397,6 +397,10 @@ type EventSubscriber interface {
 	SubscribeEvents(ctx context.Context, c Credentials, hookURL string) (Credentials, error)
 }
 
+// AudienceReporter: a platform whose events count a channel's follows, subscriptions or members (Kick, Whop), shown
+// in the analytics' Audience.
+type AudienceReporter interface{ ReportsAudience() }
+
 // Remover is implemented by platforms that can take a published post (or one part of its thread) down again.
 // externalID is what Publish or Reply returned. Remove returns nil also when the platform says the item is
 // already gone, a *Failure with ErrManual when the platform has no way to delete it through its API (the person

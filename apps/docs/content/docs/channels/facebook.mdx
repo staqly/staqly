@@ -77,6 +77,8 @@ may use and allows it. Staqly asks for these permissions:
 | `pages_manage_posts` | Publish posts, reels and stories as the Page |
 | `pages_read_engagement` | Read the Page's name, picture and posts, and a post's reactions, comments and shares (**Statistics**) |
 | `pages_manage_engagement` | Post the comments of a post's thread as the Page |
+| `read_insights` | Read a post's views and reach (**Statistics**) |
+| `pages_manage_metadata` | Subscribe the Page to the app's webhook, so new comments show within seconds ([Comments right away](#comments-right-away)) |
 
 Staqly then lists the Pages: pick one or more, and each becomes a channel showing the Page's name,
 `@username` (or its id, for a Page without one) and picture. A Page staqly finds through a business
@@ -137,6 +139,9 @@ comments within seconds of a new one:
    `https://<your dashboard>/api/v1/meta/webhook`, **Verify token** the same string, then **Verify and save**.
 3. Subscribe to the Page's **feed** field (comments come as feed changes).
 
+Staqly subscribes each Page to the app itself (`pages_manage_metadata`) when it connects, and again daily. A Page
+connected before staqly asked for that permission keeps the 30-minute read until it is reconnected once.
+
 Meta signs every call with the Meta app's secret, which the server already has; a call it can't check is refused.
 
 The same webhook tells staqly when someone takes a permission away in their Facebook settings: under **Webhooks** →
@@ -151,7 +156,9 @@ Unpublishing deletes the post on the Page through the API, thread comments first
 ## Statistics
 
 A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show its reactions (as likes), comments and
-shares (videos and reels have no shares count). They need no extra permission.
+shares (videos and reels have no shares count). A feed post also shows its views and reach (`read_insights`, and
+the person who connected the Page can analyze it); a Page connected without that permission shows the rest. Videos
+and reels show no views yet.
 
 [Audience comments](/dashboard/posts#audience-comments) also need `pages_read_user_content`, which the Meta app must have approved through App Review: without it Meta may hide commenters' names or text.
 

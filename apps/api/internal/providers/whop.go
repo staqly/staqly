@@ -575,7 +575,12 @@ func whopError(status int, raw []byte) error {
 var WhopEvents = []string{"member.created", "membership.activated"}
 
 // Whop sends the business's member events to staqly's webhook, one per channel.
-var _ EventSubscriber = Whop{}
+var (
+	_ EventSubscriber  = Whop{}
+	_ AudienceReporter = Whop{}
+)
+
+func (Whop) ReportsAudience() {}
 
 // SubscribeEvents keeps a webhook for this channel on Whop: the one made before when it still exists (turned back on
 // when Whop disabled it after failures), else a new one, whose id and signing secret come back to be stored. Whop shows

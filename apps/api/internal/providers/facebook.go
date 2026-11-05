@@ -35,8 +35,10 @@ var (
 )
 
 // facebookScopes: list the Pages (pages_show_list, and business_management for Pages a business portfolio owns),
-// publish as them (pages_manage_posts, pages_read_engagement) and comment as them (pages_manage_engagement).
-const facebookScopes = "pages_show_list,pages_manage_posts,pages_read_engagement,pages_manage_engagement,business_management"
+// publish as them (pages_manage_posts, pages_read_engagement), comment as them (pages_manage_engagement), read a
+// post's views and reach (read_insights) and send the Page's comments to staqly's webhook (pages_manage_metadata).
+const facebookScopes = "pages_show_list,pages_manage_posts,pages_read_engagement,pages_manage_engagement,business_management," +
+	"read_insights,pages_manage_metadata"
 
 func init() {
 	l := Limits{MaxChars: 63206, MaxMedia: 10, MediaKinds: []string{"image", "video"}}
@@ -563,4 +565,22 @@ func facebookSpecial(e metaErr) error {
 		return &Failure{Kind: ErrGone, Msg: "Facebook can't find the Page or the post (" + e.detail + "); reconnect the channel if the Page moved"}
 	}
 	return nil
+}
+
+// Facebook sends a Page's feed changes (new comments) to staqly's Meta webhook once the Page subscribes the app.
+var _ EventSubscriber = Facebook{}
+
+// SubscribeEvents subscribes the Page to the app's webhook for its feed (pages_manage_metadata): Meta calls
+// /v1/meta/webhook when someone comments. Subscribing again changes nothing. A Page connected without the permission
+// is refused (ErrRejected); its comments are still read every 30 minutes.
+func (Facebook) SubscribeEvents(ctx context.Context, c Credentials, _ string) (Credentials, error) {
+	token, page := c["access_token"], c["page_id"]
+	if token == "" || page == "" {
+		return nil, &Failure{Kind: ErrReauth, Msg: "Facebook: no Page stored; reconnect the channel"}
+	}
+	req, err := fbGraph.post(ctx, token, "/"+url.PathEscape(page)+"/subscribed_apps", url.Values{"subscribed_fields": {"feed"}})
+	if err != nil {
+		return nil, err
+	}
+	return nil, fbGraph.do(ctx, req, nil)
 }
