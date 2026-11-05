@@ -9,7 +9,7 @@ import (
 )
 
 // Meta's platforms report a published post's numbers: Facebook its reactions, comments and shares (the Page token's
-// pages_read_engagement), Instagram and Threads their insights (instagram_manage_insights, threads_manage_insights).
+// pages_read_engagement) and a feed post's views and reach (read_insights), Instagram and Threads their insights (instagram_manage_insights, threads_manage_insights).
 var (
 	_ MetricsReader = Facebook{}
 	_ MetricsReader = Instagram{}
@@ -90,6 +90,16 @@ func (Facebook) Metrics(ctx context.Context, c Credentials, externalID string) (
 	m := Metrics{Likes: &likes, Replies: &replies}
 	if post { // Facebook leaves shares out while there are none
 		m.Shares = &shares.Count
+		// shortcut: videos and reels have their views in /video_insights instead, not read yet.
+		in, err := metaInsights(ctx, fbGraph, c["access_token"], externalID, "post_media_view,post_total_media_view_unique")
+		var f *Failure
+		switch {
+		case err == nil:
+			m.Impressions, m.Reach = num(in, "post_media_view"), num(in, "post_total_media_view_unique")
+		case !errors.As(err, &f) || f.Kind != ErrRejected:
+			return Metrics{}, err
+		}
+		// Refused: a Page connected without read_insights, or one whose person can't analyze it. The rest still counts.
 	}
 	for _, t := range fbReactionTypes {
 		if !typed {

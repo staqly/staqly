@@ -892,7 +892,7 @@ func (s *Service) analyticsAudience(ctx context.Context, workspaceID string, cha
 	out := &AudienceStats{Channels: []string{}, Daily: make([]AudienceDay, len(days))}
 	for _, c := range channels {
 		if e, ok := providers.Get(c.Provider); ok && match(c.ID) {
-			if _, reports := e.Provider.(providers.EventSubscriber); reports {
+			if _, reports := e.Provider.(providers.AudienceReporter); reports {
 				out.Channels = append(out.Channels, c.ID)
 			}
 		}
