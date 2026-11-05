@@ -543,6 +543,9 @@ func (Facebook) Reply(ctx context.Context, c Credentials, parentExternalID strin
 // facebookSpecial: Facebook's own error codes, before the ones Meta's platforms share.
 func facebookSpecial(e metaErr) error {
 	switch {
+	case e.code == 10 && strings.Contains(e.lower, "pages_read_engagement"):
+		// The sign-in lacks reading for this Page (it was left out when the person chose the Pages): publishing may still work.
+		return &Failure{Kind: ErrRejected, Msg: "Facebook doesn't let staqly read this Page's posts (pages_read_engagement isn't granted for it): reconnect the channel and keep this Page and every permission ticked"}
 	case e.sub == 1390008:
 		return &Failure{Msg: "Facebook says the Page is posting too fast; staqly tries again in a few minutes"}
 	case e.code == 368:

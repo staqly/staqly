@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,6 +28,9 @@ func TestMetaMetrics(t *testing.T) {
 				t.Errorf("facebook metrics: %s", r.URL.Query().Get("metric"))
 			}
 			_, _ = w.Write([]byte(`{"data":[{"name":"post_media_view","values":[{"value":90}]},{"name":"post_total_media_view_unique","values":[{"value":60}]}]}`))
+		case "/v24.0/noread":
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"(#10) Object does not exist, cannot be loaded due to missing permission or reviewable feature, or does not support this operation. This endpoint requires the 'pages_read_engagement' permission","code":10}}`))
 		case "/v24.0/vid":
 			if !strings.HasPrefix(r.URL.Query().Get("fields"), "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)") {
 				t.Errorf("video fields: %s", r.URL.Query().Get("fields"))
@@ -69,6 +73,9 @@ func TestMetaMetrics(t *testing.T) {
 	m, err := Facebook{}.Metrics(ctx, c, "1_2")
 	if err != nil || v(m.Likes) != 7 || v(m.Replies) != 2 || v(m.Shares) != 3 || v(m.Impressions) != 90 || v(m.Reach) != 60 {
 		t.Fatalf("facebook post: %+v %v", m, err)
+	}
+	if _, err = (Facebook{}).Metrics(ctx, c, "noread"); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "reconnect the channel") {
+		t.Fatalf("facebook without reading: %v", err)
 	}
 	if m, err = (Facebook{}).Metrics(ctx, c, "vid"); err != nil || v(m.Likes) != 1 || m.Shares != nil {
 		t.Fatalf("facebook video: %+v %v", m, err)
