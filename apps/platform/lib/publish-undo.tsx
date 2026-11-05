@@ -1,5 +1,6 @@
 'use client'
 
+import { Loader2Icon } from 'lucide-react'
 import { useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 
@@ -85,8 +86,13 @@ export function undoToast(saved: Post, onUndone: (draft: Post) => void) {
   })
   setTimeout(() => {
     if (isAwaited(saved.id)) {
-      // Too late to undo: the post is going out.
-      toast.loading(<Progress postId={saved.id} />, { id, description, action: undefined })
+      // Too late to undo: the post is going out. The same info toast, a spinner in place of its icon.
+      toast.info(<Progress postId={saved.id} />, {
+        id,
+        description,
+        action: undefined,
+        icon: <Loader2Icon aria-hidden className="size-4 animate-spin" />,
+      })
     }
   }, delay)
   setTimeout(() => {
