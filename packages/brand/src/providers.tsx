@@ -250,12 +250,24 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
  * The provider as an app icon (round unless `className` gives another radius): the "Add channel" grid, channel
  * rows, the landing page and the stacked avatars on calendar chips (when a channel has no profile picture).
  */
-export function ProviderTile({ id, name, className }: { id: string; name?: string; className?: string }) {
+export function ProviderTile({
+  id,
+  name,
+  className,
+  colorway = 'theme',
+}: {
+  id: string
+  name?: string
+  className?: string
+  /** 'dark' on a page that is always dark (the landing page): only the light logo, one <img> instead of two. */
+  colorway?: 'theme' | 'dark'
+}) {
   const look = providerLook(id)
   const label = name ?? look.icon?.title ?? id
 
   if (look.logo) {
-    const src = `/brand/providers/${look.logo}.svg`
+    const darkOnly = look.dark && colorway === 'dark'
+    const src = `/brand/providers/${look.logo}${darkOnly ? '-dark' : ''}.svg`
 
     // The logo as the platform draws it, on no tile of ours; a black one swaps to its light version in dark mode.
     return (
@@ -271,9 +283,9 @@ export function ProviderTile({ id, name, className }: { id: string; name?: strin
           height={24}
           loading="lazy"
           decoding="async"
-          className={`size-[90%] object-contain ${look.dark ? '[.dark_&]:hidden' : ''}`}
+          className={`size-[90%] object-contain ${look.dark && !darkOnly ? '[.dark_&]:hidden' : ''}`}
         />
-        {look.dark && (
+        {look.dark && !darkOnly && (
           <img
             src={`/brand/providers/${look.logo}-dark.svg`}
             alt=""
