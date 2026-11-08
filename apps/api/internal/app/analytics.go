@@ -173,7 +173,7 @@ func (s *Service) trackEvent(q *db.Queries, p Principal, ev db.Event) {
 			}
 		}
 		if ev.Type == "post.target_failed" {
-			props.Set("error_class", errorClass(d.Error)).Set("error", truncateRunes(d.Error, 200))
+			props.Set("error_class", errorClass(d.Error))
 		}
 	case "workspace.plan_changed":
 		props.Set("from", d.From).Set("to", d.To).Set("reason", d.Reason)

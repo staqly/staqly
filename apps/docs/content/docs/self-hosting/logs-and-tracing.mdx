@@ -160,9 +160,10 @@ Any Sentry-compatible service works as well, for example GlitchTip or a self-hos
 ## PostHog
 
 With `POSTHOG_KEY` set, the same `ERROR` lines also go to PostHog error tracking as exceptions
-(title: the log message, description: the error, grouped by message and route), alongside the
+(title and description: the log message, grouped by message and route), alongside the
 product events described in [Analytics](/self-hosting/analytics). You can use Sentry, PostHog,
-both or neither.
+both or neither. PostHog receives the stack trace and diagnostic identifiers, but not the raw error
+or extra log fields, which may contain private data. Full error details remain in the local logs.
 
 ## Next steps
 

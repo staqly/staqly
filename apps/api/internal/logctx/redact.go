@@ -11,9 +11,13 @@ var tokenPaths = []struct{ prefix, except string }{
 
 // RedactPath keeps bearer tokens in URL paths out of logs: /v1/previews/<token>/... and
 // /v1/connect-links/<token>/... are logged with the token replaced, also behind the dashboard's /api prefix.
+// Signed media links carry a permanent download credential, so their path is hidden too.
 func RedactPath(path string) string {
 	base := strings.TrimPrefix(path, "/api")
 	lead := path[:len(path)-len(base)]
+	if strings.HasPrefix(base, "/v1/media-links/") {
+		return lead + "/v1/media-links/REDACTED"
+	}
 	for _, t := range tokenPaths {
 		if !strings.HasPrefix(base, t.prefix) || (t.except != "" && strings.HasPrefix(base, t.prefix+t.except)) {
 			continue
