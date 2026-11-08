@@ -182,7 +182,7 @@ function PostCard({
         {s.image && (
           <img
             src={`${basePath}${s.image}`}
-            alt=""
+            alt={s.imageAlt ?? ''}
             width={160}
             height={160}
             className="size-20 shrink-0 rounded-xl ring-1 ring-border sm:size-24"
