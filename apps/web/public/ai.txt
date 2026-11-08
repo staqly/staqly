@@ -1,0 +1,4 @@
+# ai.txt (https://site.spawning.ai/spawning-ai-txt): AI crawlers may read and use every page of staqly.ai.
+# A map of the site for LLMs and agents: https://staqly.ai/llms.txt
+User-Agent: *
+Allow: /
