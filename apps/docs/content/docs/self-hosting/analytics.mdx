@@ -82,7 +82,7 @@ acted, `agent` (the MCP or REST client's name, e.g. `Claude Code`) are on every 
 | `post_created`, `post_scheduled` | A post created / scheduled | `status`, `channel_count`, `platforms`, `media_count`, `thread_parts`, `repeats` |
 | `post_updated` | A post saved | — |
 | `post_published` | One channel of a post went out | `platform`, `attempts`, `delay_seconds` (how late after the due time) |
-| `post_publish_failed` | One channel of a post failed for good | `platform`, `attempts`, `error_class` (`reauth`, `rejected`, `timeout`, `start_failed`, `credentials`, `limit`, `validation`, `platform_error`), `error` (the platform's message, at most 200 characters) |
+| `post_publish_failed` | One channel of a post failed for good | `platform`, `attempts`, `error_class` (`reauth`, `rejected`, `timeout`, `start_failed`, `credentials`, `limit`, `validation`, `platform_error`) |
 | `schedule_created`, `schedule_failed` | Schedules | — |
 | `media_uploaded` | A file uploaded | `type` (`image`, `video`...), `size_bytes` |
 | `media_edited` | The design editor saved a file or a project | `kind` (`file`, `project`) |
@@ -96,7 +96,7 @@ acted, `agent` (the MCP or REST client's name, e.g. `Claude Code`) are on every 
 | `trial_paused` | A trial was paused for review because it connected accounts of an earlier unpaid trial (cloud; nothing charged) | `reason` (`channels`) |
 | `trial_ended_early` | An owner chose to start the paid plan during the trial (Start paid plan now) | `charged` |
 | `credits_purchased` | A bundle of extra posts paid | `posts` |
-| `$exception` | An error report (server or dashboard) | PostHog's exception properties; server: `request_id`, `trace_id`, `route`, `workspace_id`, `worker` and the log line's fields |
+| `$exception` | An error report (server or dashboard) | PostHog's exception properties; server: the fixed log message, stack trace and diagnostic tags (`request_id`, `trace_id`, `route`, `workspace_id`, `worker`, `mode`, `version`), without raw errors or extra log fields |
 | `$pageview`, `$web_vitals` | Dashboard pages | PostHog's, URL without query and fragment |
 
 Billing numbers in PostHog are counts of what the server confirmed from Stripe webhooks, not

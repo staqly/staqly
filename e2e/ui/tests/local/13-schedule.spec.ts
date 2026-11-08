@@ -117,6 +117,7 @@ test.describe('the schedule', () => {
     )
     // The "now" line sits on today's grid.
     await page.getByRole('button', { name: 'Today' }).click()
+    await expect(page.getByTestId(`schedule-slot-${dayKey(new Date())}-12`)).toBeAttached()
     await expect(page.getByTestId('now-line')).toBeAttached()
 
     // Day view: one column, the range names the day.
@@ -160,7 +161,8 @@ test.describe('the schedule', () => {
     const scheduled = col.posts[0]!
     const draft = col.posts[1]!
     const written = col.posts[2]!
-    const when = daysAhead(2, 10)
+    // Always cross a week boundary so Today must finish navigating before we return.
+    const when = daysAhead(8, 10)
 
     await api.schedule(scheduled.id, when.toISOString())
     await page.goto('/schedule')
@@ -185,6 +187,7 @@ test.describe('the schedule', () => {
     const yesterday = daysAhead(-1, 9)
 
     await page.getByRole('button', { name: 'Today' }).click()
+    await expect(page.getByTestId(`schedule-slot-${dayKey(new Date())}-12`)).toBeAttached()
 
     if ((await page.getByTestId(`schedule-slot-${dayKey(yesterday)}-9`).count()) > 0) {
       await expect(page.getByTestId(`schedule-slot-${dayKey(yesterday)}-9`)).toHaveAttribute('data-past', 'true')

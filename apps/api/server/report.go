@@ -1,7 +1,6 @@
 package server
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -82,24 +81,22 @@ func sentrySend(r slog.Record, rep errorReport) {
 	sentry.CaptureEvent(ev)
 }
 
-// posthogSend reports to PostHog error tracking: the log message is the issue's title, the error its
-// description, grouped by message and route like Sentry. Exceptions are personless (a workspace's, or the
-// server's when no workspace is involved).
+// posthogSend reports to PostHog error tracking, grouped by message and route like Sentry.
+// Exceptions are personless: a workspace's, or the server's when no workspace is involved.
 func posthogSend(c posthog.EnqueueClient, base posthog.Properties) func(slog.Record, errorReport) {
 	return func(r slog.Record, rep errorReport) {
 		distinct := "staqly-api"
 		if ws := rep.tags["workspace_id"]; ws != "" {
 			distinct = "workspace:" + ws
 		}
-		ex := posthog.NewDefaultException(r.Time, distinct, r.Message, cmp.Or(rep.err, r.Message))
+		// Raw errors and extra fields may contain private data; omit them from PostHog.
+		ex := posthog.NewDefaultException(r.Time, distinct, r.Message, r.Message)
 		fp := r.Message + "|" + rep.tags["route"]
 		ex.ExceptionFingerprint = &fp
 		// Exceptions don't get the client's DefaultEventProperties: base goes on them here.
 		ex.Properties = posthog.NewProperties().Merge(base).Set("$process_person_profile", false)
-		for _, m := range []map[string]string{rep.extra, rep.tags} {
-			for k, v := range m {
-				ex.Properties.Set(k, v)
-			}
+		for k, v := range rep.tags {
+			ex.Properties.Set(k, v)
 		}
 		_ = c.Enqueue(ex)
 	}

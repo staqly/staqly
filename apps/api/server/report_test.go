@@ -42,13 +42,13 @@ func TestPostHogHandlerSendsOnlyErrors(t *testing.T) {
 	log := slog.New(reportHandler{Handler: slog.NewJSONHandler(io.Discard, nil), send: posthogSend(f, base)}).
 		With("request_id", "r1", "workspace_id", "ws_1")
 	log.Warn("slow")
-	log.Error("internal error", "err", "boom", "route", "/v1/posts")
+	log.Error("internal error", "err", "invalid email: editor@example.com", "route", "/v1/posts", "detail", "secret launch text")
 	if len(f.sent) != 1 {
 		t.Fatalf("events = %d, want 1", len(f.sent))
 	}
 	ex := f.sent[0].(posthog.Exception)
 	item := ex.ExceptionList[0]
-	if ex.DistinctId != "workspace:ws_1" || item.Type != "internal error" || item.Value != "boom" ||
+	if ex.DistinctId != "workspace:ws_1" || item.Type != "internal error" || item.Value != "internal error" ||
 		*ex.ExceptionFingerprint != "internal error|/v1/posts" {
 		t.Fatalf("exception = %q %q %q %q", ex.DistinctId, item.Type, item.Value, *ex.ExceptionFingerprint)
 	}
@@ -60,5 +60,8 @@ func TestPostHogHandlerSendsOnlyErrors(t *testing.T) {
 	}
 	if item.Stacktrace == nil || len(item.Stacktrace.Frames) == 0 {
 		t.Error("no stack trace")
+	}
+	if _, ok := ex.Properties["detail"]; ok {
+		t.Fatal("PostHog exception carries an unrestricted log attribute")
 	}
 }

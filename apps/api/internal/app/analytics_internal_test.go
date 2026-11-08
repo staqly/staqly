@@ -67,7 +67,7 @@ func TestAnalyticsPostEvents(t *testing.T) {
 		UpdatedAt: s.now(), PostID: created.ID, ChannelID: ch.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.finishTarget(ctx, created.ID, ch.ID, "failed", providers.Result{}, "the platform refused the post: text too long"); err != nil {
+	if err := s.finishTarget(ctx, created.ID, ch.ID, "failed", providers.Result{}, "the platform refused the post: secret launch text, editor@example.com, https://endpoint.example/private-token"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,6 +82,9 @@ func TestAnalyticsPostEvents(t *testing.T) {
 	failed := f.named("post_publish_failed")
 	if len(failed) != 1 || failed[0].Properties["platform"] != "custom" || failed[0].Properties["error_class"] != "rejected" {
 		t.Fatalf("post_publish_failed = %+v", failed)
+	}
+	if _, ok := failed[0].Properties["error"]; ok {
+		t.Fatal("post_publish_failed carries a raw platform error")
 	}
 	for _, c := range f.sent {
 		if c.DistinctId != "workspace:"+p.WorkspaceID || c.Properties["$process_person_profile"] != false ||
