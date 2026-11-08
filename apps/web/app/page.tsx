@@ -604,14 +604,8 @@ const jsonLd = [
       url: `${SITE_URL}/pricing`,
       price: String(p.month),
       priceCurrency: 'EUR',
-      priceSpecification: {
-        '@type': 'UnitPriceSpecification',
-        price: String(p.month),
-        priceCurrency: 'EUR',
-        unitText: 'per user per month',
-        billingDuration: 'P1M',
-        valueAddedTaxIncluded: false,
-      },
+      // Google's software rich result rejects a UnitPriceSpecification here: the unit goes in the description.
+      description: 'Per user per month, VAT excluded',
     })),
   },
   {
