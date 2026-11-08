@@ -72,6 +72,7 @@ function columns(web: string, docs: string): Column[] {
         ['Security', `${GITHUB}/blob/main/SECURITY.md`],
         ['Terms', `${docs}/legal/terms`],
         ['Privacy', `${docs}/legal/privacy`],
+        ['Cookies', `${docs}/legal/privacy#cookies`],
         ['AGPL-3.0 license', `${GITHUB}/blob/main/LICENSE`],
       ],
     },

@@ -348,7 +348,12 @@ export function AspectRatioChecker() {
               return (
                 <li key={p.id} className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
                   <div className="flex items-center gap-2.5 px-3 py-3 sm:px-3.5">
-                    <ProviderTile id={p.provider} name={p.name} className="size-7 shrink-0 rounded-lg" />
+                    <ProviderTile
+                      id={p.provider}
+                      name={p.name}
+                      colorway="dark"
+                      className="size-7 shrink-0 rounded-lg"
+                    />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{p.name}</p>
                       <p className="text-xs text-muted-foreground">Common ratio {shapeLabel(p)}</p>

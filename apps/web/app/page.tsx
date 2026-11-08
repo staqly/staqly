@@ -12,7 +12,8 @@ import { ToolPreview } from '@/components/tool-preview'
 import { ToolCards } from '@/components/tools/tool-cards'
 import { UseCaseCards } from '@/components/use-case-cards'
 import { CHANNELS } from '@/lib/channels'
-import { PLANS, TRIAL_DAYS } from '@/lib/plans'
+import { faqs } from '@/lib/faqs'
+import { PLANS } from '@/lib/plans'
 import { HOME_TITLE, SITE_LD, ldJson, pageMeta } from '@/lib/seo'
 import {
   DESCRIPTION,
@@ -73,7 +74,7 @@ function Hero() {
           />
         </div>
         <div className="mx-auto max-w-md sm:absolute sm:right-8 sm:-bottom-2 sm:w-[25rem] lg:right-8 lg:bottom-6 xl:right-[max(2rem,calc(50%-38rem))]">
-          <HeroDemo />
+          <HeroDemo colorway="dark" />
         </div>
         <div className="absolute bottom-10 left-8 hidden w-44 lg:block xl:left-[max(2rem,calc(50%-38rem))]">
           <PhoneShot className="sq-float" />
@@ -99,7 +100,7 @@ function ChannelStrip() {
               aria-hidden={i >= tiles.length || undefined}
               className="flex h-12 items-center gap-2.5 rounded-xl border border-border bg-background px-3.5 text-sm font-medium whitespace-nowrap"
             >
-              <ProviderTile id={id} name={name} className="size-7 shrink-0 rounded-md" />
+              <ProviderTile id={id} name={name} colorway="dark" className="size-7 shrink-0 rounded-md" />
               {name}
             </li>
           ))}
@@ -414,7 +415,7 @@ function Channels() {
           {CHANNELS.map(([id, name]) => (
             <li key={id} className="relative size-14 hover:z-10 pointer-coarse:size-auto">
               <div className="group absolute top-0 left-0 flex h-14 items-center rounded-2xl border border-[color-mix(in_oklch,var(--brand)_40%,transparent)] bg-card px-3 font-semibold tracking-tight transition-shadow hover:shadow-lg pointer-coarse:static">
-                <ProviderTile id={id} name={name} className="size-8 shrink-0 rounded-lg" />
+                <ProviderTile id={id} name={name} colorway="dark" className="size-8 shrink-0 rounded-lg" />
                 <span
                   aria-hidden
                   className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 ease-out group-hover:ml-3 group-hover:max-w-48 group-hover:opacity-100 motion-reduce:transition-none pointer-coarse:ml-3 pointer-coarse:max-w-48 pointer-coarse:opacity-100"
@@ -521,41 +522,6 @@ function Explore() {
   )
 }
 
-const faqs: [string, string][] = [
-  [
-    'What is Staqly, in one sentence?',
-    'A social media scheduler: you (or your AI) write and design posts once, pick the channels and a time or a weekly rhythm, and Staqly publishes them to every platform you connected, retries failures and keeps the links.',
-  ],
-  [
-    'Which platforms can it publish to?',
-    "X, LinkedIn, Instagram, Facebook, Threads, TikTok, YouTube, Pinterest, Bluesky, Mastodon, Telegram, Discord, Slack, Reddit, WordPress, Medium and more, directly. Anything else goes through your own automation: an n8n workflow or a script that publishes the post and sends the link back. The composer knows each platform's limits and settings.",
-  ],
-  [
-    'Can I use it without an AI agent?',
-    'Yes. The dashboard has a composer, a calendar you drag posts around in, per-channel previews, a media library and design and video editors. The assistant and agents are optional.',
-  ],
-  [
-    'Does AI publish without me?',
-    'Only if you let it. The built-in assistant asks you to Allow every change. For your own agents, writing and publishing are separate permissions: a drafting agent fills collections, and only your schedules, you or a key with the publish permission put a post on your channels.',
-  ],
-  [
-    'What happens when a platform is down?',
-    'Publishing is a queued job. A failed channel retries on its own, the others are not held back, and you get an alert with the platform’s error and a Retry for that channel.',
-  ],
-  [
-    'What does it cost?',
-    `Plans are per user and start at €15 a month (€12 billed yearly), excl. VAT; each plan sets how many channels, new posts a month, AI allowance and storage the workspace shares. Starter has a ${TRIAL_DAYS}-day free trial. The AI assistant, the editors, MCP and the API come with every plan.`,
-  ],
-  [
-    'What makes it different from other schedulers?',
-    'It is built for agents as much as for people: Claude Code, Codex or n8n write posts over MCP or REST, collections carry their own schedules, and when a collection runs dry the schedule asks your agent for more. It is also open source and runs on your own machine if you want.',
-  ],
-  [
-    'Can I host it myself?',
-    'Yes. Staqly is AGPL-3.0: one binary or one Docker container, no plan limits, your data on your disk. It runs one workspace and prints an access token at start for your browser and agents; OAuth platforms such as X need your own developer app. The hosted version saves you backups and updates.',
-  ],
-]
-
 function Faq() {
   const more: [string, string, string][] = [
     ['Docs', DOCS, 'Setup, every feature, the API and MCP'],
@@ -598,7 +564,7 @@ function Faq() {
                 <span className="font-mono text-xs text-muted-foreground group-open:text-brand">
                   {String(i + 1).padStart(2, '0')}
                 </span>
-                <span className="flex-1 text-[17px] font-medium tracking-tight">{q}</span>
+                <h3 className="flex-1 text-[17px] font-medium tracking-tight">{q}</h3>
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition group-open:rotate-45 group-open:border-transparent group-open:bg-brand group-open:text-background">
                   <Plus className="size-4" />
                 </span>
@@ -616,49 +582,47 @@ function Faq() {
 
 // Structured data for search engines: who publishes the site, the product and its plans (per user a month, excl. VAT,
 // as on /pricing and in apps/api/internal/app/plans.go). No ratings or reviews: there are none to show.
-const jsonLd = {
-  '@context': 'https://schema.org',
-  '@graph': [
-    ...SITE_LD,
-    {
-      '@type': 'SoftwareApplication',
-      '@id': `${SITE_URL}/#software`,
-      name: 'staqly',
-      description: DESCRIPTION,
-      url: SITE_URL,
-      applicationCategory: 'BusinessApplication',
-      applicationSubCategory: 'Social media scheduler',
-      operatingSystem: 'Web, macOS, Linux',
-      license: 'https://www.gnu.org/licenses/agpl-3.0.html',
-      isAccessibleForFree: false,
-      publisher: { '@id': `${SITE_URL}/#organization` },
-      sameAs: [GITHUB],
-      offers: PLANS.map((p) => ({
-        '@type': 'Offer',
-        name: p.name,
-        url: `${SITE_URL}/pricing`,
+// One script per entity, each with its own @context and @type: some crawlers read only a top-level @type, not @graph.
+const jsonLd = [
+  ...SITE_LD,
+  {
+    '@type': 'SoftwareApplication',
+    '@id': `${SITE_URL}/#software`,
+    name: 'staqly',
+    description: DESCRIPTION,
+    url: SITE_URL,
+    applicationCategory: 'BusinessApplication',
+    applicationSubCategory: 'Social media scheduler',
+    operatingSystem: 'Web, macOS, Linux',
+    license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+    isAccessibleForFree: false,
+    publisher: { '@id': `${SITE_URL}/#organization` },
+    sameAs: [GITHUB],
+    offers: PLANS.map((p) => ({
+      '@type': 'Offer',
+      name: p.name,
+      url: `${SITE_URL}/pricing`,
+      price: String(p.month),
+      priceCurrency: 'EUR',
+      priceSpecification: {
+        '@type': 'UnitPriceSpecification',
         price: String(p.month),
         priceCurrency: 'EUR',
-        priceSpecification: {
-          '@type': 'UnitPriceSpecification',
-          price: String(p.month),
-          priceCurrency: 'EUR',
-          unitText: 'per user per month',
-          billingDuration: 'P1M',
-          valueAddedTaxIncluded: false,
-        },
-      })),
-    },
-    {
-      '@type': 'FAQPage',
-      mainEntity: faqs.map(([q, a]) => ({
-        '@type': 'Question',
-        name: q,
-        acceptedAnswer: { '@type': 'Answer', text: a },
-      })),
-    },
-  ],
-}
+        unitText: 'per user per month',
+        billingDuration: 'P1M',
+        valueAddedTaxIncluded: false,
+      },
+    })),
+  },
+  {
+    '@type': 'FAQPage',
+    mainEntity: faqs.map(([q, a]) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  },
+].map((entity) => ({ '@context': 'https://schema.org', ...entity }))
 
 export const metadata: Metadata = {
   ...pageMeta(HOME_TITLE, DESCRIPTION, '/'),
@@ -668,7 +632,9 @@ export const metadata: Metadata = {
 export default function HomePage() {
   return (
     <main id="main" className="flex flex-1 flex-col">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(jsonLd) }} />
+      {jsonLd.map((entity) => (
+        <script key={entity['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(entity) }} />
+      ))}
       <Hero />
       <ChannelStrip />
       <Audiences />
