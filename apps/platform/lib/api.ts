@@ -848,6 +848,7 @@ export const api = {
     return request<Media>('/v1/media', { method: 'POST', form, query: opts.reuse ? { reuse: 'true' } : undefined })
   },
   media: (id: string) => request<Media>(`/v1/media/${encodeURIComponent(id)}/info`),
+  mediaBlob: (id: string) => request<Blob>(`/v1/media/${encodeURIComponent(id)}`, { blob: true }),
   /** Moves a file to Deleted; `permanent` deletes it for good. */
   deleteMedia: (id: string, opts: { permanent?: boolean } = {}) =>
     request<void>(`/v1/media/${encodeURIComponent(id)}`, {

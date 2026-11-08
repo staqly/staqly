@@ -126,3 +126,28 @@ export function channelFit(channel: Channel, provider: Provider | undefined, med
 
   return notes
 }
+
+const formatsOf = (p: Provider) => p.limits.image?.formats ?? []
+
+/**
+ * What a picture of this type turns into so every given platform takes it: JPEG when they all take JPEG, else PNG,
+ * with the platforms that refuse it as it is. Undefined when they all take it, no type suits them all, or it is a GIF
+ * (converting would stop its animation).
+ */
+export function pictureTarget(providers: Provider[], mime: string) {
+  if (!mime.startsWith('image/') || mime === 'image/gif') {
+    return undefined
+  }
+
+  const refusing = providers.filter((p) => formatsOf(p).length > 0 && !formatsOf(p).includes(mime))
+
+  if (refusing.length === 0) {
+    return undefined
+  }
+
+  const to = (['image/jpeg', 'image/png'] as const).find((t) =>
+    providers.every((p) => formatsOf(p).length === 0 || formatsOf(p).includes(t)),
+  )
+
+  return to && { to, by: [...new Set(refusing.map((p) => p.name))] }
+}
