@@ -15,8 +15,8 @@ import (
 // numbers and removal go through graph.facebook.com (Instagram's methods, embedded).
 type InstagramBusiness struct{ Instagram }
 
-// instagramBusinessScopes: publishing, comments and numbers on the account, and the Pages that lead to it.
-const instagramBusinessScopes = "instagram_basic,instagram_content_publish,instagram_manage_comments,instagram_manage_insights," +
+// instagramBusinessScopes: publishing, comments, numbers and deleting posts on the account, and the Pages that lead to it.
+const instagramBusinessScopes = "instagram_basic,instagram_content_publish,instagram_manage_comments,instagram_manage_insights,instagram_manage_contents," +
 	"pages_show_list,pages_read_engagement,business_management"
 
 func init() {
