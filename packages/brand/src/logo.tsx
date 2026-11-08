@@ -28,7 +28,7 @@ export function LogoMark({ className, basePath = '', colorway = 'theme' }: MarkP
       {themed && (
         <img
           src={`${basePath}/brand/staqly-mark-light.svg`}
-          alt=""
+          alt="staqly"
           width={64}
           height={64}
           className="size-full dark:hidden"
@@ -36,7 +36,7 @@ export function LogoMark({ className, basePath = '', colorway = 'theme' }: MarkP
       )}
       <img
         src={`${basePath}/brand/staqly-mark-dark.svg`}
-        alt=""
+        alt="staqly"
         width={64}
         height={64}
         className={themed ? 'hidden size-full dark:block' : 'size-full'}

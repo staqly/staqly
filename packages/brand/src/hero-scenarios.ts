@@ -13,6 +13,7 @@ export type Scenario = {
   content: string
   targets: Target[]
   image?: string // a file under the app's public/ (both apps serve /demo/*.svg)
+  imageAlt?: string
 }
 
 // Every scenario goes to three channels, so the card keeps one height as it loops.
@@ -33,6 +34,7 @@ export const scenarios: Scenario[] = [
       { id: 'x', channel: 'X', chars: '96 / 280', link: 'x.com/.../status/18...' },
     ],
     image: '/demo/race-day.svg',
+    imageAlt: 'A runner on an empty road at sunrise',
   },
   {
     agent: 'n8n',
@@ -47,6 +49,7 @@ export const scenarios: Scenario[] = [
       { id: 'facebook', channel: 'Facebook', chars: '58 / 63,206', link: 'facebook.com/.../posts/pf...' },
     ],
     image: '/demo/golden-hour.svg',
+    imageAlt: 'Golden hour on a city rooftop',
   },
   {
     agent: 'codex',
@@ -79,5 +82,6 @@ export const scenarios: Scenario[] = [
       { id: 'instagram', channel: 'Instagram', chars: '78 / 2,200', link: 'instagram.com/p/C9b...' },
     ],
     image: '/demo/bakery.svg',
+    imageAlt: 'Fresh buns and a coffee on a bakery counter',
   },
 ]
