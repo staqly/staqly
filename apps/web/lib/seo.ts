@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 
 import { DESCRIPTION, GITHUB, SITE_URL, TAGLINE } from './site'
 
-/** The home page's title, also the default for pages without one. */
-export const HOME_TITLE = `staqly — ${TAGLINE}`
+/** The home page's title, also the default for pages without one; under 60 characters so search results show it whole. */
+export const HOME_TITLE = 'staqly — Social media scheduler for people and AI agents'
 
 /*
  * The social card (app/opengraph-image.png). A page that sets its own `openGraph`

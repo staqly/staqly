@@ -182,7 +182,15 @@ export function ProviderIcon({ id, name, className }: { id: string; name?: strin
 
   if (look.image) {
     return (
-      <img src={look.image} alt={name ?? id} className={classes('shrink-0 object-contain', ['size-4'], className)} />
+      <img
+        src={look.image}
+        alt={name ?? id}
+        width={16}
+        height={16}
+        loading="lazy"
+        decoding="async"
+        className={classes('shrink-0 object-contain', ['size-4'], className)}
+      />
     )
   }
 
@@ -256,11 +264,23 @@ export function ProviderTile({ id, name, className }: { id: string; name?: strin
         aria-label={label}
         className={classes('inline-flex shrink-0 items-center justify-center', ['size-9'], className)}
       >
-        <img src={src} alt="" className={`size-[90%] object-contain ${look.dark ? '[.dark_&]:hidden' : ''}`} />
+        <img
+          src={src}
+          alt=""
+          width={24}
+          height={24}
+          loading="lazy"
+          decoding="async"
+          className={`size-[90%] object-contain ${look.dark ? '[.dark_&]:hidden' : ''}`}
+        />
         {look.dark && (
           <img
             src={`/brand/providers/${look.logo}-dark.svg`}
             alt=""
+            width={24}
+            height={24}
+            loading="lazy"
+            decoding="async"
             className="hidden size-[90%] object-contain [.dark_&]:block"
           />
         )}
@@ -275,7 +295,17 @@ export function ProviderTile({ id, name, className }: { id: string; name?: strin
   let mark
 
   if (look.image) {
-    mark = <img src={look.image} alt="" className="size-[80%] object-contain" />
+    mark = (
+      <img
+        src={look.image}
+        alt=""
+        width={24}
+        height={24}
+        loading="lazy"
+        decoding="async"
+        className="size-[80%] object-contain"
+      />
+    )
   } else if (look.parts) {
     mark = <ProviderIcon id={id} className="size-[60%]" />
   } else if (look.glyph) {

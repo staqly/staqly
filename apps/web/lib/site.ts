@@ -31,4 +31,4 @@ export const wrapWide = 'mx-auto w-full max-w-7xl px-5 sm:px-8'
 export const SITE_URL = env.siteUrl
 export const TAGLINE = 'The social media scheduler for people and their AI agents'
 export const DESCRIPTION =
-  'Staqly is the social media scheduler for people and their AI agents. Write, design and schedule posts once, and Staqly publishes them to Instagram, LinkedIn, X, TikTok, YouTube and more on time. Draft with the built-in assistant or Claude Code, Codex and n8n; open source and self-hostable.'
+  'The social media scheduler for people and their AI agents: write and schedule posts once, publish to Instagram, LinkedIn, X, TikTok and more. Open source.'
