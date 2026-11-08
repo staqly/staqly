@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { acceptFor, channelFit, fitMedia, takesWords } from '@/lib/channel-fit'
+import { acceptFor, channelFit, fitMedia, pictureTarget, takesWords } from '@/lib/channel-fit'
 
 import { channel, provider } from './fixtures'
 
@@ -13,6 +13,22 @@ const pin = provider({
 })
 
 describe('channel fit', () => {
+  it('converts a picture only a shared type makes every platform take', () => {
+    const ig = provider({ name: 'Instagram', limits: { ...provider().limits, image: { formats: ['image/jpeg'] } } })
+    const th = provider({
+      name: 'Threads',
+      limits: { ...provider().limits, image: { formats: ['image/jpeg', 'image/png'] } },
+    })
+    const webpOnly = provider({ limits: { ...provider().limits, image: { formats: ['image/webp'] } } })
+
+    expect(pictureTarget([ig, th, provider()], 'image/png')).toEqual({ to: 'image/jpeg', by: ['Instagram'] })
+    expect(pictureTarget([th], 'image/webp')).toEqual({ to: 'image/jpeg', by: ['Threads'] })
+    expect(pictureTarget([ig], 'image/jpeg')).toBeUndefined()
+    expect(pictureTarget([ig], 'image/gif')).toBeUndefined()
+    expect(pictureTarget([ig], 'video/mp4')).toBeUndefined()
+    expect(pictureTarget([ig, webpOnly], 'image/png')).toBeUndefined()
+  })
+
   it('keeps the files a platform takes, like the server', () => {
     const files = [file('clip.mp4', 'video/mp4'), file('a.png', 'image/png'), file('b.png', 'image/png')]
 

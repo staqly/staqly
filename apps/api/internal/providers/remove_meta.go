@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 	"strings"
 )
 
-// Facebook and Threads delete a post (or a comment) with DELETE /{id}; Instagram only its comments.
+// Facebook, Instagram and Threads delete a post (or a comment) with DELETE /{id}.
 var (
 	_ Remover = Facebook{}
 	_ Remover = Instagram{}
@@ -55,12 +56,22 @@ func (Facebook) Remove(ctx context.Context, c Credentials, externalID string) er
 	return fbGraph.del(ctx, c["access_token"], externalID)
 }
 
+// Remove deletes a comment of the thread, or the post itself: Meta deletes Instagram posts, reels, stories and whole
+// carousels through Facebook Login only (graph.facebook.com, instagram_manage_contents), whatever comments others left.
+// Instagram login (graph.instagram.com) has no delete, and a refusal (a permission not granted, an ad, a type Meta
+// keeps) leaves it to the person.
 func (Instagram) Remove(ctx context.Context, c Credentials, externalID string) error {
-	id, ok := metaCommentID(externalID)
-	if !ok {
-		return &Failure{Kind: ErrManual, Msg: "Instagram has no way to delete a post through its API: delete it in the Instagram app"}
+	if id, ok := metaCommentID(externalID); ok {
+		return igFor(c).del(ctx, c["access_token"], id)
 	}
-	return igFor(c).del(ctx, c["access_token"], id)
+	if c["login"] == "instagram" {
+		return &Failure{Kind: ErrManual, Msg: "Instagram deletes posts through its API only for accounts connected with Facebook: delete it in the Instagram app"}
+	}
+	err := igGraph.del(ctx, c["access_token"], externalID)
+	if errors.Is(err, ErrRejected) {
+		return &Failure{Kind: ErrManual, Msg: err.Error() + "; delete it in the Instagram app (reconnecting the channel asks Facebook for the permission to delete)"}
+	}
+	return err
 }
 
 func (Threads) Remove(ctx context.Context, c Credentials, externalID string) error {

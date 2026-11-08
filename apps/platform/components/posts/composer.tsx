@@ -65,7 +65,7 @@ import {
   type Provider,
   type ProviderField,
 } from '@/lib/api'
-import { acceptFor, channelFit, takesFile, takesWords } from '@/lib/channel-fit'
+import { acceptFor, channelFit, pictureTarget, takesFile, takesWords } from '@/lib/channel-fit'
 import { apiFieldErrors } from '@/lib/form-errors'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { applyLinks, linksNotice } from '@/lib/links'
@@ -92,6 +92,7 @@ import { displayZone } from '@/lib/zone'
 
 import type { AiPostResult } from './ai-post-dialog'
 import { AllChannelsTab, ChannelTab } from './channel-tab'
+import { convertPicture, toastConverted, useConvertedMedia } from './convert-media'
 import { PostEditor } from './post-editor'
 import { isVideo, MediaItem } from './preview/parts'
 import { PublishReview } from './publish-review'
@@ -428,10 +429,13 @@ function MediaButton({
   onAdd,
   limits,
   count = 0,
+  platforms = NO_PROVIDERS,
 }: {
   onAdd: (m: Media) => void
   limits?: Provider['limits']
   count?: number
+  /** The picked channels' platforms: a picture one of them refuses is converted to a type they all take first. */
+  platforms?: Provider[]
 }) {
   const input = useRef<HTMLInputElement>(null)
   // Video opens the video editor in a new tab; what it saves for this token lands here.
@@ -441,7 +445,16 @@ function MediaButton({
 
   useDesignedMedia(token, onAdd)
   const upload = useMutation({
-    mutationFn: (file: File) => api.uploadMedia(file, undefined, { reuse: true }),
+    mutationFn: async (file: File) => {
+      const target = pictureTarget(platforms, file.type)
+      const converted = target && (await convertPicture(file, target.to))
+
+      if (target && converted) {
+        toastConverted(file.name, file.type, target)
+      }
+
+      return api.uploadMedia(converted ?? file, undefined, { reuse: true })
+    },
     onSuccess: onAdd,
     onError: (e) => toastApiError(e),
   })
@@ -998,6 +1011,8 @@ interface ChannelEditorProps {
   onMedia: Dispatch<SetStateAction<Media[]>>
   /** The one picked channel's limits: the files it takes, how many. */
   limits?: Provider['limits']
+  /** Every picked channel's platform: an uploaded picture one of them refuses is converted first. */
+  platforms: Provider[]
 }
 
 /**
@@ -1020,6 +1035,7 @@ const ChannelEditor = memo(
     onText,
     onMedia,
     limits,
+    platforms,
   }: ChannelEditorProps) {
     const providerOf = (c: Channel) => providers.find((p) => p.id === c.provider)
     const counts = channel
@@ -1052,7 +1068,12 @@ const ChannelEditor = memo(
           }
           start={
             locked ? undefined : (
-              <MediaButton limits={limits} count={media.length} onAdd={(m) => addWithin(limits, onMedia, m)} />
+              <MediaButton
+                limits={limits}
+                count={media.length}
+                platforms={platforms}
+                onAdd={(m) => addWithin(limits, onMedia, m)}
+              />
             )
           }
           end={<Counter counts={counts} />}
@@ -1542,6 +1563,10 @@ export function ComposerForm({
   )
   const [title, setTitle] = useState(post?.title ?? '')
   const picked = useMemo(() => channelList.filter((c) => selected.has(c.id)), [channelList, selected])
+  const pickedPlatforms = useMemo(
+    () => picked.flatMap((c) => providerList.find((p) => p.id === c.provider) ?? []),
+    [picked, providerList],
+  )
   // Channels a post can wait for: connected, on a platform that says when a stream starts.
   const streams = useMemo(
     () =>
@@ -1737,6 +1762,8 @@ export function ComposerForm({
 
   const [tab, setTab] = useState<string>(initialTab ?? 'all')
   const locked = !!post && isLocked(post)
+
+  useConvertedMedia(media, pickedPlatforms, setMedia, locked)
   // Sent and failed on some channels: its time is history; each failed channel is retried in Insights.
   const sent = post?.status === 'failed'
   // Post (the content), Settings (each channel's platform settings) and, once it was sent off, Insights.
@@ -2187,6 +2214,7 @@ export function ComposerForm({
                     onText={onText}
                     onMedia={setMedia}
                     limits={onlyLimits}
+                    platforms={pickedPlatforms}
                   />
                 ))}
                 <LinksNotices counts={countsFor(active)} />

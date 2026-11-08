@@ -85,6 +85,7 @@ Meta offers an optional ad account, the person can skip it. The configuration as
 | `instagram_content_publish` | Publish posts, carousels, reels and stories |
 | `instagram_manage_comments` | Post the comments of a post's thread |
 | `instagram_manage_insights` | Read a post's views, shares and saves (**Statistics**) |
+| `instagram_manage_contents` | Delete a post when you unpublish it |
 
 Staqly then lists the shared accounts: pick one or more, and each becomes a channel showing the
 account's name, `@username` and picture. Connecting the same account again reconnects its channel.
@@ -200,7 +201,7 @@ alerts) before its next post fails; without the comments one its comments turn o
 
 ## Unpublishing
 
-Meta has no API to delete an Instagram post: delete it in the app (the target shows *Remove by hand*, with a link). Staqly still removes the comments of its thread.
+Unpublishing deletes the post, reel, story or whole carousel on Instagram, comments other people left included, and the comments of its thread. Meta allows this only for accounts connected through Facebook (Unified login or [Instagram (Facebook Business)](/channels/instagram_business)) with `instagram_manage_contents`; an account connected with Instagram login, a channel connected before that permission, or a post Meta won't delete (an ad) shows *Remove by hand* instead: delete it in the Instagram app. Staqly still removes the comments of its thread.
 
 ## Statistics
 

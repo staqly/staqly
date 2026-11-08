@@ -253,12 +253,20 @@
   min-height: 5rem;
 }
 
-.post-editor:focus-within {
+/* The composer's rounded box around the editor is the field: the editor inside draws no border or shadow of its own
+   (a second, tighter-rounded border inside it showed at the corners), and the box takes focus and error colors. */
+.rte-root.post-editor[data-variant] {
+  border: 0;
+  border-radius: inherit;
+  box-shadow: none;
+}
+
+:has(> .post-editor:focus-within) {
   border-color: var(--ring);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
 }
 
-.post-editor:has([aria-invalid='true']) {
+:has(> .post-editor [aria-invalid='true']) {
   border-color: var(--destructive);
 }
 

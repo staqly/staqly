@@ -65,10 +65,18 @@ func TestRemoveMetaComment(t *testing.T) {
 	if got[0] != "/v24.0/9" || got[1] != "/v24.0/9" {
 		t.Errorf("paths: %v", got)
 	}
-	err := (Instagram{}).Remove(ctx, c, "17890")
+	if err := (Instagram{}).Remove(ctx, c, "17890"); err != nil || got[len(got)-1] != "/v24.0/17890" {
+		t.Errorf("instagram media: %v %v", err, got)
+	}
+	err := (Instagram{}).Remove(ctx, c, "denied")
 	var f *Failure
-	if !errors.As(err, &f) || f.Kind != ErrManual {
-		t.Errorf("instagram media: %v", err)
+	if !errors.As(err, &f) || f.Kind != ErrManual || strings.Contains(err.Error(), "tok") {
+		t.Errorf("instagram refused: %v", err)
+	}
+	n := len(got)
+	err = (Instagram{}).Remove(ctx, Credentials{"access_token": "tok", "login": "instagram"}, "17890")
+	if !errors.As(err, &f) || f.Kind != ErrManual || len(got) != n {
+		t.Errorf("instagram login: %v %v", err, got)
 	}
 }
 
