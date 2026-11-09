@@ -28,7 +28,6 @@ import { GroupIcon, GroupIconPicker } from '@/components/channels/group-icon'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { PageContainer, PageHeader } from '@/components/common/page-header'
-import { SkeletonList } from '@/components/common/skeleton-list'
 import { ChannelStatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -52,6 +51,7 @@ import {
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useDropTarget } from '@/hooks/use-drop-target'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useScrollFade } from '@/hooks/use-scroll-fade'
@@ -956,7 +956,7 @@ export function ChannelsPage() {
           />
           <div className="mt-6">
             {channels.isLoading ? (
-              <SkeletonList count={4} className="h-14 rounded-lg" />
+              <ChannelsSkeleton />
             ) : channels.error ? (
               <ErrorState error={channels.error} onRetry={() => channels.refetch()} />
             ) : groups.length === 0 && openGroup ? (
@@ -1048,6 +1048,26 @@ export function ChannelsPage() {
           />
         </PageContainer>
       </div>
+    </div>
+  )
+}
+
+/** The loading list in the shape of the real one: a platform heading over a framed list of rows. */
+function ChannelsSkeleton() {
+  return (
+    <div className="grid gap-2" aria-busy="true" aria-label="Loading channels">
+      <Skeleton className="h-5 w-32" />
+      <ul className="divide-y rounded-xl border">
+        {Array.from({ length: 4 }, (_, i) => (
+          <li key={i} className="flex items-center gap-3 px-3 py-2.5">
+            <Skeleton className="size-10 shrink-0 rounded-full" />
+            <span className="grid flex-1 gap-1.5">
+              <Skeleton className="h-4 w-40 max-w-full" />
+              <Skeleton className="h-3 w-24 max-w-full" />
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
