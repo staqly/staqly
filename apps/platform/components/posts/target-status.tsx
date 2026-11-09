@@ -162,7 +162,11 @@ function TargetRemoval({ target }: { target: PostTarget }) {
         </span>
       )
     case 'manual':
-      return <span className="text-amber-700 dark:text-amber-400">Remove by hand: this platform has no delete</span>
+      return (
+        <span className="text-amber-700 dark:text-amber-400">
+          Remove by hand: {target.removal_error || 'this platform has no delete'}
+        </span>
+      )
     default:
       return null
   }

@@ -129,10 +129,15 @@ describe('unpublish', () => {
     expect(container.querySelector('b')).toBeNull()
     unmount()
 
-    const manual = target({ status: 'published', removal: 'manual', external_url: 'https://m.example/1' })
+    const manual = target({
+      status: 'published',
+      removal: 'manual',
+      removal_error: 'Meta refused: delete it in the app',
+      external_url: 'https://m.example/1',
+    })
 
     renderWithProviders(<TargetStatus post={out()} target={manual} />)
-    expect(screen.getByText(/Remove by hand/)).toBeInTheDocument()
+    expect(screen.getByText('Remove by hand: Meta refused: delete it in the app')).toBeInTheDocument()
     expect(screen.getByRole('link')).toHaveAttribute('href', 'https://m.example/1')
   })
 })
