@@ -97,13 +97,20 @@ export function LiveUpdates() {
       // A publish ends the toast that followed it (publish-undo); unpublishing has none.
       const id = done && !done.unpublish && e.post_id ? publishToastId(e.post_id) : undefined
 
+      // icon: undefined drops the spinner the publishing toast carried (sonner merges updates into the same id).
       if (done?.ok) {
-        toast.success(done.unpublish ? 'Unpublished' : 'Published', { id, description: done.title, duration: 5000 })
+        toast.success(done.unpublish ? 'Unpublished' : 'Published', {
+          id,
+          description: done.title,
+          duration: 5000,
+          icon: undefined,
+        })
       } else if (done) {
         toast.error(done.unpublish ? "Couldn't unpublish everywhere" : "Couldn't publish", {
           id,
           description: `${done.title}: open it to see why.`,
           duration: 8000,
+          icon: undefined,
         })
       }
     }
