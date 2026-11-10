@@ -146,9 +146,9 @@ func (s *Service) removeTarget(ctx context.Context, postID, channelID string) er
 	if ch.Status == "disabled" || ch.Status == "needs_reconnect" {
 		return s.settleRemoval(ctx, postID, channelID, "failed", "The channel is "+map[string]string{"disabled": "turned off", "needs_reconnect": "waiting to be reconnected"}[ch.Status]+"; fix that and try again.")
 	}
-	var creds providers.Credentials
-	if err := s.unseal(ch.Credentials, &creds); err != nil {
-		return s.settleRemoval(ctx, postID, channelID, "failed", "stored credentials cannot be read: "+err.Error())
+	creds, err := s.channelCredentials(ctx, ch)
+	if err != nil {
+		return s.settleRemoval(ctx, postID, channelID, "failed", err.Error())
 	}
 	if creds, err = s.refreshIfDue(ctx, ch, e, creds); err != nil {
 		if errors.Is(err, providers.ErrReauth) {

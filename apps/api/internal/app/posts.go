@@ -1458,9 +1458,9 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	if err := e.Validate(content, settings); err != nil {
 		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, err.Error())
 	}
-	var creds providers.Credentials
-	if err := s.unseal(ch.Credentials, &creds); err != nil {
-		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, "stored credentials cannot be read: "+err.Error())
+	creds, err := s.channelCredentials(ctx, ch)
+	if err != nil {
+		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, err.Error())
 	}
 	if creds, err = s.refreshIfDue(ctx, ch, e, creds); err != nil {
 		if errors.Is(err, providers.ErrReauth) {

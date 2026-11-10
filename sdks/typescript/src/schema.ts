@@ -2809,7 +2809,7 @@ export interface paths {
         put?: never;
         /**
          * Check the stored credentials against the platform (channels:manage)
-         * @description Rate-limited per principal (burst 5, then 10 per minute). A failing check marks the channel `needs_reconnect`; a passing one clears it.
+         * @description Rate-limited per principal (burst 5, then 10 per minute). A failing check (stored credentials this server's key can't read included) marks the channel `needs_reconnect`; a passing one clears it.
          */
         post: operations["testChannel"];
         delete?: never;
@@ -4015,7 +4015,7 @@ export interface paths {
         put?: never;
         /**
          * Send a test message now
-         * @description Rate-limited per principal (burst 5, then 10 per minute).
+         * @description Rate-limited per principal (burst 5, then 10 per minute). An alert whose stored secrets can't be read answers 422 `secrets_unreadable`.
          */
         post: operations["testAlert"];
         delete?: never;
@@ -6404,8 +6404,10 @@ export interface components {
             };
         };
         /**
-         * @description `validation_failed` (`fields` maps each invalid field to a message), or
-         *     `idempotency_mismatch` when an `Idempotency-Key` is reused with a different request.
+         * @description `validation_failed` (`fields` maps each invalid field to a message),
+         *     `idempotency_mismatch` when an `Idempotency-Key` is reused with a different request, or
+         *     `secrets_unreadable` when stored secrets (an alert's, a platform app's) can't be opened with
+         *     this server's key, e.g. after a restore without `notify_secret.key` or `secret.key`: enter them again.
          */
         ValidationFailed: {
             headers: {

@@ -187,8 +187,8 @@ func (s *Service) syncEvents(ctx context.Context, channelID string) error {
 	if !ok || !subscribes {
 		return nil
 	}
-	var creds providers.Credentials
-	if err := s.unseal(ch.Credentials, &creds); err != nil {
+	creds, err := s.channelCredentials(ctx, ch)
+	if err != nil {
 		return nil
 	}
 	if creds, err = s.refreshIfDue(ctx, ch, e, creds); err != nil {

@@ -46,6 +46,9 @@ func LoadSecretKey(dataDir, envValue string) ([]byte, error) {
 	return k, nil
 }
 
+// errUnreadableCredentials is what a target, a channel and its alerts say when the sealed credentials don't open.
+const errUnreadableCredentials = "stored credentials cannot be read with this server's secret key (restored without secret.key, or the key changed): reconnect the channel"
+
 var errNoSecretKey = errors.New("no secret key configured (DATA_DIR/secret.key or STAQLY_SECRET_KEY)")
 
 // seal encrypts v as JSON; the result is base64 (nonce + ciphertext).

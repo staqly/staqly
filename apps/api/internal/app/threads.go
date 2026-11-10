@@ -263,9 +263,9 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 	}
 	settings := providers.Settings{}
 	_ = json.Unmarshal([]byte(target.Settings), &settings)
-	var creds providers.Credentials
-	if err := s.unseal(ch.Credentials, &creds); err != nil {
-		return s.replyEnded(ctx, postID, channelID, index, providers.Result{}, "stored credentials cannot be read: "+err.Error())
+	creds, err := s.channelCredentials(ctx, ch)
+	if err != nil {
+		return s.replyEnded(ctx, postID, channelID, index, providers.Result{}, err.Error())
 	}
 	if creds, err = s.refreshIfDue(ctx, ch, e, creds); err != nil {
 		if errors.Is(err, providers.ErrReauth) {

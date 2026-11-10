@@ -19,7 +19,7 @@ bucket up with your provider's tools. See [Media storage](/self-hosting/storage#
 | `workspace.db` | The SQLite database, the job queue included (scheduled posts and pending retries). Use the backup command, or copy it only from a cleanly stopped install after checking the WAL. |
 | `uploads/` | Uploaded media, one folder per workspace (`uploads/workspaces/<id>/`). Their `thumbs/` folders are a cache staqly rebuilds; you can skip them. |
 | `secret.key` | Decrypts channel credentials and developer app secrets. Only there if you haven't set `STAQLY_SECRET_KEY`. **Without it every channel has to be reconnected.** |
-| `notify_secret.key` | Decrypts alert secrets. Only there if you haven't set `NOTIFY_SECRET_KEY`. |
+| `notify_secret.key` | Decrypts alert secrets. Only there if you haven't set `NOTIFY_SECRET_KEY`. **Without it every alert's token, webhook URL or password has to be entered again.** |
 | `access_token` | The Community Edition's [access token](/local-vs-cloud#the-access-token). Optional: without it a restored install makes a new token and your agents need the new one. |
 
 They are in `~/.local/share/staqly` with the binary (or your `--data` directory), and in the

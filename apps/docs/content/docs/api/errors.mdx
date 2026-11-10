@@ -29,7 +29,7 @@ Switch on `error.code`; the `message` is for humans and may change.
 
 | The code is | Do this |
 |---|---|
-| `validation_failed`, `bad_request`, `connect_failed` | Fix the request (see `fields` and the message); don't retry as is |
+| `validation_failed`, `bad_request`, `connect_failed`, `secrets_unreadable` | Fix the request (see `fields` and the message); don't retry as is |
 | `unauthorized`, `forbidden`, `csrf_failed` | Fix the credentials, the key's [scopes](/api/authentication#scopes) or sign in again |
 | `conflict`, `already_*`, `app_not_configured`, `provider_soon`, `provider_disabled`, `provider_maintenance` | Reload; the state already changed, or the platform is not ready on this server |
 | `rate_limited`, `code_cooldown`, `busy`, `unavailable`, `idempotency_in_progress` | Wait (`Retry-After` when present) and retry |
@@ -117,6 +117,7 @@ A target that fails while publishing doesn't answer an error code: the post's ta
 | 409 | `provider_soon` | The platform is in the catalog but not available in this build yet, or an OAuth platform has no app keys on this server |
 | 409 | `provider_disabled` | The platform is not turned on on this server (`PROVIDER_<ID>_ENABLED` unset or `false`) |
 | 409 | `app_not_configured` | An OAuth sign-in started for a platform without a developer app; see [Developer apps](/channels/developer-apps) |
+| 422 | `secrets_unreadable` | Stored secrets (a developer app's, an alert's) can't be opened with this server's key, e.g. after a restore without `secret.key` or `notify_secret.key`: save them again |
 | 410 | `state_expired` | The platform's sign-in took too long; start again |
 | 410 | `link_revoked` | A [connect link](/channels/connect-links) was turned off; ask for a new one |
 | 409 | `default_group` | Deleting the Default [channel group](/channels#channel-groups), which every workspace keeps |
@@ -282,7 +283,7 @@ Messages staqly itself writes on a failed target:
 | *channel was removed* | The channel was deleted while the post waited |
 | *No result reported in time* | [Your own automation](/channels/your-own-automation) did not report within the collection's processing timeout |
 | *provider not available in this build* | The server no longer has the channel's platform |
-| *stored credentials cannot be read* | The server's secret key changed; reconnect the channel (see [Security](/self-hosting/security)) |
+| *stored credentials cannot be read* | The server's secret key changed (or the install was restored without `secret.key`): the channel turned **Needs reconnect**; reconnect it, then **Retry** (see [Backup and restore](/self-hosting/backup-and-restore)) |
 
 Each platform's page lists what it refuses, e.g. [X](/channels/x#when-publishing-fails).
 
