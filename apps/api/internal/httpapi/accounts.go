@@ -55,7 +55,7 @@ func init() {
 }
 
 func (s *Server) setLoginCookie(w http.ResponseWriter, value string, maxAge int) {
-	http.SetCookie(w, &http.Cookie{Name: loginCookie, Value: value, Path: "/", MaxAge: maxAge, HttpOnly: true,
+	http.SetCookie(w, &http.Cookie{Name: loginCookie, Value: value, Path: "/", MaxAge: maxAge, HttpOnly: true, // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 		Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode})
 }
 

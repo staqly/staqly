@@ -147,7 +147,8 @@ jobs:
       - uses: ./.github/actions/setup   # goreleaser's hook builds the dashboard (make dashboard)
         with: { filter: "@staqly/platform..." }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with: { go-version-file: apps/cli/go.mod, cache-dependency-path: apps/cli/go.sum }
+        # No module cache: a published binary is built only from what go.sum pins (no cache poisoning).
+        with: { go-version-file: apps/cli/go.mod, cache: false }
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: "~> v2"

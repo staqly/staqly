@@ -775,5 +775,5 @@ func (s *Service) backoff(attempt int64) time.Duration {
 	if d <= 0 || d > s.Cfg.Webhook.RetryMax {
 		d = s.Cfg.Webhook.RetryMax
 	}
-	return time.Duration(float64(d) * (0.8 + 0.4*rand.Float64()))
+	return time.Duration(float64(d) * (0.8 + 0.4*rand.Float64())) // #nosec G404 -- retry jitter, not a secret
 }

@@ -115,13 +115,13 @@ func (s *server) startSession(w http.ResponseWriter, a app.Admin, token string, 
 		writeErr(w, s.log, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", Expires: exp, HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", Expires: exp, HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteStrictMode}) // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 	writeJSON(w, http.StatusOK, map[string]string{"email": a.Email, "csrf_token": a.CSRF})
 }
 
 func (s *server) signOut(w http.ResponseWriter, r *http.Request) {
 	err := s.svc.SignOutAdmin(r.Context(), adminOf(r))
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", Expires: time.Unix(0, 0), MaxAge: -1, HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", Expires: time.Unix(0, 0), MaxAge: -1, HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteStrictMode}) // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 	s.done(w, err)
 }
 

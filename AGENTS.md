@@ -57,7 +57,7 @@ Run `test:ui-responsive` for dashboard layout changes.
 
 | Workflow | When | What |
 |---|---|---|
-| `ci.yml` | pull requests (affected jobs); push to `main`, nightly and by hand (all jobs; a push whose exact tree a pull request run passed, and a nightly on an already-passed commit, run nothing again) | `pnpm check` tasks per package, generated code up to date, the Docker e2e suite, actionlint on the workflows; one `CI passed` job sums them up (the check branch protection should require) |
+| `ci.yml` | pull requests (affected jobs); push to `main`, nightly and by hand (all jobs; a push whose exact tree a pull request run passed, and a nightly on an already-passed commit, run nothing again) | `pnpm check` tasks per package, generated code up to date, the Docker e2e suite, actionlint and zizmor on the workflows, a static security scan (`make security`: gosec, Semgrep); one `CI passed` job sums them up (the check branch protection should require) |
 | `cross-client.yml` | pushes/PRs touching the API, CLI, SDKs or the suite; nightly and by hand | `pnpm --filter @staqly/e2e test:cross-client` (Go, uv, Node; no secrets) |
 | `n8n.yml` | pushes to `main` touching the API, image or integration (not the dashboard), nightly, by hand | the dev stack built from the checkout + a real n8n: `test:n8n` (no secrets) |
 | `ui.yml` | nightly, by hand | the dashboard in a real browser: `test:ui` (flows, axe) and `test:ui-responsive` against `staqly serve` built from the checkout (no secrets) |

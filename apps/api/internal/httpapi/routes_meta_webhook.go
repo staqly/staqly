@@ -50,7 +50,7 @@ func (s *Server) metaDataDeletionStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = io.WriteString(w, text)
+	_, _ = io.WriteString(w, text) // #nosec G705 -- text/plain + nosniff; the text is ours, not the request's
 }
 
 func (s *Server) verifyMetaWebhook(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +66,7 @@ func (s *Server) verifyMetaWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	// Meta wants the challenge back as it sent it, as plain text.
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = io.WriteString(w, challenge)
+	_, _ = io.WriteString(w, challenge) // #nosec G705 -- text/plain + nosniff, echoed only after hub.verify_token matched
 }
 
 func (s *Server) metaWebhook(w http.ResponseWriter, r *http.Request) {

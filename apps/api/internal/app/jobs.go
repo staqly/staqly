@@ -62,7 +62,7 @@ var jobBackoff = []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute}
 
 func backoffFor(attempt int64) time.Duration {
 	d := jobBackoff[min(max(attempt-1, 0), int64(len(jobBackoff)-1))]
-	return time.Duration(float64(d) * (1 + 0.2*rand.Float64()))
+	return time.Duration(float64(d) * (1 + 0.2*rand.Float64())) // #nosec G404 -- retry jitter, not a secret
 }
 
 type jobPayload struct {

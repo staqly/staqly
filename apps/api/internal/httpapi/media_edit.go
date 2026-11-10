@@ -154,7 +154,7 @@ func (s *Server) getAI(w http.ResponseWriter, r *http.Request) {
 // still running answers (multipart bodies skip the idempotency middleware: the service matches the key itself).
 func (s *Server) createAIJob(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 2*app.MaxAIImageBytes+(1<<20))
-	if err := r.ParseMultipartForm(8 << 20); err != nil {
+	if err := r.ParseMultipartForm(8 << 20); err != nil { // #nosec G120 -- the body is capped by http.MaxBytesReader above
 		writeErr(w, r, &app.Error{Code: "bad_request", Status: 400, Message: "expected multipart/form-data with an operation"})
 		return
 	}

@@ -10,8 +10,8 @@ from changes import changed_files, selected_jobs
 class ChangesTest(unittest.TestCase):
     def test_frontend_keeps_backend_jobs_off(self):
         self.assertEqual(selected_jobs(['apps/platform/components/ui/calendar.tsx']),
-                         {'dashboard', 'e2e'})
-        self.assertEqual(selected_jobs(['apps/web/app/page.tsx']), {'web'})
+                         {'dashboard', 'e2e', 'security'})
+        self.assertEqual(selected_jobs(['apps/web/app/page.tsx']), {'web', 'security'})
 
     def test_shared_inputs_and_full_run(self):
         all_jobs = selected_jobs(None)
@@ -21,9 +21,15 @@ class ChangesTest(unittest.TestCase):
 
     def test_api_schema_and_brand_dependents(self):
         self.assertEqual(selected_jobs(['apps/api/openapi.yaml']),
-                         {'api', 'cli', 'dashboard', 'docs', 'sdk_ts', 'sdk_py', 'e2e'})
+                         {'api', 'cli', 'dashboard', 'docs', 'sdk_ts', 'sdk_py', 'e2e', 'security'})
         self.assertEqual(selected_jobs(['packages/brand/logo.tsx']),
-                         {'dashboard', 'docs', 'web', 'packages', 'e2e'})
+                         {'dashboard', 'docs', 'web', 'packages', 'e2e', 'security'})
+
+    def test_security_scan_covers_code_not_notes(self):
+        for path in ['apps/api/internal/app/app.go', 'apps/admin/app/page.tsx', 'sdks/python/staqly/client.py',
+                     'integrations/n8n/workflow.json', 'Makefile']:
+            self.assertIn('security', selected_jobs([path]))
+        self.assertNotIn('security', selected_jobs(['README.md']))
 
     def test_openapi_change_runs_python_model_contract(self):
         self.assertIn('sdk_py', selected_jobs(['apps/api/openapi.yaml']))

@@ -21,6 +21,8 @@ JOBS = {
     'sdk_py': r'^(sdks/python/|apps/api/openapi\.yaml$)',
     # The image embeds the dashboard, so frontend/shared changes need the Docker check too.
     'e2e': r'^(apps/(api|cli|platform)/|packages/|sdks/|scripts/|e2e/|Dockerfile$|\.dockerignore$|compose)',
+    # Our own code (gosec, Semgrep) and secrets in any of it; the workflows are scanned by the `changes` job.
+    'security': r'^(apps/|packages/|sdks/|integrations/|scripts/|e2e/)',
 }
 
 

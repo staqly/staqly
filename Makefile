@@ -1,4 +1,4 @@
-.PHONY: help dashboard release up dev dev-tunnel site channels dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi lint-workflows gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
+.PHONY: help dashboard release up dev dev-tunnel site channels dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi lint-workflows security gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -109,9 +109,28 @@ lint-openapi: ## Validate the OpenAPI document
 	pnpm --filter @staqly/api run lint:openapi
 
 ACTIONLINT_IMAGE := rhysd/actionlint:1.7.12
+ZIZMOR_IMAGE := ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d
 
-lint-workflows: ## Lint the GitHub Actions workflows (actionlint + shellcheck, in Docker; CI runs the same)
+lint-workflows: ## Lint the GitHub Actions workflows (actionlint + shellcheck, zizmor for security; in Docker, CI runs the same)
 	docker run --rm -v "$(CURDIR):/repo" -w /repo $(ACTIONLINT_IMAGE) -color
+	docker run --rm -v "$(CURDIR):/repo" -w /repo $(ZIZMOR_IMAGE) --offline --no-progress .
+
+# Static security analysis of our own code (CodeQL needs GitHub Advanced Security in a private repository).
+# gosec leaves out the rules that flag any name or variable: G104 (unchecked errors: a lint), G101
+# (credential-like names; Semgrep's p/secrets checks values), G204/G304 (any variable command or path; the
+# taint rules G702/G703 follow request input into them). Findings are fixed or suppressed on their line:
+# `// #nosec G### -- reason`, `nosemgrep: rule-id -- reason`.
+# CI passes GOSEC=<the checksummed release binary> (ci.yml, same version) instead of building it every run.
+GOSEC ?= go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0
+GOSEC_EXCLUDE := G104,G101,G204,G304
+SEMGREP_IMAGE := semgrep/semgrep:1.182.0@sha256:4a34048c04fef049f71665047f074cffb00cc3d89482f965a5cd151d589237af
+SEMGREP_RULES := p/javascript p/typescript p/react p/nextjs p/python p/secrets
+
+security: ## Static security scan: gosec (Go), Semgrep (TS/JS, Python; secrets in every file); CI runs the same
+	cd apps/api && $(GOSEC) -quiet -exclude=$(GOSEC_EXCLUDE) ./...
+	cd apps/cli && $(GOSEC) -quiet -exclude=$(GOSEC_EXCLUDE) ./...
+	docker run --rm -u "$$(id -u):$$(id -g)" -e HOME=/tmp -v "$(CURDIR):/src" -w /src $(SEMGREP_IMAGE) \
+		semgrep scan --metrics=off --error --quiet $(addprefix --config ,$(SEMGREP_RULES))
 
 gen: ## Regenerate sqlc queries, dashboard API types and the TypeScript SDK schema
 	pnpm turbo run gen

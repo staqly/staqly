@@ -112,9 +112,9 @@ func (s *Server) connectLinkOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 	if parsed, perr := url.Parse(u); perr == nil {
 		// Pinned to this browser like the team's own sign-ins; the token cookie brings it back to the link's page.
-		http.SetCookie(w, &http.Cookie{Name: oauthCookie, Value: parsed.Query().Get("state"), Path: "/", MaxAge: 600,
+		http.SetCookie(w, &http.Cookie{Name: oauthCookie, Value: parsed.Query().Get("state"), Path: "/", MaxAge: 600, // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 			HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode})
-		http.SetCookie(w, &http.Cookie{Name: connectLinkCookie, Value: token, Path: "/", MaxAge: 600,
+		http.SetCookie(w, &http.Cookie{Name: connectLinkCookie, Value: token, Path: "/", MaxAge: 600, // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 			HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode})
 	}
 	writeJSON(w, 200, map[string]any{"url": u})
@@ -131,14 +131,14 @@ func (s *Server) connectLinkOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 	land := func(params url.Values) {
 		for _, name := range []string{oauthCookie, connectLinkCookie} {
-			http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode})
+			http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode}) // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 		}
 		// The token goes back in the fragment, as the link was sent: never in a server log or a Referer.
 		dest := s.svc.WebURL() + "/add-channel?" + params.Encode()
 		if token != "" && !strings.ContainsAny(token, "#/?& ") {
 			dest += "#" + token
 		}
-		http.Redirect(w, r, dest, http.StatusFound)
+		http.Redirect(w, r, dest, http.StatusFound) // #nosec G710 -- the target is the configured WEB_URL
 	}
 	if e := q.Get("error"); e != "" {
 		land(url.Values{"error": {oauthRefusal(q)}})

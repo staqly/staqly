@@ -122,6 +122,8 @@ runs the other packages.
 The `changes` job also runs actionlint and the change-selection tests
 (`make lint-workflows`, `python3 -m unittest discover -s .github/scripts`). The landing page, shared
 packages and TypeScript SDK share one job (`js`), each step running only when its part changed.
+The `security` job (`make security`, about a minute) scans our own code with gosec (Go) and Semgrep (TS/JS, Python,
+secrets), zizmor runs on the workflows in `make lint-workflows`; both stay free once the repository is private.
 
 The setup action optionally caches `.turbo` and `apps/*/.next/cache` for JS package jobs.
 Caches are separated by OS, architecture, workflow, job, Node/lockfile hash and commit, with a
