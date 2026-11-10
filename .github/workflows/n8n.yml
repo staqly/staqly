@@ -83,3 +83,18 @@ jobs:
       - name: Stop the dev stack
         if: always()
         run: docker compose -f compose.yml -f compose.dev.yml down -v
+
+  # A failed nightly opens an issue (or comments on the open one), so it doesn't go unnoticed.
+  alert:
+    name: Nightly failure alert
+    needs: [n8n]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, sparse-checkout: .github/actions }
+      - uses: ./.github/actions/nightly-alert

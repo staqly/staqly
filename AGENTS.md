@@ -67,6 +67,8 @@ Run `test:ui-responsive` for dashboard layout changes.
 The landing page (`apps/web`) is built and hosted outside this repository's workflows. The real-agent
 suite (`e2e/agent/`, real Claude Code, Codex and OpenCode over MCP; costs money) has no workflow: run
 it by hand (e2e/README.md). Every workflow step runs a command that works the same locally.
+A failed scheduled run (ci, cross-client, n8n, ui, codeql) opens an issue labelled `nightly-failure`, or comments on the open one
+(`.github/actions/nightly-alert`); close it once fixed.
 Third-party actions are pinned to a commit SHA with a `# vX.Y.Z` comment (Dependabot bumps both);
 every job sets `timeout-minutes` and only the `permissions:` it uses.
 
