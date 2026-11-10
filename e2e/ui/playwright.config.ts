@@ -27,15 +27,6 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     actionTimeout: 15_000,
-    // The design editor's background removal runs on WebGPU when there is one: a software adapter here.
-    launchOptions: {
-      args: [
-        '--enable-unsafe-webgpu',
-        '--enable-features=Vulkan',
-        '--use-angle=swiftshader',
-        '--enable-unsafe-swiftshader',
-      ],
-    },
   },
   projects: [
     {

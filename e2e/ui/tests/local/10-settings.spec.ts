@@ -135,7 +135,8 @@ test.describe('settings', () => {
       ),
     ).toBeTruthy()
     await queue.getByRole('radiogroup', { name: 'Job filter' }).getByRole('radio', { name: 'failed' }).click()
-    await expect(queue.getByText(/No failed jobs|failed/)).toBeVisible()
+    // The filter's own radio says "failed" too: look for the empty state or a job row.
+    await expect(queue.getByText('No failed jobs.').or(queue.getByTestId('job-row').first())).toBeVisible()
   })
 
   test('data & privacy: activity downloads and a full workspace export', async ({ page }) => {
