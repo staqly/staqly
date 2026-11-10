@@ -224,9 +224,8 @@ docker run --rm --volumes-from staqly -v "$PWD":/backup:ro alpine sh -ec '
 
 A throwaway container deletes the old database with its `-wal` and `-shm` files (stale WAL
 files must not be replayed onto the restored database), copies the backup in, replaces
-`uploads/` and gives everything back to the staqly user (uid 10001). To restore `secret.key`,
-`notify_secret.key` or `access_token`, copy them in the same way (`cp /backup/secret.key /data/`
-before the `chown`, then `chmod 600` them).
+`uploads/` together with `secret.key`, `notify_secret.key` and `access_token` (the uploads archive
+carries them) and gives everything back to the staqly user (uid 10001).
 
 </Step>
 <Step>
