@@ -39,6 +39,9 @@ export const test = base.extend<Fixtures>({
       })
       page.on('pageerror', (err) => problems.push(`pageerror: ${err.message}`))
       await use(problems)
+      // Every test, not only the ones that check `problems`: the static export's HTML must match the browser's
+      // first render (React #418 text/element mismatch, #423 and #425 in older builds).
+      expect(problems.filter((p) => /Minified React error #(418|423|425)\b|Hydration failed/.test(p))).toEqual([])
     },
     { auto: true },
   ],
