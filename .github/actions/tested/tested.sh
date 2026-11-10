@@ -27,6 +27,13 @@ case "$EVENT" in
       fi
     done
     ;;
+  schedule)
+    count=$(gh api "repos/$REPO/actions/workflows/$workflow.yml/runs?event=schedule&head_sha=$SHA&status=success&per_page=1" -q .total_count) || count=0
+    if [[ $count =~ ^[0-9]+$ ]] && [ "$count" -gt 0 ]; then
+      echo "A scheduled run of $path already passed on $SHA: no new commits since."
+      skip=true
+    fi
+    ;;
 esac
 
 echo "skip=$skip" >>"$GITHUB_OUTPUT"
