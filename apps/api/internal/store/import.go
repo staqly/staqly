@@ -71,7 +71,7 @@ func ImportSQLite(ctx context.Context, pg *sql.DB, sqlitePath string) (ImportRep
 	report := ImportReport{}
 	// Children first: limit_plans refers to limits.
 	for _, t := range []string{"limit_plans", "limits"} {
-		if _, err := tx.ExecContext(ctx, "DELETE FROM "+t); err != nil {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+t); err != nil { // #nosec G202 -- table names come from a fixed list in this file
 			return nil, err
 		}
 	}
@@ -129,7 +129,7 @@ func sameVersion(ctx context.Context, src, pg *sql.DB) error {
 }
 
 func copyTable(ctx context.Context, src *sql.DB, tx *sql.Tx, table string) (int64, int64, error) {
-	rows, err := src.QueryContext(ctx, "SELECT * FROM "+table)
+	rows, err := src.QueryContext(ctx, "SELECT * FROM "+table) // #nosec G202 -- table from importOrder (fixed list), columns from its own SELECT
 	if err != nil {
 		return 0, 0, err
 	}
@@ -138,7 +138,7 @@ func copyTable(ctx context.Context, src *sql.DB, tx *sql.Tx, table string) (int6
 	if err != nil {
 		return 0, 0, err
 	}
-	insert := "INSERT INTO " + table + " (" + strings.Join(cols, ", ") + ") OVERRIDING SYSTEM VALUE VALUES (" +
+	insert := "INSERT INTO " + table + " (" + strings.Join(cols, ", ") + ") OVERRIDING SYSTEM VALUE VALUES (" + // #nosec G202 -- table from importOrder (fixed list), columns from its own SELECT
 		strings.TrimSuffix(strings.Repeat("?, ", len(cols)), ", ") + ")"
 	vals := make([]any, len(cols))
 	ptrs := make([]any, len(cols))

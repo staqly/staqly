@@ -18,7 +18,7 @@ func (s *Server) createProductFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, app.MaxFeedbackAttachments*app.MaxFeedbackAttachmentBytes+(64<<10))
-	if err := r.ParseMultipartForm(8 << 20); err != nil {
+	if err := r.ParseMultipartForm(8 << 20); err != nil { // #nosec G120 -- the body is capped by http.MaxBytesReader above
 		var sizeErr *http.MaxBytesError
 		if errors.As(err, &sizeErr) {
 			writeErr(w, r, &app.Error{Code: "payload_too_large", Status: 413, Message: "attach at most 10 images of up to 5 MB each"})

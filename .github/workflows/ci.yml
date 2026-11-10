@@ -26,7 +26,8 @@ jobs:
   # Pull requests check affected packages; pushes to main, nightly and manual runs check everything, unless
   # .github/actions/tested proves this exact code already passed.
   # The workflows themselves are checked here too (a few seconds: a job of their own costs a billed minute):
-  # expressions, permissions, shell in run: steps (actionlint + shellcheck), the job selection's tests.
+  # expressions, permissions, shell in run: steps (actionlint + shellcheck), their security (zizmor), the job
+  # selection's tests.
   changes:
     name: What changed, workflows (actionlint)
     runs-on: ubuntu-latest
@@ -44,6 +45,7 @@ jobs:
       sdk_ts: ${{ steps.f.outputs.sdk_ts }}
       sdk_py: ${{ steps.f.outputs.sdk_py }}
       e2e: ${{ steps.f.outputs.e2e }}
+      security: ${{ steps.f.outputs.security }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, persist-credentials: false }
@@ -161,6 +163,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        # zizmor: ignore[cache-poisoning] -- goreleaser only checks its config here; release.yml builds without a cache
         with: { go-version-file: apps/cli/go.mod, cache-dependency-path: apps/cli/go.sum }
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/cli" }
@@ -296,12 +299,33 @@ jobs:
         run: pnpm turbo run test:e2e --filter=@staqly/e2e
         env: { E2E_BUILD: "0" }
 
+  # ── Static security analysis ──────────────────────────────────────────────
+  # gosec (Go) and Semgrep (TypeScript/JS, Python, secrets): `make security`, rules and suppressions in the
+  # Makefile. Stands in for CodeQL (codeql.yml), which a private repository can't run without Advanced Security.
+  security:
+    name: Security scan (gosec, Semgrep)
+    needs: changes
+    if: needs.changes.outputs.security == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # gosec type-checks both modules; the Go build cache also keeps the gosec binary `go run` builds.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: |
+            apps/api/go.sum
+            apps/cli/go.sum
+      - run: make security
+
   # One check for branch protection: jobs skipped by `changes` count as passed, a failed or
   # cancelled one fails this. Make "CI passed" the required status check, not the jobs themselves.
   passed:
     name: CI passed
     if: always()
-    needs: [changes, api, api-postgres, cli, dashboard, docs, js, sdk-python, e2e]
+    needs: [changes, api, api-postgres, cli, dashboard, docs, js, sdk-python, e2e, security]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

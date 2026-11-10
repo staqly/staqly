@@ -31,6 +31,7 @@ export default async function ApiReferenceTagPage(props: PageProps<'/api/referen
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
+          // nosemgrep: react-dangerouslysetinnerhtml -- ldJson() escapes `<`, so the JSON cannot close the script
           __html: ldJson(pageJsonLd({ title: tag.title, description: tag.description, url: tag.url })),
         }}
       />

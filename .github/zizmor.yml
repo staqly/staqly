@@ -1,0 +1,10 @@
+# zizmor (workflow security, `make lint-workflows`). Findings are fixed or ignored inline with a reason;
+# only what cannot carry a comment is listed here.
+rules:
+  # Style only: `./.github/actions/x` is fine for this repository's own actions.
+  self-repository:
+    disable: true
+  archived-uses:
+    ignore:
+      # The CLA assistant is archived but still works; pinned to a SHA and only given this workflow's narrow token.
+      - cla.yml:34

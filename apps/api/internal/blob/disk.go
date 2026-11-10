@@ -46,7 +46,7 @@ func (d *Disk) Put(_ context.Context, key string, r io.Reader, _ int64, _ string
 	// An upload already written to TempDir moves into place.
 	if f, ok := r.(*os.File); ok && filepath.Dir(f.Name()) == d.TempDir() {
 		if err := os.Rename(f.Name(), p); err == nil {
-			return os.Chmod(p, 0o640)
+			return os.Chmod(p, 0o600)
 		}
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(p), ".put-*")
@@ -59,7 +59,7 @@ func (d *Disk) Put(_ context.Context, key string, r io.Reader, _ int64, _ string
 		err = cerr
 	}
 	if err == nil {
-		err = os.Chmod(tmp.Name(), 0o640)
+		err = os.Chmod(tmp.Name(), 0o600)
 	}
 	if err != nil {
 		return err

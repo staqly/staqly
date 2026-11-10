@@ -207,7 +207,7 @@ func installService(c *Ctx, spec serviceSpec) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(unit), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(unit), 0o750); err != nil {
 		return err
 	}
 	// Stop a running one first and wait until it has exited: it holds the ports, and launchd refuses to load
@@ -228,7 +228,7 @@ func installService(c *Ctx, spec serviceSpec) error {
 	}
 	content := systemdUnitFile(spec)
 	if runtime.GOOS == "darwin" {
-		if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(logFile), 0o750); err != nil {
 			return err
 		}
 		spec.Log = logFile

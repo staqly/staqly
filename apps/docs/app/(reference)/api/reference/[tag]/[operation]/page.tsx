@@ -41,6 +41,7 @@ export default async function ApiOperationPage(props: PageProps<'/api/reference/
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
+          // nosemgrep: react-dangerouslysetinnerhtml -- ldJson() escapes `<`, so the JSON cannot close the script
           __html: ldJson(pageJsonLd({ title: op.title, description: operationPageDescription(op), url: op.url })),
         }}
       />

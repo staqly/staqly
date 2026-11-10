@@ -503,7 +503,7 @@ func (s *Service) txPostgres(ctx context.Context, fn func(q *db.Queries) error) 
 		if attempt > 0 {
 			// Full jitter under a low cap: a writer that lost many rounds waits about as long as a newcomer,
 			// so it is not starved by the fresh transactions that keep winning the row.
-			d := time.Duration(mathrand.Int64N(int64(min(time.Duration(attempt)*2*time.Millisecond, 50*time.Millisecond)))) +
+			d := time.Duration(mathrand.Int64N(int64(min(time.Duration(attempt)*2*time.Millisecond, 50*time.Millisecond)))) + // #nosec G404 -- retry jitter, not a secret
 				time.Millisecond
 			select {
 			case <-ctx.Done():

@@ -131,7 +131,7 @@ func (s *Server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1,
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 		HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode})
 	w.WriteHeader(204)
 }

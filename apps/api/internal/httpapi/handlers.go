@@ -29,7 +29,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setCookie(w http.ResponseWriter, ns app.NewSession) {
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: ns.Token, Path: "/", Expires: ns.ExpiresAt,
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: ns.Token, Path: "/", Expires: ns.ExpiresAt, // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 		HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode})
 }
 
@@ -218,7 +218,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true,
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 		Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode})
 	w.WriteHeader(204)
 }
@@ -895,7 +895,7 @@ func (s *Server) oauthStart(w http.ResponseWriter, r *http.Request) {
 	}
 	if parsed, perr := url.Parse(u); perr == nil {
 		// The state is also pinned to this browser: the callback must present the same value.
-		http.SetCookie(w, &http.Cookie{Name: oauthCookie, Value: parsed.Query().Get("state"), Path: "/", MaxAge: 600,
+		http.SetCookie(w, &http.Cookie{Name: oauthCookie, Value: parsed.Query().Get("state"), Path: "/", MaxAge: 600, // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
 			HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode})
 	}
 	writeJSON(w, 200, map[string]any{"url": u})
@@ -906,7 +906,8 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	q := r.URL.Query()
 	land := func(params url.Values) {
-		http.SetCookie(w, &http.Cookie{Name: oauthCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode})
+		http.SetCookie(w, &http.Cookie{Name: oauthCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode}) // #nosec G124 -- Secure follows COOKIE_SECURE (off only for plain-http local mode)
+		// #nosec G710 -- the target is the configured WEB_URL; provider is only a path segment
 		http.Redirect(w, r, s.oauthRedirect(provider)+"?"+params.Encode(), http.StatusFound)
 	}
 	if e := q.Get("error"); e != "" {

@@ -32,6 +32,7 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
     <DocsPage toc={page.data.toc} full={page.data.full} tableOfContent={{ style: 'clerk' }}>
       <script
         type="application/ld+json"
+        // nosemgrep: react-dangerouslysetinnerhtml -- ldJson() escapes `<`, so the JSON cannot close the script
         dangerouslySetInnerHTML={{ __html: ldJson(pageJsonLd({ ...page.data, url: page.url })) }}
       />
       <DocsTitle>{page.data.title}</DocsTitle>

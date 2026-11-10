@@ -512,7 +512,7 @@ func (s *Service) writeExportZip(ctx context.Context, wsID, dst string, withMedi
 		return 0, err
 	}
 	tmp := dst + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o640)
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return 0, err
 	}
