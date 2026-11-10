@@ -130,7 +130,7 @@ as locally:
 |---|---|---|---|
 | `cross-client.yml` | relevant pushes/PRs (API, CLI, SDKs, shared test helpers or the suite), nightly, by hand | Go, uv and Node; builds the TS SDK, then `pnpm --filter @staqly/e2e test:cross-client` | none |
 | `n8n.yml` | relevant pushes to `main` (image, compose, integration or suite), nightly, by hand (`scenarios` input) | the image built from the checkout (layer cache) as `ghcr.io/staqly/staqly:latest`, `docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait` (`make dev` without the browser), then `pnpm --filter @staqly/e2e test:n8n`; `results.json` as an artifact | none |
-| `ui.yml` | nightly, by hand | Go and Node, PostgreSQL as a service; `make dashboard`, Playwright's Chromium, then `UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui` and `pnpm --filter @staqly/e2e test:ui-responsive`; the report and traces as an artifact on failure | none |
+| `ui.yml` | nightly, by hand | Go and Node, PostgreSQL as a service; `make dashboard`, Playwright's Chromium, then `UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui` in three parallel shards (`--shard=N/3`, each its own servers) and `pnpm --filter @staqly/e2e test:ui-responsive` beside them; 20 minutes per job, Playwright's `globalTimeout` (15 minutes in CI) ends a stuck shard with a report; the report and traces always as an artifact | none |
 
 The real-agent suite (`e2e/agent/`) has no workflow: it costs money, so it runs only by hand (below).
 

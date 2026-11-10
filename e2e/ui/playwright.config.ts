@@ -16,6 +16,8 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   timeout: 60_000,
+  // A stuck run in CI ends with a report instead of being cancelled by the job's timeout.
+  globalTimeout: process.env.CI ? 15 * 60_000 : undefined,
   expect: { timeout: 10_000 },
   retries: process.env.CI ? 1 : 0,
   reporter: [['list'], ['html', { outputFolder: './.report', open: 'never' }]],
