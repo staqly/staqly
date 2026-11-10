@@ -8,10 +8,10 @@ name: n8n
 on:
   push:
     branches: [main]
+    # n8n talks to the REST API only (no dashboard page): frontend changes don't affect it, and the image they
+    # are built into is checked by ci.yml's Docker end-to-end job.
     paths:
       - apps/api/**
-      - apps/platform/**
-      - packages/**
       - e2e/n8n/**
       - e2e/package.json
       - integrations/n8n/**
