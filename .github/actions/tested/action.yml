@@ -1,0 +1,29 @@
+# Was exactly this code already tested by this workflow? (Needs a checkout and `actions: read`.)
+# - pull_request: records the tree of the merge commit it tests (an artifact "tested-<workflow>-<tree>").
+# - push: skip when a successful run of this workflow recorded the same tree. A squash merge of a pull
+#   request that was up to date with main has exactly the tree its pull request run tested.
+# Anything else, or any doubt (an API error, no record), means run: skip=false.
+name: Already tested
+description: Tells whether this workflow already passed on exactly this code
+outputs:
+  skip:
+    description: "'true' when this exact code already passed this workflow"
+    value: ${{ steps.check.outputs.skip }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        EVENT: ${{ github.event_name }}
+        WORKFLOW_REF: ${{ github.workflow_ref }}
+        REPO: ${{ github.repository }}
+        SHA: ${{ github.sha }}
+      run: bash "$GITHUB_ACTION_PATH/tested.sh"
+    - if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ steps.check.outputs.artifact }}
+        path: ${{ steps.check.outputs.file }}
+        retention-days: 7

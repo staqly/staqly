@@ -1,4 +1,7 @@
-"""Select CI jobs from a pull request's diff; pushes to main and uncertainty run the full suite."""
+"""Select CI jobs from a pull request's diff; pushes to main and uncertainty run the full suite.
+
+Nothing runs when this exact code already passed CI (ALREADY_TESTED=true, from .github/actions/tested).
+"""
 import json
 import os
 from pathlib import Path
@@ -35,7 +38,9 @@ def changed_files(event, payload):
         return None  # a missing/rewritten base must never silently skip checks
 
 
-def selected_jobs(files):
+def selected_jobs(files, already_tested=False):
+    if already_tested:
+        return set()
     if files is None or any(re.search(COMMON, path) for path in files):
         return set(JOBS)
     return {job for job, pattern in JOBS.items() if any(re.search(pattern, path) for path in files)}
@@ -43,7 +48,10 @@ def selected_jobs(files):
 
 if __name__ == '__main__':
     payload = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
-    selected = selected_jobs(changed_files(os.environ['GITHUB_EVENT_NAME'], payload))
+    selected = selected_jobs(
+        changed_files(os.environ['GITHUB_EVENT_NAME'], payload),
+        already_tested=os.environ.get('ALREADY_TESTED') == 'true',
+    )
     output = '\n'.join(f'{job}={str(job in selected).lower()}' for job in JOBS) + '\n'
     with open(os.environ['GITHUB_OUTPUT'], 'a') as destination:
         destination.write(output)

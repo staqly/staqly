@@ -23,13 +23,17 @@ env:
   TURBO_FORCE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
 
 jobs:
-  # Pull requests check affected packages; pushes to main, nightly and manual runs check everything.
+  # Pull requests check affected packages; pushes to main, nightly and manual runs check everything, unless
+  # .github/actions/tested proves this exact code already passed.
   # The workflows themselves are checked here too (a few seconds: a job of their own costs a billed minute):
   # expressions, permissions, shell in run: steps (actionlint + shellcheck), the job selection's tests.
   changes:
     name: What changed, workflows (actionlint)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # .github/actions/tested reads earlier runs and their artifacts
     outputs:
       api: ${{ steps.f.outputs.api }}
       cli: ${{ steps.f.outputs.cli }}
@@ -43,7 +47,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, persist-credentials: false }
+      # A push whose tree a pull request run already passed (a squash merge of an up-to-date pull request) runs
+      # nothing again; a pull request records its tree for that.
+      - id: tested
+        uses: ./.github/actions/tested
       - id: f
+        env: { ALREADY_TESTED: "${{ steps.tested.outputs.skip }}" }
         run: python3 .github/scripts/changes.py
       - run: make lint-workflows
       - run: python3 -m unittest discover -s .github/scripts
