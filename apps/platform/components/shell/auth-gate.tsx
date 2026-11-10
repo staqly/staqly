@@ -15,12 +15,12 @@ import { useSession, useSetupStatus } from '@/lib/queries'
 const LocalSignIn = dynamic(() => import('@/components/auth/local-sign-in').then((m) => m.LocalSignIn))
 
 /** The wait before the dashboard: invisible for a quick load (no flash), shown when it is slow (appear-when-slow). */
-function Splash({ label = 'Loading workspace...' }: { label?: string }) {
+function Splash() {
   return (
     <div className="appear-when-slow flex min-h-svh items-center justify-center" role="status">
       <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
         <LogoMark className="size-9 animate-pulse" />
-        {label}
+        Loading workspace...
       </div>
     </div>
   )
@@ -82,7 +82,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, [linkToken, signIn])
 
   if (!linkDone) {
-    return <Splash label="Signing in..." />
+    // The same splash the static export rendered without a link token: another label breaks hydration (React #418).
+    return <Splash />
   }
 
   return <SessionGate linkError={linkError}>{children}</SessionGate>
