@@ -6,25 +6,25 @@ require (
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/getsentry/sentry-go v0.50.0
 	github.com/go-chi/chi/v5 v5.5.0
-	github.com/go-jose/go-jose/v4 v4.1.7
+	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/posthog/posthog-go v1.39.0
+	github.com/posthog/posthog-go v1.42.0
 	github.com/pressly/goose/v3 v3.29.0
-	github.com/riverqueue/river v0.51.0
-	github.com/riverqueue/river/riverdriver v0.51.0
-	github.com/riverqueue/river/riverdriver/riverdatabasesql v0.51.0
-	github.com/riverqueue/river/riverdriver/riversqlite v0.51.0
-	github.com/riverqueue/river/rivertype v0.51.0
+	github.com/riverqueue/river v0.51.2
+	github.com/riverqueue/river/riverdriver v0.51.2
+	github.com/riverqueue/river/riverdriver/riverdatabasesql v0.51.2
+	github.com/riverqueue/river/riverdriver/riversqlite v0.51.2
+	github.com/riverqueue/river/rivertype v0.51.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/yuin/goldmark v1.8.7
 	go.yaml.in/yaml/v3 v3.0.6
-	golang.org/x/image v0.47.0
-	golang.org/x/oauth2 v0.37.0
-	golang.org/x/sync v0.24.0
-	modernc.org/sqlite v1.61.1
+	golang.org/x/image v0.48.0
+	golang.org/x/oauth2 v0.38.0
+	golang.org/x/sync v0.25.0
+	modernc.org/sqlite v1.62.0
 	mvdan.cc/xurls/v2 v2.6.0
 )
 
@@ -55,8 +55,8 @@ require (
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/philhofer/fwd v1.2.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.51.0 // indirect
-	github.com/riverqueue/river/rivershared v0.51.0 // indirect
+	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.51.2 // indirect
+	github.com/riverqueue/river/rivershared v0.51.2 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
@@ -72,11 +72,11 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/net v0.62.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
-	modernc.org/libc v1.79.1 // indirect
+	modernc.org/libc v1.80.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
