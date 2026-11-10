@@ -1,7 +1,7 @@
 # The dashboard in a real browser (e2e/ui: Playwright + axe, every page, dialog and menu in light and dark mode)
 # and every route at phone, tablet and desktop widths (e2e/ui-responsive), against `staqly serve` built from
 # this checkout: a local-mode server and a cloud-mode one on PostgreSQL. Nightly, not on every pull request
-# (about 15 minutes). No secrets. Locally the same commands (e2e/README.md).
+# (about 15 minutes, the suite split over parallel jobs). No secrets. Locally the same commands (e2e/README.md).
 name: Dashboard in the browser
 
 on:
@@ -18,9 +18,22 @@ concurrency:
 
 jobs:
   ui:
-    name: UI flows, accessibility and layouts
+    # test:ui in four shards (each its own servers and seed: specs never rely on another file's data), and the
+    # layouts beside them. One 2-CPU runner took the whole suite past its timeout, hiding every failure.
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # A shard takes about 3 minutes locally and under 10 on a runner; the suite's own globalTimeout (15 min in CI)
+    # ends a stuck run first, with a report.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "UI flows and accessibility (1/4)", run: "UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui --shard=1/4", artifact: ui-report-1 }
+          - { name: "UI flows and accessibility (2/4)", run: "UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui --shard=2/4", artifact: ui-report-2 }
+          - { name: "UI flows and accessibility (3/4)", run: "UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui --shard=3/4", artifact: ui-report-3 }
+          - { name: "UI flows and accessibility (4/4)", run: "UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui --shard=4/4", artifact: ui-report-4 }
+          - { name: "Layouts at phone, tablet and desktop widths", run: "pnpm --filter @staqly/e2e test:ui-responsive", artifact: ui-responsive-report }
     services:
       postgres:
         image: postgres:17.6-alpine
@@ -39,15 +52,13 @@ jobs:
         run: pnpm --filter @staqly/e2e exec playwright install --with-deps chromium
       - name: Dashboard export the server embeds (make dashboard)
         run: make dashboard
-      - name: UI flows and accessibility (test:ui)
-        run: UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui
-      - name: Layouts at phone, tablet and desktop widths (test:ui-responsive)
-        if: always()
-        run: pnpm --filter @staqly/e2e test:ui-responsive
+      - name: ${{ matrix.name }}
+        run: ${{ matrix.run }}
+      # Always, so a slow or cancelled run still shows which tests ran and how long each took.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure()
+        if: always()
         with:
-          name: ui-report
+          name: ${{ matrix.artifact }}
           path: |
             e2e/ui/.report/
             e2e/ui/.results/
