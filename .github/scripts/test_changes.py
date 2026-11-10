@@ -34,6 +34,11 @@ class ChangesTest(unittest.TestCase):
         self.assertIsNone(changed_files('schedule', {}))
         self.assertIsNone(changed_files('workflow_dispatch', {}))
 
+    def test_already_tested_code_runs_nothing(self):
+        self.assertEqual(selected_jobs(None, already_tested=True), set())
+        self.assertEqual(selected_jobs(['apps/api/main.go'], already_tested=True), set())
+        self.assertEqual(selected_jobs(None, already_tested=False), selected_jobs(None))
+
     def test_pull_request_covers_both_sides_of_rename(self):
         with tempfile.TemporaryDirectory() as directory:
             previous = Path.cwd()

@@ -8,10 +8,10 @@ name: n8n
 on:
   push:
     branches: [main]
+    # n8n talks to the REST API only (no dashboard page): frontend changes don't affect it, and the image they
+    # are built into is checked by ci.yml's Docker end-to-end job.
     paths:
       - apps/api/**
-      - apps/platform/**
-      - packages/**
       - e2e/n8n/**
       - e2e/package.json
       - integrations/n8n/**
@@ -43,7 +43,7 @@ jobs:
   n8n:
     name: staqly + real n8n
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - name: Results directory
         # results.json lands in $TMPDIR/staqly-n8n-e2e/<run>/
@@ -79,7 +79,7 @@ jobs:
           name: n8n-results
           path: ${{ runner.temp }}/staqly-n8n-e2e/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 7
       - name: Stop the dev stack
         if: always()
         run: docker compose -f compose.yml -f compose.dev.yml down -v

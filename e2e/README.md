@@ -103,8 +103,12 @@ The `e2e` job in `.github/workflows/ci.yml` builds the staqly image once (with t
 GitHub Actions layer cache) tagged `staqly-e2e:test`, checks formatting, lint and types of this package,
 then runs `pnpm turbo run test:e2e --filter=@staqly/e2e` with `E2E_BUILD=0`. On pull requests,
 `ci.yml` runs affected jobs only (`.github/scripts/changes.py`), comparing the checkout's merge commit
-to its first parent; a missing base runs everything. Pushes to main run every job: that run is the one a
-release checks. Image changes include the dashboard, shared packages and `.dockerignore`.
+to its first parent; a missing base runs everything. Pushes to main run every job (that run is the one a
+release checks), unless `.github/actions/tested` finds a passed pull request run of exactly the same tree:
+a squash merge of a pull request that was up to date with main, so nothing runs again and `CI passed` is
+green. Each pull request run records its tree for that (an artifact `tested-ci-<tree>`, 7 days).
+A nightly run skips a commit the previous nightly already passed (`cross-client.yml` and `ui.yml` too).
+Image changes include the dashboard, shared packages and `.dockerignore`.
 Workflows, the lockfile and root configuration run every job.
 
 Nightly and manual CI runs also set `TURBO_FORCE=true` to execute tasks even with a warm Turbo cache.
@@ -113,8 +117,9 @@ the image at once, then publishes and deploys only after that CI run passed.
 Only superseded PR runs are cancelled; each main push keeps its own run. Docker E2E runs alongside the
 API jobs; `internal/httpapi` on PostgreSQL is split over three runners (every third test each) and a fourth
 runs the other packages.
-The `workflows` job runs actionlint and the change-selection tests
-(`make lint-workflows`, `python3 -m unittest discover -s .github/scripts`).
+The `changes` job also runs actionlint and the change-selection tests
+(`make lint-workflows`, `python3 -m unittest discover -s .github/scripts`). The landing page, shared
+packages and TypeScript SDK share one job (`js`), each step running only when its part changed.
 
 The setup action optionally caches `.turbo` and `apps/*/.next/cache` for JS package jobs.
 Caches are separated by OS, architecture, workflow, job, Node/lockfile hash and commit, with a
@@ -129,7 +134,7 @@ as locally:
 | Workflow | When | Runs | Secrets |
 |---|---|---|---|
 | `cross-client.yml` | relevant pushes/PRs (API, CLI, SDKs, shared test helpers or the suite), nightly, by hand | Go, uv and Node; builds the TS SDK, then `pnpm --filter @staqly/e2e test:cross-client` | none |
-| `n8n.yml` | relevant pushes to `main` (image, compose, integration or suite), nightly, by hand (`scenarios` input) | the image built from the checkout (layer cache) as `ghcr.io/staqly/staqly:latest`, `docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait` (`make dev` without the browser), then `pnpm --filter @staqly/e2e test:n8n`; `results.json` as an artifact | none |
+| `n8n.yml` | relevant pushes to `main` (API, image, compose, integration or suite; not dashboard-only changes), nightly, by hand (`scenarios` input) | the image built from the checkout (layer cache) as `ghcr.io/staqly/staqly:latest`, `docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait` (`make dev` without the browser), then `pnpm --filter @staqly/e2e test:n8n`; `results.json` as an artifact | none |
 | `ui.yml` | nightly, by hand | Go and Node, PostgreSQL as a service; `make dashboard`, Playwright's Chromium, then `UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui` in four parallel shards (`--shard=N/4`, each its own servers) and `pnpm --filter @staqly/e2e test:ui-responsive` beside them; 20 minutes per job, Playwright's `globalTimeout` (15 minutes in CI) ends a stuck shard with a report; the report and traces always as an artifact | none |
 
 The real-agent suite (`e2e/agent/`) has no workflow: it costs money, so it runs only by hand (below).

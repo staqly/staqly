@@ -23,11 +23,17 @@ env:
   TURBO_FORCE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
 
 jobs:
-  # Pull requests check affected packages; pushes to main, nightly and manual runs check everything.
+  # Pull requests check affected packages; pushes to main, nightly and manual runs check everything, unless
+  # .github/actions/tested proves this exact code already passed.
+  # The workflows themselves are checked here too (a few seconds: a job of their own costs a billed minute):
+  # expressions, permissions, shell in run: steps (actionlint + shellcheck), the job selection's tests.
   changes:
-    name: What changed
+    name: What changed, workflows (actionlint)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # .github/actions/tested reads earlier runs and their artifacts
     outputs:
       api: ${{ steps.f.outputs.api }}
       cli: ${{ steps.f.outputs.cli }}
@@ -41,18 +47,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, persist-credentials: false }
+      # A push whose tree a pull request run already passed (a squash merge of an up-to-date pull request) runs
+      # nothing again; a pull request records its tree for that.
+      - id: tested
+        uses: ./.github/actions/tested
       - id: f
+        env: { ALREADY_TESTED: "${{ steps.tested.outputs.skip }}" }
         run: python3 .github/scripts/changes.py
-
-  # The workflows themselves: expressions, permissions, shell in run: steps (actionlint + shellcheck).
-  # A few seconds, so it runs on every change.
-  workflows:
-    name: Workflows (actionlint)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
       - run: make lint-workflows
       - run: python3 -m unittest discover -s .github/scripts
 
@@ -66,7 +67,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -116,7 +117,7 @@ jobs:
       matrix:
         shard: ["httpapi 1/3", "httpapi 2/3", "httpapi 3/3", "other packages"]
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17.6-alpine
@@ -136,7 +137,7 @@ jobs:
         run: |
           if [ "$SHARD" = "other packages" ]; then
             mapfile -t pkgs < <(go list ./... | grep -v '/internal/httpapi$')
-            go test -race -timeout 25m "${pkgs[@]}"
+            go test -race -timeout 15m "${pkgs[@]}"
             exit
           fi
           # Every top-level test of the package, sorted; shard n of 3 runs every third one.
@@ -147,7 +148,7 @@ jobs:
             if (( i % 3 == n - 1 )); then mine+=("${tests[$i]}"); fi
           done
           echo "${#mine[@]} of ${#tests[@]} tests"
-          go test -race -timeout 25m -run "^($(IFS='|'; echo "${mine[*]}"))\$" ./internal/httpapi
+          go test -race -timeout 15m -run "^($(IFS='|'; echo "${mine[*]}"))\$" ./internal/httpapi
 
   # ── staqly CLI ────────────────────────────────────────────────────────────
   cli:
@@ -155,7 +156,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.cli == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -177,7 +178,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -193,7 +194,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -202,61 +203,45 @@ jobs:
       - name: Formatting, lint, types, build (static export + link check)
         run: pnpm turbo run format:check lint typecheck build --filter=@staqly/docs
 
-  web:
-    name: Landing page (staqly.ai)
+  # The landing page, the shared packages and the TypeScript SDK: each takes well under a minute, so they share
+  # one job (one install, one billed minute instead of three). Each step runs only when its part changed.
+  js:
+    name: Landing page, shared packages, SDK (TypeScript)
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.packages == 'true' || needs.changes.outputs.sdk_ts == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      SITE_URL: https://staqly.ai
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
-        with: { filter: "@staqly/web...", cache-builds: "true" }
-      - name: Formatting, lint, types, tools' logic (scripts/check-tools.mjs), build (static export + link check)
+        with: { filter: "@staqly/web... ./packages/* @staqly/sdk...", cache-builds: "true" }
+      - name: "Landing page: formatting, lint, types, tools' logic (scripts/check-tools.mjs), build (static export + link check)"
+        if: needs.changes.outputs.web == 'true'
+        env: { SITE_URL: "https://staqly.ai" }
         run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/web
-      - name: SEO files are generated
+      - name: "Landing page: SEO files are generated"
+        if: needs.changes.outputs.web == 'true'
         working-directory: apps/web
         run: test -s out/robots.txt && test -s out/sitemap.xml && test -s out/llms.txt
-
-  packages:
-    name: Shared packages (packages/*)
-    needs: changes
-    if: needs.changes.outputs.packages == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
-      - uses: ./.github/actions/setup
-        with: { filter: "./packages/*", cache-builds: "true" }
-      - run: pnpm turbo run format:check lint typecheck --filter="./packages/*"
-
-  # ── SDKs ──────────────────────────────────────────────────────────────────
-  sdk-typescript:
-    name: SDK (TypeScript)
-    needs: changes
-    if: needs.changes.outputs.sdk_ts == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
-      - uses: ./.github/actions/setup
-        with: { filter: "@staqly/sdk...", cache-builds: "true" }
-      - name: Schema types are up to date with openapi.yaml
+      - name: "Shared packages (packages/*): formatting, lint, types"
+        if: needs.changes.outputs.packages == 'true'
+        run: pnpm turbo run format:check lint typecheck --filter="./packages/*"
+      - name: "SDK (TypeScript): schema types are up to date with openapi.yaml"
+        if: needs.changes.outputs.sdk_ts == 'true'
         working-directory: sdks/typescript
         run: pnpm gen && git diff --exit-code src/schema.ts
-      - run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/sdk
+      - name: "SDK (TypeScript): formatting, lint, types, tests, build"
+        if: needs.changes.outputs.sdk_ts == 'true'
+        run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/sdk
 
+  # ── SDKs ──────────────────────────────────────────────────────────────────
   sdk-python:
     name: SDK (Python ${{ matrix.python }})
     needs: changes
     if: needs.changes.outputs.sdk_py == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     defaults: { run: { working-directory: sdks/python } }
     strategy:
       fail-fast: false
@@ -284,7 +269,7 @@ jobs:
   e2e:
     name: Docker images + end-to-end
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     needs: changes
     # Runs when its code changed, next to the api job rather than after it: api (about 10 min, mostly
     # `go test -race`) and this job (about 10 min) no longer add up on the critical path. A failing api
@@ -316,7 +301,7 @@ jobs:
   passed:
     name: CI passed
     if: always()
-    needs: [changes, workflows, api, api-postgres, cli, dashboard, docs, web, packages, sdk-typescript, sdk-python, e2e]
+    needs: [changes, api, api-postgres, cli, dashboard, docs, js, sdk-python, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

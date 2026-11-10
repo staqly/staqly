@@ -5,7 +5,7 @@ name: Setup pnpm workspace
 description: Install pnpm, Node and the dependencies of the given packages
 inputs:
   filter:
-    description: pnpm filter, e.g. "@staqly/platform..."; empty = whole workspace
+    description: pnpm filters separated by spaces, e.g. "@staqly/platform..."; empty = whole workspace
     default: ""
   cache-builds:
     description: Persist JS Turbo tasks and Next compiler cache (Go jobs use setup-go).
@@ -17,7 +17,14 @@ runs:
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with: { node-version-file: .nvmrc, cache: pnpm }
     - shell: bash
-      run: pnpm install --frozen-lockfile ${{ inputs.filter && format('--filter "{0}" --filter staqly', inputs.filter) || '' }}
+      env: { FILTER: "${{ inputs.filter }}" }
+      run: |
+        # One --filter per space-separated entry (globs such as ./packages/* go to pnpm unexpanded).
+        set -f
+        args=()
+        for f in $FILTER; do args+=(--filter "$f"); done
+        if [ ${#args[@]} -gt 0 ]; then args+=(--filter staqly); fi
+        pnpm install --frozen-lockfile "${args[@]}"
     # Only main saves (one entry per commit): pull requests restore main's entry and save nothing, so their
     # caches don't fill the 10 GB repository limit and evict main's (and the Docker layer cache).
     - name: Cache Turbo tasks and Next compiler

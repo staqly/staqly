@@ -17,7 +17,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Nightly: nothing to do when last night's run already passed on this commit (weekends, quiet days).
+  tested:
+    name: Already tested
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # .github/actions/tested reads earlier runs
+    outputs:
+      skip: ${{ steps.tested.outputs.skip }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - id: tested
+        uses: ./.github/actions/tested
+
   ui:
+    needs: tested
+    # A manual run has no "tested" job (skipped) and always runs.
+    if: ${{ !cancelled() && needs.tested.outputs.skip != 'true' }}
     # test:ui in four shards (each its own servers and seed: specs never rely on another file's data), and the
     # layouts beside them. One 2-CPU runner took the whole suite past its timeout, hiding every failure.
     name: ${{ matrix.name }}
@@ -63,4 +83,4 @@ jobs:
             e2e/ui/.report/
             e2e/ui/.results/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 7
