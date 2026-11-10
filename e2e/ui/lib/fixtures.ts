@@ -110,12 +110,15 @@ export const uniq = (prefix: string) => `${prefix} ${Date.now().toString(36).sli
 export async function dismissToasts(page: Page): Promise<void> {
   const close = page.getByRole('region', { name: /Notifications/ }).getByRole('button', { name: 'Close toast' })
 
-  for (let i = 0; i < 10 && (await close.count()) > 0; i++) {
-    await close
-      .first()
-      .click({ force: true })
-      .catch(() => {})
-  }
+  // The click event on the button itself, not a click at its position: a toast already on its way out lets a
+  // positional click through to whatever is under it (a calendar slot under the toast opens the composer).
+  await expect(async () => {
+    for (const button of await close.all()) {
+      await button.dispatchEvent('click').catch(() => {})
+    }
+
+    await expect(close).toHaveCount(0, { timeout: 1_000 })
+  }).toPass()
 }
 
 /**

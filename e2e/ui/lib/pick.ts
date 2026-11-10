@@ -6,6 +6,15 @@ import { expect } from './fixtures.js'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const dayName = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })
+/** "November 2026", as the calendar names its grid. */
+const monthLabel = (d: Date) => d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+/** Months since year 0 of a grid's "November 2026", to know which way to step. */
+const monthIndex = (label: string) => {
+  const [month, year] = label.split(' ')
+  const d = new Date(`${month} 1, ${year}`)
+
+  return d.getFullYear() * 12 + d.getMonth()
+}
 
 /**
  * Picks `when` in the date-time picker inside `within` (a sheet or popover): the day button by its name,
@@ -23,12 +32,25 @@ export async function pickDateTime(
 
   await expect(picker).toBeVisible()
   const shown = picker.getByRole('grid')
-  // Move to the month of `when` if the calendar opened on another one.
-  const target = when.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  // Move to the month of `when` if the calendar opened on another one (the value's month, or today's): the grid
+  // also shows the neighbouring months' first and last days under the same names, so the month must match.
+  const target = monthLabel(when)
 
-  for (let i = 0; i < 3 && !(await shown.getAttribute('aria-label'))?.startsWith(target.split(' ')[0]!); i++) {
-    await picker.getByRole('button', { name: 'Next month' }).click()
+  for (let i = 0; i < 24; i++) {
+    const label = (await shown.getAttribute('aria-label'))!
+
+    if (label === target) {
+      break
+    }
+
+    await picker
+      .getByRole('button', { name: monthIndex(label) > monthIndex(target) ? 'Previous month' : 'Next month' })
+      .click()
+    // Read the grid again only once the step is on screen, or a slow render counts one step twice.
+    await expect(shown).not.toHaveAttribute('aria-label', label)
   }
+
+  await expect(shown).toHaveAttribute('aria-label', target)
 
   await picker.getByRole('button', { name: dayName(when), exact: true }).click()
   await picker
