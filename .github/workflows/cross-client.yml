@@ -52,7 +52,7 @@ jobs:
   cross-client:
     name: SDKs, CLI, curl and MCP against staqly serve
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     # The cloud servers run on PostgreSQL, one schema each (e2e/cross-client/lib.ts).
     services:
       postgres:
