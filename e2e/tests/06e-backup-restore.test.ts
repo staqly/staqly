@@ -4,9 +4,10 @@
 // the restored install has the posts, collection, media bytes, webhook and schedule, accepts the old
 // install's access token, and its sealed secrets still open: the custom channel's endpoint header
 // (secret.key) reaches the receiver on a publish, the webhook delivers, and the ntfy alert's access token (notify_secret.key)
-// on a test push.
+// on a test push. A third install restored from the database alone (no keys) says so: the publish fails at once
+// asking to reconnect, the channel turns needs_reconnect, and the alert's test is a 422 asking for its secret again.
 import { execFile } from 'node:child_process'
-import { rmSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -15,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   Api,
   type Alert,
+  type ApiError,
   type Channel,
   fixture,
   type Media,
@@ -32,6 +34,7 @@ const AVATAR = fixture('avatar1.png')
 const id = Date.now().toString(36)
 const SRC = `backup-e2e-src-${id}`
 const DST = `backup-e2e-dst-${id}`
+const NOKEY = `backup-e2e-nokey-${id}`
 const HEADER_SECRET = `hdr-${id}`
 const NTFY_SECRET = `ntfy-${id}`
 
@@ -80,7 +83,10 @@ async function script(file: string, args: string[], name: string): Promise<strin
 describe('backup.sh and restore.sh', () => {
   let src: Api
   let dst: Api
+  let nokey: Api
+  let network = ''
   let backupDir = ''
+  let dbOnlyDir = ''
   let collectionId: string
   let posts: string[]
   let image: Media
@@ -90,7 +96,7 @@ describe('backup.sh and restore.sh', () => {
   let schedule: Schedule
 
   beforeAll(async () => {
-    const network = (
+    network = (
       await docker([
         'inspect',
         RECEIVER_CONTAINER,
@@ -139,11 +145,13 @@ describe('backup.sh and restore.sh', () => {
   })
 
   afterAll(async () => {
-    await docker(['rm', '-f', SRC, DST]).catch(() => '')
-    await docker(['volume', 'rm', '-f', SRC, DST]).catch(() => '')
+    await docker(['rm', '-f', SRC, DST, NOKEY]).catch(() => '')
+    await docker(['volume', 'rm', '-f', SRC, DST, NOKEY]).catch(() => '')
 
-    if (backupDir) {
-      rmSync(backupDir, { recursive: true, force: true })
+    for (const dir of [backupDir, dbOnlyDir]) {
+      if (dir) {
+        rmSync(dir, { recursive: true, force: true })
+      }
     }
   })
 
@@ -198,5 +206,26 @@ describe('backup.sh and restore.sh', () => {
     )
 
     expect(push.headers.authorization).toBe(`Bearer ${NTFY_SECRET}`)
+  })
+
+  it('says what to do when restored without the keys', async () => {
+    // The database alone: the fresh install keeps its own secret.key and notify_secret.key (and access token).
+    dbOnlyDir = mkdtempSync(join(ROOT, 'backups', 'nokey-'))
+    copyFileSync(join(backupDir, 'workspace.db'), join(dbOnlyDir, 'workspace.db'))
+    nokey = await install(NOKEY, network)
+    await script('restore.sh', [dbOnlyDir], NOKEY)
+    nokey = new Api(await apiUrl(NOKEY), await token(NOKEY))
+
+    const post = await nokey.createPost(collectionId, { content: 'No keys', targets: [{ channel_id: channel.id }] })
+
+    await nokey.publish(post.id)
+    const failed = await waitForPost(nokey, post.id, 'failed')
+
+    expect(failed.targets[0]!.error).toMatch(/cannot be read.*reconnect the channel/)
+    expect(await nokey.get<Channel>(`/v1/channels/${channel.id}`)).toMatchObject({ status: 'needs_reconnect' })
+    await expect(nokey.post(`/v1/alerts/${alert.id}/test`)).rejects.toMatchObject<Partial<ApiError>>({
+      status: 422,
+      code: 'secrets_unreadable',
+    })
   })
 })

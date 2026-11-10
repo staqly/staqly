@@ -497,6 +497,9 @@ func postTitle(content string) string {
 
 // sendNotification renders and delivers msg on ch.
 func (s *Service) sendNotification(ctx context.Context, ch *notifyChannel, msg *notifyMessage) error {
+	if ch.unreadable != nil {
+		return ch.unreadable // counts as a failed delivery: the alert shows it and turns off after NOTIFY_MAX_FAILS
+	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	var err error

@@ -77,6 +77,11 @@ token platforms take fresh credentials. Targets on the channel fail until then. 
 the stored credentials cannot be read, `secret.key` (or `STAQLY_SECRET_KEY`) changed: restore the
 old key from your backup, or reconnect every channel.
 </Accordion>
+<Accordion title="An alert says its stored secrets cannot be read">
+`notify_secret.key` (or `NOTIFY_SECRET_KEY`) changed, e.g. a restore without it. The alert sends
+nothing and its test answers `secrets_unreadable`. Restore the old key from your backup, or edit the
+alert and enter its token, webhook URL or password again.
+</Accordion>
 <Accordion title="A post stays Publishing">
 A target on your own automation waits for a reported result; the post shows how long it has
 waited of the collection's limit. Check that your webhook receiver got `post.publish_requested`

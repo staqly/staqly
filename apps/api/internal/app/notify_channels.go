@@ -106,6 +106,8 @@ type notifyChannel struct {
 	row db.NotificationChannel
 	cfg AlertConfig // secrets merged in
 	sec channelSecrets
+	// unreadable: the stored secrets don't open with this server's key; the alert shows it and sends nothing.
+	unreadable error
 	events,
 	collections []string
 }
@@ -266,20 +268,27 @@ func (s *Service) openSecrets(channelID, blob string) (channelSecrets, error) {
 	}
 	pt, err := gcm.Open(nil, ct[:gcm.NonceSize()], ct[gcm.NonceSize():], []byte(channelID))
 	if err != nil {
-		return sec, errors.New("cannot decrypt channel secrets (was NOTIFY_SECRET_KEY changed?)")
+		return sec, errAlertSecretsUnreadable
 	}
 	err = json.Unmarshal(pt, &sec)
 	return sec, err
 }
 
-// loadChannel decrypts a stored channel.
+// errAlertSecretsUnreadable: a restore without notify_secret.key, or a changed NOTIFY_SECRET_KEY. Entering the
+// secrets again fixes it.
+var errAlertSecretsUnreadable = &Error{Code: "secrets_unreadable", Status: 422, Message: "this alert's stored secrets " +
+	"cannot be read with this server's key (restored without notify_secret.key, or NOTIFY_SECRET_KEY changed): enter them again"}
+
+// loadChannel decrypts a stored channel; secrets that don't open leave it loaded with c.unreadable set.
 func (s *Service) loadChannel(r db.NotificationChannel) (*notifyChannel, error) {
 	c := &notifyChannel{row: r}
 	if err := json.Unmarshal([]byte(r.Config), &c.cfg); err != nil {
 		return nil, err
 	}
 	sec, err := s.openSecrets(r.ID, r.Secrets)
-	if err != nil {
+	if errors.Is(err, errAlertSecretsUnreadable) {
+		c.unreadable = err
+	} else if err != nil {
 		return nil, err
 	}
 	c.sec = sec
@@ -321,6 +330,9 @@ func (s *Service) toChannel(c *notifyChannel) Alert {
 		Events: c.events, CollectionIDs: c.collections, DigestWindowSeconds: c.row.DigestWindowSeconds,
 		FailCount: c.row.FailCount, LastError: c.row.LastError, DisabledReason: c.row.DisabledReason,
 		LastSentAt: ptr(c.row.LastSentAt), CreatedAt: c.row.CreatedAt, UpdatedAt: c.row.UpdatedAt}
+	if c.unreadable != nil {
+		out.LastError = c.unreadable.Error()
+	}
 	if out.Events == nil {
 		out.Events = []string{}
 	}
@@ -543,8 +555,10 @@ func (s *Service) applyChannelInput(ctx context.Context, q *db.Queries, p Princi
 		}
 		ch.cfg = cfg
 	}
-	if err := validateChannelConfig(ch.row.Type, &ch.cfg); err != nil {
-		return err
+	if ch.unreadable == nil || in.Config != nil {
+		if err := validateChannelConfig(ch.row.Type, &ch.cfg); err != nil {
+			return err
+		}
 	}
 	if in.Events != nil {
 		if err := s.validateEventPatterns(ctx, p, *in.Events); err != nil {
@@ -569,11 +583,14 @@ func (s *Service) applyChannelInput(ctx context.Context, q *db.Queries, p Princi
 	var sec channelSecrets
 	ch.row.Config, sec = splitConfig(ch.cfg, ch.sec)
 	ch.sec = sec
-	blob, err := s.sealSecrets(ch.row.ID, sec)
-	if err != nil {
-		return err
+	// Secrets that don't open stay as stored (the right key may come back) until a new config replaces them.
+	if ch.unreadable == nil || in.Config != nil {
+		blob, err := s.sealSecrets(ch.row.ID, sec)
+		if err != nil {
+			return err
+		}
+		ch.row.Secrets, ch.unreadable = blob, nil
 	}
-	ch.row.Secrets = blob
 	ch.row.Events, ch.row.CollectionIds = mustJSON(ch.events), mustJSON(ch.collections)
 	return nil
 }
@@ -753,6 +770,9 @@ func (s *Service) TestAlert(ctx context.Context, p Principal, id string) (map[st
 	ch, err := s.getChannel(ctx, p, id)
 	if err != nil {
 		return nil, err
+	}
+	if ch.unreadable != nil {
+		return nil, ch.unreadable
 	}
 	msg := &notifyMessage{Headline: "Test notification from staqly: channel “" + ch.row.Name + "” works."}
 	if err := s.sendNotification(ctx, ch, msg); err != nil {

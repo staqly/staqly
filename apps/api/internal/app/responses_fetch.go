@@ -70,8 +70,8 @@ func (s *Service) readResponses(ctx context.Context, postID, channelID string) e
 	if err := s.CheckWritable(ctx, post.WorkspaceID); err != nil {
 		return nil // an expired subscription stops the reads, not the job queue
 	}
-	var creds providers.Credentials
-	if err := s.unseal(ch.Credentials, &creds); err != nil {
+	creds, err := s.channelCredentials(ctx, ch)
+	if err != nil {
 		return nil
 	}
 	if creds, err = s.refreshIfDue(ctx, ch, e, creds); err != nil {

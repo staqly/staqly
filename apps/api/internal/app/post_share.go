@@ -756,8 +756,8 @@ func (s *Service) readMetrics(ctx context.Context, workspaceID, channelID string
 	default:
 		return providers.Metrics{}, errChannelGone
 	}
-	var creds providers.Credentials
-	if err := s.unseal(ch.Credentials, &creds); err != nil {
+	creds, err := s.channelCredentials(ctx, ch)
+	if err != nil {
 		return providers.Metrics{}, err
 	}
 	if creds, err = s.refreshIfDue(ctx, ch, e, creds); err != nil {

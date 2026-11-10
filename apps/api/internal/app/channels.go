@@ -334,7 +334,8 @@ func (s *Service) providerApp(ctx context.Context, workspaceID, providerID strin
 	if err == nil {
 		var app providers.App
 		if err := s.unseal(row.Credentials, &app); err != nil {
-			return app, err
+			return app, &Error{Code: "secrets_unreadable", Status: 422, Message: "the app saved for this platform cannot be read with this " +
+				"server's key (restored without secret.key, or the key changed): save its client id and secret again, then reconnect"}
 		}
 		return app, nil
 	}
@@ -1074,6 +1075,9 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		defer unlock() // a refresh rotates the refresh token: read it under the lock
 	}
 	_, creds, err := s.storedCredentials(ctx, row.ID)
+	if errors.Is(err, providers.ErrReauth) {
+		return map[string]any{"ok": false, "error": err.Error()}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1133,6 +1137,9 @@ func (s *Service) ChannelOptions(ctx context.Context, p Principal, id, key strin
 		return nil, notFound("setting")
 	}
 	_, creds, err := s.storedCredentials(ctx, row.ID)
+	if errors.Is(err, providers.ErrReauth) {
+		return nil, conflict(err.Error())
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1213,9 +1220,9 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	if !ok || e.Auth() != providers.AuthOAuth2 || row.Status == "disabled" {
 		return nil
 	}
-	var creds providers.Credentials
-	if err := s.unseal(row.Credentials, &creds); err != nil {
-		return err
+	creds, err := s.channelCredentials(ctx, row)
+	if err != nil {
+		return nil // marked needs_reconnect
 	}
 	app, err := s.providerApp(ctx, row.WorkspaceID, row.Provider)
 	if err != nil {
@@ -1317,11 +1324,21 @@ func (s *Service) storedCredentials(ctx context.Context, channelID string) (db.C
 	if err != nil {
 		return row, nil, err
 	}
+	creds, err := s.channelCredentials(ctx, row)
+	return row, creds, err
+}
+
+// channelCredentials opens a channel's sealed credentials. When this server's key can't open them (a restore
+// without secret.key, a changed STAQLY_SECRET_KEY) no retry will help: the channel is marked needs_reconnect and
+// the error is a providers.ErrReauth, which every caller already settles as "reconnect the channel".
+func (s *Service) channelCredentials(ctx context.Context, row db.Channel) (providers.Credentials, error) {
 	var creds providers.Credentials
 	if err := s.unseal(row.Credentials, &creds); err != nil {
-		return row, nil, err
+		f := &providers.Failure{Kind: providers.ErrReauth, Msg: errUnreadableCredentials}
+		_ = s.channelNeedsReconnect(context.WithoutCancel(ctx), row, f)
+		return nil, f
 	}
-	return row, creds, nil
+	return creds, nil
 }
 
 // refreshIfDue refreshes an OAuth channel whose access token runs out within two minutes (X tokens last two
@@ -1346,6 +1363,12 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 		creds = stored
 	}
 	app, err := s.providerApp(ctx, row.WorkspaceID, row.Provider)
+	var appErr *Error
+	if errors.As(err, &appErr) {
+		// No usable app (none saved, or one that can't be read): a retry would not help, as in refreshChannel.
+		_ = s.channelNeedsReconnect(ctx, row, appErr)
+		return nil, &providers.Failure{Kind: providers.ErrReauth, Msg: appErr.Message}
+	}
 	if err != nil {
 		return nil, err
 	}
