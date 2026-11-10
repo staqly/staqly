@@ -108,6 +108,7 @@ release checks), unless `.github/actions/tested` finds a passed pull request run
 a squash merge of a pull request that was up to date with main, so nothing runs again and `CI passed` is
 green. Each pull request run records its tree for that (an artifact `tested-ci-<tree>`, 7 days).
 A nightly run skips a commit the previous nightly already passed (`cross-client.yml` and `ui.yml` too).
+A failed nightly (any of these workflows, and `n8n.yml`) opens an issue labelled `nightly-failure`.
 Image changes include the dashboard, shared packages and `.dockerignore`.
 Workflows, the lockfile and root configuration run every job.
 

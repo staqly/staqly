@@ -1,0 +1,28 @@
+# A failed scheduled run opens an issue "Nightly <workflow> failed" (label `nightly-failure`), or comments on
+# the one still open, so the failure reaches people instead of sitting in the Actions tab. Close the issue once
+# fixed. Needs `issues: write`; used by a job that runs only `if: failure() && github.event_name == 'schedule'`.
+name: Nightly failure alert
+description: Opens or updates an issue for a failed scheduled run
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        WORKFLOW: ${{ github.workflow }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        SHA: ${{ github.sha }}
+      run: |
+        title="Nightly $WORKFLOW failed"
+        body="The scheduled run on $SHA failed: $RUN_URL"
+        gh label create nightly-failure --color B60205 --description "A scheduled workflow run failed" 2>/dev/null || true
+        open=$(gh issue list --state open --label nightly-failure --search "\"$title\" in:title" --json number,title \
+          -q "map(select(.title == \"$title\"))[0].number // empty")
+        if [ -n "$open" ]; then
+          gh issue comment "$open" --body "Failed again. $body"
+        else
+          gh issue create --title "$title" --label nightly-failure --body "$body
+
+        Close this issue once the cause is fixed; the next failure opens a new one."
+        fi
