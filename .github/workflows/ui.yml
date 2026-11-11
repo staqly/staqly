@@ -34,10 +34,40 @@ jobs:
       - id: tested
         uses: ./.github/actions/tested
 
-  ui:
+  # One `staqly` binary with the dashboard and admin exports embedded (make dashboard + go build: about two
+  # minutes) for every job below, instead of each job building its own.
+  build:
+    name: staqly with the dashboard embedded
     needs: tested
     # A manual run has no "tested" job (skipped) and always runs.
     if: ${{ !cancelled() && needs.tested.outputs.skip != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: |
+            apps/api/go.sum
+            apps/cli/go.sum
+      - uses: ./.github/actions/setup
+      - name: Dashboard export the server embeds (make dashboard)
+        run: make dashboard
+      - name: staqly binary
+        working-directory: apps/cli
+        run: go build -o "$RUNNER_TEMP/bin/staqly" ./cmd/staqly
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: staqly-ui-bin
+          path: ${{ runner.temp }}/bin/staqly
+          retention-days: 1
+
+  ui:
+    needs: build
+    # Explicit: the default success() would skip these whenever "tested" was skipped (every manual run).
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     # test:ui in four shards (each its own servers and seed: specs never rely on another file's data), and the
     # layouts beside them. One 2-CPU runner took the whole suite past its timeout, hiding every failure.
     name: ${{ matrix.name }}
@@ -49,10 +79,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: "UI flows and accessibility (1/4)", run: "UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui --shard=1/4", artifact: ui-report-1 }
-          - { name: "UI flows and accessibility (2/4)", run: "UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui --shard=2/4", artifact: ui-report-2 }
-          - { name: "UI flows and accessibility (3/4)", run: "UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui --shard=3/4", artifact: ui-report-3 }
-          - { name: "UI flows and accessibility (4/4)", run: "UI_SKIP_DASHBOARD=1 pnpm --filter @staqly/e2e test:ui --shard=4/4", artifact: ui-report-4 }
+          - { name: "UI flows and accessibility (1/4)", run: "pnpm --filter @staqly/e2e test:ui --shard=1/4", artifact: ui-report-1 }
+          - { name: "UI flows and accessibility (2/4)", run: "pnpm --filter @staqly/e2e test:ui --shard=2/4", artifact: ui-report-2 }
+          - { name: "UI flows and accessibility (3/4)", run: "pnpm --filter @staqly/e2e test:ui --shard=3/4", artifact: ui-report-3 }
+          - { name: "UI flows and accessibility (4/4)", run: "pnpm --filter @staqly/e2e test:ui --shard=4/4", artifact: ui-report-4 }
           - { name: "Layouts at phone, tablet and desktop widths", run: "pnpm --filter @staqly/e2e test:ui-responsive", artifact: ui-responsive-report }
     services:
       postgres:
@@ -65,13 +95,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
       - uses: ./.github/actions/setup
+        with: { filter: "@staqly/e2e..." }
+      # Measured: apt packages about 11 s, the browser download about 9 s; a cache of either would save seconds.
       - name: Chromium for Playwright
         run: pnpm --filter @staqly/e2e exec playwright install --with-deps chromium
-      - name: Dashboard export the server embeds (make dashboard)
-        run: make dashboard
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: staqly-ui-bin, path: "${{ runner.temp }}/bin" }
+      - name: The suites start this binary instead of building one (UI_BIN; artifacts drop file modes)
+        run: |
+          chmod +x "$RUNNER_TEMP/bin/staqly"
+          echo "UI_BIN=$RUNNER_TEMP/bin/staqly" >>"$GITHUB_ENV"
       - name: ${{ matrix.name }}
         run: ${{ matrix.run }}
       # Always, so a slow or cancelled run still shows which tests ran and how long each took.
@@ -88,7 +122,7 @@ jobs:
   # A failed nightly opens an issue (or comments on the open one), so it doesn't go unnoticed.
   alert:
     name: Nightly failure alert
-    needs: [ui]
+    needs: [build, ui]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5

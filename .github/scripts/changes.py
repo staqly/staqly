@@ -1,6 +1,7 @@
 """Select CI jobs from a pull request's diff; pushes to main and uncertainty run the full suite.
 
-Nothing runs when this exact code already passed CI (ALREADY_TESTED=true, from .github/actions/tested).
+Nothing runs when this exact code already passed CI (ALREADY_TESTED=true, from .github/actions/tested), except
+on a nightly the checks whose answer changes without a commit.
 """
 import json
 import os
@@ -24,6 +25,9 @@ JOBS = {
     # Our own code (gosec, Semgrep) and secrets in any of it; the workflows are scanned by the `changes` job.
     'security': r'^(apps/|packages/|sdks/|integrations/|scripts/|e2e/)',
 }
+# Checks against data that changes without a commit: the Go vulnerability database (govulncheck) and Semgrep's
+# registry rules. A nightly runs them even on code that already passed, so a new advisory fails within a day.
+FRESH = {'security'}
 
 
 def changed_files(event, payload):
@@ -40,9 +44,9 @@ def changed_files(event, payload):
         return None  # a missing/rewritten base must never silently skip checks
 
 
-def selected_jobs(files, already_tested=False):
+def selected_jobs(files, already_tested=False, nightly=False):
     if already_tested:
-        return set()
+        return set(FRESH) if nightly else set()
     if files is None or any(re.search(COMMON, path) for path in files):
         return set(JOBS)
     return {job for job, pattern in JOBS.items() if any(re.search(pattern, path) for path in files)}
@@ -53,6 +57,7 @@ if __name__ == '__main__':
     selected = selected_jobs(
         changed_files(os.environ['GITHUB_EVENT_NAME'], payload),
         already_tested=os.environ.get('ALREADY_TESTED') == 'true',
+        nightly=os.environ['GITHUB_EVENT_NAME'] == 'schedule',
     )
     output = '\n'.join(f'{job}={str(job in selected).lower()}' for job in JOBS) + '\n'
     with open(os.environ['GITHUB_OUTPUT'], 'a') as destination:

@@ -45,6 +45,10 @@ class ChangesTest(unittest.TestCase):
         self.assertEqual(selected_jobs(['apps/api/main.go'], already_tested=True), set())
         self.assertEqual(selected_jobs(None, already_tested=False), selected_jobs(None))
 
+    def test_nightly_rechecks_vulnerabilities_on_tested_code(self):
+        self.assertEqual(selected_jobs(None, already_tested=True, nightly=True), {'security'})
+        self.assertEqual(selected_jobs(None, nightly=True), selected_jobs(None))
+
     def test_pull_request_covers_both_sides_of_rename(self):
         with tempfile.TemporaryDirectory() as directory:
             previous = Path.cwd()

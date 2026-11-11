@@ -8,6 +8,7 @@ on:
   pull_request:
   schedule:
     - cron: "17 4 * * 1" # weekly
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,9 +19,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A pull request analyzes only the languages its diff can change (.github/scripts/codeql_languages.py); main,
+  # the weekly scan and a manual run analyze all four, so main's results stay complete for every category.
+  languages:
+    name: Languages to analyze
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      languages: ${{ steps.l.outputs.languages }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 2, persist-credentials: false } # the merge commit and its base
+      - id: l
+        run: python3 .github/scripts/codeql_languages.py
+
   analyze:
     name: Analyze (${{ matrix.language }})
-    if: ${{ !github.event.repository.private }}
+    needs: languages
+    if: needs.languages.outputs.languages != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -30,11 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { language: go, build-mode: autobuild }
-          - { language: javascript-typescript, build-mode: none }
-          - { language: python, build-mode: none }
-          - { language: actions, build-mode: none }
+        language: ${{ fromJSON(needs.languages.outputs.languages) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -49,7 +62,7 @@ jobs:
       - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          build-mode: ${{ matrix.language == 'go' && 'autobuild' || 'none' }}
       - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
           category: /language:${{ matrix.language }}
@@ -57,7 +70,7 @@ jobs:
   # A failed nightly opens an issue (or comments on the open one), so it doesn't go unnoticed.
   alert:
     name: Nightly failure alert
-    needs: [analyze]
+    needs: [languages, analyze]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
