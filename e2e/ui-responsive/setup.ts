@@ -109,7 +109,7 @@ async function start(bin: string, mode: 'local' | 'cloud', port: number) {
 }
 
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
-  if (!existsSync(join(ROOT, 'apps/api/web/index.html'))) {
+  if (!process.env.UI_BIN && !existsSync(join(ROOT, 'apps/api/web/index.html'))) {
     throw new Error(
       'apps/api/web has no dashboard: run `make dashboard` first (it exports the dashboard into the binary)',
     )
