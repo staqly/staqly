@@ -66,6 +66,8 @@ jobs:
 
   ui:
     needs: build
+    # Explicit: the default success() would skip these whenever "tested" was skipped (every manual run).
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     # test:ui in four shards (each its own servers and seed: specs never rely on another file's data), and the
     # layouts beside them. One 2-CPU runner took the whole suite past its timeout, hiding every failure.
     name: ${{ matrix.name }}
