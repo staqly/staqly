@@ -214,7 +214,7 @@ func TestObsMetricsWithoutTokenIsLoopbackOnly(t *testing.T) {
 }
 
 func TestObsRateLimitPerPrincipal(t *testing.T) {
-	e := newObsEnv(t, true, false, map[string]string{"RATE_LIMIT_AUTH_PER_MINUTE": "600", "RATE_LIMIT_AUTH_BURST": "3"})
+	e := newObsEnv(t, true, false, map[string]string{"RATE_LIMIT_AUTH_PER_MINUTE": "60", "RATE_LIMIT_AUTH_BURST": "3"}) // one token a second: slow runners cannot refill between the burst and the 4th request
 	auth := []string{"Authorization", "Bearer " + e.key}
 	for i := range 3 {
 		if code, body, _ := e.req("GET", "/v1/collections", "", auth...); code != 200 {
@@ -238,8 +238,8 @@ func TestObsRateLimitPerPrincipal(t *testing.T) {
 			t.Fatal("livez limited")
 		}
 	}
-	// 10 tokens/s: the bucket refills after ~100ms.
-	time.Sleep(150 * time.Millisecond)
+	// 1 token/s: the bucket refills after ~1s.
+	time.Sleep(1100 * time.Millisecond)
 	if code, _, _ := e.req("GET", "/v1/collections", "", auth...); code != 200 {
 		t.Fatalf("after refill: %d", code)
 	}

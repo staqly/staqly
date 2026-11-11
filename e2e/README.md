@@ -118,9 +118,10 @@ Workflows, the lockfile and root configuration run every job.
 Nightly and manual CI runs also set `TURBO_FORCE=true` to execute tasks even with a warm Turbo cache.
 `make release` may tag main while the push's CI still runs (it refuses a failed one): `release.yml` builds
 the image at once, then publishes and deploys only after that CI run passed.
-Only superseded PR runs are cancelled; each main push keeps its own run. Docker E2E runs alongside the
-API jobs; `internal/httpapi` on PostgreSQL is split over three runners (every third test each) and a fourth
-runs the other packages.
+Only superseded PR runs are cancelled; each main push keeps its own run. A draft pull request runs nothing
+(`ci.yml`, `cross-client.yml`, CodeQL) until it is marked ready for review: iterate as a draft, then mark it ready.
+Docker E2E runs alongside the API jobs; `internal/httpapi` is split over two runners on SQLite and three on
+PostgreSQL (`.github/scripts/go-test-shard.sh`: every n-th test each), the other packages run beside them.
 The `changes` job also runs actionlint and the change-selection tests
 (`make lint-workflows`, `python3 -m unittest discover -s .github/scripts`). The landing page, shared
 packages and TypeScript SDK share one job (`js`), each step running only when its part changed.
@@ -144,7 +145,7 @@ as locally:
 |---|---|---|---|
 | `cross-client.yml` | relevant pushes/PRs (API, CLI, SDKs, shared test helpers or the suite), nightly, by hand | Go, uv and Node; builds the TS SDK, then `pnpm --filter @staqly/e2e test:cross-client` | none |
 | `n8n.yml` | relevant pushes to `main` (API, image, compose, integration or suite; not dashboard-only changes), nightly, by hand (`scenarios` input) | the image built from the checkout (layer cache) as `ghcr.io/staqly/staqly:latest`, `docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait` (`make dev` without the browser), then `pnpm --filter @staqly/e2e test:n8n`; `results.json` as an artifact | none |
-| `ui.yml` | nightly, by hand | one job runs `make dashboard` and builds `staqly` (an artifact for a day); then Node, PostgreSQL as a service, Playwright's Chromium, and with `UI_BIN` set to that binary `pnpm --filter @staqly/e2e test:ui` in four parallel shards (`--shard=N/4`, each its own servers) and `pnpm --filter @staqly/e2e test:ui-responsive` beside them; 20 minutes per job, Playwright's `globalTimeout` (15 minutes in CI) ends a stuck shard with a report; the report and traces always as an artifact | none |
+| `ui.yml` | nightly, by hand | one job runs `make dashboard` and builds `staqly` (an artifact for a day); then Node, PostgreSQL as a service, Playwright's Chromium, and with `UI_BIN` set to that binary `pnpm --filter @staqly/e2e test:ui` in four parallel shards (`--shard=N/4`, each its own servers) and `pnpm --filter @staqly/e2e test:ui-responsive` beside them (one job for local mode, one for cloud); 20 minutes per job, Playwright's `globalTimeout` (15 minutes in CI) ends a stuck shard with a report; the report and traces always as an artifact | none |
 
 The real-agent suite (`e2e/agent/`) has no workflow: it costs money, so it runs only by hand (below).
 

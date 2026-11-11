@@ -23,6 +23,8 @@ on:
       - turbo.json
       - .nvmrc
   pull_request:
+    # A draft runs once it is marked ready for review.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - apps/api/**
       - apps/cli/**
@@ -51,6 +53,7 @@ concurrency:
 jobs:
   cross-client:
     name: SDKs, CLI, curl and MCP against staqly serve
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

@@ -83,7 +83,9 @@ jobs:
           - { name: "UI flows and accessibility (2/4)", run: "pnpm --filter @staqly/e2e test:ui --shard=2/4", artifact: ui-report-2 }
           - { name: "UI flows and accessibility (3/4)", run: "pnpm --filter @staqly/e2e test:ui --shard=3/4", artifact: ui-report-3 }
           - { name: "UI flows and accessibility (4/4)", run: "pnpm --filter @staqly/e2e test:ui --shard=4/4", artifact: ui-report-4 }
-          - { name: "Layouts at phone, tablet and desktop widths", run: "pnpm --filter @staqly/e2e test:ui-responsive", artifact: ui-responsive-report }
+          # One job per mode (vitest filters by file name): together on one runner they took about 12 minutes.
+          - { name: "Layouts at phone, tablet and desktop widths (local)", run: "pnpm --filter @staqly/e2e test:ui-responsive local", artifact: ui-responsive-report-local }
+          - { name: "Layouts at phone, tablet and desktop widths (cloud)", run: "pnpm --filter @staqly/e2e test:ui-responsive cloud", artifact: ui-responsive-report-cloud }
     services:
       postgres:
         image: postgres:17.6-alpine
