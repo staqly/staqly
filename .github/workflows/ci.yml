@@ -103,9 +103,6 @@ jobs:
         run: '"$SQLC" generate && git diff --exit-code internal/db'
       - name: gofmt, vet + OpenAPI lint, tests (race, incl. OpenAPI contract test), build
         run: pnpm turbo run format:check lint test build --filter=@staqly/api
-      - name: Known vulnerabilities in code that is called (govulncheck)
-        working-directory: apps/api
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   # The same Go suite on PostgreSQL (cloud mode's database): every test opens a fresh schema
   # (internal/store/storetest), plus the schema drift check and the SQLite import. internal/httpapi alone takes
@@ -168,9 +165,6 @@ jobs:
       - uses: ./.github/actions/setup
         with: { filter: "@staqly/cli" }
       - run: pnpm turbo run format:check lint test build --filter=@staqly/cli
-      - name: Known vulnerabilities in code that is called (govulncheck)
-        working-directory: apps/cli
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: Release config is valid (goreleaser)
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with: { version: "~> v2", workdir: apps/cli, args: check }
@@ -281,6 +275,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      # The suite's own checks first: seconds, before the image build's two minutes.
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/e2e..." }
+      - name: Formatting, lint, types of the e2e suite
+        run: pnpm turbo run format:check lint typecheck --filter=@staqly/e2e
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: staqly image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -291,10 +290,6 @@ jobs:
           cache-from: type=gha,scope=staqly
           # main writes the layer cache, pull requests only read it (the 10 GB repository limit)
           cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,scope=staqly' || '' }}
-      - uses: ./.github/actions/setup
-        with: { filter: "@staqly/e2e..." }
-      - name: Formatting, lint, types of the e2e suite
-        run: pnpm turbo run format:check lint typecheck --filter=@staqly/e2e
       - name: End-to-end
         run: pnpm turbo run test:e2e --filter=@staqly/e2e
         env: { E2E_BUILD: "0" }
@@ -302,12 +297,14 @@ jobs:
   # ── Static security analysis ──────────────────────────────────────────────
   # gosec (Go) and Semgrep (TypeScript/JS, Python, secrets): `make security`, rules and suppressions in the
   # Makefile. Stands in for CodeQL (codeql.yml), which a private repository can't run without Advanced Security.
+  # With govulncheck, this job checks against data that changes without a commit: a nightly runs it even on code
+  # that already passed (FRESH in .github/scripts/changes.py).
   security:
-    name: Security scan (gosec, Semgrep)
+    name: Security scan (gosec, govulncheck, Semgrep)
     needs: changes
     if: needs.changes.outputs.security == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -320,6 +317,28 @@ jobs:
           echo "3fcce2c4e802ff4169217874602a7df355e9a37bcb6ffaa34b08f3d5f336cdfb  $RUNNER_TEMP/gosec.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/gosec.tar.gz" -C "$RUNNER_TEMP" gosec
       - run: make security GOSEC="$RUNNER_TEMP/gosec"
+      - name: Known vulnerabilities in code that is called (govulncheck), API
+        working-directory: apps/api
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Known vulnerabilities in code that is called (govulncheck), CLI
+        working-directory: apps/cli
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  # On a pull request, a failed quick job (a few minutes at most) stops the slow ones still running (api,
+  # api-postgres, e2e: about 10 minutes each) instead of letting them finish for a run that fails anyway. Nothing
+  # waits for the quick jobs, so a passing run is not slower. The failed job keeps its result; `passed` fails.
+  stop:
+    name: Stop the slow jobs after a failed quick one
+    needs: [cli, dashboard, docs, js, sdk-python, security]
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write # cancel this run
+    steps:
+      - env: { GH_TOKEN: "${{ github.token }}" }
+        # A fork's token is read-only: its run simply goes on.
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" || true
 
   # One check for branch protection: jobs skipped by `changes` count as passed, a failed or
   # cancelled one fails this. Make "CI passed" the required status check, not the jobs themselves.
