@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # A draft runs nothing until it is marked ready for review (each push to a draft would start a full run).
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: "23 1 * * *"
   workflow_dispatch:
@@ -30,6 +32,8 @@ jobs:
   # selection's tests.
   changes:
     name: What changed, workflows (actionlint)
+    # Nothing runs for a draft; `CI passed` then has nothing to fail on, and marking it ready starts a full run.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -101,8 +105,32 @@ jobs:
         env:
           SQLC: ${{ runner.temp }}/sqlc/sqlc
         run: '"$SQLC" generate && git diff --exit-code internal/db'
-      - name: gofmt, vet + OpenAPI lint, tests (race, incl. OpenAPI contract test), build
-        run: pnpm turbo run format:check lint test build --filter=@staqly/api
+      - name: gofmt, vet + OpenAPI lint, build
+        run: pnpm turbo run format:check lint build --filter=@staqly/api
+      # internal/httpapi (about 7 of the 8 minutes) runs in the api-httpapi jobs beside this one.
+      - name: Tests (race, incl. OpenAPI contract test), every package but internal/httpapi
+        working-directory: apps/api
+        run: ../../.github/scripts/go-test-shard.sh "other packages"
+
+  api-httpapi:
+    name: API (Go) on SQLite (httpapi ${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/2", "2/2"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
+      - name: go test -race on SQLite
+        working-directory: apps/api
+        env: { SHARD: "httpapi ${{ matrix.shard }}" }
+        run: ../../.github/scripts/go-test-shard.sh "$SHARD"
 
   # The same Go suite on PostgreSQL (cloud mode's database): every test opens a fresh schema
   # (internal/store/storetest), plus the schema drift check and the SQLite import. internal/httpapi alone takes
@@ -133,21 +161,7 @@ jobs:
         env:
           STAQLY_TEST_DATABASE_URL: postgres://staqly:staqly@127.0.0.1:5432/staqly?sslmode=disable
           SHARD: ${{ matrix.shard }}
-        run: |
-          if [ "$SHARD" = "other packages" ]; then
-            mapfile -t pkgs < <(go list ./... | grep -v '/internal/httpapi$')
-            go test -race -timeout 15m "${pkgs[@]}"
-            exit
-          fi
-          # Every top-level test of the package, sorted; shard n of 3 runs every third one.
-          n=${SHARD#httpapi }; n=${n%/3}
-          mapfile -t tests < <(grep -hoE '^func Test[A-Za-z0-9_]+\(t \*testing\.T\)' internal/httpapi/*_test.go | sed -E 's/^func (Test[A-Za-z0-9_]+).*/\1/' | sort -u)
-          mine=()
-          for i in "${!tests[@]}"; do
-            if (( i % 3 == n - 1 )); then mine+=("${tests[$i]}"); fi
-          done
-          echo "${#mine[@]} of ${#tests[@]} tests"
-          go test -race -timeout 15m -run "^($(IFS='|'; echo "${mine[*]}"))\$" ./internal/httpapi
+        run: ../../.github/scripts/go-test-shard.sh "$SHARD"
 
   # ── staqly CLI ────────────────────────────────────────────────────────────
   cli:
@@ -345,7 +359,7 @@ jobs:
   passed:
     name: CI passed
     if: always()
-    needs: [changes, api, api-postgres, cli, dashboard, docs, js, sdk-python, e2e, security]
+    needs: [changes, api, api-httpapi, api-postgres, cli, dashboard, docs, js, sdk-python, e2e, security]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

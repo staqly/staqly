@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # A draft is analyzed once it is marked ready for review.
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: "17 4 * * 1" # weekly
   workflow_dispatch:
@@ -23,7 +25,7 @@ jobs:
   # the weekly scan and a manual run analyze all four, so main's results stay complete for every category.
   languages:
     name: Languages to analyze
-    if: ${{ !github.event.repository.private }}
+    if: ${{ !github.event.repository.private && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
