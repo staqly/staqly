@@ -355,6 +355,16 @@ func (q *Queries) RevokeAdminSessionsByEmail(ctx context.Context, arg RevokeAdmi
 	return err
 }
 
+const revokeAllAdminSessions = `-- name: RevokeAllAdminSessions :exec
+UPDATE admin_sessions SET revoked_at = ?1 WHERE revoked_at IS NULL
+`
+
+// A changed access token (local mode, where it signs admins in) ends every admin session.
+func (q *Queries) RevokeAllAdminSessions(ctx context.Context, revokedAt sql.NullString) error {
+	_, err := q.db.ExecContext(ctx, revokeAllAdminSessions, revokedAt)
+	return err
+}
+
 const spendAdminCodeAttempt = `-- name: SpendAdminCodeAttempt :execrows
 UPDATE admin_codes SET attempts = attempts + 1
 WHERE id = ?1 AND used_at IS NULL AND attempts < ?2 AND expires_at > ?3

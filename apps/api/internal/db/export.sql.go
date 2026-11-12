@@ -321,7 +321,8 @@ WHERE workspace_id = ?1
   AND (?10 IS NULL OR item_id = ?10)
   -- Same rule as ListEvents: credential/session audit events only for admin principals.
   AND (CAST(?11 AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
-       OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'))
+       OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'
+       OR type GLOB 'access_token.*' OR type GLOB 'sign_in_method.*'))
 ORDER BY seq
 LIMIT ?12
 `

@@ -83,7 +83,7 @@ func (s *Service) PrepareEventExport(ctx context.Context, p Principal, f EventEx
 	}
 	audit := int64(0)
 	if p.Has(ScopeAdmin) {
-		audit = 1 // like ListEvents: api_key.*, session.*, recovery_key.*, device*.* only for admins
+		audit = 1 // like ListEvents: the audit families (event_patterns.go) only for admins
 	}
 	return &EventExport{Format: f.Format, s: s, params: db.ExportEventsPageParams{
 		WorkspaceID: p.WorkspaceID, FromTs: from, ToTs: to, Type: optAny(f.Type), TypePrefix: optAny(f.TypePrefix),

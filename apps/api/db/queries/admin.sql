@@ -66,3 +66,7 @@ UPDATE admin_sessions SET revoked_at = @revoked_at WHERE email = @email AND revo
 
 -- name: AdminAuditExists :one
 SELECT COUNT(*) FROM admin_audit WHERE action = ? AND target = ?;
+
+-- name: RevokeAllAdminSessions :exec
+-- A changed access token (local mode, where it signs admins in) ends every admin session.
+UPDATE admin_sessions SET revoked_at = @revoked_at WHERE revoked_at IS NULL;

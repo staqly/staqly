@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/providers"
@@ -14,8 +15,12 @@ import (
 // hold back the others; a repost that fails is logged and dropped, the post stays published.
 
 // checkChannelSettings validates the channels fields of a target: every id is another channel of this
-// workspace on the same platform.
+// workspace on the same platform. "reposters" is read for every target once it is out (enqueueReposts), so a
+// platform that does not declare it refuses it instead of storing it unchecked.
 func (s *Service) checkChannelSettings(ctx context.Context, q *db.Queries, workspaceID string, ch db.Channel, fields []providers.Field, settings map[string]string) error {
+	if settings["reposters"] != "" && !slices.ContainsFunc(fields, func(f providers.Field) bool { return f.Key == "reposters" && f.Kind == "channels" }) {
+		return invalid("targets."+ch.ID+".settings.reposters", "this platform has no reposts")
+	}
 	for _, f := range fields {
 		if f.Kind != "channels" {
 			continue
@@ -70,16 +75,29 @@ func (s *Service) runRepost(ctx context.Context, postID, channelID, repostBy str
 	if err != nil {
 		return err
 	}
-	ch, err := s.Q.GetChannelByID(ctx, repostBy)
+	// The reposting channel is looked up in the post's workspace and must be on the target's platform: the
+	// id comes from stored settings, which older rows and platforms without the field never had checked.
+	post, err := s.Q.GetPostByID(ctx, postID)
 	if isNoRows(err) {
-		return nil // the reposting channel was removed
+		return nil
 	}
 	if err != nil {
 		return err
 	}
+	ch, err := s.Q.GetChannel(ctx, db.GetChannelParams{WorkspaceID: post.WorkspaceID, ID: repostBy})
+	if isNoRows(err) {
+		return nil // the reposting channel was removed, or was never this workspace's
+	}
+	if err != nil {
+		return err
+	}
+	from, err := s.Q.GetChannelByID(ctx, channelID)
+	if err != nil && !isNoRows(err) {
+		return err
+	}
 	e, ok := providers.Get(ch.Provider)
 	reposter, can := e.Provider.(providers.Reposter)
-	if !ok || !can || ch.Status != "connected" {
+	if !ok || !can || ch.Status != "connected" || from.Provider != ch.Provider {
 		s.logger(ctx).Info("repost skipped", "post", postID, "channel", repostBy, "status", ch.Status)
 		return nil
 	}

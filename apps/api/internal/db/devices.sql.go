@@ -42,6 +42,21 @@ func (q *Queries) CreateDeviceLink(ctx context.Context, arg CreateDeviceLinkPara
 	return err
 }
 
+const expireDeviceLinks = `-- name: ExpireDeviceLinks :exec
+UPDATE device_links SET expires_at = ?1 WHERE workspace_id = ?2 AND expires_at > ?1
+`
+
+type ExpireDeviceLinksParams struct {
+	Now         string `json:"now"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+// A changed access token (local mode) ends the links made with the old one.
+func (q *Queries) ExpireDeviceLinks(ctx context.Context, arg ExpireDeviceLinksParams) error {
+	_, err := q.db.ExecContext(ctx, expireDeviceLinks, arg.Now, arg.WorkspaceID)
+	return err
+}
+
 const getDeviceLinkByHash = `-- name: GetDeviceLinkByHash :one
 SELECT id, workspace_id, token_hash, created_by, created_at, expires_at, used_at, user_id, max_uses, uses, guest_role FROM device_links WHERE token_hash = ?
 `

@@ -8,9 +8,9 @@ import (
 
 // Onboarded reports whether the welcome wizard (/welcome) is done for this principal: per person in an
 // account. A local install never sees it (its empty pages guide instead), nor do sessions without a person
-// in cloud mode (development API key sign-in).
+// in cloud mode (development API key sign-in), nor does a guest: the welcome is the account holder's.
 func (s *Service) Onboarded(ctx context.Context, p Principal) bool {
-	if p.UserID == "" {
+	if p.UserID == "" || p.Guest {
 		return true
 	}
 	u, err := s.Q.GetUser(ctx, p.UserID)
@@ -22,6 +22,9 @@ func (s *Service) Onboarded(ctx context.Context, p Principal) bool {
 func (s *Service) FinishOnboarding(ctx context.Context, p Principal, name string) error {
 	if p.Kind != PrincipalSession && p.Kind != PrincipalLocal {
 		return forbidden("the welcome is finished from the dashboard")
+	}
+	if err := notGuest(p); err != nil {
+		return err // it writes the account holder's name
 	}
 	name, err := trimmed(name, "name", 100, false)
 	if err != nil {

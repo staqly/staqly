@@ -1022,6 +1022,13 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 			if len(targets) == 0 {
 				return invalid("targets", "a scheduled post needs at least one channel")
 			}
+			// Moving a scheduled post, taking it off the schedule or changing what it waits for is publishing, as
+			// in SchedulePost and CancelPost; the text stays a writer's.
+			if row.Status != before.Status || row.PublishAt != before.PublishAt || row.PublishOn != before.PublishOn {
+				if err := p.require(ScopePostsPublish); err != nil {
+					return err
+				}
+			}
 		}
 		row.UpdatedAt = s.now()
 		n, err := q.UpdatePost(ctx, db.UpdatePostParams{CollectionID: row.CollectionID, Title: row.Title, Content: row.Content, Media: row.Media,

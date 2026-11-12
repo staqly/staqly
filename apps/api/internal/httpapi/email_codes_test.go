@@ -462,3 +462,87 @@ func TestEmailCodeThenGoogleIsOnePerson(t *testing.T) {
 		t.Fatalf("name after Google: %q %v", name, err)
 	}
 }
+
+// Was a bug: a removed sign-in method came back at its next sign-in, because a verified address signs into
+// the account that has it and the person's contact address still was the removed one. A removed method
+// stays removed, also when another method of the person has the same address, until they add it again.
+func TestRemovedSignInMethodStaysRemoved(t *testing.T) {
+	e, clock := newEmailEnv(t, "")
+	var list struct {
+		Data []app.SignInMethod `json:"data"`
+	}
+	methods := func(p *person) int {
+		t.Helper()
+		e.as(p, "GET", "/v1/account/sign-in-methods", nil, 200, &list)
+		return len(list.Data)
+	}
+
+	// An address of its own: Zoe adds Google (another address) and removes the email method without ever
+	// signing in with Google, so her contact address was still the removed one.
+	zoe := e.emailSignIn("zoe@example.com", nil)
+	me := e.session(zoe).User.ID
+	var start struct {
+		URL string `json:"url"`
+	}
+	e.as(zoe, "POST", "/v1/account/sign-in-methods/google", nil, 200, &start)
+	state, code := e.google.authorize(start.URL, fakeIdentity{Sub: "sub-zoe", Email: "zoe.work@example.com", Name: "Zoe"}, nil)
+	resp, err := zoe.c.Get(e.srv.URL + "/v1/auth/google/callback?state=" + url.QueryEscape(state) + "&code=" + url.QueryEscape(code))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	e.as(zoe, "DELETE", "/v1/account/sign-in-methods/email/zoe@example.com", nil, 200, nil)
+	if got := e.session(zoe).User.Email; got != "zoe.work@example.com" {
+		t.Errorf("the contact address is still the removed one: %q", got)
+	}
+	clock.add(31 * time.Second)
+	if n := e.session(e.emailSignIn("zoe@example.com", nil)); n.User.ID == me || methods(zoe) != 1 {
+		t.Fatalf("the removed address signs into the same account (%v); its methods: %+v", n.User.ID == me, list.Data)
+	}
+
+	// The same address on Google and by email code is one account (the address is the person)...
+	owner := e.mustSignIn(ana, "")
+	id := e.session(owner).User.ID
+	byMail := e.emailSignIn(ana.Email, nil)
+	if e.session(byMail).User.ID != id || methods(owner) != 2 {
+		t.Fatalf("an email code for the Google address: same person %v, methods %+v", e.session(byMail).User.ID == id, list.Data)
+	}
+	// ...until the person removes one of the two: the code then no longer reaches the account,
+	e.as(owner, "DELETE", "/v1/account/sign-in-methods/email/"+ana.Email, nil, 200, nil)
+	clock.add(31 * time.Second)
+	if n := e.session(e.emailSignIn(ana.Email, nil)); n.User.ID == id || methods(owner) != 1 {
+		t.Fatalf("a removed email method with the Google address signs into the account (%v); methods: %+v", n.User.ID == id, list.Data)
+	}
+	if e.session(e.mustSignIn(ana, "")).User.ID != id {
+		t.Fatal("Google no longer signs into the account")
+	}
+	// and the other way round: Google removed, the email method kept.
+	b := e.mustSignIn(bob, "")
+	id = e.session(b).User.ID
+	if e.session(e.emailSignIn(bob.Email, nil)).User.ID != id {
+		t.Fatal("an email code for the Google address made another person")
+	}
+	e.as(b, "DELETE", "/v1/account/sign-in-methods/google/"+bob.Sub, nil, 200, nil)
+	if e.session(e.mustSignIn(bob, "")).User.ID == id || methods(b) != 1 {
+		t.Fatalf("a removed Google method signs into the account; methods: %+v", list.Data)
+	}
+
+	// Added again by the person, it signs in again.
+	e.as(b, "DELETE", "/v1/account/sign-in-methods/email/"+bob.Email, nil, 409, nil) // the last one stays
+	cy := e.emailSignIn("cy@example.com", nil)
+	id = e.session(cy).User.ID
+	e.as(cy, "POST", "/v1/account/sign-in-methods/google", nil, 200, &start)
+	state, code = e.google.authorize(start.URL, fakeIdentity{Sub: "sub-cy", Email: "cy@example.com", Name: "Cy"}, nil)
+	if resp, err = cy.c.Get(e.srv.URL + "/v1/auth/google/callback?state=" + url.QueryEscape(state) + "&code=" + url.QueryEscape(code)); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	e.as(cy, "DELETE", "/v1/account/sign-in-methods/email/cy@example.com", nil, 200, nil)
+	clock.add(31 * time.Second)
+	e.as(cy, "POST", "/v1/account/sign-in-methods/email/start", map[string]any{"email": "cy@example.com"}, 202, nil)
+	e.as(cy, "POST", "/v1/account/sign-in-methods/email/verify", map[string]any{"email": "cy@example.com", "code": e.devCode("cy@example.com")}, 200, nil)
+	clock.add(31 * time.Second)
+	if e.session(e.emailSignIn("cy@example.com", nil)).User.ID != id {
+		t.Fatal("a method the person added again signs in someone else")
+	}
+}

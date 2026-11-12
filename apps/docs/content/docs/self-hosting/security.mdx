@@ -31,7 +31,8 @@ DNS-rebinding name can't attach it.
   (`0600`), and printed at every start on the terminal (`docker logs` with Docker), never in the
   log lines.
 - `server token --rotate` (`staqly serve token --rotate`) replaces it: the old token stops
-  working at once, also in a running server, and every browser is signed out.
+  working at once, also in a running server, and every browser is signed out; connect links not
+  used yet and admin panel sessions end with it.
 - `mcp-stdio` needs no token: it opens the database itself, so whoever may run it already has the data.
 - Defense in depth stays: the API listens on `127.0.0.1` only (Docker publishes it there).
 

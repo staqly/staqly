@@ -258,3 +258,59 @@ func TestThreadFinisherAndReposts(t *testing.T) {
 		t.Fatalf("replies under %v, reposts %v", r.parents, r.reposts)
 	}
 }
+
+// Reposters are this workspace's channels on the target's platform: a platform without the setting refuses
+// it, and the repost job never reaches another workspace's channel, whatever the stored settings say.
+func TestRepostStaysInItsWorkspace(t *testing.T) {
+	r := &reposter{replier: replier{Base: providers.NewBase("test_reposter", "Repost test", providers.AuthToken, providers.Limits{MaxChars: 50, MaxMedia: 1}).
+		WithSettings(providers.Field{Key: "reposters", Label: "Repost from", Kind: "channels", MaxItems: 3})}}
+	providers.Register(r, providers.StatusAvailable)
+	t.Cleanup(func() { providers.Unregister("test_reposter") })
+	e := newEnv(t)
+	ctx := context.Background()
+	var victim, own app.Channel
+	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "test_reposter", "name": "Victim"}, 201, &victim)
+
+	var other struct {
+		APIKey app.APIKey `json:"api_key"`
+	}
+	e.do(nil, "POST", "/v1/workspaces", "", map[string]string{"name": "Other", "setup_token": "tok"}, 201, &other)
+	k := other.APIKey.Key
+	var col app.Collection
+	e.do(nil, "POST", "/v1/collections", k, map[string]any{"name": "A"}, 201, &col)
+	var custom app.Channel
+	e.do(nil, "POST", "/v1/channels", k, map[string]any{"provider": "custom", "name": "Mine"}, 201, &custom)
+	e.do(nil, "POST", "/v1/channels", k, map[string]any{"provider": "test_reposter", "name": "Own"}, 201, &own)
+
+	// Refused when written: your own automation has no reposts, and the other workspace's channel is unknown.
+	for ch, by := range map[string]string{custom.ID: victim.ID, own.ID: victim.ID} {
+		var out struct {
+			Error struct{ Fields map[string]string }
+		}
+		e.do(nil, "POST", "/v1/posts", k, map[string]any{"title": "Post", "collection": col.ID, "content": "x",
+			"targets": []map[string]any{{"channel_id": ch, "settings": map[string]string{"reposters": by}}}}, 422, &out)
+		if out.Error.Fields["targets."+ch+".settings.reposters"] == "" {
+			t.Errorf("reposters on %s: want an error on the field, got %v", ch, out.Error.Fields)
+		}
+	}
+
+	// Settings stored before the check (or by any other way around it) still do not reach the channel: one
+	// target names another workspace's channel, the other a channel of this workspace on another platform.
+	var p app.Post
+	e.do(nil, "POST", "/v1/posts", k, map[string]any{"title": "Post", "collection": col.ID, "content": "x",
+		"targets": []map[string]any{{"channel_id": custom.ID}}}, 201, &p)
+	if _, err := e.svc.DB.Exec(`UPDATE post_targets SET settings = ? WHERE post_id = ?`, `{"reposters":"`+victim.ID+`,`+own.ID+`"}`, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.do(nil, "POST", "/v1/posts/"+p.ID+"/publish", k, nil, 202, nil)
+	e.svc.RunDueJobsOnce(ctx)
+	e.do(nil, "POST", "/v1/posts/"+p.ID+"/targets/"+custom.ID+"/result", k, map[string]any{"status": "published", "external_id": "someone-elses-post"}, 200, nil)
+	for range 3 {
+		e.svc.RunDueJobsOnce(ctx)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.reposts) != 0 {
+		t.Fatalf("a post on your own automation made other channels repost: %v", r.reposts)
+	}
+}

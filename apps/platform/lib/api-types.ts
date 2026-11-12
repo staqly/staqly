@@ -1663,7 +1663,7 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Edit a draft, scheduled or failed post (posts:write)
+         * Edit a draft, scheduled or failed post (posts:write; moving a scheduled post or taking it off the schedule also needs posts:publish)
          * @description Fields left out stay as they are; `targets` replaces the whole list; `publish_at: null` clears
          *     the time (a scheduled post becomes a draft). A published or publishing post is not editable
          *     (409 `conflict`). `expected_version` makes the edit conditional (409 `post_changed`).

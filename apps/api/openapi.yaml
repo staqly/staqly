@@ -2121,7 +2121,7 @@ paths:
     patch:
       operationId: updatePost
       tags: [posts]
-      summary: Edit a draft, scheduled or failed post (posts:write)
+      summary: Edit a draft, scheduled or failed post (posts:write; moving a scheduled post or taking it off the schedule also needs posts:publish)
       description: |
         Fields left out stay as they are; `targets` replaces the whole list; `publish_at: null` clears
         the time (a scheduled post becomes a draft). A published or publishing post is not editable
