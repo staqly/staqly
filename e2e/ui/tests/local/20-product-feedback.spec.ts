@@ -1,21 +1,13 @@
 import { axe, expect, ready, test } from '../../lib/fixtures.js'
 
-test('feedback opens from the sidebar, retains a failed report and submits ten private screenshots', async ({
+test('feedback opens from the user menu, retains a failed report and submits ten private screenshots', async ({
   page,
 }) => {
   await page.goto('/schedule?token=not-stored#private')
   await ready(page, 'Schedule')
-  const feedback = page.getByRole('button', { name: 'Feedback', exact: true })
-
-  expect(
-    await feedback.evaluate((el) => {
-      const notifications = document.querySelector('[data-testid="notifications-bell"]')
-
-      return !!notifications && !!(el.compareDocumentPosition(notifications) & Node.DOCUMENT_POSITION_FOLLOWING)
-    }),
-  ).toBe(true)
-  await feedback.click()
-  const dialog = page.getByRole('dialog', { name: 'Feedback', exact: true })
+  await page.getByTestId('user-menu-trigger').first().click()
+  await page.getByRole('menuitem', { name: 'Help & Feedback', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Help & Feedback', exact: true })
 
   await expect(dialog).toBeVisible()
   await expect.poll(async () => (await dialog.boundingBox())!.width).toBeGreaterThanOrEqual(650)
@@ -64,8 +56,9 @@ test('feedback fits a phone and keeps keyboard focus inside the modal', async ({
   await ready(page, 'Schedule')
   // Open the mobile sidebar through the shell's toggle.
   await page.getByRole('button', { name: 'More', exact: true }).click()
-  await page.getByRole('button', { name: 'Feedback', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: 'Feedback', exact: true })
+  await page.getByTestId('user-menu-trigger').first().click()
+  await page.getByRole('menuitem', { name: 'Help & Feedback', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Help & Feedback', exact: true })
 
   await expect(dialog).toBeVisible()
   const bounds = await dialog.boundingBox()

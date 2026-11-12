@@ -1135,7 +1135,16 @@ function Chat({
 }
 
 /** Docked on the right on wider screens, a sheet on phones. */
-export function AssistantPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function AssistantPanel({
+  open,
+  onOpenChange,
+  onExpandedChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** Full screen on or off (docked only): the shell gives it the page's place. */
+  onExpandedChange?: (expanded: boolean) => void
+}) {
   const session = useSession()
   const isMobile = useIsMobile()
   const workspaceId = session.data?.workspace.id
@@ -1157,11 +1166,28 @@ export function AssistantPanel({ open, onOpenChange }: { open: boolean; onOpenCh
     )
   }
 
-  return <Docked workspaceId={workspaceId} open={open} onClose={() => onOpenChange(false)} />
+  return (
+    <Docked
+      workspaceId={workspaceId}
+      open={open}
+      onClose={() => onOpenChange(false)}
+      onExpandedChange={onExpandedChange}
+    />
+  )
 }
 
 /** Keeps the docked panel mounted while it slides out, then lets it go. */
-function Docked({ workspaceId, open, onClose }: { workspaceId: string; open: boolean; onClose: () => void }) {
+function Docked({
+  workspaceId,
+  open,
+  onClose,
+  onExpandedChange,
+}: {
+  workspaceId: string
+  open: boolean
+  onClose: () => void
+  onExpandedChange?: (expanded: boolean) => void
+}) {
   const [mounted, setMounted] = useState(open)
   // Open on load (remembered from the last visit): already there, no slide in. Opened later: it slides.
   const [slideIn, setSlideIn] = useState(!open)
@@ -1176,6 +1202,7 @@ function Docked({ workspaceId, open, onClose }: { workspaceId: string; open: boo
       open={open}
       slideIn={slideIn}
       onClose={onClose}
+      onExpandedChange={onExpandedChange}
       onGone={() => {
         setMounted(false)
         setSlideIn(true)
@@ -1214,12 +1241,14 @@ function DockedPanel({
   open,
   slideIn,
   onClose,
+  onExpandedChange,
   onGone,
 }: {
   workspaceId: string
   open: boolean
   slideIn: boolean
   onClose: () => void
+  onExpandedChange?: (expanded: boolean) => void
   onGone: () => void
 }) {
   const [width, setWidth] = useState(savedWidth)
@@ -1256,7 +1285,14 @@ function DockedPanel({
     />
   )
 
-  // Full screen: over the whole dashboard, Escape back to the side.
+  // Full screen: in the page's place, beside the sidebar (the shell folds it to its icons); Escape back to the side.
+  useEffect(() => {
+    onExpandedChange?.(expanded)
+
+    return () => onExpandedChange?.(false)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- onExpandedChange only sets the shell's state
+  }, [expanded])
+
   useEffect(() => {
     if (!expanded) {
       return
@@ -1329,7 +1365,7 @@ function DockedPanel({
       style={expanded ? undefined : { width: shut ? 0 : Math.max(shown, 0) }}
       className={cn(
         expanded
-          ? 'fixed inset-0 z-50 flex flex-col bg-background'
+          ? 'sticky top-0 flex h-svh min-w-0 flex-1 flex-col bg-background'
           : 'sticky top-0 flex h-svh shrink-0 flex-col overflow-x-clip border-l bg-sidebar shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.35)]',
         !expanded && !dragging && 'transition-[width] duration-200 ease-out motion-reduce:transition-none',
         dragging && 'select-none',

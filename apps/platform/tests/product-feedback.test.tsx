@@ -51,6 +51,20 @@ describe('product feedback', () => {
     expect(calls[1].headers['X-CSRF-Token']).toBeTruthy()
   })
 
+  it('sends a question to the AI Assistant, or to the docs when the server has none', async () => {
+    const close = vi.fn<(open: boolean) => void>()
+    const ask = vi.fn<() => void>()
+    const { unmount } = renderWithProviders(<FeedbackDialog open onOpenChange={close} onAskAssistant={ask} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /Need help\?.*AI Assistant/ }))
+    expect(close).toHaveBeenCalledWith(false)
+    expect(ask).toHaveBeenCalledOnce()
+
+    unmount()
+    renderWithProviders(<FeedbackDialog open onOpenChange={close} />)
+    expect(screen.getByRole('link', { name: /Need help\?/ })).toHaveAttribute('href', 'https://docs.staqly.ai')
+  })
+
   it('blocks repeated submission and closing while sending', async () => {
     const api = mockApi({ 'POST /v1/feedback': { status: 201, body: { id: 'fb_2' } } })
     const originalFetch = globalThis.fetch

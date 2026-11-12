@@ -3,8 +3,8 @@
   "defaultRouteJsGzKB": 370,
   "routes": {
     "/posts": 415,
-    "/posts/_": 415,
-    "/channels": 396,
+    "/posts/_": 417,
+    "/channels": 398,
     "/channels/callback/_": 405,
     "/analytics": 386,
     "/media": 380,
