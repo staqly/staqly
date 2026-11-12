@@ -14,18 +14,47 @@ import { useReturnFocus } from '@/hooks/use-return-focus'
 /**
  * Unsaved changes: the form fields of a sheet are read just before the first key or click inside it; closing it
  * with Esc, the X or a SheetClose after they changed asks first. Saving closes through the caller's own
- * onOpenChange, which this does not see, so a saved form never asks; a sheet that stays open after a save reads its
- * fields again once any save (a successful mutation) finished.
+ * onOpenChange, which this does not see, so a saved form never asks; a form that stays open after its save says
+ * so itself (useSheetSaved) and its fields are read again. Another mutation in the app (an upload, a retry, a
+ * save in another drawer) is no save of this form. State that lives in no field (a post's attachments) counts
+ * through a `data-form-value` attribute.
  */
 type Guard = { el: HTMLElement | null; before?: string }
 
-const SheetGuard = React.createContext<{ remember: (el: HTMLElement) => void; reset: () => void } | null>(null)
+const SheetGuard = React.createContext<{
+  remember: (el: HTMLElement) => void
+  reset: () => void
+  saved: () => void
+} | null>(null)
 
 const FIELDS =
-  'input:not([type=hidden]):not([type=search]), textarea, select, [contenteditable=true], [role=combobox], [role=switch], [role=checkbox], [aria-pressed]'
+  'input:not([type=hidden]):not([type=search]), textarea, select, [contenteditable=true], [role=combobox], [role=switch], [role=checkbox], [aria-pressed], [data-form-value]'
+
+const noop = () => {}
+
+/**
+ * For a form in a sheet that stays open after it saved (or took in a newer version of what it edits): call the
+ * returned function then, and the fields as they are on screen become the saved ones.
+ */
+function useSheetSaved() {
+  return React.useContext(SheetGuard)?.saved ?? noop
+}
+
+/** The same for a sheet whose saved state is a view of its own (a secret shown once): render it there. */
+function SheetSaved() {
+  const saved = useSheetSaved()
+
+  React.useEffect(saved, [saved])
+
+  return null
+}
 
 function formState(el: HTMLElement) {
   return Array.from(el.querySelectorAll<HTMLElement>(FIELDS), (f) => {
+    if (f.dataset.formValue !== undefined) {
+      return f.dataset.formValue
+    }
+
     if (f instanceof HTMLInputElement && (f.type === 'checkbox' || f.type === 'radio')) {
       return String(f.checked)
     }
@@ -51,50 +80,42 @@ function Sheet({ onOpenChange, ...props }: React.ComponentProps<typeof SheetPrim
       reset: () => {
         guard.current = { el: null }
       },
+      saved: () => {
+        // After the new values reached the fields.
+        setTimeout(() => {
+          if (guard.current.el) {
+            guard.current.before = formState(guard.current.el)
+          }
+        })
+      },
     }),
     [],
   )
 
   const client = React.useContext(QueryClientContext)
 
-  // Fields the server changes are not unsaved work: re-read them after a save (any successful mutation), and after
-  // fresh data arrives while the person hasn't changed anything yet (a refetch after archiving, say).
+  const saved = ctx.saved
+
+  // Fields the server changes are not unsaved work: re-read them when fresh data arrives while the person hasn't
+  // changed anything yet (a refetch after archiving, say). Only what was fetched: this tab's own cache writes
+  // come with a change the person just made (an upload adds an attachment), which is not on screen yet.
   React.useEffect(() => {
     if (!client) {
       return
     }
 
-    const reread = (onlyIfClean: boolean) => {
-      const { el, before } = guard.current
-      const clean = !el || before === undefined || formState(el) === before
-
-      if (onlyIfClean && !clean) {
+    return client.getQueryCache().subscribe((e) => {
+      if (e.type !== 'updated' || e.action.type !== 'success' || e.action.manual) {
         return
       }
 
-      // After the new values reached the fields.
-      setTimeout(() => {
-        if (guard.current.el) {
-          guard.current.before = formState(guard.current.el)
-        }
-      })
-    }
-    const offMutations = client.getMutationCache().subscribe((e) => {
-      if (e.type === 'updated' && e.action.type === 'success') {
-        reread(false)
-      }
-    })
-    const offQueries = client.getQueryCache().subscribe((e) => {
-      if (e.type === 'updated' && e.action.type === 'success') {
-        reread(true)
-      }
-    })
+      const { el, before } = guard.current
 
-    return () => {
-      offMutations()
-      offQueries()
-    }
-  }, [client])
+      if (!el || before === undefined || formState(el) === before) {
+        saved()
+      }
+    })
+  }, [client, saved])
 
   return (
     <SheetGuard.Provider value={ctx}>
@@ -294,4 +315,15 @@ function SheetDescription({ className, ...props }: React.ComponentProps<typeof S
   )
 }
 
-export { Sheet, SheetTrigger, SheetClose, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription }
+export {
+  Sheet,
+  useSheetSaved,
+  SheetSaved,
+  SheetTrigger,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetFooter,
+  SheetTitle,
+  SheetDescription,
+}

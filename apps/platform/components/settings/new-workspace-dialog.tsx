@@ -15,7 +15,7 @@ import {
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { api, errorMessage } from '@/lib/api'
-import { useBilling } from '@/lib/queries'
+import { announceWorkspace, useBilling } from '@/lib/queries'
 import { browserTimeZone } from '@/lib/time-zone'
 import { writeWelcomeDraft } from '@/lib/welcome'
 
@@ -32,6 +32,7 @@ export function NewWorkspaceDialog({ open, onOpenChange }: { open: boolean; onOp
       const w = await api.createWorkspace(name.trim(), browserTimeZone())
 
       await api.switchWorkspace(w.id)
+      announceWorkspace(w.id)
       writeWelcomeDraft({ workspace: w.id, named: true })
     },
     onSuccess: () => window.location.assign(paid ? '/welcome?new=1' : '/schedule'),

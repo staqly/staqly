@@ -1,6 +1,6 @@
 'use client'
 
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   ArrowUp,
@@ -52,7 +52,7 @@ import {
   type AssistantMessage,
 } from '@/lib/api'
 import { timeAgo } from '@/lib/format'
-import { useSession } from '@/lib/queries'
+import { refetchPostListsFromStart, refreshEventLists, useSession } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
 import { AssistantPrivateResult } from './assistant-private-result'
@@ -187,6 +187,29 @@ export function suggestionsFor(pathname: string): [string, Suggestions] {
 /** Tools that only read: the rest change something, so the pages refresh after them. */
 const READS = /^(list|get|search|preview)_/
 
+/** Lists loaded page by page: a refetch reloads every loaded page, so only tools that change them cause one. */
+const PAGED = /^(posts|events|media|design-library|timeline-library|stock|assistant-chats)$/
+const MEDIA_LISTS = /^(media|design-library|timeline-library)$/
+const root = (q: { queryKey: readonly unknown[] }) => String(q.queryKey[0])
+
+/**
+ * Once after a turn in which tools changed something: what is one request is read again; of the paged lists only
+ * those the tools' names say they touched, and posts from their first page. What else a tool did to a post (a
+ * schedule that ran, a retry) arrives with the live update, like any change made outside this tab.
+ */
+function refreshAfterTools(qc: QueryClient, tools: string[]) {
+  void qc.invalidateQueries({ predicate: (q) => !PAGED.test(root(q)) })
+  void refreshEventLists(qc)
+
+  if (tools.some((t) => /post|collection/.test(t))) {
+    refetchPostListsFromStart(qc)
+  }
+
+  if (tools.some((t) => t.includes('media'))) {
+    void qc.invalidateQueries({ predicate: (q) => MEDIA_LISTS.test(root(q)) })
+  }
+}
+
 /** A tool's name in words: "create_post" -> "Create post". */
 function toolLabel(name: string) {
   const s = name.replaceAll('_', ' ')
@@ -197,7 +220,9 @@ function toolLabel(name: string) {
 /** Inline **bold**, `code` and links of one line. */
 function inline(line: string, key: string) {
   const out: ReactNode[] = []
-  const re = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)|(https?:\/\/[^\s)]+)/g
+  // A link is a full http(s) address (a new tab) or a path in the app; "//host" and "/\host" are other sites
+  // written like a path, so they stay text.
+  const re = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/(?![/\\])[^\s)]*)\)|(https?:\/\/[^\s)]+)/g
   let at = 0
   let m: RegExpExecArray | null
 
@@ -795,6 +820,7 @@ function Chat({
   const run = (messages: AssistantMessage[], decision?: { tool_call_id: string; allow: boolean }) => {
     const ac = new AbortController()
     let cur = messages
+    const changed: string[] = []
 
     abort.current = ac
     setBusy(true)
@@ -814,7 +840,7 @@ function Chat({
             setDraft('')
           }
         } else if (e.type === 'tool' && e.ok && e.tool && !READS.test(e.tool)) {
-          void qc.invalidateQueries()
+          changed.push(e.tool)
         } else if (e.type === 'confirm' && e.tool_call) {
           setState({ messages: cur, pending: e.tool_call })
         } else if (e.type === 'error') {
@@ -834,6 +860,10 @@ function Chat({
         setBusy(false)
         setDraft('')
         void qc.invalidateQueries({ queryKey: ['assistant-chats'] })
+
+        if (changed.length > 0) {
+          refreshAfterTools(qc, changed)
+        }
       })
   }
 

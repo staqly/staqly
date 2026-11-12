@@ -41,7 +41,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, useSheetSaved } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
@@ -137,6 +137,7 @@ function DetailForm({
   pages?: string[]
 }) {
   const qc = useQueryClient()
+  const sheetSaved = useSheetSaved()
   const { canWrite } = useRole()
   const initial = {
     name: item.original_name,
@@ -189,6 +190,7 @@ function DetailForm({
       const next = { name: m.original_name, alt: m.alt_text ?? '', folder: m.folder_id ?? '', tags: m.tags ?? [] }
 
       setSaved(next)
+      sheetSaved()
       // The fields stay editable while saving: what was typed meanwhile stays, only what was sent takes the answer.
       setName((cur) => (cur.trim() === sent.name ? next.name : cur))
       setAlt((cur) => (cur.trim() === sent.alt ? next.alt : cur))

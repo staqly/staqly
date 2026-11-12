@@ -40,6 +40,16 @@ import { placeSaved } from '@/components/design/embed'
 import { LibraryPickerButton } from '@/components/media/library-picker'
 import { PostStats } from '@/components/posts/post-stats'
 import { TargetStatus } from '@/components/posts/target-status'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -49,13 +59,14 @@ import { Input } from '@/components/ui/input'
 import { Label, RequiredMark } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, useSheetSaved } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useIsPast } from '@/hooks/use-is-past'
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import {
   api,
+  ApiError,
   mediaThumbUrl,
   type Channel,
   type ChannelGroup,
@@ -1434,6 +1445,8 @@ function ComposerFooter({
   )
 }
 
+type SaveMode = 'draft' | 'schedule' | 'now'
+
 // A dot before each part of the header's line after the collection ("Default · Published ... · created ...").
 const DOT = "before:mr-3 before:content-['·']"
 
@@ -1495,15 +1508,7 @@ export function Composer({
  * The composer's form, also used for a saved post (PostSheet): then it shows each channel's state, link, error
  * and Retry, opens on `initialTab`, puts `headerActions` in the header and is read only once the post went out.
  */
-export function ComposerForm({
-  collectionId,
-  post: initialPost,
-  defaultPublishAt,
-  defaultMedia,
-  initialTab,
-  headerActions,
-  onDone,
-}: {
+type ComposerProps = {
   collectionId?: string
   post?: Post
   defaultPublishAt?: string
@@ -1512,10 +1517,70 @@ export function ComposerForm({
   initialTab?: string
   headerActions?: React.ReactNode
   onDone: (post: Post) => void
+}
+
+/** What the composer edits of a post. Two versions equal in this differ only in what happened to the post. */
+const editedFields = (p: Post) =>
+  JSON.stringify([
+    p.title,
+    p.content,
+    (p.media_items ?? []).map((m) => m.id),
+    (p.thread ?? []).map((t) => [t.content, (t.media_items ?? []).map((m) => m.id), t.delay_seconds ?? 0]),
+    (p.targets ?? []).map((t) => [t.channel_id, t.content ?? null, t.settings]),
+    p.tags,
+    p.repeat_every ?? '',
+    p.publish_at ?? null,
+    p.publish_on ?? null,
+  ])
+
+export function ComposerForm({ post: latest, ...props }: ComposerProps) {
+  // The version the fields were loaded from, or this form last saved (a write that survived a failed scheduling
+  // step): every save is based on it. A newer one arriving from elsewhere never moves it under typed fields.
+  const [base, setBase] = useState(latest)
+  const [round, setRound] = useState(0)
+  const sheetSaved = useSheetSaved()
+  const post = latest && (!base || latest.version >= base.version) ? latest : base
+
+  // Fields loaded anew are not unsaved work.
+  useEffect(() => {
+    if (round > 0) {
+      sheetSaved()
+    }
+  }, [round, sheetSaved])
+
+  return (
+    <ComposerBody
+      key={round}
+      {...props}
+      post={post}
+      base={base}
+      onBase={(p, reload) => {
+        setBase(p)
+
+        if (reload) {
+          setRound((r) => r + 1)
+        }
+      }}
+    />
+  )
+}
+
+function ComposerBody({
+  collectionId,
+  post,
+  base,
+  onBase,
+  defaultPublishAt,
+  defaultMedia,
+  initialTab,
+  headerActions,
+  onDone,
+}: ComposerProps & {
+  /** The version of the post the fields hold; `post` is the newest one known (its status, its channels' state). */
+  base?: Post
+  /** The fields are now based on `p`; `reload` starts them over from it. */
+  onBase: (p: Post, reload: boolean) => void
 }) {
-  // A successful write survives a failed scheduling step: retries edit that draft at its new version.
-  const [savedPost, setSavedPost] = useState<Post>()
-  const post = initialPost && (!savedPost || initialPost.version >= savedPost.version) ? initialPost : savedPost
   const qc = useQueryClient()
   const collections = useCollections()
   const channels = useChannels()
@@ -1562,6 +1627,27 @@ export function ComposerForm({
     [providers.data],
   )
   const [title, setTitle] = useState(post?.title ?? '')
+  // What the person changed since the fields were loaded.
+  const formFields = JSON.stringify([
+    title,
+    content,
+    media.map((m) => m.id),
+    thread.map((p) => [p.content, p.media.map((m) => m.id), p.delay]),
+    [...selected],
+    overrides,
+    tags,
+    repeatEvery,
+    publishAt?.getTime() ?? null,
+    publishOn,
+  ])
+  const [loadedFields] = useState(formFields)
+  const dirty = formFields !== loadedFields
+  // The version a save is based on: the one the fields hold, or a newer one that changed nothing this form
+  // edits (a retry, an outcome).
+  const saveOver = useMemo(
+    () => (post && base && post.version > base.version && editedFields(post) === editedFields(base) ? post : base),
+    [post, base],
+  )
   const picked = useMemo(() => channelList.filter((c) => selected.has(c.id)), [channelList, selected])
   const pickedPlatforms = useMemo(
     () => picked.flatMap((c) => providerList.find((p) => p.id === c.provider) ?? []),
@@ -1658,7 +1744,8 @@ export function ComposerForm({
   }
 
   const save = useMutation({
-    mutationFn: async (mode: 'draft' | 'schedule' | 'now') => {
+    // `version`: the one to save over, when the person chose to (the conflict dialog).
+    mutationFn: async ({ mode, version }: { mode: SaveMode; version?: number }) => {
       const body = input(mode === 'schedule' ? 'scheduled' : 'draft')
       let saved: Post
 
@@ -1667,7 +1754,7 @@ export function ComposerForm({
         // A post that was sent keeps its time (history, and in the past): only its text and settings change.
         const when = post.status === 'failed' ? {} : { publish_at, publish_on, repeat_every }
 
-        saved = await api.updatePost(post.id, { ...patch, ...when, expected_version: post.version })
+        saved = await api.updatePost(post.id, { ...patch, ...when, expected_version: version ?? saveOver?.version })
       } else {
         saved = await api.createPost(body)
       }
@@ -1685,7 +1772,7 @@ export function ComposerForm({
       if (at || scheduleOn) {
         saved = await api.schedulePost(saved.id, at ?? scheduleOn!).catch((e: unknown) => {
           // The first write committed: retain its id/version and expose it even if this drawer closes.
-          setSavedPost(saved)
+          onBase(saved, false)
 
           if (post) {
             syncPostInCache(qc, saved)
@@ -1725,7 +1812,14 @@ export function ComposerForm({
 
       onDone(saved)
     },
-    onError: (e) => {
+    onError: (e, { mode }) => {
+      // Changed elsewhere since these fields were loaded: nothing was saved, the person decides.
+      if (e instanceof ApiError && e.code === 'post_changed') {
+        setConflict(mode)
+
+        return
+      }
+
       const { errors: fields, complete } = apiFieldErrors<string>(e, (k) => k)
       const keys = Object.keys(fields)
 
@@ -1809,7 +1903,41 @@ export function ComposerForm({
   // Scheduled or failed: saving is the main action, Publish now the other one. Never two saves side by side.
   const live = !!post && post.status !== 'draft'
   const canSend = picked.length > 0 && content.trim().length > 0 && !!collection
-  const { mutate: saveAs, isPending: busy } = save
+  const { mutate: runSave, isPending: busy } = save
+  const saveAs = (mode: SaveMode, version?: number) => runSave({ mode, version })
+
+  // The post moved on elsewhere (an agent, a teammate, another tab) while nothing was typed: the fields start
+  // over from it. Typed fields stay on their version, so saving them answers 409 and asks (the conflict dialog)
+  // instead of overwriting. Not under a save on its way: its own answer is the next version.
+  useEffect(() => {
+    if (!busy && !dirty && post && saveOver && post.version > saveOver.version) {
+      onBase(post, true)
+    }
+  }, [busy, dirty, post, saveOver, onBase])
+  // The save the server refused because the post changed elsewhere (409), until the person chose.
+  const [conflict, setConflict] = useState<SaveMode | null>(null)
+  const resolveConflict = (keepMine: boolean) => {
+    const mode = conflict
+
+    setConflict(null)
+
+    if (!post || !mode) {
+      return
+    }
+
+    api
+      .post(post.id)
+      .then((now) => {
+        if (keepMine) {
+          onBase(now, false)
+          saveAs(mode, now.version)
+        } else {
+          syncPostInCache(qc, now)
+          onBase(now, true)
+        }
+      })
+      .catch((e: unknown) => toastApiError(e))
+  }
   // Publishing (now or at its time) first lists what each channel leaves out, when one does.
   const [review, setReview] = useState<'now' | 'schedule' | null>(null)
   // Required settings left empty, checked first so every one turns red at once (the server names one at a time).
@@ -1896,16 +2024,31 @@ export function ComposerForm({
 
   return (
     // Like every drawer: the header and the footer stay put, the fields scroll between them.
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onKeyDown only stops the browser's implicit submit
     <form
       ref={formRef}
       onSubmit={(e) => {
         e.preventDefault()
+
+        // Whatever submits the form (a key, a button) sends nothing the buttons would not: not twice, not half.
+        if (busy || !canSend) {
+          return
+        }
+
         // A draft's primary sends it (now or at the picked time); a post already on its way saves, keeping its time.
         publish(sent ? 'draft' : publishAt || publishOn ? 'schedule' : live ? 'draft' : 'now')
+      }}
+      // Enter in a one-line field (the title, a tag, a setting) is not "send": only the buttons publish.
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
+          e.preventDefault()
+        }
       }}
       className="flex min-h-0 flex-1 flex-col"
       noValidate
       data-testid="composer"
+      // Attachments are unsaved changes too (the drawer's guard reads fields; these live in none).
+      data-form-value={[...media, ...thread.flatMap((p) => p.media)].map((m) => m.id).join(' ')}
     >
       <SheetHeader className="border-b pt-[max(1rem,env(safe-area-inset-top))] pr-12 pointer-coarse:pr-14">
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
@@ -2335,6 +2478,24 @@ export function ComposerForm({
           setReview(null)
         }}
       />
+      <AlertDialog open={conflict !== null} onOpenChange={(open) => !open && setConflict(null)}>
+        <AlertDialogContent data-testid="post-conflict">
+          <AlertDialogHeader>
+            <AlertDialogTitle>This post was changed elsewhere</AlertDialogTitle>
+            <AlertDialogDescription>
+              Someone else or an agent saved it while you were editing. Your changes are still here, not saved yet: save
+              your version to replace theirs, or load theirs to drop what you changed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction variant="outline" onClick={() => resolveConflict(false)}>
+              Load their version
+            </AlertDialogAction>
+            <AlertDialogAction onClick={() => resolveConflict(true)}>Save my version</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   )
 }

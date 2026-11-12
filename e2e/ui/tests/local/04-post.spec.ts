@@ -1,8 +1,9 @@
 import type { Page } from '@playwright/test'
 
+import type { Api } from '../../lib/api.js'
 import { daysAhead, freshCollection, getPost, titleOf } from '../../lib/data.js'
 import { dismissToasts, expect, test } from '../../lib/fixtures.js'
-import { pickDateTime } from '../../lib/pick.js'
+import { pickChannels, pickDateTime } from '../../lib/pick.js'
 
 const sheet = (page: Page) => page.getByRole('dialog').first()
 const actions = (page: Page) => page.getByTestId('post-actions')
@@ -20,6 +21,12 @@ async function channelList(page: Page) {
 async function publishNow(page: Page) {
   await page.getByTestId('publish-now').click()
 }
+
+/**
+ * Archives a test's collection: every collection is a Tab stop in the list beside the posts, and the keyboard-only
+ * spec (12-a11y) reaches New post within a fixed number of them when the whole suite runs on one server.
+ */
+const tidy = (api: Api, collection: string) => api.patch(`/v1/collections/${collection}`, { archived: true })
 
 test.describe('the post', () => {
   test('a published post: content, picture, tags, the channels with their links; it cannot be edited or re-published', async ({
@@ -171,7 +178,8 @@ test.describe('the post', () => {
     await api.patch(`/v1/posts/${post.id}`, { content: 'Edited elsewhere' })
     await composer.getByTestId('post-content').fill('Edited in the UI')
     await composer.getByRole('button', { name: 'Save draft' }).click()
-    await expect(page.getByText(/modified|changed|conflict/i).first()).toBeVisible()
+    await expect(page.getByRole('alertdialog', { name: 'This post was changed elsewhere' })).toBeVisible()
+    await page.getByRole('button', { name: 'Keep editing' }).click()
     await expect(composer).toBeVisible()
     await expect(composer.getByTestId('post-content')).toContainText('Edited in the UI')
     expect((await getPost(api, post.id)).content).toBe('Edited elsewhere')
@@ -214,6 +222,83 @@ test.describe('the post', () => {
     await confirm.getByRole('button', { name: 'Delete' }).click()
     await expect(page).toHaveURL(/\/posts(\?|$)/)
     expect((await api.raw('GET', `/v1/posts/${copyId}`)).status).toBe(404)
+  })
+
+  test('an edit made elsewhere while the post is open: untouched fields take it in, typed ones ask before overwriting', async ({
+    page,
+    api,
+  }) => {
+    const col = await freshCollection(api, { posts: 1 })
+    const post = col.posts[0]!
+    const composer = sheet(page)
+    const conflict = page.getByRole('alertdialog', { name: 'This post was changed elsewhere' })
+
+    // Nothing typed yet: the other edit arrives with the live update (not only on a save right after it).
+    await page.goto(`/posts/${post.id}`)
+    await expect(composer.getByTestId('post-content')).toContainText(titleOf(post.content))
+    await composer.getByTestId('post-title').click()
+    await api.patch(`/v1/posts/${post.id}`, { content: 'Edited elsewhere', title: 'Title set by an agent' })
+    await expect(composer.getByTestId('post-content')).toContainText('Edited elsewhere')
+    await expect(composer.getByTestId('post-title')).toHaveValue('Title set by an agent')
+    // What arrived is not unsaved work of this form: it closes without asking.
+    await page.keyboard.press('Escape')
+    await expect(composer).toBeHidden()
+    // An edit on top of it keeps what the other writer set.
+    await page.goto(`/posts/${post.id}`)
+    await expect(composer.getByTestId('post-content')).toContainText('Edited elsewhere')
+    await composer.getByTestId('post-content').fill('Edited in the UI')
+    await composer.getByRole('button', { name: 'Save draft' }).click()
+    await expect(page.getByText(/was saved/)).toBeVisible()
+    expect(await getPost(api, post.id)).toMatchObject({ title: 'Title set by an agent', content: 'Edited in the UI' })
+    await dismissToasts(page)
+
+    // Typed first, then the other edit lands under the typed fields (the header follows it): saving asks.
+    await page.goto(`/posts/${post.id}`)
+    await composer.getByTestId('post-content').fill('Mine, typed before theirs')
+    await api.patch(`/v1/posts/${post.id}`, { content: 'Theirs', title: 'Second title by an agent' })
+    await expect(composer.getByRole('heading', { level: 2, name: 'Second title by an agent' })).toBeVisible()
+    await expect(composer.getByTestId('post-content')).toContainText('Mine, typed before theirs')
+    await composer.getByRole('button', { name: 'Save draft' }).click()
+    await expect(conflict).toBeVisible()
+    expect(await getPost(api, post.id)).toMatchObject({ title: 'Second title by an agent', content: 'Theirs' })
+    // Theirs: the form starts over from it.
+    await conflict.getByRole('button', { name: 'Load their version' }).click()
+    await expect(composer.getByTestId('post-content')).toContainText('Theirs')
+    await expect(composer.getByTestId('post-title')).toHaveValue('Second title by an agent')
+
+    // The same again, this time keeping mine: it replaces theirs, knowingly.
+    await composer.getByTestId('post-content').fill('Mine again')
+    await api.patch(`/v1/posts/${post.id}`, { content: 'Theirs again', title: 'Third title by an agent' })
+    await expect(composer.getByRole('heading', { level: 2, name: 'Third title by an agent' })).toBeVisible()
+    await composer.getByRole('button', { name: 'Save draft' }).click()
+    await conflict.getByRole('button', { name: 'Save my version' }).click()
+    await expect(page.getByText('“Second title by an agent” was saved')).toBeVisible()
+    expect(await getPost(api, post.id)).toMatchObject({ title: 'Second title by an agent', content: 'Mine again' })
+    await tidy(api, col.id)
+  })
+
+  test('Enter in the Title of a new post does not publish it, pressed twice neither', async ({ page, api }) => {
+    const col = await freshCollection(api, { posts: 0 })
+    const posts = async () => (await api.get<{ data: unknown[] }>(`/v1/collections/${col.id}/posts`)).data.length
+
+    await page.goto(`/posts?collection=${col.id}`)
+    await page.getByTestId('new-post').click()
+    const composer = page.getByRole('dialog', { name: 'New post' })
+
+    await pickChannels(page, composer, col.channel.name)
+    await composer.getByTestId('post-content').fill('Written, not yet meant to go out')
+    await composer.getByTestId('post-title').fill('Not yet')
+    await composer.getByTestId('post-title').press('Enter')
+    await composer.getByTestId('post-title').press('Enter')
+    // Publishing would close the composer and say so; the post stays in it, unsent.
+    await expect(composer.getByTestId('publish-now')).toBeEnabled()
+    await expect(page.getByText(/Publishing in/)).toHaveCount(0)
+    expect(await posts()).toBe(0)
+    // The button still sends it, once.
+    await composer.getByTestId('publish-now').click()
+    await expect(composer).toBeHidden()
+    await expect.poll(posts).toBe(1)
+    await tidy(api, col.id)
   })
 
   test('a post that does not exist explains itself', async ({ page }) => {
