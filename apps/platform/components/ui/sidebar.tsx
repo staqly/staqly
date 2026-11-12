@@ -97,7 +97,13 @@ function SidebarProvider({
         return
       }
 
-      if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
+      if (
+        event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
+        (event.metaKey || event.ctrlKey) &&
+        // With Shift or Alt it is the browser's own shortcut (⌘⇧B: Chrome's bookmarks bar).
+        !event.shiftKey &&
+        !event.altKey
+      ) {
         event.preventDefault()
         toggleSidebar()
       }

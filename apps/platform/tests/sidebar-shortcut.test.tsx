@@ -30,6 +30,9 @@ describe('sidebar shortcut', () => {
     // Bold in the editor: the sidebar stays.
     fireEvent.keyDown(screen.getByTestId('editor'), { key: 'b', metaKey: true })
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Name' }), { key: 'b', ctrlKey: true })
+    // The browser's own shortcuts (⌘⇧B: Chrome's bookmarks bar): the sidebar stays.
+    fireEvent.keyDown(document.body, { key: 'b', metaKey: true, shiftKey: true })
+    fireEvent.keyDown(document.body, { key: 'b', metaKey: true, altKey: true })
     expect(state).toHaveTextContent('expanded')
     fireEvent.keyDown(document.body, { key: 'b', metaKey: true })
     expect(state).toHaveTextContent('collapsed')

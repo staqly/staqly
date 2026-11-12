@@ -999,6 +999,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       // Autofill and password managers send keydown events without a key.
       const key = e.key?.toLowerCase()
 
+      // With Shift or Alt it is the browser's own shortcut (⌘⇧J: Chrome's downloads).
+      if (e.shiftKey || e.altKey) {
+        return
+      }
+
       if (key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         toggleCommand()
