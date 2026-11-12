@@ -52,7 +52,7 @@ export function usePlanActions() {
       window.location.assign(url)
     },
     onError: (e) => {
-      // A switch charged at once (leaving the trial, an upgrade) that wasn't paid: the payment page says why and what to do.
+      // A switch charged at once (leaving the trial, an upgrade, monthly to yearly) that wasn't paid: the payment page says why and what to do.
       if (e instanceof ApiError && e.code === 'payment_failed') {
         qc.setQueryData<PendingPayment>(qk.pendingPayment, { ...e.details, pending: true })
         router.push(PAYMENT_FAILED)
@@ -406,7 +406,7 @@ export function PlansPage() {
           {EVERY_PLAN}. Prices are per user: everyone in the workspace counts, whatever their role.{' '}
           {canPay
             ? subscribed
-              ? 'A switch takes effect at once; Stripe charges or credits the difference.'
+              ? 'An upgrade or a move to yearly billing is charged to your card now; a lower plan or monthly billing starts at once, with a credit on your next invoice.'
               : trialHere
                 ? 'Pay by card through Stripe. Starter starts with a 7-day free trial (card required); Plus, Pro and Business are charged today. Cancel any time.'
                 : 'Pay by card through Stripe; the plan you choose is charged today. Cancel any time.'

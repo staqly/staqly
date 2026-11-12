@@ -190,7 +190,8 @@ func TestTrialUpgradeDeclined(t *testing.T) {
 }
 
 // A paying workspace moving to a higher plan is charged the difference at once, and gets the plan only when that
-// payment goes through; a lower plan, or the same plan in the other interval, is settled on the next invoice.
+// payment goes through; a lower plan, or the same plan billed monthly instead of yearly, is settled on the next
+// invoice.
 func TestUpgradeOfPayingSubscription(t *testing.T) {
 	e := newEnv(t)
 	ws := workspaceID(e)
@@ -273,6 +274,97 @@ func TestUpgradeOfPayingSubscription(t *testing.T) {
 		e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": to[0], "interval": to[1]}, 200, nil)
 		if f := sent(); f.Get("proration_behavior") != "create_prorations" || f.Get("payment_behavior") != "" {
 			t.Fatalf("switch to %v: %v", to, f)
+		}
+	}
+}
+
+// Was a bug: monthly to yearly kept create_prorations, and with billing_mode=flexible Stripe neither resets the
+// billing cycle nor invoices an interval change by itself, so the year stayed unbilled as pending invoice items
+// until the next invoice, a year away. It is charged at once and applied only once paid, like an upgrade,
+// whatever the plan; the fake Stripe invoices only on always_invoice, like the sandbox.
+func TestMonthlyToYearlyIsChargedAtOnce(t *testing.T) {
+	e := newEnv(t)
+	ws := workspaceID(e)
+	sub := subObject("sub_1", ws, "active", "starter", "month")
+	var mu sync.Mutex
+	var switched url.Values
+	invoices, declined := 0, true
+	stripe := httptest.NewServer(subsFirst(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.Method + " " + r.URL.Path {
+		case "GET /v1/prices":
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
+		case "GET /v1/subscriptions/sub_1":
+			json.NewEncoder(w).Encode(sub)
+		case "POST /v1/subscriptions/sub_1":
+			switched = r.Form
+			out := map[string]any{"id": "sub_1"}
+			if r.Form.Get("proration_behavior") == "always_invoice" {
+				invoices++
+				if declined {
+					out["pending_update"] = map[string]any{"expires_at": 1893456000}
+					out["latest_invoice"] = map[string]any{"id": "in_1", "status": "open", "payment_intent": "pi_1",
+						"hosted_invoice_url": "https://invoice.stripe.com/i/acct_1/test_in_1"}
+				}
+			}
+			json.NewEncoder(w).Encode(out)
+		case "GET /v1/payment_intents/pi_1":
+			fmt.Fprint(w, `{"id":"pi_1","status":"requires_payment_method","last_payment_error":{"code":"card_declined","decline_code":"insufficient_funds"}}`)
+		default:
+			fmt.Fprint(w, `{}`)
+		}
+	}))
+	defer stripe.Close()
+	admin := e.keyWith(app.ScopeAdmin)
+	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_year", WebhookSecret: testWhsec, APIBase: stripe.URL}
+	e.stripeEvent("evt_1", "customer.subscription.created", sub, testWhsec)
+
+	// The card is declined: 402, an invoice was made, the change waits and the workspace stays as it was.
+	var errBody paymentErr
+	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter", "interval": "year"}, 402, &errBody)
+	mu.Lock()
+	f, n := switched, invoices
+	declined = false
+	mu.Unlock()
+	if f.Get("proration_behavior") != "always_invoice" || f.Get("payment_behavior") != "pending_if_incomplete" ||
+		f.Get("items[0][price]") != "price_starter_year" || n != 1 {
+		t.Fatalf("monthly to yearly: %d invoices, %v", n, f)
+	}
+	if errBody.Error.Code != "payment_failed" || errBody.Error.Details["pay_url"] == "" {
+		t.Fatalf("402: %+v", errBody.Error)
+	}
+
+	// from (plan, interval, status) to (plan, interval): is it invoiced now?
+	for _, c := range []struct {
+		plan, interval, status, toPlan, toInterval string
+		now                                        bool
+	}{
+		{"starter", "month", "active", "starter", "year", true},   // the same plan, yearly
+		{"starter", "month", "active", "plus", "year", true},      // a higher plan, yearly
+		{"plus", "month", "active", "starter", "year", true},      // a lower plan, yearly: the year is still due
+		{"starter", "month", "past_due", "starter", "year", true}, // unpaid: the year never goes out unbilled
+		{"starter", "year", "active", "plus", "month", true},      // a higher plan, monthly: an upgrade
+		{"plus", "month", "active", "starter", "month", false},    // a lower plan: a credit
+		{"plus", "year", "active", "plus", "month", false},        // yearly to monthly: a credit
+		{"plus", "year", "active", "starter", "month", false},     // a lower plan, monthly: a credit
+	} {
+		mu.Lock()
+		sub["status"] = c.status
+		sub["items"].(map[string]any)["data"].([]any)[0].(map[string]any)["price"] = stripePriceObject(c.plan, c.interval)
+		before := invoices
+		mu.Unlock()
+		e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": c.toPlan, "interval": c.toInterval}, 200, nil)
+		mu.Lock()
+		f, made := switched, invoices-before
+		mu.Unlock()
+		want, pay := "create_prorations", ""
+		if c.now {
+			want, pay = "always_invoice", "pending_if_incomplete"
+		}
+		if f.Get("proration_behavior") != want || f.Get("payment_behavior") != pay || (made == 1) != c.now {
+			t.Errorf("%+v: %d invoices, %v", c, made, f)
 		}
 	}
 }

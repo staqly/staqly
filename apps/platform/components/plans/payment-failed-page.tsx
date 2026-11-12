@@ -71,7 +71,7 @@ function view(reason: Reason | undefined, plan: string): View {
 }
 
 /**
- * After a plan switch that is charged at once (leaving the trial, an upgrade) wasn't paid: what happened, in plain
+ * After a plan switch that is charged at once (leaving the trial, an upgrade, monthly to yearly) wasn't paid: what happened, in plain
  * words (the trial or the current plan goes on meanwhile), and the
  * next step on Stripe's pages: confirm the payment with the bank on Stripe's invoice page, or change the card in the
  * billing portal. Payments never happen here; the server reads where the payment stands from Stripe, again whenever

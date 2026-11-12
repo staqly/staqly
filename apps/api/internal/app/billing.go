@@ -575,10 +575,12 @@ func (s *Service) ensureCustomer(ctx context.Context, w db.GetWorkspaceBillingRo
 
 // switchSubscription moves a live subscription to another price (plan or interval); Stripe prorates.
 // The plan changes here when Stripe's subscription.updated event arrives.
-// A paying (active) subscription moving to a higher plan is an upgrade: the difference is invoiced at once and
-// the change waits for that payment (a pending update), like leaving the trial. Anything else (a lower plan,
-// the same plan in the other interval) keeps create_prorations: a credit settles on the next invoice, and
-// Stripe itself invoices an interval change at once.
+// A change the customer pays for now is invoiced at once and waits for that payment (a pending update), like
+// leaving the trial: a paying (active) subscription moving to a higher plan, and monthly to yearly on any plan
+// (the year is due now: with billing_mode=flexible Stripe neither resets the billing cycle nor invoices an
+// interval change by itself, so create_prorations would leave the year unbilled until the next invoice, a
+// year away). Anything else (a lower or the same plan on the same interval or yearly to monthly) keeps
+// create_prorations: a credit settles on the next invoice, at most a month away.
 // With a promotion code (its id), the code's discount replaces the subscription's; with the same price only the
 // code is applied.
 func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscriptionID, price, planID, interval, promo string) error {
@@ -616,13 +618,14 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 	// waits for that payment (a pending update), so a card that fails leaves the trial as it was.
 	trial := sub.Status == "trialing"
 	cur, known := s.planOf(sub.Items.Data[i].Price)
-	upgrade := sub.Status == "active" && known && planRank(planID) > planRank(cur)
+	toYear := interval == IntervalYear && sub.Items.Data[i].Price.Recurring.Interval == IntervalMonth
+	payNow := toYear || sub.Status == "active" && known && planRank(planID) > planRank(cur)
 	keeps := "your current plan"
 	if trial {
 		form.Set("trial_end", "now")
 		keeps = "the trial"
 	}
-	if trial || upgrade {
+	if trial || payNow {
 		form.Set("proration_behavior", "always_invoice")
 		form.Set("payment_behavior", "pending_if_incomplete")
 		form.Set("expand[]", "latest_invoice")
@@ -636,7 +639,7 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 	}
 	// Not paid: read why from the invoice and its payment (outside any transaction), so the dashboard can send
 	// the person to the right Stripe page: the invoice page to confirm with the bank, or the billing portal.
-	if (trial || upgrade) && out.PendingUpdate != nil {
+	if (trial || payNow) && out.PendingUpdate != nil {
 		return s.pendingPayment(ctx, *out.PendingUpdate, out.LatestInvoice, planID).error(keeps)
 	}
 	return nil

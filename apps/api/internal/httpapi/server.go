@@ -448,11 +448,17 @@ func (s *Server) localHost(host string) bool {
 
 // Changes a suspended workspace may still make: sign out, secure itself,
 // connect a device to read, export or delete its data, and pay for a plan; and the account-level moves that
-// don't change it (switch to another workspace, make a new one), so a read-only workspace never traps anyone.
+// don't change it (switch to another workspace, make a new one, join one by invitation, finish the welcome, the
+// person's own name, notifications and sign-in methods), so a read-only workspace never traps anyone.
 var allowedWhileSuspended = []*regexp.Regexp{
 	regexp.MustCompile(`^POST /v1/feedback$`),
 	regexp.MustCompile(`^POST /v1/session/workspace$`),
 	regexp.MustCompile(`^POST /v1/account/workspaces$`),
+	regexp.MustCompile(`^POST /v1/invitations/accept$`),
+	regexp.MustCompile(`^POST /v1/session/onboarded$`),
+	regexp.MustCompile(`^PATCH /v1/account$`),
+	regexp.MustCompile(`^PUT /v1/account/notifications$`),
+	regexp.MustCompile(`^(POST|PATCH|DELETE) /v1/account/sign-in-methods/.+$`),
 	regexp.MustCompile(`^DELETE /v1/sessions?(/[^/]+)?$`),
 	regexp.MustCompile(`^POST /v1/device-links$`),
 	regexp.MustCompile(`^POST /v1/recovery-key/rotate$`),
