@@ -528,12 +528,14 @@ paths:
 
         With a live subscription: switches it to the plan and interval (Stripe prorates the difference) and
         returns the dashboard's plan page URL (`/settings/plan`) with `?checkout=switched`; the plan changes when Stripe's
-        `customer.subscription.updated` event arrives. 409 for the plan and interval it already has. A lower plan,
-        or the same plan in the other interval, is settled by Stripe's proration (a credit goes on the next invoice).
+        `customer.subscription.updated` event arrives. 409 for the plan and interval it already has. A lower plan
+        on the same interval, and yearly to monthly on the same or a lower plan, are settled by Stripe's proration
+        (a credit goes on the next invoice).
 
-        An upgrade (a paying subscription moving to a higher plan) charges the prorated difference at once, and
-        leaving Starter's trial ends it now and charges the new plan at once; either change waits for that payment,
-        and the workspace keeps its plan (or trial) until then.
+        An upgrade (a paying subscription moving to a higher plan) charges the prorated difference at once,
+        monthly to yearly on any plan charges the year at once (less the unused rest of the month), and
+        leaving Starter's trial ends it now and charges the new plan at once; each of these waits for that payment,
+        and the workspace keeps its plan and interval (or trial) until then.
         When it doesn't go through: 402 `payment_failed` whose `details` say why (`reason`; see `PendingPayment`)
         and, when the bank asks the customer to confirm the payment, `pay_url`: Stripe's invoice page to confirm
         and pay there. `GET /v1/billing/pending-payment` reads the same later.
@@ -755,7 +757,8 @@ paths:
       tags: [billing]
       summary: A plan change waiting for its payment, read from Stripe (account owner)
       description: |
-        An upgrade to a higher plan, and leaving Starter's trial for another plan, are charged at once, and Stripe
+        An upgrade to a higher plan, a move from monthly to yearly billing, and leaving Starter's trial for another
+        plan, are charged at once, and Stripe
         applies the change only when that payment goes through (until then it is the subscription's pending update
         and the current plan, or the trial, stays). This reads
         from Stripe whether such a change waits and why it isn't paid: `authentication_required` (the bank asks
@@ -5176,7 +5179,7 @@ components:
       type: object
       required: [pending]
       description: |
-        A plan change waiting for its payment (an upgrade and leaving the trial are charged at once). Also the `details` of the
+        A plan change waiting for its payment (an upgrade, monthly to yearly and leaving the trial are charged at once). Also the `details` of the
         402 `payment_failed` that `POST /v1/billing/checkout` answers when that payment didn't go through
         (without `pending`).
       properties:

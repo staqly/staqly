@@ -236,9 +236,13 @@ months at 20 % off, rounded down, so the saving is 20 % or a little more.
     page as when leaving the trial (step 5 above): confirm the payment with your bank, or change the
     card, on Stripe's pages. The API answers 402 `payment_failed`. Stripe drops an unpaid change after
     about a day; choose the plan again then.
-  - **A lower plan** starts at once; Stripe credits the unused difference on the next invoice.
-  - **Monthly to yearly (or back)** on the same plan starts a new billing period, which Stripe
-    charges right away with the unused time credited.
+  - **Monthly to yearly**, on the same plan or another, works like an upgrade: the year is charged
+    to the card on file right away, less the unused rest of the month, and yearly billing starts
+    once that payment goes through. If it doesn't, the workspace stays on its plan, billed monthly.
+  - **A lower plan** on the same interval starts at once; Stripe credits the unused difference on
+    the next invoice.
+  - **Yearly to monthly**, on the same plan or a lower one, starts at once; Stripe credits the
+    unused rest of the year on the next invoices. With a higher plan it is an upgrade (above).
 - **Manage subscription** opens the Stripe customer portal (`POST /v1/billing/portal`) to change
   the card, download invoices or cancel. When a subscription is canceled or stays unpaid, the
   plan ends and the workspace is suspended until it pays again. `GET /v1/billing` shows the

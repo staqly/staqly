@@ -1300,3 +1300,46 @@ func TestOperatorIntegrationKeys(t *testing.T) {
 	e.svc.Now = func() time.Time { return clock.Add(2 * time.Hour) }
 	e.do(nil, "GET", "/v1/posts", timed.Key, nil, 401, nil)
 }
+
+// Was a bug: a signed-in person whose own workspace is read-only (no plan yet) got 402 plan_expired when
+// accepting an invitation to another workspace. Account-level moves never change the read-only workspace.
+func TestReadOnlyWorkspaceTrapsNoOne(t *testing.T) {
+	e := newAccountsEnv(t, "")
+	owner := e.mustSignIn(ana, "")
+	_, tok := e.invite(owner, bob.Email, app.RoleEditor)
+	// With billing on, a new workspace has no plan: Bob's own workspace is read-only.
+	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_ro", WebhookSecret: testWhsec, APIBase: "http://127.0.0.1:1"}
+	bobP := e.mustSignIn(bob, "")
+	var errBody struct{ Error app.Error }
+	e.as(bobP, "POST", "/v1/collections", map[string]any{"name": "Blocked"}, 402, &errBody)
+	if errBody.Error.Code != "plan_expired" {
+		t.Fatalf("read-only: %+v", errBody.Error)
+	}
+	// The person's own account: whatever each answers, it is not the workspace's 402.
+	for _, r := range [][2]string{
+		{"POST", "/v1/session/onboarded"},
+		{"PATCH", "/v1/account"},
+		{"PUT", "/v1/account/notifications"},
+		{"POST", "/v1/account/sign-in-methods/email/start"},
+		{"POST", "/v1/account/sign-in-methods/passkey/start"},
+		{"PATCH", "/v1/account/sign-in-methods/passkey/nope"},
+		{"DELETE", "/v1/account/sign-in-methods/google/nope"},
+	} {
+		req, _ := http.NewRequest(r[0], e.srv.URL+r[1], strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-CSRF-Token", bobP.csrf)
+		res, err := bobP.c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode == 402 || res.StatusCode >= 500 {
+			t.Errorf("%s %s = %d", r[0], r[1], res.StatusCode)
+		}
+	}
+	var joined app.MyWorkspace
+	e.as(bobP, "POST", "/v1/invitations/accept", map[string]any{"token": tok}, 200, &joined)
+	if joined.Role != app.RoleEditor || !joined.Current {
+		t.Fatalf("accept: %+v", joined)
+	}
+}
