@@ -126,6 +126,25 @@ The same applies when a paid period ends unpaid. `GET /v1/workspace/usage` shows
 There is no free plan. Workspaces created before the plans above were on a free plan; they are
 now an ended Starter period (read-only) until a plan is paid for.
 
+## Welcome emails
+
+Staqly Cloud emails a workspace's **owners** twice, once each:
+
+| Email | When | What it says |
+|---|---|---|
+| *Your free trial has started* | The Starter trial starts (about a minute after Stripe's checkout). | The plan, the day the trial ends, that the card is charged then unless you cancel before, and three first steps: connect a channel, write your first post, look at the calendar. |
+| *You are on Starter* (or Plus, Pro, Business) | The workspace pays for a plan the first time: at the end of the trial, or at once without one. | The plan, monthly or yearly billing, and where invoices, the card and the plan are (**Settings → Plan & usage**). The first steps too when the workspace had no trial. |
+
+Nothing else sends them again: not a change of plan, a renewal, a failed payment put right, or a new
+subscription after a cancellation (Stripe sends the receipts). A trial that ends within its first minute (**Start
+paid plan now**, a card that gets no trial) is announced by the second email only. A plan the operator sets
+(`server set-plan`, the admin panel) sends none. These emails are about your account, so they have no
+unsubscribe link; what you choose under [Your notifications](/dashboard/notifications) doesn't change them.
+
+On a cloud server without Stripe the server-side trial sends the first email when the workspace is created; it
+says the workspace becomes read-only when the trial ends. A server without mail (`MAIL_SMTP_HOST`, `MAIL_FROM`)
+sends neither, and Staqly Community Edition has no plans and sends none.
+
 ## How limits are counted
 
 - Limits apply **per workspace**: every API key of a workspace shares its plan.

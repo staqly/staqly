@@ -1139,6 +1139,10 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 		SubscriptionStatus: nullStr(sub.Status), UpdatedAt: s.now(), ID: ws}); err != nil {
 		return err
 	}
+	// The trial's start and the first payment are told to the owners once (before settleTrial records them).
+	if err := s.welcomeSubscription(ctx, q, cur, sub); err != nil {
+		return err
+	}
 	if err := s.settleTrial(ctx, q, ws, sub); err != nil {
 		return err
 	}
