@@ -356,7 +356,9 @@ These downloads are your own copy of the workspace.
 
 If you develop staqly from the repository with [Docker Compose](/self-hosting/docker-compose),
 Stop the Compose install first (`docker stop -t 30 staqly`). `make backup` (`scripts/backup.sh`)
-refuses a running container, another running container on its volume, or a nonempty WAL.
+refuses a running container, another running container on its volume, a nonempty WAL, or an
+install with `STORAGE_DRIVER=s3` (the default of `make dev`: its media is in the bucket, which the
+script cannot copy).
 It copies the database and archives the files against the Compose volume
 `staqly_staqly-data` and writes `backups/<timestamp>/workspace.db` and `uploads.tar.gz`
 (uploads without the `thumbs` cache, plus `secret.key`, `notify_secret.key` and `access_token` if

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Channel credentials and developer app secrets are sealed with AES-256-GCM
@@ -26,22 +27,37 @@ func LoadSecretKey(dataDir, envValue string) ([]byte, error) {
 		return k, nil
 	}
 	path := filepath.Join(dataDir, "secret.key")
-	if b, err := os.ReadFile(path); err == nil {
-		k, err := base64.StdEncoding.DecodeString(string(b))
-		if err != nil || len(k) != 32 {
-			return nil, fmt.Errorf("%s is not a valid key; remove it to generate a new one (channels will need reconnecting)", path)
+	// Only a missing file leads to a new key (never an unreadable one: that would replace the key the
+	// stored credentials are sealed with). Processes starting together on a fresh data directory (the
+	// server and mcp-stdio) race for the exclusive create; the losers read the winner's key.
+	b, err := readFullKey(path)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(dataDir, 0o750); err != nil {
+			return nil, err
 		}
-		return k, nil
+		k := make([]byte, 32)
+		if _, err := rand.Read(k); err != nil {
+			return nil, err
+		}
+		f, ferr := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if ferr == nil {
+			_, err = f.WriteString(base64.StdEncoding.EncodeToString(k))
+			if cerr := f.Close(); err == nil {
+				err = cerr
+			}
+			return k, err
+		}
+		if !errors.Is(ferr, os.ErrExist) {
+			return nil, ferr
+		}
+		b, err = readFullKey(path)
 	}
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
+	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(dataDir, 0o750); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(path, []byte(base64.StdEncoding.EncodeToString(k)), 0o600); err != nil {
-		return nil, err
+	k, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(b)))
+	if err != nil || len(k) != 32 {
+		return nil, fmt.Errorf("%s is not a valid key; remove it to generate a new one (channels will need reconnecting)", path)
 	}
 	return k, nil
 }

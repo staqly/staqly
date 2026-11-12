@@ -35,6 +35,7 @@ const id = Date.now().toString(36)
 const SRC = `backup-e2e-src-${id}`
 const DST = `backup-e2e-dst-${id}`
 const NOKEY = `backup-e2e-nokey-${id}`
+const S3 = `backup-e2e-s3-${id}`
 const HEADER_SECRET = `hdr-${id}`
 const NTFY_SECRET = `ntfy-${id}`
 
@@ -145,14 +146,20 @@ describe('backup.sh and restore.sh', () => {
   })
 
   afterAll(async () => {
-    await docker(['rm', '-f', SRC, DST, NOKEY]).catch(() => '')
-    await docker(['volume', 'rm', '-f', SRC, DST, NOKEY]).catch(() => '')
+    await docker(['rm', '-f', SRC, DST, NOKEY, S3]).catch(() => '')
+    await docker(['volume', 'rm', '-f', SRC, DST, NOKEY, S3]).catch(() => '')
 
     for (const dir of [backupDir, dbOnlyDir]) {
       if (dir) {
         rmSync(dir, { recursive: true, force: true })
       }
     }
+  })
+
+  it('refuses an install whose media is in an S3 bucket instead of leaving the media out', async () => {
+    // Never started: the script reads the storage driver from the container's configuration.
+    await docker(['create', '--name', S3, '-v', `${S3}:/data`, '-e', 'STORAGE_DRIVER=s3', 'staqly-e2e:test'])
+    await expect(script('backup.sh', [], S3)).rejects.toThrow(/S3 bucket/)
   })
 
   it('backs up a stopped install and restores it into a fresh one', async () => {

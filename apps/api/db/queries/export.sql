@@ -43,17 +43,25 @@ SELECT * FROM workspace_exports WHERE status = 'pending' ORDER BY created_at LIM
 UPDATE workspace_exports SET status = 'running', started_at = ? WHERE id = ? AND status = 'pending';
 
 -- name: RequeueRunningExports :exec
+-- SQLite (one server process), at start: whatever was running was interrupted by the restart.
 UPDATE workspace_exports SET status = 'pending', started_at = NULL WHERE status = 'running';
 
+-- name: RenewWorkspaceExportLease :execrows
+-- While an export is built, started_at is its builder's lease: the builder moves it forward every
+-- exportHeartbeat, and only while it is still the value the builder wrote last (its ownership check).
+UPDATE workspace_exports SET started_at = @renewed WHERE id = @id AND status = 'running' AND started_at = @lease;
+
 -- name: RequeueStaleExports :exec
--- PostgreSQL (several server processes): only exports abandoned long ago, not the ones another process builds.
+-- Exports whose builder stopped renewing its lease (a crash, also in another server process): never the ones
+-- being built right now.
 UPDATE workspace_exports SET status = 'pending', started_at = NULL WHERE status = 'running' AND started_at < @before;
 
 -- name: FinishWorkspaceExport :execrows
--- Only a still-running export finishes: a purge or workspace deletion may
--- have expired (or removed) it while it was being built.
-UPDATE workspace_exports SET status = ?, size_bytes = ?, error = ?, finished_at = ?, expires_at = ?
-WHERE id = ? AND status = 'running';
+-- Only the builder that still holds the lease finishes: a purge or workspace deletion may have expired (or
+-- removed) the export while it was being built, or another process took it over. started_at goes back to
+-- when the build began.
+UPDATE workspace_exports SET status = ?, size_bytes = ?, error = ?, finished_at = ?, expires_at = ?, started_at = @started_at
+WHERE id = ? AND status = 'running' AND started_at = @lease;
 
 -- name: ExpiredWorkspaceExports :many
 SELECT id, workspace_id FROM workspace_exports WHERE status IN ('ready', 'failed') AND expires_at <= ? LIMIT 100;
@@ -94,11 +102,13 @@ WHERE webhook_deliveries.workspace_id = @workspace_id AND webhook_deliveries.sta
   AND event_id IN (SELECT e.id FROM events e WHERE e.workspace_id = @workspace_id AND e.created_at < @cutoff);
 
 -- name: PruneEvents :execrows
--- Events with a delivery still pending are kept until it finishes (at-least-once).
+-- Events with a webhook delivery or an alert still pending are kept until it finishes (at-least-once);
+-- an alert's finished rows go with the event (FK cascade).
 DELETE FROM events
 WHERE seq IN (SELECT e.seq FROM events e
               WHERE e.workspace_id = @workspace_id AND e.created_at < @cutoff
                 AND NOT EXISTS (SELECT 1 FROM webhook_deliveries d WHERE d.event_id = e.id)
+                AND NOT EXISTS (SELECT 1 FROM notification_outbox o WHERE o.event_id = e.id AND o.status = 'pending')
               ORDER BY e.seq LIMIT @lim);
 
 -- ---- GDPR: erase a post's history, erase workspace ----

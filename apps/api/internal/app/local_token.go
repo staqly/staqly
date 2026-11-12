@@ -84,7 +84,8 @@ func (s *Service) EnsureLocalToken() (string, error) {
 }
 
 func readLocalToken(path string) (string, error) {
-	b, err := os.ReadFile(path)
+	b, err := readFullKey(path) // another process may have just created it and not written it yet
+
 	if err != nil {
 		return "", err
 	}
