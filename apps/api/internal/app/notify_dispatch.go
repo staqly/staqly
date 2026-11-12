@@ -413,11 +413,12 @@ func truncateRunes(s string, n int) string {
 }
 
 // buildMessage turns pending outbox rows into one message. Rows about posts
-// that are gone are skipped; several rows about one post collapse into one entry.
+// that are gone are skipped; several rows about one post, event type and channel collapse into one entry, so
+// a target's failure and the final post.failed are never hidden behind an earlier success of the same post.
 func (s *Service) buildMessage(ctx context.Context, ch *notifyChannel, rows []db.NotificationOutbox) (*notifyMessage, []db.NotificationOutbox) {
 	msg := &notifyMessage{}
 	var skipped []db.NotificationOutbox
-	byPost := map[string]int{}
+	byPost := map[string]bool{}
 	for _, o := range rows {
 		ev, err := s.Q.GetEvent(ctx, o.EventID)
 		if err != nil {
@@ -464,11 +465,12 @@ func (s *Service) buildMessage(ctx context.Context, ch *notifyChannel, rows []db
 				e.MediaID, e.MediaMime = post.MediaItems[0].ID, post.MediaItems[0].MimeType
 			}
 			_ = row
-			if _, ok := byPost[post.ID]; ok {
+			key := post.ID + "\x00" + ev.Type + "\x00" + ev.ChannelID.String + "\x00" + e.Channel
+			if byPost[key] {
 				msg.rows = append(msg.rows, o)
 				continue
 			}
-			byPost[post.ID] = len(msg.Entries)
+			byPost[key] = true
 		case ev.ChannelID.Valid:
 			e.Title = firstNonEmpty(e.Channel, "A channel")
 			e.Preview = data.Error

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/staqly/staqly/apps/api/internal/blob"
@@ -11,8 +12,13 @@ import (
 // layoutMarker records in the store that its files are in workspace folders (MoveLegacyFiles ran).
 const layoutMarker = "workspaces/.layout"
 
+// deletedWorkspaceMarker is the store's record that a workspace's folder still has to go: written before the
+// workspace's rows are deleted, removed once the folder is empty. Whatever stops the removal in between (the
+// store failing, a crash) is made up for by sweepDeletedWorkspaces.
+func deletedWorkspaceMarker(workspaceID string) string { return "deleted-workspaces/" + workspaceID }
+
 // removeWorkspaceFiles deletes a workspace's folder in the store (media, thumbnails, projects, backups) and returns how
-// many files went.
+// many files went. A file that cannot be deleted does not stop the rest; the marker stays until none is left.
 func (s *Service) removeWorkspaceFiles(ctx context.Context, workspaceID string) (int, error) {
 	var keys []string
 	if err := s.Cfg.Blob.Walk(ctx, workspaceKey(workspaceID), func(key string, _ int64) error {
@@ -21,12 +27,46 @@ func (s *Service) removeWorkspaceFiles(ctx context.Context, workspaceID string) 
 	}); err != nil {
 		return 0, err
 	}
-	for i, k := range keys {
+	var errs []error
+	for _, k := range keys {
 		if err := s.Cfg.Blob.Delete(ctx, k); err != nil {
-			return i, err
+			errs = append(errs, err)
 		}
 	}
-	return len(keys), nil
+	if len(errs) > 0 {
+		return len(keys) - len(errs), fmt.Errorf("%d of %d files not deleted: %w", len(errs), len(keys), errs[0])
+	}
+	return len(keys), s.Cfg.Blob.Delete(ctx, deletedWorkspaceMarker(workspaceID))
+}
+
+// sweepDeletedWorkspaces removes the folders of deleted workspaces that are still marked (their removal
+// failed or was interrupted) and returns how many files went. A marker whose workspace exists is left alone:
+// its deletion is in progress, or was rolled back.
+func (s *Service) sweepDeletedWorkspaces(ctx context.Context) (int, error) {
+	var ids []string
+	prefix := deletedWorkspaceMarker("")
+	if err := s.Cfg.Blob.Walk(ctx, prefix, func(key string, _ int64) error {
+		ids = append(ids, strings.TrimPrefix(key, prefix))
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	files := 0
+	var errs []error
+	for _, id := range ids {
+		if _, err := s.Q.GetWorkspace(ctx, id); !isNoRows(err) {
+			if err != nil {
+				errs = append(errs, err) // never delete on database uncertainty
+			}
+			continue
+		}
+		n, err := s.removeWorkspaceFiles(ctx, id)
+		files += n
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return files, errors.Join(errs...)
 }
 
 // MoveLegacyFiles moves files stored before workspace folders ("ab/abcdef.jpg", "projects/ab/abcdef.json") to

@@ -455,8 +455,8 @@ func (q *Queries) ExportStatusByID(ctx context.Context, id string) (string, erro
 }
 
 const finishWorkspaceExport = `-- name: FinishWorkspaceExport :execrows
-UPDATE workspace_exports SET status = ?, size_bytes = ?, error = ?, finished_at = ?, expires_at = ?
-WHERE id = ? AND status = 'running'
+UPDATE workspace_exports SET status = ?, size_bytes = ?, error = ?, finished_at = ?, expires_at = ?, started_at = ?
+WHERE id = ? AND status = 'running' AND started_at = ?
 `
 
 type FinishWorkspaceExportParams struct {
@@ -465,11 +465,14 @@ type FinishWorkspaceExportParams struct {
 	Error      string         `json:"error"`
 	FinishedAt sql.NullString `json:"finished_at"`
 	ExpiresAt  string         `json:"expires_at"`
+	StartedAt  sql.NullString `json:"started_at"`
 	ID         string         `json:"id"`
+	Lease      sql.NullString `json:"lease"`
 }
 
-// Only a still-running export finishes: a purge or workspace deletion may
-// have expired (or removed) it while it was being built.
+// Only the builder that still holds the lease finishes: a purge or workspace deletion may have expired (or
+// removed) the export while it was being built, or another process took it over. started_at goes back to
+// when the build began.
 func (q *Queries) FinishWorkspaceExport(ctx context.Context, arg FinishWorkspaceExportParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, finishWorkspaceExport,
 		arg.Status,
@@ -477,7 +480,9 @@ func (q *Queries) FinishWorkspaceExport(ctx context.Context, arg FinishWorkspace
 		arg.Error,
 		arg.FinishedAt,
 		arg.ExpiresAt,
+		arg.StartedAt,
 		arg.ID,
+		arg.Lease,
 	)
 	if err != nil {
 		return 0, err
@@ -657,6 +662,7 @@ DELETE FROM events
 WHERE seq IN (SELECT e.seq FROM events e
               WHERE e.workspace_id = ?1 AND e.created_at < ?2
                 AND NOT EXISTS (SELECT 1 FROM webhook_deliveries d WHERE d.event_id = e.id)
+                AND NOT EXISTS (SELECT 1 FROM notification_outbox o WHERE o.event_id = e.id AND o.status = 'pending')
               ORDER BY e.seq LIMIT ?3)
 `
 
@@ -666,7 +672,8 @@ type PruneEventsParams struct {
 	Lim         int64  `json:"lim"`
 }
 
-// Events with a delivery still pending are kept until it finishes (at-least-once).
+// Events with a webhook delivery or an alert still pending are kept until it finishes (at-least-once);
+// an alert's finished rows go with the event (FK cascade).
 func (q *Queries) PruneEvents(ctx context.Context, arg PruneEventsParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, pruneEvents, arg.WorkspaceID, arg.Cutoff, arg.Lim)
 	if err != nil {
@@ -703,10 +710,31 @@ func (q *Queries) ReadyWorkspaceExports(ctx context.Context, workspaceID string)
 	return items, nil
 }
 
+const renewWorkspaceExportLease = `-- name: RenewWorkspaceExportLease :execrows
+UPDATE workspace_exports SET started_at = ?1 WHERE id = ?2 AND status = 'running' AND started_at = ?3
+`
+
+type RenewWorkspaceExportLeaseParams struct {
+	Renewed sql.NullString `json:"renewed"`
+	ID      string         `json:"id"`
+	Lease   sql.NullString `json:"lease"`
+}
+
+// While an export is built, started_at is its builder's lease: the builder moves it forward every
+// exportHeartbeat, and only while it is still the value the builder wrote last (its ownership check).
+func (q *Queries) RenewWorkspaceExportLease(ctx context.Context, arg RenewWorkspaceExportLeaseParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, renewWorkspaceExportLease, arg.Renewed, arg.ID, arg.Lease)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const requeueRunningExports = `-- name: RequeueRunningExports :exec
 UPDATE workspace_exports SET status = 'pending', started_at = NULL WHERE status = 'running'
 `
 
+// SQLite (one server process), at start: whatever was running was interrupted by the restart.
 func (q *Queries) RequeueRunningExports(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, requeueRunningExports)
 	return err
@@ -716,7 +744,8 @@ const requeueStaleExports = `-- name: RequeueStaleExports :exec
 UPDATE workspace_exports SET status = 'pending', started_at = NULL WHERE status = 'running' AND started_at < ?1
 `
 
-// PostgreSQL (several server processes): only exports abandoned long ago, not the ones another process builds.
+// Exports whose builder stopped renewing its lease (a crash, also in another server process): never the ones
+// being built right now.
 func (q *Queries) RequeueStaleExports(ctx context.Context, before sql.NullString) error {
 	_, err := q.db.ExecContext(ctx, requeueStaleExports, before)
 	return err

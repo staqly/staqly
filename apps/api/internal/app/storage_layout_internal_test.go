@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/png"
 	"io"
@@ -99,5 +100,66 @@ func TestFilesLiveInWorkspaceFolders(t *testing.T) {
 	}
 	if got := storedKeys(t, s.Cfg.Blob); len(got) != 1 || got[0] != legacy {
 		t.Fatalf("left: %v", got)
+	}
+}
+
+// flakyStore fails deletes of keys containing failOn.
+type flakyStore struct {
+	blob.Store
+	failOn string
+}
+
+func (f *flakyStore) Delete(ctx context.Context, key string) error {
+	if f.failOn != "" && strings.Contains(key, f.failOn) {
+		return errors.New("storage unavailable")
+	}
+	return f.Store.Delete(ctx, key)
+}
+
+// The store fails on one file while a deleted workspace's folder is removed: the other files still go, and
+// the retention run removes what is left once the store works again.
+func TestDeletedWorkspaceFilesAreRemovedAfterAStorageFailure(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	st := &flakyStore{Store: s.Cfg.Blob, failOn: "media/a"}
+	s.Cfg.Blob = st
+	for _, name := range []string{"a.png", "b.png", "c.png"} {
+		if err := st.Put(ctx, mediaKey(p.WorkspaceID, name), strings.NewReader("x"), 1, "image/png"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.deleteWorkspace(ctx, p.WorkspaceID, ""); err != nil {
+		t.Fatal(err)
+	}
+	left := storedKeys(t, st)
+	if want := []string{deletedWorkspaceMarker(p.WorkspaceID), mediaKey(p.WorkspaceID, "a.png")}; strings.Join(left, ",") != strings.Join(want, ",") {
+		t.Fatalf("after the failed delete the store holds %v, want %v", left, want)
+	}
+	if _, err := s.RunRetention(ctx); err != nil { // the store still fails: nothing lost, nothing else stopped
+		t.Fatal(err)
+	}
+	st.failOn = ""
+	if _, err := s.RunRetention(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if left := storedKeys(t, st); len(left) != 0 {
+		t.Fatalf("a deleted workspace's files stay in the store: %v", left)
+	}
+}
+
+// A marker whose workspace exists (its deletion was rolled back) removes nothing.
+func TestDeletedWorkspaceMarkerOfALivingWorkspaceIsIgnored(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	for _, k := range []string{mediaKey(p.WorkspaceID, "a.png"), deletedWorkspaceMarker(p.WorkspaceID)} {
+		if err := s.Cfg.Blob.Put(ctx, k, strings.NewReader("x"), 1, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, err := s.sweepDeletedWorkspaces(ctx); err != nil || n != 0 {
+		t.Fatal(n, err)
+	}
+	if _, err := s.Cfg.Blob.Stat(ctx, mediaKey(p.WorkspaceID, "a.png")); err != nil {
+		t.Fatalf("a living workspace's file was removed: %v", err)
 	}
 }

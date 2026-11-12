@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -168,6 +169,12 @@ func (s *Service) RunRetention(ctx context.Context) (RetentionReport, error) {
 	}
 	rep.Exports = n
 
+	// 4a. Folders of deleted workspaces whose removal failed or was interrupted. What still fails is tried
+	// again at the next run and must not hold up the rest.
+	if n, err := s.sweepDeletedWorkspaces(ctx); err != nil {
+		s.logger(ctx).Warn("files of deleted workspaces not removed; trying again at the next run", "files_removed", n, "err", err)
+	}
+
 	// 4b. Files in Deleted for longer than MediaTrashDays.
 	if rep.Media, err = s.purgeTrashedMedia(ctx, now); err != nil {
 		return rep, err
@@ -277,6 +284,11 @@ func (s *Service) deleteWorkspace(ctx context.Context, wsID, onlyMember string) 
 	if err := s.cancelSubscription(ctx, wsID); err != nil {
 		return err
 	}
+	// The store's note that this folder has to go, before the rows do: if removing the files fails after the
+	// commit, the retention worker finishes it (sweepDeletedWorkspaces). Until the commit it means nothing.
+	if err := s.Cfg.Blob.Put(ctx, deletedWorkspaceMarker(wsID), strings.NewReader(""), 0, "text/plain"); err != nil {
+		return fmt.Errorf("workspace not deleted: file store: %w", err)
+	}
 	var exports []string
 	err := s.tx(ctx, func(q *db.Queries) error {
 		if _, err := q.GetWorkspace(ctx, wsID); err != nil {
@@ -314,11 +326,12 @@ func (s *Service) deleteWorkspace(ctx context.Context, wsID, onlyMember string) 
 		return err
 	})
 	if err != nil {
+		_ = s.Cfg.Blob.Delete(ctx, deletedWorkspaceMarker(wsID)) // best effort: a marker of a living workspace is ignored
 		return err
 	}
 	files, err := s.removeWorkspaceFiles(ctx, wsID)
 	if err != nil {
-		s.logger(ctx).Warn("files not removed after workspace deletion", "err", err)
+		s.logger(ctx).Warn("files not removed after workspace deletion; retention tries again", "err", err)
 	}
 	for _, id := range exports {
 		s.removeExportFile(ctx, wsID, id)
