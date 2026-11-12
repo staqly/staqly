@@ -126,7 +126,8 @@ Everyone signed in sees their sign-in methods under **Settings → Account**:
 Every sign-in, with Google, a code or a passkey, creates a new session, so an old cookie never
 carries over. Sessions expire after 30 days. **Sign out** ends the session at once. Removing
 someone from a workspace signs them out of it everywhere. Switching workspaces keeps the session
-and moves it.
+and moves it. The tabs of one browser share that session, so the other open tabs follow: they
+reload into the workspace you switched to (changes not yet saved in them are lost).
 
 **Connect a device** (**Settings → General → Devices**) signs a phone or another
 browser in as the same person with a QR code: one use, 5 minutes, and it creates a session of its

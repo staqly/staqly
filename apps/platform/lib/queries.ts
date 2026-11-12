@@ -310,30 +310,38 @@ export function useRecentEvents(opts?: { refetchInterval?: number }) {
 }
 
 /**
- * Post ids this tab changed itself in the last `ttlMs`. Their events are not a reason to refetch a list; a
- * later change to the same post (an agent edits it, the scheduler publishes it) is. Entries expire, so the
- * set stays small however many posts a long session touches.
+ * Posts this tab changed itself in the last `ttlMs`, with the version its change left them at. Their events
+ * are not a reason to refetch a list; a later change to the same post (an agent edits it, the scheduler
+ * publishes it) is. Entries expire, so the set stays small however many posts a long session touches.
  */
 export function createRecentIds(ttlMs = 60_000) {
-  const ids = new Map<string, number>()
+  const ids = new Map<string, { at: number; version?: number }>()
 
   return {
-    add(id: string) {
+    add(id: string, version?: number) {
       const now = Date.now()
 
-      for (const [k, at] of ids) {
-        if (now - at > ttlMs) {
+      for (const [k, v] of ids) {
+        if (now - v.at > ttlMs) {
           ids.delete(k)
         }
       }
 
       ids.delete(id)
-      ids.set(id, now)
+      ids.set(id, { at: now, version })
     },
-    has(id: string) {
-      const at = ids.get(id)
+    /** `version`: the one an event carries. A later version than this tab wrote is someone else's change. */
+    has(id: string, version?: number) {
+      const hit = ids.get(id)
 
-      return at !== undefined && Date.now() - at <= ttlMs
+      if (!hit || Date.now() - hit.at > ttlMs) {
+        return false
+      }
+
+      // shortcut: an event without the post's version (post.deleted, a shared preview) or a change whose
+      // version this tab does not know (a create, a delete) still counts as this tab's for `ttlMs`; put the
+      // version into those events and calls to close that too.
+      return version === undefined || hit.version === undefined || version <= hit.version
     },
   }
 }
@@ -346,15 +354,18 @@ const OUTCOME = /^post\.(publish_requested|published|failed|target_\w+|reply_\w+
 
 /**
  * An event this tab has not written into the cache itself. A post this tab just changed still gets news from
- * elsewhere: the outcome of publishing and anything the system did (local mode can't tell the dashboard from
- * an automation by its actor, so outcomes count as foreign whoever reported them).
+ * elsewhere: a later version of it (someone else's edit), the outcome of publishing and anything the system
+ * did (local mode can't tell the dashboard from an automation by its actor, so outcomes count as foreign
+ * whoever reported them).
  */
 export function isForeignEvent(e: StashEvent, isLocal?: (postId: string) => boolean) {
   if (!e.post_id || e.actor?.type === 'system' || OUTCOME.test(e.type)) {
     return true
   }
 
-  return !(appliedHere.has(e.post_id) || isLocal?.(e.post_id))
+  const version = (e.data as { post?: { version?: number } } | null | undefined)?.post?.version
+
+  return !(appliedHere.has(e.post_id, version) || isLocal?.(e.post_id))
 }
 
 /**
@@ -560,7 +571,7 @@ export function flattenPosts(data?: InfiniteData<PostPage>): Post[] {
 
 /** Write an updated post everywhere it is cached (detail + any list). */
 export function syncPostInCache(qc: QueryClient, post: Post) {
-  appliedHere.add(post.id)
+  appliedHere.add(post.id, post.version)
   qc.setQueryData(qk.post(post.id), post)
   qc.setQueriesData<InfiniteData<PostPage>>({ queryKey: qk.postsAll }, (old) =>
     old
@@ -707,11 +718,55 @@ export function useRole() {
   }
 }
 
+const WORKSPACE_CHANNEL = 'staqly.workspace'
+
+/**
+ * Tells this browser's other tabs that the session now works in workspace `id`. They share the session, so
+ * what they create or set would land there while their screen still shows the workspace they opened.
+ */
+export function announceWorkspace(id: string) {
+  if (typeof BroadcastChannel === 'undefined') {
+    return
+  }
+
+  const ch = new BroadcastChannel(WORKSPACE_CHANNEL)
+
+  // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a BroadcastChannel is same-origin only
+  ch.postMessage(id)
+  ch.close()
+}
+
+/** Another tab switched workspace: this one opens it too, like the tab that switched (a full reload). */
+export function useFollowWorkspace() {
+  const qc = useQueryClient()
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') {
+      return
+    }
+
+    const ch = new BroadcastChannel(WORKSPACE_CHANNEL)
+
+    ch.addEventListener('message', (e: MessageEvent<string>) => {
+      const here = qc.getQueryData<Awaited<ReturnType<typeof api.session>>>(qk.session)?.workspace.id
+
+      if (e.data && here && e.data !== here) {
+        window.location.assign('/schedule')
+      }
+    })
+
+    return () => ch.close()
+  }, [qc])
+}
+
 /** Opens another workspace: a full reload, so nothing cached for the previous one shows in the next. */
 export function useSwitchWorkspace() {
   return useMutation({
     mutationFn: (id: string) => api.switchWorkspace(id),
-    onSuccess: () => window.location.assign('/schedule'),
+    onSuccess: (_, id) => {
+      announceWorkspace(id)
+      window.location.assign('/schedule')
+    },
     onError: (e) => toastApiError(e),
   })
 }

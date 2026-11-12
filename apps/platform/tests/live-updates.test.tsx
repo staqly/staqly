@@ -7,7 +7,7 @@ import { LiveUpdates } from '@/components/shell/live-updates'
 import { api, type Post, type StashEvent } from '@/lib/api'
 import { awaitOutcome, progressOf } from '@/lib/publish-outcome'
 import { undoToast } from '@/lib/publish-undo'
-import { qk } from '@/lib/queries'
+import { announceWorkspace, qk } from '@/lib/queries'
 
 const event = (seq: number, type = 'webhook.test') =>
   ({ id: `evt_${seq}`, seq, type, post_id: null, actor: { type: 'api_key' } }) as StashEvent
@@ -179,5 +179,44 @@ describe('live updates', () => {
     qc.clear()
     fetchEvents.mockRestore()
     success.mockRestore()
+  })
+})
+
+// The tabs of one browser share the session: when one switches workspace, the writes of the others would land in
+// the new workspace while their screen still shows the old one.
+describe('another tab switched workspace', () => {
+  const assign = vi.fn<(url: string) => void>()
+
+  function open(workspace: string) {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
+
+    vi.stubGlobal('location', { ...window.location, assign })
+    assign.mockReset()
+    qc.setQueryData(qk.session, { workspace: { id: workspace } })
+    qc.setQueryData(qk.recentEvents, [])
+    vi.spyOn(api, 'events').mockResolvedValue({ data: [] })
+
+    return render(
+      <QueryClientProvider client={qc}>
+        <LiveUpdates />
+      </QueryClientProvider>,
+    )
+  }
+
+  it('this tab opens the new workspace too', async () => {
+    const { unmount } = open('ws_1')
+
+    announceWorkspace('ws_2')
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/schedule'))
+    unmount()
+  })
+
+  it('a tab already in that workspace stays where it is', async () => {
+    const { unmount } = open('ws_2')
+
+    announceWorkspace('ws_2')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(assign).not.toHaveBeenCalled()
+    unmount()
   })
 })

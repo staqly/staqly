@@ -124,6 +124,16 @@ pnpm gen               # regenerate lib/api-types.ts from ../api/openapi.yaml
   under their fields (`setFormApiError` / `formApiError`), only the rest is
   toasted. Type-to-confirm and "I have saved..." checkboxes use
   `ConfirmNameField` / `AckCheckbox`.
+* Drawers ask before dropping a changed form (`components/ui/sheet.tsx`
+  compares the fields with how they were before the first key or click). A
+  form that stays open after its own save calls `useSheetSaved()` (or renders
+  `<SheetSaved />`); no other mutation resets it. State that lives in no
+  field (a post's attachments) counts through `data-form-value`.
+* A post open in the composer is saved against the version its fields were
+  loaded from (`expected_version`), never a newer one a refetch brought: an
+  edit made elsewhere is taken in while nothing was typed, otherwise the save
+  answers 409 `post_changed` and the person chooses (load theirs, or save
+  theirs over it). Enter in a one-line field never sends a post.
 * Colours: statuses, badges, timeline icons and action buttons take a tone
   from `lib/tones.ts` (neutral slate, info blue, warning amber, success
   emerald, attention orange, danger red, accent violet); post, target and
@@ -217,8 +227,9 @@ must re-render only the component it concerns.
   `lib/schedule.ts`; `toLocale*String` with options builds a new
   `Intl.DateTimeFormat` per call (~30 us, per row or cell).
 * `LiveUpdates` and `useRefetchOnForeignChange` skip events for posts this
-  tab wrote into the cache (`isForeignEvent`), but never publishing outcomes
-  or system events: those always refetch.
+  tab wrote into the cache (`isForeignEvent`), but never publishing outcomes,
+  system events or an event with a later version of the post than this tab
+  wrote (someone else's edit): those always refetch.
 * The compiler does not memoise per item inside `.map()`. List rows and cards
   are `memo()` components (the calendar `Entry`, `AuditEventRow`). Pass them
   primitives, the post object and **stable callbacks** (setState, or a

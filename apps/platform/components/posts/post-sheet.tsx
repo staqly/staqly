@@ -85,7 +85,7 @@ export function PostSheet({ id, channel, onClose }: { id: string | null; channel
   })
   const p = post.data
   // The form's fields are its initial state. When the list's copy turns out older than the post, the form starts
-  // over from the post; later versions (a save, a retry) keep what is typed.
+  // over from the post; later versions are the composer's matter (it keeps what is typed).
   const [shown, setShown] = useState<{ id: string; version: number; checked: boolean; round: number } | null>(null)
 
   if (p && shown?.id !== p.id) {

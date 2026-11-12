@@ -24,7 +24,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetSaved, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { useIsPast } from '@/hooks/use-is-past'
 import { api, type Collection, type Schedule, type ScheduleInput } from '@/lib/api'
@@ -269,6 +269,7 @@ function ScheduleSheet({
         </SheetHeader>
         {freshSecret && (
           <div className="grid content-start gap-3 p-4">
+            <SheetSaved />
             <div className="grid gap-2 rounded-lg border border-brand/40 bg-brand-soft/40 p-3" role="status">
               <div className="text-xs font-medium">Copy the signing secret now. It is not shown again.</div>
               <SecretField value={freshSecret} label="Signing secret" />

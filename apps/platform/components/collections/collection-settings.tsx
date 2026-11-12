@@ -22,7 +22,7 @@ import {
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, useSheetSaved } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { api, ApiError, type Collection } from '@/lib/api'
 import { fieldsOf, focusFirstInvalid, formApiError, setFormApiError } from '@/lib/form-errors'
@@ -170,6 +170,7 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
 
   const qc = useQueryClient()
   const router = useRouter()
+  const sheetSaved = useSheetSaved()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [confirmName, setConfirmName] = useState('')
   const [deleteTried, setDeleteTried] = useState(false)
@@ -212,6 +213,7 @@ function SettingsBody({ collection, onClose }: { collection: Collection; onClose
         color: c.color ?? '',
         processing_timeout_seconds: c.processing_timeout_seconds ? String(c.processing_timeout_seconds) : '',
       })
+      sheetSaved()
       namedToast(c.name, 'was updated')
     },
     onError: (e) => {

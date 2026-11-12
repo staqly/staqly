@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { outcomeOf, publishToastId } from '@/lib/publish-outcome'
-import { isForeignEvent, qk, refreshEventLists, useRecentEvents } from '@/lib/queries'
+import { isForeignEvent, qk, refreshEventLists, useFollowWorkspace, useRecentEvents } from '@/lib/queries'
 
 /** How often the dashboard looks for changes made elsewhere (agents, the scheduler, other tabs); paused in background tabs. */
 export const LIVE_INTERVAL_MS = 3000
@@ -66,12 +66,15 @@ function useLoaded() {
  * appears that this tab hasn't seen, the views it touches refetch (counts, activity, the posts it names, the
  * channels and schedules, webhook deliveries). Paged post lists refetch themselves from the same request.
  * Changes this tab made itself are already in the cache, so their events refetch nothing but the activity.
+ * A workspace switch in another tab reloads this one into it (the session is shared).
  */
 export function LiveUpdates() {
   const qc = useQueryClient()
   const loaded = useLoaded()
   const events = useRecentEvents({ refetchInterval: loaded ? LIVE_INTERVAL_MS : undefined })
   const seen = useRef<number | undefined>(undefined)
+
+  useFollowWorkspace()
 
   useEffect(() => {
     const list = events.data

@@ -52,7 +52,7 @@ import {
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { api, type Collection, type Post, type PostQuery, type PostPage } from '@/lib/api'
+import { api, ApiError, type Collection, type Post, type PostQuery, type PostPage } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
 import {
@@ -718,6 +718,24 @@ export function usePostRowActions(query = '') {
   return { onAction, dialogs }
 }
 
+/**
+ * Adds and takes off tags on the post as the server has it now, not as the list loaded it: a tag an agent or a
+ * teammate added since stays. The API takes the whole tag list, so the write names the version it read and
+ * reads again when the post changed in between (once; a second 409 counts as failed).
+ */
+async function retagPost(id: string, add: string[], drop: string[], again = true): Promise<Post> {
+  const now = await api.post(id)
+  const tags = [...new Set([...now.tags.filter((t) => !drop.includes(t)), ...add])]
+
+  return api.updatePost(id, { tags, expected_version: now.version }).catch((e: unknown) => {
+    if (again && e instanceof ApiError && e.code === 'post_changed') {
+      return retagPost(id, add, drop, false)
+    }
+
+    throw e
+  })
+}
+
 /** Runs one call per post (or post id) and reports how many worked; the rest are toasted once. */
 async function eachPost<T>(list: T[], run: (p: T) => Promise<Post>) {
   const done: Post[] = []
@@ -827,9 +845,7 @@ export function PostSelectionBar({
   })
   const retag = useMutation({
     mutationFn: ({ add, drop }: { add: string[]; drop: string[] }) =>
-      eachPost(editable, (p) =>
-        api.updatePost(p.id, { tags: [...new Set([...p.tags.filter((t) => !drop.includes(t)), ...add])] }),
-      ),
+      eachPost(editable, (p) => retagPost(p.id, add, drop)),
     onSuccess: ({ done, failed }) => {
       done.forEach((p) => syncPostInCache(qc, p))
       finish('updated', selected.length, done.length, failed)
