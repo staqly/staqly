@@ -35,7 +35,7 @@ sqlc generate                       # after editing db/queries or migrations (~/
 
 PostgreSQL needs a direct connection or a session-mode pooler. Transaction/statement
 pooling is unsupported: OAuth refreshes hold session advisory locks across the provider
-request and credential save. Keep at least two connections in the application pool
+request and credential save, and so do Stripe subscription refreshes (`lockBilling`: read, then apply). Keep at least two connections in the application pool
 (the default is 20); refresh lock holders reserve at most half the configured limit.
 
 ## Conventions

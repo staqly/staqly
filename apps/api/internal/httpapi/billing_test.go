@@ -218,11 +218,13 @@ func TestStripeBillingLifecycle(t *testing.T) {
 		t.Fatalf("usage after checkout: %+v", u.Plan)
 	}
 
-	// Paying already: a checkout for another plan switches the subscription (prorated), back to the billing page.
+	// Paying already: a checkout for another plan switches the subscription, back to the billing page. A higher
+	// plan is invoiced at once and waits for that payment (TestUpgradeOfPayingSubscription has the rest).
 	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "plus", "interval": "year"}, 409, nil) // same price
 	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "interval": "month"}, 200, &out)
 	if !strings.HasSuffix(out.URL, "/settings/plan?checkout=switched") || switched.Get("items[0][id]") != "si_1" ||
-		switched.Get("items[0][price]") != "price_business_month" || switched.Get("proration_behavior") != "create_prorations" {
+		switched.Get("items[0][price]") != "price_business_month" || switched.Get("proration_behavior") != "always_invoice" ||
+		switched.Get("payment_behavior") != "pending_if_incomplete" {
 		t.Fatalf("switch: %q %v", out.URL, switched)
 	}
 	item["price"] = stripePriceObject("business", "month")

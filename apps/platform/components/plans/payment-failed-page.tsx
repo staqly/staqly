@@ -12,7 +12,7 @@ import { usePlanActions } from '@/components/plans/plans-page'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PendingPayment } from '@/lib/api'
-import { useMode, usePendingPayment, usePlans } from '@/lib/queries'
+import { useBilling, useMode, usePendingPayment, usePlans } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 import { TONES, type Tone } from '@/lib/tones'
 import { cn } from '@/lib/utils'
@@ -71,7 +71,8 @@ function view(reason: Reason | undefined, plan: string): View {
 }
 
 /**
- * After a plan switch that is charged at once (leaving the trial) wasn't paid: what happened, in plain words, and the
+ * After a plan switch that is charged at once (leaving the trial, an upgrade) wasn't paid: what happened, in plain
+ * words (the trial or the current plan goes on meanwhile), and the
  * next step on Stripe's pages: confirm the payment with the bank on Stripe's invoice page, or change the card in the
  * billing portal. Payments never happen here; the server reads where the payment stands from Stripe, again whenever
  * the person comes back to this tab, and once it has gone through Plan & usage shows the new plan.
@@ -81,6 +82,9 @@ export function PaymentFailedPage() {
   const router = useRouter()
   const pending = usePendingPayment({ enabled: !isLocal })
   const plans = usePlans({ enabled: !isLocal })
+  const billing = useBilling({ enabled: !isLocal })
+  // What goes on unchanged while the payment waits.
+  const keeps = billing.data?.subscription_status === 'trialing' ? 'your free trial' : 'your current plan'
   const { portal } = usePlanActions()
   const { data, error, isLoading, isFetching, refetch } = pending
   // The change waited for its payment while this page was open: once nothing waits, it went through.
@@ -134,7 +138,7 @@ export function PaymentFailedPage() {
     content = <p className="text-center text-sm text-muted-foreground">A local install has no plans and no payments.</p>
   } else if (error) {
     content = <ErrorState title="Could not check the payment" error={error} onRetry={() => void refetch()} />
-  } else if (isLoading || !data) {
+  } else if (isLoading || !data || billing.isLoading) {
     content = <Skeleton className="h-72 rounded-2xl" />
   } else if (!data.pending) {
     content = (
@@ -164,8 +168,8 @@ export function PaymentFailedPage() {
         </div>
         <Callout tone="neutral" role="note">
           {reason === 'processing'
-            ? 'Your free trial goes on until the payment goes through.'
-            : "Nothing has changed yet: your free trial goes on as before, and you haven't been charged."}
+            ? `Until the payment goes through, ${keeps} goes on.`
+            : `Nothing has changed yet: ${keeps} goes on as before, and you haven't been charged.`}
         </Callout>
         {reason === 'authentication_required' ? (
           <Callout tone="info" role="note">

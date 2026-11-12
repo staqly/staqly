@@ -361,9 +361,12 @@ export interface paths {
          *
          *     With a live subscription: switches it to the plan and interval (Stripe prorates the difference) and
          *     returns the dashboard's plan page URL (`/settings/plan`) with `?checkout=switched`; the plan changes when Stripe's
-         *     `customer.subscription.updated` event arrives. 409 for the plan and interval it already has.
+         *     `customer.subscription.updated` event arrives. 409 for the plan and interval it already has. A lower plan,
+         *     or the same plan in the other interval, is settled by Stripe's proration (a credit goes on the next invoice).
          *
-         *     Leaving Starter's trial ends it now and charges the new plan at once; the change waits for that payment.
+         *     An upgrade (a paying subscription moving to a higher plan) charges the prorated difference at once, and
+         *     leaving Starter's trial ends it now and charges the new plan at once; either change waits for that payment,
+         *     and the workspace keeps its plan (or trial) until then.
          *     When it doesn't go through: 402 `payment_failed` whose `details` say why (`reason`; see `PendingPayment`)
          *     and, when the bank asks the customer to confirm the payment, `pay_url`: Stripe's invoice page to confirm
          *     and pay there. `GET /v1/billing/pending-payment` reads the same later.
@@ -560,8 +563,9 @@ export interface paths {
         };
         /**
          * A plan change waiting for its payment, read from Stripe (account owner)
-         * @description Leaving Starter's trial for another plan is charged at once, and Stripe applies the change only when that
-         *     payment goes through (until then it is the subscription's pending update and the trial stays). This reads
+         * @description An upgrade to a higher plan, and leaving Starter's trial for another plan, are charged at once, and Stripe
+         *     applies the change only when that payment goes through (until then it is the subscription's pending update
+         *     and the current plan, or the trial, stays). This reads
          *     from Stripe whether such a change waits and why it isn't paid: `authentication_required` (the bank asks
          *     the customer to confirm the payment: open `pay_url`, Stripe's hosted invoice page, to confirm and pay),
          *     a decline (`card_declined`, `insufficient_funds`, `expired_card`, `incorrect_card_details`: change the
@@ -4336,7 +4340,7 @@ export interface components {
             invoice_pdf: string;
         };
         /**
-         * @description A plan change waiting for its payment (leaving the trial is charged at once). Also the `details` of the
+         * @description A plan change waiting for its payment (an upgrade and leaving the trial are charged at once). Also the `details` of the
          *     402 `payment_failed` that `POST /v1/billing/checkout` answers when that payment didn't go through
          *     (without `pending`).
          */
@@ -6322,7 +6326,7 @@ export interface components {
         /**
          * @description `plan_limit_exceeded` (a plan limit; `details` has limit, max, used, plan),
          *     `plan_expired` (the workspace is suspended and read-only), `payment_failed` (a plan
-         *     change that charges at once, such as leaving the trial, wasn't paid: nothing changed; `details` has
+         *     change that charges at once, an upgrade or leaving the trial, wasn't paid: nothing changed; `details` has
          *     `reason`, and `pay_url`, `decline_code`, `plan`, `expires_at` when known, as in `PendingPayment`), or `x_posts_exhausted` (this
          *     period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end), or
          *     `linkedin_posts_exhausted` / `linkedin_videos_exhausted` (this period's posts to LinkedIn, or those with a video,
