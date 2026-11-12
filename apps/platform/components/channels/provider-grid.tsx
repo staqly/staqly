@@ -35,7 +35,7 @@ function useInsecurePage() {
  * The "Add channel" grid: every platform the catalog lists, in its order, as a tile with the brand mark.
  * Platforms not wired up yet are still shown (greyed, "Soon"), so people see where staqly is going.
  */
-/** A tile's name with its variant in parentheses smaller ("Instagram" over "(Facebook Business)"). */
+/** A tile's name with its variant in parentheses smaller ("Instagram" over "(Professional)"). */
 function TileName({ name }: { name: string }) {
   const at = name.indexOf(' (')
 
@@ -59,8 +59,8 @@ const GROUPS: { title: string; ids: string[] }[] = [
     ids: [
       'x',
       'facebook',
+      'instagram_unified',
       'instagram',
-      'instagram_business',
       'threads',
       'linkedin',
       'linkedin_page',

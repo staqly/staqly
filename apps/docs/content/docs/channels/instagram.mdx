@@ -141,11 +141,14 @@ you or Meta has Facebook Login unavailable for the app.
    ```
 
 The **Add channel** grid then shows two Instagram tiles: **Instagram (Standalone)** (this sign-in) and
-[Instagram (Facebook Business)](/channels/instagram_business) (an account linked to a Facebook Page, through
-Facebook Login with the Meta app).
+**Instagram (Professional)** (Unified login as above: sign in with Instagram or Facebook, with the Meta app's keys
+and `PROVIDER_INSTAGRAM_CONFIG_ID`). `PROVIDER_INSTAGRAM_UNIFIED_ENABLED=true` turns the second one on; add
+`https://<your dashboard>/channels/callback/instagram_unified` to the Meta app's redirect URLs for it. Before v0.34
+the second tile was Instagram (Facebook Business), turned on with `PROVIDER_INSTAGRAM_BUSINESS_ENABLED`: channels
+connected with it keep publishing, and connecting one again signs in with Unified login.
 
 With both set, **Connect with Instagram** opens instagram.com, asks for publishing, comments and insights, and
-keeps a 60-day token that staqly renews on its own. `PROVIDER_INSTAGRAM_CONFIG_ID` is then not used. Accounts
+keeps a 60-day token that staqly renews on its own. `PROVIDER_INSTAGRAM_CONFIG_ID` then serves Instagram (Professional) only. Accounts
 connected before keep working as they are (each remembers how it signed in); connect one again to move it to
 Instagram login. For [comments right away](#comments-right-away), set the webhook in **API setup with Instagram
 login** too: Meta signs those calls with the Instagram app's secret, which the server then has.
@@ -201,7 +204,7 @@ alerts) before its next post fails; without the comments one its comments turn o
 
 ## Unpublishing
 
-Unpublishing deletes the post, reel, story or whole carousel on Instagram, comments other people left included, and the comments of its thread. Meta allows this only for accounts connected through Facebook (Unified login or [Instagram (Facebook Business)](/channels/instagram_business)) with `instagram_manage_contents`; an account connected with Instagram login, a channel connected before that permission, or a post Meta won't delete (an ad) shows *Remove by hand* instead: delete it in the Instagram app. Staqly still removes the comments of its thread.
+Unpublishing deletes the post, reel, story or whole carousel on Instagram, comments other people left included, and the comments of its thread. Meta allows this only for accounts connected through Facebook (Unified login, Instagram (Professional) included) with `instagram_manage_contents`; an account connected with Instagram login, a channel connected before that permission, or a post Meta won't delete (an ad) shows *Remove by hand* instead: delete it in the Instagram app. Staqly still removes the comments of its thread.
 
 ## Statistics
 

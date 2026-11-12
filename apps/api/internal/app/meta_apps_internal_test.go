@@ -33,7 +33,7 @@ func TestMetaPlatformsTakeTheirOwnKeys(t *testing.T) {
 }
 
 // With Unified login there is one Instagram tile; with Instagram login, "Instagram (Standalone)" and
-// "Instagram (Facebook Business)".
+// "Instagram (Professional)" (Unified login, the same configuration).
 func TestInstagramTiles(t *testing.T) {
 	s, p, _ := publishTest(t)
 	env := map[string]string{"PROVIDER_META_CLIENT_ID": "meta", "PROVIDER_META_CLIENT_SECRET": "meta-secret", "PROVIDER_INSTAGRAM_CONFIG_ID": "cfg"}
@@ -55,7 +55,7 @@ func TestInstagramTiles(t *testing.T) {
 		t.Fatalf("unified: %v", got)
 	}
 	env["PROVIDER_INSTAGRAM_CLIENT_ID"], env["PROVIDER_INSTAGRAM_CLIENT_SECRET"] = "ig", "ig-secret"
-	if got := tiles(); got["instagram"] != "Instagram (Standalone)" || got["instagram_business"] != "Instagram (Facebook Business)" {
+	if got := tiles(); got["instagram"] != "Instagram (Standalone)" || got["instagram_unified"] != "Instagram (Professional)" {
 		t.Fatalf("instagram login: %v", got)
 	}
 	list, _ := s.ListProviders(context.Background(), p)
@@ -64,7 +64,11 @@ func TestInstagramTiles(t *testing.T) {
 			t.Errorf("%s is %s (app configured %v)", i.ID, i.Status, i.AppConfigured)
 		}
 	}
-	if app, ok := s.serverApp("instagram_business"); !ok || app.ClientID != "meta" || app.InstagramLogin {
-		t.Fatalf("business uses the Meta app: %+v", app)
+	if app, ok := s.serverApp("instagram_unified"); !ok || app.ClientID != "meta" || app.InstagramLogin || app.ConfigID != "cfg" {
+		t.Fatalf("professional uses the Meta app and Instagram's configuration: %+v", app)
+	}
+	env["PROVIDER_INSTAGRAM_CONFIG_ID"] = ""
+	if _, ok := s.serverApp("instagram_unified"); ok {
+		t.Fatal("professional without a login configuration must wait")
 	}
 }

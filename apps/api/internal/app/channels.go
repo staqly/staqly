@@ -169,9 +169,9 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 		if !s.providerEnabled(e.ID()) {
 			continue // turned off on this server: no tile, no connecting, no publishing
 		}
-		// Instagram through Facebook Business is the second Instagram tile only next to Instagram login (the Instagram
-		// app's own keys); with Unified login, one Instagram tile covers both kinds of sign-in.
-		if e.ID() == "instagram_business" && !s.instagramLogin() {
+		// Instagram (Professional), Unified login as its own tile, is the second Instagram tile only next to Instagram
+		// login (the Instagram app's own keys); without it the one Instagram tile already is Unified login.
+		if e.ID() == "instagram_unified" && !s.instagramLogin() {
 			continue
 		}
 		_, serverOK := s.serverApp(e.ID())
@@ -242,10 +242,17 @@ func (s *Service) serverApp(providerID string) (providers.App, bool) {
 	if metaApp(providerID) && !own {
 		key = "PROVIDER_META_CLIENT_"
 	}
+	config := providerEnv(providerID)
+	if providerID == "instagram_unified" {
+		config = providerEnv("instagram") // the same login configuration as the one Instagram tile
+	}
 	app := providers.App{ClientID: s.Env(key+"ID", ""), ClientSecret: s.Env(key+"SECRET", ""),
-		ConfigID: s.Env(providerEnv(providerID)+"CONFIG_ID", ""), InstagramLogin: providerID == "instagram" && own}
+		ConfigID: s.Env(config+"CONFIG_ID", ""), InstagramLogin: providerID == "instagram" && own}
 	if app.InstagramLogin {
 		app.ConfigID = ""
+	}
+	if providerID == "instagram_unified" && app.ConfigID == "" {
+		return app, false // no login configuration: the tile waits ("soon") instead of failing at sign-in
 	}
 	if needsBotToken(providerID) && s.Env(providerEnv(providerID)+"BOT_TOKEN", "") == "" {
 		return app, false
@@ -253,8 +260,8 @@ func (s *Service) serverApp(providerID string) (providers.App, bool) {
 	return app, app.ClientID != ""
 }
 
-// instagramLogin: Instagram signs in with the Instagram app's own keys (Instagram login), so Instagram through a
-// Facebook Page is offered as a second tile.
+// instagramLogin: Instagram signs in with the Instagram app's own keys (Instagram login), so Unified login is offered
+// as a second tile, Instagram (Professional).
 func (s *Service) instagramLogin() bool {
 	app, _ := s.serverApp("instagram")
 	return app.InstagramLogin
@@ -262,7 +269,7 @@ func (s *Service) instagramLogin() bool {
 
 // metaApp: the platform signs in through the server's one Meta app (Threads has its own Threads app id).
 func metaApp(providerID string) bool {
-	return providerID == "facebook" || providerID == "instagram" || providerID == "instagram_business"
+	return providerID == "facebook" || providerID == "instagram" || providerID == "instagram_unified"
 }
 
 // needsBotToken: the platform posts with the server's own bot (Discord), so only the server's app works for it.
