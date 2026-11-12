@@ -42,10 +42,14 @@ type fakeAI struct {
 	bodies  []map[string]any
 	idem    []string
 	cancels atomic.Int32
-	polls   atomic.Int32 // status checks: the worker has stored the provider's request id
-	forgets atomic.Int32
-	uploads atomic.Int32
-	png     []byte
+	// onSubmit runs while the provider takes a request (the worker waits for the answer); cancelLate: the
+	// provider answers a cancel with 202, the request already runs.
+	onSubmit   func()
+	cancelLate bool
+	polls      atomic.Int32 // status checks: the worker has stored the provider's request id
+	forgets    atomic.Int32
+	uploads    atomic.Int32
+	png        []byte
 }
 
 func (f *fakeAI) set(fn func(f *fakeAI)) {
@@ -73,11 +77,16 @@ func (f *fakeAI) recordSubmit(r *http.Request) (int, bool, bool) {
 	var body map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	f.mu.Lock()
-	defer f.mu.Unlock()
+	hook := f.onSubmit
 	f.submits = append(f.submits, r.URL.Path)
 	f.bodies = append(f.bodies, body)
 	f.idem = append(f.idem, r.Header.Get("Idempotency-Key"))
-	return f.submit, f.slow, f.fail
+	code, slow, fail := f.submit, f.slow, f.fail
+	f.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return code, slow, fail
 }
 
 // newFakeFal: POST /<model> queues, GET <app>/requests/<id>/status says COMPLETED (or IN_PROGRESS when slow),
@@ -119,6 +128,13 @@ func newFakeFal(t *testing.T) *fakeAI {
 			switch {
 			case r.Method == "PUT" && strings.HasSuffix(r.URL.Path, "/cancel"):
 				f.cancels.Add(1)
+				late := false
+				f.set(func(f *fakeAI) { late = f.cancelLate })
+				if late {
+					w.WriteHeader(202)
+					_, _ = io.WriteString(w, `{"status":"ALREADY_COMPLETED"}`)
+					return
+				}
 				_, _ = io.WriteString(w, `{"status":"OK"}`)
 			case strings.HasSuffix(r.URL.Path, "/status"):
 				f.polls.Add(1)
@@ -709,6 +725,37 @@ func TestAICancelRunning(t *testing.T) {
 	e.do(nil, "GET", "/v1/ai/jobs/"+job.ID, e.key, nil, 200, &job)
 	if job.Status != "canceled" || fal.cancels.Load() != 1 || job.CostUSD != 0 || job.Result != nil {
 		t.Fatalf("cancelled while running: %+v cancels %d", job, fal.cancels.Load())
+	}
+}
+
+// Cancelling while the worker hands the job to the provider: the provider took it, so the worker tells it to drop
+// the request, and the job costs nothing only when the provider confirms that.
+func TestAICancelDuringSubmit(t *testing.T) {
+	for _, late := range []bool{false, true} {
+		e := newEnv(t)
+		e.paid()
+		fal := newFakeFal(t)
+		e.aiSetup(fal, nil)
+		_, job, _ := e.aiJob(e.key, map[string]string{"operation": "generate", "prompt": "slow"}, nil, nil)
+		p := app.Principal{WorkspaceID: workspaceID(e), Kind: app.PrincipalSession, ID: "ses_test", Name: "Owner", Scopes: app.AllScopes}
+		fal.set(func(f *fakeAI) {
+			f.slow, f.cancelLate = true, late
+			f.onSubmit = func() {
+				if err := e.svc.DiscardAIJob(context.Background(), p, job.ID); err != nil {
+					t.Errorf("discard: %v", err)
+				}
+			}
+		})
+		e.runAI(job.ID)
+		var status, state string
+		var cost int64
+		if err := e.svc.DB.QueryRow("SELECT status, submit_state, cost_micros FROM ai_jobs WHERE id = ?", job.ID).Scan(&status, &state, &cost); err != nil {
+			t.Fatal(err)
+		}
+		if status != "canceled" || fal.count() != 1 || fal.cancels.Load() != 1 || (cost == 0) == late {
+			t.Fatalf("provider confirms the cancel %v: job %s (%s), cost_micros %d, submits %d, cancels %d",
+				!late, status, state, cost, fal.count(), fal.cancels.Load())
+		}
 	}
 }
 

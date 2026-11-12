@@ -30,7 +30,7 @@ func TestAssistantModelPayloadRedactsMalformedAndRepeatedPrivateResults(t *testi
 		{Role: "assistant", ToolCalls: []AssistantToolCall{{ID: "ordinary", Name: "list_posts", Arguments: "{}"}}},
 		{Role: "tool", ToolCallID: "ordinary", Content: `{"url":"https://ordinary.example/posts"}`},
 	}
-	if _, _, err := s.assistantCall(context.Background(), AIEndpoint{BaseURL: model.URL, Model: "fake"}, msgs, "", nil, func(string) {}); err != nil {
+	if _, _, _, err := s.assistantCall(context.Background(), AIEndpoint{BaseURL: model.URL, Model: "fake"}, msgs, "", nil, func(string) {}); err != nil {
 		t.Fatal(err)
 	}
 	for _, secret := range []string{"generated-private-value", "truncated-private-value"} {

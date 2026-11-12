@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -30,6 +32,7 @@ const (
 	assistantMaxOutput     = 2048    // bound the provider bill before making a reservation
 	assistantMaxSteps      = 12      // model calls per request (a tool-using answer takes a few)
 	assistantMaxMessages   = 60      // the conversation sent to the model, most recent last
+	assistantMaxRequest    = 1000    // messages of one request's conversation (the client sends all of it)
 	assistantMaxToolResult = 24_000  // characters of one tool result the model sees
 	assistantMaxUserRunes  = 8_000   // one message the person typed
 	assistantMaxBody       = 4 << 20 // bytes of one request's conversation
@@ -128,14 +131,23 @@ func (e AIEndpoint) provider() string {
 	return AIProviderFal
 }
 
-// CheckAssistant validates a turn before anything streams (so a bad request answers with a status code).
-func (s *Service) CheckAssistant(req AssistantRequest) error {
+// CheckAssistant validates a turn before anything streams (so a bad request answers with a status code). The
+// assistant takes posts:read: every role has it (a viewer's assistant only looks: the tools check their own
+// scopes), a key made for something else does not spend the workspace's AI allowance.
+func (s *Service) CheckAssistant(p Principal, req AssistantRequest) error {
+	if err := p.require(ScopePostsRead); err != nil {
+		return err
+	}
 	if !s.AssistantAvailable() {
 		return &Error{Code: "not_available", Status: 409, Message: "the assistant needs AI set up on the server"}
 	}
 	if len(req.Messages) == 0 {
 		return invalid("messages", "is required")
 	}
+	if len(req.Messages) > assistantMaxRequest {
+		return invalid("messages", fmt.Sprintf("a conversation takes at most %d messages; start a new chat", assistantMaxRequest))
+	}
+	attached := 0
 	for _, m := range req.Messages {
 		switch m.Role {
 		case "user", "assistant", "tool":
@@ -144,6 +156,9 @@ func (s *Service) CheckAssistant(req AssistantRequest) error {
 		}
 		if len(m.Attachments) > assistantMaxAttachments {
 			return invalid("messages", fmt.Sprintf("a message takes at most %d attachments", assistantMaxAttachments))
+		}
+		if attached += len(m.Attachments); attached > assistantMaxRequestAttachments {
+			return invalid("messages", fmt.Sprintf("a conversation takes at most %d attachments; start a new chat", assistantMaxRequestAttachments))
 		}
 		if m.Role == "user" && utf8.RuneCountInString(m.Content) > assistantMaxUserRunes {
 			return invalid("messages", fmt.Sprintf("a message must be at most %d characters", assistantMaxUserRunes))
@@ -155,7 +170,17 @@ func (s *Service) CheckAssistant(req AssistantRequest) error {
 // Assistant runs one turn: the decided tool (if any), then the model and the tools it calls, until it answers,
 // a tool waits for the person, or the step limit. Events go to emit as they happen.
 func (s *Service) Assistant(ctx context.Context, p Principal, req AssistantRequest, tools AssistantTools, emit func(AssistantEvent)) error {
-	msgs := s.withAttachments(ctx, p, req.Messages)
+	if err := s.CheckAssistant(p, req); err != nil {
+		return err
+	}
+	// Only what the model gets is read, and nothing is read for a turn that would be refused anyway.
+	msgs := assistantWindow(req.Messages)
+	if slices.ContainsFunc(msgs, func(m AssistantMessage) bool { return m.Role == "user" && len(m.Attachments) > 0 }) {
+		if err := s.aiAdmits(ctx, p); err != nil {
+			return err
+		}
+		msgs = s.withAttachments(ctx, p, msgs)
+	}
 	sys := s.assistantSystem(ctx, p, req.Page) // once per turn: the workspace as it is now
 	readOnly := map[string]bool{}
 	for _, t := range tools.List {
@@ -197,7 +222,8 @@ func (s *Service) Assistant(ctx context.Context, p Principal, req AssistantReque
 		}
 		for _, c := range msgs[last].ToolCalls {
 			switch {
-			case done[c.ID]:
+			case done[c.ID]: // also a second call under an id that already ran: one decision allows one call
+				continue
 			case readOnly[c.Name]:
 				run(c)
 			case req.Decision != nil && req.Decision.ToolCallID == c.ID:
@@ -211,6 +237,7 @@ func (s *Service) Assistant(ctx context.Context, p Principal, req AssistantReque
 				emit(AssistantEvent{Type: "confirm", ToolCall: &c})
 				return true
 			}
+			done[c.ID] = true
 		}
 		return false
 	}
@@ -325,12 +352,7 @@ func (s *Service) assistantStep(ctx context.Context, p Principal, msgs []Assista
 
 // assistantStepOp is assistantStep recorded under another operation (comment_insights).
 func (s *Service) assistantStepOp(ctx context.Context, p Principal, op string, msgs []AssistantMessage, sys string, tools []AssistantTool, onText func(string)) (AssistantMessage, error) {
-	if len(msgs) > assistantMaxMessages {
-		msgs = msgs[len(msgs)-assistantMaxMessages:]
-		for len(msgs) > 0 && msgs[0].Role == "tool" { // a tool result without its call is refused
-			msgs = msgs[1:]
-		}
-	}
+	msgs = assistantWindow(msgs)
 	var err error
 	for _, e := range s.assistantEndpoints() {
 		estimate := s.assistantEstimate(e, msgs, sys, tools)
@@ -340,9 +362,10 @@ func (s *Service) assistantStepOp(ctx context.Context, p Principal, op string, m
 		}
 		started := s.Now()
 		wrote := false
-		out, cost, cerr := s.assistantCall(ctx, e, msgs, sys, tools, func(t string) { wrote = true; onText(t) })
-		// Missing usage or an interrupted stream is not proof that the provider charged nothing.
-		if cost == 0 {
+		out, cost, took, cerr := s.assistantCall(ctx, e, msgs, sys, tools, func(t string) { wrote = true; onText(t) })
+		// Missing usage or an interrupted stream is not proof that the provider charged nothing; a call the
+		// endpoint refused or never got (took is false) costs nothing.
+		if cost == 0 && took {
 			cost = estimate
 		}
 		status, code, msg := "succeeded", "", ""
@@ -357,6 +380,17 @@ func (s *Service) assistantStepOp(ctx context.Context, p Principal, op string, m
 		err = cerr
 	}
 	return AssistantMessage{}, err
+}
+
+// assistantWindow is the part of a conversation the model gets: the most recent messages.
+func assistantWindow(msgs []AssistantMessage) []AssistantMessage {
+	if len(msgs) > assistantMaxMessages {
+		msgs = msgs[len(msgs)-assistantMaxMessages:]
+		for len(msgs) > 0 && msgs[0].Role == "tool" { // a tool result without its call is refused
+			msgs = msgs[1:]
+		}
+	}
+	return msgs
 }
 
 // assistantEstimate reserves input bytes (a conservative token estimate), message/tool overhead and the
@@ -382,30 +416,49 @@ func (s *Service) assistantEstimate(e AIEndpoint, msgs []AssistantMessage, sys s
 // allowance would be exceeded; finishAIJob records how it went and what it cost.
 func (s *Service) reserveAI(ctx context.Context, p Principal, op, prompt string, params map[string]any, estimate int64) (string, error) {
 	if !aiLimiter.allow(p.WorkspaceID, s.clock()) {
-		return "", &Error{Code: "rate_limited", Status: 429, Message: fmt.Sprintf("at most %d AI requests per %s per workspace; try again in a few minutes", aiLimitCalls, aiLimitWindow)}
+		return "", aiRateLimited()
 	}
 	id := newID("aij")
 	o, _ := aiOpByID(op)
 	err := s.tx(ctx, func(q *db.Queries) error {
-		limit, err := s.aiMonthlyLimit(ctx, q, p.WorkspaceID)
-		if err != nil {
+		if err := s.aiAllowance(ctx, q, p.WorkspaceID, estimate); err != nil {
 			return err
-		}
-		if limit >= 0 {
-			used, err := q.SumAICost(ctx, db.SumAICostParams{WorkspaceID: p.WorkspaceID, CreatedAt: s.monthStart()})
-			if err != nil {
-				return err
-			}
-			if float64(used+estimate)/1e6 > limit {
-				return &Error{Code: "ai_limit_reached", Status: 402,
-					Message: "This workspace has used its AI allowance for this month; it renews on the 1st.",
-					Details: map[string]any{"used_usd": float64(used) / 1e6, "limit_usd": limit, "estimate_usd": float64(estimate) / 1e6}}
-			}
 		}
 		return q.CreateAIJob(ctx, db.CreateAIJobParams{ID: id, WorkspaceID: p.WorkspaceID, CreatedBy: p.actor(), Operation: op,
 			Kind: o.Kind, Prompt: prompt, Params: mustJSON(params), InputHash: newID("h"), CostMicros: estimate, CreatedAt: s.now()})
 	})
 	return id, err
+}
+
+func aiRateLimited() error {
+	return &Error{Code: "rate_limited", Status: 429, Message: fmt.Sprintf("at most %d AI requests per %s per workspace; try again in a few minutes", aiLimitCalls, aiLimitWindow)}
+}
+
+// aiAllowance refuses a request whose estimate would pass the month's allowance.
+func (s *Service) aiAllowance(ctx context.Context, q *db.Queries, workspaceID string, estimate int64) error {
+	limit, err := s.aiMonthlyLimit(ctx, q, workspaceID)
+	if err != nil || limit < 0 {
+		return err
+	}
+	used, err := q.SumAICost(ctx, db.SumAICostParams{WorkspaceID: workspaceID, CreatedAt: s.monthStart()})
+	if err != nil {
+		return err
+	}
+	if float64(used+estimate)/1e6 > limit {
+		return &Error{Code: "ai_limit_reached", Status: 402,
+			Message: "This workspace has used its AI allowance for this month; it renews on the 1st.",
+			Details: map[string]any{"used_usd": float64(used) / 1e6, "limit_usd": limit, "estimate_usd": float64(estimate) / 1e6}}
+	}
+	return nil
+}
+
+// aiAdmits: whether a request could run now (the rate limit has room, the allowance is not used up), asked
+// before work that is wasted on a refused request. Nothing is counted or reserved: reserveAI does that.
+func (s *Service) aiAdmits(ctx context.Context, p Principal) error {
+	if aiLimiter.full(p.WorkspaceID, s.clock()) {
+		return aiRateLimited()
+	}
+	return s.aiAllowance(ctx, s.Q, p.WorkspaceID, 1)
 }
 
 // url: the endpoint's chat completions, or fal.ai's router's (fal.run; AI_FAL_BASE_URL in tests).
@@ -434,8 +487,9 @@ func assistantModelToolResult(content string) string {
 }
 
 // assistantCall sends the conversation to the model and reads its streamed answer: text (passed to onText as it
-// comes) and tool calls. The cost is the router's own figure, else the tokens at the estimate.
-func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []AssistantMessage, sys string, tools []AssistantTool, onText func(string)) (AssistantMessage, int64, error) {
+// comes) and tool calls. The cost is the router's own figure, else the tokens at the estimate. took: the endpoint
+// began to answer, or may have (a timeout, a request given up); false when it refused the call or was not reached.
+func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []AssistantMessage, sys string, tools []AssistantTool, onText func(string)) (AssistantMessage, int64, bool, error) {
 	type fn struct {
 		Name        string          `json:"name"`
 		Description string          `json:"description"`
@@ -497,7 +551,7 @@ func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []Assist
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.url(s.Cfg.AI.FalBaseURL), bytes.NewReader(body))
 	if err != nil {
-		return AssistantMessage{}, 0, err
+		return AssistantMessage{}, 0, false, err
 	}
 	switch {
 	case e.BaseURL == "":
@@ -508,7 +562,9 @@ func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []Assist
 	req.Header.Set("Content-Type", "application/json")
 	res, err := assistantHTTP.Do(req)
 	if err != nil {
-		return AssistantMessage{}, 0, &Error{Code: "ai_failed", Status: 502, Message: "The AI service could not be reached; try again."}
+		var ne net.Error
+		took := ctx.Err() != nil || (errors.As(err, &ne) && ne.Timeout()) // it may be answering: only we stopped waiting
+		return AssistantMessage{}, 0, took, &Error{Code: "ai_failed", Status: 502, Message: "The AI service could not be reached; try again."}
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
@@ -517,7 +573,7 @@ func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []Assist
 		if msg == "" {
 			msg = fmt.Sprintf("the AI service answered %d", res.StatusCode)
 		}
-		return AssistantMessage{}, 0, &Error{Code: "ai_failed", Status: 502, Message: msg}
+		return AssistantMessage{}, 0, false, &Error{Code: "ai_failed", Status: 502, Message: msg}
 	}
 
 	out := AssistantMessage{Role: "assistant"}
@@ -566,8 +622,8 @@ func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []Assist
 		if json.Unmarshal([]byte(data), &ch) != nil {
 			continue
 		}
-		if ch.Error != nil {
-			return AssistantMessage{}, 0, &Error{Code: "ai_failed", Status: 502, Message: ch.Error.Message}
+		if ch.Error != nil { // a router's refusal comes in the stream; after part of an answer it may still be charged
+			return AssistantMessage{}, 0, text.Len() > 0 || len(order) > 0, &Error{Code: "ai_failed", Status: 502, Message: ch.Error.Message}
 		}
 		if ch.Usage != nil {
 			inTok, outTok, cost = ch.Usage.PromptTokens, ch.Usage.CompletionTokens, ch.Usage.Cost
@@ -594,14 +650,16 @@ func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []Assist
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return AssistantMessage{}, 0, &Error{Code: "ai_failed", Status: 502, Message: "The AI service stopped answering; try again."}
+		return AssistantMessage{}, 0, true, &Error{Code: "ai_failed", Status: 502, Message: "The AI service stopped answering; try again."}
 	}
 	out.Content = text.String()
+	ids := map[string]bool{}
 	for i, k := range order {
 		c := *calls[k]
-		if c.ID == "" {
+		if c.ID == "" || ids[c.ID] { // a decision names one call by its id: two calls never share one
 			c.ID = fmt.Sprintf("call_%d_%d", s.Now().UnixNano(), i)
 		}
+		ids[c.ID] = true
 		if strings.TrimSpace(c.Arguments) == "" {
 			c.Arguments = "{}"
 		}
@@ -615,5 +673,5 @@ func (s *Service) assistantCall(ctx context.Context, e AIEndpoint, msgs []Assist
 		}
 		micros = p.cost(inTok, cachedTok, outTok)
 	}
-	return out, micros, nil
+	return out, micros, true, nil
 }

@@ -76,11 +76,11 @@ func (s *Server) assistantChat(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, &app.Error{Code: "validation_failed", Status: 422, Message: "chat_id must be ach_ and 8 to 32 lowercase letters or digits"})
 		return
 	}
-	if err := s.svc.CheckAssistant(req); err != nil {
+	p := principal(r)
+	if err := s.svc.CheckAssistant(p, req); err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	p := principal(r)
 	tools, done, err := s.cfg.AssistantTools(r.Context(), p)
 	if err != nil {
 		writeErr(w, r, err)

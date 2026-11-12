@@ -117,6 +117,7 @@ See [Webhooks](/automation/webhooks) and [Alerts](/automation/alerts).
 |---|---|
 | Page size of list endpoints | default 50, at most 200 ([pagination](/api/pagination-and-search)) |
 | A listing | 5 seconds, then `503 unavailable`: retry or narrow it with filters |
+| A turn of the [assistant](/dashboard/assistant) | a request of 4 MB; 1,000 messages and 200 attached files in a chat, 10 files in a message (`422` over those). The model gets the last 60 messages and pictures of up to 5 MB each, the most recent 20 MB of them |
 | Upload | `MAX_UPLOAD_MB` on the server (default 100 MB), or the plan's file size if smaller ([media](/api/media)) |
 | `Idempotency-Key` | remembered for 24 hours ([idempotency](/api/idempotency)) |
 | Invoices per page (billing details) | 24 |
