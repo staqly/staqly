@@ -1060,7 +1060,7 @@ export function MediaPage() {
       <LibraryPane {...nav} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-10 border-b bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
+        <div className="sticky top-0 z-10 border-b bg-background/95 px-4 py-3 backdrop-blur sm:px-6 md:top-[var(--shell-notice,0px)]">
           {header}
           {toolbar}
         </div>

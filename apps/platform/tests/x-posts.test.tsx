@@ -35,6 +35,8 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('X posts', () => {
   it('reads as included used, bought left and when they expire; warns at 80 % and when used up', () => {
+    // The year shows only when it is not this one: these dates are this year's.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-13T12:00:00Z') })
     expect(xPostsLine(xposts())).toBe('37 of 250 included')
     expect(
       xPostsLine(
@@ -53,6 +55,10 @@ describe('X posts', () => {
       'Your X posts for this period are used up. Buy more or wait until Dec 1.',
     )
     expect(xPostsWarning(xposts({ unlimited: true }))).toBe('')
+    expect(xPostsLine(xposts({ credits_left: 1200, credits_expire_at: '2027-11-12T00:00:00Z', left: 1413 }))).toBe(
+      '37 of 250 included · 1,200 extra left (expire Nov 12, 2027)',
+    )
+    vi.useRealTimers()
   })
 
   it('Plan & usage buys a bundle through Stripe Checkout', async () => {

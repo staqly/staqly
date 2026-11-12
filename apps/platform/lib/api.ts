@@ -191,7 +191,8 @@ export type WorkspaceUsage = Omit<RawUsage, 'plan' | 'usage'> & {
   usage: RawUsage['usage'] & { notification_channels?: number }
 }
 export type DeviceLink = JSONOf<'/v1/device-links', 'post', 201>
-export type Billing = JSONOf<'/v1/billing', 'get', 200>
+/** `ended_for`: why the plan ended (`payment_failed`: Stripe gave up after its retries); absent on servers without it. */
+export type Billing = JSONOf<'/v1/billing', 'get', 200> & { ended_for?: 'payment_failed' | null }
 export type PromotionCode = JSONOf<'/v1/billing/promotion-code', 'post', 200>
 export type BillingDetails = JSONOf<'/v1/billing/details', 'get', 200>
 export type PendingPayment = JSONOf<'/v1/billing/pending-payment', 'get', 200>

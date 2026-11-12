@@ -122,7 +122,7 @@ export function PaymentMethods({
   )
 }
 
-function InvoiceRows({ invoices }: { invoices: Invoice[] }) {
+function InvoiceRows({ invoices, planEnded }: { invoices: Invoice[]; planEnded?: boolean }) {
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -139,7 +139,11 @@ function InvoiceRows({ invoices }: { invoices: Invoice[] }) {
         </TableHeader>
         <TableBody>
           {invoices.map((inv) => {
-            const [label, tone] = INVOICE_STATUS[inv.status] ?? [inv.status, 'neutral' as Tone]
+            // An ended plan's unpaid invoice is history: "Due" and "Pay" would read as the way back in.
+            const unpaid = planEnded && inv.status === 'open'
+            const [label, tone] = unpaid
+              ? ['Unpaid', 'neutral' as Tone]
+              : (INVOICE_STATUS[inv.status] ?? [inv.status, 'neutral' as Tone])
             const hosted = safeHttpUrl(inv.hosted_invoice_url)
             const pdf = safeHttpUrl(inv.invoice_pdf)
 
@@ -155,7 +159,7 @@ function InvoiceRows({ invoices }: { invoices: Invoice[] }) {
                   {hosted && (
                     <Button asChild variant="ghost" size="sm">
                       <a href={hosted} target="_blank" rel="noopener noreferrer">
-                        {inv.status === 'open' ? 'Pay' : 'View'} <ExternalLink />
+                        {inv.status === 'open' && !unpaid ? 'Pay' : 'View'} <ExternalLink />
                       </a>
                     </Button>
                   )}
@@ -185,7 +189,14 @@ function InvoiceRows({ invoices }: { invoices: Invoice[] }) {
  * The invoices Stripe has for this workspace, newest first, 24 a page. With Managed Payments Stripe sells through
  * Link, which sends the receipts and invoices itself: the list may then stay empty, and says where they are.
  */
-export function Invoices({ details }: { details: BillingDetails }) {
+export function Invoices({
+  details,
+  planEnded,
+}: {
+  details: BillingDetails
+  /** The workspace is locked and its plan has ended: an unpaid invoice is shown as history, not as a way to open it. */
+  planEnded?: boolean
+}) {
   const [older, setOlder] = useState<Invoice[]>([])
   const [hasMore, setHasMore] = useState<boolean | null>(null)
   const more = useMutation({
@@ -223,7 +234,13 @@ export function Invoices({ details }: { details: BillingDetails }) {
         />
       ) : (
         <div className="grid gap-3">
-          <InvoiceRows invoices={invoices} />
+          {planEnded && invoices.some((inv) => inv.status === 'open') && (
+            <p className="text-sm text-muted-foreground" role="note" data-testid="invoices-plan-ended">
+              The plan these invoices were for has ended. Paying an unpaid one settles it but does not open the
+              workspace: choose a plan for that.
+            </p>
+          )}
+          <InvoiceRows invoices={invoices} planEnded={planEnded} />
           {moreLeft && (
             <div>
               <Button
