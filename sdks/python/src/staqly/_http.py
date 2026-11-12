@@ -11,6 +11,7 @@ import json
 import mimetypes
 import os
 import random
+import re
 import tempfile
 import time
 import uuid
@@ -38,6 +39,17 @@ DEFAULT_MAX_RETRIES = 2
 MAX_RETRY_AFTER = 60.0
 USER_AGENT = f"staqly-sdk-python/{__version__}"
 RETRYABLE_STATUS = frozenset({408, 429, 500, 502, 503, 504})
+#: Unsafe requests whose response the server does not keep for a repeated Idempotency-Key, because it
+#: carries a secret (``noStore`` in apps/api/internal/httpapi): a repeat runs the handler again and would
+#: make a second webhook, schedule, key or link. The TypeScript SDK holds the same list (``core.ts``).
+NOT_REPLAYED = {
+    "POST": re.compile(
+        r"/v1/(schedules|webhooks|api-keys|api-keys/[^/]+/rotate|recovery-key/rotate|access-token/rotate"
+        r"|device-links|channels|channel-links|posts/[^/]+/previews)"
+    ),
+    "PATCH": re.compile(r"/v1/(schedules|webhooks|channels)/[^/]+"),
+    "PUT": re.compile(r"/v1/providers/[^/]+/app"),
+}
 
 #: Anything ``media.upload`` accepts: a path, bytes, or a binary file object.
 FileInput = str | os.PathLike[str] | bytes | bytearray | memoryview | IO[bytes]
@@ -179,11 +191,17 @@ class BaseHTTPClient:
             headers["Content-Type"] = "application/json"
             kwargs["content"] = json.dumps(spec.json, default=_json_default).encode()
         # Unsafe JSON requests carry an Idempotency-Key so a retry never applies
-        # twice (the server replays the first response). Multipart is not covered
-        # by the server, so uploads are only retried on 429 (not processed).
+        # twice (the server replays the first response). Where it does not
+        # (multipart bodies, public endpoints without credentials, the
+        # secret-bearing responses in NOT_REPLAYED), a request that may have been
+        # processed (lost response, timeout, 5xx) is not sent again: only on 429
+        # (not processed).
         unsafe = spec.method != "GET"
-        idempotent = not unsafe or (spec.files is None and ("idempotency_key" in opts or max_retries > 0))
-        if unsafe and spec.files is None and idempotent:
+        keyed = unsafe and spec.files is None and ("idempotency_key" in opts or max_retries > 0)
+        pattern = NOT_REPLAYED.get(spec.method)
+        not_replayed = spec.no_auth or (pattern is not None and pattern.fullmatch(spec.path) is not None)
+        idempotent = not unsafe or (keyed and not not_replayed)
+        if keyed:
             headers["Idempotency-Key"] = opts.get("idempotency_key") or f"sdk-{uuid.uuid4()}"
         headers.update(opts.get("headers", {}))
         params = {k: query_value(v) for k, v in (spec.params or {}).items() if v is not None and v != ""}

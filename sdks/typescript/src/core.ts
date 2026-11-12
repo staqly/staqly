@@ -35,7 +35,10 @@ export interface ClientOptions {
   apiKey?: string | null
   /** Per-request timeout in milliseconds (default 60 000). */
   timeout?: number
-  /** Retries for 408/429/5xx/network errors with exponential backoff and jitter (default 2). */
+  /**
+   * Retries for 408/429/5xx/network errors with exponential backoff and jitter (default 2). Uploads and
+   * the calls whose response carries a secret (new webhook, schedule, API key, link...) retry on 429 only.
+   */
   maxRetries?: number
   /** Custom fetch implementation (tests, proxies, instrumentation). Defaults to the global fetch. */
   fetch?: FetchLike
@@ -111,6 +114,17 @@ function randomId(): string {
 }
 
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504])
+
+/**
+ * Unsafe requests whose response the server does not keep for a repeated Idempotency-Key, because it
+ * carries a secret (`noStore` in apps/api/internal/httpapi): a repeat runs the handler again and would
+ * make a second webhook, schedule, key or link. The Python SDK holds the same list (`_http.py`).
+ */
+const NOT_REPLAYED: Partial<Record<RequestSpec['method'], RegExp>> = {
+  POST: /^\/v1\/(schedules|webhooks|api-keys|api-keys\/[^/]+\/rotate|recovery-key\/rotate|access-token\/rotate|device-links|channels|channel-links|posts\/[^/]+\/previews)$/,
+  PATCH: /^\/v1\/(schedules|webhooks|channels)\/[^/]+$/,
+  PUT: /^\/v1\/providers\/[^/]+\/app$/,
+}
 
 /** Backoff for attempt n (0-based): 0.5s · 2^n capped at 8s, with ±25% jitter. */
 export function backoffMs(attempt: number): number {
@@ -214,13 +228,16 @@ export class HTTPClient {
     }
 
     // Unsafe JSON requests carry an Idempotency-Key so a retry can never apply
-    // twice; the server replays the first response for a repeated key. The
-    // server does not cover multipart bodies, so uploads are only retried when
-    // the server says it did not process them (429).
+    // twice; the server replays the first response for a repeated key. Where it
+    // does not (multipart bodies, public endpoints without credentials, the
+    // secret-bearing responses in NOT_REPLAYED), a request that may have been
+    // processed (lost response, timeout, 5xx) is not sent again: such requests
+    // are only retried when the server says it did not process them (429).
     const unsafe = spec.method !== 'GET'
-    const idempotent = !unsafe || (!spec.form && (opts.idempotencyKey !== undefined || maxRetries > 0))
+    const keyed = unsafe && !spec.form && (opts.idempotencyKey !== undefined || maxRetries > 0)
+    const idempotent = !unsafe || (keyed && !spec.noAuth && !NOT_REPLAYED[spec.method]?.test(spec.path))
 
-    if (unsafe && !spec.form && idempotent) {
+    if (keyed) {
       headers['Idempotency-Key'] = opts.idempotencyKey ?? `sdk-${randomId()}`
     }
 
@@ -267,16 +284,23 @@ export class HTTPClient {
 
       let errBody: unknown
       // Raw (streamed) responses keep listening to opts.signal until the body
-      // is consumed, so a download can still be aborted mid-stream.
+      // is consumed, so a download can still be aborted mid-stream, and keep
+      // the timeout: it then limits the wait for each chunk of the body.
       let keepAbortListener = false
 
       try {
         if (res.ok) {
           if (spec.raw) {
-            if (res.body && opts.signal) {
+            if (res.body) {
               keepAbortListener = true
 
-              return abortableUntilConsumed(res, () => opts.signal?.removeEventListener('abort', onAbort)) as T
+              return watchedUntilConsumed(
+                res,
+                timeout,
+                () => ctrl.abort(),
+                () => new TimeoutError(`Timed out reading the response to ${spec.method} ${spec.path}`),
+                () => opts.signal?.removeEventListener('abort', onAbort),
+              ) as T
             }
 
             return res as T
@@ -338,10 +362,18 @@ export class HTTPClient {
 }
 
 /**
- * The same response, but `cleanup` runs once its body has been read to the
- * end, failed (e.g. aborted via the request controller) or was cancelled.
+ * The same response, but each chunk of its body must arrive within `idleMs` (else the request is
+ * aborted and the body fails with `timeoutError()`), and `cleanup` runs once the body has been read
+ * to the end, failed (e.g. aborted via the request controller) or was cancelled. Only the wait for
+ * the network counts: a consumer that reads slowly is not timed out.
  */
-function abortableUntilConsumed(res: Response, cleanup: () => void): Response {
+function watchedUntilConsumed(
+  res: Response,
+  idleMs: number,
+  abort: () => void,
+  timeoutError: () => Error,
+  cleanup: () => void,
+): Response {
   let done = false
   const finish = () => {
     if (!done) {
@@ -352,8 +384,22 @@ function abortableUntilConsumed(res: Response, cleanup: () => void): Response {
   const reader = res.body!.getReader()
   const relay = new ReadableStream<Uint8Array>({
     async pull(controller) {
+      let stalled = false
+      const timer = setTimeout(() => {
+        stalled = true
+        finish()
+        controller.error(timeoutError())
+        abort()
+        // For a fetch that ignores the signal.
+        reader.cancel().catch(() => undefined)
+      }, idleMs)
+
       try {
         const chunk = await reader.read()
+
+        if (stalled) {
+          return
+        }
 
         if (chunk.done) {
           finish()
@@ -362,8 +408,12 @@ function abortableUntilConsumed(res: Response, cleanup: () => void): Response {
           controller.enqueue(chunk.value)
         }
       } catch (err) {
-        finish()
-        controller.error(err)
+        if (!stalled) {
+          finish()
+          controller.error(err)
+        }
+      } finally {
+        clearTimeout(timer)
       }
     },
     cancel(reason) {

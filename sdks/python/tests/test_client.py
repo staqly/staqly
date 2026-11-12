@@ -354,6 +354,73 @@ class TestRetries:
         client.media.upload(b"\x01\x02")
         assert len(mock.requests) == 2
 
+    # The server never stores these responses (they carry a secret), so a repeat would run again:
+    # a second webhook, schedule, key or link. The same table is in sdks/typescript/test/client.test.ts.
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            ("POST", "/v1/webhooks"),
+            ("PATCH", "/v1/webhooks/wh_1"),
+            ("POST", "/v1/schedules"),
+            ("PATCH", "/v1/schedules/sch_1"),
+            ("POST", "/v1/api-keys"),
+            ("POST", "/v1/api-keys/key_1/rotate"),
+            ("POST", "/v1/recovery-key/rotate"),
+            ("POST", "/v1/access-token/rotate"),
+            ("POST", "/v1/device-links"),
+            ("POST", "/v1/channels"),
+            ("PATCH", "/v1/channels/ch_1"),
+            ("PUT", "/v1/providers/x/app"),
+            ("POST", "/v1/channel-links"),
+            ("POST", "/v1/posts/pst_1/previews"),
+        ],
+    )
+    def test_not_replayed_requests_are_only_sent_again_after_429(
+        self, client: Staqly, mock: Mock, method: str, path: str
+    ) -> None:
+        mock.reply(_retry_after_0(502))
+        with pytest.raises(InternalServerError):
+            client.request(method, path, json={})
+        assert len(mock.requests) == 1
+
+        mock.reply(httpx.ReadTimeout("lost"))
+        with pytest.raises(APIConnectionError):
+            client.request(method, path, json={})
+        assert len(mock.requests) == 2
+
+        mock.reply(_retry_after_0(429), jsonr({}, 201))
+        client.request(method, path, json={})
+        assert len(mock.requests) == 4
+
+    def test_webhook_create_and_calls_without_credentials_are_not_sent_again(
+        self, client: Staqly, mock: Mock
+    ) -> None:
+        mock.reply(_retry_after_0(503))
+        with pytest.raises(InternalServerError):
+            client.webhooks.create("https://example.com/hook", events=["*"])
+        assert len(mock.requests) == 1
+        with pytest.raises(InternalServerError):
+            client.workspaces.create(name="a")
+        assert len(mock.requests) == 2
+
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            ("DELETE", "/v1/webhooks/wh_1"),
+            ("POST", "/v1/webhooks/wh_1/test"),
+            ("POST", "/v1/schedules/sch_1/run"),
+            ("DELETE", "/v1/api-keys/key_1"),
+            ("POST", "/v1/channels/ch_1/test"),
+            ("POST", "/v1/posts"),
+        ],
+    )
+    def test_neighbours_of_not_replayed_requests_still_retry(
+        self, client: Staqly, mock: Mock, method: str, path: str
+    ) -> None:
+        mock.reply(_retry_after_0(503), jsonr({}))
+        client.request(method, path)
+        assert len(mock.requests) == 2
+
     def test_no_automatic_key_without_retries(self, mock: Mock) -> None:
         mock.reply(jsonr(post(), 201))
         with Staqly(base_url=BASE, max_retries=0) as c:

@@ -39,6 +39,12 @@ agents write, no longer a review inbox.
   `AnalyticsTimeSlot`, `PostingTimes`, `TopPosts`, `TopPost`, `TopPostChannel`, `AnalyticsFailure`,
   `AnalyticsFeedback`.
 
+### Fixed
+- Calls whose response the server does not replay (it carries a secret: creating or updating a webhook,
+  schedule or channel, API keys, device links, recovery key and access token rotation, provider apps,
+  connect and preview links, calls without credentials) are no longer retried after a 5xx, a timeout or a
+  lost connection, only after a 429: a retry made a second webhook, schedule or key.
+
 ### Removed
 - `items`, `watchers`, `notification_channels`, `decision_links`, `request_approval`,
   `requires_approval`, `RejectedError`; `collections.set_actions` and `list_items` (now `list_posts`).

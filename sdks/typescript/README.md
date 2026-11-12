@@ -579,7 +579,15 @@ try {
   matter), so a key can be shared with the Python SDK for the same request.
 - Multipart uploads (`media.upload`) are not covered by server-side idempotency,
   so they are retried only on 429.
-- `timeout` (default 60 s) applies to each attempt.
+- Calls whose response carries a secret are not replayed by the server, so after a failure that may
+  have reached it (5xx, timeout, lost connection) they are not sent again, only on 429: creating or
+  updating a webhook, a schedule or a channel, `apiKeys.create` / `rotate`, `sessions.createDeviceLink`,
+  `workspace.rotateRecoveryKey` / `rotateAccessToken`, `providers.setApp`, connect links, preview links,
+  and the calls made without credentials (`workspaces.create`, sign-in). The error reaches you: check
+  whether the first attempt went through (list the webhooks, schedules or keys) before calling again.
+- `timeout` (default 60 s) applies to each attempt. For a download (`media.download`,
+  `exports.events`, the `...Response` methods) it then limits the wait for each part of the body, so
+  a stalled download ends with a `TimeoutError`; a large one may take longer in all.
 
 ## Example: an agent that writes and publishes
 
