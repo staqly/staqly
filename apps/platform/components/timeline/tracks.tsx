@@ -78,28 +78,31 @@ function Wave({ s, width }: { s: Sound; width: number }) {
   useEffect(() => {
     let live = true
 
-    void decode(s.src).then((buf) => {
-      const c = ref.current
+    void decode(s.src)
+      .then((buf) => {
+        const c = ref.current
 
-      if (!live || !c || !buf) {
-        return
-      }
+        if (!live || !c || !buf) {
+          return
+        }
 
-      const n = Math.max(1, Math.floor(width / 2))
-      const p = peaks(buf, s.in, s.duration, n)
-      const ctx = c.getContext('2d')!
-      const h = c.height
+        const n = Math.max(1, Math.floor(width / 2))
+        const p = peaks(buf, s.in, s.duration, n)
+        const ctx = c.getContext('2d')!
+        const h = c.height
 
-      c.width = n * 2
-      ctx.clearRect(0, 0, c.width, h)
-      ctx.fillStyle = 'rgba(255,255,255,0.7)'
+        c.width = n * 2
+        ctx.clearRect(0, 0, c.width, h)
+        ctx.fillStyle = 'rgba(255,255,255,0.7)'
 
-      for (let i = 0; i < n; i++) {
-        const v = Math.max(1, p[i]! * h * 0.9)
+        for (let i = 0; i < n; i++) {
+          const v = Math.max(1, p[i]! * h * 0.9)
 
-        ctx.fillRect(i * 2, (h - v) / 2, 1.4, v)
-      }
-    })
+          ctx.fillRect(i * 2, (h - v) / 2, 1.4, v)
+        }
+      })
+      // A sound that did not arrive has no waveform; the export says so.
+      .catch(() => undefined)
 
     return () => {
       live = false

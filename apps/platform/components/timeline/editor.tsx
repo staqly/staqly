@@ -24,7 +24,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
-import { draftKey, dropDraft, offerDraft, writeDraft } from '@/components/design/drafts'
+import { ErrorState } from '@/components/common/error-state'
+import { draftKey, draftScope, dropDraft, offerDraft, writeDraft } from '@/components/design/drafts'
 import { announceEdited } from '@/components/design/edited-media'
 import { loadFont } from '@/components/design/fonts'
 import { NameField } from '@/components/design/name-field'
@@ -34,10 +35,11 @@ import { Button } from '@/components/ui/button'
 import { api, mediaUrl, type Media } from '@/lib/api'
 import { downloadBlob } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
+import { useSession } from '@/lib/queries'
 import { safeNextPath } from '@/lib/safe'
 import { cn } from '@/lib/utils'
 
-import { play as playSound } from './audio'
+import { keepDecoded, play as playSound } from './audio'
 import {
   clipAt,
   clock,
@@ -100,7 +102,14 @@ async function fromProject(id: string): Promise<Opened | null> {
 /** What the editor opens: a saved project, the file a project saved, or library files on a new timeline. */
 async function open(params: Params, kind: Timeline['kind']): Promise<Opened | null> {
   if (params.project) {
-    return fromProject(params.project)
+    const o = await fromProject(params.project)
+
+    // Not a timeline (a design, or a damaged file): it stays closed, so Save cannot write a blank one over it.
+    if (!o) {
+      throw new Error('This project is not a video or a sound this editor can open.')
+    }
+
+    return o
   }
 
   if (!params.ids.length) {
@@ -286,13 +295,18 @@ async function render(doc: Timeline, onProgress: (p: Progress) => void, signal: 
 export default function TimelineEditor({ search, kind }: { search: string; kind: Timeline['kind'] }) {
   const [params] = useState(() => readParams(search))
   const { doc, update, undo, redo, replace, canUndo, canRedo } = useHistory(newTimeline(kind))
-  const [phase, setPhase] = useState<'loading' | 'ready'>(params.project || params.ids.length ? 'loading' : 'ready')
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'failed'>(
+    params.project || params.ids.length ? 'loading' : 'ready',
+  )
+  // Why it did not open (Try again opens it once more).
+  const [failure, setFailure] = useState<unknown>(null)
   const [panel, setPanel] = useState<AddPanel | null>(kind === 'video' ? 'media' : 'audio')
   const [sel, setSel] = useState<Selection>(null)
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [pps, setPps] = useState(kind === 'video' ? 60 : 30)
-  const [project, setProject] = useState(params.project)
+  // The project Save writes to: known only once it opened (a failed open must never be saved over).
+  const [project, setProject] = useState('')
   const [output, setOutput] = useState<string | undefined>()
   const [baseline, setBaseline] = useState<Timeline | null>(null)
   const [busy, setBusy] = useState<{ what: 'save' | 'download'; progress: Progress } | null>(null)
@@ -309,10 +323,13 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
   const videos = useRef(new Map<string, HTMLVideoElement>())
   const total = length(doc)
   const dirty = baseline ? baseline !== doc : canUndo
-  const [draft, setDraft] = useState(() => draftKey(`staqly-${kind}-draft:`, params))
+  // The draft is this person's in this workspace, for the document that opened (after a save: its project).
+  const scope = draftScope(useSession().data)
+  const [kept, setKept] = useState({ project: params.project, ids: params.ids })
+  const draft = draftKey(`staqly-${kind}-draft:`, scope, kept)
   const video = kind === 'video'
 
-  useEffect(() => {
+  const load = useCallback(() => {
     void open(params, kind)
       .then((o) => {
         if (o) {
@@ -322,12 +339,29 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
           setOutput(o.output)
         }
       })
-      .catch((e: unknown) => toastApiError(e, 'Could not open it'))
-      .finally(() => {
-        setPhase('ready')
-        offerDraft(draftKey(`staqly-${kind}-draft:`, params), parseTimeline, replace)
-      })
+      .then(
+        () => setPhase('ready'),
+        (e: unknown) => {
+          setFailure(e)
+          setPhase('failed')
+        },
+      )
   }, [params, kind, replace])
+
+  useEffect(load, [load])
+
+  // Unsaved changes kept in this browser are offered once the document is open.
+  const offer = draftKey(`staqly-${kind}-draft:`, scope, params)
+
+  useEffect(() => {
+    if (phase === 'ready') {
+      offerDraft(offer, parseTimeline, replace)
+    }
+  }, [phase, offer, replace])
+
+  // Decoded sound is large: only what the timeline still uses is kept, and nothing once the editor closes.
+  useEffect(() => keepDecoded(new Set([...doc.clips, ...doc.sounds].map((c) => c.src))), [doc])
+  useEffect(() => () => keepDecoded(new Set()), [])
 
   // The draft follows every change, a second after the last one.
   useEffect(() => {
@@ -596,6 +630,15 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
 
         const media = await api.saveEdited(output, blob, name)
 
+        // The file is in Media from here on, whatever fails next: saving again replaces it instead of adding
+        // another, and a post open in another tab follows it (a new video made from its Video button, or this one
+        // saved again).
+        setOutput(media.id)
+
+        if (params.fromComposer && (output || params.for)) {
+          announceEdited(output ? { from: output, to: media.id } : { from: '', to: media.id, for: params.for })
+        }
+
         if (folder) {
           await api.organizeMedia({ ids: [media.id], folder_id: folder })
         }
@@ -606,17 +649,10 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
           new Blob([JSON.stringify(d)], { type: 'application/json' }),
         )
 
-        // A post open in another tab follows: it takes the new file (a new video made from its Video button, or
-        // this one saved again).
-        if (params.fromComposer && (output || params.for)) {
-          announceEdited(output ? { from: output, to: media.id } : { from: '', to: media.id, for: params.for })
-        }
-
         setProject(p.id)
-        setOutput(media.id)
         setBaseline(d)
         dropDraft(draft)
-        setDraft(`staqly-${kind}-draft:${p.id}`)
+        setKept({ project: p.id, ids: [] })
         // A reload keeps the way back (the post it came from) and the post that follows its saves.
         window.history.replaceState(
           null,
@@ -635,7 +671,17 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
       .finally(() => setBusy(null))
   }
 
-  const save = () => (project ? make('save') : setAsking(true))
+  const save = () => {
+    if (phase !== 'ready') {
+      return
+    }
+
+    if (project) {
+      make('save')
+    } else {
+      setAsking(true)
+    }
+  }
   const empty = video ? !doc.clips.length && !doc.sounds.length : !doc.sounds.length
   const PANELS: { id: AddPanel; label: string; icon: React.ReactNode }[] = video
     ? [
@@ -847,6 +893,16 @@ export default function TimelineEditor({ search, kind }: { search: string; kind:
             <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center bg-muted/60 p-4 [background-image:radial-gradient(var(--border)_1px,transparent_1px)] [background-size:16px_16px]">
               {phase === 'loading' ? (
                 <Loader2 className="animate-spin text-muted-foreground" />
+              ) : phase === 'failed' ? (
+                <ErrorState
+                  error={failure}
+                  title="Could not open it"
+                  className="rounded-xl border bg-card"
+                  onRetry={() => {
+                    setPhase('loading')
+                    load()
+                  }}
+                />
               ) : video ? (
                 <canvas
                   ref={canvas}

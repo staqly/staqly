@@ -1,11 +1,21 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { SchedulePage } from '@/components/schedule/schedule-page'
-import { dayKey, moveToDay, moveToHour, rangeOf, scheduleState, startOfWeek } from '@/lib/schedule'
+import {
+  addDays,
+  dayKey,
+  moveToDay,
+  moveToHour,
+  rangeOf,
+  scheduleSlots,
+  scheduleState,
+  startOfWeek,
+} from '@/lib/schedule'
+import { fromWall, setDisplayZone } from '@/lib/zone'
 
-import { collection, post, target } from './fixtures'
+import { collection, post, schedule, target } from './fixtures'
 import { nav } from './navigation'
 import { type Call, mockApi, renderWithProviders } from './utils'
 
@@ -55,6 +65,44 @@ describe('schedule helpers', () => {
     expect(rangeOf('month', new Date(2026, 9, 18)).days.length % 7).toBe(0)
     expect(rangeOf('day', new Date(2026, 9, 18, 15)).days).toHaveLength(1)
     expect(rangeOf('day', new Date(2026, 9, 18, 15)).days[0].getHours()).toBe(0)
+  })
+})
+
+/** When a schedule with this rule runs on these days. */
+const runs = (rule: object, days: Date[]) => scheduleSlots([schedule({ rule })], days, 0).map((s) => s.at.toISOString())
+
+describe("a schedule's runs on the calendar", () => {
+  afterEach(() => setDisplayZone(null))
+
+  it("shows a run on the workspace's day although it is the day before in the schedule's zone", () => {
+    setDisplayZone('UTC')
+
+    // Sunday 20:00 in New York is Monday 01:00 UTC.
+    const sunday = { times: ['20:00'], weekdays: [0], tz: 'America/New_York' }
+
+    expect(runs(sunday, [fromWall(2026, 11, 16)])).toEqual(['2026-11-16T01:00:00.000Z'])
+    expect(runs(sunday, [fromWall(2026, 11, 15)])).toEqual([])
+  })
+
+  it("shows a run on the workspace's day although it is the day after in the schedule's zone", () => {
+    setDisplayZone('America/New_York')
+
+    // Monday 09:00 in Tokyo is Sunday 19:00 in New York.
+    expect(runs({ times: ['09:00'], weekdays: [1], tz: 'Asia/Tokyo' }, [fromWall(2026, 11, 15)])).toEqual([
+      '2026-11-16T00:00:00.000Z',
+    ])
+  })
+
+  it('counts each run once over a week in which the clocks change', () => {
+    setDisplayZone('UTC')
+
+    // New York goes to summer time on 8 March 2026: 23:30 there is 04:30 UTC before it and 03:30 UTC after.
+    const first = fromWall(2026, 3, 2)
+    const week = Array.from({ length: 7 }, (_, i) => addDays(first, i))
+    const nightly = { times: ['23:30'], weekdays: [], tz: 'America/New_York' }
+
+    expect(runs(nightly, week)).toEqual([2, 3, 4, 5, 6, 7, 8].map((d) => `2026-03-0${d}T04:30:00.000Z`))
+    expect(runs(nightly, [fromWall(2026, 3, 9)])).toEqual(['2026-03-09T03:30:00.000Z'])
   })
 })
 
