@@ -18,6 +18,7 @@ import (
 // every post), one email per post listing its channels, the unsubscribe link, and nothing without the email on.
 func TestPersonalNotifications(t *testing.T) {
 	e := newAccountsEnv(t, "")
+	owner := e.mustSignIn(ana, "") // before mail is on: the new workspace's welcome email is not this test's
 	host, port, inbox := fakeSMTP(t)
 	prev := e.svc.Getenv
 	e.svc.Getenv = func(k string) string {
@@ -31,7 +32,6 @@ func TestPersonalNotifications(t *testing.T) {
 		return ""
 	}
 	ctx := context.Background()
-	owner := e.mustSignIn(ana, "")
 	clock := &testClock{t: time.Now().UTC()}
 	e.svc.Now = clock.now
 
