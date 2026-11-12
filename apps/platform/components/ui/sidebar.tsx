@@ -493,6 +493,8 @@ function SidebarMenuButton({
       data-active={isActive}
       // The active entry is the current page for screen readers too, not only a highlight.
       aria-current={isActive ? 'page' : undefined}
+      // Collapsed to the rail, the label is clipped away: the tooltip's text names the button.
+      aria-label={state === 'collapsed' && !isMobile && typeof tooltip === 'string' ? tooltip : undefined}
       className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
       {...props}
     />

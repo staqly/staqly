@@ -14,6 +14,7 @@ import {
   CreditCard,
   Gauge,
   Images,
+  LifeBuoy,
   Lock,
   LogOut,
   Menu,
@@ -41,6 +42,7 @@ import { PlanBadge } from '@/components/plans/plan-badge'
 import { PostLinkDrawer } from '@/components/posts/post-link-drawer'
 import { NewWorkspaceDialog } from '@/components/settings/new-workspace-dialog'
 import { UserAvatar } from '@/components/settings/user-avatar'
+import { ThemeSwitcher } from '@/components/shell/theme-toggle'
 import { WorkspaceLogo, WorkspaceTile } from '@/components/shell/workspace-tile'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -328,6 +330,10 @@ function WorkspaceMenu({ compact = false }: { compact?: boolean }) {
 
 // ---- signed-in person ----
 
+const FeedbackDialog = dynamic(() => import('@/components/feedback/feedback-dialog').then((m) => m.FeedbackDialog), {
+  ssr: false,
+})
+
 /**
  * The person at the bottom of the sidebar: their name, address and picture in the cloud, the computer's
  * user name in a local install (one person, signed in with the access token).
@@ -339,6 +345,8 @@ function UserMenu() {
   const router = useRouter()
   const { setOpenMobile, state, isMobile } = useSidebar()
   const logout = useLogout()
+  const feedback = useLazyDialog()
+  const { assistant } = useShell()
   const user = session.data?.user
   // Cloud, for owners and admins: Billing, and the loud row. In the trial or after a plan ran out: Choose a plan.
   // Paying: Upgrade to the next plan up while there is one (none on Business).
@@ -439,7 +447,10 @@ function UserMenu() {
               </>
             )}
             <DropdownMenuSeparator />
-            {/* People in an account: members and their own account, then the workspace's settings apart (Plan & usage is in the workspace menu). */}
+            <DropdownMenuItem onSelect={() => feedback.setOpen(true)}>
+              <LifeBuoy /> Help & Feedback
+            </DropdownMenuItem>
+            {/* People in an account: members, their own account and the workspace's settings (Plan & usage is in the workspace menu). */}
             {guest ? (
               <DropdownMenuItem onSelect={() => go('/settings/plan')}>
                 <Gauge /> Plan & usage
@@ -454,7 +465,6 @@ function UserMenu() {
                 <DropdownMenuItem onSelect={() => go('/settings/account')}>
                   <UserRound /> Account settings
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => go('/settings')}>
                   <Settings /> Workspace settings
                 </DropdownMenuItem>
@@ -464,6 +474,8 @@ function UserMenu() {
                 <Settings /> Settings
               </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator />
+            <ThemeSwitcher />
             {/* Locally too: a browser signs in with the access token and can sign out again. */}
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => logout.mutate()} disabled={logout.isPending}>
@@ -471,6 +483,21 @@ function UserMenu() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {feedback.used && (
+          <FeedbackDialog
+            open={feedback.open}
+            onOpenChange={feedback.setOpen}
+            onAskAssistant={
+              assistant
+                ? () => {
+                    if (!assistant.open) {
+                      assistant.toggle()
+                    }
+                  }
+                : undefined
+            }
+          />
+        )}
       </SidebarMenuItem>
     </SidebarMenu>
   )
@@ -631,14 +658,9 @@ function SidebarNotifications() {
   )
 }
 
-const FeedbackDialog = dynamic(() => import('@/components/feedback/feedback-dialog').then((m) => m.FeedbackDialog), {
-  ssr: false,
-})
-
 // ---- sidebar ----
 
 function AppSidebar() {
-  const feedback = useLazyDialog()
   const pathname = usePathname()
   const { openCommandPalette } = useShell()
   const { setOpenMobile } = useSidebar()
@@ -767,25 +789,17 @@ function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="in-data-[mobile=true]:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-        {/* Theme lives in Settings and ⌘K; collapsing in the sidebar edge (rail) and ⌘B. Phones have the bell in
-            the top bar. Plan & usage is in the workspace menu. */}
+        {/* Theme and Help & Feedback are in the person's menu; collapsing in the sidebar edge (rail) and ⌘B. Phones
+            have the bell in the top bar. Plan & usage is in the workspace menu. */}
         <SidebarGroup className="p-0">
           <SidebarGroupLabel>System</SidebarGroupLabel>
           <SidebarAssistant />
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton tooltip="Feedback" aria-label="Feedback" onClick={feedback.toggle}>
-                <PenSquare /> <span>Feedback</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
           <SidebarNotifications />
         </SidebarGroup>
         <SidebarTrial />
         <UserMenu />
       </SidebarFooter>
       <SidebarRail />
-      {feedback.used && <FeedbackDialog open={feedback.open} onOpenChange={feedback.setOpen} />}
     </Sidebar>
   )
 }
@@ -958,6 +972,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   })
   const [assistantUsed, setAssistantUsed] = useState(assistantOpen)
+  // Full screen, the assistant takes the page's place and the sidebar folds to its icons; opened by hand
+  // meanwhile, it stays open only until the assistant goes back to the side (the remembered choice is kept).
+  const [assistantFull, setAssistantFull] = useState(false)
+  const [fullSidebarOpen, setFullSidebarOpen] = useState(false)
   const openAssistant = (open: boolean) => {
     setAssistantOpen(open)
     setAssistantUsed(true)
@@ -1019,6 +1037,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return saved === null ? null : { wide: true, open: saved }
   })
   const sidebarOpen = override && override.wide === wide ? override.open : wide
+  const full = assistantFull && assistantOpen && hasAssistant && !isMobile
   const ctx = useMemo<ShellContextValue>(
     () => ({
       openCreateCollection: () => setCreateOpen(true),
@@ -1036,8 +1055,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       <IdRoutePrefetch />
       <PostLinkDrawer />
       <SidebarProvider
-        open={sidebarOpen}
+        open={full ? fullSidebarOpen : sidebarOpen}
         onOpenChange={(open) => {
+          if (full) {
+            setFullSidebarOpen(open)
+
+            return
+          }
+
           setOverride({ wide, open })
 
           if (wide) {
@@ -1053,13 +1078,24 @@ export function AppShell({ children }: { children: ReactNode }) {
           Skip to content
         </a>
         <AppSidebar />
-        <SidebarInset id="main" tabIndex={-1} className="min-w-0 pb-(--mobile-chrome-bottom) outline-none md:pb-0">
+        <SidebarInset
+          id="main"
+          tabIndex={-1}
+          className={cn('min-w-0 pb-(--mobile-chrome-bottom) outline-none md:pb-0', full && 'hidden')}
+        >
           {isMobile && <MobileHeader />}
           <PlanGate>{children}</PlanGate>
         </SidebarInset>
         {/* Mounted once opened (its code loads then), so it can slide out when it closes. */}
         {hasAssistant && (assistantOpen || assistantUsed) && (
-          <AssistantPanel open={assistantOpen} onOpenChange={openAssistant} />
+          <AssistantPanel
+            open={assistantOpen}
+            onOpenChange={openAssistant}
+            onExpandedChange={(expanded) => {
+              setAssistantFull(expanded)
+              setFullSidebarOpen(false)
+            }}
+          />
         )}
         {isMobile && <MobileTabBar />}
       </SidebarProvider>

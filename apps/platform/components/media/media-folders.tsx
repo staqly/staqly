@@ -12,7 +12,7 @@ import {
   Image as ImageIcon,
   Images,
   Plus,
-  Sparkles,
+  Unlink,
   Trash2,
 } from 'lucide-react'
 import { useRef, useState } from 'react'
@@ -36,7 +36,7 @@ export const LIBRARY = [
   { key: 'image', label: 'Images', icon: ImageIcon },
   { key: 'video', label: 'Videos', icon: Film },
   { key: 'audio', label: 'Audio', icon: AudioLines },
-  { key: 'unused', label: 'Unused', icon: Sparkles },
+  { key: 'unused', label: 'Unused', icon: Unlink },
   { key: 'duplicates', label: 'Duplicates', icon: Copy },
   { key: 'deleted', label: 'Deleted', icon: Trash2 },
 ] as const

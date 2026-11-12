@@ -1,10 +1,12 @@
 'use client'
 
 import { useMutation } from '@tanstack/react-query'
-import { XIcon } from 'lucide-react'
+import { ArrowRight, XIcon } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { AssistantIcon } from '@/components/assistant/assistant-icon'
+import { DOCS_URL } from '@/components/common/docs-link'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -20,7 +22,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { errorMessage, request } from '@/lib/api'
 
-export function FeedbackDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+const HELP_CARD =
+  'group flex w-full items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2.5 text-left text-sm transition-colors outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
+
+/** Help & Feedback: for a question, the way to the AI Assistant (the docs without one); below, a report to the staqly team. */
+export function FeedbackDialog({
+  open,
+  onOpenChange,
+  onAskAssistant,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** Opens the AI Assistant; absent when the server has no AI for it. */
+  onAskAssistant?: () => void
+}) {
   const [kind, setKind] = useState('problem')
   const [description, setDescription] = useState('')
   const [screenshots, setScreenshots] = useState<{ id: number; file: File }[]>([])
@@ -67,9 +82,39 @@ export function FeedbackDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     >
       <DialogContent className="sm:max-w-2xl" showCloseButton={!isPending}>
         <DialogHeader>
-          <DialogTitle>Feedback</DialogTitle>
+          <DialogTitle>Help & Feedback</DialogTitle>
           <DialogDescription>Report a problem or suggest a feature to the staqly team.</DialogDescription>
         </DialogHeader>
+        {onAskAssistant ? (
+          <button
+            type="button"
+            className={HELP_CARD}
+            disabled={isPending}
+            onClick={() => {
+              onOpenChange(false)
+              onAskAssistant()
+            }}
+          >
+            <AssistantIcon className="size-5 shrink-0" />
+            <span className="grid min-w-0 flex-1">
+              <span className="font-medium">Need help?</span>
+              <span className="text-xs text-muted-foreground">Ask the AI Assistant how to do anything in staqly.</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 font-medium">
+              Ask <ArrowRight className="size-3.5" />
+            </span>
+          </button>
+        ) : (
+          <a href={DOCS_URL} target="_blank" rel="noreferrer" className={HELP_CARD}>
+            <span className="grid min-w-0 flex-1">
+              <span className="font-medium">Need help?</span>
+              <span className="text-xs text-muted-foreground">Step-by-step guides are at docs.staqly.ai.</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 font-medium">
+              Open the docs <ArrowRight className="size-3.5" />
+            </span>
+          </a>
+        )}
         <form
           className="grid gap-4"
           aria-busy={isPending}

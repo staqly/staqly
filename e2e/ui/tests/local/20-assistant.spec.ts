@@ -36,6 +36,29 @@ test.describe('assistant', () => {
     ).toBeVisible()
   })
 
+  test('full screen takes the place of the page and folds the sidebar to its icons', async ({ page }) => {
+    await page.goto('/schedule')
+    await ready(page, 'Schedule')
+    const panel = page.getByTestId('assistant')
+    const sidebar = page.locator('[data-slot=sidebar][data-state]')
+
+    if (!(await panel.isVisible())) {
+      await page.getByTestId('assistant-toggle').click()
+    }
+
+    await expect(sidebar).toHaveAttribute('data-state', 'expanded')
+    await panel.getByRole('button', { name: 'Full screen' }).click()
+    await expect(sidebar).toHaveAttribute('data-state', 'collapsed')
+    // The rail stays in reach, the assistant starts right beside it and the page steps aside.
+    await expect(sidebar.locator('a[href="/channels"]')).toBeVisible()
+    await expect(page.locator('#main')).toBeHidden()
+    await expect.poll(async () => (await panel.boundingBox())!.x).toBeLessThan(64)
+    expect(await axe(page)).toEqual([])
+    await page.keyboard.press('Escape')
+    await expect(sidebar).toHaveAttribute('data-state', 'expanded')
+    await expect(page.locator('#main')).toBeVisible()
+  })
+
   test('keeps private tool links masked and copyable after reloading a chat on a phone', async ({
     page,
     api,

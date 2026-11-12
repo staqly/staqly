@@ -191,7 +191,12 @@ export function ChannelsHealthCard() {
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                <span
+                  className={cn(
+                    'shrink-0 font-mono text-xs',
+                    busy || !r ? 'text-muted-foreground' : r.ok ? TONES.success.text : TONES.danger.text,
+                  )}
+                >
                   {busy ? 'checking' : r ? (r.ok ? 'ok' : 'needs attention') : '—'}
                 </span>
               </li>

@@ -166,7 +166,8 @@ pnpm gen               # regenerate lib/api-types.ts from ../api/openapi.yaml
   admins and owners), Account (the account owner), Plan & usage, Data &
   privacy, Backups (local or paid plans only), System. `useRole()` hides what a
   role cannot do; the server decides. The sidebar footer shows the person
-  (Google name and picture, or the computer's user name locally) with Sign out. Notifications is its
+  (Google name and picture, or the computer's user name locally) with Sign out; its menu also holds
+  Help & Feedback (a question goes to the AI Assistant, a report to the staqly team) and Theme. Notifications is its
   own page (`/notifications`, `components/notifications`).
 * Notification channel secrets come back masked (`••••abcd`): show "•••• set"
   with Replace/Remove, never prefill them, and leave unchanged secrets out of

@@ -106,8 +106,16 @@ describe('the signed-in person in the sidebar', () => {
       .getAllByRole('menuitem')
       .map((i) => i.textContent?.trim())
 
-    expect(items).toEqual(expect.arrayContaining(['Members', 'Account settings', 'Workspace settings', 'Sign out']))
+    expect(items).toEqual(
+      expect.arrayContaining(['Help & Feedback', 'Members', 'Account settings', 'Workspace settings', 'Sign out']),
+    )
     expect(items).not.toContain('Plan & usage')
+    // Theme is one row of three radio items (the tests render without a theme provider: System stays checked).
+    expect(
+      within(menu)
+        .getAllByRole('menuitemradio')
+        .map((i) => `${i.getAttribute('aria-label')}:${i.getAttribute('aria-checked')}`),
+    ).toEqual(['Light:false', 'Dark:false', 'System:true'])
     expect(within(menu).queryByRole('menuitem', { name: 'Billing' })).not.toBeInTheDocument()
     await user.click(within(menu).getByRole('menuitem', { name: /sign out/i }))
     await waitFor(() => expect(api.find('DELETE', '/v1/session')).toHaveLength(1))

@@ -948,9 +948,12 @@ export function ChannelsPage() {
                     <FolderPlus /> New group
                   </Button>
                 )}
-                <Button onClick={() => add.setOpen(true)} data-testid="add-channel">
-                  <Plus /> Add channel
-                </Button>
+                {/* Without a channel yet, the empty state below holds the one Add channel. */}
+                {!!all?.length && (
+                  <Button onClick={() => add.setOpen(true)} data-testid="add-channel">
+                    <Plus /> Add channel
+                  </Button>
+                )}
               </>
             }
           />
@@ -969,7 +972,7 @@ export function ChannelsPage() {
                 title="No channels yet"
                 description="Connect the first platform. Your posts can then go there at their time, with retries when the platform is slow."
                 action={
-                  <Button onClick={() => add.setOpen(true)}>
+                  <Button onClick={() => add.setOpen(true)} data-testid="add-channel">
                     <Plus /> Add channel
                   </Button>
                 }

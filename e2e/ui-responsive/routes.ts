@@ -108,8 +108,9 @@ export function routes({
           await p.getByRole('button', { name: 'More', exact: true }).click()
         }
 
-        await p.getByRole('button', { name: 'Feedback', exact: true }).click()
-        await p.getByRole('dialog', { name: 'Feedback', exact: true }).waitFor()
+        await click(p, '[data-testid=user-menu-trigger]:visible')
+        await p.getByRole('menuitem', { name: 'Help & Feedback', exact: true }).click()
+        await p.getByRole('dialog', { name: 'Help & Feedback', exact: true }).waitFor()
       },
     },
     { name: 'not found', path: '/does-not-exist' },

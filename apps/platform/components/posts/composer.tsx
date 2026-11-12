@@ -1984,7 +1984,8 @@ export function ComposerForm({
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
         {/* Post always; Settings while it can still change (it waits for a channel with options); Insights once it went out. */}
-        <div className="overflow-x-auto px-4 pt-3 pb-1">
+        {/* A post that went nowhere has only Post: no strip for a single tab. */}
+        <div className={cn('overflow-x-auto px-4 pt-3 pb-1', locked && deliveryTargets.length === 0 && 'hidden')}>
           <TabsList aria-label="Post sections">
             <TabsTrigger value="post">Post</TabsTrigger>
             {!locked && (
