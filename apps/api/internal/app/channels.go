@@ -169,15 +169,18 @@ func (s *Service) providerCatalog(ctx context.Context, workspaceID string) ([]Pr
 		if !s.providerEnabled(e.ID()) {
 			continue // turned off on this server: no tile, no connecting, no publishing
 		}
-		// Instagram (Professional), Unified login as its own tile, is the second Instagram tile only next to Instagram
-		// login (the Instagram app's own keys); without it the one Instagram tile already is Unified login.
-		if e.ID() == "instagram_unified" && !s.instagramLogin() {
+		// Instagram has two sign-ins. Without the Instagram app's own keys there is one tile, Instagram (Unified
+		// login). With them Instagram (Standalone) signs in with Instagram login, and Unified login stays next to it,
+		// as Instagram (Professional), only with PROVIDER_INSTAGRAM_UNIFIED_ENABLED=true.
+		standalone := s.instagramLogin()
+		if (e.ID() == "instagram_standalone" && !standalone) ||
+			(e.ID() == "instagram" && standalone && !s.envFlag("PROVIDER_INSTAGRAM_UNIFIED_ENABLED")) {
 			continue
 		}
 		_, serverOK := s.serverApp(e.ID())
 		info := providerInfo(e, (configured[e.ID()] && !needsBotToken(e.ID()) && !ownClient(e.ID())) || serverOK)
-		if e.ID() == "instagram" && s.instagramLogin() {
-			info.Name = "Instagram (Standalone)"
+		if e.ID() == "instagram" && standalone {
+			info.Name = "Instagram (Professional)"
 		}
 		if !info.AppConfigured || s.providerMaintenance(e.ID()) {
 			info.Status = providers.StatusSoon // an OAuth platform waits for its app's keys in the environment, or maintenance ends
@@ -212,16 +215,20 @@ func (s *Service) providerMaintenance(providerID string) bool {
 }
 
 // providerEnv is the prefix of a provider's settings: PROVIDER_X_, PROVIDER_LINKEDIN_PAGE_. Whop with an API key is
-// turned on and off with Whop (PROVIDER_WHOP_ENABLED).
+// turned on and off with Whop (PROVIDER_WHOP_ENABLED), and Instagram login shares Instagram's settings
+// (PROVIDER_INSTAGRAM_ENABLED; PROVIDER_INSTAGRAM_CLIENT_ID and _SECRET are the Instagram app's keys).
 func providerEnv(providerID string) string {
-	if providerID == "whop_key" {
+	switch providerID {
+	case "whop_key":
 		providerID = "whop"
+	case "instagram_standalone":
+		providerID = "instagram"
 	}
 	return "PROVIDER_" + strings.ToUpper(providerID) + "_"
 }
 
 // serverApp is the OAuth client the operator configured for a provider (PROVIDER_<ID>_CLIENT_ID/SECRET; Facebook
-// and Instagram share the Meta app's PROVIDER_META_CLIENT_ID/SECRET unless they have their own). A platform that posts with the server's own
+// and Instagram share the Meta app's PROVIDER_META_CLIENT_ID/SECRET, Facebook unless it has its own). A platform that posts with the server's own
 // bot (Needs.BotToken) also needs PROVIDER_<ID>_BOT_TOKEN.
 func (s *Service) serverApp(providerID string) (providers.App, bool) {
 	if ownClient(providerID) {
@@ -236,23 +243,18 @@ func (s *Service) serverApp(providerID string) (providers.App, bool) {
 			ClientSecret: hex.EncodeToString(mac.Sum(nil))}, https && len(s.Cfg.SecretKey) > 0
 	}
 	key := providerEnv(providerID) + "CLIENT_"
-	// Facebook and Instagram use the Meta app's keys unless the platform has its own (both of them): Facebook its
-	// own Meta app, Instagram its Instagram app, which signs in with Instagram login instead of Unified login.
+	// Facebook uses the Meta app's keys unless it has a Meta app of its own (both keys). Instagram (Unified login)
+	// always uses the Meta app: PROVIDER_INSTAGRAM_CLIENT_ID and _SECRET are the Instagram app's keys, which only
+	// Instagram login (instagram_standalone) signs in with, and only when both are set.
 	own := s.Env(key+"ID", "") != "" && s.Env(key+"SECRET", "") != ""
-	if metaApp(providerID) && !own {
+	if providerID == "instagram" || (providerID == "facebook" && !own) {
 		key = "PROVIDER_META_CLIENT_"
 	}
-	config := providerEnv(providerID)
-	if providerID == "instagram_unified" {
-		config = providerEnv("instagram") // the same login configuration as the one Instagram tile
-	}
 	app := providers.App{ClientID: s.Env(key+"ID", ""), ClientSecret: s.Env(key+"SECRET", ""),
-		ConfigID: s.Env(config+"CONFIG_ID", ""), InstagramLogin: providerID == "instagram" && own}
-	if app.InstagramLogin {
-		app.ConfigID = ""
-	}
-	if providerID == "instagram_unified" && app.ConfigID == "" {
-		return app, false // no login configuration: the tile waits ("soon") instead of failing at sign-in
+		ConfigID: s.Env(providerEnv(providerID)+"CONFIG_ID", "")}
+	if providerID == "instagram_standalone" {
+		app.ConfigID = "" // the configuration is Unified login's
+		return app, own
 	}
 	if needsBotToken(providerID) && s.Env(providerEnv(providerID)+"BOT_TOKEN", "") == "" {
 		return app, false
@@ -260,16 +262,10 @@ func (s *Service) serverApp(providerID string) (providers.App, bool) {
 	return app, app.ClientID != ""
 }
 
-// instagramLogin: Instagram signs in with the Instagram app's own keys (Instagram login), so Unified login is offered
-// as a second tile, Instagram (Professional).
+// instagramLogin: the server has the Instagram app's own keys, so Instagram (Standalone) is offered.
 func (s *Service) instagramLogin() bool {
-	app, _ := s.serverApp("instagram")
-	return app.InstagramLogin
-}
-
-// metaApp: the platform signs in through the server's one Meta app (Threads has its own Threads app id).
-func metaApp(providerID string) bool {
-	return providerID == "facebook" || providerID == "instagram" || providerID == "instagram_unified"
+	_, ok := s.serverApp("instagram_standalone")
+	return ok
 }
 
 // needsBotToken: the platform posts with the server's own bot (Discord), so only the server's app works for it.
@@ -1472,4 +1468,24 @@ func boolInt(b bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+// MoveInstagramLoginChannels runs at start: channels connected with Instagram login become instagram_standalone.
+// Before v0.34 both sign-ins were "instagram", told apart only by the sealed credentials, which a migration can't read.
+// ponytail: reads every Instagram channel at each start; drop it once nobody upgrades from before v0.34.
+func (s *Service) MoveInstagramLoginChannels(ctx context.Context) error {
+	rows, err := s.Q.InstagramChannels(ctx)
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		var c providers.Credentials
+		if s.unseal(r.Credentials, &c) != nil || c["login"] != "instagram" {
+			continue
+		}
+		if err := s.W.SetChannelProvider(ctx, db.SetChannelProviderParams{Provider: "instagram_standalone", WorkspaceID: r.WorkspaceID, ID: r.ID}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

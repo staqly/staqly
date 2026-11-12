@@ -114,19 +114,20 @@ If your Creator or Business account is missing from the account list, select the
 it. You do not need to add your account to the developer app's portfolio just to connect it.
 
 Staqly uses Unified Login by default. If your Meta app has **API setup with Instagram login**, staqly can
-use that instead (below).
+use that instead, or both side by side (below).
 
 See Meta's [business onboarding guide](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-unified-login/business-onboarding/)
 and [migration guide](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/migration-guide/).
 
-## Instagram login instead
+## Instagram login
 
 With **Instagram login**, people sign in on instagram.com with the Instagram account itself (Business or
-Creator), with no Facebook account or business portfolio in between. Use it when Unified login doesn't suit
-you or Meta has Facebook Login unavailable for the app.
+Creator), with no Facebook account or business portfolio in between. It is a tile of its own, **Instagram
+(Standalone)** (provider `instagram_standalone`), instead of Unified login or next to it. Use it when Unified login
+doesn't suit you or Meta has Facebook Login unavailable for the app.
 
 1. In the Meta app's **Instagram** use case open **API setup with Instagram login**. Under **Set up Instagram
-   business login → Business login settings** add the redirect URL `https://<your dashboard>/channels/callback/instagram`,
+   business login → Business login settings** add the redirect URL `https://<your dashboard>/channels/callback/instagram_standalone`,
    and copy the **Instagram app ID** and **Instagram app secret** (not the Meta app's keys). In the same
    settings set **Deauthorize callback URL** `https://<your API>/v1/meta/deauthorize` (someone removed the app:
    their channel turns Needs reconnect) and **Data deletion request URL** `https://<your API>/v1/meta/data-deletion`
@@ -140,17 +141,16 @@ you or Meta has Facebook Login unavailable for the app.
    PROVIDER_INSTAGRAM_CLIENT_SECRET=your-instagram-app-secret
    ```
 
-The **Add channel** grid then shows two Instagram tiles: **Instagram (Standalone)** (this sign-in) and
-**Instagram (Professional)** (Unified login as above: sign in with Instagram or Facebook, with the Meta app's keys
-and `PROVIDER_INSTAGRAM_CONFIG_ID`). `PROVIDER_INSTAGRAM_UNIFIED_ENABLED=true` turns the second one on; add
-`https://<your dashboard>/channels/callback/instagram_unified` to the Meta app's redirect URLs for it. Before v0.34
-the second tile was Instagram (Facebook Business), turned on with `PROVIDER_INSTAGRAM_BUSINESS_ENABLED`: channels
-connected with it keep publishing, and connecting one again signs in with Unified login.
+The **Add channel** grid then shows **Instagram (Standalone)** in place of **Instagram**: **Connect** opens
+instagram.com, asks for publishing, comments and insights, and keeps a 60-day token that staqly renews on its own.
+To offer Unified login next to it, as **Instagram (Professional)** on the left, keep `PROVIDER_INSTAGRAM_CONFIG_ID`
+and set `PROVIDER_INSTAGRAM_UNIFIED_ENABLED=true`. `PROVIDER_INSTAGRAM_ENABLED` turns both tiles on or off.
 
-With both set, **Connect with Instagram** opens instagram.com, asks for publishing, comments and insights, and
-keeps a 60-day token that staqly renews on its own. `PROVIDER_INSTAGRAM_CONFIG_ID` then serves Instagram (Professional) only. Accounts
-connected before keep working as they are (each remembers how it signed in); connect one again to move it to
-Instagram login. For [comments right away](#comments-right-away), set the webhook in **API setup with Instagram
+Before v0.34 Instagram login used the provider `instagram` and the redirect URL `.../channels/callback/instagram`:
+add the new redirect URL at Meta when you upgrade. Channels connected with Instagram login move to
+`instagram_standalone` at the next start and keep publishing, and so do channels of the earlier second tile,
+Instagram (Facebook Business), which become `instagram`. For [comments right away](#comments-right-away), set the
+webhook in **API setup with Instagram
 login** too: Meta signs those calls with the Instagram app's secret, which the server then has.
 
 ## The sign-in
@@ -204,7 +204,7 @@ alerts) before its next post fails; without the comments one its comments turn o
 
 ## Unpublishing
 
-Unpublishing deletes the post, reel, story or whole carousel on Instagram, comments other people left included, and the comments of its thread. Meta allows this only for accounts connected through Facebook (Unified login, Instagram (Professional) included) with `instagram_manage_contents`; an account connected with Instagram login, a channel connected before that permission, or a post Meta won't delete (an ad) shows *Remove by hand* instead: delete it in the Instagram app. Staqly still removes the comments of its thread.
+Unpublishing deletes the post, reel, story or whole carousel on Instagram, comments other people left included, and the comments of its thread. Meta allows this only for accounts connected through Facebook (Unified login) with `instagram_manage_contents`; an account connected with Instagram login, a channel connected before that permission, or a post Meta won't delete (an ad) shows *Remove by hand* instead: delete it in the Instagram app. Staqly still removes the comments of its thread.
 
 ## Statistics
 

@@ -272,7 +272,7 @@ func (q *Queries) ConnectedChannelsOfProvider(ctx context.Context, provider stri
 
 const connectedMetaChannels = `-- name: ConnectedMetaChannels :many
 SELECT id, workspace_id, provider, credentials FROM channels
-WHERE provider IN ('facebook', 'instagram', 'instagram_unified') AND status = 'connected' AND deleted_at IS NULL
+WHERE provider IN ('facebook', 'instagram', 'instagram_standalone') AND status = 'connected' AND deleted_at IS NULL
 `
 
 type ConnectedMetaChannelsRow struct {
@@ -583,6 +583,41 @@ func (q *Queries) GetProviderApp(ctx context.Context, arg GetProviderAppParams) 
 	return i, err
 }
 
+const instagramChannels = `-- name: InstagramChannels :many
+SELECT id, workspace_id, credentials FROM channels WHERE provider = 'instagram'
+`
+
+type InstagramChannelsRow struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Credentials string `json:"credentials"`
+}
+
+// Every workspace's Instagram channels, removed ones included: only the sealed credentials say how each signed in
+// (MoveInstagramLoginChannels, at start).
+func (q *Queries) InstagramChannels(ctx context.Context) ([]InstagramChannelsRow, error) {
+	rows, err := q.db.QueryContext(ctx, instagramChannels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstagramChannelsRow
+	for rows.Next() {
+		var i InstagramChannelsRow
+		if err := rows.Scan(&i.ID, &i.WorkspaceID, &i.Credentials); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChannels = `-- name: ListChannels :many
 SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY provider, name COLLATE NOCASE, id
 `
@@ -692,7 +727,7 @@ func (q *Queries) MarkInboundEvent(ctx context.Context, arg MarkInboundEventPara
 }
 
 const metaChannels = `-- name: MetaChannels :many
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE provider IN ('facebook', 'instagram', 'instagram_unified', 'threads') AND deleted_at IS NULL
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, credentials, settings, last_error, created_at, updated_at, group_id, comments, deleted_at FROM channels WHERE provider IN ('facebook', 'instagram', 'instagram_standalone', 'threads') AND deleted_at IS NULL
 `
 
 // Every workspace's Facebook, Instagram and Threads channels still kept: a Meta deauthorize or data deletion request
@@ -794,6 +829,21 @@ func (q *Queries) SetChannelHealth(ctx context.Context, arg SetChannelHealthPara
 		arg.UpdatedAt,
 		arg.ID,
 	)
+	return err
+}
+
+const setChannelProvider = `-- name: SetChannelProvider :exec
+UPDATE channels SET provider = ?1 WHERE workspace_id = ?2 AND id = ?3
+`
+
+type SetChannelProviderParams struct {
+	Provider    string `json:"provider"`
+	WorkspaceID string `json:"workspace_id"`
+	ID          string `json:"id"`
+}
+
+func (q *Queries) SetChannelProvider(ctx context.Context, arg SetChannelProviderParams) error {
+	_, err := q.db.ExecContext(ctx, setChannelProvider, arg.Provider, arg.WorkspaceID, arg.ID)
 	return err
 }
 

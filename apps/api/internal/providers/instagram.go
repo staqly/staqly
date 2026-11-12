@@ -68,14 +68,8 @@ func (Instagram) Needs() Needs { return Needs{HTTPS: true, PublicMedia: true} }
 
 // CheckApp asks Facebook for an app token: the keys are the Meta app's, as for Facebook Pages.
 func (Instagram) CheckApp(ctx context.Context, app App, _ string) (bool, error) {
-	if app.InstagramLogin {
-		return true, nil // Instagram login has no app token to ask for; a wrong key shows at the first sign-in
-	}
 	return metaCheckApp(ctx, igGraph, igGraph.url("/oauth/access_token"), app)
 }
-
-// instagramScopes: what Instagram login asks for (the Instagram app's keys).
-const instagramScopes = "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments,instagram_business_manage_insights"
 
 // igFor: the Graph host of a connected account: graph.instagram.com for Instagram login, else graph.facebook.com.
 func igFor(c Credentials) metaGraph {
@@ -85,19 +79,13 @@ func igFor(c Credentials) metaGraph {
 	return igGraph
 }
 
-// AuthURL opens the sign-in. With the Instagram app's own keys (app.InstagramLogin: PROVIDER_INSTAGRAM_CLIENT_ID and
-// _SECRET) it is Instagram login, on instagram.com with the Instagram account itself; otherwise Facebook Login for
-// Business with the Meta app's Instagram configuration (Unified login), where the configuration, not a scope, says
-// which permissions and which kind of token the sign-in gives.
+// AuthURL opens the sign-in: Facebook Login for Business with the Meta app's Instagram configuration (Unified
+// login), where the configuration, not a scope, says which permissions and which kind of token the sign-in gives.
+// Instagram login, on instagram.com, is InstagramStandalone.
 func (Instagram) AuthURL(app App, redirect, state string, _ map[string]string) (string, error) {
-	if app.InstagramLogin {
-		q := url.Values{"client_id": {app.ClientID}, "redirect_uri": {redirect}, "response_type": {"code"},
-			"scope": {instagramScopes}, "state": {state}, "enable_fb_login": {"0"}, "force_reauth": {"true"}}
-		return instagramAuthorize + "?" + q.Encode(), nil
-	}
 	if app.ConfigID == "" {
 		// For whoever runs the server: PROVIDER_INSTAGRAM_CONFIG_ID is the configuration made under the Meta app's
-		// Instagram use case, API setup with Unified login (or the Instagram app's own keys for Instagram login).
+		// Instagram use case, API setup with Unified login.
 		return "", &Failure{Kind: ErrRejected, Msg: "Instagram needs the Meta app's login configuration: whoever runs this server sets PROVIDER_INSTAGRAM_CONFIG_ID"}
 	}
 	q := url.Values{
@@ -114,9 +102,6 @@ func (Instagram) AuthURL(app App, redirect, state string, _ map[string]string) (
 
 // Exchange trades the code for the token; the Instagram accounts it reaches come from Accounts.
 func (Instagram) Exchange(ctx context.Context, app App, redirect, code string, _ map[string]string) (Credentials, Profile, error) {
-	if app.InstagramLogin {
-		return instagramLoginExchange(ctx, app, redirect, strings.TrimSuffix(code, "#_"))
-	}
 	q := url.Values{"client_id": {app.ClientID}, "client_secret": {app.ClientSecret}, "redirect_uri": {redirect},
 		"code": {strings.TrimSuffix(code, "#_")}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, igGraph.url("/oauth/access_token")+"?"+q.Encode(), nil)
