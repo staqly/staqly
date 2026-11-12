@@ -15,6 +15,7 @@ import {
   History,
   ImagePlus,
   Loader2,
+  MessageSquare,
   Maximize2,
   Minimize2,
   Paperclip,
@@ -474,7 +475,7 @@ const MAX_TEXT = 100_000
 /** The assistant's mark beside its words. */
 function AssistantAvatar() {
   return (
-    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-muted" aria-hidden>
+    <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-background" aria-hidden>
       <AssistantIcon className="size-3.5" />
     </span>
   )
@@ -489,16 +490,25 @@ function AssistantBubble({ children }: { children: ReactNode }) {
   )
 }
 
+/** The day a chat was last used, as the list's headings: Today, Yesterday, Last 7 days, Older. */
+function chatDay(value: string) {
+  const days = Math.floor((new Date().setHours(24, 0, 0, 0) - new Date(value).getTime()) / 86_400_000)
+
+  return days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 7 ? 'Last 7 days' : 'Older'
+}
+
 /**
  * The person's chats, newest first, a page at a time (there may be very many): search by title, open one, or
  * remove it.
  */
 function ChatHistory({
   current,
+  expanded,
   onOpen,
   onRemoved,
 }: {
   current: string
+  expanded?: boolean
   onOpen: (id: string) => void
   onRemoved: (id: string) => void
 }) {
@@ -529,7 +539,7 @@ function ChatHistory({
   const rows = chats.data?.pages.flatMap((p) => p.data) ?? []
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
+    <div className={cn('mx-auto flex min-h-0 w-full flex-1 flex-col', expanded && 'max-w-3xl')}>
       <div className="p-3">
         <div className="flex h-9 items-center gap-2 rounded-lg border bg-background px-2.5 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
           <Search className="size-4 shrink-0 text-muted-foreground" />
@@ -542,7 +552,7 @@ function ChatHistory({
           />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {chats.isPending ? (
           <p className="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Loading chats...
@@ -554,32 +564,60 @@ function ChatHistory({
             {query ? 'No chat has these words in its title.' : 'No chats yet.'}
           </p>
         ) : (
-          <ul className="grid gap-0.5">
-            {rows.map((c) => (
-              <li key={c.id} className="group/chat flex items-center rounded-lg hover:bg-muted">
-                <button
-                  type="button"
-                  className={cn(
-                    'grid min-w-0 flex-1 gap-0.5 rounded-lg px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    c.id === current && 'bg-muted',
+          <ul className="grid gap-1.5">
+            {rows.map((c, i) => {
+              const day = chatDay(c.updated_at)
+              const open = c.id === current
+
+              return (
+                <Fragment key={c.id}>
+                  {/* Newest first: a heading where the day changes. */}
+                  {day !== (i > 0 ? chatDay(rows[i - 1].updated_at) : '') && (
+                    <li className="px-1 pt-2 text-xs font-medium text-muted-foreground first:pt-0">{day}</li>
                   )}
-                  onClick={() => onOpen(c.id)}
-                >
-                  <span className="truncate text-sm">{c.title}</span>
-                  <span className="text-xs text-muted-foreground">{timeAgo(c.updated_at)}</span>
-                </button>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  className="mr-1.5 opacity-0 group-hover/chat:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-                  aria-label={`Remove ${c.title}`}
-                  disabled={remove.isPending}
-                  onClick={() => remove.mutate(c.id)}
-                >
-                  <Trash2 />
-                </Button>
-              </li>
-            ))}
+                  <li
+                    className={cn(
+                      'group/chat relative flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 transition-colors hover:border-brand/40 hover:bg-muted/60',
+                      open && 'border-brand/40 bg-brand-soft/40',
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'grid size-8 shrink-0 place-items-center rounded-lg border bg-background text-muted-foreground [&_svg]:size-4',
+                        open && 'text-brand-strong',
+                      )}
+                    >
+                      <MessageSquare />
+                    </span>
+                    {/* The whole card opens the chat (the button stretches over it); Remove sits above it. */}
+                    <button
+                      type="button"
+                      aria-current={open || undefined}
+                      className="grid min-w-0 flex-1 gap-0.5 text-left outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                      onClick={() => onOpen(c.id)}
+                    >
+                      <span className="truncate text-sm font-medium">{c.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {open ? 'Open now · ' : ''}
+                        {timeAgo(c.updated_at)}
+                      </span>
+                    </button>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="relative z-10 opacity-0 group-hover/chat:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                      aria-label={`Remove ${c.title}`}
+                      tooltip="Remove"
+                      disabled={remove.isPending}
+                      onClick={() => remove.mutate(c.id)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </li>
+                </Fragment>
+              )
+            })}
           </ul>
         )}
         {chats.hasNextPage && (
@@ -838,13 +876,25 @@ function Chat({
     }
   }
 
+  const chatTitle = history ? 'Chats' : title || state.messages.find((m) => m.role === 'user')?.content
+
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="assistant">
       <div className="flex h-12 shrink-0 items-center gap-1 border-b px-3">
         <AssistantAvatar />
         <div className="ml-1 grid min-w-0 flex-1 leading-tight">
-          <h2 className="truncate text-sm font-semibold">
-            {history ? 'Chats' : title || state.messages.find((m) => m.role === 'user')?.content || 'AI Assistant'}
+          {/* Always the assistant's name; beside it, where you are: the chat's title or the list of chats. */}
+          <h2 className="flex min-w-0 items-baseline gap-1.5 text-sm font-semibold">
+            <span className="shrink-0">AI Assistant</span>
+            {chatTitle && (
+              <span
+                className="truncate font-normal text-muted-foreground"
+                title={chatTitle}
+                data-testid="assistant-chat-title"
+              >
+                {chatTitle}
+              </span>
+            )}
           </h2>
           {onDevice && <span className="text-xs text-muted-foreground">On this device</span>}
         </div>
@@ -886,6 +936,7 @@ function Chat({
       {history && (
         <ChatHistory
           current={chatId}
+          expanded={expanded}
           onOpen={(id) => (id === chatId ? setHistory(false) : switchTo(id))}
           onRemoved={(id) => id === chatId && switchTo(newChatId(), true)}
         />
@@ -900,7 +951,8 @@ function Chat({
         )}
         <div
           className={cn(
-            'relative mx-auto flex min-h-full w-full max-w-2xl flex-col gap-4 p-4',
+            // Docked, the chat takes the panel's whole width; full screen keeps lines readable.
+            'relative mx-auto flex min-h-full w-full flex-col gap-4 p-4',
             expanded && 'max-w-3xl py-8',
           )}
         >
@@ -1008,7 +1060,7 @@ function Chat({
       </div>
       <form
         hidden={history}
-        className={cn('mx-auto w-full max-w-2xl shrink-0 p-3', expanded && 'max-w-3xl pb-6')}
+        className={cn('mx-auto w-full shrink-0 p-3', expanded && 'max-w-3xl pb-6')}
         onSubmit={(e) => {
           e.preventDefault()
           send(input)
@@ -1366,7 +1418,9 @@ function DockedPanel({
       className={cn(
         expanded
           ? 'sticky top-0 flex h-svh min-w-0 flex-1 flex-col bg-background'
-          : 'sticky top-0 flex h-svh shrink-0 flex-col overflow-x-clip border-l bg-sidebar shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.35)]',
+          : 'sticky top-0 flex h-svh shrink-0 flex-col overflow-x-clip bg-sidebar',
+        // Above the page's sticky bars, so its soft shadow runs the whole height.
+        !expanded && 'z-30 shadow-[-6px_0_16px_-12px_rgb(0_0_0/0.15)] dark:shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.35)]',
         !expanded && !dragging && 'transition-[width] duration-200 ease-out motion-reduce:transition-none',
         dragging && 'select-none',
       )}
@@ -1391,7 +1445,7 @@ function DockedPanel({
           }
         }}
         className={cn(
-          'absolute inset-y-0 left-0 z-20 w-2 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:transition-colors hover:after:bg-ring focus-visible:after:w-0.5 focus-visible:after:bg-ring',
+          'absolute inset-y-0 left-0 z-20 w-2 cursor-col-resize outline-none after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-border after:transition-colors hover:after:bg-ring focus-visible:after:w-0.5 focus-visible:after:bg-ring',
           dragging && 'after:bg-ring',
         )}
       />

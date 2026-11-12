@@ -216,12 +216,14 @@ export const PostRow = memo(function PostRow({
           <TooltipTrigger asChild>
             <span
               className="relative z-10 inline-flex rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              tabIndex={targets.length ? 0 : -1}
+              tabIndex={0}
             >
               <ChannelStack channels={targets} max={3} size="size-8" />
             </span>
           </TooltipTrigger>
-          {targets.length > 0 && (
+          {targets.length === 0 ? (
+            <TooltipContent side="bottom">No channels picked yet</TooltipContent>
+          ) : (
             <TooltipContent side="bottom" className="max-w-72">
               <ul className="grid gap-1 py-0.5">
                 {targets.map((t) => (

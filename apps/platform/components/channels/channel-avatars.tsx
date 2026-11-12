@@ -1,5 +1,7 @@
 'use client'
 
+import { Share2 } from 'lucide-react'
+
 import { ProviderIcon, ProviderTile } from '@/lib/providers'
 import { safeImageSrc } from '@/lib/safe'
 import { cn } from '@/lib/utils'
@@ -78,6 +80,18 @@ export function ChannelStack({
       role="img"
       aria-label={channels.map((c) => c.name).join(', ') || 'No channels'}
     >
+      {/* No channel: a dashed place holder, so rows and chips keep their shape. */}
+      {channels.length === 0 && (
+        <span
+          aria-hidden
+          className={cn(
+            'inline-flex shrink-0 items-center justify-center rounded-full border border-dashed text-muted-foreground [&_svg]:size-1/2',
+            size,
+          )}
+        >
+          <Share2 />
+        </span>
+      )}
       {shown.map((c, i) => (
         // The ring sits on a square box of the avatar's size (an inline span is taller than wide: an oval ring).
         <span
