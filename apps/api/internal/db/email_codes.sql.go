@@ -162,6 +162,21 @@ func (q *Queries) DeleteIdentity(ctx context.Context, arg DeleteIdentityParams) 
 	return result.RowsAffected()
 }
 
+const forgetRemovedIdentity = `-- name: ForgetRemovedIdentity :exec
+DELETE FROM removed_identities WHERE provider = ? AND subject = ? AND user_id = ?
+`
+
+type ForgetRemovedIdentityParams struct {
+	Provider string `json:"provider"`
+	Subject  string `json:"subject"`
+	UserID   string `json:"user_id"`
+}
+
+func (q *Queries) ForgetRemovedIdentity(ctx context.Context, arg ForgetRemovedIdentityParams) error {
+	_, err := q.db.ExecContext(ctx, forgetRemovedIdentity, arg.Provider, arg.Subject, arg.UserID)
+	return err
+}
+
 const getIdentity = `-- name: GetIdentity :one
 SELECT provider, subject, user_id, email, created_at, last_login_at FROM user_identities WHERE provider = ? AND subject = ?
 `
@@ -183,6 +198,24 @@ func (q *Queries) GetIdentity(ctx context.Context, arg GetIdentityParams) (UserI
 		&i.LastLoginAt,
 	)
 	return i, err
+}
+
+const identityRemoved = `-- name: IdentityRemoved :one
+SELECT COUNT(*) FROM removed_identities WHERE provider = ? AND subject = ? AND user_id = ?
+`
+
+type IdentityRemovedParams struct {
+	Provider string `json:"provider"`
+	Subject  string `json:"subject"`
+	UserID   string `json:"user_id"`
+}
+
+// Whether this person removed this sign-in method (and has not added it again).
+func (q *Queries) IdentityRemoved(ctx context.Context, arg IdentityRemovedParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, identityRemoved, arg.Provider, arg.Subject, arg.UserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const latestEmailCode = `-- name: LatestEmailCode :one
@@ -266,6 +299,28 @@ func (q *Queries) MarkEmailCodeVerified(ctx context.Context, arg MarkEmailCodeVe
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const markIdentityRemoved = `-- name: MarkIdentityRemoved :exec
+INSERT INTO removed_identities (provider, subject, user_id, removed_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (provider, subject, user_id) DO NOTHING
+`
+
+type MarkIdentityRemovedParams struct {
+	Provider  string `json:"provider"`
+	Subject   string `json:"subject"`
+	UserID    string `json:"user_id"`
+	RemovedAt string `json:"removed_at"`
+}
+
+func (q *Queries) MarkIdentityRemoved(ctx context.Context, arg MarkIdentityRemovedParams) error {
+	_, err := q.db.ExecContext(ctx, markIdentityRemoved,
+		arg.Provider,
+		arg.Subject,
+		arg.UserID,
+		arg.RemovedAt,
+	)
+	return err
 }
 
 const purgeEmailCodes = `-- name: PurgeEmailCodes :exec

@@ -14,7 +14,8 @@ WHERE workspace_id = @workspace_id
   AND (sqlc.narg(post_id) IS NULL OR item_id = sqlc.narg(post_id))
   -- Same rule as ListEvents: credential/session audit events only for admin principals.
   AND (CAST(@include_audit AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
-       OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'))
+       OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'
+       OR type GLOB 'access_token.*' OR type GLOB 'sign_in_method.*'))
 ORDER BY seq
 LIMIT @lim;
 

@@ -23,7 +23,8 @@ WHERE workspace_id = @workspace_id
   AND (sqlc.narg(before_seq) IS NULL OR seq < sqlc.narg(before_seq))
   -- Credential/session audit events are visible to admin principals only.
   AND (CAST(@include_audit AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
-       OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'))
+       OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'
+       OR type GLOB 'access_token.*' OR type GLOB 'sign_in_method.*'))
 ORDER BY seq DESC
 LIMIT @lim;
 

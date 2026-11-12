@@ -471,3 +471,59 @@ func TestRepeatPostREST(t *testing.T) {
 		t.Fatalf("catch-up: %+v", page.Data)
 	}
 }
+
+// Was a bug: PATCH (and MCP update_post) let a key with posts:write alone move a scheduled post or take it
+// off the schedule, which /schedule and /cancel refuse. The text of a scheduled post stays a writer's.
+func TestRescheduleThroughPatchNeedsPublish(t *testing.T) {
+	e := newEnv(t)
+	writer := e.keyWith("posts:read", "posts:write")
+	ch := e.customChannel("Worker")
+	p := e.post(e.collection("Launch").ID, map[string]any{"targets": []map[string]any{{"channel_id": ch.ID}}})
+	var scheduled app.Post
+	e.do(nil, "POST", "/v1/posts/"+p.ID+"/schedule", e.key, map[string]any{"publish_at": future(48 * time.Hour)}, 200, &scheduled)
+
+	e.do(nil, "PATCH", "/v1/posts/"+p.ID, writer, map[string]any{"publish_at": future(time.Hour)}, 403, nil)
+	e.do(nil, "PATCH", "/v1/posts/"+p.ID, writer, map[string]any{"publish_at": nil}, 403, nil)
+	if _, out := mcpCall(e, writer, "update_post", map[string]any{"post_id": p.ID, "publish_at": future(2 * time.Hour)}); !isToolError(out) {
+		t.Errorf("MCP update_post moved a scheduled post with posts:write alone: %v", out)
+	}
+	// An edit that leaves the time alone (the composer sends it back as it is) is still a writer's.
+	var got app.Post
+	e.do(nil, "PATCH", "/v1/posts/"+p.ID, writer, map[string]any{"content": "Better words", "publish_at": *scheduled.PublishAt}, 200, &got)
+	if got.Status != "scheduled" || got.Content != "Better words" || *got.PublishAt != *scheduled.PublishAt {
+		t.Fatalf("a writer's edit of a scheduled post: %+v", got)
+	}
+	// With posts:publish the same PATCH moves it.
+	e.do(nil, "PATCH", "/v1/posts/"+p.ID, e.key, map[string]any{"publish_at": nil}, 200, &got)
+	if got.Status != "draft" {
+		t.Fatalf("unscheduled by a publisher: %q", got.Status)
+	}
+	// A draft's planned time is not a schedule: writers set it.
+	e.do(nil, "PATCH", "/v1/posts/"+p.ID, writer, map[string]any{"publish_at": future(time.Hour)}, 200, nil)
+}
+
+// Was a bug: a caller with webhooks:manage and no admin could not subscribe to audit events, yet could
+// change the URL (or rotate the secret) of an admin's webhook that gets them. Alerts had the same gap.
+func TestAuditSubscriptionsAreChangedByAdminsOnly(t *testing.T) {
+	e := newEnv(t)
+	manager := e.keyWith("webhooks:manage", "alerts:manage")
+	e.do(nil, "POST", "/v1/webhooks", manager, map[string]any{"url": "http://127.0.0.1:9/mine", "events": []string{"session.*"}}, 403, nil)
+	var wh, got app.Webhook
+	e.do(nil, "POST", "/v1/webhooks", e.admin, map[string]any{"url": "http://127.0.0.1:9/admin", "events": []string{"session.*"}}, 201, &wh)
+	for _, patch := range []map[string]any{{"url": "http://127.0.0.1:9/elsewhere"}, {"rotate_secret": true}, {"events": []string{"post.*"}}} {
+		e.do(nil, "PATCH", "/v1/webhooks/"+wh.ID, manager, patch, 403, nil)
+	}
+	e.do(nil, "GET", "/v1/webhooks/"+wh.ID, e.admin, nil, 200, &got)
+	if got.URL != wh.URL || len(got.Events) != 1 || got.Events[0] != "session.*" {
+		t.Fatalf("the audit webhook changed: %+v", got)
+	}
+	e.do(nil, "PATCH", "/v1/webhooks/"+wh.ID, e.admin, map[string]any{"url": "http://127.0.0.1:9/moved"}, 200, nil)
+	// A webhook without audit events stays the manager's.
+	e.do(nil, "POST", "/v1/webhooks", manager, map[string]any{"url": "http://127.0.0.1:9/mine"}, 201, &wh)
+	e.do(nil, "PATCH", "/v1/webhooks/"+wh.ID, manager, map[string]any{"url": "http://127.0.0.1:9/mine2"}, 200, nil)
+
+	var al app.Alert
+	e.do(nil, "POST", "/v1/alerts", e.admin, map[string]any{"type": "ntfy", "name": "Audit", "config": map[string]any{"topic": "t"}, "events": []string{"api_key.*"}}, 201, &al)
+	e.do(nil, "PATCH", "/v1/alerts/"+al.ID, manager, map[string]any{"name": "Mine now"}, 403, nil)
+	e.do(nil, "PATCH", "/v1/alerts/"+al.ID, e.admin, map[string]any{"name": "Audit log"}, 200, nil)
+}

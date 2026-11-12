@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,20 +20,22 @@ import (
 // Sign-in with an email code (cloud accounts, accounts.go). A 6-digit code mailed to an address proves
 // it: only its hash is stored, it works once, for emailCodeTTL, and dies after emailCodeMaxAttempts wrong
 // tries. The answer to "send a code" never says whether the address has an account. A verified code
-// signs in as the identity ("email", <address>) through the same signInIdentity as Google, so a Google
-// identity and an email identity with the same address stay two people unless the person links them.
+// signs in as the identity ("email", <address>) through the same signInIdentity as Google; an address that
+// already has an account signs into it (upsertUser), unless the person removed that sign-in method.
 
 const (
 	emailCodeTTL         = 10 * time.Minute
 	emailCodeCooldown    = 30 * time.Second
 	emailCodeMaxAttempts = 5
 	// emailCodesPerHour: codes one asker (a client address) can have sent to one address per hour, and
-	// emailCodesPerDay per rolling 24 hours. Counted per asker, so nobody can use up another person's codes
-	// (a lockout of an address by asking for its codes); every purpose counts.
+	// emailCodesPerDay per rolling 24 hours; every purpose counts. They bound one asker only.
 	emailCodesPerHour = 5
 	emailCodesPerDay  = 15
 	// emailCodesPerAddressDay: all askers together, so guessing stays bounded over days whoever asks (60 codes
-	// x 5 tries: 300 guesses a day out of a million).
+	// x 5 tries: 300 guesses a day out of a million). Known limit: askers on four or more client addresses
+	// can use this up, and the address then gets no code for up to a day; each request also replaces the
+	// open code. Lifting it needs codes that cannot be guessed once the cap is reached (a longer code or a
+	// sign-in link), not a higher number.
 	emailCodesPerAddressDay = 60
 
 	purposeSignIn = "sign_in"
@@ -391,6 +394,9 @@ func (s *Service) RemoveSignInMethod(ctx context.Context, p Principal, provider,
 		if n == 0 {
 			return notFound("sign-in method")
 		}
+		if err := s.forgetIdentity(ctx, q, p.UserID, provider, subject, rows); err != nil {
+			return err
+		}
 		_, err = s.emit(ctx, q, p, "sign_in_method.removed", "", "", map[string]any{"provider": provider, "subject": subject})
 		return err
 	})
@@ -398,6 +404,33 @@ func (s *Service) RemoveSignInMethod(ctx context.Context, p Principal, provider,
 		return nil, err
 	}
 	return s.ListSignInMethods(ctx, p)
+}
+
+// forgetIdentity makes a removal last. rows are the person's identities before it. The address alone would
+// bring the method back at its next sign-in (upsertUser), so the removal is recorded; and the person's
+// contact address, when it was the removed method's and no other method has it, moves to one they still
+// sign in with (it stays when only passkeys are left: there is no other address to use).
+func (s *Service) forgetIdentity(ctx context.Context, q *db.Queries, userID, provider, subject string, rows []db.UserIdentity) error {
+	if provider == ProviderPasskey {
+		return nil
+	}
+	if err := q.MarkIdentityRemoved(ctx, db.MarkIdentityRemovedParams{Provider: provider, Subject: subject, UserID: userID, RemovedAt: s.now()}); err != nil {
+		return err
+	}
+	var removed, next string
+	for _, r := range rows {
+		if r.Provider == provider && r.Subject == subject {
+			removed = r.Email
+		} else if next == "" {
+			next = r.Email
+		}
+	}
+	if removed == "" || next == "" || slices.ContainsFunc(rows, func(r db.UserIdentity) bool {
+		return (r.Provider != provider || r.Subject != subject) && r.Email == removed
+	}) {
+		return nil
+	}
+	return q.ChangeUserEmail(ctx, db.ChangeUserEmailParams{Email: next, Now: s.now(), ID: userID, OldEmail: removed})
 }
 
 func (s *Service) linkIdentity(ctx context.Context, userID string, id Identity) error {
@@ -419,6 +452,10 @@ func (s *Service) linkIdentityTx(ctx context.Context, q *db.Queries, userID stri
 		return &Error{Code: "identity_taken", Status: 409,
 			Message: what + " already signs in to another Staqly person: sign in with it and remove it there first"}
 	case !isNoRows(err):
+		return err
+	}
+	// Added again by the person: no longer a method they removed.
+	if err := q.ForgetRemovedIdentity(ctx, db.ForgetRemovedIdentityParams{Provider: id.Provider, Subject: id.Subject, UserID: userID}); err != nil {
 		return err
 	}
 	return q.CreateIdentity(ctx, db.CreateIdentityParams{Provider: id.Provider, Subject: id.Subject, UserID: userID,

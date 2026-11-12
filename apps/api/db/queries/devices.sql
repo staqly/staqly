@@ -12,3 +12,7 @@ WHERE id = @id AND (max_uses = 0 OR uses < max_uses) AND expires_at > @now;
 
 -- name: PurgeDeviceLinks :exec
 DELETE FROM device_links WHERE expires_at < ?;
+
+-- name: ExpireDeviceLinks :exec
+-- A changed access token (local mode) ends the links made with the old one.
+UPDATE device_links SET expires_at = @now WHERE workspace_id = @workspace_id AND expires_at > @now;

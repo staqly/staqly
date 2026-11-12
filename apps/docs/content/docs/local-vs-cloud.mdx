@@ -116,7 +116,7 @@ to set it.
 - Make a new one with `staqly serve token --rotate` (or `docker exec staqly server token --rotate`),
   or **Rotate** next to the access token under **Integrations** in the dashboard. The old token stops working at
   once, also in a running server, and every browser is signed out (the dashboard you rotate from
-  stays signed in). Update your agents' configuration with the new token.
+  stays signed in); connect links not used yet and admin panel sessions end too. Update your agents' configuration with the new token.
 - `docker exec -i staqly mcp-stdio` needs no token: it opens the database itself, so whoever may run
   it already has the data.
 

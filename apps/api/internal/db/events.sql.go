@@ -126,7 +126,8 @@ WHERE workspace_id = ?1
   AND (?14 IS NULL OR seq < ?14)
   -- Credential/session audit events are visible to admin principals only.
   AND (CAST(?15 AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
-       OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'))
+       OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'
+       OR type GLOB 'access_token.*' OR type GLOB 'sign_in_method.*'))
 ORDER BY seq DESC
 LIMIT ?16
 `

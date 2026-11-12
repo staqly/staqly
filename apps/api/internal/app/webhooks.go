@@ -154,6 +154,11 @@ func validateWebhookURL(raw string) error {
 }
 
 func (s *Service) applyWebhookInput(ctx context.Context, q *db.Queries, p Principal, w *db.Webhook, in WebhookInput) error {
+	var stored []string
+	_ = json.Unmarshal([]byte(w.Events), &stored)
+	if err := auditSubscription(p, stored); err != nil {
+		return err
+	}
 	if in.URL != nil {
 		if err := validateWebhookURL(*in.URL); err != nil {
 			return err

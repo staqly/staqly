@@ -156,7 +156,7 @@ func (s *Service) SignOutIfTokenChanged(ctx context.Context) (int64, error) {
 		sys := Principal{WorkspaceID: p.WorkspaceID, Kind: PrincipalSystem, ID: "server", Name: "Server"}
 		err = s.tx(ctx, func(q *db.Queries) error {
 			var err error
-			if revoked, err = q.RevokeOtherSessions(ctx, db.RevokeOtherSessionsParams{RevokedAt: nullStr(s.now()), WorkspaceID: p.WorkspaceID, KeepID: ""}); err != nil {
+			if revoked, err = s.closeLocalAccess(ctx, q, p.WorkspaceID, ""); err != nil {
 				return err
 			}
 			_, err = s.emit(ctx, q, sys, "access_token.rotated", "", "", map[string]any{"sessions_revoked": revoked})
@@ -167,6 +167,21 @@ func (s *Service) SignOutIfTokenChanged(ctx context.Context) (int64, error) {
 		}
 	}
 	return revoked, s.rememberLocalToken(cur)
+}
+
+// closeLocalAccess ends everything the old access token opened: browser sessions (all but keepSessionID),
+// connect links not used yet and admin panel sessions, which the token signs in too. It returns the number
+// of browser sessions signed out.
+func (s *Service) closeLocalAccess(ctx context.Context, q *db.Queries, workspaceID, keepSessionID string) (int64, error) {
+	now := s.now()
+	revoked, err := q.RevokeOtherSessions(ctx, db.RevokeOtherSessionsParams{RevokedAt: nullStr(now), WorkspaceID: workspaceID, KeepID: keepSessionID})
+	if err != nil {
+		return 0, err
+	}
+	if err := q.ExpireDeviceLinks(ctx, db.ExpireDeviceLinksParams{Now: now, WorkspaceID: workspaceID}); err != nil {
+		return 0, err
+	}
+	return revoked, q.RevokeAllAdminSessions(ctx, nullStr(now))
 }
 
 // rememberLocalToken writes the token's hash as the one browsers sign in with.
@@ -261,7 +276,7 @@ func (s *Service) RotateLocalToken(ctx context.Context, p Principal, keepSession
 	var revoked int64
 	err = s.tx(ctx, func(q *db.Queries) error {
 		var err error
-		revoked, err = q.RevokeOtherSessions(ctx, db.RevokeOtherSessionsParams{RevokedAt: nullStr(s.now()), WorkspaceID: p.WorkspaceID, KeepID: keepSessionID})
+		revoked, err = s.closeLocalAccess(ctx, q, p.WorkspaceID, keepSessionID)
 		if err != nil {
 			return err
 		}
