@@ -55,6 +55,30 @@
   }
 }
 
+/*
+ * Every other icon in a button answers a hover once: a small tilt and back. Arrows keep their nudge above; chevrons
+ * (they turn when a menu opens) and anything already moving (a spinner) stay as they are. Pointer devices only, so a
+ * tap leaves nothing stuck; off with reduced motion.
+ */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  :is(button, [role='button'], [data-slot='button']):hover
+    svg.lucide:not(
+      [class*='lucide-arrow-'],
+      [class*='lucide-move-'],
+      [class*='lucide-chevron'],
+      [class*='lucide-loader'],
+      [class*='animate-']
+    ) {
+    animation: sq-icon 0.4s ease-out;
+  }
+}
+
+@keyframes sq-icon {
+  40% {
+    transform: rotate(-10deg) scale(1.12);
+  }
+}
+
 @keyframes sq-nudge {
   0%,
   100% {
