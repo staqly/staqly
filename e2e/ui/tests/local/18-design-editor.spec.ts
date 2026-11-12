@@ -106,6 +106,17 @@ test.describe('the design editor', () => {
     await tools.getByRole('button', { name: 'Layers' }).click()
     await expect(page.getByRole('complementary', { name: 'Layers' }).getByText('Add a heading')).toBeVisible()
 
+    // A design that cannot be loaded says so and stays closed: no blank design that Save would write over it.
+    await page.route('**/api/v1/media-projects/*/file', (r) =>
+      r.fulfill({ status: 503, json: { error: { code: 'unavailable', message: 'The server is busy' } } }),
+    )
+    await page.reload()
+    await expect(page.getByRole('alert').filter({ hasText: 'Could not open it' })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByTestId('design-save')).toBeDisabled()
+    await page.unroute('**/api/v1/media-projects/*/file')
+    await page.getByRole('button', { name: 'Try again' }).click()
+    await expect(page.getByRole('button', { name: 'Page 3' })).toBeVisible({ timeout: 30_000 })
+
     // In Media the three pages are one tile: the carousel.
     await page.goto('/media')
     await ready(page, 'All files')

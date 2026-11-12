@@ -308,8 +308,11 @@ export function scheduleSlots(
     const tz = rule.tz || displayZone()
     const weekdays = rule.weekdays?.length ? rule.weekdays : [0, 1, 2, 3, 4, 5, 6]
 
-    for (const day of days) {
-      // The same calendar date in the schedule's zone; weekdays numbered like the API: 0 = Sunday ... 6 = Saturday.
+    // Every date the visible days can touch in the schedule's zone: a run late on its day there is the next
+    // day here (Sunday 20:00 in New York is Monday 01:00 UTC), so one day more on each side; push keeps the
+    // runs that fall on the visible days. The weekday is the date's own in the schedule's zone, as the server
+    // reads it; numbered like the API: 0 = Sunday ... 6 = Saturday.
+    for (const day of [addDays(first, -1), ...days, addDays(last, 1)]) {
       const d = wallOf(day)
 
       if (!weekdays.includes(d.weekday)) {

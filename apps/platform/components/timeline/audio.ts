@@ -5,19 +5,37 @@ import { clipStarts, length, type Sound, type Timeline } from './doc'
 const RATE = 48_000
 const decoded = new Map<string, Promise<AudioBuffer | null>>()
 
-/** The file's sound, decoded (null for a file without sound, like a silent video). Kept for the next use. */
+/**
+ * The file's sound, decoded: null for a file with no sound in it to decode (a silent video), a rejection for a file
+ * that did not arrive. Kept for the next use, unless it failed: the next call fetches it again.
+ */
 export function decode(src: string): Promise<AudioBuffer | null> {
   let p = decoded.get(src)
 
   if (!p) {
     p = fetch(src)
-      .then((r) => r.arrayBuffer())
-      .then((b) => new OfflineAudioContext(2, 1, RATE).decodeAudioData(b))
-      .catch(() => null)
+      .then((r) => {
+        if (!r.ok) {
+          throw new Error(`HTTP ${r.status}`)
+        }
+
+        return r.arrayBuffer()
+      })
+      .then((b) => new OfflineAudioContext(2, 1, RATE).decodeAudioData(b).catch(() => null))
+    p.catch(() => decoded.get(src) === p && decoded.delete(src))
     decoded.set(src, p)
   }
 
   return p
+}
+
+/** Lets go of every decoded file the timeline no longer uses (a buffer is about 23 MB a minute). */
+export function keepDecoded(used: Set<string>) {
+  for (const src of decoded.keys()) {
+    if (!used.has(src)) {
+      decoded.delete(src)
+    }
+  }
 }
 
 /** Everything that sounds: the sound clips and the video clips with their volume up, on one list. */
@@ -71,7 +89,8 @@ function envelope(g: GainNode, s: Sound, when: number, from: number) {
 /** Plays every voice of the timeline from `from` seconds on, in step with `ctx`'s clock; stop() silences it. */
 export async function play(ctx: AudioContext, t: Timeline, from: number) {
   const list = voices(t).filter((s) => s.start + s.duration > from)
-  const buffers = await Promise.all(list.map((s) => decode(s.src)))
+  // The preview plays what it has: a file that did not arrive is silent here (the export refuses it).
+  const buffers = await Promise.all(list.map((s) => decode(s.src).catch(() => null)))
   const now = ctx.currentTime + 0.05
   const nodes: AudioBufferSourceNode[] = []
 
@@ -100,7 +119,10 @@ export async function play(ctx: AudioContext, t: Timeline, from: number) {
   }
 }
 
-/** The whole timeline's sound as one stereo buffer (silence where nothing plays). */
+/**
+ * The whole timeline's sound as one stereo buffer (silence where nothing plays). A sound that cannot be read fails
+ * it, so no file is made without one of its tracks; a video clip with no sound in its file is silent.
+ */
 export async function mix(t: Timeline, onProgress?: (share: number) => void): Promise<AudioBuffer> {
   const len = Math.max(0.1, length(t))
   const ctx = new OfflineAudioContext(2, Math.ceil(len * RATE), RATE)
@@ -108,7 +130,14 @@ export async function mix(t: Timeline, onProgress?: (share: number) => void): Pr
   let done = 0
 
   for (const s of list) {
-    const buf = await decode(s.src)
+    const buf = await decode(s.src).catch(() => undefined)
+
+    // A sound clip is nothing but its sound; a video clip may have none (null), but its file must have arrived.
+    if (buf === undefined || (!buf && t.sounds.includes(s))) {
+      decoded.delete(s.src)
+
+      throw new Error(`Could not read the sound of ${s.name}. Check the connection and try again.`)
+    }
 
     onProgress?.(++done / Math.max(1, list.length))
 

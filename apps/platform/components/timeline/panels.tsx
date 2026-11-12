@@ -174,7 +174,7 @@ export function addFromLibrary(
  * music's lead-in is trimmed so a beat falls where it starts. Video clips keep their length.
  */
 export async function fitToBeat(ctx: Ctx, s: Sound) {
-  const buf = await decode(s.src)
+  const buf = await decode(s.src).catch(() => null)
 
   if (!buf) {
     throw new Error('This sound could not be read')
