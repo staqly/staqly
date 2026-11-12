@@ -15,6 +15,7 @@ type allowanceProvider struct {
 	providers.Base
 	mu      sync.Mutex
 	calls   int
+	retries []bool // PostContent.Retry of every call
 	errs    []error
 	entered chan struct{}
 	release chan struct{}
@@ -23,6 +24,7 @@ type allowanceProvider struct {
 func (f *allowanceProvider) Publish(ctx context.Context, _ providers.Credentials, post providers.PostContent, _ providers.Settings) (providers.Result, error) {
 	f.mu.Lock()
 	f.calls++
+	f.retries = append(f.retries, post.Retry)
 	var err error
 	if len(f.errs) > 0 {
 		err, f.errs = f.errs[0], f.errs[1:]
@@ -296,5 +298,23 @@ func TestPublishingAllowanceRetryCannotIncreaseReservedCost(t *testing.T) {
 				t.Fatalf("refusing edited retry changed original charge: %d, %v", used, err)
 			}
 		})
+	}
+}
+
+// A platform may take a "duplicate" refusal for the post itself only on a retry (X does): a target's first send
+// says so, and the one after a failed try does.
+func TestPublishTellsThePlatformARetryFromAFirstSend(t *testing.T) {
+	f := &allowanceProvider{errs: []error{errors.New("lost response")}}
+	s, _, posts, _, _ := allowanceFixture(t, "x", f)
+	ctx := context.Background()
+	channelID := posts[0].Targets[0].ChannelID
+	if err := s.publishTarget(ctx, posts[0].ID, channelID); err == nil {
+		t.Fatal("expected the first try to fail")
+	}
+	if err := s.publishTarget(ctx, posts[0].ID, channelID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.retries) != 2 || f.retries[0] || !f.retries[1] {
+		t.Fatalf("retry flags %v, want [false true]", f.retries)
 	}
 }

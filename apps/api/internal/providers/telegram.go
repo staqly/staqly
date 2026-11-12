@@ -317,6 +317,27 @@ type TelegramCommand struct {
 	MessageID int64
 	Code      string
 	Bot       string // the bot it is addressed to (/connect@bot CODE), without the @; "" for any bot
+	SenderID  int64  // who sent it; 0 for a channel's post
+	// ByAdmin: the sender needs no check: a channel's post (only its administrators post there), a group's anonymous
+	// administrator (sent in the group's own name), or the person's own private chat with the bot.
+	ByAdmin bool
+}
+
+// TelegramAdmin tells whether the person runs the chat (its creator or an administrator): in a group anyone may
+// write /connect CODE, but only they may hand the group to a workspace. The answer goes into the chat.
+func TelegramAdmin(ctx context.Context, token string, chatID, userID int64) error {
+	var member struct {
+		Status string `json:"status"`
+	}
+	if userID != 0 {
+		if err := telegramCall(ctx, token, "getChatMember", map[string]any{"chat_id": chatID, "user_id": userID}, &member); err != nil {
+			return err
+		}
+	}
+	if member.Status != "administrator" && member.Status != "creator" {
+		return invalid("chat", "only an administrator of this group can connect it to staqly: ask one to send the command")
+	}
+	return nil
 }
 
 // /connect CODE, or /connect@thebot CODE as Telegram writes it in groups with several bots.
@@ -329,8 +350,15 @@ func TelegramCommands(ctx context.Context, token string, offset int64, wait int)
 		MessageID int64  `json:"message_id"`
 		Text      string `json:"text"`
 		Chat      struct {
-			ID int64 `json:"id"`
+			ID   int64  `json:"id"`
+			Type string `json:"type"`
 		} `json:"chat"`
+		From *struct {
+			ID int64 `json:"id"`
+		} `json:"from"`
+		SenderChat *struct {
+			ID int64 `json:"id"`
+		} `json:"sender_chat"`
 	}
 	var updates []struct {
 		UpdateID    int64 `json:"update_id"`
@@ -345,15 +373,20 @@ func TelegramCommands(ctx context.Context, token string, offset int64, wait int)
 	var out []TelegramCommand
 	for _, u := range updates {
 		offset = max(offset, u.UpdateID+1)
-		m := u.Message
+		m, channel := u.Message, false
 		if m == nil {
-			m = u.ChannelPost
+			m, channel = u.ChannelPost, true
 		}
 		if m == nil {
 			continue
 		}
 		if g := telegramConnect.FindStringSubmatch(strings.TrimSpace(m.Text)); g != nil {
-			out = append(out, TelegramCommand{ChatID: m.Chat.ID, MessageID: m.MessageID, Code: strings.ToUpper(g[2]), Bot: g[1]})
+			c := TelegramCommand{ChatID: m.Chat.ID, MessageID: m.MessageID, Code: strings.ToUpper(g[2]), Bot: g[1]}
+			c.ByAdmin = channel || m.Chat.Type == "private" || (m.SenderChat != nil && m.SenderChat.ID == m.Chat.ID)
+			if m.From != nil && !channel {
+				c.SenderID = m.From.ID
+			}
+			out = append(out, c)
 		}
 	}
 	return out, offset, nil
@@ -431,7 +464,8 @@ func (t Telegram) send(ctx context.Context, c Credentials, p PostContent, s Sett
 		params["disable_notification"] = true
 	}
 	if replyTo != "" {
-		id, err := strconv.ParseInt(replyTo, 10, 64)
+		first, _, _ := strings.Cut(replyTo, ",") // an album's ids: its first message
+		id, err := strconv.ParseInt(first, 10, 64)
 		if err != nil {
 			return Result{}, &Failure{Kind: ErrRejected, Msg: "Telegram: nothing to reply to (the post's id is not a message id)"}
 		}
@@ -440,6 +474,7 @@ func (t Telegram) send(ctx context.Context, c Credentials, p PostContent, s Sett
 	}
 
 	var id int64
+	var album []string // an album is one message per file: all their ids
 	switch len(p.Media) {
 	case 0:
 		params["text"] = p.Text
@@ -484,6 +519,9 @@ func (t Telegram) send(ctx context.Context, c Credentials, p PostContent, s Sett
 		if len(ms) > 0 {
 			id = ms[0].MessageID
 		}
+		for _, m := range ms {
+			album = append(album, strconv.FormatInt(m.MessageID, 10))
+		}
 	}
 	if err != nil {
 		// The Bot API has no idempotency key: sending again after an answer that never came could post twice.
@@ -497,7 +535,12 @@ func (t Telegram) send(ctx context.Context, c Credentials, p PostContent, s Sett
 		return Result{}, &Failure{Kind: ErrRejected, Msg: "Telegram published the post but did not say its id; check the channel"}
 	}
 	msg := strconv.FormatInt(id, 10)
-	return Result{ExternalID: msg, URL: telegramLink(c, msg)}, nil
+	res := Result{ExternalID: msg, URL: telegramLink(c, msg)}
+	if len(album) > 1 {
+		// "70,71,72": the first is the message replies and the link go to, Remove deletes them all.
+		res.ExternalID = strings.Join(album, ",")
+	}
+	return res, nil
 }
 
 // telegramLink is the message's t.me link: by @username for a public chat, by id for a private channel or

@@ -207,7 +207,8 @@ func TestTelegramPublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.ExternalID != "70" {
+	// An album is a message per file: every id is kept (to delete them all), the first one is the post's.
+	if res.ExternalID != "70,71" || res.URL != "https://t.me/janedoe_news/70" {
 		t.Fatalf("album %+v", res)
 	}
 	var group []map[string]string
@@ -232,6 +233,13 @@ func TestTelegramReply(t *testing.T) {
 	}
 	if rp := f.params["sendMessage"]["reply_parameters"]; !strings.Contains(rp, `"message_id":55`) {
 		t.Fatalf("reply_parameters %q", rp)
+	}
+	// Under an album the reply goes to its first message.
+	if _, err := (Telegram{}).Reply(context.Background(), telegramCreds(), "70,71", PostContent{Text: "More"}, Settings{}); err != nil {
+		t.Fatal(err)
+	}
+	if rp := f.params["sendMessage"]["reply_parameters"]; !strings.Contains(rp, `"message_id":70`) {
+		t.Fatalf("album reply_parameters %q", rp)
 	}
 	if _, err := (Telegram{}).Reply(context.Background(), telegramCreds(), "", PostContent{Text: "More"}, Settings{}); !errors.Is(err, ErrRejected) {
 		t.Fatalf("no parent: %v", err)

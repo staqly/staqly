@@ -331,34 +331,31 @@ func discordPartly(done []discordPart, err error) error {
 	return &Failure{Kind: ErrRejected, Msg: "Discord: published in " + strings.Join(where, ", ") + " but not in the next channel (" + err.Error() + "); post the rest separately"}
 }
 
-// targets are the channel ids a post goes to: the ones it names, #names looked up in the server.
+// targets are the channel ids a post goes to. Ids and #names are both looked up in the connected server: the bot
+// is this staqly server's own, shared by every workspace, so an id from elsewhere would post in someone else's server.
 func (d Discord) targets(ctx context.Context, c Credentials, set Settings) ([]string, error) {
 	picked := ListValues(set["channel"])
 	if len(picked) == 0 {
 		return nil, &Failure{Kind: ErrRejected, Msg: "Discord: pick the Discord channels the post goes to in its Discord settings"}
 	}
-	var byName map[string]string
+	chans, err := d.channels(ctx, c["guild_id"])
+	if err != nil {
+		return nil, err
+	}
+	known := map[string]string{}
+	for _, ch := range chans {
+		known[ch.ID] = ch.ID
+	}
+	for _, ch := range chans {
+		if _, taken := known["#"+ch.Name]; !taken {
+			known["#"+ch.Name] = ch.ID
+		}
+	}
 	out := make([]string, 0, len(picked))
 	for _, v := range picked {
-		if !strings.HasPrefix(v, "#") {
-			out = append(out, v)
-			continue
-		}
-		if byName == nil {
-			chans, err := d.channels(ctx, c["guild_id"])
-			if err != nil {
-				return nil, err
-			}
-			byName = map[string]string{}
-			for _, ch := range chans {
-				if _, taken := byName["#"+ch.Name]; !taken {
-					byName["#"+ch.Name] = ch.ID
-				}
-			}
-		}
-		id, ok := byName[v]
+		id, ok := known[v]
 		if !ok {
-			return nil, &Failure{Kind: ErrRejected, Msg: "Discord: the server has no text channel " + v + "; pick another"}
+			return nil, &Failure{Kind: ErrRejected, Msg: "Discord: the connected server has no text channel " + v + "; pick one of its channels"}
 		}
 		out = append(out, id)
 	}

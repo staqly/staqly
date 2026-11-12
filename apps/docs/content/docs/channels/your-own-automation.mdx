@@ -68,7 +68,7 @@ How staqly reads the reply:
 
 | Your endpoint answers | The target |
 |---|---|
-| `2xx`, optionally `{"url": "...", "external_id": "..."}` | **Published**, with that link |
+| `2xx`, optionally `{"url": "...", "external_id": "..."}` | **Published**, with that link. A `url` that is not an absolute `http://` or `https://` address (up to 2,048 characters, no credentials) and an `external_id` over 500 characters are left out |
 | `202`, or `{"status": "publishing"}` | Waits for your result report, as in the event flow below |
 | `4xx` (except `408` and `429`) | **Failed** at once: the request is refused as sent, so it is not tried again |
 | `{"status": "failed"}`, `5xx`, `408`, `429`, another status code, or no answer | **Failed** after the job queue's retries (1, 5, then 15 minutes) |
@@ -78,7 +78,8 @@ URLs, the wait after the part before): your automation publishes them itself, so
 *skipped* on this channel. The `post.publish_requested` event carries them too, in `target.thread`.
 
 The call goes through the same guard as [webhooks](/automation/webhooks): in cloud mode private
-and loopback addresses are refused. Every request carries `User-Agent: staqly` and
+and loopback addresses are refused, and a failed target names the status code your endpoint answered
+without its text (an install keeps the first 200 characters). Every request carries `User-Agent: staqly` and
 `X-Staqly-Post` with the post id.
 
 ## Set it up

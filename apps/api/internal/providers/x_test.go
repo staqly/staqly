@@ -230,8 +230,13 @@ func TestXPublish(t *testing.T) {
 	f.timeline = "Q&amp;A is live https://t.co/abc"
 	f.tweetCode, f.tweetBody = 403, `{"detail":"You are not allowed to create a Tweet with duplicate content.","status":403}`
 	connected := Credentials{"access_token": "at", "username": "jumpthebear", "user_id": "42"}
-	if res, err := e.Publish(ctx, connected, PostContent{Text: "Q&A is live"}, nil); err != nil || res.ExternalID != "1789" {
+	if res, err := e.Publish(ctx, connected, PostContent{Text: "Q&A is live", Retry: true}, nil); err != nil || res.ExternalID != "1789" {
 		t.Fatalf("duplicate after a lost answer: %+v %v", res, err)
+	}
+	// On a first send the post with this text is another post's: refused, never taken as this one's (unpublishing
+	// this post would delete it).
+	if res, err := e.Publish(ctx, connected, PostContent{Text: "Q&A is live"}, nil); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "already posted") || res.ExternalID != "" {
+		t.Fatalf("duplicate on a first send: %+v %v", res, err)
 	}
 	f.timeline = ""
 

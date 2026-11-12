@@ -19,7 +19,8 @@ token:
    alone; a plain `/connect K7M2QX` works too).
 2. Add the bot to your channel (**Add to a channel**: as an administrator allowed to post and delete
    messages) or group (**Add to a group**).
-3. Send the command in that chat. The bot checks it may post there, the chat becomes a channel (with the chat's title and
+3. Send the command in that chat. In a group, an **administrator** of the group sends it (anyone else is told
+   so, and the group is not connected); in a channel only administrators can post anyway. The bot checks it may post there, the chat becomes a channel (with the chat's title and
    picture), and the bot deletes the command (or, when it may not delete, asks you to). The dashboard sees it within a few seconds.
 
 A code lasts 10 minutes and only works with the staqly that showed it; a wrong or old one gets an answer in the
@@ -101,7 +102,8 @@ sealed and never shown again; connecting the same chat again reconnects the exis
 ## Comments
 
 A post's [thread](/concepts#threads-comments-under-a-post) goes out as replies: each part replies to
-the message before it, after its delay (to the album's first message after an album). In a
+the message before it, after its delay (to the album's first message after an album).
+An album is one message per file: unpublishing the post deletes every one of them. In a
 channel, replies show as messages quoting the one before; when the channel has a linked discussion
 group, Telegram also copies them there.
 

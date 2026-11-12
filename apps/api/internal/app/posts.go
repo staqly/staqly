@@ -1451,7 +1451,7 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	for i := range thread {
 		thread[i].Text, _ = providers.ApplyLinks(links, thread[i].Text)
 	}
-	content := providers.PostContent{PostID: postID, ChannelID: channelID, Text: text, Media: providers.FitMedia(e.Limits(), files), Tags: tags, Thread: thread}
+	content := providers.PostContent{PostID: postID, ChannelID: channelID, Text: text, Media: providers.FitMedia(e.Limits(), files), Tags: tags, Thread: thread, Retry: target.Attempts > 0}
 	settings := providers.Settings{}
 	_ = json.Unmarshal([]byte(target.Settings), &settings)
 	settings = providers.WithPost(e.SettingsFields(), e.Limits(), row.Title, tags, settings)

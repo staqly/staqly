@@ -117,6 +117,13 @@ func httpClient(ctx context.Context) *http.Client {
 	return http.DefaultClient
 }
 
+type quietKey struct{}
+
+// WithoutResponseText: what your own endpoint answers to a refused request is not kept (cloud mode).
+func WithoutResponseText(ctx context.Context) context.Context {
+	return context.WithValue(ctx, quietKey{}, true)
+}
+
 type getenvKey struct{}
 
 // WithGetenv hands providers the server's settings (the app's Env, so a test sets them per service): a platform
@@ -200,7 +207,10 @@ func (Custom) Publish(ctx context.Context, c Credentials, p PostContent, s Setti
 		if len(snippet) > 200 {
 			snippet = snippet[:200] + "..."
 		}
-		msg := fmt.Sprintf("your endpoint answered %d %s", resp.StatusCode, snippet)
+		if ctx.Value(quietKey{}) != nil {
+			snippet = ""
+		}
+		msg := strings.TrimSpace(fmt.Sprintf("your endpoint answered %d %s", resp.StatusCode, snippet))
 		// A 4xx refuses this request as sent: sending it again gets the same answer. Timeouts and rate limits
 		// (408, 429) and the endpoint's own failures (5xx) are worth another try.
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusRequestTimeout && resp.StatusCode != http.StatusTooManyRequests {
@@ -219,6 +229,14 @@ func (Custom) Publish(ctx context.Context, c Credentials, p PostContent, s Setti
 	}
 	if reply.Status == "failed" {
 		return Result{}, errors.New("your endpoint reported a failure")
+	}
+	// Both are stored on the target and copied into events and webhooks: held to what a reported result
+	// (POST /posts/{id}/targets/{channel}/result) may carry. The post went out, so a bad one is left out.
+	if u, err := url.Parse(reply.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || len(reply.URL) > 2048 {
+		reply.URL = ""
+	}
+	if len(reply.ExternalID) > 500 {
+		reply.ExternalID = ""
 	}
 	return Result{URL: reply.URL, ExternalID: reply.ExternalID}, nil
 }
