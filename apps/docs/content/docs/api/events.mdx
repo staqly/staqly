@@ -105,13 +105,14 @@ objects carry them in `data` (`data.channel`, `data.schedule`, `data.webhook`).
 | `post.updated` | Content, media, targets, tags, metadata or collection changed via `PATCH`, or the post moved to Default because its collection was deleted | `moved_from` (`id`, `name`) when it moved with a deleted collection |
 | `post.scheduled` | A publish time was set or moved, or the post now waits for a stream (`POST .../schedule`, `PATCH` with `publish_at` or `publish_on`, created as `scheduled`) | `publish_at`, `previous_publish_at` when moved; `publish_on` when it waits for a stream |
 | `post.unscheduled` | The time was cleared: cancel, `PATCH` with `publish_at: null` or `publish_on: null`, or the channel a post waited for was removed | — |
-| `post.publish_requested` | A target on [your own automation](/channels/your-own-automation) waits for a result | `channel`, `target` (`channel_id`, `content`, `settings`, `thread`), `timeout_seconds` |
+| `post.publish_requested` | A target on [your own automation](/channels/your-own-automation) waits for a result | `channel`, `target` (`channel_id`, `content`, `settings`, `thread`), `timeout_seconds`, `attempt_id` (send it back with the [result](/channels/your-own-automation#report-the-result)) |
 | `post.target_published` | One target was published | `channel_id`, `channel` (the channel, plus `provider_name`: the platform's name), `url`, `external_id` |
 | `post.target_failed` | One target failed: the platform refused, your automation reported a failure, or nothing was reported within the timeout (`error` *No result reported in time*) | `channel_id`, `channel` (as above), `error` |
 | `post.reply_published` | One [thread](/concepts#threads-comments-under-a-post) part was published as a reply on a channel | `channel_id`, `index`, `url`, `external_id` |
 | `post.reply_failed` | A reply was refused or ran out of retries; the parts after it are skipped | `channel_id`, `index`, `error` |
 | `post.published` | Every target is published | — |
 | `post.failed` | A target failed, so the post did | — |
+| `post.repeat_stopped` | A [repeating](/concepts#repeating-posts) post was published but its next copy could not be made (a plan limit, an archived collection, a channel that is gone), so the repeat ends here | `repeat_every`, `error` |
 | `post.unpublished` | A published post was [taken down](/concepts#unpublish) | `channels` (the channel ids being removed) |
 | `post.target_removed` | One target was removed from its platform, by unpublishing or, with `deleted_outside: true`, by someone deleting it there (found when staqly read its numbers) | `channel_id`, `channel` (as above), `deleted_outside` |
 | `post.target_remove_failed` | Removing a target failed | `channel_id`, `channel` (as above), `error` |

@@ -1740,6 +1740,8 @@ export interface paths {
          *     (history). Each target gets `removal`: `removing` while a job deletes it on the platform, then
          *     `removed`, `failed` (see `removal_error`; retry by calling this again) or `manual` (the platform
          *     has no delete: remove it there yourself). 409 `not_published` when nothing is published.
+         *     A channel the post had not reached yet (waiting for a retry or for your automation's result)
+         *     fails instead of going out later, and a scheduled time is dropped.
          */
         post: operations["unpublishPost"];
         delete?: never;
@@ -2263,7 +2265,10 @@ export interface paths {
          * Close a target on your own automation that waits for a result (posts:publish)
          * @description Only targets on a channel of provider `custom` take reported results, and only while they are
          *     `publishing` (409 otherwise). `published` needs no more; `failed` takes an `error`. The post
-         *     settles when its last target does.
+         *     settles when its last target does. Send the `attempt_id` of the `post.publish_requested` event
+         *     (or of the request your endpoint got): a result for an attempt that timed out and was retried
+         *     since is then refused (409) instead of settling the retry. Without it the result counts for
+         *     the attempt the target is in.
          */
         post: operations["reportTargetResult"];
         delete?: never;
@@ -3046,7 +3051,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Queue a failed job again, now (posts:publish) */
+        /**
+         * Queue a failed job again, now (posts:publish)
+         * @description A `publish_target` job is retried like its target (`POST /v1/posts/{id}/targets/{channel}/retry`):
+         *     409 `unpublished` for a post that was taken down, 409 unless the target is `failed`, 422 for a
+         *     post carrying a file in Deleted. A `publish_post` job is refused (409) unless its post is still
+         *     `scheduled`: publish or schedule the post instead.
+         */
         post: operations["retryJob"];
         delete?: never;
         options?: never;
@@ -3065,7 +3076,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel a queued job (posts:publish) */
+        /**
+         * Cancel a queued job (posts:publish)
+         * @description 409 once a worker has started the job. What the job would have done is settled: a target fails
+         *     (retry brings it back), a scheduled post goes back to draft, a recurring schedule skips this run
+         *     and queues its next one, a one-time schedule turns off.
+         */
         post: operations["cancelJob"];
         delete?: never;
         options?: never;
@@ -6070,6 +6086,8 @@ export interface components {
                 event_id?: string;
                 /** @description notify_person: who gets the email */
                 user_id?: string;
+                /** @description target_timeout: the attempt it times out */
+                attempt_id?: string;
             };
             /** Format: date-time */
             created_at: string;
@@ -11086,6 +11104,8 @@ export interface operations {
                     external_id?: string;
                     /** @description Why it failed */
                     error?: string;
+                    /** @description The attempt this result answers: `attempt_id` of `post.publish_requested` */
+                    attempt_id?: string;
                 };
             };
         };

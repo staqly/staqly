@@ -114,9 +114,27 @@ func (s *Service) runRepeatPost(ctx context.Context, workspaceID, postID string)
 	if errors.As(err, &e) && e.Status >= 400 && e.Status < 500 {
 		// A plan limit, an archived collection, channels that are gone: the chain ends here, retrying won't help.
 		s.logger(ctx).Warn("repeat stopped", "post_id", postID, "reason", e.Message)
-		return nil
+		return s.repeatStopped(ctx, workspaceID, postID, e.Message)
 	}
 	return err
+}
+
+// repeatStopped tells the workspace that a repeating post's chain ended (post.repeat_stopped on the post that
+// should have repeated, with why): its next copy was refused, or could not be made after every attempt.
+func (s *Service) repeatStopped(ctx context.Context, workspaceID, postID, reason string) error {
+	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "repeater", Name: "Repeater"}
+	return s.tx(ctx, func(q *db.Queries) error {
+		row, err := q.GetPostByID(ctx, postID)
+		if isNoRows(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		_, err = s.emit(ctx, q, sys, "post.repeat_stopped", row.CollectionID, postID,
+			s.postEventData(ctx, q, workspaceID, postID, map[string]any{"repeat_every": row.RepeatEvery, "error": reason}))
+		return err
+	})
 }
 
 // repeatDay is the day of month the chain started on: the first post's (copies point back with repeat_of).

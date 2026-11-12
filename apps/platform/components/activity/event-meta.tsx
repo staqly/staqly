@@ -38,6 +38,7 @@ const LABELS: Record<string, string> = {
   'post.target_failed': 'A channel failed',
   'post.published': 'Published',
   'post.failed': 'Publishing failed',
+  'post.repeat_stopped': 'Repeat stopped',
   'post.deleted': 'Post deleted',
   'post.preview_shared': 'Preview link shared',
   'post.feedback_added': 'Feedback on a preview',

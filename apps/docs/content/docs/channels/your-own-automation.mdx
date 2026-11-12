@@ -32,7 +32,7 @@ sequenceDiagram
    lists every target that waits for a result.
 3. It publishes the content wherever it should go, then **reports the result** with
    `POST /v1/posts/{id}/targets/{channel}/result`: `published` with the URL and the platform's
-   id, or `failed` with an error.
+   id, or `failed` with an error, and the `attempt_id` it was asked with.
 4. The target takes that status; the post settles when its last target does. Nothing reported
    within the collection's **processing timeout** (`processing_timeout_seconds`, else the
    server's `PROCESSING_TIMEOUT`, default 1 hour) fails the target with *No result reported*.
@@ -56,6 +56,7 @@ The JSON body:
 {
   "post_id": "post_3wq8m2kd7hz5vn4yjx6a",
   "channel_id": "ch_7h2kq9xw3nbvd5yhzm6a",
+  "attempt_id": "job_1842",
   "text": "Release 0.9 is out.",
   "media": [{ "id": "med_...", "name": "cover.png", "mime_type": "image/png", "size": 48213, "url": "http://localhost:3333/v1/media/med_..." }],
   "tags": ["release"],
@@ -129,7 +130,7 @@ curl -s -H "Authorization: Bearer $STAQLY_API_KEY" http://localhost:3333/v1/work
 ```
 
 The webhook's `data` carries the same post snapshot plus `channel`, `target` (`channel_id`,
-`content` as this channel will carry it, `settings`) and `timeout_seconds`. Media URLs in
+`content` as this channel will carry it, `settings`), `timeout_seconds` and `attempt_id`. Media URLs in
 `data.post.media_items[].url` use `PUBLIC_API_URL`; download them with the same credentials
 your automation uses for the API.
 
@@ -141,11 +142,17 @@ your automation uses for the API.
 ```bash
 curl -s -H "Authorization: Bearer $STAQLY_API_KEY" -X POST http://localhost:3333/v1/posts/post_oalirbz67y4m4cqxq5dw/targets/ch_7h2kq9xw3nbvd5yhzm6a/result \
   -H 'Content-Type: application/json' \
-  -d '{"status":"published","url":"https://example.com/p/1790","external_id":"1790"}'
+  -d '{"status":"published","url":"https://example.com/p/1790","external_id":"1790","attempt_id":"job_1842"}'
 
 # or
-  -d '{"status":"failed","error":"Instagram API quota exceeded"}'
+  -d '{"status":"failed","error":"Instagram API quota exceeded","attempt_id":"job_1842"}'
 ```
+
+Send back the **`attempt_id`** you were asked with (in the event's `data` and in the body your
+endpoint gets; treat it as an opaque string). A target that timed out can be retried, and the retry
+is a new attempt with a new id: a late result of the old attempt is then refused with `409` instead
+of settling the retry. A result without `attempt_id` counts for the attempt the target is in, as
+before.
 
 Only targets on a `custom` channel take reported results, and only while they are
 `publishing` (`409` otherwise, also when the result was already reported or the timeout settled

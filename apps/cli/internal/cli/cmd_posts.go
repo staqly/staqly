@@ -730,6 +730,7 @@ func postsResultCommand() *Command {
 		link := fs.String("url", "", "where the post lives now")
 		extID := fs.String("external-id", "", "the platform's id of the post")
 		errMsg := fs.String("error", "", "why it failed")
+		attempt := fs.String("attempt", "", "the attempt_id of the post.publish_requested event this answers")
 		return func(c *Ctx, args []string) error {
 			if *status != "published" && *status != "failed" {
 				return usageErrf("--status must be published or failed")
@@ -746,6 +747,7 @@ func postsResultCommand() *Command {
 			setIf(body, "url", *link)
 			setIf(body, "external_id", *extID)
 			setIf(body, "error", *errMsg)
+			setIf(body, "attempt_id", *attempt)
 			var p Post
 			raw, err := cl.Post(c, "/v1/posts/"+url.PathEscape(args[0])+"/targets/"+url.PathEscape(ch)+"/result", body, &p)
 			if err != nil || c.JSON {

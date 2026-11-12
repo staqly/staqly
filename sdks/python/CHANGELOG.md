@@ -9,6 +9,8 @@ First release, rebuilt for the posts pivot (2026-10-19): staqly is a scheduler f
 agents write, no longer a review inbox.
 
 ### Added
+- `posts.report_result(..., attempt_id=...)`: the `attempt_id` of the `post.publish_requested` event; a
+  result for an attempt that was retried since is refused (409) instead of settling the retry.
 - The rest of what an API key can do: `channels.options`, `channels.telegram_connect` /
   `telegram_connect_status`, `providers.check`, `media.replace`, and the design editor's endpoints:
   `media_projects` (list, get, create, update, delete, file), `design` (brand, set_brand), `ai`

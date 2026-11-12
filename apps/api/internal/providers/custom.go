@@ -171,11 +171,12 @@ func (Custom) Publish(ctx context.Context, c Credentials, p PostContent, s Setti
 		q := u.Query()
 		q.Set("post_id", p.PostID)
 		q.Set("channel_id", p.ChannelID)
+		q.Set("attempt_id", p.AttemptID)
 		q.Set("text", p.Text)
 		u.RawQuery = q.Encode()
 		target = u.String()
 	} else {
-		b, err := json.Marshal(map[string]any{"post_id": p.PostID, "channel_id": p.ChannelID, "text": p.Text,
+		b, err := json.Marshal(map[string]any{"post_id": p.PostID, "channel_id": p.ChannelID, "attempt_id": p.AttemptID, "text": p.Text,
 			"media": media, "tags": p.Tags, "settings": s, "thread": thread})
 		if err != nil {
 			return Result{}, err

@@ -69,13 +69,14 @@ type jobPayload struct {
 	PostID     string `json:"post_id,omitempty"`
 	ChannelID  string `json:"channel_id,omitempty"`
 	ScheduleID string `json:"schedule_id,omitempty"`
-	Index      int    `json:"index,omitempty"`     // publish_reply: the thread part
-	ParentID   string `json:"parent_id,omitempty"` // publish_reply: the platform id it replies to
-	RepostBy   string `json:"repost_by,omitempty"` // repost: the channel that reposts
-	EventID    string `json:"event_id,omitempty"`  // notify_people, notify_person: the event to tell about
-	UserID     string `json:"user_id,omitempty"`   // notify_person: who gets the email
-	At         string `json:"at,omitempty"`        // sync_seats: when the membership changed (the proration date)
-	AIJobID    string `json:"ai_job_id,omitempty"` // ai_run: the AI request
+	Index      int    `json:"index,omitempty"`      // publish_reply: the thread part
+	ParentID   string `json:"parent_id,omitempty"`  // publish_reply: the platform id it replies to
+	RepostBy   string `json:"repost_by,omitempty"`  // repost: the channel that reposts
+	EventID    string `json:"event_id,omitempty"`   // notify_people, notify_person: the event to tell about
+	UserID     string `json:"user_id,omitempty"`    // notify_person: who gets the email
+	At         string `json:"at,omitempty"`         // sync_seats: when the membership changed (the proration date)
+	AIJobID    string `json:"ai_job_id,omitempty"`  // ai_run: the AI request
+	AttemptID  string `json:"attempt_id,omitempty"` // target_timeout: the attempt it times out
 }
 
 func parsePayload(raw string) jobPayload {
@@ -95,7 +96,7 @@ func (s *Service) execJob(ctx context.Context, kind string, a jobArgs) error {
 	case "remove_target":
 		return s.removeTarget(ctx, p.PostID, p.ChannelID)
 	case "target_timeout":
-		return s.targetTimedOut(ctx, p.PostID, p.ChannelID)
+		return s.targetTimedOut(ctx, p.PostID, p.ChannelID, p.AttemptID)
 	case "run_schedule":
 		return s.runSchedule(ctx, p.ScheduleID)
 	case "refresh_channel":
@@ -131,45 +132,49 @@ func (s *Service) execJob(ctx context.Context, kind string, a jobArgs) error {
 	return fmt.Errorf("unknown job kind %q", kind)
 }
 
-// jobFailed settles what a job that ran out of attempts was about.
-func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause error) {
+// jobFailed settles what a job that ran out of attempts was about. Its error says the settling did not happen
+// (the rescue sweep tries again; a worker logs it).
+func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause error) error {
 	p := a.Payload
 	switch kind {
 	case "publish_target":
-		if err := s.finishTarget(ctx, p.PostID, p.ChannelID, "failed", providers.Result{}, cause.Error()); err != nil {
-			s.logger(ctx).Error("target not settled after failed job", "err", err)
+		// A send whose result could not be recorded keeps its link: the target fails, to be checked by a person.
+		result := providers.Result{}
+		var sent *unrecordedSend
+		if errors.As(cause, &sent) {
+			result = sent.result
 		}
+		return s.finishTarget(ctx, p.PostID, p.ChannelID, "failed", result, cause.Error())
 	case "remove_target":
-		if err := s.settleRemoval(ctx, p.PostID, p.ChannelID, "failed", cause.Error()); err != nil {
-			s.logger(ctx).Error("removal not settled after failed job", "err", err)
-		}
+		return s.settleRemoval(ctx, p.PostID, p.ChannelID, "failed", cause.Error())
 	case "publish_post":
-		s.scheduledPublishFailed(ctx, a.WorkspaceID, p.PostID, cause)
+		return s.scheduledPublishFailed(ctx, a.WorkspaceID, p.PostID, cause)
 	case "ai_run":
 		s.aiRunFailed(ctx, a.WorkspaceID, p.AIJobID)
 	case "run_schedule":
-		s.scheduleFailed(ctx, p.ScheduleID, cause)
+		return s.scheduleFailed(ctx, p.ScheduleID, cause)
+	case "repeat_post":
+		return s.repeatStopped(ctx, a.WorkspaceID, p.PostID, cause.Error())
 	case "refresh_channel":
 		// A refused sign-in already marked the channel needs_reconnect (refreshChannel); what is left is the
 		// platform or the network being down (a laptop waking up, DNS failing). Reconnecting would not help:
 		// the channel stays connected and the refresh is tried again later.
 		s.logger(ctx).Warn("token refresh failed; trying again later", "channel", p.ChannelID, "err", cause)
-		_ = s.enqueue(ctx, s.W, a.WorkspaceID, "refresh_channel", "refresh_channel:"+p.ChannelID,
+		return s.enqueue(ctx, s.W, a.WorkspaceID, "refresh_channel", "refresh_channel:"+p.ChannelID,
 			map[string]any{"channel_id": p.ChannelID}, s.Now().Add(refreshRetryDelay), 3)
 	case "publish_reply":
 		// The post is out; its thread stops at this part.
-		if err := s.replyEnded(ctx, p.PostID, p.ChannelID, p.Index, providers.Result{}, cause.Error()); err != nil {
-			s.logger(ctx).Error("reply not settled after failed job", "err", err)
-		}
+		return s.replyEnded(ctx, p.PostID, p.ChannelID, p.Index, providers.Result{}, cause.Error())
 	}
+	return nil
 }
 
 // scheduledPublishFailed: a scheduled post whose publishing could not start after every attempt is failed
 // (post.failed, which alerts), instead of staying "scheduled" with nothing left to publish it. It can be
 // edited and scheduled again.
-func (s *Service) scheduledPublishFailed(ctx context.Context, workspaceID, postID string, cause error) {
+func (s *Service) scheduledPublishFailed(ctx context.Context, workspaceID, postID string, cause error) error {
 	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
-	err := s.tx(ctx, func(q *db.Queries) error {
+	return s.tx(ctx, func(q *db.Queries) error {
 		row, err := q.GetPostByID(ctx, postID)
 		if isNoRows(err) || (err == nil && (row.Status != "scheduled" || (row.PublishAt.Valid && row.PublishAt.String > s.now()))) {
 			return nil // published by hand, unscheduled, rescheduled (its new run is queued) or deleted meanwhile
@@ -185,9 +190,6 @@ func (s *Service) scheduledPublishFailed(ctx context.Context, workspaceID, postI
 		_, err = s.emit(ctx, q, sys, "post.failed", row.CollectionID, postID, data)
 		return err
 	})
-	if err != nil {
-		s.logger(ctx).Error("scheduled post not failed after its job failed", "post_id", postID, "err", err)
-	}
 }
 
 // runPublishPost is the publish_post job: the scheduled time came.
@@ -202,11 +204,14 @@ func (s *Service) runPublishPost(ctx context.Context, workspaceID, postID string
 	if row.Status != "scheduled" {
 		return nil // unscheduled or published by hand meanwhile
 	}
-	if blocked := s.publishBlocked(ctx, workspaceID); blocked != nil {
+	blocked := s.publishBlocked(ctx, workspaceID)
+	if row.UnpublishedAt.Valid {
+		blocked = errUnpublished // taken down since it was scheduled: it does not go out again
+	}
+	if blocked != nil {
 		// A read-only workspace, or one whose trial is paused, publishes nothing: the post fails with why
 		// (post.failed alerts).
-		s.scheduledPublishFailed(ctx, workspaceID, postID, blocked)
-		return nil
+		return s.scheduledPublishFailed(ctx, workspaceID, postID, blocked)
 	}
 	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
 	return s.tx(ctx, func(q *db.Queries) error {
@@ -454,6 +459,12 @@ func (s *Service) RetryJob(ctx context.Context, p Principal, id string) (Job, er
 	}
 	var a jobArgs
 	_ = json.Unmarshal(r.EncodedArgs, &a)
+	pl := a.Payload
+	if r.Kind == "publish_target" {
+		if err := s.checkTrialReview(ctx, p.WorkspaceID); err != nil {
+			return Job{}, err
+		}
+	}
 	// One transaction: the job comes back together with its target's state, so a worker picking it up at once
 	// finds the target publishing (not failed, which it would skip and leave stuck).
 	err = s.tx(ctx, func(q *db.Queries) error {
@@ -466,26 +477,30 @@ func (s *Service) RetryJob(ctx context.Context, p Principal, id string) (Job, er
 		if len(live.Jobs) > 0 {
 			return conflict("this work is queued again already (job " + jobPublicID(live.Jobs[0].ID) + ")")
 		}
-		if _, err := s.river.JobRetryTx(ctx, tx, r.ID); err != nil {
-			return err
+		switch r.Kind {
+		case "publish_target":
+			// The same checks and the same way back to publishing as Retry on the post's channel.
+			if _, err := s.retryTargetTx(ctx, q, p.WorkspaceID, pl.PostID, pl.ChannelID); err != nil {
+				return err
+			}
+		case "publish_post":
+			// Its last failure failed the post (or someone changed it since): the run would find nothing to do.
+			row, err := q.GetPost(ctx, db.GetPostParams{WorkspaceID: p.WorkspaceID, ID: pl.PostID})
+			if isNoRows(err) {
+				return notFound("post")
+			}
+			if err != nil {
+				return err
+			}
+			if row.UnpublishedAt.Valid {
+				return errUnpublished
+			}
+			if row.Status != "scheduled" {
+				return conflict("this post is not scheduled any more (it is " + row.Status + "); publish it or schedule it again from the post")
+			}
 		}
-		// A retried publish puts its target back to publishing so the outcome lands where it belongs.
-		if r.Kind != "publish_target" {
-			return nil
-		}
-		pl := a.Payload
-		t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: pl.PostID, ChannelID: pl.ChannelID})
-		if isNoRows(err) || (err == nil && t.Status != "failed") {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if err := q.SetTargetStatus(ctx, db.SetTargetStatusParams{Status: "publishing", ExternalID: "", ExternalUrl: "", Error: "",
-			Attempts: t.Attempts, PublishedAt: nullStr(""), UpdatedAt: s.now(), PostID: pl.PostID, ChannelID: pl.ChannelID}); err != nil {
-			return err
-		}
-		return q.SetPostStatus(ctx, db.SetPostStatusParams{Status: "publishing", PublishedAt: nullStr(""), UpdatedAt: s.now(), ID: pl.PostID})
+		_, err = s.river.JobRetryTx(ctx, tx, r.ID)
+		return err
 	})
 	if err != nil {
 		return Job{}, err
@@ -508,29 +523,56 @@ func (s *Service) CancelJob(ctx context.Context, p Principal, id string) (Job, e
 	if err != nil {
 		return Job{}, err
 	}
-	if jobStatus(r.State) != "queued" {
-		return Job{}, conflict("only a queued job can be cancelled")
-	}
 	if _, test := testJobKinds[r.Kind]; !cancellableJobKinds[r.Kind] && !test {
 		return Job{}, conflict("this is staqly's own work (billing, alerts, timeouts) and can't be cancelled")
 	}
-	if _, err := s.river.JobCancel(ctx, r.ID); err != nil {
+	if err := s.cancelQueuedJob(ctx, p, r); err != nil {
 		return Job{}, err
 	}
+	return s.getJob(ctx, p, id)
+}
+
+// cancelQueuedJob cancels r if it is still queued and settles what it would have done. r may be a moment old: a
+// worker that claimed the job since keeps it (409), because cancelling a run in progress would fail its target
+// while the post goes out.
+func (s *Service) cancelQueuedJob(ctx context.Context, p Principal, r *rivertype.JobRow) error {
+	// The state is read again in the transaction that cancels: SQLite holds the write lock, PostgreSQL reruns
+	// the transaction when a worker claimed the row meanwhile.
+	err := s.tx(ctx, func(q *db.Queries) error {
+		tx := s.sqlTx(q)
+		cur, err := s.river.JobGetTx(ctx, tx, r.ID)
+		if errors.Is(err, river.ErrNotFound) {
+			return notFound("job")
+		}
+		if err != nil {
+			return err
+		}
+		if jobStatus(cur.State) != "queued" {
+			return conflict("only a queued job can be cancelled (this one is " + jobStatus(cur.State) + ")")
+		}
+		_, err = s.river.JobCancelTx(ctx, tx, r.ID)
+		return err
+	})
+	if err != nil {
+		return err
+	}
 	// Settle what the job would have done, or the post waits for it for good: a target fails (Retry brings it
-	// back), a reply ends its thread, a scheduled post goes back to draft as if taken off the schedule.
+	// back), a reply ends its thread, a scheduled post goes back to draft as if taken off the schedule, a
+	// schedule skips this run and queues its next one.
 	var a jobArgs
 	_ = json.Unmarshal(r.EncodedArgs, &a)
 	switch r.Kind {
 	case "publish_target", "publish_reply":
-		s.jobFailed(ctx, r.Kind, a, errors.New("the job was cancelled"))
+		return s.jobFailed(ctx, r.Kind, a, errors.New("the job was cancelled"))
+	case "run_schedule":
+		return s.scheduleRunSkipped(ctx, a.Payload.ScheduleID)
 	case "publish_post":
 		var e *Error
 		if _, err := s.CancelPost(ctx, p, a.Payload.PostID); err != nil && !errors.As(err, &e) {
-			return Job{}, err // a conflict (not scheduled any more) or a deleted post needs nothing
+			return err // a conflict (not scheduled any more) or a deleted post needs nothing
 		}
 	}
-	return s.getJob(ctx, p, id)
+	return nil
 }
 
 func contains(list []string, v string) bool {

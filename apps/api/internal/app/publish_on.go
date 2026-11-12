@@ -55,8 +55,7 @@ func (s *Service) waitFor(ctx context.Context, q *db.Queries, p Principal, works
 	if err := s.cancelJobs(ctx, q, "publish_post:"+postID); err != nil {
 		return err
 	}
-	_, err := s.emit(ctx, q, p, "post.scheduled", "", postID, s.postEventData(ctx, q, workspaceID, postID, map[string]any{"publish_on": publishOnOf(stored)}))
-	return err
+	return s.emitScheduled(ctx, q, p, workspaceID, postID, map[string]any{"publish_on": publishOnOf(stored)})
 }
 
 // channelWentLive publishes the posts waiting for this channel's stream: each gets its publish_post job now, which

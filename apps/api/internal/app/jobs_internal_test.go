@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"sync/atomic"
@@ -503,5 +504,76 @@ func TestJobsSweepDoesNotReplaceAConcurrentRequeue(t *testing.T) {
 	job := toJob(jobs[0])
 	if job.Payload.PostID != "newest" || jobs[0].ScheduledAt.Sub(later).Abs() > time.Millisecond {
 		t.Fatalf("sweep restored stale request over the latest one: %+v", job)
+	}
+}
+
+// One workspace with a long backlog must not hide the others from the fairness check: its first 50 waiting
+// jobs are all its own.
+func TestOthersWaitingBehindALongBacklog(t *testing.T) {
+	s, _ := queueTest(t)
+	ctx := context.Background()
+	if err := s.tx(ctx, func(q *db.Queries) error {
+		for i := range 60 {
+			if err := s.enqueue(ctx, q, "ws_busy", "test_fast", fmt.Sprintf("busy:%d", i), nil, s.Now(), 3); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if s.othersWaiting(ctx, "ws_busy") {
+		t.Fatal("nobody else waits yet")
+	}
+	enqueueAt(t, s, "test_fast", "other:1", s.Now(), nil) // workspace ws_test
+	if !s.othersWaiting(ctx, "ws_busy") {
+		t.Fatal("another workspace's job waits behind 60 of ws_busy's and is not seen")
+	}
+	if s.othersWaiting(ctx, "ws_test") != true {
+		t.Fatal("ws_busy's jobs wait while ws_test runs")
+	}
+}
+
+// A rescued job whose settling fails (the database refuses the write) is not marked settled: the next sweep
+// settles it, instead of leaving the target publishing for good.
+func TestRescuedJobIsSettledAgainAfterAFailedSettle(t *testing.T) {
+	s, p, post := publishTest(t)
+	ctx := context.Background()
+	if err := s.tx(ctx, func(q *db.Queries) error {
+		return s.startPublish(ctx, q, p, p.WorkspaceID, post.ID)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	channelID := post.Targets[0].ChannelID
+	rescueDiscard(t, s, "publish_target:"+post.ID+":"+channelID)
+	lift := refuseWrites(t, s, `UPDATE ON post_targets WHEN NEW.status = 'failed'`)
+	if n := s.settleRescuedJobs(ctx); n != 0 {
+		t.Fatalf("settled %d while the database refused the write", n)
+	}
+	lift()
+	if n := s.settleRescuedJobs(ctx); n != 1 {
+		t.Fatalf("settled %d on the next sweep, want 1", n)
+	}
+	if target, err := s.Q.GetTarget(ctx, db.GetTargetParams{PostID: post.ID, ChannelID: channelID}); err != nil || target.Status != "failed" {
+		t.Fatalf("target %s %v, want failed", target.Status, err)
+	}
+}
+
+// refuseWrites makes the database refuse some writes (a SQLite trigger: on = "UPDATE ON post_targets WHEN
+// NEW.status = 'failed'") and returns what lifts it again. It stands in for a database that is briefly unable
+// to take a write; the test is skipped on PostgreSQL.
+func refuseWrites(t *testing.T, s *Service, on string) (lift func()) {
+	t.Helper()
+	if s.pg {
+		t.Skip("uses a SQLite trigger")
+	}
+	if _, err := s.DB.Exec(`CREATE TRIGGER refuse_writes BEFORE ` + on + ` BEGIN SELECT RAISE(ABORT, 'write refused'); END`); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		t.Helper()
+		if _, err := s.DB.Exec(`DROP TRIGGER refuse_writes`); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

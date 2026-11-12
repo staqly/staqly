@@ -358,7 +358,7 @@ Methods that return a list return a Python `list`; `list()` on paginated endpoin
 | `posts.preview(post_id)` | `GET .../preview` |
 | `posts.history(post_id, *, limit=None, cursor=None)` | `GET .../events` (newest first) |
 | `posts.retry_target(post_id, channel_id)` | `POST .../targets/{channel}/retry` (202) |
-| `posts.report_result(post_id, channel_id, *, status, url=None, external_id=None, error=None)` | `POST .../targets/{channel}/result` |
+| `posts.report_result(post_id, channel_id, *, status, url=None, external_id=None, error=None, attempt_id=None)` | `POST .../targets/{channel}/result` |
 | `posts.wait_for_published(post_id, *, timeout=600, poll_interval=2, on_poll=None)` | Polls `GET /v1/posts/{id}` until the post is `published` or `failed` |
 | `posts.delete(post_id)`, `posts.delete_many(ids)`, `posts.purge(post_id)` | `DELETE /v1/posts/{id}`, `POST /v1/posts/delete`, `POST .../purge` |
 | `posts.metrics(post_id, refresh=False)`, `posts.report_metrics(post_id, channel_id, metrics)` | `GET .../metrics`, `PUT .../targets/{channel}/metrics` (numbers per channel) |

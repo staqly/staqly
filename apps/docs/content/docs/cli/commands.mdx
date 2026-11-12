@@ -135,7 +135,7 @@ staqly posts responses post_1 [--channel ID|name] [--refresh]   # what people an
 staqly posts share post_1 --expires 7      # a preview link anyone can open and comment on (shown once)
 staqly posts comments post_1               # what reviewers said on the preview
 staqly posts retry post_1 <channel> [--wait]   # one failed channel again
-staqly posts result post_1 <channel> --status published|failed [--url https://...] [--external-id 1790] [--error "<text>"]
+staqly posts result post_1 <channel> --status published|failed [--url https://...] [--external-id 1790] [--error "<text>"] [--attempt <attempt_id>]
 staqly posts history post_1                # events, oldest first
 staqly posts delete post_1 [post_2 post_3] # history is kept; API keys need posts:delete
 staqly posts purge post_1 [--yes]          # post, its events and unused media (admin)

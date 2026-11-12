@@ -1628,6 +1628,8 @@ class JobPayload(StaqlyModel):
     event_id: str | None = None
     #: notify_person: who gets the email.
     user_id: str | None = None
+    #: target_timeout: the attempt it times out.
+    attempt_id: str | None = None
 
 
 class Job(StaqlyModel):

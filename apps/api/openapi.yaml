@@ -2227,6 +2227,8 @@ paths:
         (history). Each target gets `removal`: `removing` while a job deletes it on the platform, then
         `removed`, `failed` (see `removal_error`; retry by calling this again) or `manual` (the platform
         has no delete: remove it there yourself). 409 `not_published` when nothing is published.
+        A channel the post had not reached yet (waiting for a retry or for your automation's result)
+        fails instead of going out later, and a scheduled time is dropped.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
@@ -2723,10 +2725,13 @@ paths:
       description: |
         Only targets on a channel of provider `custom` take reported results, and only while they are
         `publishing` (409 otherwise). `published` needs no more; `failed` takes an `error`. The post
-        settles when its last target does.
+        settles when its last target does. Send the `attempt_id` of the `post.publish_requested` event
+        (or of the request your endpoint got): a result for an attempt that timed out and was retried
+        since is then refused (409) instead of settling the retry. Without it the result counts for
+        the attempt the target is in.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [published, failed] }, url: { type: string, maxLength: 2048, description: "Where the post lives now" }, external_id: { type: string, maxLength: 500, description: "The platform's id of the post" }, error: { type: string, description: "Why it failed" } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [published, failed] }, url: { type: string, maxLength: 2048, description: "Where the post lives now" }, external_id: { type: string, maxLength: 500, description: "The platform's id of the post" }, error: { type: string, description: "Why it failed" }, attempt_id: { type: string, maxLength: 100, description: "The attempt this result answers: `attempt_id` of `post.publish_requested`" } } } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Post" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -3573,6 +3578,11 @@ paths:
       operationId: retryJob
       tags: [jobs]
       summary: Queue a failed job again, now (posts:publish)
+      description: |
+        A `publish_target` job is retried like its target (`POST /v1/posts/{id}/targets/{channel}/retry`):
+        409 `unpublished` for a post that was taken down, 409 unless the target is `failed`, 422 for a
+        post carrying a file in Deleted. A `publish_post` job is refused (409) unless its post is still
+        `scheduled`: publish or schedule the post instead.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       responses:
@@ -3590,6 +3600,10 @@ paths:
       operationId: cancelJob
       tags: [jobs]
       summary: Cancel a queued job (posts:publish)
+      description: |
+        409 once a worker has started the job. What the job would have done is settled: a target fails
+        (retry brings it back), a scheduled post goes back to draft, a recurring schedule skips this run
+        and queues its next one, a one-time schedule turns off.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       responses:
@@ -6628,6 +6642,7 @@ components:
             repost_by: { type: string, description: "repost: the channel that reposts" }
             event_id: { type: string, description: "notify_people, notify_person: the event to tell people about" }
             user_id: { type: string, description: "notify_person: who gets the email" }
+            attempt_id: { type: string, description: "target_timeout: the attempt it times out" }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         done_at: { type: [string, "null"], format: date-time }

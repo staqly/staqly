@@ -277,6 +277,9 @@ func (m MediaFile) Reader(ctx context.Context) (io.ReadCloser, error) {
 type PostContent struct {
 	PostID    string
 	ChannelID string
+	// AttemptID names this attempt (from Publish or Retry to its last try); custom hands it to your automation,
+	// which sends it back with its result.
+	AttemptID string
 	Text      string
 	Media     []MediaFile
 	Tags      []string

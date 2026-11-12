@@ -535,10 +535,11 @@ type reportResultIn struct {
 	URL        string `json:"url,omitempty" jsonschema:"where the post lives now"`
 	ExternalID string `json:"external_id,omitempty" jsonschema:"the platform's id of the post"`
 	Error      string `json:"error,omitempty" jsonschema:"why it failed"`
+	AttemptID  string `json:"attempt_id,omitempty" jsonschema:"the attempt_id of the post.publish_requested event this answers; a result for an attempt that was retried since is refused"`
 }
 
 func (t *tools) reportResult(ctx context.Context, _ *mcp.CallToolRequest, in reportResultIn) (*mcp.CallToolResult, any, error) {
-	return nil0(t.svc.ReportTargetResult(ctx, t.principal(ctx), in.PostID, in.ChannelID, app.ResultInput{Status: in.Status, URL: in.URL, ExternalID: in.ExternalID, Error: in.Error}))
+	return nil0(t.svc.ReportTargetResult(ctx, t.principal(ctx), in.PostID, in.ChannelID, app.ResultInput{Status: in.Status, URL: in.URL, ExternalID: in.ExternalID, Error: in.Error, AttemptID: in.AttemptID}))
 }
 
 type targetRef struct {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -60,6 +61,29 @@ func TestNextRunTimesAndWeekdays(t *testing.T) {
 	}
 	if _, ok := nextRun(ScheduleRule{}, time.Now()); ok {
 		t.Error("empty rule has a next run")
+	}
+}
+
+// Europe/Warsaw, 2026-03-29: clocks jump from 02:00 to 03:00, so 02:30 does not exist (Go reads it as 03:30).
+// With times 02:30 and 03:00 the schedule still runs at 03:00 that day, then at 03:30.
+func TestNextRunSpringForwardKeepsTheLaterSlot(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Warsaw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := ScheduleRule{Times: []string{"02:30", "03:00"}, TZ: "Europe/Warsaw"}
+	after := time.Date(2026, 3, 29, 0, 0, 0, 0, loc)
+	var runs []string
+	for range 3 {
+		next, ok := nextRun(rule, after)
+		if !ok || !next.After(after) {
+			t.Fatalf("next run %s after %s (ok %v)", next.In(loc), after.In(loc), ok)
+		}
+		runs = append(runs, next.In(loc).Format("01-02 15:04"))
+		after = next
+	}
+	if want := []string{"03-29 03:00", "03-29 03:30", "03-30 02:30"}; !slices.Equal(runs, want) {
+		t.Fatalf("runs %v, want %v", runs, want)
 	}
 }
 
