@@ -52,7 +52,7 @@ export function usePlanActions() {
       window.location.assign(url)
     },
     onError: (e) => {
-      // A switch charged at once (leaving the trial) that wasn't paid: the payment page says why and what to do.
+      // A switch charged at once (leaving the trial, an upgrade) that wasn't paid: the payment page says why and what to do.
       if (e instanceof ApiError && e.code === 'payment_failed') {
         qc.setQueryData<PendingPayment>(qk.pendingPayment, { ...e.details, pending: true })
         router.push(PAYMENT_FAILED)

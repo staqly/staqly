@@ -353,3 +353,133 @@ func TestBillingPortalNeedsCustomerAndAdmin(t *testing.T) {
 		t.Fatalf("after failed checkout: %+v", b)
 	}
 }
+
+// subObject is a Stripe subscription of a workspace's customer (cus_1) on a plan, as events and reads carry it.
+func subObject(id, ws, status, plan, interval string) map[string]any {
+	return map[string]any{"id": id, "customer": "cus_1", "status": status, "metadata": map[string]string{"workspace_id": ws},
+		"items": map[string]any{"data": []any{map[string]any{"id": "si_" + id, "quantity": 1,
+			"current_period_end": time.Now().Add(300 * 24 * time.Hour).Unix(), "price": stripePriceObject(plan, interval)}}}}
+}
+
+func recordedSubscription(e *env, ws string) string {
+	e.t.Helper()
+	w, err := e.svc.Q.GetWorkspaceBilling(context.Background(), ws)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return w.StripeSubscriptionID.String
+}
+
+// Was a bug: two checkouts left open (an old tab) and both paid gave two live subscriptions, of which only the
+// last one was known; deleting the workspace cancelled only that one.
+func TestOneSubscriptionPerWorkspace(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	ws := workspaceID(e)
+	admin := e.keyWith(app.ScopeAdmin)
+	ok := func() (int, any) { return 200, map[string]string{} }
+	f.set("POST /v1/customers/cus_1", ok)
+	f.set("GET /v1/checkout/sessions", func() (int, any) {
+		return 200, map[string]any{"data": []any{map[string]string{"id": "cs_old", "mode": "subscription"}, map[string]string{"id": "cs_posts", "mode": "payment"}}}
+	})
+	f.set("POST /v1/checkout/sessions/cs_old/expire", ok)
+
+	// A second plan checkout closes the first; a checkout for extra posts is left alone.
+	for range 2 {
+		e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, nil)
+	}
+	if n, m := f.called("POST /v1/checkout/sessions/cs_old/expire"), f.called("POST /v1/checkout/sessions/cs_posts/expire"); n != 1 || m != 0 {
+		t.Fatalf("expired the older plan checkout %d times (want 1), the posts checkout %d times (want 0)", n, m)
+	}
+
+	// Both were paid all the same: the first stays, the second is cancelled with its unused time credited.
+	subA, subB := subObject("sub_A", ws, "active", "pro", "month"), subObject("sub_B", ws, "active", "pro", "month")
+	f.set("GET /v1/subscriptions/sub_A", func() (int, any) { return 200, subA })
+	f.set("DELETE /v1/subscriptions/sub_A", ok)
+	f.set("DELETE /v1/subscriptions/sub_B", ok)
+	for i, sub := range []map[string]any{subA, subB, subObject("sub_B", ws, "canceled", "pro", "month")} {
+		if code := e.stripeEvent(fmt.Sprint("evt_", i), "customer.subscription.created", sub, testWhsec); code != 200 {
+			t.Fatalf("event %d: %d", i, code)
+		}
+	}
+	if got, n := recordedSubscription(e, ws), f.called("DELETE /v1/subscriptions/sub_B"); got != "sub_A" || n != 1 || f.called("DELETE /v1/subscriptions/sub_A") != 0 {
+		t.Fatalf("kept %q, cancelled the duplicate %d times", got, n)
+	}
+	if b := e.billing(admin); b.Plan != "pro" || b.Suspended {
+		t.Fatalf("after the duplicate: %+v", b)
+	}
+
+	// Deleting the workspace cancels every subscription its customer still has, known here or not.
+	f.set("GET /v1/subscriptions", func() (int, any) {
+		return 200, map[string]any{"data": []any{subA, subObject("sub_C", ws, "past_due", "pro", "month")}}
+	})
+	f.set("DELETE /v1/subscriptions/sub_C", ok)
+	e.do(e.browser, "DELETE", "/v1/workspace", "", map[string]string{"confirm": "Test"}, 204, nil, "X-CSRF-Token", e.csrf)
+	if a, c := f.called("DELETE /v1/subscriptions/sub_A"), f.called("DELETE /v1/subscriptions/sub_C"); a != 1 || c != 1 {
+		t.Fatalf("workspace deleted; cancel calls sub_A=%d sub_C=%d (a live subscription keeps charging)", a, c)
+	}
+}
+
+// The subscription on record ended at Stripe and its event never came: a new one takes its place, and is not
+// mistaken for a duplicate.
+func TestNewSubscriptionReplacesOneThatEndedUnseen(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	ws := workspaceID(e)
+	admin := e.keyWith(app.ScopeAdmin)
+	// One whose first payment never came gives way to a paid one without asking Stripe.
+	e.stripeEvent("evt_0", "customer.subscription.created", subObject("sub_0", ws, "incomplete", "starter", "month"), testWhsec)
+	e.stripeEvent("evt_0b", "customer.subscription.created", subObject("sub_A", ws, "active", "starter", "month"), testWhsec)
+	if got := recordedSubscription(e, ws); got != "sub_A" || f.called("DELETE /v1/subscriptions/sub_A") != 0 {
+		t.Fatalf("after an unpaid first one: %q, calls %v", got, f.calls)
+	}
+	e.stripeEvent("evt_1", "customer.subscription.created", subObject("sub_A", ws, "active", "starter", "month"), testWhsec)
+	f.set("GET /v1/subscriptions/sub_A", func() (int, any) { return 200, subObject("sub_A", ws, "canceled", "starter", "month") })
+	if code := e.stripeEvent("evt_2", "customer.subscription.created", subObject("sub_B", ws, "active", "pro", "month"), testWhsec); code != 200 {
+		t.Fatalf("event: %d", code)
+	}
+	if got := recordedSubscription(e, ws); got != "sub_B" || f.called("DELETE /v1/subscriptions/sub_B") != 0 {
+		t.Fatalf("on record: %q, calls %v", got, f.calls)
+	}
+	if b := e.billing(admin); b.Plan != "pro" || b.Suspended || *b.SubscriptionStatus != "active" {
+		t.Fatalf("after the new subscription: %+v", b)
+	}
+}
+
+// Was a bug: a plan the operator set (server set-plan, the admin panel) after the subscription ended was undone by
+// POST /v1/billing/sync, or by Stripe telling the ended subscription again, and the workspace went read-only.
+func TestOperatorPlanSurvivesEndedSubscription(t *testing.T) {
+	for _, how := range []string{"sync", "replayed event"} {
+		t.Run(how, func(t *testing.T) {
+			e := newEnv(t)
+			f := withStripe(t, e)
+			ws := workspaceID(e)
+			admin := e.keyWith(app.ScopeAdmin)
+			e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, nil) // makes cus_1
+			e.stripeEvent("evt_1", "customer.subscription.created", subObject("sub_1", ws, "active", "starter", "month"), testWhsec)
+			ended := subObject("sub_1", ws, "canceled", "starter", "month")
+			e.stripeEvent("evt_2", "customer.subscription.deleted", ended, testWhsec)
+			if b := e.billing(admin); !b.Suspended {
+				t.Fatalf("setup: canceled must suspend: %+v", b)
+			}
+			if err := e.svc.SetPlan(context.Background(), ws, "pro", ""); err != nil { // server set-plan <ws> pro
+				t.Fatal(err)
+			}
+			if how == "sync" {
+				f.set("GET /v1/subscriptions", func() (int, any) { return 200, map[string]any{"data": []any{ended}} })
+				e.do(nil, "POST", "/v1/billing/sync", admin, nil, 200, nil)
+			} else if code := e.stripeEvent("evt_3", "customer.subscription.updated", ended, testWhsec); code != 200 {
+				t.Fatalf("event: %d", code)
+			}
+			if b := e.billing(admin); b.Suspended || b.Plan != "pro" || b.PlanExpiresAt != nil {
+				t.Fatalf("operator plan undone: %+v", b)
+			}
+			// Paying again puts Stripe back in charge: that subscription ending ends the plan.
+			e.stripeEvent("evt_4", "customer.subscription.created", subObject("sub_2", ws, "active", "plus", "month"), testWhsec)
+			e.stripeEvent("evt_5", "customer.subscription.deleted", subObject("sub_2", ws, "canceled", "plus", "month"), testWhsec)
+			if b := e.billing(admin); !b.Suspended || b.Plan != "plus" {
+				t.Fatalf("a paid plan that ended must suspend: %+v", b)
+			}
+		})
+	}
+}

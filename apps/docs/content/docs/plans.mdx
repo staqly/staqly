@@ -228,8 +228,17 @@ months at 20 % off, rounded down, so the saving is 20 % or a little more.
 - Without a subscription, a card opens Stripe Checkout (`POST /v1/billing/checkout` with
   `{"plan":"plus","interval":"year"}`, account owner). When Stripe confirms the payment, the
   workspace moves to that plan until the end of the paid period plus 3 days of grace.
-- With a subscription, a card switches it to that plan or interval at once; Stripe charges or
-  credits the difference (proration). The plan changes when Stripe's event arrives.
+- With a subscription, a card switches it to that plan or interval; the plan changes when Stripe's
+  event arrives.
+  - **An upgrade** (a higher plan) charges the difference for the rest of the period to the card on
+    file right away, and the higher plan starts once that payment goes through. If it doesn't, the
+    workspace stays on its current plan, nothing is charged, and the dashboard opens the same payment
+    page as when leaving the trial (step 5 above): confirm the payment with your bank, or change the
+    card, on Stripe's pages. The API answers 402 `payment_failed`. Stripe drops an unpaid change after
+    about a day; choose the plan again then.
+  - **A lower plan** starts at once; Stripe credits the unused difference on the next invoice.
+  - **Monthly to yearly (or back)** on the same plan starts a new billing period, which Stripe
+    charges right away with the unused time credited.
 - **Manage subscription** opens the Stripe customer portal (`POST /v1/billing/portal`) to change
   the card, download invoices or cancel. When a subscription is canceled or stays unpaid, the
   plan ends and the workspace is suspended until it pays again. `GET /v1/billing` shows the

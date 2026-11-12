@@ -188,3 +188,91 @@ func TestTrialUpgradeDeclined(t *testing.T) {
 		t.Fatalf("unreadable payment: %+v", pp)
 	}
 }
+
+// A paying workspace moving to a higher plan is charged the difference at once, and gets the plan only when that
+// payment goes through; a lower plan, or the same plan in the other interval, is settled on the next invoice.
+func TestUpgradeOfPayingSubscription(t *testing.T) {
+	e := newEnv(t)
+	ws := workspaceID(e)
+	sub := subObject("sub_1", ws, "active", "starter", "year")
+	var mu sync.Mutex
+	var switched url.Values
+	declined := true
+	stripe := httptest.NewServer(subsFirst(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.Method + " " + r.URL.Path {
+		case "GET /v1/prices":
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
+		case "GET /v1/subscriptions/sub_1":
+			json.NewEncoder(w).Encode(sub)
+		case "POST /v1/subscriptions/sub_1":
+			switched = r.Form
+			out := map[string]any{"id": "sub_1"}
+			if declined {
+				out["pending_update"] = map[string]any{"expires_at": 1893456000}
+				out["latest_invoice"] = map[string]any{"id": "in_1", "status": "open", "payment_intent": "pi_1",
+					"hosted_invoice_url": "https://invoice.stripe.com/i/acct_1/test_in_1"}
+			}
+			json.NewEncoder(w).Encode(out)
+		case "GET /v1/payment_intents/pi_1":
+			fmt.Fprint(w, `{"id":"pi_1","status":"requires_payment_method","last_payment_error":{"code":"card_declined","decline_code":"insufficient_funds"}}`)
+		default:
+			fmt.Fprint(w, `{}`)
+		}
+	}))
+	defer stripe.Close()
+	admin := e.keyWith(app.ScopeAdmin)
+	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_up", WebhookSecret: testWhsec, APIBase: stripe.URL}
+	e.stripeEvent("evt_1", "customer.subscription.created", sub, testWhsec)
+	if b := e.billing(admin); b.Plan != "starter" || *b.SubscriptionStatus != "active" {
+		t.Fatalf("setup: %+v", b)
+	}
+	sent := func() url.Values {
+		mu.Lock()
+		defer mu.Unlock()
+		return switched
+	}
+
+	// The card is declined: 402 says why, Stripe keeps the change pending and the workspace stays on Starter.
+	var errBody paymentErr
+	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "interval": "year"}, 402, &errBody)
+	if f := sent(); f.Get("proration_behavior") != "always_invoice" || f.Get("payment_behavior") != "pending_if_incomplete" ||
+		f.Get("items[0][price]") != "price_business_year" || f.Get("trial_end") != "" {
+		t.Fatalf("upgrade: %v", f)
+	}
+	if d := errBody.Error.Details; errBody.Error.Code != "payment_failed" || d["reason"] != "insufficient_funds" || d["plan"] != "business" ||
+		d["pay_url"] == "" || !strings.Contains(errBody.Error.Message, "your current plan stays as it was") {
+		t.Fatalf("402: %+v", errBody.Error)
+	}
+	e.stripeEvent("evt_2", "customer.subscription.updated", sub, testWhsec) // Stripe's event still has the old price
+	if b := e.billing(admin); b.Plan != "starter" || b.Suspended {
+		t.Fatalf("an unpaid upgrade must not change the plan: %+v", b)
+	}
+
+	// Paid: back to the plan page; the plan changes with Stripe's event.
+	mu.Lock()
+	declined = false
+	mu.Unlock()
+	var out struct{ URL string }
+	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "interval": "year"}, 200, &out)
+	if !strings.HasSuffix(out.URL, "?checkout=switched") || sent().Get("proration_behavior") != "always_invoice" {
+		t.Fatalf("paid upgrade: %q %v", out.URL, sent())
+	}
+	mu.Lock()
+	sub["items"].(map[string]any)["data"].([]any)[0].(map[string]any)["price"] = stripePriceObject("business", "year")
+	mu.Unlock()
+	e.stripeEvent("evt_3", "customer.subscription.updated", sub, testWhsec)
+	if b := e.billing(admin); b.Plan != "business" {
+		t.Fatalf("after the upgrade: %+v", b)
+	}
+
+	// A lower plan, and the same plan billed monthly: prorated onto the next invoice, nothing waits.
+	for _, to := range [][2]string{{"plus", "year"}, {"business", "month"}} {
+		e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": to[0], "interval": to[1]}, 200, nil)
+		if f := sent(); f.Get("proration_behavior") != "create_prorations" || f.Get("payment_behavior") != "" {
+			t.Fatalf("switch to %v: %v", to, f)
+		}
+	}
+}

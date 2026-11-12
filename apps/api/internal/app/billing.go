@@ -432,6 +432,9 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	if err != nil {
 		return "", err
 	}
+	if w.StripeCustomerID.Valid && w.StripeCustomerID.String != "" {
+		s.expireOpenCheckouts(ctx, customer)
+	}
 	seats, err := s.seatCount(ctx, s.Q, w.ID)
 	if err != nil {
 		return "", err
@@ -572,6 +575,10 @@ func (s *Service) ensureCustomer(ctx context.Context, w db.GetWorkspaceBillingRo
 
 // switchSubscription moves a live subscription to another price (plan or interval); Stripe prorates.
 // The plan changes here when Stripe's subscription.updated event arrives.
+// A paying (active) subscription moving to a higher plan is an upgrade: the difference is invoiced at once and
+// the change waits for that payment (a pending update), like leaving the trial. Anything else (a lower plan,
+// the same plan in the other interval) keeps create_prorations: a credit settles on the next invoice, and
+// Stripe itself invoices an interval change at once.
 // With a promotion code (its id), the code's discount replaces the subscription's; with the same price only the
 // code is applied.
 func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscriptionID, price, planID, interval, promo string) error {
@@ -608,8 +615,14 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 	// Leaving the trial for another plan: the trial ends now and the new plan is charged at once; the change
 	// waits for that payment (a pending update), so a card that fails leaves the trial as it was.
 	trial := sub.Status == "trialing"
+	cur, known := s.planOf(sub.Items.Data[i].Price)
+	upgrade := sub.Status == "active" && known && planRank(planID) > planRank(cur)
+	keeps := "your current plan"
 	if trial {
 		form.Set("trial_end", "now")
+		keeps = "the trial"
+	}
+	if trial || upgrade {
 		form.Set("proration_behavior", "always_invoice")
 		form.Set("payment_behavior", "pending_if_incomplete")
 		form.Set("expand[]", "latest_invoice")
@@ -623,10 +636,15 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 	}
 	// Not paid: read why from the invoice and its payment (outside any transaction), so the dashboard can send
 	// the person to the right Stripe page: the invoice page to confirm with the bank, or the billing portal.
-	if trial && out.PendingUpdate != nil {
-		return s.pendingPayment(ctx, *out.PendingUpdate, out.LatestInvoice, planID).error()
+	if (trial || upgrade) && out.PendingUpdate != nil {
+		return s.pendingPayment(ctx, *out.PendingUpdate, out.LatestInvoice, planID).error(keeps)
 	}
 	return nil
+}
+
+// planRank: a plan's place in Plans (cheapest first), -1 for one that isn't sold.
+func planRank(id string) int {
+	return slices.IndexFunc(Plans, func(p Plan) bool { return p.ID == id })
 }
 
 // stripeCoupon: what a promotion code's coupon takes off, and the products it is limited to (none: every plan).
@@ -960,14 +978,13 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 		}
 		var cs struct {
 			Subscription string `json:"subscription"`
+			Customer     string `json:"customer"`
 		}
 		if err := json.Unmarshal(ev.Data.Object, &cs); err != nil || cs.Subscription == "" {
 			return nil // not a subscription checkout
 		}
-		// The session carries only the id; read the subscription itself (with the card it is paid with).
-		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(cs.Subscription)+subscriptionExpand, nil, &sub); err != nil {
-			return err
-		}
+		// The session carries only the id; the subscription itself is read below (with the card it is paid with).
+		sub.ID, sub.Customer = cs.Subscription, cs.Customer
 	case "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
 		"customer.subscription.paused", "customer.subscription.resumed":
 		if err := json.Unmarshal(ev.Data.Object, &sub); err != nil || sub.ID == "" {
@@ -980,11 +997,6 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 			if err == nil {
 				s.logger(ctx).Warn("stripe: subscription for an unknown customer", "subscription", sub.ID, "event", ev.Type)
 			}
-			return err
-		}
-		id := sub.ID
-		sub = stripeSubscription{}
-		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(id)+subscriptionExpand, nil, &sub); err != nil {
 			return err
 		}
 	case "payment_method.attached":
@@ -1037,13 +1049,28 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 	default:
 		return nil
 	}
-	err := s.tx(ctx, func(q *db.Queries) error {
+	// Read and applied under the customer's lock, so two events (or an event and a sync) can't commit an older
+	// read over a newer one.
+	unlock, err := s.lockBilling(ctx, sub.Customer)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	id := sub.ID
+	sub = stripeSubscription{}
+	if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(id)+subscriptionExpand, nil, &sub); err != nil {
+		return err
+	}
+	err = s.tx(ctx, func(q *db.Queries) error {
 		if n, err := q.InsertStripeEvent(ctx, db.InsertStripeEventParams{ID: ev.ID, CreatedAt: s.now()}); err != nil || n == 0 {
 			return err // n == 0: already applied
 		}
 		return s.applySubscription(ctx, q, sub, ev.Type)
 	})
 	if err != nil {
+		return err
+	}
+	if err := s.settleDuplicate(ctx, sub); err != nil {
 		return err
 	}
 	// A trial paid with a card an unpaid trial used ends now (Stripe is called after the transaction). On a
@@ -1094,6 +1121,9 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 	if cur.StripeSubscriptionID.Valid && cur.StripeSubscriptionID.String != sub.ID && cur.SubscriptionStatus.Valid &&
 		liveSubscription(cur.SubscriptionStatus.String) && !liveSubscription(sub.Status) {
 		return nil // an old subscription ending does not touch the current one
+	}
+	if otherLive(cur, sub) {
+		return nil // a second live subscription (two checkouts paid) never replaces the one on record: settleDuplicate
 	}
 	if cur.StripeSubscriptionID.Valid && cur.StripeSubscriptionID.String == sub.ID && cur.SubscriptionStatus.Valid &&
 		finalSubscription(cur.SubscriptionStatus.String) && sub.Status != cur.SubscriptionStatus.String {
@@ -1154,7 +1184,18 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 		return s.changePlan(ctx, q, actor, planID, formatTime(end), reason)
 	}
 	// Canceled, unpaid, paused, incomplete_expired: the plan ends now, so the
-	// workspace becomes read-only until it pays again.
+	// workspace becomes read-only until it pays again. A plan the operator set since (server set-plan, the admin
+	// panel) stands: an ended subscription told again (a sync, a replayed event) or ending later must not undo it.
+	// shortcut: reads the latest workspace.plan_changed event, so event retention (off by default) forgets it;
+	// give the plan a source column if operators set plans on installs that prune events.
+	if data, err := q.LastPlanChange(ctx, ws); err == nil {
+		var last struct{ Reason string }
+		if json.Unmarshal([]byte(data), &last) == nil && strings.HasPrefix(last.Reason, "operator") {
+			return nil
+		}
+	} else if !isNoRows(err) {
+		return err
+	}
 	end := s.Now()
 	if cur.PlanExpiresAt.Valid {
 		if t, err := time.Parse(timeFormat, cur.PlanExpiresAt.String); err == nil && t.Before(end) {
@@ -1164,18 +1205,124 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 	return s.changePlan(ctx, q, actor, planID, formatTime(end), reason)
 }
 
-// cancelSubscription ends a live subscription right away (workspace deleted).
+// otherLive: the workspace has a live subscription on record and sub is another live one. One on record whose
+// first payment never came (incomplete; Stripe ends it within a day) gives way to the new one instead.
+func otherLive(cur db.GetWorkspaceBillingRow, sub stripeSubscription) bool {
+	return cur.StripeSubscriptionID.Valid && cur.StripeSubscriptionID.String != "" && cur.StripeSubscriptionID.String != sub.ID &&
+		liveSubscription(cur.SubscriptionStatus.String) && cur.SubscriptionStatus.String != "incomplete" && liveSubscription(sub.Status)
+}
+
+// settleDuplicate runs after a subscription was applied (outside the transaction, under lockBilling): a workspace
+// has one subscription. A live one arriving while another is live on record (two open checkouts, both paid) is
+// cancelled at Stripe, its unused time credited to the customer's balance (which pays the kept one's next
+// invoices). When the one on record turns out to have ended at Stripe (its event lost), that is applied first and
+// sub takes its place. Like guardCard it reads the state as it is, so a retried event runs it again.
+func (s *Service) settleDuplicate(ctx context.Context, sub stripeSubscription) error {
+	if !liveSubscription(sub.Status) {
+		return nil
+	}
+	ws := sub.Metadata["workspace_id"]
+	if ws == "" {
+		id, err := s.Q.GetWorkspaceIDByStripeCustomer(ctx, nullStr(sub.Customer))
+		if isNoRows(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		ws = id
+	}
+	cur, err := s.Q.GetWorkspaceBilling(ctx, ws)
+	if isNoRows(err) || (err == nil && !otherLive(cur, sub)) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var kept stripeSubscription
+	if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(cur.StripeSubscriptionID.String)+subscriptionExpand, nil, &kept); err != nil {
+		return err
+	}
+	if !liveSubscription(kept.Status) {
+		return s.tx(ctx, func(q *db.Queries) error {
+			if err := s.applySubscription(ctx, q, kept, "billing.sync"); err != nil {
+				return err
+			}
+			return s.applySubscription(ctx, q, sub, "billing.sync")
+		})
+	}
+	s.logger(ctx).Warn("stripe: second live subscription of a workspace cancelled, unused time credited",
+		"workspace_id", ws, "kept", kept.ID, "cancelled", sub.ID)
+	return s.stripe(ctx, "DELETE", "/v1/subscriptions/"+url.PathEscape(sub.ID), url.Values{"prorate": {"true"}, "invoice_now": {"true"}}, nil)
+}
+
+// lockBilling serializes "read a customer's subscription from Stripe, then apply it" (webhook events, syncs), in
+// this process and, on PostgreSQL, across processes: without it a read that stalls commits its older snapshot
+// over a newer one. No transaction is open while Stripe is called.
+func (s *Service) lockBilling(ctx context.Context, customer string) (func(), error) {
+	return s.lockRefresh(ctx, db.Channel{WorkspaceID: "stripe", Provider: customer})
+}
+
+// expireOpenCheckouts: a new plan checkout closes the customer's older open ones (another tab), so two can't
+// both be paid. Best effort: settleDuplicate handles the two that still got through.
+func (s *Service) expireOpenCheckouts(ctx context.Context, customer string) {
+	var list struct {
+		Data []struct {
+			ID   string `json:"id"`
+			Mode string `json:"mode"`
+		} `json:"data"`
+	}
+	q := url.Values{"customer": {customer}, "status": {"open"}, "limit": {"100"}}
+	err := s.stripe(ctx, "GET", "/v1/checkout/sessions?"+q.Encode(), nil, &list)
+	for _, cs := range list.Data {
+		if cs.Mode != "subscription" { // extra posts are paid in sessions of their own
+			continue
+		}
+		if e := s.stripe(ctx, "POST", "/v1/checkout/sessions/"+url.PathEscape(cs.ID)+"/expire", nil, nil); e != nil {
+			err = e
+		}
+	}
+	if err != nil {
+		s.logger(ctx).Warn("billing: older open checkouts not expired", "err", err)
+	}
+}
+
+// cancelSubscription ends, right away, every subscription of the workspace's customer (workspace deleted).
 func (s *Service) cancelSubscription(ctx context.Context, workspaceID string) error {
 	if !s.BillingEnabled() {
 		return nil
 	}
 	w, err := s.Q.GetWorkspaceBilling(ctx, workspaceID)
-	// Every subscription Stripe could still bill or resume, unpaid and paused included (not only the live
-	// ones): after the workspace is gone nobody could reach it to cancel.
-	if err != nil || !w.StripeSubscriptionID.Valid || !cancellableSubscription(w.SubscriptionStatus.String) {
+	if err != nil {
 		return err
 	}
-	return s.stripe(ctx, "DELETE", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String), nil, nil)
+	// Every subscription Stripe could still bill or resume, unpaid and paused included (not only the live
+	// ones): after the workspace is gone nobody could reach them to cancel. The one on record, and any other the
+	// customer has (a second checkout that was paid; Stripe lists the ones that aren't canceled).
+	var ids []string
+	if w.StripeSubscriptionID.Valid && cancellableSubscription(w.SubscriptionStatus.String) {
+		ids = append(ids, w.StripeSubscriptionID.String)
+	}
+	if w.StripeCustomerID.Valid && w.StripeCustomerID.String != "" {
+		var list struct {
+			Data []stripeSubscription `json:"data"`
+		}
+		q := url.Values{"customer": {w.StripeCustomerID.String}, "limit": {"100"}}
+		if err := s.stripe(ctx, "GET", "/v1/subscriptions?"+q.Encode(), nil, &list); err != nil {
+			return err
+		}
+		for _, sub := range list.Data {
+			if cancellableSubscription(sub.Status) && !slices.Contains(ids, sub.ID) {
+				ids = append(ids, sub.ID)
+			}
+		}
+	}
+	for _, id := range ids {
+		if err := s.stripe(ctx, "DELETE", "/v1/subscriptions/"+url.PathEscape(id), nil, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // stripe calls the Stripe API with a form-encoded body and decodes the JSON
@@ -1213,13 +1360,15 @@ func (s *Service) stripeKeyed(ctx context.Context, method, path string, form url
 	if resp.StatusCode >= 300 {
 		var e struct {
 			Error struct {
-				Message string `json:"message"`
-				Code    string `json:"code"`
-				Param   string `json:"param"`
+				Type  string `json:"type"`
+				Code  string `json:"code"`
+				Param string `json:"param"`
 			} `json:"error"`
 		}
 		_ = json.Unmarshal(raw, &e)
-		s.logger(ctx).Error("stripe request failed", "path", path, "status", resp.StatusCode, "err", e.Error.Message)
+		// Never the query string (ids, a typed promotion code) nor Stripe's message, which may quote them.
+		logPath, _, _ := strings.Cut(path, "?")
+		s.logger(ctx).Error("stripe request failed", "path", logPath, "status", resp.StatusCode, "code", e.Error.Code, "type", e.Error.Type)
 		return &Error{Code: "payment_provider_error", Status: 502, Message: "the payment provider rejected the request",
 			Details: map[string]any{"provider_code": e.Error.Code, "provider_param": e.Error.Param}}
 	}

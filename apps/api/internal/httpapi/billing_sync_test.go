@@ -1,11 +1,13 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,5 +70,67 @@ func TestBillingSyncWithoutWebhook(t *testing.T) {
 	}
 	if n := e.svc.ReconcileBilling(t.Context()); n != 0 {
 		t.Fatalf("a workspace with a live subscription is not reconciled again, synced %d", n)
+	}
+}
+
+// Was a bug: of two refreshes of one customer at once, the one whose read of Stripe stalled committed its older
+// answer over the newer one, and the workspace kept the old plan until the next event or sync.
+func TestBillingRefreshesKeepNewestSnapshot(t *testing.T) {
+	e := newEnv(t)
+	ws := workspaceID(e)
+	admin := e.keyWith(app.ScopeAdmin)
+	var mu sync.Mutex
+	reads := 0
+	first, second := make(chan struct{}), make(chan struct{})
+	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /v1/prices":
+			fmt.Fprint(w, `{"data":[{"id":"price_1"}]}`)
+		case "POST /v1/customers":
+			fmt.Fprint(w, `{"id":"cus_1"}`)
+		case "POST /v1/checkout/sessions":
+			fmt.Fprint(w, `{"url":"https://checkout.stripe.test/s"}`)
+		case "GET /v1/subscriptions":
+			mu.Lock()
+			reads++
+			n := reads
+			mu.Unlock()
+			plan := "business"
+			if n == 1 {
+				// The first read sees Starter, and its answer is slow to arrive: by then a second read (if the
+				// server lets one through) has seen the upgrade to Business and applied it.
+				plan = "starter"
+				close(first)
+				select {
+				case <-second:
+					time.Sleep(200 * time.Millisecond)
+				case <-time.After(500 * time.Millisecond):
+				}
+			} else if n == 2 {
+				defer close(second)
+			}
+			json.NewEncoder(w).Encode(map[string]any{"data": []any{subObject("sub_1", ws, "active", plan, "month")}})
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer stripe.Close()
+	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_order", WebhookSecret: testWhsec, APIBase: stripe.URL}
+	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter"}, 200, nil) // makes cus_1
+	owner := app.Principal{WorkspaceID: ws, Kind: app.PrincipalSession, ID: "ses_test", Name: "Owner", Scopes: app.AllScopes}
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	for i := range errs {
+		wg.Go(func() { _, errs[i] = e.svc.SyncBilling(context.Background(), owner) })
+		if i == 0 {
+			<-first
+		}
+	}
+	wg.Wait()
+	if errs[0] != nil || errs[1] != nil {
+		t.Fatalf("sync: %v", errs)
+	}
+	if b := e.billing(admin); b.Plan != "business" {
+		t.Fatalf("the older read was applied last: plan %q, want business", b.Plan)
 	}
 }

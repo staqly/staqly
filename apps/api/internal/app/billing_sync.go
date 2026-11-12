@@ -20,6 +20,12 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 	var list struct {
 		Data []stripeSubscription `json:"data"`
 	}
+	// Read and applied under the customer's lock: see lockBilling.
+	unlock, err := s.lockBilling(ctx, customer)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	q := url.Values{"customer": {customer}, "status": {"all"}, "limit": {"1"}, "expand[]": {"data.default_payment_method"}}
 	if err := s.stripe(ctx, "GET", "/v1/subscriptions?"+q.Encode(), nil, &list); err != nil {
 		return err
@@ -29,6 +35,9 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 	}
 	sub := list.Data[0]
 	if err := s.tx(ctx, func(q *db.Queries) error { return s.applySubscription(ctx, q, sub, "billing.sync") }); err != nil {
+		return err
+	}
+	if err := s.settleDuplicate(ctx, sub); err != nil {
 		return err
 	}
 	return s.guardCard(ctx, sub)
