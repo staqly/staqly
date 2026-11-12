@@ -6,7 +6,7 @@
 export const PROVIDER_HINTS: Record<string, string> = {
   custom: 'Hands each post to n8n, a script or an agent of your own, which reports back',
   instagram: 'Posts, reels and stories on an Instagram Business or Creator account',
-  instagram_business: 'An Instagram account linked to a Facebook Page, signed in with Facebook',
+  instagram_unified: 'An Instagram Business or Creator account, signed in with Instagram or Facebook',
   mastodon_token: 'Mastodon with an access token made on your server',
   bluesky_app_password: 'Bluesky with an app password, for accounts on a server of their own',
   discord_webhook: 'Messages in one Discord channel, through a webhook made there',

@@ -1184,7 +1184,7 @@ function Template(p: PreviewProps) {
     case 'facebook':
       return <FacebookTemplate {...p} />
     case 'instagram':
-    case 'instagram_business':
+    case 'instagram_unified':
       return <InstagramTemplate {...p} />
     case 'tiktok':
       return <TikTokTemplate {...p} />

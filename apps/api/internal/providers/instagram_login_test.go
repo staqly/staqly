@@ -80,3 +80,17 @@ func TestInstagramLogin(t *testing.T) {
 		t.Fatalf("published elsewhere: %v", paths)
 	}
 }
+
+// Instagram (Professional) is Unified login under its own id: the configuration, not scopes, and never Instagram login.
+func TestInstagramUnifiedTile(t *testing.T) {
+	e, ok := Get("instagram_unified")
+	if !ok || e.Name() != "Instagram (Professional)" {
+		t.Fatal("not registered")
+	}
+	auth, err := e.Provider.(interface {
+		AuthURL(App, string, string, map[string]string) (string, error)
+	}).AuthURL(App{ClientID: "meta", ConfigID: "cfg"}, "https://app.example/channels/callback/instagram_unified", "st", nil)
+	if err != nil || !strings.HasPrefix(auth, facebookAuthorize) || !strings.Contains(auth, "config_id=cfg") || strings.Contains(auth, "scope=") {
+		t.Fatalf("auth url %s %v", auth, err)
+	}
+}

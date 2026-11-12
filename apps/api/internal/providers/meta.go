@@ -330,12 +330,6 @@ type metaPage struct {
 			URL string `json:"url"`
 		} `json:"data"`
 	} `json:"picture"`
-	Instagram *struct {
-		ID       string `json:"id"`
-		Username string `json:"username"`
-		Name     string `json:"name"`
-		Picture  string `json:"profile_picture_url"`
-	} `json:"instagram_business_account"`
 }
 
 // metaPages lists the Pages the sign-in may manage: the ones the person allowed in the dialog (/me/accounts), then
