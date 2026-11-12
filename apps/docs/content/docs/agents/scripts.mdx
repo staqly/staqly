@@ -80,7 +80,8 @@ Any host name works: what lets the request in is the access token, not where it 
 ## Loading demo data
 
 With a checkout of the [repository](https://github.com/staqly/staqly), `scripts/seed.sh` loads
-demo collections and posts through the public API, so events and webhooks fire as usual. It calls `http://localhost:3333`, so it works with
+demo collections, pictures and draft posts through the public API, so events and webhooks fire as usual
+(it stops with exit 1 at the first request the API refuses). It calls `http://localhost:3333`, so it works with
 `staqly serve` and Docker alike, with the access token in `STAQLY_API_KEY`
 (`STAQLY_API_KEY=$(staqly serve token) scripts/seed.sh`). In cloud mode:
 `STAQLY_API_URL=https://api.staqly.ai STAQLY_API_KEY=stk_... scripts/seed.sh`.

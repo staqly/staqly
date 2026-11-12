@@ -479,6 +479,54 @@ describe.each(['local', 'cloud'] as const)('%s: idempotency keys', (name) => {
     expect(found.data.filter((p) => p.external_ref === ref).map((p) => p.id)).toEqual([post.id])
   })
 
+  // The server never stores a response that carries a secret (here the webhook's signing secret), so the same
+  // key would run the create again. Neither SDK sends it again after a lost response: the error reaches the
+  // caller and there is one webhook, not two.
+  it('a webhook create whose response was lost is not retried: one webhook (TypeScript, Python)', async () => {
+    const admin = sdk(t.url, t.admin || null)
+    const mine = async (url: string) => (await admin.webhooks.list()).filter((w) => w.url === url)
+    let dropped = false
+    const lossy: FetchLike = async (input, init) => {
+      const res = await fetch(input, init)
+
+      if (!dropped && init?.method === 'POST') {
+        dropped = true
+        await res.arrayBuffer()
+
+        throw new TypeError('fetch failed: socket hang up')
+      }
+
+      return res
+    }
+    const url = `https://example.com/lost-ts-${name}-${Date.now()}`
+    const c = new Staqly({ baseUrl: t.url, apiKey: t.admin || null, fetch: lossy })
+
+    expect(await errorOf(c.webhooks.create({ url, events: ['post.published'] }))).toBeInstanceOf(APIConnectionError)
+    const made = await mine(url)
+
+    expect(made).toHaveLength(1)
+    await admin.webhooks.delete(made[0]!.id)
+
+    for (const mode of MODES) {
+      const pyUrl = `https://example.com/lost-py-${name}-${mode}-${Date.now()}`
+      const e = await py.fail(
+        mode,
+        pyc({ url: t.url, key: t.admin }, { drop_first_response: true }),
+        'webhooks.create',
+        [pyUrl],
+        {
+          events: ['post.published'],
+        },
+      )
+
+      expect(e.mro).toContain('APIConnectionError')
+      const pyMade = await mine(pyUrl)
+
+      expect(pyMade).toHaveLength(1)
+      await admin.webhooks.delete(pyMade[0]!.id)
+    }
+  })
+
   it('without retries and without a key, a lost response is not replayed (TypeScript)', async () => {
     const seen: (string | null)[] = []
     const record: FetchLike = (input, init) => {

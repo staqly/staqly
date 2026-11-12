@@ -29,6 +29,15 @@ your agents write, no longer a review inbox.
   feedback for a range of days. Types `Analytics`, `AnalyticsParams`, `AnalyticsTotals`,
   `AnalyticsMetrics`, `ChannelAnalytics`, `AnalyticsTimeSlot`.
 
+### Fixed
+- Calls whose response the server does not replay (it carries a secret: creating or updating a webhook,
+  schedule or channel, API keys, device links, recovery key and access token rotation, provider apps,
+  connect and preview links, calls without credentials) are no longer retried after a 5xx, a timeout or a
+  lost connection, only after a 429: a retry made a second webhook, schedule or key.
+- `timeout` now also covers the body of a download (the wait for each chunk); a stalled
+  `media.download` used to wait for ever.
+- Leaving `exports.events()` early (`break`) closes the HTTP stream.
+
 ### Removed
 - `items`, `watchers`, `notificationChannels`, `decisionLinks`, `requestApproval`,
   `requiresApproval`, `RejectedError`, `ItemEventData`; `collections.setActions` and `listItems`

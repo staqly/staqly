@@ -1,6 +1,7 @@
 # Was exactly this code already tested by this workflow? (Needs a checkout and `actions: read`.)
 # - pull_request: records the tree of the merge commit it tests (an artifact "tested-<workflow>-<tree>").
-# - push: skip when a successful run of this workflow recorded the same tree. A squash merge of a pull
+# - push: skip when a successful pull request run of this workflow, from a branch of this repository (never a
+#   fork: it runs its own copy of the workflow), recorded the same tree. A squash merge of a pull
 #   request that was up to date with main has exactly the tree its pull request run tested.
 # - schedule: skip when a scheduled run of this workflow already passed on this commit (no new commits, e.g.
 #   weekends). A failed nightly runs again the next night.

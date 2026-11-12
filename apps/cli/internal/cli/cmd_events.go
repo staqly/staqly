@@ -171,7 +171,8 @@ events are only included for admin principals.`
 	return cmd
 }
 
-// eventsSince pages backwards from the newest event until it reaches seq <= last.
+// eventsSince pages backwards from the newest event until it reaches seq <= last, however many pages that
+// takes: a follow that fell far behind (an outage, a sleeping laptop) must not skip what it missed.
 func eventsSince(c *Ctx, cl *Client, q url.Values, last int64) ([]Event, error) {
 	page := url.Values{}
 	for k, v := range q {
@@ -179,7 +180,7 @@ func eventsSince(c *Ctx, cl *Client, q url.Values, last int64) ([]Event, error) 
 	}
 	page.Set("limit", "100")
 	var out []Event
-	for range 20 {
+	for {
 		var p EventPage
 		if _, err := cl.Get(c, "/v1/events", page, &p); err != nil {
 			return nil, err

@@ -55,7 +55,8 @@ If the first attempt went through, the retry gets the stored response with the h
 - Responses that carry a secret — a new API key, a recovery key, a device link, a webhook
   signing secret (create or rotate) — are never kept in the replay cache. Retrying such a
   request with the same key creates another secret, so check whether the first attempt
-  succeeded (e.g. list your keys or webhooks) before retrying it.
+  succeeded (e.g. list your keys or webhooks) before retrying it. The SDKs do not retry these
+  requests on their own, except after a 429.
 - A JSON body (`Content-Type: application/json`) is compared in a canonical form: object keys
   sorted, whitespace between tokens ignored, string escapes decoded. So the Python SDK
   (`json.dumps`, with spaces) and the TypeScript SDK (compact `JSON.stringify`) can share a key

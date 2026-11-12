@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -248,6 +249,58 @@ func TestEventsTailFollow(t *testing.T) {
 	}
 	if len(seqs) != 4 || seqs[0] != 1 || seqs[1] != 2 || seqs[2] != 3 || seqs[3] != 4 {
 		t.Fatalf("events printed out of order or duplicated: %v", seqs)
+	}
+}
+
+// 2,001 events arrive between two polls of `events tail --follow` (an outage, a sleeping laptop): it pages
+// back to the last event it printed, however far that is (it used to stop after 20 pages and skip the rest).
+func TestEventsTailFollowLargeBacklog(t *testing.T) {
+	f := newFake(t)
+	const newest = 2002 // seq 1 was shown by the first request; 2..2002 are new
+	first := true
+	f.handle("GET /v1/events", func(w http.ResponseWriter, r *http.Request) {
+		if first {
+			first = false
+			writeJSON(w, 200, map[string]any{"data": []any{ev(1, "collection.created")}})
+			return
+		}
+		// Newest first, 100 a page; the cursor is the seq to continue below.
+		from := newest
+		if c := r.URL.Query().Get("cursor"); c != "" {
+			from, _ = strconv.Atoi(c)
+		}
+		var data []any
+		for s := from; s > from-100 && s >= 1; s-- {
+			data = append(data, ev(s, "post.created"))
+		}
+		page := map[string]any{"data": data}
+		if from-100 >= 1 {
+			page["next_cursor"] = strconv.Itoa(from - 100)
+		}
+		writeJSON(w, 200, page)
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sleeps := 0
+	r := f.runWith(runOpts{ctx: ctx, sleep: func(context.Context, time.Duration) error {
+		sleeps++
+		if sleeps == 2 {
+			cancel()
+		}
+		return nil
+	}}, "events", "tail", "--follow", "--json").mustCode(t, 0)
+	seen := map[int]bool{}
+	for _, l := range strings.Split(strings.TrimSpace(r.out), "\n") {
+		seen[int(mustJSON(t, l)["seq"].(float64))] = true
+	}
+	var missing []int
+	for s := 1; s <= newest; s++ {
+		if !seen[s] {
+			missing = append(missing, s)
+		}
+	}
+	if len(missing) > 0 {
+		t.Fatalf("%d of %d events never printed: seq %v", len(missing), newest, missing)
 	}
 }
 

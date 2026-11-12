@@ -49,6 +49,26 @@ describe('exports', () => {
     })
   })
 
+  it('stopping the iteration early cancels the HTTP stream', async () => {
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      start(ctrl) {
+        ctrl.enqueue(new TextEncoder().encode(`${JSON.stringify(ev('e1'))}\n`)) // and never ends
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    const { c } = client(() => new Response(body)) // a function: the helper clones a plain Response (a tee)
+
+    for await (const e of c.exports.events()) {
+      expect(e.id).toBe('e1')
+      break
+    }
+
+    expect(cancelled).toBe(true)
+  })
+
   it('handles a final line without newline', async () => {
     const { c } = client(chunked(JSON.stringify(ev('a')), '\n', JSON.stringify(ev('b'))))
     const ids: string[] = []

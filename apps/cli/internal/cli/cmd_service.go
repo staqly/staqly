@@ -114,7 +114,7 @@ func serviceCommand() *Command {
 			}
 			fmt.Fprintf(c.Out, "  `%s` prints the access token and a link that signs your browser in.\n",
 				serveSubcommand(dataDir, *dashboardPort, "token"))
-			fmt.Fprintln(c.Out, "  `staqly service status` checks it, `staqly service logs` shows its log, `staqly service uninstall` removes it.")
+			fmt.Fprintln(c.Out, "  `staqly service status` checks it, `staqly service logs` shows its log, `staqly service stop` / `start` pause it, `staqly service uninstall` removes it.")
 			return nil
 		}
 	}, "staqly service install", "staqly service install --expose", "LOG_LEVEL=debug staqly service install")
@@ -137,6 +137,27 @@ replaces the service, e.g. after an upgrade or to change the flags.`
 		}
 	}, "staqly service uninstall")
 
+	stop := leaf("stop", "", "Stop the background service until `staqly service start` or the next login or boot (e.g. for a full backup)", 0, 0, func(fs *flag.FlagSet) runFunc {
+		return func(c *Ctx, _ []string) error {
+			if err := stopInstalledService(c); err != nil {
+				return err
+			}
+			fmt.Fprintln(c.Out, "Background service stopped. `staqly service start` starts it again.")
+			return nil
+		}
+	}, "staqly service stop")
+
+	start := leaf("start", "", "Start the installed background service again", 0, 0, func(fs *flag.FlagSet) runFunc {
+		return func(c *Ctx, _ []string) error {
+			port, err := startInstalledService(c)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(c.Out, "Background service started: staqly answers on http://127.0.0.1:%d.\n", port)
+			return nil
+		}
+	}, "staqly service start")
+
 	status := leaf("status", "", "Show whether the background service is installed and running", 0, 0, func(fs *flag.FlagSet) runFunc {
 		return func(c *Ctx, _ []string) error {
 			out, err := serviceStatus(c)
@@ -153,7 +174,7 @@ replaces the service, e.g. after an upgrade or to change the flags.`
 	}, "staqly service logs", "staqly service logs -f")
 
 	return &Command{Name: "service", Short: "Run staqly in the background at login or boot (macOS, Linux)",
-		Subs: []*Command{install, uninstall, status, logs}}
+		Subs: []*Command{install, uninstall, stop, start, status, logs}}
 }
 
 // serviceEnv keeps the staqly settings of an environment, sorted.
@@ -313,6 +334,58 @@ func stopService(c *Ctx) error {
 	}
 }
 
+// installedUnit is the unit file of the installed service and its content.
+func installedUnit(c *Ctx) (unit, content string, err error) {
+	unit, _, err = servicePaths(c)
+	if err != nil {
+		return "", "", err
+	}
+	b, err := os.ReadFile(unit)
+	if err != nil {
+		return "", "", errors.New("the background service is not installed; run `staqly service install`")
+	}
+	return unit, string(b), nil
+}
+
+// stopInstalledService stops the installed service and keeps it installed: it starts again with
+// `staqly service start`, and at the next login (macOS) or boot (Linux).
+func stopInstalledService(c *Ctx) error {
+	if _, _, err := installedUnit(c); err != nil {
+		return err
+	}
+	if runtime.GOOS == "darwin" {
+		return stopService(c)
+	}
+	// Unlike install's best-effort stop, a failure here must be seen: a backup would copy a running install.
+	if out, err := runSystem("systemctl", "--user", "stop", systemdUnit); err != nil {
+		return fmt.Errorf("systemctl --user stop %s: %v: %s", systemdUnit, err, out)
+	}
+	return nil
+}
+
+// startInstalledService starts the installed service (a no-op for one that runs) and waits for /health.
+func startInstalledService(c *Ctx) (int, error) {
+	unit, content, err := installedUnit(c)
+	if err != nil {
+		return 0, err
+	}
+	if runtime.GOOS == "darwin" {
+		if _, err := runSystem("launchctl", "print", launchdTarget()); err != nil { // not loaded
+			if err := loadService(c, unit); err != nil {
+				return 0, err
+			}
+		}
+	} else if out, err := runSystem("systemctl", "--user", "start", systemdUnit); err != nil {
+		return 0, fmt.Errorf("systemctl --user start %s: %v: %s", systemdUnit, err, out)
+	}
+	port := unitPort(content)
+	if _, err := waitHealthy(c, port, serviceStartWait); err != nil {
+		return 0, fmt.Errorf("the service was started but staqly did not answer on http://127.0.0.1:%d/health within %s (%v); see `staqly service logs`",
+			port, serviceStartWait, err)
+	}
+	return port, nil
+}
+
 // waitHealthy polls the API's /health until it answers 200, returning the version it reports.
 func waitHealthy(c *Ctx, port int, wait time.Duration) (string, error) {
 	deadline := c.Env.now().Add(wait)
@@ -404,7 +477,7 @@ func serviceStatus(c *Ctx) (string, error) {
 		logHint = logFile
 		out, err := runSystem("launchctl", "print", launchdTarget())
 		if err != nil {
-			return "Installed (" + unit + ") but not loaded: run `staqly service install` again. Log: " + logHint, exitWith(1)
+			return "Installed (" + unit + ") but stopped: run `staqly service start`. Log: " + logHint, exitWith(1)
 		}
 		if !strings.Contains(out, "state = running") {
 			return "Installed but not running (it is restarted every few seconds while it fails). Log: " + logHint, exitWith(1)

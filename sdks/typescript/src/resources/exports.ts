@@ -38,16 +38,15 @@ export class Exports extends APIResource {
       return
     }
 
-    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
     let buf = ''
 
     try {
       for (;;) {
         const { value, done } = await reader.read()
 
-        if (value) {
-          buf += value
-        }
+        buf += decoder.decode(value, { stream: !done })
 
         let nl = buf.indexOf('\n')
 
@@ -72,8 +71,9 @@ export class Exports extends APIResource {
         yield JSON.parse(buf) as StaqlyEvent
       }
     } finally {
-      reader.releaseLock()
-      await res.body.cancel().catch(() => undefined)
+      // Through the reader: it holds the lock on res.body, so cancelling the body itself is refused and
+      // the request would stay open after a `break`.
+      await reader.cancel().catch(() => undefined)
     }
   }
 

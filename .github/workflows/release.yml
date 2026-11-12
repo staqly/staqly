@@ -144,11 +144,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, persist-credentials: false } # changelog since the previous v* tag
-      - uses: ./.github/actions/setup   # goreleaser's hook builds the dashboard (make dashboard)
+      - uses: ./.github/actions/setup
         with: { filter: "@staqly/platform..." }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         # No module cache: a published binary is built only from what go.sum pins (no cache poisoning).
         with: { go-version-file: apps/cli/go.mod, cache: false }
+      # Dependency installs, the Next.js builds and the tests run here, in steps without the release token:
+      # only goreleaser itself (compile, archive, upload) gets it.
+      - name: Dashboard and admin panel for the binary (static exports into apps/api)
+        run: make dashboard
+      - name: CLI tests
+        working-directory: apps/cli
+        run: go test ./...
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: "~> v2"

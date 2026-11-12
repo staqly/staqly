@@ -321,6 +321,75 @@ describe('retries', () => {
     expect(calls).toHaveLength(2)
   })
 
+  // The server never stores these responses (they carry a secret), so a repeat would run again:
+  // a second webhook, schedule, key or link. The same table is in sdks/python/tests/test_client.py.
+  const notReplayed: [method: 'POST' | 'PATCH' | 'PUT', path: string][] = [
+    ['POST', '/v1/webhooks'],
+    ['PATCH', '/v1/webhooks/wh_1'],
+    ['POST', '/v1/schedules'],
+    ['PATCH', '/v1/schedules/sch_1'],
+    ['POST', '/v1/api-keys'],
+    ['POST', '/v1/api-keys/key_1/rotate'],
+    ['POST', '/v1/recovery-key/rotate'],
+    ['POST', '/v1/access-token/rotate'],
+    ['POST', '/v1/device-links'],
+    ['POST', '/v1/channels'],
+    ['PATCH', '/v1/channels/ch_1'],
+    ['PUT', '/v1/providers/x/app'],
+    ['POST', '/v1/channel-links'],
+    ['POST', '/v1/posts/pst_1/previews'],
+  ]
+
+  it.each(notReplayed)(
+    '%s %s is not sent again after a 5xx or a lost response, only after a 429',
+    async (method, path) => {
+      const failed = client(new Response('{}', { status: 502, headers: { 'Retry-After': '0' } }))
+
+      await expect(failed.c.http.request({ method, path, body: {} })).rejects.toBeInstanceOf(InternalServerError)
+      expect(failed.calls).toHaveLength(1)
+
+      const lost = client(() => {
+        throw new TypeError('fetch failed')
+      })
+
+      await expect(lost.c.http.request({ method, path, body: {} })).rejects.toBeInstanceOf(APIConnectionError)
+      expect(lost.calls).toHaveLength(1)
+
+      const limited = client(new Response('{}', { status: 429, headers: { 'Retry-After': '0' } }), json({}, 201))
+
+      await limited.c.http.request({ method, path, body: {} })
+      expect(limited.calls).toHaveLength(2)
+    },
+  )
+
+  it('webhooks.create and the calls without credentials are not sent again; their neighbours still are', async () => {
+    const hook = client(new Response('{}', { status: 503, headers: { 'Retry-After': '0' } }))
+
+    await expect(hook.c.webhooks.create({ url: 'https://example.com/hook', events: ['*'] })).rejects.toBeInstanceOf(
+      InternalServerError,
+    )
+    expect(hook.calls).toHaveLength(1)
+
+    const signup = client(new Response('{}', { status: 503, headers: { 'Retry-After': '0' } }))
+
+    await expect(signup.c.workspaces.create({ name: 'a' })).rejects.toBeInstanceOf(InternalServerError)
+    expect(signup.calls).toHaveLength(1)
+
+    for (const [method, path] of [
+      ['DELETE', '/v1/webhooks/wh_1'],
+      ['POST', '/v1/webhooks/wh_1/test'],
+      ['POST', '/v1/schedules/sch_1/run'],
+      ['DELETE', '/v1/api-keys/key_1'],
+      ['POST', '/v1/channels/ch_1/test'],
+      ['POST', '/v1/posts'],
+    ] as const) {
+      const { c, calls } = client(new Response('{}', { status: 503, headers: { 'Retry-After': '0' } }), json({}))
+
+      await c.http.request({ method, path })
+      expect(calls, `${method} ${path}`).toHaveLength(2)
+    }
+  })
+
   it('no automatic Idempotency-Key when retries are disabled', async () => {
     const m = mockFetch(json({}, 201))
 
@@ -395,6 +464,39 @@ describe('streamed (raw) responses', () => {
 
     ctrl.abort()
     await expect(pending).rejects.toThrow(/abort/i)
+  })
+
+  // `timeout` covers the body too: a download that stalls after its headers ends with a TimeoutError
+  // instead of waiting for ever. It counts the wait for each chunk, not the whole download.
+  it('a download whose body stalls past the timeout throws TimeoutError', async () => {
+    const c = new Staqly({ baseUrl: 'http://x', fetch: streamingFetch(), timeout: 30, maxRetries: 0 })
+    const outcome = await Promise.race([
+      c.media.download('med_1').catch((e: unknown) => e),
+      new Promise((resolve) => setTimeout(() => resolve('still waiting'), 1000)),
+    ])
+
+    expect(outcome).toBeInstanceOf(TimeoutError)
+  })
+
+  it('a body that keeps arriving may take longer than the timeout in all', async () => {
+    const slow = () => {
+      let n = 0
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          await new Promise((resolve) => setTimeout(resolve, 25))
+          controller.enqueue(new Uint8Array([n]))
+
+          if (++n === 4) {
+            controller.close()
+          }
+        },
+      })
+
+      return Promise.resolve(new Response(body))
+    }
+    const c = new Staqly({ baseUrl: 'http://x', fetch: slow, timeout: 60, maxRetries: 0 })
+
+    expect(await c.media.download('med_1')).toEqual(new Uint8Array([0, 1, 2, 3]))
   })
 
   it('releases the abort listener once the body has been read', async () => {

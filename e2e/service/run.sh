@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real test of `staqly service install / status / logs / uninstall` on this Mac (launchd LaunchAgent).
+# Real test of `staqly service install / stop / start / status / logs / uninstall` on this Mac (launchd LaunchAgent).
 #
 #   e2e/service/run.sh                            build the CLI from this checkout and test it
 #   STAQLY_BIN=/path/to/staqly e2e/service/run.sh test another binary
@@ -174,6 +174,16 @@ check "reinstall #2" install
 check "reinstall #3" install
 check "still one job, running and answering" sh -c "[ \$(launchctl list | grep -c $LABEL) = 1 ] && curl -sf http://127.0.0.1:$API_PORT/health"
 check "status after reinstalls" "$BIN" service status
+
+echo "3b. stop and start (the documented nightly backup)"
+check "stop exits 0" "$BIN" service stop
+check "job unloaded, plist kept" sh -c "! launchctl print $TARGET && test -e '$PLIST'"
+check "API port closed" sh -c "! curl -s --max-time 2 http://127.0.0.1:$API_PORT/health"
+check "stop again is harmless" "$BIN" service stop
+check "start exits 0" "$BIN" service start
+check "running and answering" running_ok
+check "start again is harmless" "$BIN" service start
+check "still one job" one_job
 
 echo "4. busy port"
 python3 -m http.server "$BUSY_PORT" --bind 127.0.0.1 --directory "$WORK" >/dev/null 2>&1 &
