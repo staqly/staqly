@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -59,6 +60,12 @@ func (w *welcomeEnv) mailOn(t *testing.T) {
 // dropped. The clock goes back afterwards: Stripe's signatures are checked against it.
 func (w *welcomeEnv) welcomes() []string {
 	w.t.Helper()
+	return w.received("Subject: Your staqly free trial has started", "Subject: You are on staqly")
+}
+
+// received is welcomes for emails with any of these texts.
+func (w *welcomeEnv) received(texts ...string) []string {
+	w.t.Helper()
 	ctx := context.Background()
 	w.svc.RunDueJobsOnce(ctx)
 	w.clock.add(2 * time.Minute)
@@ -72,7 +79,7 @@ func (w *welcomeEnv) welcomes() []string {
 	var out []string
 	for _, m := range w.mail {
 		body := decodeQP(m.Data)
-		if strings.Contains(body, "Subject: Your staqly free trial has started") || strings.Contains(body, "Subject: You are on staqly") {
+		if slices.ContainsFunc(texts, func(s string) bool { return strings.Contains(body, s) }) {
 			out = append(out, strings.Join(m.To, ",")+"\n"+body)
 		}
 	}

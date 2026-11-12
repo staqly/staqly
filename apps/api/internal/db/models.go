@@ -744,6 +744,7 @@ type Workspace struct {
 	Timezone                 string         `json:"timezone"`
 	Logo                     string         `json:"logo"`
 	DesignBrand              string         `json:"design_brand"`
+	SubscriptionEndedFor     sql.NullString `json:"subscription_ended_for"`
 }
 
 type WorkspaceExport struct {

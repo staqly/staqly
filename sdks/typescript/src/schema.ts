@@ -363,7 +363,7 @@ export interface paths {
          *     returns the dashboard's plan page URL (`/settings/plan`) with `?checkout=switched`; the plan changes when Stripe's
          *     `customer.subscription.updated` event arrives. 409 for the plan and interval it already has. A lower plan
          *     on the same interval, and yearly to monthly on the same or a lower plan, are settled by Stripe's proration
-         *     (a credit goes on the next invoice).
+         *     at once: the credit goes to the customer's balance at Stripe, which pays the next invoices (an upgrade's too).
          *
          *     An upgrade (a paying subscription moving to a higher plan) charges the prorated difference at once,
          *     monthly to yearly on any plan charges the year at once (less the unused rest of the month), and
@@ -455,12 +455,16 @@ export interface paths {
         put?: never;
         /**
          * Add an add-on to the subscription (a workspace owner)
-         * @description Adds it to the live subscription in the subscription's interval, charged at once for the rest of the period with the card on file. Its features apply when Stripe reports them (seconds).
+         * @description Adds it to the live subscription in the subscription's interval, charged at once for the rest of the period
+         *     with the card on file, and added only once that payment goes through. Its features apply when Stripe
+         *     reports them (seconds). When the payment doesn't go through: 402 `payment_failed` whose `details` say why
+         *     (`reason`, `addon`, `pay_url`; see `PendingPayment`), the subscription stays as it was without the add-on,
+         *     and `GET /v1/billing/pending-payment` reads the same later.
          */
         post: operations["addAddon"];
         /**
          * Remove an add-on (a workspace owner)
-         * @description Removes it from the subscription now; the unused rest of the period is credited on the next invoice.
+         * @description Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
          */
         delete: operations["removeAddon"];
         options?: never;
@@ -564,9 +568,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A plan change waiting for its payment, read from Stripe (account owner)
-         * @description An upgrade to a higher plan, a move from monthly to yearly billing, and leaving Starter's trial for another
-         *     plan, are charged at once, and Stripe
+         * A plan change or an add-on waiting for its payment, read from Stripe (account owner)
+         * @description An upgrade to a higher plan, a move from monthly to yearly billing, leaving Starter's trial for another
+         *     plan, and an added add-on, are charged at once, and Stripe
          *     applies the change only when that payment goes through (until then it is the subscription's pending update
          *     and the current plan, or the trial, stays). This reads
          *     from Stripe whether such a change waits and why it isn't paid: `authentication_required` (the bank asks
@@ -4211,6 +4215,11 @@ export interface components {
              * @enum {string|null}
              */
             trial_review: "channels" | null;
+            /**
+             * @description payment_failed when the subscription ended, or is held unpaid, because a payment failed (Stripe's cancellation_details.reason; subscription_status is canceled or unpaid); null otherwise, also for a subscription the customer cancelled, and again once the workspace subscribes
+             * @enum {string|null}
+             */
+            ended_for: "payment_failed" | null;
         };
         XPosts: {
             /**
@@ -4359,12 +4368,12 @@ export interface components {
             invoice_pdf: string;
         };
         /**
-         * @description A plan change waiting for its payment (an upgrade, monthly to yearly and leaving the trial are charged at once). Also the `details` of the
-         *     402 `payment_failed` that `POST /v1/billing/checkout` answers when that payment didn't go through
+         * @description A plan change or an add-on waiting for its payment (an upgrade, monthly to yearly, leaving the trial and an added add-on are charged at once). Also the `details` of the
+         *     402 `payment_failed` that `POST /v1/billing/checkout` and `POST /v1/billing/addons/{id}` answer when that payment didn't go through
          *     (without `pending`).
          */
         PendingPayment: {
-            /** @description A plan change waits for its payment; false when none does (nothing else is set then) */
+            /** @description A plan change or an add-on waits for its payment; false when none does (nothing else is set then) */
             pending: boolean;
             /**
              * @description Why the payment hasn't gone through: `authentication_required` (the bank asks the customer to confirm it,
@@ -4390,6 +4399,11 @@ export interface components {
              * @example pro
              */
             plan?: string;
+            /**
+             * @description The add-on waiting for the payment (its id), when an add-on is what waits; `plan` is absent then
+             * @example channels_pack
+             */
+            addon?: string;
             /**
              * Format: date-time
              * @description When Stripe drops the change if it is still unpaid
@@ -7342,8 +7356,10 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            502: components["responses"]["BadGateway"];
         };
     };
     removeAddon: {
@@ -7368,6 +7384,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            502: components["responses"]["BadGateway"];
         };
     };
     createPortalSession: {

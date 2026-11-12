@@ -145,13 +145,29 @@ On a cloud server without Stripe the server-side trial sends the first email whe
 says the workspace becomes read-only when the trial ends. A server without mail (`MAIL_SMTP_HOST`, `MAIL_FROM`)
 sends neither, and Staqly Community Edition has no plans and sends none.
 
+## Payment emails
+
+When a payment fails, Staqly Cloud emails the workspace's **owners**:
+
+| Email | When | What it says |
+|---|---|---|
+| *The payment for Starter failed* (or Plus, Pro, Business) | Stripe could not charge the card and the subscription becomes `past_due`. Once per failure: not again while Stripe retries, again if a later payment fails. | That Stripe tries the card again over the next days, the day the workspace becomes read-only if it stays unpaid, and a link to **Settings → Plan & usage** to update the card. |
+| *Your staqly workspace is read-only* | Stripe ended the subscription because the payment kept failing. Once per subscription. | That the posts and settings stay, and how to open the workspace again: choose a plan in **Settings → Plan & usage**. |
+
+A payment that goes through after all sends nothing (Stripe sends the receipt), and neither does a
+subscription you cancel yourself. A renewal that isn't paid does not extend the plan: the workspace stays
+open for 3 days of grace after the paid period, then it is read-only until the invoice is paid.
+`GET /v1/billing` says so: `subscription_status` is `past_due` while Stripe retries, and `ended_for` is
+`payment_failed` once the subscription ended for it. Like the welcome emails, these have no unsubscribe
+link and need mail on the server.
+
 ## How limits are counted
 
 - Limits apply **per workspace**: every API key of a workspace shares its plan.
 - **Seats** are the workspace's members, whatever their role, and each one is billed at the plan's
   price per user (a team of three on Plus pays 3 × €29 = €87 a month). An invitation adds a seat
   once it is accepted and the rest of the period is charged at once; removing someone (or someone
-  leaving) takes it away and the unused rest is credited on the next invoice, so a person pays for
+  leaving) takes it away and the unused rest is credited at once (see [credits](#credits)), so a person pays for
   exactly the days they were a member; during the Starter trial seats are free and the first charge uses the
   seats at the trial's end. No plan caps the seats. Agents and API keys are not seats and cost
   nothing.
@@ -258,10 +274,10 @@ months at 20 % off, rounded down, so the saving is 20 % or a little more.
   - **Monthly to yearly**, on the same plan or another, works like an upgrade: the year is charged
     to the card on file right away, less the unused rest of the month, and yearly billing starts
     once that payment goes through. If it doesn't, the workspace stays on its plan, billed monthly.
-  - **A lower plan** on the same interval starts at once; Stripe credits the unused difference on
-    the next invoice.
-  - **Yearly to monthly**, on the same plan or a lower one, starts at once; Stripe credits the
-    unused rest of the year on the next invoices. With a higher plan it is an upgrade (above).
+  - **A lower plan** on the same interval starts at once; the unused difference is
+    [credited](#credits) at once.
+  - **Yearly to monthly**, on the same plan or a lower one, starts at once; the unused rest of the
+    year is [credited](#credits) at once. With a higher plan it is an upgrade (above).
 - **Manage subscription** opens the Stripe customer portal (`POST /v1/billing/portal`) to change
   the card, download invoices or cancel. When a subscription is canceled or stays unpaid, the
   plan ends and the workspace is suspended until it pays again. `GET /v1/billing` shows the
@@ -269,6 +285,50 @@ months at 20 % off, rounded down, so the saving is 20 % or a little more.
 
 Every plan change is recorded as a `workspace.plan_changed` [event](/api/events#other-events)
 with the reason (for example `stripe:active`).
+
+### Credits
+
+A lower plan, a removed add-on and a removed seat leave unused time that was already paid for. Stripe
+invoices that credit right away, and the invoice's negative total becomes the workspace's **balance**
+at Stripe. The balance pays the next invoices by itself, a later upgrade's included, so nothing waits
+for the renewal. Credits are not paid back to the card.
+
+## Add-ons
+
+An add-on is one more item on the subscription, on any plan (**Settings → Plan & usage → Add-ons**,
+`GET /v1/billing/addons`). **Add** (`POST /v1/billing/addons/{id}`) charges the rest of the billing
+period to the card on file and adds the add-on once that payment goes through; if it doesn't, the
+subscription stays as it was and the API answers 402 `payment_failed`, like an upgrade. **Remove**
+(`DELETE /v1/billing/addons/{id}`) takes it off now and [credits](#credits) the unused rest.
+
+### Defining an add-on in Stripe
+
+Operators of a cloud server sell add-ons by making them in Stripe; staqly reads them from there (the
+list is cached for 10 minutes):
+
+1. **A product** with the metadata `staqly_kind` = `addon` and `staqly_addon` = an id of your choice
+   (`ai_pack`). Its name, description and marketing features are shown in the app.
+2. **Its prices**, recurring and in EUR, with the lookup keys `staqly_addon_<id>_month` and
+   `staqly_addon_<id>_year` (`staqly_addon_ai_pack_month`). An interval without a price is not sold;
+   a product without any is not offered.
+3. **A feature** (Stripe Entitlements) attached to the product, whose metadata says what it raises:
+   `staqly_limit_<limit>` = `+N` (added to the plan's limit) or `unlimited`.
+
+| Metadata key | Counts in | Example |
+|---|---|---|
+| `staqly_limit_ai_monthly_cents` | US cents of the monthly AI allowance | `+500`: $5 more a month |
+| `staqly_limit_channels`, `staqly_limit_alerts`, `staqly_limit_webhooks`, `staqly_limit_api_keys` | pieces | `+10` |
+| `staqly_limit_posts_per_month`, `staqly_limit_x_posts_per_period`, `staqly_limit_linkedin_posts_per_period`, `staqly_limit_linkedin_videos_per_period` | posts | `+500` |
+| `staqly_limit_storage_gb` | GB | `+50` |
+| `staqly_limit_max_upload_mb` | MB | `+100` |
+| `staqly_enable` | a capability | `data_export` |
+
+So an add-on for more AI is a product `staqly_addon` = `ai_pack` with a feature carrying
+`staqly_limit_ai_monthly_cents` = `+500`: a Starter workspace that adds it has $6 a month instead of
+$1 (`GET /v1/ai` reports `usage.limit_usd`), and $1 again once it is removed. Several features add
+up; a value that is not `+N` or `unlimited` is ignored. The Stripe webhook endpoint must send
+`entitlements.active_entitlement_summary.updated`, which is how staqly learns that a workspace's
+features changed.
 
 The plans and their prices live in `apps/api/internal/app/plans.go`. Their limits live in the
 database: a default per limit, a value per plan where it differs, and a value per workspace where the

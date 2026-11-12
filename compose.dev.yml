@@ -107,9 +107,11 @@ services:
     restart: unless-stopped
     environment:
       STRIPE_API_KEY: ${STRIPE_SECRET_KEY:-}
+    # Exactly the events HandleStripeWebhook handles (apps/api/internal/app/billing.go); a test fails when the
+    # two drift (TestDevStripeListenerForwardsHandledEvents).
     command: >-
       listen --skip-verify
-      --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.paused,customer.subscription.resumed,invoice.finalized,invoice.paid,invoice.payment_failed,entitlements.active_entitlement_summary.updated
+      --events checkout.session.completed,checkout.session.async_payment_succeeded,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.paused,customer.subscription.resumed,payment_method.attached,charge.refunded,charge.dispute.created,entitlements.active_entitlement_summary.updated
       --forward-to http://staqly:3333/v1/billing/webhook
     depends_on:
       staqly:

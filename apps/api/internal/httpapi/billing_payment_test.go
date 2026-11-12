@@ -190,8 +190,8 @@ func TestTrialUpgradeDeclined(t *testing.T) {
 }
 
 // A paying workspace moving to a higher plan is charged the difference at once, and gets the plan only when that
-// payment goes through; a lower plan, or the same plan billed monthly instead of yearly, is settled on the next
-// invoice.
+// payment goes through; a lower plan, or the same plan billed monthly instead of yearly, is invoiced at once
+// without waiting (its credit becomes the customer's balance: TestCreditsBecomeBalanceAtOnce).
 func TestUpgradeOfPayingSubscription(t *testing.T) {
 	e := newEnv(t)
 	ws := workspaceID(e)
@@ -269,10 +269,10 @@ func TestUpgradeOfPayingSubscription(t *testing.T) {
 		t.Fatalf("after the upgrade: %+v", b)
 	}
 
-	// A lower plan, and the same plan billed monthly: prorated onto the next invoice, nothing waits.
+	// A lower plan, and the same plan billed monthly: invoiced at once (a credit), nothing waits.
 	for _, to := range [][2]string{{"plus", "year"}, {"business", "month"}} {
 		e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": to[0], "interval": to[1]}, 200, nil)
-		if f := sent(); f.Get("proration_behavior") != "create_prorations" || f.Get("payment_behavior") != "" {
+		if f := sent(); f.Get("proration_behavior") != "always_invoice" || f.Get("payment_behavior") != "" {
 			t.Fatalf("switch to %v: %v", to, f)
 		}
 	}
@@ -336,7 +336,8 @@ func TestMonthlyToYearlyIsChargedAtOnce(t *testing.T) {
 		t.Fatalf("402: %+v", errBody.Error)
 	}
 
-	// from (plan, interval, status) to (plan, interval): is it invoiced now?
+	// from (plan, interval, status) to (plan, interval): does it wait for its payment (now), or is it a credit
+	// invoiced at once that nothing waits for?
 	for _, c := range []struct {
 		plan, interval, status, toPlan, toInterval string
 		now                                        bool
@@ -359,11 +360,11 @@ func TestMonthlyToYearlyIsChargedAtOnce(t *testing.T) {
 		mu.Lock()
 		f, made := switched, invoices-before
 		mu.Unlock()
-		want, pay := "create_prorations", ""
+		pay := ""
 		if c.now {
-			want, pay = "always_invoice", "pending_if_incomplete"
+			pay = "pending_if_incomplete"
 		}
-		if f.Get("proration_behavior") != want || f.Get("payment_behavior") != pay || (made == 1) != c.now {
+		if f.Get("proration_behavior") != "always_invoice" || f.Get("payment_behavior") != pay || made != 1 {
 			t.Errorf("%+v: %d invoices, %v", c, made, f)
 		}
 	}

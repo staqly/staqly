@@ -315,6 +315,9 @@ class Billing(StaqlyModel):
     #: ``channels`` while the free trial is paused for review (it connected accounts of an earlier unpaid
     #: trial): publishing and new channels wait until the paid plan starts; ``None`` otherwise.
     trial_review: str | None = None
+    #: ``payment_failed`` when the subscription ended, or is held unpaid, because a payment failed (Stripe's
+    #: cancellation reason); ``None`` otherwise, and again once the workspace subscribes.
+    ended_for: str | None = None
 
 
 class SubscriptionDiscount(StaqlyModel):

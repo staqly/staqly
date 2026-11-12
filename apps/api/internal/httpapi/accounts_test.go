@@ -532,8 +532,9 @@ func TestSeatsAreBilledPerMember(t *testing.T) {
 		t.Fatalf("billing seats = %d", b.Seats)
 	}
 
-	// Bob is removed in the same period: back to one seat, the unused rest credited on the next invoice. With
-	// the charge above, he pays for the days in between.
+	// Bob is removed in the same period: back to one seat, the unused rest invoiced at once, so the credit is the
+	// customer's balance right away (was a bug: create_prorations left it as pending invoice items, which a later
+	// upgrade's invoice skips). With the charge above, he pays for the days in between.
 	removed := time.Now()
 	var members struct{ Data []app.Member }
 	e.as(owner, "GET", "/v1/members", nil, 200, &members)
@@ -543,7 +544,7 @@ func TestSeatsAreBilledPerMember(t *testing.T) {
 		}
 	}
 	e.svc.RunDueJobsOnce(ctx)
-	if len(updates) != 2 || updates[1].Get("items[0][quantity]") != "1" || updates[1].Get("proration_behavior") != "create_prorations" {
+	if len(updates) != 2 || updates[1].Get("items[0][quantity]") != "1" || updates[1].Get("proration_behavior") != "always_invoice" {
 		t.Fatalf("after Bob left: %v", updates)
 	}
 	prorated(updates[1], removed)

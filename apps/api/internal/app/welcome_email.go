@@ -22,11 +22,23 @@ import (
 // set-plan, the admin panel) is not a welcome: there is no card, no interval and no invoice to tell about. The
 // email is written when it is sent, from the workspace as it is then, and not sent at all when that is no longer
 // true (a trial ended at once for its card).
+//
+// The same job tells the owners about a payment that failed (applySubscription queues both, in its transaction):
+//
+//   - payment failed: the subscription is first seen past_due, once per failure (not again while it stays so,
+//     again when it fails after it was paid); not sent when the payment went through before the email did;
+//   - subscription ended: Stripe ended it (or holds it unpaid) because the payment kept failing, once per
+//     subscription (subscription_ended_for remembers it); the workspace is read-only until it has a plan again.
+//
+// A payment put right sends nothing: Stripe's receipt says so.
 
 const (
 	welcomeTrial   = "trial"
 	welcomePaid    = "paid"          // after a trial: the first steps were in the trial's email
 	welcomePaidNew = "paid_no_trial" // paid from the first day: with the first steps
+
+	emailPaymentFailed     = "payment_failed"
+	emailSubscriptionEnded = "subscription_ended"
 
 	// welcomeTrialDelay: the trial's email waits, so a trial ended right after it began (guardCard) says nothing.
 	welcomeTrialDelay = time.Minute
@@ -126,20 +138,37 @@ func (s *Service) runWelcomeEmail(ctx context.Context, workspaceID string, p job
 		return nil
 	}
 	f := welcomeFacts{Kind: p.Welcome, Workspace: w.Name, Plan: plan.Name, Interval: p.Interval, Base: s.webURL()}
+	// day: a stored time in the workspace's time zone (zero when it can't be read).
+	day := func(v string) time.Time {
+		t, err := time.Parse(timeFormat, v)
+		if err != nil {
+			return time.Time{}
+		}
+		if ws, err := s.Q.GetWorkspace(ctx, workspaceID); err == nil {
+			if loc, err := time.LoadLocation(ws.Timezone); err == nil {
+				t = t.In(loc)
+			}
+		}
+		return t
+	}
 	switch p.Welcome {
 	case welcomeTrial:
 		ends := s.trialEndsAt(w)
 		if ends == nil {
 			return nil // the trial is over already (ended for its card, cancelled)
 		}
-		f.TrialEnds, _ = time.Parse(timeFormat, *ends)
-		if ws, err := s.Q.GetWorkspace(ctx, workspaceID); err == nil {
-			if loc, err := time.LoadLocation(ws.Timezone); err == nil {
-				f.TrialEnds = f.TrialEnds.In(loc)
-			}
-		}
+		f.TrialEnds = day(*ends)
 		f.Card = w.SubscriptionStatus.Valid // Stripe's trial has a card on file; the server-side one has none
 		f.Steps = true
+	case emailPaymentFailed:
+		if w.SubscriptionStatus.String != "past_due" {
+			return nil // paid meanwhile, or ended (which has its own email)
+		}
+		f.ReadOnly = day(w.PlanExpiresAt.String)
+	case emailSubscriptionEnded:
+		if liveSubscription(w.SubscriptionStatus.String) {
+			return nil // a plan again already
+		}
 	case welcomePaid, welcomePaidNew:
 		if w.SubscriptionStatus.String != "active" {
 			return nil // not paying after all (the payment failed, the plan was cancelled)
@@ -160,6 +189,7 @@ type welcomeFacts struct {
 	TrialEnds time.Time // trial: its last day, in the workspace's time zone
 	Card      bool      // trial: a card is on file and is charged when the trial ends (else: read-only then)
 	Interval  string    // paid: IntervalMonth or IntervalYear ("" when unknown)
+	ReadOnly  time.Time // payment failed: the day the workspace becomes read-only if it stays unpaid (zero: unknown)
 	Steps     bool      // show the first steps
 	Base      string    // the app's address
 }
@@ -169,6 +199,38 @@ func welcomeEmail(f welcomeFacts) (string, emailDoc) {
 	planPage := f.Base + "/settings/plan"
 	d := emailDoc{Footer: []string{"You get this email once, because you are an owner of the workspace " + f.Workspace + "."}}
 	subject := ""
+	const readOnly = "your posts and settings stay, but nothing new can be written or published"
+	switch f.Kind {
+	case emailPaymentFailed:
+		subject = "The payment for staqly " + f.Plan + " failed"
+		d.Title = "The payment for " + f.Plan + " failed"
+		d.Preheader = "Update the card to keep the workspace open."
+		d.Footer = []string{"You get this email because you are an owner of the workspace " + f.Workspace + "."}
+		when := "If it stays unpaid"
+		if !f.ReadOnly.IsZero() {
+			when = "If it is still unpaid on **" + f.ReadOnly.Format("2 January 2006") + "**"
+		}
+		d.Paragraphs = []string{
+			"The payment for the **" + f.Plan + "** plan of the workspace **" + f.Workspace + "** didn't go through.",
+			"Stripe tries the card again over the next days, so there is nothing to do if the card is fine. " + when +
+				", the workspace becomes read-only: " + readOnly + ".",
+			"To pay with another card, update it in Settings → Plan & usage.",
+		}
+		d.Button = &emailLink{Text: "Update the card", URL: planPage}
+		return subject, d
+	case emailSubscriptionEnded:
+		subject = "Your staqly workspace is read-only"
+		d.Title = "The workspace is read-only"
+		d.Preheader = "Choose a plan to open it again."
+		d.Footer = []string{"You get this email because you are an owner of the workspace " + f.Workspace + "."}
+		d.Paragraphs = []string{
+			"The payment for the **" + f.Plan + "** plan of the workspace **" + f.Workspace + "** kept failing, so the subscription has ended.",
+			"The workspace is read-only: " + readOnly + ".",
+			"To open it again, choose a plan in Settings → Plan & usage. It opens as soon as the plan is paid.",
+		}
+		d.Button = &emailLink{Text: "Choose a plan", URL: planPage}
+		return subject, d
+	}
 	if f.Kind == welcomeTrial {
 		day := f.TrialEnds.Format("2 January 2006")
 		subject = "Your staqly free trial has started"
