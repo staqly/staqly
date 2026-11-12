@@ -178,6 +178,11 @@ func (s *Service) telegramConnectChat(ctx context.Context, token string, c provi
 		return
 	}
 	e, err := s.availableProvider("telegram")
+	if err == nil && !c.ByAdmin {
+		// Anyone in a group may write there, and the bot is shared by every workspace: only who runs the group
+		// may hand it over.
+		err = providers.TelegramAdmin(s.providerCtx(ctx), token, c.ChatID, c.SenderID)
+	}
 	var ch Channel
 	if err == nil {
 		var creds providers.Credentials

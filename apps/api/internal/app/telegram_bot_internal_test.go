@@ -75,7 +75,7 @@ func TestTelegramSharedBotConnects(t *testing.T) {
 	if err != nil || next != 7 || len(cmds) != 1 || cmds[0].Code != "ABC234" || cmds[0].ChatID != -100123 {
 		t.Fatalf("commands %+v %d %v", cmds, next, err)
 	}
-	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 7, Code: code.Code})
+	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ByAdmin: true, ChatID: -100123, MessageID: 7, Code: code.Code})
 
 	got, err := s.GetTelegramConnect(ctx, p, code.Code)
 	if err != nil || got.Status != "connected" || got.ChannelID == "" {
@@ -90,7 +90,7 @@ func TestTelegramSharedBotConnects(t *testing.T) {
 	}
 
 	// A used or unknown code is turned down in the chat.
-	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 10, Code: code.Code})
+	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ByAdmin: true, ChatID: -100123, MessageID: 10, Code: code.Code})
 	if len(fake.said) != 2 || !strings.Contains(fake.said[1], "doesn't work here") ||
 		!strings.Contains(fake.said[1], "only works with the staqly that showed it") || !strings.HasPrefix(fake.said[1], "<b>") {
 		t.Fatalf("said %v", fake.said)
@@ -101,11 +101,11 @@ func TestTelegramSharedBotConnects(t *testing.T) {
 	}
 
 	// Was confusing: a /connect addressed to another bot (another staqly's) got "this code is not valid" from ours.
-	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 11, Code: "ZZZ234", Bot: "staqly_dev_bot"})
+	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ByAdmin: true, ChatID: -100123, MessageID: 11, Code: "ZZZ234", Bot: "staqly_dev_bot"})
 	if len(fake.said) != 2 {
 		t.Fatalf("answered another bot's command: %v", fake.said)
 	}
-	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 12, Code: "ZZZ234", Bot: "Staqly_Test_Bot"})
+	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ByAdmin: true, ChatID: -100123, MessageID: 12, Code: "ZZZ234", Bot: "Staqly_Test_Bot"})
 	if len(fake.said) != 3 || !strings.Contains(fake.said[2], "doesn't work here") {
 		t.Fatalf("its own command: %v", fake.said)
 	}
@@ -149,7 +149,7 @@ func TestTelegramConnectCodeExpiresAndStaysInItsWorkspace(t *testing.T) {
 
 	later := time.Now().Add(telegramCodeTTL + time.Minute)
 	s.Now = func() time.Time { return later }
-	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ChatID: -100123, MessageID: 7, Code: code.Code})
+	s.telegramConnectChat(ctx, "T0KEN", providers.TelegramCommand{ByAdmin: true, ChatID: -100123, MessageID: 7, Code: code.Code})
 	got, err := s.GetTelegramConnect(ctx, p, code.Code)
 	if err != nil || got.Status != "expired" || got.ChannelID != "" {
 		t.Fatalf("expired code: %+v %v", got, err)
@@ -162,5 +162,80 @@ func TestTelegramConnectCodeExpiresAndStaysInItsWorkspace(t *testing.T) {
 	}
 	if len(fake.said) != 1 || !strings.Contains(fake.said[0], "doesn't work here") {
 		t.Fatalf("said %v", fake.said)
+	}
+}
+
+// In a group anyone may write /connect CODE, and the bot is the server's own: only the group's administrators (its
+// creator, or one posting in the group's name) may hand it to a workspace. A member is told so in the chat.
+func TestTelegramConnectInGroupNeedsAnAdministrator(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	providers.SetTelegramBot("T0KEN", "staqly_test_bot")
+	// Who sends the command, per case: user 999 is a member, 500 an administrator, the last one is anonymous.
+	senders := []string{`"from":{"id":999}`, `"from":{"id":500}`, `"from":{"id":1087968824},"sender_chat":{"id":-100777}`}
+	var mu sync.Mutex
+	var said []string
+	sender, code := "", ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		ok := func(v string) { _, _ = w.Write([]byte(`{"ok":true,"result":` + v + `}`)) }
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:] {
+		case "getMe":
+			ok(`{"id":42,"username":"staqly_test_bot"}`)
+		case "getUpdates":
+			ok(`[{"update_id":5,"message":{"message_id":7,` + sender + `,"text":"/connect ` + code + `","chat":{"id":-100777,"type":"supergroup"}}}]`)
+		case "getChat":
+			ok(`{"id":-100777,"type":"supergroup","title":"Community"}`)
+		case "getChatMember":
+			switch id, _ := in["user_id"].(float64); id {
+			case 999:
+				ok(`{"status":"member"}`)
+			case 42, 500:
+				ok(`{"status":"administrator"}`)
+			default:
+				t.Errorf("asked about user %v", id)
+			}
+		case "sendMessage":
+			said = append(said, in["text"].(string))
+			ok(`{"message_id":9}`)
+		default:
+			ok(`true`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	providers.SetTelegramAPI(srv.URL)
+	t.Cleanup(func() { providers.SetTelegramAPI("https://api.telegram.org"); providers.SetTelegramBot("", "") })
+	s.Cfg.Webhook.AllowLoopback = true
+
+	for i, from := range senders {
+		c, err := s.StartTelegramConnect(ctx, p, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		mu.Lock()
+		sender, code = from, c.Code
+		mu.Unlock()
+		cmds, _, err := providers.TelegramCommands(ctx, "T0KEN", 0, 0)
+		if err != nil || len(cmds) != 1 {
+			t.Fatalf("commands %+v %v", cmds, err)
+		}
+		s.telegramConnectChat(ctx, "T0KEN", cmds[0])
+		got, err := s.GetTelegramConnect(ctx, p, c.Code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			if got.Status != "waiting" || !strings.Contains(got.Error, "only an administrator") ||
+				len(said) != 1 || !strings.Contains(said[0], "Only an administrator of this group can connect it") {
+				t.Fatalf("a member's /connect: %+v, said %v", got, said)
+			}
+			continue
+		}
+		if got.Status != "connected" || len(said) != 1 {
+			t.Fatalf("sender %s: %+v, said %v", from, got, said)
+		}
 	}
 }

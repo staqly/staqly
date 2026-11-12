@@ -361,9 +361,12 @@ export interface paths {
          *
          *     With a live subscription: switches it to the plan and interval (Stripe prorates the difference) and
          *     returns the dashboard's plan page URL (`/settings/plan`) with `?checkout=switched`; the plan changes when Stripe's
-         *     `customer.subscription.updated` event arrives. 409 for the plan and interval it already has.
+         *     `customer.subscription.updated` event arrives. 409 for the plan and interval it already has. A lower plan,
+         *     or the same plan in the other interval, is settled by Stripe's proration (a credit goes on the next invoice).
          *
-         *     Leaving Starter's trial ends it now and charges the new plan at once; the change waits for that payment.
+         *     An upgrade (a paying subscription moving to a higher plan) charges the prorated difference at once, and
+         *     leaving Starter's trial ends it now and charges the new plan at once; either change waits for that payment,
+         *     and the workspace keeps its plan (or trial) until then.
          *     When it doesn't go through: 402 `payment_failed` whose `details` say why (`reason`; see `PendingPayment`)
          *     and, when the bank asks the customer to confirm the payment, `pay_url`: Stripe's invoice page to confirm
          *     and pay there. `GET /v1/billing/pending-payment` reads the same later.
@@ -560,8 +563,9 @@ export interface paths {
         };
         /**
          * A plan change waiting for its payment, read from Stripe (account owner)
-         * @description Leaving Starter's trial for another plan is charged at once, and Stripe applies the change only when that
-         *     payment goes through (until then it is the subscription's pending update and the trial stays). This reads
+         * @description An upgrade to a higher plan, and leaving Starter's trial for another plan, are charged at once, and Stripe
+         *     applies the change only when that payment goes through (until then it is the subscription's pending update
+         *     and the current plan, or the trial, stays). This reads
          *     from Stripe whether such a change waits and why it isn't paid: `authentication_required` (the bank asks
          *     the customer to confirm the payment: open `pay_url`, Stripe's hosted invoice page, to confirm and pay),
          *     a decline (`card_declined`, `insufficient_funds`, `expired_card`, `incorrect_card_details`: change the
@@ -1663,7 +1667,7 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Edit a draft, scheduled or failed post (posts:write)
+         * Edit a draft, scheduled or failed post (posts:write; moving a scheduled post or taking it off the schedule also needs posts:publish)
          * @description Fields left out stay as they are; `targets` replaces the whole list; `publish_at: null` clears
          *     the time (a scheduled post becomes a draft). A published or publishing post is not editable
          *     (409 `conflict`). `expected_version` makes the edit conditional (409 `post_changed`).
@@ -3502,8 +3506,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * One turn of the dashboard's assistant (server-sent events)
-         * @description The dashboard's chat assistant: a language model on the server's AI provider (AI_ASSISTANT_MODEL through fal.ai) works on the workspace with staqly's MCP tools, as the caller and with the caller's scopes. Tools that only read run at once; any other tool is announced with a confirm event and runs only when the next request carries the person's decision. The conversation lives with the client: each request sends it (the messages streamed as message events are appended to it). Each model call counts as AI usage. Answers text/event-stream, one JSON event per data line; errors after the stream started come as an error event.
+         * One turn of the dashboard's assistant, as server-sent events (posts:read)
+         * @description The dashboard's chat assistant: a language model on the server's AI provider (AI_ASSISTANT_MODEL through fal.ai) works on the workspace with staqly's MCP tools, as the caller and with the caller's scopes. Tools that only read run at once; any other tool is announced with a confirm event and runs only when the next request carries the person's decision (one decision runs one tool call). The conversation lives with the client: each request sends it (the messages streamed as message events are appended to it). Each model call counts as AI usage; a call the model refused costs nothing. Answers text/event-stream, one JSON event per data line; errors after the stream started come as an error event. Limits: a body of 4 MB, 1,000 messages, 10 attachments in a message and 200 in the conversation (422 over those). The model gets the last 60 messages and their pictures of up to 5 MB each, the most recent 20 MB of them, each picture once; the others go by name.
          */
         post: operations["assistantChat"];
         delete?: never;
@@ -4352,7 +4356,7 @@ export interface components {
             invoice_pdf: string;
         };
         /**
-         * @description A plan change waiting for its payment (leaving the trial is charged at once). Also the `details` of the
+         * @description A plan change waiting for its payment (an upgrade and leaving the trial are charged at once). Also the `details` of the
          *     402 `payment_failed` that `POST /v1/billing/checkout` answers when that payment didn't go through
          *     (without `pending`).
          */
@@ -6340,7 +6344,7 @@ export interface components {
         /**
          * @description `plan_limit_exceeded` (a plan limit; `details` has limit, max, used, plan),
          *     `plan_expired` (the workspace is suspended and read-only), `payment_failed` (a plan
-         *     change that charges at once, such as leaving the trial, wasn't paid: nothing changed; `details` has
+         *     change that charges at once, an upgrade or leaving the trial, wasn't paid: nothing changed; `details` has
          *     `reason`, and `pay_url`, `decline_code`, `plan`, `expires_at` when known, as in `PendingPayment`), or `x_posts_exhausted` (this
          *     period's posts to X, included and bought, can't cover the post; `details` has needed, left, period_end), or
          *     `linkedin_posts_exhausted` / `linkedin_videos_exhausted` (this period's posts to LinkedIn, or those with a video,

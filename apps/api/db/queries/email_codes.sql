@@ -47,3 +47,14 @@ WHERE provider = @provider AND subject = @subject AND user_id = @user_id;
 -- name: ChangeUserEmail :exec
 -- The person's contact address follows the sign-in address it was.
 UPDATE users SET email = @email, updated_at = @now WHERE id = @id AND email = @old_email;
+
+-- name: MarkIdentityRemoved :exec
+INSERT INTO removed_identities (provider, subject, user_id, removed_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (provider, subject, user_id) DO NOTHING;
+
+-- name: IdentityRemoved :one
+-- Whether this person removed this sign-in method (and has not added it again).
+SELECT COUNT(*) FROM removed_identities WHERE provider = ? AND subject = ? AND user_id = ?;
+
+-- name: ForgetRemovedIdentity :exec
+DELETE FROM removed_identities WHERE provider = ? AND subject = ? AND user_id = ?;

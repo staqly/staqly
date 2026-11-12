@@ -83,7 +83,7 @@ func (s *Service) PrepareEventExport(ctx context.Context, p Principal, f EventEx
 	}
 	audit := int64(0)
 	if p.Has(ScopeAdmin) {
-		audit = 1 // like ListEvents: api_key.*, session.*, recovery_key.*, device*.* only for admins
+		audit = 1 // like ListEvents: the audit families (event_patterns.go) only for admins
 	}
 	return &EventExport{Format: f.Format, s: s, params: db.ExportEventsPageParams{
 		WorkspaceID: p.WorkspaceID, FromTs: from, ToTs: to, Type: optAny(f.Type), TypePrefix: optAny(f.TypePrefix),
@@ -315,16 +315,20 @@ func (s *Service) OpenWorkspaceExport(ctx context.Context, p Principal, id strin
 	return f, x, err
 }
 
+// An export being built is leased to its builder through started_at: the builder renews it every
+// exportHeartbeat, and an export whose lease is older than exportLease was abandoned (a crash) and is queued
+// again by whichever server process looks next. The gap between the two keeps a live build from being taken.
+const (
+	exportHeartbeat = 30 * time.Second
+	exportLease     = 5 * time.Minute
+)
+
 // RunExportWorker builds queued exports and deletes expired ones until ctx ends.
 func (s *Service) RunExportWorker(ctx context.Context) {
-	requeue := func() error { return s.W.RequeueRunningExports(ctx) }
-	if s.pg { // other server processes may be building theirs right now
-		requeue = func() error {
-			return s.W.RequeueStaleExports(ctx, nullStr(formatTime(s.Now().Add(-time.Hour))))
+	if !s.pg { // the only server process: what was running was interrupted by the restart
+		if err := s.W.RequeueRunningExports(ctx); err != nil {
+			s.logger(ctx).Error("export requeue failed", "err", err)
 		}
-	}
-	if err := requeue(); err != nil { // interrupted by a restart
-		s.logger(ctx).Error("export requeue failed", "err", err)
 	}
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
@@ -347,6 +351,9 @@ func init() {
 // expired ZIPs. Exposed for tests.
 func (s *Service) ProcessExports(ctx context.Context) {
 	s.expireExports(ctx)
+	if err := s.W.RequeueStaleExports(ctx, nullStr(formatTime(s.Now().Add(-exportLease)))); err != nil && ctx.Err() == nil {
+		s.logger(ctx).Error("export requeue failed", "err", err)
+	}
 	for ctx.Err() == nil {
 		jobs, err := s.Q.PendingWorkspaceExports(ctx, 10)
 		if err != nil || len(jobs) == 0 {
@@ -356,29 +363,69 @@ func (s *Service) ProcessExports(ctx context.Context) {
 			return
 		}
 		for _, j := range jobs {
-			n, err := s.W.ClaimWorkspaceExport(ctx, db.ClaimWorkspaceExportParams{StartedAt: nullStr(s.now()), ID: j.ID})
+			started := s.now()
+			n, err := s.W.ClaimWorkspaceExport(ctx, db.ClaimWorkspaceExportParams{StartedAt: nullStr(started), ID: j.ID})
 			if err != nil || n == 0 {
 				continue
 			}
-			s.buildExport(ctx, j)
+			s.buildExport(ctx, j, started)
 		}
 	}
 }
 
-func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport) {
+// renewExportLease moves the lease of an export this process builds forward; false when it is no longer
+// ours (expired by a purge, removed with its workspace, or taken over after the lease ran out).
+func (s *Service) renewExportLease(ctx context.Context, id, lease string) (string, bool, error) {
+	renewed := s.now()
+	n, err := s.W.RenewWorkspaceExportLease(ctx, db.RenewWorkspaceExportLeaseParams{Renewed: nullStr(renewed), ID: id, Lease: nullStr(lease)})
+	if err != nil {
+		return lease, true, err // not known to be lost: try again at the next beat
+	}
+	return renewed, n > 0, nil
+}
+
+// buildExport builds the export claimed at started (its first lease).
+func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport, started string) {
 	ctx = logctx.With(ctx, "workspace_id", j.WorkspaceID, "export_id", j.ID)
 	p := Principal{WorkspaceID: j.WorkspaceID, Kind: j.ActorType, ID: j.ActorID, Name: j.ActorName}
 	final := s.exportPath(j.ID)
-	size, err := s.writeExportZip(ctx, j.WorkspaceID, final, j.IncludesMedia != 0)
+	// Keep the lease while building; stop building once it is lost.
+	bctx, stop := context.WithCancel(ctx)
+	beats := make(chan string, 1)
+	go func() {
+		lease := started
+		defer func() { beats <- lease }()
+		t := time.NewTicker(exportHeartbeat)
+		defer t.Stop()
+		for {
+			select {
+			case <-bctx.Done():
+				return
+			case <-t.C:
+			}
+			var ok bool
+			var err error
+			// ctx, not bctx: a renewal cut short by the end of the build could leave a lease we don't know.
+			if lease, ok, err = s.renewExportLease(ctx, j.ID, lease); err != nil && ctx.Err() == nil {
+				s.logger(ctx).Warn("export lease not renewed", "err", err)
+			} else if !ok {
+				stop()
+				return
+			}
+		}
+	}()
+	size, err := s.writeExportZip(bctx, j.WorkspaceID, final, j.IncludesMedia != 0)
 	if err == nil && s.exportsOnS3() {
 		var f *os.File
 		f, err = os.Open(final)
 		if err == nil {
-			err = s.Cfg.Blob.Put(ctx, s.exportKey(j.WorkspaceID, j.ID), f, size, "application/zip")
+			err = s.Cfg.Blob.Put(bctx, s.exportKey(j.WorkspaceID, j.ID), f, size, "application/zip")
 			f.Close()
 		}
 		os.Remove(final)
 	}
+	stop()
+	lease := <-beats
 	now := s.Now().UTC()
 	status, msg := "ready", ""
 	if err != nil {
@@ -387,12 +434,17 @@ func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport) {
 		os.Remove(final)
 	}
 	n, ferr := s.W.FinishWorkspaceExport(ctx, db.FinishWorkspaceExportParams{Status: status, SizeBytes: size, Error: msg,
-		FinishedAt: nullStr(formatTime(now)), ExpiresAt: formatTime(now.Add(exportTTL)), ID: j.ID})
+		FinishedAt: nullStr(formatTime(now)), ExpiresAt: formatTime(now.Add(exportTTL)), StartedAt: nullStr(started),
+		ID: j.ID, Lease: nullStr(lease)})
 	if ferr != nil {
 		s.logger(ctx).Error("export finish failed", "err", ferr)
 		return
 	}
 	if n == 0 {
+		// Taken over by another builder after the lease ran out: the file under this id is theirs now.
+		if st, err := s.Q.ExportStatusByID(ctx, j.ID); err != nil && !isNoRows(err) || st == "pending" || st == "running" || st == "ready" {
+			return
+		}
 		// Expired by a purge or the workspace was deleted mid-build: the ZIP
 		// may contain erased data, so it must not survive.
 		s.removeExportFile(ctx, j.WorkspaceID, j.ID)

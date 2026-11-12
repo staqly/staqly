@@ -1035,6 +1035,13 @@ func (s *Service) UpdatePost(ctx context.Context, p Principal, id string, in Pos
 			if len(targets) == 0 {
 				return invalid("targets", "a scheduled post needs at least one channel")
 			}
+			// Moving a scheduled post, taking it off the schedule or changing what it waits for is publishing, as
+			// in SchedulePost and CancelPost; the text stays a writer's.
+			if row.Status != before.Status || row.PublishAt != before.PublishAt || row.PublishOn != before.PublishOn {
+				if err := p.require(ScopePostsPublish); err != nil {
+					return err
+				}
+			}
 		}
 		row.UpdatedAt = s.now()
 		n, err := q.UpdatePost(ctx, db.UpdatePostParams{CollectionID: row.CollectionID, Title: row.Title, Content: row.Content, Media: row.Media,
@@ -1479,7 +1486,7 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	for i := range thread {
 		thread[i].Text, _ = providers.ApplyLinks(links, thread[i].Text)
 	}
-	content := providers.PostContent{PostID: postID, ChannelID: channelID, AttemptID: attempt, Text: text, Media: providers.FitMedia(e.Limits(), files), Tags: tags, Thread: thread}
+	content := providers.PostContent{PostID: postID, ChannelID: channelID, AttemptID: attempt, Text: text, Media: providers.FitMedia(e.Limits(), files), Tags: tags, Thread: thread, Retry: target.Attempts > 0}
 	settings := providers.Settings{}
 	_ = json.Unmarshal([]byte(target.Settings), &settings)
 	settings = providers.WithPost(e.SettingsFields(), e.Limits(), row.Title, tags, settings)

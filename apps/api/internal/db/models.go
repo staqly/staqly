@@ -585,6 +585,13 @@ type PublishingAllowanceReservation struct {
 	CreditDraws string `json:"credit_draws"`
 }
 
+type RemovedIdentity struct {
+	Provider  string `json:"provider"`
+	Subject   string `json:"subject"`
+	UserID    string `json:"user_id"`
+	RemovedAt string `json:"removed_at"`
+}
+
 type Schedule struct {
 	ID             string         `json:"id"`
 	WorkspaceID    string         `json:"workspace_id"`

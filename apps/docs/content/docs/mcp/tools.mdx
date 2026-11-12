@@ -185,7 +185,7 @@ Create a post in a collection: content, media (ids from upload_media), targets (
 | `title` | string | <Required /> | The post's title (required): platforms with a title (YouTube, Reddit, blogs) publish it, the others show it in staqly's lists |
 
 ### `update_post`
-Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (an empty string clears it), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. · `posts:write`
+Edit a draft, scheduled or failed post: content, media, targets (the full list replaces the current one), publish_at (an empty string clears it), tags, metadata, collection, repeat_every (an empty string stops repeating; edit the next scheduled copy of a repeating post to stop the chain), thread (replaces the replies; [] clears them). A published post is refused (duplicate it). Pass expected_version to refuse the edit when someone changed it meanwhile. Changing or clearing the publish_at of a scheduled post also needs `posts:publish`. · `posts:write`
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|

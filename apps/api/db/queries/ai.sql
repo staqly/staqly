@@ -31,8 +31,19 @@ UPDATE ai_jobs SET provider = @provider, model = @model, fallback_from = @fallba
   cost_micros = @cost_micros
 WHERE id = @id AND status = 'running';
 
--- name: SetAIJobSubmitted :exec
-UPDATE ai_jobs SET submit_state = 'submitted', provider_request = ? WHERE id = ?;
+-- name: SetAIJobSubmitted :execrows
+-- No row: the job was cancelled while the provider took it (the worker then asks the provider to drop it).
+UPDATE ai_jobs SET submit_state = 'submitted', provider_request = ? WHERE id = ? AND status = 'running';
+
+-- name: CancelAIJob :execrows
+-- A cancel decided against the submission state its caller read: no row when the worker moved the job on
+-- meanwhile (the caller reads it again). The reserved cost stays; RefundCanceledAIJob clears it.
+UPDATE ai_jobs SET status = 'canceled', error_code = 'canceled', error = 'Cancelled', finished_at = @finished_at
+WHERE id = @id AND status IN ('queued', 'running') AND submit_state = @submit_state;
+
+-- name: RefundCanceledAIJob :exec
+-- A cancelled job costs nothing once it is known that no provider ran it.
+UPDATE ai_jobs SET cost_micros = 0 WHERE id = ? AND status = 'canceled';
 
 -- name: FinishAIJob :execrows
 -- A job ends once: succeeded, failed or cancelled (a later attempt or a cancel that lost the race changes nothing).

@@ -44,6 +44,16 @@ if [ -n "$(docker ps --filter "volume=$volume" --format '{{.ID}}')" ]; then
   exit 1
 fi
 
+# With STORAGE_DRIVER=s3 (the dev stack's default: MaxIOFS) the uploaded files are in the bucket, not on the
+# volume: uploads.tar.gz would hold none of them and still look like a full backup.
+env=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container")
+if grep -qx 'STORAGE_DRIVER=s3' <<<"$env"; then
+  echo "$container keeps its media in an S3 bucket (STORAGE_DRIVER=s3), which this script cannot back up:" >&2
+  echo "nothing was written. Back the bucket up with your S3 tools and the database on its own" >&2
+  echo "(docs: Self-hosting -> Backup & restore), or use an install with STORAGE_DRIVER=disk." >&2
+  exit 1
+fi
+
 mkdir -p backups
 chmod 700 backups
 mkdir "$out"

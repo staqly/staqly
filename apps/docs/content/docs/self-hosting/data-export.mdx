@@ -113,7 +113,8 @@ variables](/self-hosting/configuration#how-to-change-a-setting). A daily worker 
 | `RETENTION_EVENTS_DAYS` | `0` (forever) | Events older than N days. A `retention.events_pruned` event per workspace records the count |
 
 - Events can't be changed (a trigger blocks `UPDATE`); retention only deletes whole events. An
-  event with a still-pending delivery is kept until it finishes, so webhooks stay at-least-once.
+  event with a still-pending webhook delivery or alert message is kept until it finishes, so
+  webhooks and alerts stay at-least-once.
 - Done jobs of the [queue](/concepts#jobs) are deleted after 7 days without a setting.
 
 ## Purge a post

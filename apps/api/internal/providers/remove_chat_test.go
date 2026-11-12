@@ -171,3 +171,27 @@ func TestRemoveTelegramOK(t *testing.T) {
 		t.Fatalf("calls %v", f.calls)
 	}
 }
+
+// An album is several messages: taking the post down deletes each one, also when one is gone already.
+func TestRemoveTelegramAlbum(t *testing.T) {
+	var deleted []float64
+	chatRemoveServer(t, func(w http.ResponseWriter, r *http.Request, b map[string]any) {
+		id, _ := b["message_id"].(float64)
+		deleted = append(deleted, id)
+		if id == 70 {
+			w.WriteHeader(400)
+			_, _ = w.Write([]byte(`{"ok":false,"error_code":400,"description":"Bad Request: message to delete not found"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
+	})
+	old := telegramAPI
+	telegramAPI = chatRemoveURL()
+	t.Cleanup(func() { telegramAPI = old })
+	if err := (Telegram{}).Remove(context.Background(), telegramCreds(), "70,71,72"); err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 3 || deleted[0] != 70 || deleted[1] != 71 || deleted[2] != 72 {
+		t.Fatalf("deleted %v", deleted)
+	}
+}

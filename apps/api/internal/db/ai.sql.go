@@ -9,6 +9,27 @@ import (
 	"context"
 )
 
+const cancelAIJob = `-- name: CancelAIJob :execrows
+UPDATE ai_jobs SET status = 'canceled', error_code = 'canceled', error = 'Cancelled', finished_at = ?1
+WHERE id = ?2 AND status IN ('queued', 'running') AND submit_state = ?3
+`
+
+type CancelAIJobParams struct {
+	FinishedAt  string `json:"finished_at"`
+	ID          string `json:"id"`
+	SubmitState string `json:"submit_state"`
+}
+
+// A cancel decided against the submission state its caller read: no row when the worker moved the job on
+// meanwhile (the caller reads it again). The reserved cost stays; RefundCanceledAIJob clears it.
+func (q *Queries) CancelAIJob(ctx context.Context, arg CancelAIJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cancelAIJob, arg.FinishedAt, arg.ID, arg.SubmitState)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const clearAIJobResult = `-- name: ClearAIJobResult :exec
 UPDATE ai_jobs SET result_key = '' WHERE workspace_id = ? AND id = ?
 `
@@ -342,6 +363,16 @@ func (q *Queries) PurgeAIJobFiles(ctx context.Context, id string) error {
 	return err
 }
 
+const refundCanceledAIJob = `-- name: RefundCanceledAIJob :exec
+UPDATE ai_jobs SET cost_micros = 0 WHERE id = ? AND status = 'canceled'
+`
+
+// A cancelled job costs nothing once it is known that no provider ran it.
+func (q *Queries) RefundCanceledAIJob(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, refundCanceledAIJob, id)
+	return err
+}
+
 const setAIJobMedia = `-- name: SetAIJobMedia :exec
 UPDATE ai_jobs SET media_id = ?, result_key = '' WHERE workspace_id = ? AND id = ?
 `
@@ -357,8 +388,8 @@ func (q *Queries) SetAIJobMedia(ctx context.Context, arg SetAIJobMediaParams) er
 	return err
 }
 
-const setAIJobSubmitted = `-- name: SetAIJobSubmitted :exec
-UPDATE ai_jobs SET submit_state = 'submitted', provider_request = ? WHERE id = ?
+const setAIJobSubmitted = `-- name: SetAIJobSubmitted :execrows
+UPDATE ai_jobs SET submit_state = 'submitted', provider_request = ? WHERE id = ? AND status = 'running'
 `
 
 type SetAIJobSubmittedParams struct {
@@ -366,9 +397,13 @@ type SetAIJobSubmittedParams struct {
 	ID              string `json:"id"`
 }
 
-func (q *Queries) SetAIJobSubmitted(ctx context.Context, arg SetAIJobSubmittedParams) error {
-	_, err := q.db.ExecContext(ctx, setAIJobSubmitted, arg.ProviderRequest, arg.ID)
-	return err
+// No row: the job was cancelled while the provider took it (the worker then asks the provider to drop it).
+func (q *Queries) SetAIJobSubmitted(ctx context.Context, arg SetAIJobSubmittedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setAIJobSubmitted, arg.ProviderRequest, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const setAIJobSubmitting = `-- name: SetAIJobSubmitting :execrows

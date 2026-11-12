@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Why a plan change that is charged at once (leaving Starter's trial) hasn't been paid. Stripe keeps such a change
+// Why a plan change that is charged at once (leaving Starter's trial, an upgrade) hasn't been paid. Stripe keeps such a change
 // as the subscription's pending update until the invoice it made is paid; the person pays or confirms on Stripe's
 // own pages (the hosted invoice page, the billing portal), never in staqly, and staqly only reads where it stands.
 const (
@@ -43,13 +43,14 @@ type PendingPayment struct {
 }
 
 // error: the 402 a plan switch answers when its payment didn't go through, with the PendingPayment as details.
-func (pp PendingPayment) error() *Error {
-	msg := "the payment for the new plan didn't go through, so the trial stays as it was: check the card in Manage billing and try again"
+// keeps: what goes on unchanged meanwhile ("the trial", "your current plan").
+func (pp PendingPayment) error(keeps string) *Error {
+	msg := "the payment for the new plan didn't go through, so " + keeps + " stays as it was: check the card in Manage billing and try again"
 	switch pp.Reason {
 	case PaymentAuthRequired:
-		msg = "your bank asks you to confirm the payment for the new plan; until then the trial stays as it was"
+		msg = "your bank asks you to confirm the payment for the new plan; until then " + keeps + " stays as it was"
 	case PaymentDeclined, PaymentInsufficientFunds, PaymentExpiredCard, PaymentIncorrectDetails:
-		msg = "the card was declined, so the trial stays as it was: update the card in Manage billing and try again"
+		msg = "the card was declined, so " + keeps + " stays as it was: update the card in Manage billing and try again"
 	case PaymentProcessing:
 		msg = "the payment for the new plan is still being processed; the plan changes once it goes through"
 	}

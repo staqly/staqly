@@ -1,9 +1,12 @@
 package app
 
 import (
+	"bytes"
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -61,4 +64,62 @@ func stringContains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// Processes that start together on a fresh data directory (the server and mcp-stdio, two containers on one
+// volume) must all end up with the key that is on disk; the same goes for the access token.
+func TestConcurrentFirstStartsShareOneSecret(t *testing.T) {
+	for round := range 100 {
+		dir := t.TempDir()
+		const n = 8
+		keys, tokens := make([][]byte, n), make([]string, n)
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for i := range n {
+			wg.Go(func() {
+				<-start
+				var err error
+				if keys[i], err = LoadSecretKey(dir, ""); err != nil {
+					t.Error(err)
+				}
+				if tokens[i], err = (&Service{Cfg: Config{LocalTokenPath: filepath.Join(dir, LocalTokenFile)}}).EnsureLocalToken(); err != nil {
+					t.Error(err)
+				}
+			})
+		}
+		close(start)
+		wg.Wait()
+		raw, _ := os.ReadFile(filepath.Join(dir, "secret.key"))
+		disk, _ := base64.StdEncoding.DecodeString(string(raw))
+		tok, _ := os.ReadFile(filepath.Join(dir, LocalTokenFile))
+		for i := range n {
+			if !bytes.Equal(keys[i], disk) {
+				t.Fatalf("round %d: starter %d holds a key that is not the one in secret.key (what it seals cannot be opened after a restart)", round, i)
+			}
+			if tokens[i] != strings.TrimSpace(string(tok)) {
+				t.Fatalf("round %d: starter %d holds an access token that is not the one in the file", round, i)
+			}
+		}
+	}
+}
+
+// A key file that is there but cannot be read is an error, never a reason to make a new key over it.
+func TestUnreadableSecretKeyIsNotReplaced(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads every file")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "secret.key")
+	if _, err := LoadSecretKey(dir, ""); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(path)
+	if err := os.Chmod(path, 0o200); err != nil { // writable, not readable
+		t.Fatal(err)
+	}
+	_, err := LoadSecretKey(dir, "")
+	_ = os.Chmod(path, 0o600)
+	if after, _ := os.ReadFile(path); err == nil || !bytes.Equal(before, after) {
+		t.Fatalf("a key file that could not be read was replaced by a new key (err %v)", err)
+	}
 }

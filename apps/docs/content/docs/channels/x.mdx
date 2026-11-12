@@ -156,6 +156,7 @@ likes, reposts, replies, quotes and bookmarks. They need no extra scope.
 | The sign-in is no longer accepted (401, revoked app access) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
 | Rate limit (429) or X unavailable (5xx) | Retries through the job queue (after 1, 5, then 15 minutes) |
 | Duplicate text, a refused link, a suspended or locked account, a video too long for the account | Fails the target with X's reason; retrying would not help, so it does not |
+| Duplicate text on a **retry** of the same post (the first try's answer was lost) | Finds the post among the account's latest five and marks the target **published** with it. On a post's first try the same text is another post's, and is never taken for this one |
 
 Access tokens last two hours. Staqly renews them half an hour before they run out and again
 right before publishing when needed; a renewal X refuses marks the channel *Needs reconnect*.

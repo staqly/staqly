@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
+import { ErrorState } from '@/components/common/error-state'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -37,7 +38,7 @@ import {
 import { api, mediaUrl, type Media, type Provider } from '@/lib/api'
 import { downloadBlob } from '@/lib/format'
 import { toastApiError } from '@/lib/notify'
-import { qk } from '@/lib/queries'
+import { qk, useSession } from '@/lib/queries'
 import { safeNextPath } from '@/lib/safe'
 import { cn } from '@/lib/utils'
 
@@ -56,7 +57,7 @@ import {
   type El,
   type Page,
 } from './doc'
-import { draftKey, dropDraft, offerDraft, writeDraft } from './drafts'
+import { draftKey, draftScope, dropDraft, offerDraft, writeDraft } from './drafts'
 import { announceEdited } from './edited-media'
 import type { Embedded } from './embed'
 import { NameField } from './name-field'
@@ -190,13 +191,15 @@ interface SaveArgs {
   project: string
   /** Draws page i on the canvas and answers it as a file. */
   render: (i: number, type: 'image/png' | 'image/jpeg') => Promise<Blob>
+  /** A page's file is saved (the one before it is gone): told at once, so a save that fails later can be tried again. */
+  onPage: (page: string, before: string | undefined, after: string) => void
 }
 
 /**
  * Saves every page as a picture in Media (JPG with photos, PNG without), replacing what it saved before, and the
  * design itself as the project, its pages remembering their files.
  */
-async function saveAll({ design, saved, project, render }: SaveArgs) {
+async function saveAll({ design, saved, project, render, onPage }: SaveArgs) {
   const base = design.name.trim() || 'Design'
   const n = design.pages.length
   const media: { page: string; before?: string; after: Media }[] = []
@@ -208,6 +211,7 @@ async function saveAll({ design, saved, project, render }: SaveArgs) {
     const before = saved[page.id]
     const after = await api.saveEdited(before, blob, name)
 
+    onPage(page.id, before, after.id)
     media.push({ page: page.id, before, after })
   }
 
@@ -242,7 +246,11 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
   const [params] = useState(() => readParams(search))
   const store = useDesignStore(newDesign())
   const { design, update, undo, redo, replace } = store
-  const [phase, setPhase] = useState<'loading' | 'ready'>(params.project || params.ids.length ? 'loading' : 'ready')
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'failed'>(
+    params.project || params.ids.length ? 'loading' : 'ready',
+  )
+  // Why it did not open (Try again opens it once more).
+  const [failure, setFailure] = useState<unknown>(null)
   const [panel, setPanel] = useState<PanelId | null>(params.project || params.ids.length ? null : 'templates')
   const [pageId, setPageId] = useState(design.pages[0]!.id)
   const [selected, setSelected] = useState<string[]>([])
@@ -250,7 +258,8 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
   const [zoom, setZoom] = useState<number | 'fit'>('fit')
   const [fitScale, setFitScale] = useState(1)
   const [busy, setBusy] = useState('')
-  const [project, setProject] = useState(params.project)
+  // The project Save writes to: known only once it opened (a failed open must never be saved over).
+  const [project, setProject] = useState('')
   const [files, setFiles] = useState<Saved>({})
   const [baseline, setBaseline] = useState<Design | null>(null)
   // Saving and downloading draw each page off screen: the page on screen stays put.
@@ -267,7 +276,13 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
   // Where Back (or, in a drawer, Escape or another design) goes once unsaved changes are confirmed: 'back' or a
   // project to open.
   const [leaving, setLeaving] = useState('')
-  const [draft, setDraft] = useState(() => draftKey(DRAFT, params))
+  // The draft is this person's in this workspace, for the document that opened (after a save: its project).
+  const scope = draftScope(useSession().data)
+  const [kept, setKept] = useState({ project: params.project, ids: params.ids })
+  const draft = draftKey(DRAFT, scope, kept)
+  // What the post had before each page's first save since the last complete one: a save tried again after it
+  // failed half way still tells the post which file to swap.
+  const swapped = useRef<Record<string, string | undefined>>({})
   const left = useRef(false)
   const root = useRef<HTMLDivElement>(null)
 
@@ -293,7 +308,7 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
   // An AI request still waiting when the editor closes is cancelled (its files go too).
   useEffect(() => discardAiRun, [])
 
-  useEffect(() => {
+  const load = useCallback(() => {
     void open(params)
       .then((o) => {
         if (!o) {
@@ -310,12 +325,25 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
           toast.info(o.notice, { description: 'It opened as a new design.' })
         }
       })
-      .catch((e: unknown) => toastApiError(e, 'Could not open it'))
-      .finally(() => {
-        setPhase('ready')
-        offerDraft(draftKey(DRAFT, params), parseDesign, replace)
-      })
+      .then(
+        () => setPhase('ready'),
+        (e: unknown) => {
+          setFailure(e)
+          setPhase('failed')
+        },
+      )
   }, [params, replace])
+
+  useEffect(load, [load])
+
+  // Unsaved changes kept in this browser are offered once the document is open.
+  const offer = draftKey(DRAFT, scope, params)
+
+  useEffect(() => {
+    if (phase === 'ready') {
+      offerDraft(offer, parseDesign, replace)
+    }
+  }, [phase, offer, replace])
 
   // The draft follows every change, a second after the last one.
   useEffect(() => {
@@ -605,10 +633,39 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
 
   // A new design asks for its name and folder first (once); a saved one saves straight away.
   const [asking, setAsking] = useState(false)
-  const save = () => (project || params.fromComposer ? persist(design, '') : setAsking(true))
+  const save = () => {
+    if (phase !== 'ready') {
+      return
+    }
+
+    if (project || params.fromComposer) {
+      persist(design, '')
+    } else {
+      setAsking(true)
+    }
+  }
   const persist = (doc: Design, folder: string) =>
     run('save', async () => {
-      const out = await saveAll({ design: doc, saved: files, project, render })
+      const out = await saveAll({
+        design: doc,
+        saved: files,
+        project,
+        render,
+        onPage: (id, before, after) => {
+          if (!(id in swapped.current)) {
+            swapped.current[id] = before
+          }
+
+          setFiles((f) => ({ ...f, [id]: after }))
+        },
+      })
+
+      // What each page replaced since the post last heard of it.
+      for (const m of out.media) {
+        m.before = swapped.current[m.page]
+      }
+
+      swapped.current = {}
 
       if (folder) {
         await api.organizeMedia({ ids: out.media.map((m) => m.after.id), folder_id: folder })
@@ -618,7 +675,7 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
       setFiles(out.saved)
       setBaseline(doc)
       dropDraft(draft)
-      setDraft(DRAFT + out.project)
+      setKept({ project: out.project, ids: [] })
 
       // On its own page the address names the saved design, and a post open in another tab follows: its
       // attachments become the new files (or get them, for a new design). In a drawer the post takes them below.
@@ -909,6 +966,17 @@ export default function DesignEditor({ search, embedded }: { search: string; emb
             {phase === 'loading' ? (
               <div className="flex size-full items-center justify-center">
                 <Loader2 className="animate-spin text-muted-foreground" />
+              </div>
+            ) : phase === 'failed' ? (
+              <div className="flex size-full items-center justify-center">
+                <ErrorState
+                  error={failure}
+                  title="Could not open it"
+                  onRetry={() => {
+                    setPhase('loading')
+                    load()
+                  }}
+                />
               </div>
             ) : (
               <DesignCanvas

@@ -13,7 +13,7 @@ import { makeClient, mockApi, renderWithProviders, sessionFixture } from './util
 
 const PAY_URL = 'https://invoice.stripe.com/i/acct_1/test_in_1'
 
-function setup(routes: Record<string, unknown>) {
+function setup(routes: Record<string, unknown>, subscriptionStatus = 'trialing') {
   const client = makeClient()
 
   client.setQueryData(qk.session, {
@@ -32,7 +32,7 @@ function setup(routes: Record<string, unknown>) {
     'GET /v1/billing': {
       enabled: true,
       plan: 'starter',
-      subscription_status: 'trialing',
+      subscription_status: subscriptionStatus,
       plan_expires_at: null,
       suspended: false,
       has_customer: true,
@@ -98,6 +98,18 @@ describe('a trial upgrade that was not paid', () => {
     await user.click(screen.getByRole('button', { name: 'Check again' }))
     await waitFor(() => expect(nav.replace.mock.calls[0]?.[0]).toBe('/settings/plan?checkout=switched'))
     expect(api.find('GET', '/v1/billing/pending-payment').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('an upgrade of a paid plan that was not paid: the current plan goes on, not a trial', async () => {
+    const { client } = setup(
+      { 'GET /v1/billing/pending-payment': { pending: true, reason: 'card_declined', pay_url: PAY_URL, plan: 'pro' } },
+      'active',
+    )
+
+    renderWithProviders(<PaymentFailedPage />, { client })
+    expect(await screen.findByRole('heading', { name: 'Your card was declined' })).toBeInTheDocument()
+    expect(screen.getByText(/your current plan goes on as before, and you haven't been charged/)).toBeInTheDocument()
+    expect(screen.queryByText(/free trial/)).not.toBeInTheDocument()
   })
 
   it('the card was declined: the reason in plain words and the billing portal to change the card', async () => {

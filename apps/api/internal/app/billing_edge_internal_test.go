@@ -1,8 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,4 +66,32 @@ func TestReconcileReachesLiveSubscriptionsFirst(t *testing.T) {
 		}
 	}
 	t.Errorf("the workspace with a lost renewal is never reconciled: %d rows, all churned", len(rows))
+}
+
+// Was a bug: a refused Stripe request was logged with its query string (customer ids, the promotion code someone
+// typed) and Stripe's message, which may quote them.
+func TestStripeFailureLogHasNoQueryOrMessage(t *testing.T) {
+	s, _, _ := publishTest(t)
+	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(400)
+		fmt.Fprint(w, `{"error":{"type":"invalid_request_error","code":"resource_missing","message":"No such promotion code: 'SECRET20' for ana@example.com"}}`)
+	}))
+	defer stripe.Close()
+	var logged bytes.Buffer
+	s.Log = slog.New(slog.NewTextHandler(&logged, nil))
+	s.Cfg.Billing = BillingConfig{SecretKey: "sk_test_log", WebhookSecret: "whsec_log", APIBase: stripe.URL}
+	if err := s.stripe(context.Background(), "GET", "/v1/promotion_codes?code=SECRET20&customer=cus_9", nil, nil); err == nil {
+		t.Fatal("the request should fail")
+	}
+	got := logged.String()
+	for _, secret := range []string{"SECRET20", "cus_9", "ana@example.com"} {
+		if strings.Contains(got, secret) {
+			t.Errorf("the log has %q: %s", secret, got)
+		}
+	}
+	for _, want := range []string{"path=/v1/promotion_codes ", "code=resource_missing", "type=invalid_request_error", "status=400"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the log lacks %q: %s", want, got)
+		}
+	}
 }

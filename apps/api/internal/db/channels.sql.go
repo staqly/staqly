@@ -761,7 +761,7 @@ func (q *Queries) SetChannelComments(ctx context.Context, arg SetChannelComments
 }
 
 const setChannelCredentials = `-- name: SetChannelCredentials :exec
-UPDATE channels SET credentials = ?, updated_at = ? WHERE id = ?
+UPDATE channels SET credentials = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL
 `
 
 type SetChannelCredentialsParams struct {
@@ -770,6 +770,7 @@ type SetChannelCredentialsParams struct {
 	ID          string `json:"id"`
 }
 
+// Renewed tokens. Not into a removed channel: a refresh that ends after the removal must not bring credentials back.
 func (q *Queries) SetChannelCredentials(ctx context.Context, arg SetChannelCredentialsParams) error {
 	_, err := q.db.ExecContext(ctx, setChannelCredentials, arg.Credentials, arg.UpdatedAt, arg.ID)
 	return err

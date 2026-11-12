@@ -39,7 +39,8 @@ UPDATE channels SET status = ?, last_error = ?, updated_at = ? WHERE id = ?;
 UPDATE channels SET status = 'needs_reconnect', last_error = ?, updated_at = ? WHERE id = ? AND status NOT IN ('needs_reconnect', 'disabled');
 
 -- name: SetChannelCredentials :exec
-UPDATE channels SET credentials = ?, updated_at = ? WHERE id = ?;
+-- Renewed tokens. Not into a removed channel: a refresh that ends after the removal must not bring credentials back.
+UPDATE channels SET credentials = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL;
 
 -- name: DeleteChannel :execrows
 -- Kept as a row for the posts it published (their targets stay); its credentials go.

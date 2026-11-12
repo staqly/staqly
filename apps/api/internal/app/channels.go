@@ -311,7 +311,13 @@ func (s *Service) authURL(ctx context.Context, e providers.Entry, app providers.
 // providerCtx is what a provider call runs with: the SSRF-guarded client, and the server's settings for a platform
 // that reads its bot token at use time.
 func (s *Service) providerCtx(ctx context.Context) context.Context {
-	return providers.WithGetenv(providers.WithHTTPClient(ctx, s.safeClient()), func(k string) string { return s.Env(k, "") })
+	ctx = providers.WithGetenv(providers.WithHTTPClient(ctx, s.safeClient()), func(k string) string { return s.Env(k, "") })
+	if s.Cfg.Mode == ModeCloud {
+		// As for webhooks: with a permissive destination policy an endpoint's words would let a workspace read
+		// internal services.
+		ctx = providers.WithoutResponseText(ctx)
+	}
+	return ctx
 }
 
 // providerApp: the workspace's developer app, else the server's.

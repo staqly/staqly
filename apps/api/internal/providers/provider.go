@@ -286,6 +286,9 @@ type PostContent struct {
 	// Thread: the parts published as replies under the post after it (each with its own delay).
 	// Providers that reply implement Replier; custom hands them to your automation in its payload.
 	Thread []ThreadPart
+	// Retry: an earlier try to send this to the channel was made and may have reached the platform, so a
+	// "duplicate" refusal can be that try's post. On a first send it is somebody else's and is never adopted.
+	Retry bool
 }
 
 // ThreadPart is one follow-up part of a post ("comment"), published as a reply DelaySeconds after the

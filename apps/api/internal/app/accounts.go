@@ -409,9 +409,10 @@ func (s *Service) userHasAddress(ctx context.Context, q *db.Queries, user db.Use
 	return false, nil
 }
 
-// upsertUser finds the person by (provider, subject), never by email, and refreshes their profile.
-// A new identity always creates a new person: linking a second provider to an existing person is an
-// explicit, signed-in action (LinkEmail, Google's link mode), so an email address alone never merges two people.
+// upsertUser finds the person by (provider, subject) and refreshes their profile. An identity nobody has
+// yet joins the account of its verified address (the address is the person), unless that person removed
+// this very sign-in method: then it stays removed and the sign-in makes a new person, as for an address
+// without an account.
 func (s *Service) upsertUser(ctx context.Context, q *db.Queries, id Identity) (db.User, error) {
 	now := s.now()
 	email := strings.ToLower(strings.TrimSpace(id.Email))
@@ -424,7 +425,13 @@ func (s *Service) upsertUser(ctx context.Context, q *db.Queries, id Identity) (d
 		// The address is the person: a verified one (Google's email_verified, an email code that reached the
 		// inbox) that already has an account signs into it, and this sign-in method is added to it.
 		if u, err = q.OldestUserByEmail(ctx, email); err == nil {
-			if err := q.CreateIdentity(ctx, db.CreateIdentityParams{Provider: id.Provider, Subject: id.Subject, UserID: u.ID, Email: email,
+			gone, gerr := q.IdentityRemoved(ctx, db.IdentityRemovedParams{Provider: id.Provider, Subject: id.Subject, UserID: u.ID})
+			if gerr != nil {
+				return db.User{}, gerr
+			}
+			if gone > 0 {
+				err = sql.ErrNoRows // removed by the person: not theirs any more
+			} else if err := q.CreateIdentity(ctx, db.CreateIdentityParams{Provider: id.Provider, Subject: id.Subject, UserID: u.ID, Email: email,
 				CreatedAt: now, LastLoginAt: nullStr(now)}); err != nil {
 				return db.User{}, err
 			}

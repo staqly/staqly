@@ -105,3 +105,23 @@ func TestGuestCannotAcceptOwnerInvitation(t *testing.T) {
 	e.as(guest, "POST", "/v1/invitations/accept", body, 403, nil)
 	e.as(owner, "POST", "/v1/invitations/accept", body, 200, nil)
 }
+
+// Was a bug: the welcome's last step writes the person's name and skipped the guest check, so a guest (a
+// viewer too) renamed the account holder. A guest is never shown the welcome either.
+func TestGuestCannotFinishOwnerWelcome(t *testing.T) {
+	e := newAccountsEnv(t, "")
+	owner := e.mustSignIn(ana, "")
+	guest := e.guestFor(ana.Email, "")
+	var s struct {
+		Onboarded bool `json:"onboarded"`
+	}
+	e.as(guest, "GET", "/v1/session", nil, 200, &s)
+	if !s.Onboarded {
+		t.Error("a guest is asked to go through the account holder's welcome")
+	}
+	e.as(guest, "POST", "/v1/session/onboarded", map[string]any{"name": "Renamed by guest"}, 403, nil)
+	if name := e.session(owner).User.Name; name != ana.Name {
+		t.Fatalf("the guest renamed the account holder to %q", name)
+	}
+	e.as(owner, "POST", "/v1/session/onboarded", map[string]any{"name": "Ana B."}, 204, nil)
+}

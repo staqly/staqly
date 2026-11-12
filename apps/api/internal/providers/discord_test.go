@@ -21,6 +21,7 @@ type fakeDiscordBot struct {
 	posts     []discordPost // every message posted
 	failIn    map[string]string
 	rateLimit bool
+	lost      bool // a send gets no answer
 	srv       *httptest.Server
 	n         int
 }
@@ -75,6 +76,9 @@ func (f *fakeDiscordBot) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		write(200, `{"roles":["r1"]}`)
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/channels/") && strings.HasSuffix(r.URL.Path, "/messages"):
 		channel := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/channels/"), "/messages")
+		if f.lost {
+			panic(http.ErrAbortHandler) // drops the connection without an answer
+		}
 		if f.rateLimit {
 			w.Header().Set("Retry-After", "2")
 			write(429, `{"message":"You are being rate limited.","retry_after":2,"global":false}`)
@@ -258,8 +262,9 @@ func TestDiscordFailures(t *testing.T) {
 	if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "published in 901") {
 		t.Fatalf("partial: %v", err)
 	}
-	f.failIn["907"] = `{"message":"Unknown Channel","code":10003}`
-	if _, err := d.Publish(ctx, c, post, Settings{"channel": "907"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "gone") {
+	// Deleted between the look-up and the send.
+	f.failIn["906"] = `{"message":"Unknown Channel","code":10003}`
+	if _, err := d.Publish(ctx, c, post, Settings{"channel": "906"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "gone") {
 		t.Fatalf("unknown channel: %v", err)
 	}
 	if _, err := d.Publish(ctx, c, post, Settings{"channel": "#nope"}); !errors.Is(err, ErrRejected) {
@@ -285,7 +290,9 @@ func TestDiscordFailures(t *testing.T) {
 	}
 
 	// The answer never came back: the message may be out.
-	f.srv.Close()
+	f.mu.Lock()
+	f.lost = true
+	f.mu.Unlock()
 	if _, err := d.Publish(ctx, c, post, Settings{"channel": "901"}); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "may have published") {
 		t.Fatalf("lost answer: %v", err)
 	}
@@ -369,5 +376,19 @@ func TestDiscordOAuthErrors(t *testing.T) {
 		if err == nil || errors.Is(err, ErrRejected) == c.temporary || !strings.Contains(err.Error(), c.says) {
 			t.Errorf("%d %s: %v", c.status, c.body, err)
 		}
+	}
+}
+
+// The bot is the server's own, one for every workspace: a channel id that is not one of the connected Discord
+// server's channels may belong to someone else's, so it is refused before anything is sent.
+func TestDiscordRefusesChannelOutsideConnectedServer(t *testing.T) {
+	f, ctx := useFakeDiscordBot(t)
+	// 777 is not in server 800's channel list; 901 is, and must not get the post either.
+	_, err := Discord{}.Publish(ctx, Credentials{"guild_id": "800"}, PostContent{Text: "hi"}, Settings{"channel": "901,777"})
+	if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "777") {
+		t.Fatalf("publish to a channel outside the connected server: %v", err)
+	}
+	if len(f.posts) != 0 {
+		t.Fatalf("the bot posted in channel %q", f.posts[0].channel)
 	}
 }

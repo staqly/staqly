@@ -71,6 +71,18 @@ func eventMatches(pat, typ string) bool {
 	return ok
 }
 
+// auditSubscription refuses a caller without admin on a subscription that names an audit family. Updates
+// check the stored subscription with it too, whatever the change: a new URL or secret on a webhook that gets
+// session.* would hand those events to someone who may not subscribe to them.
+func auditSubscription(p Principal, pats []string) error {
+	for _, e := range pats {
+		if fam, _, _ := strings.Cut(e, "."); auditFamilies[fam] && !p.Has(ScopeAdmin) {
+			return &Error{Code: "forbidden", Status: 403, Message: "subscribing to " + e + " (credential and session audit events) needs the admin scope"}
+		}
+	}
+	return nil
+}
+
 // validateEventPatterns checks webhook and notification channel
 // subscriptions: "*", globs inside a known family ("post.*",
 // "post.*_requested") and known event types. A typo like "post.publised" or
@@ -79,10 +91,8 @@ func (s *Service) validateEventPatterns(_ context.Context, p Principal, pats []s
 	if len(pats) == 0 || len(pats) > 50 {
 		return invalid("events", "subscribe to 1-50 event patterns (use \"*\" for all)")
 	}
-	for _, e := range pats {
-		if fam, _, _ := strings.Cut(e, "."); auditFamilies[fam] && !p.Has(ScopeAdmin) {
-			return &Error{Code: "forbidden", Status: 403, Message: "subscribing to " + e + " (credential and session audit events) needs the admin scope"}
-		}
+	if err := auditSubscription(p, pats); err != nil {
+		return err
 	}
 	for _, e := range pats {
 		if e == "*" || knownEventTypes[e] {

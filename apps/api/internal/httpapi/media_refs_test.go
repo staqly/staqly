@@ -205,6 +205,8 @@ func TestStorageCountsProjects(t *testing.T) {
 	}
 	file := append(append([]byte{}, pngBytes...), make([]byte, 1000-len(pngBytes))...)
 	e.upload("/v1/media", e.key, nil, "f.png", file, 402, nil)
+	// Storage is checked before the file is read to see what it is: no room answers 402, whatever was sent.
+	e.sendFile("POST", "/v1/media-projects", e.key, map[string]string{"name": "More"}, []byte(strings.Repeat("not a project ", 100)), 402, nil)
 }
 
 // Publish now, a retry and a schedule run refuse a post carrying a file in Deleted, like scheduling does.

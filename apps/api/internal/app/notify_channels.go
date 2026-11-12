@@ -515,6 +515,9 @@ func checkRetarget(typ string, old, next AlertConfig, in map[string]json.RawMess
 // applyChannelInput merges input onto ch (config keys merge; masked secret
 // values are ignored so a client can echo back what it read).
 func (s *Service) applyChannelInput(ctx context.Context, q *db.Queries, p Principal, ch *notifyChannel, in AlertInput) error {
+	if err := auditSubscription(p, ch.events); err != nil {
+		return err
+	}
 	if in.Name != nil {
 		n, err := trimmed(*in.Name, "name", 100, true)
 		if err != nil {
