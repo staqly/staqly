@@ -43,6 +43,7 @@ jobs:
       api: ${{ steps.f.outputs.api }}
       cli: ${{ steps.f.outputs.cli }}
       dashboard: ${{ steps.f.outputs.dashboard }}
+      admin: ${{ steps.f.outputs.admin }}
       docs: ${{ steps.f.outputs.docs }}
       web: ${{ steps.f.outputs.web }}
       packages: ${{ steps.f.outputs.packages }}
@@ -184,21 +185,28 @@ jobs:
         with: { version: "~> v2", workdir: apps/cli, args: check }
 
   # ── Dashboard, docs site, landing page ────────────────────────────────────
+  # The dashboard and the admin panel share one job (one install); each step runs only when its part changed.
   dashboard:
-    name: Dashboard (Next.js)
+    name: Dashboard, admin panel (Next.js)
     needs: changes
-    if: needs.changes.outputs.dashboard == 'true'
+    if: needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.admin == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup
-        with: { filter: "@staqly/platform...", cache-builds: "true" }
-      - name: API types are up to date with openapi.yaml
+        with: { filter: "@staqly/platform... @staqly/admin...", cache-builds: "true" }
+      - name: "Dashboard: API types are up to date with openapi.yaml"
+        if: needs.changes.outputs.dashboard == 'true'
         working-directory: apps/platform
         run: pnpm gen && git diff --exit-code lib/api-types.ts
-      - run: pnpm turbo run format:check lint typecheck test build size --filter=@staqly/platform
+      - name: "Dashboard: formatting, lint, types, tests, build, size"
+        if: needs.changes.outputs.dashboard == 'true'
+        run: pnpm turbo run format:check lint typecheck test build size --filter=@staqly/platform
+      - name: "Admin panel: formatting, lint, types, tests, build"
+        if: needs.changes.outputs.admin == 'true'
+        run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/admin
 
   docs:
     name: Docs (Fumadocs)

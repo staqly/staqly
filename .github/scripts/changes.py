@@ -15,13 +15,14 @@ JOBS = {
     'api': r'^apps/api/',
     'cli': r'^apps/(api|cli)/',
     'dashboard': r'^(apps/platform/|packages/|apps/api/openapi\.yaml$)',
+    'admin': r'^(apps/admin/|packages/)',
     'docs': r'^(apps/docs/|packages/|apps/api/openapi\.yaml$)',
     'web': r'^(apps/web/|packages/)',
     'packages': r'^packages/',
     'sdk_ts': r'^(sdks/typescript/|apps/api/openapi\.yaml$)',
     'sdk_py': r'^(sdks/python/|apps/api/openapi\.yaml$)',
-    # The image embeds the dashboard, so frontend/shared changes need the Docker check too.
-    'e2e': r'^(apps/(api|cli|platform)/|packages/|sdks/|scripts/|e2e/|Dockerfile$|\.dockerignore$|compose)',
+    # The image embeds the dashboard and the admin panel, so frontend/shared changes need the Docker check too.
+    'e2e': r'^(apps/(api|cli|platform|admin)/|packages/|sdks/|scripts/|e2e/|Dockerfile$|\.dockerignore$|compose)',
     # Our own code (gosec, Semgrep) and secrets in any of it; the workflows are scanned by the `changes` job.
     'security': r'^(apps/|packages/|sdks/|integrations/|scripts/|e2e/)',
 }

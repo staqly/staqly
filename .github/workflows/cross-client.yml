@@ -1,7 +1,8 @@
 # Cross-client suite (e2e/cross-client): the TypeScript and Python SDKs, the
 # staqly CLI, curl and MCP against three real `staqly serve` processes built
 # from this checkout (local, cloud, cloud with a tiny rate limit). No Docker,
-# no secrets. Locally the same: `pnpm --filter @staqly/e2e test:cross-client`
+# no secrets. Also the shell scripts (seed.sh against the local server, restore.sh with a stub docker)
+# and the n8n demo workflow's verification code. Locally the same: `pnpm --filter @staqly/e2e test:cross-client`
 # after building the SDK (see e2e/README.md).
 name: Cross-client
 
@@ -12,6 +13,8 @@ on:
       - apps/api/**
       - apps/cli/**
       - sdks/**
+      - scripts/**
+      - integrations/n8n/**
       - e2e/cross-client/**
       - e2e/lib/**
       - e2e/package.json
@@ -29,6 +32,8 @@ on:
       - apps/api/**
       - apps/cli/**
       - sdks/**
+      - scripts/**
+      - integrations/n8n/**
       - e2e/cross-client/**
       - e2e/lib/**
       - e2e/package.json

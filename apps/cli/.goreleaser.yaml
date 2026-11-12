@@ -1,17 +1,24 @@
 # goreleaser v2 config for the staqly binary (CLI + `staqly serve`), run from
 # apps/cli. Published by .github/workflows/release.yml on v* tags.
-# Dry run: goreleaser release --snapshot --clean
+# Dry run: make dashboard, then (here) goreleaser release --snapshot --clean
 version: 2
 
 project_name: staqly
 
 git:
 
+# The dashboard and admin panel must already be built into apps/api/web and apps/api/admin
+# (`make dashboard`, embedded by `staqly serve`). release.yml builds them and runs the tests in steps of
+# their own, before this one: hooks here would run dependency installs, builds and tests with the
+# release token (GITHUB_TOKEN, contents: write) in their environment.
 before:
   hooks:
-    # Embeds the dashboard (static export) into apps/api/web for `staqly serve`.
-    - make -C ../.. dashboard
-    - go test ./...
+    - sh -c 'test -s ../api/web/index.html && test -s ../api/admin/index.html || { echo "apps/api/web or apps/api/admin is empty, build the dashboard first" >&2; exit 1; }'
+
+release:
+  # v0.2.0-rc.1 is published as a pre-release: never GitHub's "latest" release, which
+  # scripts/install.sh downloads from (releases/latest/download/...).
+  prerelease: auto
 
 builds:
   - id: staqly

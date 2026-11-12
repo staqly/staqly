@@ -19,8 +19,10 @@ case "$EVENT" in
     runs=$(gh api "repos/$REPO/actions/artifacts?name=$name&per_page=30" -q '.artifacts[].workflow_run.id') || runs=""
     for id in $runs; do
       [[ $id =~ ^[0-9]+$ ]] || continue # never an error message read as run ids
-      # Only a finished, successful run of this very workflow file counts.
-      if [ "$(gh api "repos/$REPO/actions/runs/$id" -q '.conclusion + " " + .path' || true)" = "success $path" ]; then
+      # Only a finished, successful pull request run of this very workflow file counts, and only from a branch
+      # of this repository: a fork's pull request runs the fork's copy of the workflow, which could pass
+      # trivially and record any tree.
+      if [ "$(gh api "repos/$REPO/actions/runs/$id" -q '.conclusion + " " + .path + " " + .event + " " + .head_repository.full_name' || true)" = "success $path pull_request $REPO" ]; then
         echo "Run $id of $path passed on this exact tree ($tree): nothing to run again."
         skip=true
         break
