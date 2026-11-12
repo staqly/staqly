@@ -144,3 +144,40 @@ func TestCustomEndpointClientErrorsAreFinal(t *testing.T) {
 		t.Errorf("network error: %v, want a retried error", err)
 	}
 }
+
+// What the endpoint answers is stored on the target and copied into events and webhooks, so it is held to what a
+// reported result is: an http(s) link and a short id. In cloud mode the text of a refusal is not kept at all (as
+// for webhooks: with a permissive destination policy it would let a workspace read internal services).
+func TestCustomEndpointAnswerIsChecked(t *testing.T) {
+	status, body := 200, ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	c, _ := Get("custom")
+	creds := Credentials{"url": srv.URL, "method": "POST"}
+	post := PostContent{PostID: "p", Text: "x"}
+	ctx := context.Background()
+
+	for _, bad := range []string{"javascript:alert(1)", "/relative", "https://user:pw@social.test/p/1", "https://social.test/" + strings.Repeat("a", 2100)} {
+		body = `{"url":"` + bad + `","external_id":"` + strings.Repeat("9", 501) + `"}`
+		res, err := c.Publish(ctx, creds, post, nil)
+		if err != nil || res.URL != "" || res.ExternalID != "" {
+			t.Errorf("answer with url %.40q: kept %.60q %.20q, %v", bad, res.URL, res.ExternalID, err)
+		}
+	}
+	body = `{"url":"https://social.test/p/1","external_id":"p1"}`
+	if res, err := c.Publish(ctx, creds, post, nil); err != nil || res.URL != "https://social.test/p/1" || res.ExternalID != "p1" {
+		t.Fatalf("a good answer: %+v %v", res, err)
+	}
+
+	status, body = 500, "internal: db password is hunter2"
+	if _, err := c.Publish(ctx, creds, post, nil); err == nil || !strings.Contains(err.Error(), "hunter2") {
+		t.Fatalf("an install keeps the endpoint's words: %v", err)
+	}
+	_, err := c.Publish(WithoutResponseText(ctx), creds, post, nil)
+	if err == nil || strings.Contains(err.Error(), "hunter2") || !strings.Contains(err.Error(), "answered 500") {
+		t.Fatalf("cloud mode: %v", err)
+	}
+}

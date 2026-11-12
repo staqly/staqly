@@ -334,9 +334,13 @@ func (x X) tweet(ctx context.Context, c Credentials, p PostContent, s Settings, 
 		} `json:"data"`
 	}
 	if err := xDo(ctx, req, &out); err != nil {
-		// A retry after a lost answer (a restart, the job's time ran out) is refused as a duplicate: when the
-		// account's latest posts hold this text, that is the post, published.
+		// A retry after a lost answer (the job's time ran out) is refused as a duplicate: when the account's
+		// latest posts hold this text, that is the post, published. Only on a retry: on a first send the post
+		// with this text is another one, and taking its id would delete it when this post is unpublished.
 		if !strings.Contains(err.Error(), xDuplicateMsg) {
+			return Result{}, err
+		}
+		if !p.Retry {
 			return Result{}, err
 		}
 		id := x.recentWithText(ctx, token, c["user_id"], p.Text)

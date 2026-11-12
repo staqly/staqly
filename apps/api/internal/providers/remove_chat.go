@@ -152,7 +152,8 @@ func discordDelete(ctx context.Context, req *http.Request, fail func(int, http.H
 	return fail(resp.StatusCode, resp.Header, raw)
 }
 
-// Remove deletes the message (Telegram refuses after 48 hours in some chats: the person deletes it).
+// Remove deletes the post's message, or every message of an album ("70,71"; one id before albums kept them all).
+// Telegram refuses after 48 hours in some chats: the person deletes it.
 func (Telegram) Remove(ctx context.Context, c Credentials, externalID string) error {
 	token, err := telegramToken(c)
 	if err != nil {
@@ -161,20 +162,27 @@ func (Telegram) Remove(ctx context.Context, c Credentials, externalID string) er
 	if token == "" || c["chat_id"] == "" {
 		return &Failure{Kind: ErrReauth, Msg: "Telegram: no bot token stored; reconnect the channel"}
 	}
-	id, err := strconv.ParseInt(strings.TrimSpace(externalID), 10, 64)
-	if err != nil {
-		return &Failure{Kind: ErrRejected, Msg: "Telegram: nothing to delete (the post has no id)"}
+	var ids []int64
+	for _, v := range strings.Split(externalID, ",") {
+		id, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		if err != nil {
+			return &Failure{Kind: ErrRejected, Msg: "Telegram: nothing to delete (the post has no id)"}
+		}
+		ids = append(ids, id)
 	}
-	err = telegramCall(ctx, token, "deleteMessage", map[string]any{"chat_id": c["chat_id"], "message_id": id}, nil)
-	if err == nil {
-		return nil
+	for _, id := range ids {
+		err := telegramCall(ctx, token, "deleteMessage", map[string]any{"chat_id": c["chat_id"], "message_id": id}, nil)
+		if err == nil {
+			continue
+		}
+		lower := strings.ToLower(err.Error())
+		switch {
+		case strings.Contains(lower, "message to delete not found"):
+			continue // gone already, or deleted by the try before this one
+		case strings.Contains(lower, "can't be deleted"), strings.Contains(lower, "cant be deleted"):
+			return &Failure{Kind: ErrManual, Msg: "Telegram would not let the bot delete the message (older than 48 hours, or no right to): delete it in Telegram"}
+		}
+		return err
 	}
-	lower := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(lower, "message to delete not found"):
-		return nil
-	case strings.Contains(lower, "can't be deleted"), strings.Contains(lower, "cant be deleted"):
-		return &Failure{Kind: ErrManual, Msg: "Telegram would not let the bot delete the message (older than 48 hours, or no right to): delete it in Telegram"}
-	}
-	return err
+	return nil
 }
