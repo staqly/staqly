@@ -199,7 +199,7 @@ func TestBackupDockerProcess(t *testing.T) {
 				env = append(env, args[i+1])
 			}
 		}
-		body := strings.ReplaceAll(args[len(args)-1], "chown -R 10001:10001 /data", ":") // container UID mapping only
+		body := strings.ReplaceAll(args[len(args)-1], "chown -R 10001:10001 \"$new\"", ":") // container UID mapping only
 		body = strings.ReplaceAll(strings.ReplaceAll(body, "/data", data), "/backup", out)
 		cmd := exec.Command("sh", "-ec", body)
 		cmd.Env, cmd.Stdout, cmd.Stderr = env, os.Stdout, os.Stderr
