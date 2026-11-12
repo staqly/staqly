@@ -128,8 +128,8 @@ func (p Pinterest) Refresh(ctx context.Context, app App, c Credentials) (Credent
 	return t.into(c, time.Now()), nil
 }
 
-// Pinterest refuses an app with wrong keys (401) before it looks at the code; with right keys it refuses the
-// made-up code. Its wording for that is not documented, so the check proves the keys only by the first answer.
+// Pinterest answers 401 both ways (seen 2026-11-12): wrong keys are code 2 "Authentication failed", right keys
+// with the made-up code are code 283 "The authorization grant is invalid". Only the code tells them apart.
 func (Pinterest) CheckApp(ctx context.Context, app App, redirect string) (bool, error) {
 	req, err := checkForm(ctx, pinterestAPI+"/v5/oauth/token", url.Values{"grant_type": {"authorization_code"},
 		"code": {checkCode}, "redirect_uri": {redirect}})
@@ -138,9 +138,15 @@ func (Pinterest) CheckApp(ctx context.Context, app App, redirect string) (bool, 
 	}
 	req.SetBasicAuth(app.ClientID, app.ClientSecret)
 	status, body, err := probe(ctx, req, "Pinterest")
+	var answer struct {
+		Code int `json:"code"`
+	}
+	_ = json.Unmarshal([]byte(body), &answer)
 	switch {
 	case err != nil:
 		return false, err
+	case answer.Code == 283:
+		return true, nil
 	case status == http.StatusUnauthorized, strings.Contains(body, "invalid_client"):
 		return false, errors.New("Pinterest did not accept the app keys: check the App id and App secret key on the app's page")
 	case status == http.StatusBadRequest:

@@ -239,14 +239,14 @@ func TestPinterestCheckApp(t *testing.T) {
 			_, _ = w.Write([]byte(`{"code":2,"message":"Authentication failed."}`))
 			return
 		}
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"code":1,"message":"Invalid authorization code"}`))
+		w.WriteHeader(http.StatusUnauthorized) // what Pinterest really sends for right keys and a made-up code
+		_, _ = w.Write([]byte(`{"code":283,"message":"The authorization grant is invalid"}`))
 	}))
 	defer srv.Close()
 	old := pinterestAPI
 	pinterestAPI = srv.URL
 	defer func() { pinterestAPI = old }()
-	if ok, err := (Pinterest{}).CheckApp(context.Background(), App{ClientID: "cid", ClientSecret: "secret"}, "https://app.example/cb"); ok || err != nil {
+	if ok, err := (Pinterest{}).CheckApp(context.Background(), App{ClientID: "cid", ClientSecret: "secret"}, "https://app.example/cb"); !ok || err != nil {
 		t.Fatalf("good keys: %v %v", ok, err)
 	}
 	if _, err := (Pinterest{}).CheckApp(context.Background(), App{ClientID: "cid", ClientSecret: "wrong"}, "https://app.example/cb"); err == nil {
