@@ -101,7 +101,7 @@ func (f *fakeServiceManager) run(name string, args ...string) (string, error) {
 			return "active", nil
 		}
 		return "inactive", errors.New("exit status 3")
-	case strings.Contains(cmd, "restart"):
+	case strings.Contains(cmd, "start"): // start and restart
 		f.loaded = true
 	case strings.Contains(cmd, "stop"), strings.Contains(cmd, "disable"):
 		f.loaded = false
@@ -192,6 +192,48 @@ func TestServiceInstallUninstall(t *testing.T) {
 	}
 	if r := run("service", "status"); r.code != 1 || !strings.Contains(r.out, "Not installed") {
 		t.Fatalf("status after uninstall: %d %s", r.code, r.out)
+	}
+}
+
+// stop keeps the unit and stops the process (waiting until it is gone); start brings it back and waits for
+// /health. The documented nightly backup script runs both.
+func TestServiceStopStart(t *testing.T) {
+	f := fakeService(t)
+	home, port := t.TempDir(), healthServer(t)
+	run := func(args ...string) result {
+		return runCLI(t, "http://127.0.0.1:1", runOpts{env: map[string]string{"HOME": home}}, args...)
+	}
+
+	for _, cmd := range []string{"stop", "start"} {
+		if r := run("service", cmd); r.code == 0 || !strings.Contains(r.err, "not installed") {
+			t.Fatalf("%s without an install: %d %s %s", cmd, r.code, r.out, r.err)
+		}
+	}
+	if r := run("service", "install", "--port", port); r.code != 0 {
+		t.Fatalf("install: %d %s", r.code, r.err)
+	}
+	if r := run("service", "stop"); r.code != 0 {
+		t.Fatalf("stop: %d %s %s", r.code, r.out, r.err)
+	}
+	if f.loaded || f.stopping > 0 {
+		t.Fatalf("stop returned before the job was gone: loaded=%v stopping=%d", f.loaded, f.stopping)
+	}
+	if _, err := os.Stat(unitPath(home)); err != nil {
+		t.Fatalf("stop removed the unit: %v", err)
+	}
+	if r := run("service", "status"); r.code != 1 {
+		t.Fatalf("status of a stopped service: %d %s", r.code, r.out)
+	}
+	if r := run("service", "stop"); r.code != 0 {
+		t.Fatalf("stop of a stopped service: %d %s", r.code, r.err)
+	}
+	for range 2 { // the second start finds it running
+		if r := run("service", "start"); r.code != 0 || !strings.Contains(r.out, "http://127.0.0.1:"+port) {
+			t.Fatalf("start: %d %s %s", r.code, r.out, r.err)
+		}
+		if !f.loaded {
+			t.Fatalf("not loaded after start: %v", f.ran)
+		}
 	}
 }
 

@@ -78,6 +78,13 @@ check "reinstall #1" install
 check "reinstall #2" install
 check "active and answering" sh -c "[ \$(systemctl --user is-active staqly.service) = active ] && curl -sf http://127.0.0.1:$API_PORT/health"
 
+echo "3b. stop and start (the documented nightly backup)"
+check "stop exits 0" "$BIN" service stop
+check "not active, unit kept and enabled" sh -c "! systemctl --user is-active staqly.service && test -e '$UNIT' && [ \$(systemctl --user is-enabled staqly.service) = enabled ]"
+check "API port closed" sh -c "! curl -s --max-time 2 http://127.0.0.1:$API_PORT/health"
+check "start exits 0" "$BIN" service start
+check "active and answering" sh -c "[ \$(systemctl --user is-active staqly.service) = active ] && curl -sf http://127.0.0.1:$API_PORT/health"
+
 echo "4. busy port"
 nc -l 127.0.0.1 "$BUSY_PORT" >/dev/null 2>&1 &
 NC=$!

@@ -112,7 +112,7 @@ A nightly run skips a commit the previous nightly already passed (`cross-client.
 the `security` job: govulncheck's database and Semgrep's registry rules change without a commit, so it runs every
 night (`FRESH` in `changes.py`). A failed run, cancelled or incomplete, never counts as passed.
 A failed nightly (any of these workflows, and `n8n.yml`) opens an issue labelled `nightly-failure`.
-Image changes include the dashboard, shared packages and `.dockerignore`.
+Image changes include the dashboard, the admin panel, shared packages and `.dockerignore`.
 Workflows, the lockfile and root configuration run every job.
 
 Nightly and manual CI runs also set `TURBO_FORCE=true` to execute tasks even with a warm Turbo cache.
@@ -124,7 +124,8 @@ Docker E2E runs alongside the API jobs; `internal/httpapi` is split over two run
 PostgreSQL (`.github/scripts/go-test-shard.sh`: every n-th test each), the other packages run beside them.
 The `changes` job also runs actionlint and the change-selection tests
 (`make lint-workflows`, `python3 -m unittest discover -s .github/scripts`). The landing page, shared
-packages and TypeScript SDK share one job (`js`), each step running only when its part changed.
+packages and TypeScript SDK share one job (`js`), the dashboard and the admin panel another (`dashboard`), each
+step running only when its part changed.
 The `security` job (`make security`, about three minutes) scans our own code with gosec (Go) and Semgrep (TS/JS, Python,
 secrets) and runs govulncheck on the API and CLI; zizmor runs on the workflows in `make lint-workflows`; all stay free
 once the repository is private. On a pull request, a failed quick job (CLI, dashboard, docs, `js`, Python SDK,
@@ -143,7 +144,7 @@ as locally:
 
 | Workflow | When | Runs | Secrets |
 |---|---|---|---|
-| `cross-client.yml` | relevant pushes/PRs (API, CLI, SDKs, shared test helpers or the suite), nightly, by hand | Go, uv and Node; builds the TS SDK, then `pnpm --filter @staqly/e2e test:cross-client` | none |
+| `cross-client.yml` | relevant pushes/PRs (API, CLI, SDKs, `scripts/`, the n8n demo workflow, shared test helpers or the suite), nightly, by hand | Go, uv and Node; builds the TS SDK, then `pnpm --filter @staqly/e2e test:cross-client` | none |
 | `n8n.yml` | relevant pushes to `main` (API, image, compose, integration or suite; not dashboard-only changes), nightly, by hand (`scenarios` input) | the image built from the checkout (layer cache) as `ghcr.io/staqly/staqly:latest`, `docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait` (`make dev` without the browser), then `pnpm --filter @staqly/e2e test:n8n`; `results.json` as an artifact | none |
 | `ui.yml` | nightly, by hand | one job runs `make dashboard` and builds `staqly` (an artifact for a day); then Node, PostgreSQL as a service, Playwright's Chromium, and with `UI_BIN` set to that binary `pnpm --filter @staqly/e2e test:ui` in four parallel shards (`--shard=N/4`, each its own servers) and `pnpm --filter @staqly/e2e test:ui-responsive` beside them; 20 minutes per job, Playwright's `globalTimeout` (15 minutes in CI) ends a stuck shard with a report; the report and traces always as an artifact | none |
 
@@ -309,6 +310,7 @@ nightly and on pushes to `main` or pull requests that touch its inputs (`cross-c
 | `03-cli` | Every command group in both modes: exit codes (0, 1, 2 failed, 3 timeout, 64 usage), `--json` output, no review-era commands, name-addressed collections (rename, timeout, archive, delete), `posts create` as a draft, with `--publish-at` (needs a channel), `--now --wait` (published 0, failed 2, timeout 3), `--file`, `--stdin`, `@file`, `--idempotency-key`; posts list (`--all` paging, filters), get, update (`--expected-version`, `--clear-publish-at`, `--no-channels`), schedule (relative times), cancel, duplicate, preview, history, delete, purge (admin), tags, the `schedule` calendar; publish, `work`, `result` by channel name, `retry --wait`; channels (providers, connect your own automation, a `soon` platform refused, update, test, remove); media; events; webhooks; alerts; schedules (times, every, once, run) and jobs (list, stats, get, cancel, retry); workspace export; keys, plans, profiles (`login` / `logout`), billing without Stripe, `staqly serve` operator commands against a live data directory |
 | `04-method-sweep` | The remaining SDK methods in TS and Python: server info, collections (`listPosts`, the processing timeout, archive refuses new posts, delete), posts (search, tags, preview, moving between collections, purge), providers and channels (catalog, a `soon` platform and an unknown one refused, test, disable, enable, remove, `oauthStart` on a platform on the way), alerts (masked secrets, enable, update, test against nothing, deliveries), workspace and exports, sign-in with an API key, device links (dashboard session only, single use), billing without Stripe, recovery keys (single use) |
 | `05-schedules` | Schedules, jobs and the work list across clients: Python drafts → CLI creates a weekday schedule → curl runs it (the oldest draft goes to the schedule's channel, `GET /v1/work` lists it in every client) → TS `waitForPublished` released by curl's result report → the queue read by TS, Python, CLI and MCP (a done job can neither be retried nor cancelled) → CLI toggles, Python runs, MCP deletes; a schedule with `source: agent` asks for posts until MCP writes one; a once schedule from the CLI with a relative time; validation the same everywhere |
+| `06-scripts` | The shell scripts and the n8n demo workflow as they are: `scripts/seed.sh` against the local server (collections, pictures and posts exist, a second run passes, a refused request ends with exit 1), `scripts/restore.sh` with a stub `docker` on throwaway folders (a restore swaps database, uploads and keys; a truncated archive is refused before anything stops; a backup that cannot be unpacked or a swap that fails half way leaves the previous data in place and the container running; data left aside by an earlier failure stops it with the container stopped and says so), the workflow's **Verify & parse** node (a repeated event is dropped, an `X-Staqly-Event-Id` header that differs from the signed body is refused) |
 
 ## Dashboard UI suite (Playwright, no Docker)
 
