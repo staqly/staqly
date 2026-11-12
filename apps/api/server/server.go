@@ -125,6 +125,9 @@ func run(ctx context.Context, cfg config.Config, log *slog.Logger, version strin
 	if err := svc.EnsureAdmins(ctx); err != nil {
 		return fmt.Errorf("admins: %w", err)
 	}
+	if err := svc.MoveInstagramLoginChannels(ctx); err != nil {
+		return fmt.Errorf("instagram channels: %w", err)
+	}
 	localToken := ""
 	if cfg.App.Mode == app.ModeLocal {
 		if err := svc.EnsureLocalWorkspace(ctx); err != nil {

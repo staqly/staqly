@@ -73,31 +73,32 @@ func (s *Service) fingerprint(kind, value string) string {
 }
 
 // providerFamilies: platforms connected in more than one way are one account: the same Bluesky account by OAuth or
-// an app password, the same Mastodon account by OAuth or a token, the same Discord server by the bot or a webhook.
+// an app password, the same Mastodon account by OAuth or a token, the same Discord server by the bot or a webhook,
+// the same Instagram account by Unified login or Instagram login.
 var providerFamilies = map[string]string{
 	"bluesky_app_password": "bluesky",
 	"mastodon_token":       "mastodon",
 	"discord_webhook":      "discord",
 	"whop_key":             "whop",
+	"instagram_standalone": "instagram",
 }
 
 // accountIDKeys: for personal accounts, the credentials that carry the platform's own id for the account, which
 // never changes (a handle can be renamed), in order of preference. A family not listed here and not a shared space
 // falls back to the account URL (Mastodon) or the handle.
 var accountIDKeys = map[string][]string{
-	"bluesky":           {"did"},
-	"x":                 {"user_id"},
-	"threads":           {"user_id"},
-	"tiktok":            {"open_id"},
-	"instagram":         {"user_id"},
-	"instagram_unified": {"user_id"},
-	"linkedin":          {"person_id"},
-	"youtube":           {"channel_id", "google_id"},
-	"twitch":            {"user_id"},
-	"kick":              {"user_id"},
-	"tumblr":            {"user", "blog"},
-	"reddit":            {"username"},
-	"pinterest":         {"username"},
+	"bluesky":   {"did"},
+	"x":         {"user_id"},
+	"threads":   {"user_id"},
+	"tiktok":    {"open_id"},
+	"instagram": {"user_id"},
+	"linkedin":  {"person_id"},
+	"youtube":   {"channel_id", "google_id"},
+	"twitch":    {"user_id"},
+	"kick":      {"user_id"},
+	"tumblr":    {"user", "blog"},
+	"reddit":    {"username"},
+	"pinterest": {"username"},
 }
 
 // sharedSpaces: platforms whose channel is a space many people may use, with who authorized the connection ("" when

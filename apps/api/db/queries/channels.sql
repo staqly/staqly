@@ -78,12 +78,12 @@ UPDATE channels SET comments = ? WHERE id = ?;
 -- Every workspace's connected Facebook and Instagram channels: a Meta webhook says whose permission changed only by
 -- ids kept in the sealed credentials.
 SELECT id, workspace_id, provider, credentials FROM channels
-WHERE provider IN ('facebook', 'instagram', 'instagram_unified') AND status = 'connected' AND deleted_at IS NULL;
+WHERE provider IN ('facebook', 'instagram', 'instagram_standalone') AND status = 'connected' AND deleted_at IS NULL;
 
 -- name: MetaChannels :many
 -- Every workspace's Facebook, Instagram and Threads channels still kept: a Meta deauthorize or data deletion request
 -- names the person only by ids kept in the sealed credentials.
-SELECT * FROM channels WHERE provider IN ('facebook', 'instagram', 'instagram_unified', 'threads') AND deleted_at IS NULL;
+SELECT * FROM channels WHERE provider IN ('facebook', 'instagram', 'instagram_standalone', 'threads') AND deleted_at IS NULL;
 
 -- name: WipeChannelAccount :exec
 -- A data deletion request from the platform: the channel keeps its row and name, loses what came from the account.
@@ -119,3 +119,11 @@ SELECT channel_id, kind, substr(at, 1, 16) AS minute, CAST(SUM(count) AS INTEGER
 FROM channel_activity
 WHERE workspace_id = sqlc.arg(workspace_id) AND at >= sqlc.arg(from_at) AND at < sqlc.arg(to_at)
 GROUP BY channel_id, kind, substr(at, 1, 16);
+
+-- name: InstagramChannels :many
+-- Every workspace's Instagram channels, removed ones included: only the sealed credentials say how each signed in
+-- (MoveInstagramLoginChannels, at start).
+SELECT id, workspace_id, credentials FROM channels WHERE provider = 'instagram';
+
+-- name: SetChannelProvider :exec
+UPDATE channels SET provider = @provider WHERE workspace_id = @workspace_id AND id = @id;

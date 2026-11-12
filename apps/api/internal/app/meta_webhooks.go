@@ -154,7 +154,7 @@ const storyLifetime = 24 * time.Hour
 // storyExpired: a published Instagram story past its day, whose numbers are final (story_insights) and must not be
 // asked for again.
 func storyExpired(provider, settings string, publishedAt sql.NullString, now time.Time) bool {
-	if (provider != "instagram" && provider != "instagram_unified") || !publishedAt.Valid {
+	if (provider != "instagram" && provider != "instagram_standalone") || !publishedAt.Valid {
 		return false
 	}
 	var s map[string]string
@@ -189,7 +189,7 @@ func (s *Service) storeStoryInsights(ctx context.Context, payload any) error {
 			return err
 		}
 		for _, r := range rows {
-			if r.Provider != "instagram" && r.Provider != "instagram_unified" {
+			if r.Provider != "instagram" && r.Provider != "instagram_standalone" {
 				continue
 			}
 			if err := s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(m), MetricsAt: nullStr(s.now()),
@@ -279,7 +279,7 @@ func (s *Service) metaPermissionsChanged(ctx context.Context, body []byte) (int,
 		}
 		hit := false
 		provider := r.Provider
-		if provider == "instagram_unified" { // the same Instagram permissions
+		if provider == "instagram_standalone" { // the same Instagram permissions
 			provider = "instagram"
 		}
 		for _, rv := range byProvider[provider] {

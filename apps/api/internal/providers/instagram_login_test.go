@@ -15,7 +15,7 @@ import (
 // the account from /me, and publishing on graph.instagram.com; an account from Unified login stays on graph.facebook.com.
 func TestInstagramLogin(t *testing.T) {
 	ctx := context.Background()
-	ig, _ := Get("instagram")
+	ig, _ := Get("instagram_standalone")
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.Method+" "+r.URL.Path)
@@ -48,10 +48,10 @@ func TestInstagramLogin(t *testing.T) {
 	instagramGraph, facebookGraph = srv.URL, "http://unused.invalid"
 	defer func() { instagramGraph, facebookGraph = host, fb }()
 
-	app := App{ClientID: "ig-app", ClientSecret: "ig-secret", InstagramLogin: true}
+	app := App{ClientID: "ig-app", ClientSecret: "ig-secret"}
 	auth, err := ig.Provider.(interface {
 		AuthURL(App, string, string, map[string]string) (string, error)
-	}).AuthURL(app, "https://app.example/channels/callback/instagram", "st", nil)
+	}).AuthURL(app, "https://app.example/channels/callback/instagram_standalone", "st", nil)
 	u, _ := url.Parse(auth)
 	if err != nil || !strings.HasPrefix(auth, "https://www.instagram.com/oauth/authorize?") || u.Query().Get("scope") != instagramScopes ||
 		u.Query().Get("config_id") != "" {
@@ -59,7 +59,7 @@ func TestInstagramLogin(t *testing.T) {
 	}
 	creds, _, err := ig.Provider.(interface {
 		Exchange(context.Context, App, string, string, map[string]string) (Credentials, Profile, error)
-	}).Exchange(ctx, app, "https://app.example/channels/callback/instagram", "code#_", nil)
+	}).Exchange(ctx, app, "https://app.example/channels/callback/instagram_standalone", "code#_", nil)
 	if err != nil || creds["access_token"] != "long" || creds["login"] != "instagram" || creds["no_comments"] != "true" {
 		t.Fatalf("exchange %v %v", creds, err)
 	}
@@ -78,19 +78,5 @@ func TestInstagramLogin(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(paths, " "), "POST /"+instagramVersion+"/17841/media_publish") {
 		t.Fatalf("published elsewhere: %v", paths)
-	}
-}
-
-// Instagram (Professional) is Unified login under its own id: the configuration, not scopes, and never Instagram login.
-func TestInstagramUnifiedTile(t *testing.T) {
-	e, ok := Get("instagram_unified")
-	if !ok || e.Name() != "Instagram (Professional)" {
-		t.Fatal("not registered")
-	}
-	auth, err := e.Provider.(interface {
-		AuthURL(App, string, string, map[string]string) (string, error)
-	}).AuthURL(App{ClientID: "meta", ConfigID: "cfg"}, "https://app.example/channels/callback/instagram_unified", "st", nil)
-	if err != nil || !strings.HasPrefix(auth, facebookAuthorize) || !strings.Contains(auth, "config_id=cfg") || strings.Contains(auth, "scope=") {
-		t.Fatalf("auth url %s %v", auth, err)
 	}
 }

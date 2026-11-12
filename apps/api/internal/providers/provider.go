@@ -197,17 +197,17 @@ var imageRules = func() map[string]*ImageRules {
 	igFeed := &ImageRules{MaxBytes: 8 << 20, Formats: jpeg, MinRatio: 0.8, MaxRatio: 1.91, MinWidth: 320,
 		Note: "Feed posts take 4:5 to 1.91:1; stories and reels are 9:16."}
 	return map[string]*ImageRules{
-		"x":                 {MaxBytes: 5 << 20, Formats: []string{"image/jpeg", "image/png", "image/gif", "image/webp"}},
-		"instagram":         igFeed,
-		"instagram_unified": igFeed,
-		"threads":           {MaxBytes: 8 << 20, Formats: []string{"image/jpeg", "image/png"}, MinRatio: 0.1, MaxRatio: 10, MinWidth: 320},
-		"facebook":          {MaxBytes: 10 << 20, Formats: []string{"image/jpeg", "image/png", "image/gif", "image/bmp", "image/tiff", "image/webp"}},
-		"linkedin":          {Formats: []string{"image/jpeg", "image/png", "image/gif"}, MaxPixels: 36_152_320},
-		"linkedin_page":     {Formats: []string{"image/jpeg", "image/png", "image/gif"}, MaxPixels: 36_152_320},
-		"pinterest":         {MaxBytes: 20 << 20, Formats: []string{"image/jpeg", "image/png", "image/webp"}},
-		"bluesky":           {MaxBytes: 1_000_000, Formats: []string{"image/jpeg", "image/png", "image/webp", "image/gif"}},
-		"telegram":          {MaxBytes: 10 << 20, MinRatio: 0.05, MaxRatio: 20},
-		"google_business":   {MaxBytes: 5 << 20, Formats: []string{"image/jpeg", "image/png"}, MinWidth: 250},
+		"x":                    {MaxBytes: 5 << 20, Formats: []string{"image/jpeg", "image/png", "image/gif", "image/webp"}},
+		"instagram":            igFeed,
+		"instagram_standalone": igFeed,
+		"threads":              {MaxBytes: 8 << 20, Formats: []string{"image/jpeg", "image/png"}, MinRatio: 0.1, MaxRatio: 10, MinWidth: 320},
+		"facebook":             {MaxBytes: 10 << 20, Formats: []string{"image/jpeg", "image/png", "image/gif", "image/bmp", "image/tiff", "image/webp"}},
+		"linkedin":             {Formats: []string{"image/jpeg", "image/png", "image/gif"}, MaxPixels: 36_152_320},
+		"linkedin_page":        {Formats: []string{"image/jpeg", "image/png", "image/gif"}, MaxPixels: 36_152_320},
+		"pinterest":            {MaxBytes: 20 << 20, Formats: []string{"image/jpeg", "image/png", "image/webp"}},
+		"bluesky":              {MaxBytes: 1_000_000, Formats: []string{"image/jpeg", "image/png", "image/webp", "image/gif"}},
+		"telegram":             {MaxBytes: 10 << 20, MinRatio: 0.05, MaxRatio: 20},
+		"google_business":      {MaxBytes: 5 << 20, Formats: []string{"image/jpeg", "image/png"}, MinWidth: 250},
 	}
 }()
 
@@ -231,9 +231,6 @@ type App struct {
 	// ConfigID is the app's Facebook Login for Business configuration (Instagram: it says the permissions and the
 	// kind of token); "" for the other platforms.
 	ConfigID string `json:"config_id,omitempty"`
-	// InstagramLogin: Instagram signs in with the Instagram app's own keys (instagram.com) instead of the Meta app's
-	// Unified login; the server sets it (PROVIDER_INSTAGRAM_CLIENT_ID and _SECRET).
-	InstagramLogin bool `json:"-"`
 }
 
 // Profile is what the platform knows the account as.
