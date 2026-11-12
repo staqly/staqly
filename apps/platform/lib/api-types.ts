@@ -3486,8 +3486,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * One turn of the dashboard's assistant (server-sent events)
-         * @description The dashboard's chat assistant: a language model on the server's AI provider (AI_ASSISTANT_MODEL through fal.ai) works on the workspace with staqly's MCP tools, as the caller and with the caller's scopes. Tools that only read run at once; any other tool is announced with a confirm event and runs only when the next request carries the person's decision. The conversation lives with the client: each request sends it (the messages streamed as message events are appended to it). Each model call counts as AI usage. Answers text/event-stream, one JSON event per data line; errors after the stream started come as an error event.
+         * One turn of the dashboard's assistant, as server-sent events (posts:read)
+         * @description The dashboard's chat assistant: a language model on the server's AI provider (AI_ASSISTANT_MODEL through fal.ai) works on the workspace with staqly's MCP tools, as the caller and with the caller's scopes. Tools that only read run at once; any other tool is announced with a confirm event and runs only when the next request carries the person's decision (one decision runs one tool call). The conversation lives with the client: each request sends it (the messages streamed as message events are appended to it). Each model call counts as AI usage; a call the model refused costs nothing. Answers text/event-stream, one JSON event per data line; errors after the stream started come as an error event. Limits: a body of 4 MB, 1,000 messages, 10 attachments in a message and 200 in the conversation (422 over those). The model gets the last 60 messages and their pictures of up to 5 MB each, the most recent 20 MB of them, each picture once; the others go by name.
          */
         post: operations["assistantChat"];
         delete?: never;

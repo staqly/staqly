@@ -1,12 +1,14 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/staqly/staqly/apps/api/internal/blob"
@@ -112,13 +114,9 @@ type MediaProjectInput struct {
 // timeline of the video and sound editor has a kind ("video": a frame size, picture clips, captions, sound clips;
 // "audio": sound clips).
 type designFile struct {
-	Version int               `json:"version"`
-	Kind    string            `json:"kind"`
-	Width   float64           `json:"width"`
-	Height  float64           `json:"height"`
-	Pages   []json.RawMessage `json:"pages"`
-	Clips   []json.RawMessage `json:"clips"`
-	Sounds  []json.RawMessage `json:"sounds"`
+	Version, Width, Height float64
+	Kind                   string
+	Pages, Clips, Sounds   int // how many
 }
 
 func (d designFile) valid() bool {
@@ -126,12 +124,192 @@ func (d designFile) valid() bool {
 	case d.Version != 1:
 		return false
 	case d.Kind == "video":
-		return d.Width > 0 && d.Height > 0 && len(d.Clips)+len(d.Sounds) > 0
+		return d.Width > 0 && d.Height > 0 && d.Clips+d.Sounds > 0
 	case d.Kind == "audio":
-		return len(d.Sounds) > 0
+		return d.Sounds > 0
 	default:
-		return d.Kind == "" && d.Width > 0 && d.Height > 0 && len(d.Pages) > 0
+		return d.Kind == "" && d.Width > 0 && d.Height > 0 && d.Pages > 0
 	}
+}
+
+// readDesignFile reads an editor file (the JSON object at its start) as it streams, keeping only what valid
+// checks. It holds one small buffer however large the file or a text in it is: decoding a file whole took
+// several times its size in memory, and files go up to the upload limit.
+func readDesignFile(r io.Reader) (designFile, error) {
+	s := designScan{bufio.NewReaderSize(r, 64<<10)}
+	var d designFile
+	if c, err := s.next(); err != nil || c != '{' {
+		return d, errDesign
+	}
+	_, err := s.each('{', func(key string, c byte) error {
+		var err error
+		count := func(n *int) error {
+			if c != '[' {
+				return s.skip(c, 1)
+			}
+			*n, err = s.each('[', func(_ string, c byte) error { return s.skip(c, 2) })
+			return err
+		}
+		number := func(v *float64) error {
+			raw, err := s.scalar(c)
+			if err != nil || raw == "null" {
+				return err
+			}
+			*v, err = strconv.ParseFloat(raw, 64)
+			return err
+		}
+		switch strings.ToLower(key) {
+		case "version":
+			return number(&d.Version)
+		case "width":
+			return number(&d.Width)
+		case "height":
+			return number(&d.Height)
+		case "kind":
+			if c != '"' { // null is no kind; anything else is no editor file
+				if raw, err := s.scalar(c); err != nil || raw != "null" {
+					return errDesign
+				}
+				return nil
+			}
+			d.Kind, err = s.str(16)
+			return err
+		case "pages":
+			return count(&d.Pages)
+		case "clips":
+			return count(&d.Clips)
+		case "sounds":
+			return count(&d.Sounds)
+		}
+		return s.skip(c, 1)
+	})
+	return d, err
+}
+
+var errDesign = errors.New("not an editor project")
+
+// designScan walks JSON byte by byte, checking its syntax.
+type designScan struct{ r *bufio.Reader }
+
+// next is the next byte that is not white space.
+func (s designScan) next() (byte, error) {
+	for {
+		c, err := s.r.ReadByte()
+		if err != nil || (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+			return c, err
+		}
+	}
+}
+
+// str reads a string whose opening quote was read and answers its first keep bytes as written (an escape as a
+// backslash: such a name is none the server knows).
+func (s designScan) str(keep int) (string, error) {
+	var out []byte
+	for {
+		c, err := s.r.ReadByte()
+		switch {
+		case err != nil:
+			return "", err
+		case c == '"':
+			return string(out), nil
+		case c < 0x20:
+			return "", errDesign
+		case c == '\\':
+			e, err := s.r.ReadByte()
+			if err != nil {
+				return "", err
+			}
+			if e == 'u' {
+				hex, err := s.r.Peek(4)
+				if _, perr := strconv.ParseUint(string(hex), 16, 16); err != nil || perr != nil {
+					return "", errDesign
+				}
+			} else if !strings.ContainsRune(`"\/bfnrt`, rune(e)) {
+				return "", errDesign
+			}
+		}
+		if len(out) < keep {
+			out = append(out, c)
+		}
+	}
+}
+
+// scalar reads a number, true, false or null that starts with c, as written.
+func (s designScan) scalar(c byte) (string, error) {
+	out := []byte{c}
+	for {
+		b, err := s.r.Peek(1)
+		if err != nil || !strings.ContainsRune("+-.0123456789eEaflnrstu", rune(b[0])) {
+			break
+		}
+		out = append(out, b[0])
+		_, _ = s.r.Discard(1)
+		if len(out) > 64 {
+			return "", errDesign
+		}
+	}
+	if !json.Valid(out) {
+		return "", errDesign
+	}
+	return string(out), nil
+}
+
+// each walks an object's members or an array's elements (open, { or [, was read): fn gets a member's name ("" in
+// an array) and the first byte of its value, and reads that value. It answers how many there were.
+func (s designScan) each(open byte, fn func(key string, c byte) error) (int, error) {
+	end := open + 2 // } for {, ] for [
+	n := 0
+	c, err := s.next()
+	if err != nil || c == end {
+		return 0, err
+	}
+	for {
+		key := ""
+		if open == '{' {
+			if c != '"' {
+				return n, errDesign
+			}
+			if key, err = s.str(16); err != nil {
+				return n, err
+			}
+			if c, err = s.next(); err != nil || c != ':' {
+				return n, errDesign
+			}
+			if c, err = s.next(); err != nil {
+				return n, err
+			}
+		}
+		if err := fn(key, c); err != nil {
+			return n, err
+		}
+		n++
+		if c, err = s.next(); err != nil || c == end {
+			return n, err
+		}
+		if c != ',' {
+			return n, errDesign
+		}
+		if c, err = s.next(); err != nil {
+			return n, err
+		}
+	}
+}
+
+// skip reads past the value that starts with c.
+func (s designScan) skip(c byte, depth int) error {
+	var err error
+	switch c {
+	case '"':
+		_, err = s.str(0)
+	case '{', '[':
+		if depth > 500 { // far deeper than any editor nests
+			return errDesign
+		}
+		_, err = s.each(c, func(_ string, c byte) error { return s.skip(c, depth+1) })
+	default:
+		_, err = s.scalar(c)
+	}
+	return err
 }
 
 // projectKey is where a design editor project lives in the store: "workspaces/<id>/projects/abcdef.json".
@@ -213,16 +391,7 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 		f.Close()
 		return MediaProject{}, &Error{Code: "too_large", Status: 413, Message: "project file exceeds the upload limit"}
 	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		f.Close()
-		return MediaProject{}, err
-	}
-	var d designFile
-	if err := json.NewDecoder(f).Decode(&d); err != nil || !d.valid() {
-		f.Close()
-		return MediaProject{}, &Error{Code: "unsupported_media_type", Status: 415, Message: "not an editor project (design JSON with pages, or a video or sound timeline, version 1)"}
-	}
-	if plan.Limits.StorageBytes != Unlimited {
+	if plan.Limits.StorageBytes != Unlimited { // before the file is read again to check it
 		used, err := s.Q.StorageUsed(ctx, p.WorkspaceID) // files and projects
 		if err != nil {
 			f.Close()
@@ -232,6 +401,14 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 			f.Close()
 			return MediaProject{}, limitErr(plan, LimitStorage, plan.Limits.StorageBytes, used)
 		}
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		f.Close()
+		return MediaProject{}, err
+	}
+	if d, err := readDesignFile(f); err != nil || !d.valid() {
+		f.Close()
+		return MediaProject{}, &Error{Code: "unsupported_media_type", Status: 415, Message: "not an editor project (design JSON with pages, or a video or sound timeline, version 1)"}
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		f.Close()

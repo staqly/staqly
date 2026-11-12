@@ -498,7 +498,7 @@ func (s *Service) CreateAIJob(ctx context.Context, p Principal, in AIJobInput) (
 		return AIJob{}, false, err
 	}
 	if !aiLimiter.allow(p.WorkspaceID, s.clock()) {
-		return AIJob{}, false, &Error{Code: "rate_limited", Status: 429, Message: fmt.Sprintf("at most %d AI requests per %s per workspace; try again in a few minutes", aiLimitCalls, aiLimitWindow)}
+		return AIJob{}, false, aiRateLimited()
 	}
 
 	id := newID("aij")
@@ -708,40 +708,62 @@ func (s *Service) DiscardAIJob(ctx context.Context, p Principal, id string) erro
 	if err := p.require(ScopeMediaWrite); err != nil {
 		return err
 	}
-	row, err := s.aiJob(ctx, p, id)
-	if err != nil {
-		return err
-	}
-	if row.Status == "queued" || row.Status == "running" {
-		cost := int64(0)
-		if row.SubmitState != "" {
-			cost = row.CostMicros // it may run anyway: counted unless the provider confirms it dropped it
-			if prov := s.aiProvider(row.Provider); prov != nil && row.SubmitState == "submitted" {
-				var req aiRequest
-				_ = json.Unmarshal([]byte(row.ProviderRequest), &req)
-				cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-				dropped, cerr := prov.Cancel(cctx, req)
-				cancel()
-				if cerr != nil {
-					s.logger(ctx).Warn("ai job: the provider's cancel failed", "ai_job_id", id, "provider", row.Provider, "err", cerr)
-				}
-				if dropped {
-					cost = 0
-				}
-			}
-		}
-		err := s.tx(ctx, func(q *db.Queries) error {
-			if _, err := q.FinishAIJob(ctx, db.FinishAIJobParams{Status: "canceled", ErrorCode: "canceled", Error: "Cancelled",
-				CostMicros: cost, FinishedAt: s.now(), ID: id}); err != nil {
-				return err
-			}
-			return s.cancelJobs(ctx, q, "ai_run:"+id)
-		})
+	for { // ends: a job's submission state only moves forward ("", submitting, submitted) until it finishes
+		row, err := s.aiJob(ctx, p, id)
 		if err != nil {
 			return err
 		}
+		if row.Status == "queued" || row.Status == "running" {
+			done, err := s.cancelAIJob(ctx, row)
+			if err != nil {
+				return err
+			}
+			if !done {
+				continue // the worker moved it on meanwhile: decide again on what it is now
+			}
+		}
+		return s.purgeAIJob(ctx, row)
 	}
-	return s.purgeAIJob(ctx, row)
+}
+
+// cancelAIJob cancels the live job as row shows it; false when its submission state changed since row was read
+// (nothing is written then). What it costs follows that state: nothing before any provider was asked, the
+// reserved cost once one may have taken it, unless that provider confirms it dropped the request.
+func (s *Service) cancelAIJob(ctx context.Context, row db.AiJob) (bool, error) {
+	refund := row.SubmitState == ""
+	if row.SubmitState == "submitted" {
+		var req aiRequest
+		_ = json.Unmarshal([]byte(row.ProviderRequest), &req)
+		refund = s.dropAtProvider(ctx, row.ID, s.aiProvider(row.Provider), req)
+	}
+	var n int64
+	err := s.tx(ctx, func(q *db.Queries) error {
+		var err error
+		if n, err = q.CancelAIJob(ctx, db.CancelAIJobParams{FinishedAt: s.now(), ID: row.ID, SubmitState: row.SubmitState}); err != nil || n == 0 {
+			return err
+		}
+		if refund {
+			if err := q.RefundCanceledAIJob(ctx, row.ID); err != nil {
+				return err
+			}
+		}
+		return s.cancelJobs(ctx, q, "ai_run:"+row.ID)
+	})
+	return n > 0, err
+}
+
+// dropAtProvider asks the provider to drop a request it took; true when it confirmed the request never runs.
+func (s *Service) dropAtProvider(ctx context.Context, id string, prov aiProvider, req aiRequest) bool {
+	if prov == nil {
+		return false
+	}
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
+	defer cancel()
+	dropped, err := prov.Cancel(cctx, req)
+	if err != nil {
+		s.logger(ctx).Warn("ai job: the provider's cancel failed", "ai_job_id", id, "provider", prov.Name(), "err", err)
+	}
+	return dropped
 }
 
 func (s *Service) deleteAIFiles(ctx context.Context, workspaceID, id string, names []string) {
@@ -917,8 +939,17 @@ func (s *Service) runAIJob(ctx context.Context, workspaceID, id string) error {
 			}
 			if err == nil {
 				prov = cand.prov
-				if err := s.W.SetAIJobSubmitted(ctx, db.SetAIJobSubmittedParams{ProviderRequest: mustJSON(req), ID: id}); err != nil {
+				n, err := s.W.SetAIJobSubmitted(ctx, db.SetAIJobSubmittedParams{ProviderRequest: mustJSON(req), ID: id})
+				if err != nil {
 					return err
+				}
+				if n == 0 {
+					// Cancelled while the provider took it: the cancel kept the reserved cost and could not tell the
+					// provider (it had no request yet), so that is done here.
+					if s.dropAtProvider(ctx, id, prov, req) {
+						return s.W.RefundCanceledAIJob(ctx, id)
+					}
+					return nil
 				}
 				break
 			}
@@ -927,11 +958,14 @@ func (s *Service) runAIJob(ctx context.Context, workspaceID, id string) error {
 			}
 			kind := aiErrKind(err)
 			s.logger(ctx).Warn("ai job: the provider did not take it", "ai_job_id", id, "provider", cand.prov.Name(), "kind", kind, "err", err)
-			if kind == aiNotAccepted && i+1 < len(chain) {
-				continue // fallback: the first provider took nothing, so nothing is paid twice
-			}
 			if kind == aiNotAccepted || kind == aiInvalid {
 				cost = 0
+				if err := s.W.RefundCanceledAIJob(ctx, id); err != nil { // cancelled meanwhile: this provider took nothing
+					return err
+				}
+			}
+			if kind == aiNotAccepted && i+1 < len(chain) {
+				continue // fallback: the first provider took nothing, so nothing is paid twice
 			}
 			code, msg := aiFailure(err, providerLabel(cand.prov.Name()))
 			return fail(code, msg, cost)
@@ -1040,6 +1074,19 @@ const (
 type windowLimiter struct {
 	mu   sync.Mutex
 	hits map[string][]time.Time
+}
+
+// full: allow would refuse now (nothing is counted).
+func (l *windowLimiter) full(key string, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, t := range l.hits[key] {
+		if now.Sub(t) < aiLimitWindow {
+			n++
+		}
+	}
+	return n >= aiLimitCalls
 }
 
 func (l *windowLimiter) allow(key string, now time.Time) bool {

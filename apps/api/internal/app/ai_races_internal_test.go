@@ -189,3 +189,42 @@ func TestAIConcurrentAcceptKeepsOneMedia(t *testing.T) {
 		t.Fatalf("kept result: %+v %v", row, err)
 	}
 }
+
+// A cancel that read the job before the worker began to hand it to a provider must not record it as free: it
+// changes nothing, and the cancel decided on the job as it is now keeps the reserved cost.
+func TestAICancelLosesToSubmission(t *testing.T) {
+	s, p, _ := publishTest(t)
+	s.Cfg.AI.FalKey = "test-key"
+	ctx := t.Context()
+	job, _, err := s.CreateAIJob(ctx, p, AIJobInput{Operation: AIGenerate, Prompt: "raced"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.aiJob(ctx, p, job.ID) // what the cancel read
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The worker, between that read and the cancel's write.
+	if _, err := s.W.StartAIJob(ctx, db.StartAIJobParams{StartedAt: s.now(), ID: job.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.W.SetAIJobSubmitting(ctx, db.SetAIJobSubmittingParams{Provider: AIProviderFal, Model: "m", CostMicros: 5000, ID: job.ID}); err != nil || n != 1 {
+		t.Fatalf("submitting: %d %v", n, err)
+	}
+	if done, err := s.cancelAIJob(ctx, before); err != nil || done {
+		t.Fatalf("a cancel decided before the submission was applied: %v %v", done, err)
+	}
+	if row, _ := s.aiJob(ctx, p, job.ID); row.Status != "running" || row.CostMicros != 5000 {
+		t.Fatalf("the lost cancel changed the job: %+v", row)
+	}
+	if err := s.DiscardAIJob(ctx, p, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if row, _ := s.aiJob(ctx, p, job.ID); row.Status != "canceled" || row.CostMicros != 5000 {
+		t.Fatalf("cancelled while a provider may have taken it: %+v", row)
+	}
+	// The worker's answer arrives after the cancel: no row, so it tells the provider itself (runAIJob).
+	if n, err := s.W.SetAIJobSubmitted(ctx, db.SetAIJobSubmittedParams{ProviderRequest: "{}", ID: job.ID}); err != nil || n != 0 {
+		t.Fatalf("a cancelled job was marked submitted: %d %v", n, err)
+	}
+}
