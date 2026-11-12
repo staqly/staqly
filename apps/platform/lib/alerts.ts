@@ -21,6 +21,7 @@ export const CHANNEL_EVENTS: { value: string; hint: string; group: string }[] = 
   { value: 'post.*', hint: 'Every post event', group: 'Wildcards' },
   { value: 'post.published', hint: 'A post is out on every channel', group: 'Publishing' },
   { value: 'post.failed', hint: 'A channel failed for good', group: 'Publishing' },
+  { value: 'post.repeat_stopped', hint: 'A repeating post could not make its next copy', group: 'Publishing' },
   { value: 'post.target_failed', hint: 'One channel failed (retries follow)', group: 'Publishing' },
   { value: 'post.publish_requested', hint: 'A post waits for your automation', group: 'Publishing' },
   { value: 'post.created', hint: 'A post was added', group: 'Posts' },

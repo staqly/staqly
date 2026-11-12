@@ -43,6 +43,14 @@ type jobArgs struct {
 
 func (a jobArgs) Kind() string { return a.kind }
 
+type jobCtxKey struct{}
+
+// jobFrom is the job a run belongs to: nil outside a worker (tests and tools that call a job's code directly).
+func jobFrom(ctx context.Context) *rivertype.JobRow {
+	j, _ := ctx.Value(jobCtxKey{}).(*rivertype.JobRow)
+	return j
+}
+
 // jobKinds are the kinds the workers run (execJob). testJobKindNames are registered too so the queue's
 // own tests can run jobs of their making (testJobKinds); a missing one fails like an unknown kind.
 var (
@@ -259,6 +267,14 @@ func (s *Service) cancelJobs(ctx context.Context, q *db.Queries, key string) err
 	return err
 }
 
+// jobRunning: a worker has the key's job right now, so it can't be taken back.
+func (s *Service) jobRunning(ctx context.Context, q *db.Queries, key string) (bool, error) {
+	kind, _, _ := strings.Cut(key, ":")
+	res, err := s.river.JobListTx(ctx, s.sqlTx(q), river.NewJobListParams().Kinds(kind).States(rivertype.JobStateRunning).
+		Where(s.jobArgsWhere("key"), river.NamedArgs{"key": key}).First(1))
+	return err == nil && len(res.Jobs) > 0, err
+}
+
 func (s *Service) dropQueuedJobs(ctx context.Context, tx *sql.Tx, kind, key string) error {
 	res, err := s.river.JobListTx(ctx, tx, river.NewJobListParams().Kinds(kind).States(queuedJobStates...).
 		Where(s.jobArgsWhere("key"), river.NamedArgs{"key": key}).First(10))
@@ -304,18 +320,16 @@ func (s *Service) fairEnd(workspaceID string) {
 	s.fair.mu.Unlock()
 }
 
+// othersWaiting asks the database, not a page of the queue: a workspace with a long backlog fills any first page
+// with its own jobs.
 func (s *Service) othersWaiting(ctx context.Context, workspaceID string) bool {
-	res, err := s.river.JobList(ctx, river.NewJobListParams().States(rivertype.JobStateAvailable).First(50))
-	if err != nil {
-		return false
+	where := "json_extract(args, '$.workspace_id') <> @workspace_id"
+	if s.pg {
+		where = "args->>'workspace_id' <> @workspace_id"
 	}
-	for _, j := range res.Jobs {
-		var a jobArgs
-		if json.Unmarshal(j.EncodedArgs, &a) == nil && a.WorkspaceID != workspaceID {
-			return true
-		}
-	}
-	return false
+	res, err := s.river.JobList(ctx, river.NewJobListParams().States(rivertype.JobStateAvailable).
+		Where(where, river.NamedArgs{"workspace_id": workspaceID}).First(1))
+	return err == nil && len(res.Jobs) > 0
 }
 
 // workJob runs one job: its kind's code within its budget (River's Timeout), then a requeue that came in
@@ -326,7 +340,7 @@ func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 		return river.JobSnooze(jobFairSnooze)
 	}
 	defer s.fairEnd(a.WorkspaceID)
-	ctx = logctx.With(ctx, "workspace_id", a.WorkspaceID, "job_id", jobPublicID(j.ID), "job_kind", j.Kind)
+	ctx = context.WithValue(logctx.With(ctx, "workspace_id", a.WorkspaceID, "job_id", jobPublicID(j.ID), "job_kind", j.Kind), jobCtxKey{}, j.JobRow)
 	err := s.execJob(ctx, j.Kind, a)
 	if err == nil && ctx.Err() != nil {
 		err = ctx.Err() // the run's budget ran out
@@ -356,7 +370,9 @@ func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 	case j.Attempt >= j.MaxAttempts:
 		metricJobs.Inc(j.Kind, "failed")
 		s.logger(ctx).Warn("job failed", "attempt", j.Attempt, "err", err)
-		s.jobFailed(wctx, j.Kind, a, err)
+		if ferr := s.jobFailed(wctx, j.Kind, a, err); ferr != nil {
+			s.logger(ctx).Error("failed job not settled", "err", ferr)
+		}
 	default:
 		metricJobs.Inc(j.Kind, "retry")
 		s.logger(ctx).Warn("job attempt failed", "attempt", j.Attempt, "err", err)
@@ -482,6 +498,10 @@ const riverRescuedError = "Stuck job rescued by JobRescuer"
 // errJobInterrupted is what a job discarded by the rescuer settles with.
 var errJobInterrupted = errors.New("the server stopped during the last attempt (it may have gone out; check before retrying)")
 
+// jobSettledOutput marks a rescued job whose work was settled (a publish job's output can also hold the
+// platform's receipt, see recordSent).
+const jobSettledOutput = `"settled"`
+
 // settleRescuedJobs settles what rescued jobs were about. A process that died during a job's last attempt
 // leaves it running; River's rescuer then discards it without running our worker, so jobFailed never ran (a
 // target publishing for good, a recurring schedule with no next run). Each is settled once (marked in the
@@ -503,16 +523,20 @@ func (s *Service) settleRescuedJobs(ctx context.Context) int {
 	settled := 0
 	for _, r := range res.Jobs {
 		var a jobArgs
-		if len(r.Output()) > 0 || r.FinalizedAt == nil || r.FinalizedAt.Before(since) || json.Unmarshal(r.EncodedArgs, &a) != nil {
+		if string(r.Output()) == jobSettledOutput || r.FinalizedAt == nil || r.FinalizedAt.Before(since) || json.Unmarshal(r.EncodedArgs, &a) != nil {
 			continue
 		}
 		jctx := logctx.With(ctx, "workspace_id", a.WorkspaceID, "job_id", jobPublicID(r.ID), "job_kind", r.Kind)
-		if _, err := s.river.JobUpdate(ctx, r.ID, &river.JobUpdateParams{Output: "settled"}); err != nil {
-			s.logger(jctx).Error("rescued job not marked", "err", err)
+		s.logger(jctx).Warn("job failed: its process stopped during the last attempt", "attempt", r.Attempt)
+		// Settle first, mark after: a settle that fails is tried again by the next sweep (settling twice is
+		// harmless: a settled target or post is left alone, a schedule gets its next run queued again).
+		if err := s.jobFailed(jctx, r.Kind, a, errJobInterrupted); err != nil {
+			s.logger(jctx).Error("rescued job not settled; trying again", "err", err)
 			continue
 		}
-		s.logger(jctx).Warn("job failed: its process stopped during the last attempt", "attempt", r.Attempt)
-		s.jobFailed(jctx, r.Kind, a, errJobInterrupted)
+		if _, err := s.river.JobUpdate(ctx, r.ID, &river.JobUpdateParams{Output: "settled"}); err != nil {
+			s.logger(jctx).Error("rescued job not marked", "err", err)
+		}
 		settled++
 	}
 	return settled
@@ -541,6 +565,7 @@ func (s *Service) RunJobs(ctx context.Context) {
 				s.logger(ctx).Info("job requeues swept", "keys", n)
 			}
 			s.settleRescuedJobs(ctx)
+			s.sweepSchedules(ctx)
 			s.sweepAIFiles(ctx)
 		}
 	}

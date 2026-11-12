@@ -105,7 +105,9 @@ changes.
 
 To **stop**, clear `repeat_every` on the next scheduled copy (`PATCH` with `"repeat_every": ""`
 or `null`, MCP `update_post`, `staqly posts update <id> --repeat none`), or delete that copy.
-A plan limit, an archived collection or channels that are gone also end the chain.
+A plan limit, an archived collection or channels that are gone also end the chain: the post that
+should have repeated gets a `post.repeat_stopped` event with the reason (an [alert](/automation/alerts)
+can tell you).
 
 ### Threads (comments under a post)
 
@@ -210,8 +212,10 @@ stateDiagram-v2
 
 `POST /v1/posts/{id}/unpublish` (`posts:publish`) takes a published post down from all its channels, or
 only `channel_ids`. A job deletes it on each platform, thread parts first (newest first), then the post.
-The post stays `published` as history, with `unpublished_at` and `unpublished_by`. Each target gets a
-`removal`:
+The post stays `published` as history, with `unpublished_at` and `unpublished_by`. A channel the post had
+not reached yet (waiting for a retry, or for your own automation's result) fails instead of going out
+later, and a time on the schedule is dropped; a send already in progress is recorded as it ends. Each
+published target gets a `removal`:
 
 | `removal` | Meaning |
 |---|---|
@@ -274,7 +278,14 @@ subject (`publish_post:<post id>`): queueing the same key again replaces a queue
 one finishes its run and then runs again at the new time (never two runs at once). Up to
 `JOB_CONCURRENCY` jobs run at once (default 4), at most half of them for one workspace while
 another workspace's job waits. Done, failed and cancelled jobs are kept for 7 days. See them in **Settings → System → Queue** or with `GET /v1/jobs`; retry a
-failed one, cancel a queued one.
+failed one, cancel a queued one (not one a worker has started). Cancelling settles what the job stood for:
+a channel fails, a scheduled post goes back to draft, a recurring schedule skips that run and queues its
+next one, a one-time schedule turns off.
+
+A post is sent to a platform once. When the platform accepted it but the result could not be saved, the
+job keeps the platform's receipt and its next attempts only save it; if that never works, the channel
+fails with the link and a note to check it before retrying. Only a server that dies in the moment between
+the platform's answer and that save sends the post again on the retry.
 
 ## Events
 

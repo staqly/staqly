@@ -246,6 +246,54 @@ func (q *Queries) GetScheduleByID(ctx context.Context, id string) (Schedule, err
 	return i, err
 }
 
+const listOverdueSchedules = `-- name: ListOverdueSchedules :many
+SELECT id, workspace_id, collection_id, name, channels, kind, run_at, rule, pick, post_ids, source, endpoint_url, endpoint_secret, enabled, next_run_at, last_run_at, last_result, created_at, updated_at FROM schedules WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at < ?1 ORDER BY next_run_at LIMIT 200
+`
+
+// Enabled schedules of every workspace whose run time passed before the cutoff (the sweep that queues a lost run).
+func (q *Queries) ListOverdueSchedules(ctx context.Context, before sql.NullString) ([]Schedule, error) {
+	rows, err := q.db.QueryContext(ctx, listOverdueSchedules, before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Schedule
+	for rows.Next() {
+		var i Schedule
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.CollectionID,
+			&i.Name,
+			&i.Channels,
+			&i.Kind,
+			&i.RunAt,
+			&i.Rule,
+			&i.Pick,
+			&i.PostIds,
+			&i.Source,
+			&i.EndpointUrl,
+			&i.EndpointSecret,
+			&i.Enabled,
+			&i.NextRunAt,
+			&i.LastRunAt,
+			&i.LastResult,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSchedules = `-- name: ListSchedules :many
 SELECT id, workspace_id, collection_id, name, channels, kind, run_at, rule, pick, post_ids, source, endpoint_url, endpoint_secret, enabled, next_run_at, last_run_at, last_result, created_at, updated_at FROM schedules WHERE workspace_id = ?1 AND (?2 IS NULL OR collection_id = ?2)
 ORDER BY collection_id, name COLLATE NOCASE, id

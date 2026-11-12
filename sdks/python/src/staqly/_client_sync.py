@@ -694,12 +694,23 @@ class Posts(_Resource):
         url: str | None = None,
         external_id: str | None = None,
         error: str | None = None,
+        attempt_id: str | None = None,
         request_options: RequestOptions | None = None,
     ) -> Post:
         """Closes a target on your own automation (a channel of provider ``custom``) that waits for
         a result: ``status="published"`` (with ``url`` / ``external_id``) or ``status="failed"``
-        (with ``error``). Raises :class:`~staqly.ConflictError` unless the target is publishing."""
-        body = clean({"status": status, "url": url, "external_id": external_id, "error": error})
+        (with ``error``). Pass the ``attempt_id`` of the ``post.publish_requested`` event: a result
+        for an attempt that was retried since is then refused. Raises
+        :class:`~staqly.ConflictError` unless the target is publishing (in that attempt)."""
+        body = clean(
+            {
+                "status": status,
+                "url": url,
+                "external_id": external_id,
+                "error": error,
+                "attempt_id": attempt_id,
+            }
+        )
         r = self._http.request(
             RequestSpec(
                 "POST",

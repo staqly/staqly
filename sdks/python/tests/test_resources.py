@@ -732,12 +732,12 @@ CASES = [
     Case(
         "posts.report_result published",
         lambda c: c.posts.report_result(
-            "pst_1", "ch_1", status="published", url="https://x/1", external_id="42"
+            "pst_1", "ch_1", status="published", url="https://x/1", external_id="42", attempt_id="job_7"
         ),
         "POST",
         "/v1/posts/pst_1/targets/ch_1/result",
         post(status="published"),
-        body={"status": "published", "url": "https://x/1", "external_id": "42"},
+        body={"status": "published", "url": "https://x/1", "external_id": "42", "attempt_id": "job_7"},
     ),
     Case(
         "posts.report_result failed",

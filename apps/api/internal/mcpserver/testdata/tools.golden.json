@@ -2424,6 +2424,10 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "attempt_id": {
+          "description": "the attempt_id of the post.publish_requested event this answers; a result for an attempt that was retried since is refused",
+          "type": "string"
+        },
         "channel_id": {
           "description": "the custom channel the target is on",
           "type": "string"

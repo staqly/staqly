@@ -364,6 +364,8 @@ func eventLabel(e notifyEntry) string {
 		return "Reply published on " + firstNonEmpty(e.Channel, "a channel")
 	case "post.reply_failed":
 		return "Reply failed on " + firstNonEmpty(e.Channel, "a channel")
+	case "post.repeat_stopped":
+		return "Repeat stopped"
 	case "post.publish_requested":
 		return "Your automation is asked to publish"
 	case "post.scheduled":

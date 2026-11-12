@@ -17,6 +17,10 @@ UPDATE schedules SET name = ?, channels = ?, kind = ?, run_at = ?, rule = ?, pic
     enabled = ?, next_run_at = ?, updated_at = ?
 WHERE workspace_id = ? AND id = ?;
 
+-- name: ListOverdueSchedules :many
+-- Enabled schedules of every workspace whose run time passed before the cutoff (the sweep that queues a lost run).
+SELECT * FROM schedules WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at < sqlc.arg(before) ORDER BY next_run_at LIMIT 200;
+
 -- name: FinishScheduleRun :exec
 UPDATE schedules SET enabled = ?, next_run_at = ?, last_run_at = ?, last_result = ?, updated_at = ? WHERE id = ?;
 

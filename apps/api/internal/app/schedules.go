@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/riverqueue/river"
+
 	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
@@ -194,12 +196,18 @@ func nextRun(r ScheduleRule, after time.Time) (time.Time, bool) {
 		if len(r.Weekdays) > 0 && !slices.Contains(r.Weekdays, int(date.Weekday())) {
 			continue
 		}
+		// The earliest instant of the day's times, not the first in wall-clock order: a time the clocks skip
+		// (02:30 on a spring-forward night) lands an hour later, after a real 03:00.
+		var first time.Time
 		for _, t := range r.Times {
 			hh, mm, _ := parseClock(t)
 			at := time.Date(date.Year(), date.Month(), date.Day(), hh, mm, 0, 0, loc)
-			if at.After(after) {
-				return at, true
+			if at.After(after) && (first.IsZero() || at.Before(first)) {
+				first = at
 			}
+		}
+		if !first.IsZero() {
+			return first, true
 		}
 	}
 	return time.Time{}, false
@@ -637,8 +645,8 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 				return err
 			}
 			cur, err := q.GetPostByID(ctx, p.ID)
-			if err != nil || cur.Status == "publishing" || cur.Status == "published" {
-				return err
+			if err != nil || cur.Status == "publishing" || cur.Status == "published" || cur.UnpublishedAt.Valid {
+				return err // going out, out, or taken down: an unpublished post is not published again
 			}
 			if err := checkNoDeletedMedia(ctx, q, r.WorkspaceID, cur); err != nil {
 				return err
@@ -705,7 +713,8 @@ func (s *Service) runScheduleWith(ctx context.Context, id string, advance bool) 
 		}
 	}
 	err = s.tx(ctx, func(q *db.Queries) error {
-		if current, err := scheduleUnchanged(ctx, q, before); err != nil || !current {
+		// A "Run now" that finished meanwhile only recorded its run; this run still owes the schedule its next one.
+		if current, err := scheduleNotEdited(ctx, q, before); err != nil || !current {
 			return err
 		}
 		if err := q.FinishScheduleRun(ctx, db.FinishScheduleRunParams{Enabled: r.Enabled, NextRunAt: r.NextRunAt, LastRunAt: nullStr(now),
@@ -738,10 +747,99 @@ func scheduleUnchanged(ctx context.Context, q *db.Queries, before db.Schedule) (
 	return current == before, err
 }
 
+// scheduleNotEdited is scheduleUnchanged that looks past another run's record (last run, its result): an edit or a
+// deletion supersedes a run, a manual run next to it does not.
+func scheduleNotEdited(ctx context.Context, q *db.Queries, before db.Schedule) (bool, error) {
+	current, err := q.GetScheduleByID(ctx, before.ID)
+	if isNoRows(err) {
+		return false, nil
+	}
+	current.LastRunAt, current.LastResult, current.UpdatedAt = before.LastRunAt, before.LastResult, before.UpdatedAt
+	return current == before, err
+}
+
+// scheduleRunSkipped: someone cancelled the schedule's queued run. That run is skipped and the next one queued
+// (a one-time schedule has no next one and turns off), so an enabled schedule never sits without a job.
+func (s *Service) scheduleRunSkipped(ctx context.Context, id string) error {
+	return s.tx(ctx, func(q *db.Queries) error {
+		r, err := q.GetScheduleByID(ctx, id)
+		if isNoRows(err) || (err == nil && (r.Enabled != 1 || !r.NextRunAt.Valid)) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		// The run after the skipped one (or after now, when the skipped one was overdue).
+		after := s.Now()
+		if skipped, err := time.Parse(timeFormat, r.NextRunAt.String); err == nil && skipped.After(after) {
+			after = skipped
+		}
+		var rule ScheduleRule
+		_ = json.Unmarshal([]byte(r.Rule), &rule)
+		r.Enabled, r.NextRunAt = 0, nullStr("")
+		if at, ok := nextRun(rule, after); ok && r.Kind == "recurring" {
+			r.Enabled, r.NextRunAt = 1, nullStr(formatTime(at))
+		}
+		r.LastResult, r.UpdatedAt = "skipped: its queued run was cancelled", s.now()
+		if err := q.FinishScheduleRun(ctx, db.FinishScheduleRunParams{Enabled: r.Enabled, NextRunAt: r.NextRunAt, LastRunAt: r.LastRunAt,
+			LastResult: r.LastResult, UpdatedAt: r.UpdatedAt, ID: r.ID}); err != nil {
+			return err
+		}
+		if err := s.queueScheduleJob(ctx, q, r); err != nil {
+			return err
+		}
+		sys := Principal{WorkspaceID: r.WorkspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
+		_, err = s.emitRef(ctx, q, sys, "schedule.updated", Ref{Collection: r.CollectionID, Schedule: r.ID}, map[string]any{"schedule": s.toSchedule(ctx, r)})
+		return err
+	})
+}
+
+// sweepSchedules queues the run of every enabled schedule whose time passed a few minutes ago and that has no
+// job (the minute sweep). Each write that moves next_run_at queues its job in the same transaction; this is
+// the net under what that can't cover: a failed run whose own record was refused by the database.
+func (s *Service) sweepSchedules(ctx context.Context) int {
+	rows, err := s.Q.ListOverdueSchedules(ctx, nullStr(formatTime(s.Now().Add(-scheduleOverdue))))
+	if err != nil {
+		if ctx.Err() == nil {
+			s.logger(ctx).Error("schedule sweep failed", "err", err)
+		}
+		return 0
+	}
+	queued := 0
+	for _, r := range rows {
+		lost := false // set by the run that commits (on PostgreSQL fn may run again)
+		err := s.tx(ctx, func(q *db.Queries) error {
+			lost = false
+			key := "run_schedule:" + r.ID
+			live, err := s.river.JobListTx(ctx, s.sqlTx(q), river.NewJobListParams().Kinds("run_schedule").States(liveJobStates...).
+				Where(s.jobArgsWhere("key"), river.NamedArgs{"key": key}).First(1))
+			if err != nil || len(live.Jobs) > 0 {
+				return err // waiting behind a busy queue, or running: not lost
+			}
+			if current, err := scheduleUnchanged(ctx, q, r); err != nil || !current {
+				return err
+			}
+			lost = true
+			return s.queueScheduleJob(ctx, q, r)
+		})
+		switch {
+		case err != nil:
+			s.logger(ctx).Warn("schedule sweep: run not queued", "schedule_id", r.ID, "err", err)
+		case lost:
+			s.logger(ctx).Warn("schedule had no run queued; queued it", "schedule_id", r.ID)
+			queued++
+		}
+	}
+	return queued
+}
+
+// scheduleOverdue: how late a run must be before the sweep looks for its job.
+const scheduleOverdue = 5 * time.Minute
+
 // scheduleFailed records a run that errored out after its attempts.
-func (s *Service) scheduleFailed(ctx context.Context, id string, cause error) {
+func (s *Service) scheduleFailed(ctx context.Context, id string, cause error) error {
 	now := s.now()
-	_ = s.tx(ctx, func(q *db.Queries) error {
+	return s.tx(ctx, func(q *db.Queries) error {
 		r, err := q.GetScheduleByID(ctx, id)
 		if isNoRows(err) {
 			return nil

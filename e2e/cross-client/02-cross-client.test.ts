@@ -50,8 +50,9 @@ const INPUT = {
 }
 const RESULT = { url: 'https://example.com/p/1', external_id: 'p-42' }
 
-/** What must match between clients: the type, the data and the principal. */
-const strip = (e: Event) => normalize({ type: e.type, data: e.data, actor_type: e.actor.type, actor: e.actor.id })
+/** What must match between clients: the type, the data (but the attempt, each post's own publish job) and the principal. */
+const strip = (e: Event) =>
+  normalize({ type: e.type, data: { ...e.data, attempt_id: undefined }, actor_type: e.actor.type, actor: e.actor.id })
 
 /** Waits until the post's targets were handed to the automation. */
 async function requested(c: Staqly, id: string): Promise<Post> {

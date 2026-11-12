@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
+
 	"github.com/staqly/staqly/apps/api/internal/blob"
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/providers"
@@ -727,7 +730,17 @@ func (s *Service) schedulePublish(ctx context.Context, q *db.Queries, p Principa
 	if previous != nil {
 		extra["previous_publish_at"] = *previous
 	}
-	_, err := s.emit(ctx, q, p, "post.scheduled", "", postID, s.postEventData(ctx, q, workspaceID, postID, extra))
+	return s.emitScheduled(ctx, q, p, workspaceID, postID, extra)
+}
+
+// emitScheduled records post.scheduled with the post's collection, like every other post event (webhooks, alerts
+// and filters limited to a collection match on it).
+func (s *Service) emitScheduled(ctx context.Context, q *db.Queries, p Principal, workspaceID, postID string, extra map[string]any) error {
+	row, err := q.GetPostByID(ctx, postID)
+	if err != nil {
+		return err
+	}
+	_, err = s.emit(ctx, q, p, "post.scheduled", row.CollectionID, postID, s.postEventData(ctx, q, workspaceID, postID, extra))
 	return err
 }
 
@@ -1403,6 +1416,21 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	if err != nil {
 		return err
 	}
+	// An earlier attempt of this job sent the post but could not record it: record it now, never send again.
+	job := jobFrom(ctx)
+	if sent, ok := sentReceipt(job); ok {
+		return s.recordSent(ctx, postID, channelID, sent)
+	}
+	if row.UnpublishedAt.Valid {
+		// Taken down while this channel waited (a retry, a platform's quota): it must not go out afterwards.
+		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, "The post was unpublished before it reached this channel")
+	}
+	// The attempt: this job, from Publish or Retry to its last try. Your own automation gets it and sends it back
+	// with its result, so a late answer to an earlier attempt can't settle this one.
+	attempt := ""
+	if job != nil {
+		attempt = jobPublicID(job.ID)
+	}
 	if blocked := s.publishBlocked(ctx, row.WorkspaceID); blocked != nil {
 		return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, blocked.(*Error).Message)
 	}
@@ -1451,7 +1479,7 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	for i := range thread {
 		thread[i].Text, _ = providers.ApplyLinks(links, thread[i].Text)
 	}
-	content := providers.PostContent{PostID: postID, ChannelID: channelID, Text: text, Media: providers.FitMedia(e.Limits(), files), Tags: tags, Thread: thread}
+	content := providers.PostContent{PostID: postID, ChannelID: channelID, AttemptID: attempt, Text: text, Media: providers.FitMedia(e.Limits(), files), Tags: tags, Thread: thread}
 	settings := providers.Settings{}
 	_ = json.Unmarshal([]byte(target.Settings), &settings)
 	settings = providers.WithPost(e.SettingsFields(), e.Limits(), row.Title, tags, settings)
@@ -1509,13 +1537,13 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 			data := s.postEventData(wctx, q, row.WorkspaceID, postID, map[string]any{
 				"channel": toChannelOut(ch), "target": map[string]any{"channel_id": channelID, "content": text, "settings": settings,
 					"thread": s.threadOut(wctx, q, row.WorkspaceID, row.Thread)},
-				"timeout_seconds": int64(timeout / time.Second)})
+				"timeout_seconds": int64(timeout / time.Second), "attempt_id": attempt})
 			if _, err := s.emitRef(wctx, q, sys, "post.publish_requested", Ref{Collection: row.CollectionID, Post: postID, Channel: channelID}, data); err != nil {
 				return err
 			}
 			if timeout > 0 {
 				return s.enqueue(wctx, q, row.WorkspaceID, "target_timeout", "target_timeout:"+postID+":"+channelID,
-					map[string]any{"post_id": postID, "channel_id": channelID}, s.Now().Add(timeout), 1)
+					map[string]any{"post_id": postID, "channel_id": channelID, "attempt_id": attempt}, s.Now().Add(timeout), 0)
 			}
 			return nil
 		})
@@ -1529,11 +1557,62 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 		}
 		return err // the job retries with backoff; the last failure settles the target (jobFailed)
 	}
-	return s.finishTarget(wctx, postID, channelID, "published", result, "")
+	return s.recordSent(wctx, postID, channelID, result)
 }
 
-// targetTimedOut is the target_timeout job: a custom target nobody reported on fails.
-func (s *Service) targetTimedOut(ctx context.Context, postID, channelID string) error {
+// settleRetry: the waits between tries to record a send that went out (a variable so tests can shrink it).
+var settleRetry = []time.Duration{time.Second, 3 * time.Second}
+
+// unrecordedSend: the platform has the post, the database refused its result.
+type unrecordedSend struct {
+	result providers.Result
+	err    error
+}
+
+func (e *unrecordedSend) Error() string {
+	return "It was sent, but the result could not be saved (" + e.err.Error() + "). Check the channel before you retry: a retry sends it again."
+}
+
+func (e *unrecordedSend) Unwrap() error { return e.err }
+
+// sentOutput is a publish job's output when a send could not be recorded: the platform's receipt.
+type sentOutput struct {
+	Sent *providers.Result `json:"sent"`
+}
+
+// sentReceipt is the receipt an earlier attempt of the job left.
+func sentReceipt(job *rivertype.JobRow) (providers.Result, bool) {
+	var out sentOutput
+	if job == nil || json.Unmarshal(job.Output(), &out) != nil || out.Sent == nil {
+		return providers.Result{}, false
+	}
+	return *out.Sent, true
+}
+
+// recordSent records a send the platform accepted. A database that refuses it is asked again, here and then by
+// the job's next attempts, which find the receipt in the job's output and never call the platform again. When
+// every attempt fails, the target fails with the link and says so (jobFailed): a person checks it, nothing
+// sends it twice. ponytail: a process that dies before the receipt is stored still sends again on its retry.
+func (s *Service) recordSent(ctx context.Context, postID, channelID string, result providers.Result) error {
+	var err error
+	for try := 0; ; try++ {
+		if err = s.finishTarget(ctx, postID, channelID, "published", result, ""); err == nil {
+			return nil
+		}
+		if try == len(settleRetry) || ctx.Err() != nil {
+			break
+		}
+		time.Sleep(settleRetry[try])
+	}
+	if rerr := river.RecordOutput(ctx, sentOutput{Sent: &result}); rerr != nil {
+		s.logger(ctx).Error("receipt of a sent post not kept", "post_id", postID, "channel_id", channelID, "err", rerr)
+	}
+	return &unrecordedSend{result: result, err: err}
+}
+
+// targetTimedOut is the target_timeout job: a custom target nobody reported on fails. attempt is the one it was
+// queued for ("" from before attempts had ids): a newer attempt has its own timeout.
+func (s *Service) targetTimedOut(ctx context.Context, postID, channelID, attempt string) error {
 	t, err := s.Q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
 	if isNoRows(err) || (err == nil && t.Status != "publishing") {
 		return nil
@@ -1541,25 +1620,33 @@ func (s *Service) targetTimedOut(ctx context.Context, postID, channelID string) 
 	if err != nil {
 		return err
 	}
-	return s.finishTarget(ctx, postID, channelID, "failed", providers.Result{}, "No result reported in time")
+	err = s.settleTarget(ctx, postID, channelID, "failed", providers.Result{}, "No result reported in time", attempt)
+	if errors.Is(err, errTargetSettled) || errors.Is(err, errStaleAttempt) {
+		return nil
+	}
+	return err
 }
 
 // errTargetSettled: the target was no longer publishing when its outcome came in (another report, the
 // timeout or a run got there first).
 var errTargetSettled = errors.New("target already settled")
 
+// errStaleAttempt: the outcome belongs to an earlier attempt than the one the target is in now.
+var errStaleAttempt = errors.New("outcome of an earlier attempt")
+
 // finishTarget records a target's outcome and settles the post when every target is done. An outcome for a
 // target that is not publishing any more is dropped: it was settled meanwhile, once.
 func (s *Service) finishTarget(ctx context.Context, postID, channelID, status string, result providers.Result, errMsg string) error {
-	if err := s.settleTarget(ctx, postID, channelID, status, result, errMsg); !errors.Is(err, errTargetSettled) {
+	if err := s.settleTarget(ctx, postID, channelID, status, result, errMsg, ""); !errors.Is(err, errTargetSettled) {
 		return err
 	}
 	return nil
 }
 
 // settleTarget is finishTarget that says errTargetSettled when the target was not publishing (checked inside
-// the transaction, so two outcomes at once settle it once).
-func (s *Service) settleTarget(ctx context.Context, postID, channelID, status string, result providers.Result, errMsg string) error {
+// the transaction, so two outcomes at once settle it once), and errStaleAttempt when attempt is given and the
+// target is in a newer one.
+func (s *Service) settleTarget(ctx context.Context, postID, channelID, status string, result providers.Result, errMsg, attempt string) error {
 	row, err := s.Q.GetPostByID(ctx, postID)
 	if isNoRows(err) {
 		return nil
@@ -1579,46 +1666,72 @@ func (s *Service) settleTarget(ctx context.Context, postID, channelID, status st
 		if t.Status != "publishing" {
 			return errTargetSettled
 		}
-		now := s.now()
-		published := nullStr("")
-		if status == "published" {
-			published = nullStr(now)
-		}
-		if err := q.SetTargetStatus(ctx, db.SetTargetStatusParams{Status: status, ExternalID: result.ExternalID, ExternalUrl: result.URL,
-			Error: truncateRunes(errMsg, 500), Attempts: max(t.Attempts, 1), PublishedAt: published, UpdatedAt: now, AttemptedAt: nullStr(now), PostID: postID, ChannelID: channelID}); err != nil {
-			return err
-		}
-		if err := s.cancelJobs(ctx, q, "target_timeout:"+postID+":"+channelID); err != nil {
-			return err
-		}
-		if status == "published" {
-			if err := s.meterTarget(ctx, q, row, t, channelID); err != nil {
+		if attempt != "" {
+			if current, err := s.currentAttempt(ctx, q, postID, channelID); err != nil {
 				return err
-			}
-			if err := s.startThread(ctx, q, row, channelID, result, now); err != nil {
-				return err
-			}
-			if err := s.enqueueReposts(ctx, q, row.WorkspaceID, postID, channelID, t.Settings); err != nil {
-				return err
+			} else if current != "" && current != attempt {
+				return errStaleAttempt
 			}
 		}
-		typ := "post.target_published"
-		if status == "failed" {
-			typ = "post.target_failed"
-		}
-		extra := map[string]any{"channel_id": channelID, "url": result.URL, "external_id": result.ExternalID, "error": errMsg}
-		// The channel as it is now (name, platform, picture), so a notification can say where it went.
-		if ch, err := q.GetChannel(ctx, db.GetChannelParams{WorkspaceID: row.WorkspaceID, ID: channelID}); err == nil {
-			extra["channel"] = targetChannel(ch)
-		} else if !isNoRows(err) {
-			return err
-		}
-		data := s.postEventData(ctx, q, row.WorkspaceID, postID, extra)
-		if _, err := s.emitRef(ctx, q, sys, typ, Ref{Collection: row.CollectionID, Post: postID, Channel: channelID}, data); err != nil {
-			return err
-		}
-		return s.settlePost(ctx, q, sys, row.WorkspaceID, postID)
+		return s.settleTargetTx(ctx, q, sys, row, t, status, result, errMsg)
 	})
+}
+
+// currentAttempt is the attempt a target is in: its latest publish job ("" once that job's row was cleaned up,
+// a week after it ended; an outcome is then taken as before attempts had ids).
+func (s *Service) currentAttempt(ctx context.Context, q *db.Queries, postID, channelID string) (string, error) {
+	res, err := s.river.JobListTx(ctx, s.sqlTx(q), river.NewJobListParams().Kinds("publish_target").
+		Where(s.jobArgsWhere("key"), river.NamedArgs{"key": "publish_target:" + postID + ":" + channelID}).
+		OrderBy(river.JobListOrderByID, river.SortOrderDesc).First(1))
+	if err != nil || len(res.Jobs) == 0 {
+		return "", err
+	}
+	return jobPublicID(res.Jobs[0].ID), nil
+}
+
+// settleTargetTx writes a target's outcome (t as just read in q's transaction), its events and what follows a
+// published one, then settles the post when no target is left open.
+func (s *Service) settleTargetTx(ctx context.Context, q *db.Queries, sys Principal, row db.Post, t db.PostTarget, status string, result providers.Result, errMsg string) error {
+	postID, channelID := t.PostID, t.ChannelID
+	now := s.now()
+	published := nullStr("")
+	if status == "published" {
+		published = nullStr(now)
+	}
+	if err := q.SetTargetStatus(ctx, db.SetTargetStatusParams{Status: status, ExternalID: result.ExternalID, ExternalUrl: result.URL,
+		Error: truncateRunes(errMsg, 500), Attempts: max(t.Attempts, 1), PublishedAt: published, UpdatedAt: now, AttemptedAt: nullStr(now), PostID: postID, ChannelID: channelID}); err != nil {
+		return err
+	}
+	if err := s.cancelJobs(ctx, q, "target_timeout:"+postID+":"+channelID); err != nil {
+		return err
+	}
+	if status == "published" {
+		if err := s.meterTarget(ctx, q, row, t, channelID); err != nil {
+			return err
+		}
+		if err := s.startThread(ctx, q, row, channelID, result, now); err != nil {
+			return err
+		}
+		if err := s.enqueueReposts(ctx, q, row.WorkspaceID, postID, channelID, t.Settings); err != nil {
+			return err
+		}
+	}
+	typ := "post.target_published"
+	if status == "failed" {
+		typ = "post.target_failed"
+	}
+	extra := map[string]any{"channel_id": channelID, "url": result.URL, "external_id": result.ExternalID, "error": errMsg}
+	// The channel as it is now (name, platform, picture), so a notification can say where it went.
+	if ch, err := q.GetChannel(ctx, db.GetChannelParams{WorkspaceID: row.WorkspaceID, ID: channelID}); err == nil {
+		extra["channel"] = targetChannel(ch)
+	} else if !isNoRows(err) {
+		return err
+	}
+	data := s.postEventData(ctx, q, row.WorkspaceID, postID, extra)
+	if _, err := s.emitRef(ctx, q, sys, typ, Ref{Collection: row.CollectionID, Post: postID, Channel: channelID}, data); err != nil {
+		return err
+	}
+	return s.settlePost(ctx, q, sys, row.WorkspaceID, postID)
 }
 
 // eventChannel is a channel in a per-target event: the channel plus its platform's display name.
@@ -1690,6 +1803,10 @@ type ResultInput struct {
 	URL        string `json:"url"`
 	ExternalID string `json:"external_id"`
 	Error      string `json:"error"`
+	// AttemptID is the attempt_id of the post.publish_requested event (or request) this result answers. With
+	// it, a result that arrives after the target was retried is refused (409) instead of settling the retry;
+	// without it the result counts for the attempt the target is in.
+	AttemptID string `json:"attempt_id"`
 }
 
 // ReportTargetResult closes a custom target that is waiting for your automation.
@@ -1706,6 +1823,9 @@ func (s *Service) ReportTargetResult(ctx context.Context, p Principal, postID, c
 	}
 	if len(in.URL) > 2048 {
 		return Post{}, invalid("url", "must be at most 2048 characters")
+	}
+	if len(in.AttemptID) > 100 {
+		return Post{}, invalid("attempt_id", "must be at most 100 characters")
 	}
 	if _, _, err := s.loadPost(ctx, s.Q, p.WorkspaceID, postID); err != nil {
 		return Post{}, err
@@ -1729,9 +1849,12 @@ func (s *Service) ReportTargetResult(ctx context.Context, p Principal, postID, c
 			return Post{}, invalid("url", "must be an absolute http(s) URL")
 		}
 	}
-	err = s.settleTarget(ctx, postID, channelID, in.Status, providers.Result{ExternalID: in.ExternalID, URL: in.URL}, in.Error)
+	err = s.settleTarget(ctx, postID, channelID, in.Status, providers.Result{ExternalID: in.ExternalID, URL: in.URL}, in.Error, in.AttemptID)
 	if errors.Is(err, errTargetSettled) {
 		return Post{}, conflict("this target is not waiting for a result any more (another result or the timeout settled it)")
+	}
+	if errors.Is(err, errStaleAttempt) {
+		return Post{}, conflict("this result is for an earlier attempt (" + in.AttemptID + "); the target was retried since and waits for the new attempt's result")
 	}
 	if err != nil {
 		return Post{}, err
@@ -1748,35 +1871,8 @@ func (s *Service) RetryTarget(ctx context.Context, p Principal, postID, channelI
 		return Post{}, err
 	}
 	err := s.tx(ctx, func(q *db.Queries) error {
-		row, err := q.GetPost(ctx, db.GetPostParams{WorkspaceID: p.WorkspaceID, ID: postID})
-		if isNoRows(err) {
-			return notFound("post")
-		}
+		row, err := s.retryTargetTx(ctx, q, p.WorkspaceID, postID, channelID)
 		if err != nil {
-			return err
-		}
-		if row.UnpublishedAt.Valid {
-			return errUnpublished
-		}
-		t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
-		if isNoRows(err) {
-			return notFound("target")
-		}
-		if err != nil {
-			return err
-		}
-		if t.Status != "failed" {
-			return conflict("only a failed target can be retried")
-		}
-		if err := checkNoDeletedMedia(ctx, q, p.WorkspaceID, row); err != nil {
-			return err
-		}
-		now := s.now()
-		if err := q.SetTargetStatus(ctx, db.SetTargetStatusParams{Status: "publishing", ExternalID: "", ExternalUrl: "", Error: "",
-			Attempts: t.Attempts, PublishedAt: nullStr(""), UpdatedAt: now, PostID: postID, ChannelID: channelID}); err != nil {
-			return err
-		}
-		if err := q.SetPostStatus(ctx, db.SetPostStatusParams{Status: "publishing", PublishedAt: nullStr(""), UpdatedAt: now, ID: postID}); err != nil {
 			return err
 		}
 		return s.enqueue(ctx, q, row.WorkspaceID, "publish_target", "publish_target:"+postID+":"+channelID,
@@ -1786,6 +1882,41 @@ func (s *Service) RetryTarget(ctx context.Context, p Principal, postID, channelI
 		return Post{}, err
 	}
 	return s.getPost(ctx, p, postID)
+}
+
+// retryTargetTx puts a failed target and its post back to publishing; the caller queues the job (Retry on the
+// post's channel a new one, Retry in the queue the failed one). An unpublished post, a target that is not
+// failed and a post with a deleted file are refused.
+func (s *Service) retryTargetTx(ctx context.Context, q *db.Queries, workspaceID, postID, channelID string) (db.Post, error) {
+	row, err := q.GetPost(ctx, db.GetPostParams{WorkspaceID: workspaceID, ID: postID})
+	if isNoRows(err) {
+		return row, notFound("post")
+	}
+	if err != nil {
+		return row, err
+	}
+	if row.UnpublishedAt.Valid {
+		return row, errUnpublished
+	}
+	t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
+	if isNoRows(err) {
+		return row, notFound("target")
+	}
+	if err != nil {
+		return row, err
+	}
+	if t.Status != "failed" {
+		return row, conflict("only a failed target can be retried")
+	}
+	if err := checkNoDeletedMedia(ctx, q, workspaceID, row); err != nil {
+		return row, err
+	}
+	now := s.now()
+	if err := q.SetTargetStatus(ctx, db.SetTargetStatusParams{Status: "publishing", ExternalID: "", ExternalUrl: "", Error: "",
+		Attempts: t.Attempts, PublishedAt: nullStr(""), UpdatedAt: now, PostID: postID, ChannelID: channelID}); err != nil {
+		return row, err
+	}
+	return row, q.SetPostStatus(ctx, db.SetPostStatusParams{Status: "publishing", PublishedAt: nullStr(""), UpdatedAt: now, ID: postID})
 }
 
 // ---- preview ----

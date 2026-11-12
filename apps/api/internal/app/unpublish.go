@@ -70,6 +70,44 @@ func (s *Service) UnpublishPost(ctx context.Context, p Principal, postID string,
 				return err
 			}
 		}
+		// What has not gone out yet does not go out after a takedown: a channel waiting for its retry (or for
+		// your automation's result) fails now, a time on the schedule is dropped. A send in progress can't be
+		// taken back: its run records what the platform answers.
+		if row.Status == "scheduled" {
+			if err := s.cancelJobs(ctx, q, "publish_post:"+postID); err != nil {
+				return err
+			}
+			if err := q.SetPostStatus(ctx, db.SetPostStatusParams{Status: "draft", PublishedAt: nullStr(""), UpdatedAt: now, ID: postID}); err != nil {
+				return err
+			}
+			if _, err := s.emit(ctx, q, p, "post.unscheduled", row.CollectionID, postID, s.postEventData(ctx, q, p.WorkspaceID, postID, nil)); err != nil {
+				return err
+			}
+		}
+		sys := Principal{WorkspaceID: p.WorkspaceID, Kind: PrincipalSystem, ID: "publisher", Name: "Publisher"}
+		for _, t := range targets {
+			if t.Status != "publishing" {
+				continue
+			}
+			for _, k := range []string{"publish_target:", "target_timeout:"} {
+				if err := s.cancelJobs(ctx, q, k+postID+":"+t.ChannelID); err != nil {
+					return err
+				}
+			}
+			if running, err := s.jobRunning(ctx, q, "publish_target:"+postID+":"+t.ChannelID); err != nil || running {
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			open, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: t.ChannelID})
+			if err != nil {
+				return err
+			}
+			if err := s.settleTargetTx(ctx, q, sys, row, open, "failed", providers.Result{}, "The post was unpublished before it reached this channel"); err != nil {
+				return err
+			}
+		}
 		channels := []string{}
 		for _, t := range chosen {
 			channels = append(channels, t.ChannelID)

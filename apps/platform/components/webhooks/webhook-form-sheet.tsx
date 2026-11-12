@@ -32,6 +32,7 @@ const POST_EVENT_GROUPS: { title: string; events: { value: string; hint: string 
       { value: 'post.target_failed', hint: 'One channel failed' },
       { value: 'post.published', hint: 'Out on every channel' },
       { value: 'post.failed', hint: 'A channel failed for good' },
+      { value: 'post.repeat_stopped', hint: 'A repeating post could not make its next copy' },
     ],
   },
   {

@@ -9,6 +9,8 @@ First public release, rebuilt for the posts pivot (2026-10-19): staqly is a sche
 your agents write, no longer a review inbox.
 
 ### Added
+- `posts.reportResult` takes `attempt_id` (the `attempt_id` of the `post.publish_requested` event): a
+  result for an attempt that was retried since is refused (409) instead of settling the retry.
 - `channels.options`, `channels.telegramConnect`, `channels.telegramConnectStatus`, `providers.check`,
   `media.replace`, and the design editor's endpoints: `mediaProjects` (list, create, get, update, delete,
   file), `ai` (status, text, `jobs`: create, get, discard, result, accept), `design` (brand, setBrand) and
