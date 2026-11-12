@@ -26,7 +26,7 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 		return err
 	}
 	defer unlock()
-	q := url.Values{"customer": {customer}, "status": {"all"}, "limit": {"1"}, "expand[]": {"data.default_payment_method"}}
+	q := url.Values{"customer": {customer}, "status": {"all"}, "limit": {"1"}, "expand[]": {"data.default_payment_method", "data.latest_invoice"}}
 	if err := s.stripe(ctx, "GET", "/v1/subscriptions?"+q.Encode(), nil, &list); err != nil {
 		return err
 	}

@@ -274,6 +274,9 @@ type Billing struct {
 	// TrialReview: "channels" while the free trial is paused because the workspace connected accounts an earlier
 	// unpaid trial used: publishing and new channels wait until it pays (StartPaidPlan) or the operator clears it.
 	TrialReview *string `json:"trial_review"`
+	// EndedFor: "payment_failed" when the subscription ended (or is unpaid) because a payment failed, as Stripe
+	// says (cancellation_details.reason); null otherwise, and once the workspace subscribes again.
+	EndedFor *string `json:"ended_for"`
 }
 
 // Trial availability (Billing.Trial).
@@ -360,6 +363,9 @@ func (s *Service) GetBilling(ctx context.Context, p Principal) (Billing, error) 
 	}
 	if w.PlanExpiresAt.Valid {
 		b.PlanExpiresAt = &w.PlanExpiresAt.String
+	}
+	if w.SubscriptionEndedFor.Valid && w.SubscriptionEndedFor.String != "" {
+		b.EndedFor = &w.SubscriptionEndedFor.String
 	}
 	b.TrialEndsAt = s.trialEndsAt(w)
 	if b.TrialRevoked, b.TrialReview, err = s.trialState(ctx, p.WorkspaceID); err != nil {
@@ -579,8 +585,11 @@ func (s *Service) ensureCustomer(ctx context.Context, w db.GetWorkspaceBillingRo
 // leaving the trial: a paying (active) subscription moving to a higher plan, and monthly to yearly on any plan
 // (the year is due now: with billing_mode=flexible Stripe neither resets the billing cycle nor invoices an
 // interval change by itself, so create_prorations would leave the year unbilled until the next invoice, a
-// year away). Anything else (a lower or the same plan on the same interval or yearly to monthly) keeps
-// create_prorations: a credit settles on the next invoice, at most a month away.
+// year away). Anything else (a lower or the same plan on the same interval or yearly to monthly) is invoiced at
+// once too, without waiting: its credit is that invoice's negative total, which Stripe puts on the customer's
+// balance right away, and the balance pays the next invoices, an upgrade's included. (Left as pending invoice
+// items by create_prorations, a credit is skipped by the invoice of a pending update and waits for the renewal,
+// up to a year away.)
 // With a promotion code (its id), the code's discount replaces the subscription's; with the same price only the
 // code is applied.
 func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscriptionID, price, planID, interval, promo string) error {
@@ -607,7 +616,7 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 		"items[0][id]":              {sub.Items.Data[i].ID},
 		"items[0][price]":           {price},
 		"items[0][quantity]":        {strconv.FormatInt(seats, 10)},
-		"proration_behavior":        {"create_prorations"},
+		"proration_behavior":        {"always_invoice"},
 		"metadata[staqly_plan]":     {planID},
 		"metadata[staqly_interval]": {interval},
 	}
@@ -626,7 +635,6 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 		keeps = "the trial"
 	}
 	if trial || payNow {
-		form.Set("proration_behavior", "always_invoice")
 		form.Set("payment_behavior", "pending_if_incomplete")
 		form.Set("expand[]", "latest_invoice")
 	}
@@ -883,7 +891,12 @@ type stripeSubscription struct {
 	Discounts          []json.RawMessage `json:"discounts"` // ids, or objects when expanded
 	// DefaultPaymentMethod: an id, or the payment method when expanded (its card's fingerprint: cardFingerprint).
 	DefaultPaymentMethod json.RawMessage `json:"default_payment_method"`
-	Items                struct {
+	// LatestInvoice: an id, or the invoice when expanded (unpaidRenewal).
+	LatestInvoice       json.RawMessage `json:"latest_invoice"`
+	CancellationDetails struct {
+		Reason string `json:"reason"` // cancellation_requested, payment_disputed, payment_failed
+	} `json:"cancellation_details"`
+	Items struct {
 		Data []struct {
 			ID                 string      `json:"id"`
 			Quantity           int64       `json:"quantity"`
@@ -937,6 +950,34 @@ func (sub stripeSubscription) periodEnd() int64 {
 		end = max(end, it.CurrentPeriodEnd)
 	}
 	return end
+}
+
+// periodStart: when the current period began (0 when Stripe didn't say).
+func (sub stripeSubscription) periodStart() int64 {
+	start := sub.CurrentPeriodStart
+	for _, it := range sub.Items.Data {
+		start = max(start, it.CurrentPeriodStart)
+	}
+	return start
+}
+
+// unpaidRenewal: the latest invoice (expanded: subscriptionExpand) is a renewal's and still open, so the
+// current period hasn't been paid for.
+func (sub stripeSubscription) unpaidRenewal() bool {
+	var inv struct {
+		Status        string `json:"status"`
+		BillingReason string `json:"billing_reason"`
+	}
+	return json.Unmarshal(sub.LatestInvoice, &inv) == nil && inv.BillingReason == "subscription_cycle" && inv.Status == "open"
+}
+
+// endedFor: "payment_failed" for a subscription Stripe ended, or holds unpaid, because a payment failed; ""
+// otherwise (Billing.EndedFor).
+func (sub stripeSubscription) endedFor() string {
+	if sub.Status == "unpaid" || (sub.Status == "canceled" && sub.CancellationDetails.Reason == "payment_failed") {
+		return "payment_failed"
+	}
+	return ""
 }
 
 // HandleStripeWebhook verifies and applies one Stripe event. Unknown event
@@ -1082,8 +1123,8 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 }
 
 // subscriptionExpand: subscription reads expand the default payment method, whose card fingerprint is kept for
-// repeated trials (trials.go).
-const subscriptionExpand = "?expand[]=default_payment_method"
+// repeated trials (trials.go), and the latest invoice, which tells an unpaid renewal (unpaidRenewal).
+const subscriptionExpand = "?expand[]=default_payment_method&expand[]=latest_invoice"
 
 // subscriptionIsOurs: the subscription names a workspace of this instance (metadata or a known customer).
 func (s *Service) subscriptionIsOurs(ctx context.Context, sub stripeSubscription) (bool, error) {
@@ -1136,7 +1177,7 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 		return nil
 	}
 	if err := q.SetSubscription(ctx, db.SetSubscriptionParams{StripeSubscriptionID: nullStr(sub.ID),
-		SubscriptionStatus: nullStr(sub.Status), UpdatedAt: s.now(), ID: ws}); err != nil {
+		SubscriptionStatus: nullStr(sub.Status), SubscriptionEndedFor: nullStr(sub.endedFor()), UpdatedAt: s.now(), ID: ws}); err != nil {
 		return err
 	}
 	// The trial's start and the first payment are told to the owners once (before settleTrial records them).
@@ -1172,12 +1213,31 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 	}
 	switch sub.Status {
 	case "past_due", "incomplete":
-		// Stripe advances the period even when the renewal fails: keep the
-		// paid end (plus grace); the workspace is suspended if it passes.
 		if cur.SubscriptionStatus.String != sub.Status {
 			s.trackAs(q, actor, "subscription_payment_failed", "status", sub.Status, "plan", planID)
+			// The owners are told once per failure (an incomplete first payment is told by Checkout).
+			if sub.Status == "past_due" {
+				if err := s.queueWelcome(ctx, q, ws, emailPaymentFailed, ""); err != nil {
+					return err
+				}
+			}
 		}
-		return nil
+		// Keep the paid end (plus grace); the workspace is suspended if it passes. Stripe starts the new period
+		// (as active, which moved the end a period ahead) about an hour before it charges the renewal: when that
+		// charge fails, the period wasn't paid for, so the end goes back to where the paid one stopped. An
+		// invoice of another kind left unpaid (a seat added mid-period) leaves the paid period alone.
+		start := sub.periodStart()
+		if !sub.unpaidRenewal() || start == 0 {
+			return nil
+		}
+		paidUntil := formatTime(time.Unix(start, 0).Add(billingGrace))
+		if !cur.PlanExpiresAt.Valid || cur.PlanExpiresAt.String <= paidUntil {
+			return nil
+		}
+		if set, err := operatorPlan(ctx, q, ws); err != nil || set {
+			return err
+		}
+		return s.changePlan(ctx, q, actor, cur.Plan, paidUntil, reason)
 	case "active", "trialing":
 		paidUntil := sub.periodEnd()
 		if sub.Status == "trialing" && sub.TrialEnd > 0 {
@@ -1195,13 +1255,14 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 	// panel) stands: an ended subscription told again (a sync, a replayed event) or ending later must not undo it.
 	// shortcut: reads the latest workspace.plan_changed event, so event retention (off by default) forgets it;
 	// give the plan a source column if operators set plans on installs that prune events.
-	if data, err := q.LastPlanChange(ctx, ws); err == nil {
-		var last struct{ Reason string }
-		if json.Unmarshal([]byte(data), &last) == nil && strings.HasPrefix(last.Reason, "operator") {
-			return nil
-		}
-	} else if !isNoRows(err) {
+	if set, err := operatorPlan(ctx, q, ws); err != nil || set {
 		return err
+	}
+	// Ended because a payment failed: the owners are told once per subscription (cur is the workspace before).
+	if why := sub.endedFor(); why != "" && (cur.StripeSubscriptionID.String != sub.ID || cur.SubscriptionEndedFor.String != why) {
+		if err := s.queueWelcome(ctx, q, ws, emailSubscriptionEnded, ""); err != nil {
+			return err
+		}
 	}
 	end := s.Now()
 	if cur.PlanExpiresAt.Valid {
@@ -1210,6 +1271,19 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 		}
 	}
 	return s.changePlan(ctx, q, actor, planID, formatTime(end), reason)
+}
+
+// operatorPlan: the workspace's plan was last set by the operator (server set-plan, the admin panel).
+func operatorPlan(ctx context.Context, q *db.Queries, workspaceID string) (bool, error) {
+	data, err := q.LastPlanChange(ctx, workspaceID)
+	if isNoRows(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var last struct{ Reason string }
+	return json.Unmarshal([]byte(data), &last) == nil && strings.HasPrefix(last.Reason, "operator"), nil
 }
 
 // otherLive: the workspace has a live subscription on record and sub is another live one. One on record whose
@@ -1441,7 +1515,8 @@ func (s *Service) queueSeatSync(ctx context.Context, q *db.Queries, workspaceID 
 // membership changed (at), so a person pays exactly for the days they were a member:
 //   - more seats: always_invoice, the rest of the period is charged at once (waiting for the next invoice
 //     would leave the charge unpaid if the subscription is cancelled at the period's end);
-//   - fewer seats: create_prorations, the unused rest is credited on the next invoice;
+//   - fewer seats: always_invoice too, so the unused rest is the customer's balance at Stripe at once (the
+//     invoice's negative total) and pays the next invoices, an upgrade's included;
 //   - added and removed in one period: the charge and the credit net to the days in between;
 //   - during the Starter trial: no proration (seats are free; the first invoice uses the count at its end).
 //
@@ -1476,16 +1551,11 @@ func (s *Service) runSyncSeats(ctx context.Context, workspaceID, at string) erro
 	form := url.Values{
 		"items[0][id]":       {item.ID},
 		"items[0][quantity]": {strconv.FormatInt(seats, 10)},
+		"proration_behavior": {"always_invoice"},
 	}
-	switch {
-	case sub.Status == "trialing":
+	if sub.Status == "trialing" {
 		form.Set("proration_behavior", "none")
-	case seats > item.Quantity:
-		form.Set("proration_behavior", "always_invoice")
-	default:
-		form.Set("proration_behavior", "create_prorations")
-	}
-	if sub.Status != "trialing" {
+	} else {
 		// Prorate from the change, not from when this job ran; Stripe wants a date inside the current period.
 		when := s.Now().Unix()
 		if t, err := time.Parse(timeFormat, at); err == nil {

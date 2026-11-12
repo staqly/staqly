@@ -530,7 +530,7 @@ paths:
         returns the dashboard's plan page URL (`/settings/plan`) with `?checkout=switched`; the plan changes when Stripe's
         `customer.subscription.updated` event arrives. 409 for the plan and interval it already has. A lower plan
         on the same interval, and yearly to monthly on the same or a lower plan, are settled by Stripe's proration
-        (a credit goes on the next invoice).
+        at once: the credit goes to the customer's balance at Stripe, which pays the next invoices (an upgrade's too).
 
         An upgrade (a paying subscription moving to a higher plan) charges the prorated difference at once,
         monthly to yearly on any plan charges the year at once (less the unused rest of the month), and
@@ -638,23 +638,31 @@ paths:
       operationId: addAddon
       tags: [billing]
       summary: Add an add-on to the subscription (a workspace owner)
-      description: Adds it to the live subscription in the subscription's interval, charged at once for the rest of the period with the card on file. Its features apply when Stripe reports them (seconds).
+      description: |
+        Adds it to the live subscription in the subscription's interval, charged at once for the rest of the period
+        with the card on file, and added only once that payment goes through. Its features apply when Stripe
+        reports them (seconds). When the payment doesn't go through: 402 `payment_failed` whose `details` say why
+        (`reason`, `addon`, `pay_url`; see `PendingPayment`), the subscription stays as it was without the add-on,
+        and `GET /v1/billing/pending-payment` reads the same later.
       responses:
         "204": { description: Added }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "502": { $ref: "#/components/responses/BadGateway" }
     delete:
       operationId: removeAddon
       tags: [billing]
       summary: Remove an add-on (a workspace owner)
-      description: Removes it from the subscription now; the unused rest of the period is credited on the next invoice.
+      description: Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
       responses:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "502": { $ref: "#/components/responses/BadGateway" }
   /v1/billing/portal:
     post:
       operationId: createPortalSession
@@ -755,10 +763,10 @@ paths:
     get:
       operationId: getPendingPayment
       tags: [billing]
-      summary: A plan change waiting for its payment, read from Stripe (account owner)
+      summary: A plan change or an add-on waiting for its payment, read from Stripe (account owner)
       description: |
-        An upgrade to a higher plan, a move from monthly to yearly billing, and leaving Starter's trial for another
-        plan, are charged at once, and Stripe
+        An upgrade to a higher plan, a move from monthly to yearly billing, leaving Starter's trial for another
+        plan, and an added add-on, are charged at once, and Stripe
         applies the change only when that payment goes through (until then it is the subscription's pending update
         and the current plan, or the trial, stays). This reads
         from Stripe whether such a change waits and why it isn't paid: `authentication_required` (the bank asks
@@ -5049,7 +5057,7 @@ components:
             failed: { type: integer, description: Gave up after every retry }
     Billing:
       type: object
-      required: [enabled, plan, subscription_status, plan_expires_at, trial_ends_at, suspended, has_customer, seats, trial, trial_revoked, trial_review]
+      required: [enabled, plan, subscription_status, plan_expires_at, trial_ends_at, suspended, has_customer, seats, trial, trial_revoked, trial_review, ended_for]
       properties:
         enabled: { type: boolean, description: Billing is configured on this instance }
         plan: { type: string, description: "starter, plus, pro or business (cloud; an operator may also set a plan of their own), unlocked (Community Edition)", examples: [plus] }
@@ -5074,6 +5082,10 @@ components:
           type: [string, "null"]
           enum: [channels, null]
           description: "channels while the free trial is paused for review: the workspace connected a personal account (or two people behind shared spaces) of an earlier free trial that ended unpaid. Nothing is charged; publishing and new channels wait (402 trial_already_used) until it starts the paid plan (POST /v1/billing/start-paid-plan) or the operator clears it; drafts and settings stay. null otherwise"
+        ended_for:
+          type: [string, "null"]
+          enum: [payment_failed, null]
+          description: "payment_failed when the subscription ended, or is held unpaid, because a payment failed (Stripe's cancellation_details.reason; subscription_status is canceled or unpaid); null otherwise, also for a subscription the customer cancelled, and again once the workspace subscribes"
     XPosts:
       type: object
       required: [period, period_end, unlimited, included, used, included_left, credits_left, credits_expire_at, left, bundles, currency, link_post_weight]
@@ -5179,11 +5191,11 @@ components:
       type: object
       required: [pending]
       description: |
-        A plan change waiting for its payment (an upgrade, monthly to yearly and leaving the trial are charged at once). Also the `details` of the
-        402 `payment_failed` that `POST /v1/billing/checkout` answers when that payment didn't go through
+        A plan change or an add-on waiting for its payment (an upgrade, monthly to yearly, leaving the trial and an added add-on are charged at once). Also the `details` of the
+        402 `payment_failed` that `POST /v1/billing/checkout` and `POST /v1/billing/addons/{id}` answer when that payment didn't go through
         (without `pending`).
       properties:
-        pending: { type: boolean, description: "A plan change waits for its payment; false when none does (nothing else is set then)" }
+        pending: { type: boolean, description: "A plan change or an add-on waits for its payment; false when none does (nothing else is set then)" }
         reason:
           type: string
           enum: [authentication_required, card_declined, insufficient_funds, expired_card, incorrect_card_details, processing, unknown]
@@ -5195,6 +5207,7 @@ components:
         decline_code: { type: string, description: "Stripe's decline code or error code, as Stripe gives it", examples: [insufficient_funds] }
         pay_url: { type: string, format: uri, description: "Stripe's hosted invoice page for the unpaid invoice, where the customer confirms the payment with the bank or pays with another card. Absent when the invoice isn't open or has no such page.", examples: ["https://invoice.stripe.com/i/acct_123/test_abc"] }
         plan: { type: string, description: The plan waiting for the payment, examples: [pro] }
+        addon: { type: string, description: "The add-on waiting for the payment (its id), when an add-on is what waits; `plan` is absent then", examples: [channels_pack] }
         expires_at: { type: string, format: date-time, description: When Stripe drops the change if it is still unpaid }
     BillingURL:
       type: object

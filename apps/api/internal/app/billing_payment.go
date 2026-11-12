@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Why a plan change that is charged at once (leaving Starter's trial, an upgrade) hasn't been paid. Stripe keeps such a change
+// Why a change that is charged at once (leaving Starter's trial, an upgrade, an add-on) hasn't been paid. Stripe keeps such a change
 // as the subscription's pending update until the invoice it made is paid; the person pays or confirms on Stripe's
 // own pages (the hosted invoice page, the billing portal), never in staqly, and staqly only reads where it stands.
 const (
@@ -38,24 +38,30 @@ type PendingPayment struct {
 	PayURL string `json:"pay_url,omitempty"`
 	// Plan: the plan waiting for the payment, when it can be told.
 	Plan string `json:"plan,omitempty"`
+	// Addon: the add-on waiting for the payment (its id), when that is what waits; Plan is empty then.
+	Addon string `json:"addon,omitempty"`
 	// ExpiresAt: when Stripe drops the waiting change if it is still unpaid.
 	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
-// error: the 402 a plan switch answers when its payment didn't go through, with the PendingPayment as details.
-// keeps: what goes on unchanged meanwhile ("the trial", "your current plan").
+// error: the 402 a plan switch or an added add-on answers when its payment didn't go through, with the
+// PendingPayment as details. keeps: what goes on unchanged meanwhile ("the trial", "your current plan").
 func (pp PendingPayment) error(keeps string) *Error {
-	msg := "the payment for the new plan didn't go through, so " + keeps + " stays as it was: check the card in Manage billing and try again"
+	what, then := "the new plan", "the plan changes"
+	if pp.Addon != "" {
+		what, then = "the add-on", "the add-on is added"
+	}
+	msg := "the payment for " + what + " didn't go through, so " + keeps + " stays as it was: check the card in Manage billing and try again"
 	switch pp.Reason {
 	case PaymentAuthRequired:
-		msg = "your bank asks you to confirm the payment for the new plan; until then " + keeps + " stays as it was"
+		msg = "your bank asks you to confirm the payment for " + what + "; until then " + keeps + " stays as it was"
 	case PaymentDeclined, PaymentInsufficientFunds, PaymentExpiredCard, PaymentIncorrectDetails:
 		msg = "the card was declined, so " + keeps + " stays as it was: update the card in Manage billing and try again"
 	case PaymentProcessing:
-		msg = "the payment for the new plan is still being processed; the plan changes once it goes through"
+		msg = "the payment for " + what + " is still being processed; " + then + " once it goes through"
 	}
 	details := map[string]any{"reason": pp.Reason}
-	for k, v := range map[string]string{"pay_url": pp.PayURL, "decline_code": pp.DeclineCode, "plan": pp.Plan, "expires_at": pp.ExpiresAt} {
+	for k, v := range map[string]string{"pay_url": pp.PayURL, "decline_code": pp.DeclineCode, "plan": pp.Plan, "addon": pp.Addon, "expires_at": pp.ExpiresAt} {
 		if v != "" {
 			details[k] = v
 		}
@@ -71,7 +77,7 @@ type stripePendingUpdate struct {
 	} `json:"subscription_items"`
 }
 
-// GetPendingPayment reads from Stripe whether a plan change waits for its payment and why it hasn't been paid
+// GetPendingPayment reads from Stripe whether a plan change or an add-on waits for its payment and why it hasn't been paid
 // (account owner). The dashboard's payment page asks it, also after the person comes back from Stripe.
 func (s *Service) GetPendingPayment(ctx context.Context, p Principal) (PendingPayment, error) {
 	if err := s.requireOwner(ctx, p); err != nil {
@@ -88,8 +94,8 @@ func (s *Service) GetPendingPayment(ctx context.Context, p Principal) (PendingPa
 		return PendingPayment{}, nil
 	}
 	var sub struct {
+		stripeSubscription
 		PendingUpdate *stripePendingUpdate `json:"pending_update"`
-		LatestInvoice json.RawMessage      `json:"latest_invoice"`
 	}
 	q := url.Values{"expand[]": {"latest_invoice"}}
 	if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String)+"?"+q.Encode(), nil, &sub); err != nil {
@@ -98,7 +104,21 @@ func (s *Service) GetPendingPayment(ctx context.Context, p Principal) (PendingPa
 	if sub.PendingUpdate == nil {
 		return PendingPayment{}, nil
 	}
-	return s.pendingPayment(ctx, *sub.PendingUpdate, sub.LatestInvoice, ""), nil
+	pp := s.pendingPayment(ctx, *sub.PendingUpdate, sub.LatestInvoice, "")
+	// An add-on waits when the update holds one the subscription doesn't have yet (the plan's item is in the
+	// update too, unchanged).
+	for _, it := range sub.PendingUpdate.SubscriptionItems {
+		var pr stripePrice
+		if json.Unmarshal(it.Price, &pr) != nil {
+			continue
+		}
+		if id := addonOf(pr); id != "" {
+			if _, has := addonItem(sub.stripeSubscription, id); !has {
+				pp.Plan, pp.Addon = "", id
+			}
+		}
+	}
+	return pp, nil
 }
 
 // pendingPayment reads why the invoice of a pending update hasn't been paid: the invoice (expanded on the

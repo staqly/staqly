@@ -70,7 +70,7 @@ func TestEntitlementsAndAddons(t *testing.T) {
 		case "GET /v1/entitlements/features":
 			enc.Encode(map[string]any{"data": []any{
 				map[string]any{"id": "feat_ch", "name": "Channels pack", "lookup_key": "webhooks_extra_2", "metadata": map[string]string{"staqly_limit_webhooks": "+2"}},
-				map[string]any{"id": "feat_ai", "name": "AI pack", "lookup_key": "ai_pack"},
+				map[string]any{"id": "feat_ai", "name": "AI pack", "lookup_key": "ai_pack", "metadata": map[string]string{"staqly_limit_ai_monthly_cents": "+500"}},
 			}})
 		case "GET /v1/products":
 			enc.Encode(map[string]any{"data": []any{
@@ -81,13 +81,13 @@ func TestEntitlementsAndAddons(t *testing.T) {
 			}})
 		case "GET /v1/subscriptions/sub_1":
 			enc.Encode(map[string]any{"id": "sub_1", "customer": "cus_1", "status": "active", "items": map[string]any{"data": items}})
-		case "POST /v1/subscription_items":
+		case "POST /v1/subscriptions/sub_1":
 			added = r.Form
-			items = append(items, map[string]any{"id": "si_addon", "quantity": 1, "price": map[string]any{"id": r.Form.Get("price"),
-				"lookup_key": "staqly_addon_webhooks_pack_month", "metadata": map[string]string{"staqly_addon": "webhooks_pack"}, "recurring": map[string]any{"interval": "month"}}})
-			fmt.Fprint(w, `{"id":"si_addon"}`)
+			items = append(items, map[string]any{"id": "si_addon", "quantity": 1, "price": map[string]any{"id": r.Form.Get("items[0][price]"),
+				"lookup_key": "staqly_addon_webhooks_pack_month", "recurring": map[string]any{"interval": "month"}}})
+			fmt.Fprint(w, `{"id":"sub_1"}`)
 		case "DELETE /v1/subscription_items/si_addon":
-			if r.URL.Query().Get("proration_behavior") != "create_prorations" {
+			if r.URL.Query().Get("proration_behavior") != "always_invoice" {
 				t.Errorf("removal without a credit: %v", r.URL.Query())
 			}
 			items = items[:1]
@@ -127,10 +127,11 @@ func TestEntitlementsAndAddons(t *testing.T) {
 	}
 	e.do(nil, "GET", "/v1/billing/addons", reader, nil, 403, nil)
 
-	// Add it: one more item on the subscription in its interval, charged at once.
+	// Add it: one more item on the subscription in its interval, charged at once and added once paid.
 	e.do(nil, "POST", "/v1/billing/addons/webhooks_pack", admin, nil, 204, nil)
-	if added.Get("subscription") != "sub_1" || added.Get("price") != "price_addon_webhooks_pack_month" ||
-		added.Get("proration_behavior") != "always_invoice" || added.Get("quantity") != "1" {
+	if added.Get("items[0][id]") != "" || added.Get("items[0][price]") != "price_addon_webhooks_pack_month" ||
+		added.Get("proration_behavior") != "always_invoice" || added.Get("items[0][quantity]") != "1" ||
+		added.Get("payment_behavior") != "pending_if_incomplete" {
 		t.Fatalf("add-on item: %v", added)
 	}
 	e.do(nil, "POST", "/v1/billing/addons/webhooks_pack", admin, nil, 409, nil) // already there
@@ -147,9 +148,27 @@ func TestEntitlementsAndAddons(t *testing.T) {
 	e.svc.RunDueJobsOnce(ctx)
 	usage()
 	if u.Plan.Limits.Webhooks != 5 || u.Plan.BaseLimits == nil || u.Plan.BaseLimits.Webhooks != 3 ||
-		fmt.Sprint(u.Plan.Entitlements) != "[ai_pack webhooks_extra_2]" || len(u.Plan.LimitBonuses) != 1 ||
-		u.Plan.LimitBonuses[0].From != "Channels pack" || u.Plan.LimitBonuses[0].Add != 2 {
+		fmt.Sprint(u.Plan.Entitlements) != "[ai_pack webhooks_extra_2]" || len(u.Plan.LimitBonuses) != 2 ||
+		u.Plan.LimitBonuses[1].From != "Channels pack" || u.Plan.LimitBonuses[1].Add != 2 {
 		t.Fatalf("effective plan: %+v", u.Plan)
+	}
+	// Was a bug: a feature raising the monthly AI allowance (staqly_limit_ai_monthly_cents) was charged for and
+	// changed nothing. Starter's $1 a month becomes $6, where the app reads it (GET /v1/ai).
+	if b := u.Plan.LimitBonuses[0]; b.Limit != app.LimitAIMonthlyCents || b.Add != 500 || b.From != "AI pack" ||
+		u.Plan.Limits.AIMonthlyCents != 600 || u.Plan.BaseLimits.AIMonthlyCents != 100 {
+		t.Fatalf("AI allowance with the AI pack: %+v", u.Plan)
+	}
+	aiLimit := func() float64 {
+		t.Helper()
+		var st app.AIStatus
+		e.do(nil, "GET", "/v1/ai", e.key, nil, 200, &st)
+		if st.Usage.LimitUSD == nil {
+			t.Fatal("no AI limit")
+		}
+		return *st.Usage.LimitUSD
+	}
+	if l := aiLimit(); l != 6 {
+		t.Fatalf("AI allowance with the AI pack: $%v, want $6", l)
 	}
 	// The limit check itself uses it: two more webhooks, then 402.
 	hook(201)
@@ -171,6 +190,9 @@ func TestEntitlementsAndAddons(t *testing.T) {
 	usage()
 	if u.Plan.Limits.Webhooks != 3 || len(u.Plan.Entitlements) != 0 {
 		t.Fatalf("after removal: %+v", u.Plan)
+	}
+	if l := aiLimit(); l != 1 {
+		t.Fatalf("AI allowance without the AI pack: $%v, want $1", l)
 	}
 
 	// Features are read once per 10 minutes (one list for both syncs that needed them).

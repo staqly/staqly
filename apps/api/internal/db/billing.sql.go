@@ -27,7 +27,8 @@ func (q *Queries) CountOwnersOtherTrials(ctx context.Context, workspaceID string
 }
 
 const getWorkspaceBilling = `-- name: GetWorkspaceBilling :one
-SELECT id, name, plan, plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status
+SELECT id, name, plan, plan_expires_at, stripe_customer_id, stripe_subscription_id, subscription_status,
+       subscription_ended_for
 FROM workspaces WHERE id = ?
 `
 
@@ -39,6 +40,7 @@ type GetWorkspaceBillingRow struct {
 	StripeCustomerID     sql.NullString `json:"stripe_customer_id"`
 	StripeSubscriptionID sql.NullString `json:"stripe_subscription_id"`
 	SubscriptionStatus   sql.NullString `json:"subscription_status"`
+	SubscriptionEndedFor sql.NullString `json:"subscription_ended_for"`
 }
 
 func (q *Queries) GetWorkspaceBilling(ctx context.Context, id string) (GetWorkspaceBillingRow, error) {
@@ -52,6 +54,7 @@ func (q *Queries) GetWorkspaceBilling(ctx context.Context, id string) (GetWorksp
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
 		&i.SubscriptionStatus,
+		&i.SubscriptionEndedFor,
 	)
 	return i, err
 }
@@ -140,12 +143,14 @@ func (q *Queries) SetStripeCustomer(ctx context.Context, arg SetStripeCustomerPa
 }
 
 const setSubscription = `-- name: SetSubscription :exec
-UPDATE workspaces SET stripe_subscription_id = ?, subscription_status = ?, updated_at = ? WHERE id = ?
+UPDATE workspaces SET stripe_subscription_id = ?, subscription_status = ?, subscription_ended_for = ?, updated_at = ?
+WHERE id = ?
 `
 
 type SetSubscriptionParams struct {
 	StripeSubscriptionID sql.NullString `json:"stripe_subscription_id"`
 	SubscriptionStatus   sql.NullString `json:"subscription_status"`
+	SubscriptionEndedFor sql.NullString `json:"subscription_ended_for"`
 	UpdatedAt            string         `json:"updated_at"`
 	ID                   string         `json:"id"`
 }
@@ -154,6 +159,7 @@ func (q *Queries) SetSubscription(ctx context.Context, arg SetSubscriptionParams
 	_, err := q.db.ExecContext(ctx, setSubscription,
 		arg.StripeSubscriptionID,
 		arg.SubscriptionStatus,
+		arg.SubscriptionEndedFor,
 		arg.UpdatedAt,
 		arg.ID,
 	)

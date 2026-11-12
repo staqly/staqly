@@ -19,7 +19,8 @@ import (
 //
 //	staqly_limit_<limit> = "+10" | "unlimited"   channels, alerts, webhooks, api_keys, x_posts_per_period,
 //	                                              linkedin_posts_per_period, linkedin_videos_per_period,
-//	                                              posts_per_month, storage_gb, max_upload_mb
+//	                                              posts_per_month, storage_gb, max_upload_mb,
+//	                                              ai_monthly_cents (US cents: "+500" is $5 more a month)
 //	staqly_enable        = "data_export,..."      capabilities a plan may lack
 //
 // Features come from the products a subscription holds: each plan's product (its base features, no deltas),
@@ -59,6 +60,7 @@ var limitFields = []struct {
 	{"linkedin_videos_per_period", 1, LimitLinkedInVideos, func(l *PlanLimits) *int64 { return &l.LinkedInVideosPerPeriod }},
 	{"storage_gb", gb, LimitStorage, func(l *PlanLimits) *int64 { return &l.StorageBytes }},
 	{"max_upload_mb", 1 << 20, LimitMaxUpload, func(l *PlanLimits) *int64 { return &l.MaxUploadBytes }},
+	{"ai_monthly_cents", 1, LimitAIMonthlyCents, func(l *PlanLimits) *int64 { return &l.AIMonthlyCents }},
 }
 
 // ApplyEntitlements is the one place a plan meets its entitlements: the effective plan every limit check uses
@@ -313,6 +315,19 @@ func (s *Service) stripeAddons(ctx context.Context) ([]Addon, error) {
 	return out, nil
 }
 
+// addonOf: the add-on a price sells ("" for a plan's price), from its metadata or its lookup key.
+func addonOf(pr stripePrice) string {
+	if id := pr.Metadata["staqly_addon"]; id != "" {
+		return id
+	}
+	rest, ok := strings.CutPrefix(pr.LookupKey, "staqly_addon_")
+	if !ok {
+		return ""
+	}
+	rest = strings.TrimSuffix(rest, "_"+IntervalMonth)
+	return strings.TrimSuffix(rest, "_"+IntervalYear)
+}
+
 // addonItem: the subscription item holding an add-on, if the subscription has it.
 func addonItem(sub stripeSubscription, id string) (string, bool) {
 	for _, it := range sub.Items.Data {
@@ -367,8 +382,10 @@ func (s *Service) ListAddons(ctx context.Context, p Principal) ([]Addon, error) 
 }
 
 // AddAddon: POST /v1/billing/addons/{id}. The add-on joins the live subscription as one more item, in the
-// subscription's interval, charged at once for the rest of the period (always_invoice, like an added seat);
-// the card on file pays it, so no Checkout is needed. Its features arrive with Stripe's entitlement events.
+// subscription's interval, charged at once for the rest of the period and added only once that is paid (a pending
+// update, like an upgrade: switchSubscription); the card on file pays it, so no Checkout is needed. A payment that
+// doesn't go through answers 402 payment_failed and leaves the subscription as it was, without the add-on. Its
+// features arrive with Stripe's entitlement events.
 func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
 	if err := s.requireOwner(ctx, p); err != nil {
 		return err
@@ -388,20 +405,35 @@ func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.stripe(ctx, "POST", "/v1/subscription_items", url.Values{
-		"subscription":           {sub.ID},
-		"price":                  {pr.id},
-		"quantity":               {"1"},
-		"proration_behavior":     {"always_invoice"},
-		"metadata[staqly_addon]": {id},
-	}, nil); err != nil {
+	// Through the subscription (an item without an id is added, the others stay): its answer carries the pending
+	// update. No item metadata: a pending update takes only what changes the invoice, and the add-on is told by
+	// its price (addonItem).
+	var out struct {
+		PendingUpdate *stripePendingUpdate `json:"pending_update"`
+		LatestInvoice json.RawMessage      `json:"latest_invoice"`
+	}
+	if err := s.stripe(ctx, "POST", "/v1/subscriptions/"+url.PathEscape(sub.ID), url.Values{
+		"items[0][price]":    {pr.id},
+		"items[0][quantity]": {"1"},
+		"proration_behavior": {"always_invoice"},
+		"payment_behavior":   {"pending_if_incomplete"},
+		"expand[]":           {"latest_invoice"},
+	}, &out); err != nil {
 		return err
+	}
+	if out.PendingUpdate != nil {
+		pp := s.pendingPayment(ctx, *out.PendingUpdate, out.LatestInvoice, "")
+		pp.Plan, pp.Addon = "", id
+		return pp.error("your subscription")
 	}
 	return s.tx(ctx, func(q *db.Queries) error { return s.queueEntitlementSync(ctx, q, p.WorkspaceID) })
 }
 
 // RemoveAddon: DELETE /v1/billing/addons/{id}. The item leaves the subscription now; the unused rest of the
-// period is credited on the next invoice.
+// period is invoiced at once (always_invoice), and that invoice's negative total becomes the customer's balance
+// at Stripe, which pays the next invoices (an upgrade's too). An add-on that was never paid (added before add-ons
+// waited for their payment; the subscription is past_due) is not credited: its open invoice is voided instead,
+// so nobody owes for an add-on they no longer have.
 func (s *Service) RemoveAddon(ctx context.Context, p Principal, id string) error {
 	if err := s.requireOwner(ctx, p); err != nil {
 		return err
@@ -417,8 +449,57 @@ func (s *Service) RemoveAddon(ctx context.Context, p Principal, id string) error
 	if !ok {
 		return notFound("add-on")
 	}
-	if err := s.stripe(ctx, "DELETE", "/v1/subscription_items/"+url.PathEscape(item)+"?proration_behavior=create_prorations", nil, nil); err != nil {
+	proration := "always_invoice"
+	if sub.Status == "past_due" && s.voidInvoicesOf(ctx, sub.ID, item) {
+		proration = "none"
+	}
+	if err := s.stripe(ctx, "DELETE", "/v1/subscription_items/"+url.PathEscape(item)+"?proration_behavior="+proration, nil, nil); err != nil {
 		return err
 	}
 	return s.tx(ctx, func(q *db.Queries) error { return s.queueEntitlementSync(ctx, q, p.WorkspaceID) })
+}
+
+// voidInvoicesOf voids the subscription's open invoices that bill nothing but one item (an add-on charged when it
+// was added and never paid) and says whether there was one and all of them are void now. An invoice with other
+// lines (a renewal) stays; one that can't be read or voided is logged and counts as not voided, so the removal
+// credits the item as usual.
+// shortcut: the newest 10 open invoices and each one's first 10 lines; an invoice of one add-on has one or two.
+func (s *Service) voidInvoicesOf(ctx context.Context, subscriptionID, item string) bool {
+	var list struct {
+		Data []struct {
+			ID    string `json:"id"`
+			Lines struct {
+				Data []struct {
+					SubscriptionItem string `json:"subscription_item"` // before Stripe API 2025-03-31
+					Parent           struct {
+						SubscriptionItemDetails struct {
+							SubscriptionItem string `json:"subscription_item"`
+						} `json:"subscription_item_details"`
+					} `json:"parent"`
+				} `json:"data"`
+				HasMore bool `json:"has_more"`
+			} `json:"lines"`
+		} `json:"data"`
+	}
+	q := url.Values{"subscription": {subscriptionID}, "status": {"open"}, "limit": {"10"}}
+	if err := s.stripe(ctx, "GET", "/v1/invoices?"+q.Encode(), nil, &list); err != nil {
+		return false
+	}
+	found, voided := 0, 0
+	for _, inv := range list.Data {
+		only := len(inv.Lines.Data) > 0 && !inv.Lines.HasMore
+		for _, l := range inv.Lines.Data {
+			only = only && firstNonEmpty(l.Parent.SubscriptionItemDetails.SubscriptionItem, l.SubscriptionItem) == item
+		}
+		if !only {
+			continue
+		}
+		found++
+		if err := s.stripe(ctx, "POST", "/v1/invoices/"+url.PathEscape(inv.ID)+"/void", nil, nil); err != nil {
+			s.logger(ctx).Warn("billing: unpaid add-on invoice not voided", "err", err)
+			continue
+		}
+		voided++
+	}
+	return found > 0 && voided == found
 }
