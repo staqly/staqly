@@ -22,9 +22,9 @@ var lastAttempt = map[string]string{
 	"run_schedule":    "settles",
 	"repeat_post":     "settles",
 	"refresh_channel": "settles",
+	"target_timeout":  "settles",
 	"ai_run":          "settles elsewhere: the request fails and its credits come back (the AI tests)",
 
-	"target_timeout":    "nothing: the target keeps waiting for a result (reported as a defect; a result report or a retry still ends it)",
 	"repost":            "nothing: a repost that never went through is logged; the post is out",
 	"notify_people":     "nothing: the event stays in the activity log",
 	"notify_person":     "nothing: the event stays in the activity log",
@@ -216,6 +216,54 @@ func TestEveryJobKindSaysWhatItsLastFailureLeaves(t *testing.T) {
 			stopped := eventsOfType(t, s, p, "post.repeat_stopped")
 			if len(stopped) != 1 || stopped[0].item != post.ID || !strings.Contains(stopped[0].data, "boom") {
 				t.Fatalf("post.repeat_stopped events %+v, want one for the post with the cause", stopped)
+			}
+		},
+		// Was a bug: a custom target whose timeout job ran out of attempts (its write kept failing) stayed publishing
+		// for good. The last failure times the target out, once, and leaves a newer attempt alone.
+		"target_timeout": func(t *testing.T, s *Service, p Principal, post Post) {
+			ctx := t.Context()
+			ch := post.Targets[0].ChannelID
+			s.Cfg.ProcessingTimeout = time.Minute
+			if _, err := s.PublishPost(ctx, p, post.ID); err != nil {
+				t.Fatal(err)
+			}
+			s.RunDueJobsOnce(ctx) // the target waits for the automation's result
+			targetJobs := jobsByKey(t, s, "publish_target:"+post.ID+":"+ch)
+			if len(targetJobs) != 1 {
+				t.Fatalf("setup: %d publish jobs", len(targetJobs))
+			}
+			attempt := jobPublicID(targetJobs[0].ID)
+			lift := refuseWrites(t, s, `UPDATE ON post_targets WHEN NEW.status = 'failed'`)
+			later := time.Now()
+			for range 4 { // every attempt of the timeout fails to write
+				later = later.Add(time.Hour)
+				s.Now = func() time.Time { return later }
+				s.RunDueJobsOnce(ctx)
+			}
+			lift()
+			jobs := jobsByKey(t, s, "target_timeout:"+post.ID+":"+ch)
+			if got, _ := s.GetPost(ctx, p, post.ID); len(jobs) != 1 || jobStatus(jobs[0].State) != "failed" || got.Targets[0].Status != "publishing" {
+				t.Fatalf("setup: timeout jobs %+v, target %s; want one failed job and the target still waiting", jobs, got.Targets[0].Status)
+			}
+			stale := jobArgs{WorkspaceID: p.WorkspaceID, Payload: jobPayload{PostID: post.ID, ChannelID: ch, AttemptID: "job_0"}}
+			if err := s.jobFailed(ctx, "target_timeout", stale, boom); err != nil {
+				t.Fatal(err)
+			}
+			if got, _ := s.GetPost(ctx, p, post.ID); got.Targets[0].Status != "publishing" {
+				t.Fatalf("the last failure of an older attempt's timeout settled the target: %s", got.Targets[0].Status)
+			}
+			a := jobArgs{WorkspaceID: p.WorkspaceID, Payload: jobPayload{PostID: post.ID, ChannelID: ch, AttemptID: attempt}}
+			for range 2 { // the database takes the write again; settling twice changes nothing more
+				if err := s.jobFailed(ctx, "target_timeout", a, boom); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, _ := s.GetPost(ctx, p, post.ID)
+			if tg := got.Targets[0]; tg.Status != "failed" || tg.Error != "No result reported in time" || got.Status != "failed" {
+				t.Fatalf("target %+v, post %s; want both failed as by a timeout", tg, got.Status)
+			}
+			if n, m := len(eventsOfType(t, s, p, "post.target_failed")), len(eventsOfType(t, s, p, "post.failed")); n != 1 || m != 1 {
+				t.Fatalf("%d post.target_failed and %d post.failed events, want 1 and 1", n, m)
 			}
 		},
 		// The channel stays connected and the refresh is tried again later (a refused sign-in is handled by the run).
