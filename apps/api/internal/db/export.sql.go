@@ -323,23 +323,27 @@ WHERE workspace_id = ?1
   AND (CAST(?11 AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
        OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'
        OR type GLOB 'access_token.*' OR type GLOB 'sign_in_method.*'))
+  -- hidden_families: a JSON array of event families (the part before the dot) the caller may not read
+  -- through the resource's own endpoint (app.hiddenEventFamilies).
+  AND (?12 IS NULL OR substr(type, 1, instr(type, '.') - 1) NOT IN (SELECT value FROM json_each(?12)))
 ORDER BY seq
-LIMIT ?12
+LIMIT ?13
 `
 
 type ExportEventsPageParams struct {
-	WorkspaceID  string      `json:"workspace_id"`
-	AfterSeq     int64       `json:"after_seq"`
-	FromTs       interface{} `json:"from_ts"`
-	ToTs         interface{} `json:"to_ts"`
-	Type         interface{} `json:"type"`
-	TypePrefix   interface{} `json:"type_prefix"`
-	ActorType    interface{} `json:"actor_type"`
-	ActorID      interface{} `json:"actor_id"`
-	CollectionID interface{} `json:"collection_id"`
-	PostID       interface{} `json:"post_id"`
-	IncludeAudit int64       `json:"include_audit"`
-	Lim          int64       `json:"lim"`
+	WorkspaceID    string      `json:"workspace_id"`
+	AfterSeq       int64       `json:"after_seq"`
+	FromTs         interface{} `json:"from_ts"`
+	ToTs           interface{} `json:"to_ts"`
+	Type           interface{} `json:"type"`
+	TypePrefix     interface{} `json:"type_prefix"`
+	ActorType      interface{} `json:"actor_type"`
+	ActorID        interface{} `json:"actor_id"`
+	CollectionID   interface{} `json:"collection_id"`
+	PostID         interface{} `json:"post_id"`
+	IncludeAudit   int64       `json:"include_audit"`
+	HiddenFamilies interface{} `json:"hidden_families"`
+	Lim            int64       `json:"lim"`
 }
 
 // ---- event export ----
@@ -356,6 +360,7 @@ func (q *Queries) ExportEventsPage(ctx context.Context, arg ExportEventsPagePara
 		arg.CollectionID,
 		arg.PostID,
 		arg.IncludeAudit,
+		arg.HiddenFamilies,
 		arg.Lim,
 	)
 	if err != nil {

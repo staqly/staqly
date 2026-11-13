@@ -19,6 +19,8 @@ dev: ## Build from this checkout with the dev stack (debug logs, mailpit :8025, 
 # localhost:8080 (the dashboard) and localhost:$MAXIOFS_PORT (MaxIOFS, default 9000) on two hostnames (a third for localhost:3333 sets PUBLIC_API_URL); media links are signed for the
 # second, while staqly itself reads MaxIOFS on the compose network (through Cloudflare, HEAD requests for .png/.jpg
 # keys sometimes arrive as GET and fail their signature). The dashboard is public meanwhile, so the dev sign-in (readable email codes) is off.
+# For this run the session cookie is Secure and the visitor's address comes from the X-Forwarded-For entry Cloudflare
+# adds (COOKIE_SECURE, TRUST_PROXY): without it every visitor would share one address and one sign-in rate limit.
 TUNNEL_FILE = $(shell echo $(TUNNEL))
 TUNNEL_LOG := $(or $(TMPDIR),/tmp/)staqly-tunnel.log
 
@@ -32,7 +34,7 @@ dev-tunnel: ## Dev stack behind a named Cloudflare tunnel (Instagram tests): mak
 	pkill -f "cloudflared tunnel --no-autoupdate --config $(TUNNEL_FILE)" || true; \
 	nohup cloudflared tunnel --no-autoupdate --config $(TUNNEL_FILE) run > $(TUNNEL_LOG) 2>&1 & \
 	for i in $$(seq 30); do [ "$$(curl -s -o /dev/null -w '%{http_code}' https://$$media)" != 530 ] && break; sleep 1; done; \
-	PUBLIC_DASHBOARD_URL=https://$$app PUBLIC_API_URL=$${api:+https://$$api} AUTH_DEV_SIGNIN=false S3_SIGN_ENDPOINT=https://$$media $(DEV) up -d --build --wait && \
+	PUBLIC_DASHBOARD_URL=https://$$app PUBLIC_API_URL=$${api:+https://$$api} AUTH_DEV_SIGNIN=false COOKIE_SECURE=true TRUST_PROXY=true S3_SIGN_ENDPOINT=https://$$media $(DEV) up -d --build --wait && \
 	echo "Dashboard: https://$$app  API: $${api:+https://$$api}  Media: https://$$media  Tunnel log: $(TUNNEL_LOG)  (make dev-down stops both)"
 
 pull: ## Download the released image (STAQLY_VERSION=v0.2.0 for a specific release)

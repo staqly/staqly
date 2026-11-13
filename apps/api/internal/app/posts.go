@@ -449,7 +449,7 @@ func (s *Service) resolveTargets(ctx context.Context, q *db.Queries, workspaceID
 		if err := e.Validate(providers.PostContent{Text: text, Media: providers.FitMedia(e.Limits(), files)}, settings); err != nil {
 			return nil, targetError(t.ChannelID, err)
 		}
-		if err := s.checkChannelSettings(ctx, q, workspaceID, ch, e.SettingsFields(), t.Settings); err != nil {
+		if err := s.checkTargetChannels(ctx, q, workspaceID, ch, e.SettingsFields(), t.Settings, "targets."+ch.ID+".settings."); err != nil {
 			return nil, err
 		}
 	}

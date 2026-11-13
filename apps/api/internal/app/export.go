@@ -88,7 +88,7 @@ func (s *Service) PrepareEventExport(ctx context.Context, p Principal, f EventEx
 	return &EventExport{Format: f.Format, s: s, params: db.ExportEventsPageParams{
 		WorkspaceID: p.WorkspaceID, FromTs: from, ToTs: to, Type: optAny(f.Type), TypePrefix: optAny(f.TypePrefix),
 		ActorType: optAny(f.ActorType), ActorID: optAny(f.ActorID), CollectionID: optAny(f.CollectionID),
-		PostID: optAny(f.PostID), IncludeAudit: audit, Lim: exportPageSize, AfterSeq: f.AfterSeq,
+		PostID: optAny(f.PostID), IncludeAudit: audit, HiddenFamilies: hiddenEventFamilies(p), Lim: exportPageSize, AfterSeq: f.AfterSeq,
 	}}, nil
 }
 
