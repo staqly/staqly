@@ -25,9 +25,12 @@ async function toasted(heading: string, err: unknown, title?: string) {
 const say = (details: Record<string, unknown>) => describePlanLimit(details, 'fallback')
 const down = () => new ApiError(0, undefined, 'Cannot reach the staqly API. Is the server running?')
 
-afterEach(() => {
+afterEach(async () => {
   setNavigator(null)
   act(() => void toast.dismiss())
+  // Sonner takes a dismissed toast off ~200 ms later on a timer of its own: let it run while the page still exists,
+  // or after the file's last test it fires into a torn-down jsdom ("window is not defined", an unhandled error).
+  await act(() => new Promise((done) => setTimeout(done, 300)))
 })
 
 describe('a plan limit in plain words', () => {
