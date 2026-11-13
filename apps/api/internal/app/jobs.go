@@ -151,6 +151,10 @@ func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause e
 			result = sent.result
 		}
 		return s.finishTarget(ctx, p.PostID, p.ChannelID, "failed", result, cause.Error())
+	case "target_timeout":
+		// Its own write kept failing: the timeout still holds once the database takes it, or the target would
+		// wait for good. A result or a newer attempt that came in meanwhile is left alone (targetTimedOut).
+		return s.targetTimedOut(ctx, p.PostID, p.ChannelID, p.AttemptID)
 	case "remove_target":
 		return s.settleRemoval(ctx, p.PostID, p.ChannelID, "failed", cause.Error())
 	case "publish_post":

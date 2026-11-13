@@ -604,12 +604,18 @@ func (s *Service) RunDueJobsOnce(ctx context.Context) {
 	defer s.stopRiver(c)
 	for ctx.Err() == nil {
 		promoted := s.promoteDueJobs(ctx, c)
-		live, err := c.JobList(ctx, river.NewJobListParams().States(rivertype.JobStateAvailable, rivertype.JobStateRunning).First(1))
+		live, err := c.JobList(ctx, river.NewJobListParams().States(rivertype.JobStateAvailable, rivertype.JobStateRunning).
+			OrderBy(river.JobListOrderByScheduledAt, river.SortOrderAsc).First(1))
 		if err != nil {
 			s.logger(ctx).Error("job queue poll failed", "err", err)
 			return
 		}
-		if promoted == 0 && len(live.Jobs) == 0 {
+		// River's scheduler may make a job available a moment before its time; the workers only take it once it is
+		// due, so on a clock that stands still it is not work to wait for (it was, and this loop never ended). A
+		// millisecond of slack: River's SQLite driver stores times rounded to the millisecond.
+		waiting := len(live.Jobs) > 0 && (live.Jobs[0].State == rivertype.JobStateRunning ||
+			!live.Jobs[0].ScheduledAt.After(s.Now().Add(time.Millisecond)))
+		if promoted == 0 && !waiting {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)

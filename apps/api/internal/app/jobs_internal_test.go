@@ -568,9 +568,6 @@ func refuseWrites(t *testing.T, s *Service, on string) (lift func()) {
 	create := []string{`CREATE TRIGGER refuse_writes BEFORE ` + on + ` BEGIN SELECT RAISE(ABORT, 'write refused'); END`}
 	drop := []string{`DROP TRIGGER refuse_writes`}
 	if s.pg {
-		if strings.Contains(on, "SELECT") {
-			t.Skip("a trigger condition with a subquery is SQLite only")
-		}
 		event, rest, _ := strings.Cut(on, " ON ")
 		table, when, conditional := strings.Cut(rest, " WHEN ")
 		if conditional {

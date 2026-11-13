@@ -4682,9 +4682,11 @@ paths:
       summary: Start a workspace export (admin; GDPR data portability)
       description: |
         Queues a background job that builds a ZIP (workspace.json,
-        collections.ndjson, posts.ndjson with their targets, events.ndjson,
-        media.ndjson, media/ files under their original names, webhooks.json
-        with secrets redacted, channels.json without credentials, schedules.json, README.txt).
+        collections.ndjson, posts.ndjson with their targets, post_comments.ndjson,
+        responses.ndjson, response_insights.ndjson, events.ndjson, media.ndjson,
+        media_folders.ndjson, media/ files under their original names, webhooks.json
+        with secrets redacted, channels.json without credentials, channel_groups.ndjson,
+        schedules.json, README.txt).
         Every plan can export. On a plan without data export (Starter) the
         export is data only (`includes_media: false`): the same files without
         media/, media.ndjson lists each file by id, original_name and

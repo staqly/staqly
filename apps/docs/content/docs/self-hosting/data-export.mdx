@@ -82,19 +82,23 @@ they finish; afterwards the download returns `410`.
 | `workspace.json` | Workspace, export format version, export time, record counts, `includes_media` |
 | `collections.ndjson` | All collections, including archived ones |
 | `posts.ndjson` | All posts with their targets (status, link and error per channel) and `media_files` (paths in the archive) |
-| `channels.json` | Connected channels: provider, name, handle, status, settings. Credentials are never exported |
+| `channels.json` | Connected channels: provider, name, handle, status, settings and `group_id`. Credentials are never exported |
+| `channel_groups.ndjson` | The groups channels are sorted into: name, color, icon, position |
 | `schedules.json` | Schedules; endpoint secrets replaced by `[redacted]` |
+| `post_comments.ndjson` | Review comments on posts, by the team and by reviewers on a preview link (with the reviewer's name and email), threads by `parent_id` |
 | `events.ndjson` | The activity log, oldest first |
 | `responses.ndjson` | The audience comments read from the platforms, per post and channel |
 | `response_insights.ndjson` | The AI reading of those comments: sentiment counts, summary, themes, questions |
-| `media.ndjson` | Every upload: id, `original_name`, `mime_type`, size, SHA-256 and `file` (empty in a data-only export) |
+| `media.ndjson` | Every upload: id, `original_name`, `mime_type`, size, SHA-256, `folder_id` and `file` (empty in a data-only export) |
+| `media_folders.ndjson` | The library's folders, nested by `parent_id` (`""` is the top level) |
 | `media/` | The uploaded files under their original names (not in a data-only export) |
 | `webhooks.json` | Webhook endpoints, signing secrets replaced by `[redacted]` |
 | `README.txt` | A description of the files |
 
 A data-only export (Starter) has no `media/` folder and no `media_files` on posts; its
 `workspace.json` and `README.txt` say so. API keys, sessions, the recovery key and channel
-credentials are never exported. The archive is built from live data
+credentials are never exported, nor are alert destinations, channel invitation links, connected
+agents, assistant conversations and the editors' working files. The archive is built from live data
 page by page, not as one snapshot — for a point-in-time copy take a
 [backup](/self-hosting/backup-and-restore). `workspace.export_requested` and
 `workspace.exported` events are recorded.

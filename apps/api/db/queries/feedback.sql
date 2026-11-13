@@ -39,3 +39,7 @@ DELETE FROM post_comments WHERE workspace_id = @workspace_id AND post_id = @post
 
 -- name: SetTargetMetrics :exec
 UPDATE post_targets SET metrics = ?, metrics_at = ? WHERE post_id = ? AND channel_id = ?;
+
+-- name: ExportPostComments :many
+-- Every comment of the workspace's posts, for its data export.
+SELECT * FROM post_comments WHERE workspace_id = ? ORDER BY created_at, id;

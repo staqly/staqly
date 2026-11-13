@@ -454,7 +454,7 @@ func (q *Queries) DeleteUnpublishedTargetsOfChannel(ctx context.Context, arg Del
 }
 
 const exportAllChannels = `-- name: ExportAllChannels :many
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, settings, last_error, created_at, updated_at
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, settings, last_error, created_at, updated_at, group_id
 FROM channels WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY created_at, id
 `
 
@@ -471,6 +471,7 @@ type ExportAllChannelsRow struct {
 	LastError   string `json:"last_error"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+	GroupID     string `json:"group_id"`
 }
 
 func (q *Queries) ExportAllChannels(ctx context.Context, workspaceID string) ([]ExportAllChannelsRow, error) {
@@ -495,6 +496,7 @@ func (q *Queries) ExportAllChannels(ctx context.Context, workspaceID string) ([]
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.GroupID,
 		); err != nil {
 			return nil, err
 		}

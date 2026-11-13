@@ -118,6 +118,52 @@ func (q *Queries) DeletePostComment(ctx context.Context, arg DeletePostCommentPa
 	return result.RowsAffected()
 }
 
+const exportPostComments = `-- name: ExportPostComments :many
+SELECT id, workspace_id, post_id, preview_id, author_name, author_email, body, quote, channel_id, created_at, parent_id, part, anchor_start, anchor_end, resolved_at, resolved_by, author_user FROM post_comments WHERE workspace_id = ? ORDER BY created_at, id
+`
+
+// Every comment of the workspace's posts, for its data export.
+func (q *Queries) ExportPostComments(ctx context.Context, workspaceID string) ([]PostComment, error) {
+	rows, err := q.db.QueryContext(ctx, exportPostComments, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PostComment
+	for rows.Next() {
+		var i PostComment
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.PostID,
+			&i.PreviewID,
+			&i.AuthorName,
+			&i.AuthorEmail,
+			&i.Body,
+			&i.Quote,
+			&i.ChannelID,
+			&i.CreatedAt,
+			&i.ParentID,
+			&i.Part,
+			&i.AnchorStart,
+			&i.AnchorEnd,
+			&i.ResolvedAt,
+			&i.ResolvedBy,
+			&i.AuthorUser,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPostComment = `-- name: GetPostComment :one
 SELECT id, workspace_id, post_id, preview_id, author_name, author_email, body, quote, channel_id, created_at, parent_id, part, anchor_start, anchor_end, resolved_at, resolved_by, author_user FROM post_comments WHERE workspace_id = ? AND post_id = ? AND id = ?
 `

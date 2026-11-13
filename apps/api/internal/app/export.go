@@ -656,7 +656,7 @@ func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string
 			return err
 		}
 		for _, m := range rows {
-			entry := exportMedia{Media: Media{MediaRef: *s.mediaRef(m), SHA256: m.Sha256, CreatedAt: m.CreatedAt}}
+			entry := exportMedia{Media: Media{MediaRef: *s.mediaRef(m), SHA256: m.Sha256, CreatedAt: m.CreatedAt, FolderID: m.FolderID}}
 			if !withMedia { // data only: the file is referenced, not copied
 				mediaIndex = append(mediaIndex, entry)
 				continue
@@ -749,6 +749,16 @@ func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string
 		return err
 	}
 
+	// post_comments.ndjson: review comments on posts (by the team and by reviewers on a preview link).
+	comments, err := s.Q.ExportPostComments(ctx, wsID)
+	if err != nil {
+		return err
+	}
+	if err := writeNDJSON(create, "post_comments.ndjson", len(comments), func(i int) any { return comments[i] }); err != nil {
+		return err
+	}
+	counts["post_comments"] = len(comments)
+
 	// events.ndjson
 	if w, err = create("events.ndjson", zip.Deflate); err != nil {
 		return err
@@ -766,6 +776,14 @@ func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string
 	if err := writeNDJSON(create, "media.ndjson", len(mediaIndex), func(i int) any { return mediaIndex[i] }); err != nil {
 		return err
 	}
+	folders, err := s.Q.ListMediaFolders(ctx, wsID)
+	if err != nil {
+		return err
+	}
+	if err := writeNDJSON(create, "media_folders.ndjson", len(folders), func(i int) any { return folders[i] }); err != nil {
+		return err
+	}
+	counts["media_folders"] = len(folders)
 
 	hooks, err := s.Q.ListWebhooks(ctx, wsID)
 	if err != nil {
@@ -781,6 +799,15 @@ func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string
 		return err
 	}
 	counts["webhooks"] = len(outHooks)
+
+	groups, err := s.Q.ListChannelGroups(ctx, wsID)
+	if err != nil {
+		return err
+	}
+	if err := writeNDJSON(create, "channel_groups.ndjson", len(groups), func(i int) any { return groups[i] }); err != nil {
+		return err
+	}
+	counts["channel_groups"] = len(groups)
 
 	chans, err := s.Q.ExportAllChannels(ctx, wsID)
 	if err != nil {
@@ -902,13 +929,24 @@ workspace.json      Workspace details, export format version and record counts.
 collections.ndjson  One collection per line (including archived ones).
 posts.ndjson        One post per line with its targets (channel, status, link) and
                     "media_files", the paths of its files below.
+responses.ndjson    Comments and replies read from the platforms, one per line.
+response_insights.ndjson
+                    What the analysis made of a post's responses (sentiment
+                    counts, summary, themes, questions), one per post and channel.
+post_comments.ndjson
+                    Review comments on posts, by the team and by reviewers on
+                    a preview link (with the reviewer's name and email).
 events.ndjson       The activity log, oldest first (one event per line).
-media.ndjson        Every uploaded file with its id, type, size, SHA-256 and
-                    "file" (path inside this archive).
+media.ndjson        Every uploaded file with its id, type, size, SHA-256,
+                    "folder_id" and "file" (path inside this archive).
+media_folders.ndjson
+                    The library's folders ("parent_id" "" = the top level).
 media/              Uploaded files under their original names; duplicates get
                     " (2)", " (3)", ... appended.
 webhooks.json       Webhook endpoints. Signing secrets are redacted.
-channels.json       Connected channels (no credentials).
+channels.json       Connected channels (no credentials), with their "group_id".
+channel_groups.ndjson
+                    The groups channels are sorted into.
 schedules.json      Publishing schedules (no endpoint secrets).
 
 NDJSON = one JSON document per line. Timestamps are ISO-8601 UTC.

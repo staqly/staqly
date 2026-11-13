@@ -103,6 +103,9 @@ describe('workspace export', () => {
       'webhooks.json',
       'channels.json',
       'schedules.json',
+      'post_comments.ndjson',
+      'media_folders.ndjson',
+      'channel_groups.ndjson',
     ]) {
       expect(files.has(name)).toBe(true)
     }
