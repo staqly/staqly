@@ -70,6 +70,10 @@ func TestRefreshReadsNow(t *testing.T) {
 	if n := len(jobsByKey(t, s, "read_responses:"+post.ID+":"+got.Channels[0].ChannelID)); n != 0 {
 		t.Fatalf("a read that worked queues nothing, got %d", n)
 	}
+	// The person pressed Refresh: the AI's reading of the new comment is due now, not after the background debounce.
+	if a := jobsByKey(t, s, "analyze_responses:"+post.ID); len(a) != 1 || a[0].ScheduledAt.After(time.Now().Add(5*time.Second)) {
+		t.Fatalf("want the analysis due now, got %+v", a)
+	}
 	// A read that fails for another reason than a refusal goes to the queue, which retries it.
 	r.err = errors.New("network down")
 	if _, err := s.RefreshPostResponses(context.Background(), p, post.ID); err != nil {

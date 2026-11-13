@@ -171,7 +171,7 @@ func (s *Service) RefreshPostResponses(ctx context.Context, p Principal, postID 
 		if t.Status != "published" || t.Removal != "" || t.ChannelStatus != "connected" {
 			continue
 		}
-		if err := s.readResponses(ctx, postID, t.ChannelID); err != nil {
+		if err := s.readResponsesThen(ctx, postID, t.ChannelID, 0); err != nil {
 			s.logger(ctx).Info("responses: refresh read queued", "post_id", postID, "channel_id", t.ChannelID, "err", err)
 			if err := s.queueRead(ctx, p.WorkspaceID, postID, t.ChannelID); err != nil {
 				return PostResponses{}, err
