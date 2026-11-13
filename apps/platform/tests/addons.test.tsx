@@ -71,7 +71,7 @@ describe('add-ons and entitlements', () => {
     renderWithProviders(<AddonsSection canBuy yearly={false} />, { mode: 'cloud' })
     const list = await screen.findByTestId('addons')
 
-    expect(within(list).getAllByText('€9 per month · excl. VAT')).toHaveLength(2)
+    expect(within(list).getAllByText('€9 per month · incl. VAT')).toHaveLength(2)
     await user.click(within(list).getByRole('button', { name: /add/i }))
     const confirm = await screen.findByRole('alertdialog')
 
@@ -114,7 +114,7 @@ describe('add-ons and entitlements', () => {
     renderWithProviders(<AddonsSection canBuy={false} yearly />, { mode: 'cloud' })
     const list = await screen.findByTestId('addons')
 
-    expect(within(list).getByText('€86 per year · excl. VAT')).toBeInTheDocument()
+    expect(within(list).getByText('€86 per year · incl. VAT')).toBeInTheDocument()
     expect(within(list).queryByRole('button')).not.toBeInTheDocument()
   })
 })

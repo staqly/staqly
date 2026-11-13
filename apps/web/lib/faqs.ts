@@ -24,7 +24,7 @@ export const faqs: [string, string][] = [
   ],
   [
     'What does it cost?',
-    `Plans are per user and start at €15 a month (€12 billed yearly), excl. VAT; each plan sets how many channels, new posts a month, AI allowance and storage the workspace shares. Starter has a ${TRIAL_DAYS}-day free trial. The AI assistant, the editors, MCP and the API come with every plan.`,
+    `Plans are per user and start at €15 a month (€12 billed yearly), incl. VAT; each plan sets how many channels, new posts a month, AI allowance and storage the workspace shares. Starter has a ${TRIAL_DAYS}-day free trial. The AI assistant, the editors, MCP and the API come with every plan.`,
   ],
   [
     'What makes it different from other schedulers?',

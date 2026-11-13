@@ -10,7 +10,7 @@ export const LLMS = `# staqly
 Agents connect over MCP (Claude Code, Codex, OpenCode, Cursor and any MCP client) or REST, write posts with \`create_post\`,
 put them on the calendar with \`schedule_post\` and refill a collection when \`list_requested_work\` shows a schedule out of
 posts. Posts go to connected channels; a channel on your own automation hands them to n8n or a script. Hosted workspaces start
-with a free 7-day Starter trial, card required (Plus, Pro and Business are paid from the first day); plans are per user, excl. VAT: Starter €15, Plus €29, Pro €59 and Business €99 a month (billed yearly: €12, €23, €47 and €79 a month),
+with a free 7-day Starter trial, card required (Plus, Pro and Business are paid from the first day); plans are per user, incl. VAT: Starter €15, Plus €29, Pro €59 and Business €99 a month (billed yearly: €12, €23, €47 and €79 a month),
 with shared workspace allowances for posts, channels, storage and AI. The app is open
 source (AGPL-3.0) and can be self-hosted as Staqly Community Edition, with no plan limits.
 

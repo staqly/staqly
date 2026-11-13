@@ -50,6 +50,18 @@ func (s *Service) managedCheckout(form url.Values) {
 	form.Set("managed_payments[enabled]", "true")
 }
 
+// checkoutTax sets the tax parameters every Checkout Session sends (plans and X post packs alike): Stripe Tax
+// works out the VAT part of the VAT-inclusive prices from the required billing address and the tax ID, both
+// saved on the customer. Under Managed Payments Stripe does that itself and the parameters it refuses go.
+func (s *Service) checkoutTax(form url.Values) {
+	form.Set("tax_id_collection[enabled]", "true")
+	form.Set("customer_update[name]", "auto")
+	form.Set("customer_update[address]", "auto")
+	form.Set("automatic_tax[enabled]", "true")
+	form.Set("billing_address_collection", "required")
+	s.managedCheckout(form)
+}
+
 // PriceLookupKey is the Stripe lookup key of a plan's price in an interval (month or year).
 func PriceLookupKey(plan, interval string) string { return "staqly_" + plan + "_" + interval }
 
@@ -492,12 +504,8 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		"subscription_data[metadata][workspace_id]":    {w.ID},
 		"subscription_data[metadata][staqly_plan]":     {plan.ID},
 		"subscription_data[metadata][staqly_interval]": {interval},
-		// The tax ID on the invoice (saved on the customer).
-		"tax_id_collection[enabled]": {"true"},
-		"customer_update[name]":      {"auto"},
-		"customer_update[address]":   {"auto"},
-		"success_url":                {success},
-		"cancel_url":                 {cancel},
+		"success_url": {success},
+		"cancel_url":  {cancel},
 	}
 	// Discount codes made in Stripe (Coupons, then a promotion code): the one typed in staqly, else Checkout's
 	// own code box (Stripe takes one or the other).
@@ -517,11 +525,8 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		form.Set("subscription_data[trial_period_days]", strconv.Itoa(TrialDays))
 		form.Set("subscription_data[trial_settings][end_behavior][missing_payment_method]", "cancel")
 	}
-	// Business customers: tax by Stripe Tax on prices that exclude it, from the billing address and tax ID.
 	form.Set("payment_method_collection", "always")
-	form.Set("automatic_tax[enabled]", "true")
-	form.Set("billing_address_collection", "required")
-	s.managedCheckout(form)
+	s.checkoutTax(form)
 	err = s.stripe(ctx, "POST", "/v1/checkout/sessions", form, &cs)
 	if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok {
 		form.Set("line_items[0][price]", found)

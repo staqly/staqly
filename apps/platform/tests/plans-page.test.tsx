@@ -102,7 +102,7 @@ describe('plan picker', () => {
     expect(within(plus).getByText('Most popular')).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: /yearly/i }))
     expect(within(plus).getByText('€23')).toBeInTheDocument()
-    expect(within(plus).getByText('€276 per user, billed yearly, excl. VAT')).toBeInTheDocument()
+    expect(within(plus).getByText('€276 per user, billed yearly, incl. VAT')).toBeInTheDocument()
     expect(within(screen.getByTestId('plan-starter')).getByText('€12')).toBeInTheDocument()
     await user.click(within(plus).getByRole('button', { name: 'Choose Plus' }))
     await waitFor(() => expect(api.find('POST', '/v1/billing/checkout')).toHaveLength(1))
@@ -330,7 +330,7 @@ describe('per user pricing', () => {
     await user.click(screen.getByRole('radio', { name: /yearly/i }))
     expect(within(plus).getByTestId('plan-old-price-plus')).toHaveTextContent('€23')
     expect(within(plus).getByTestId('plan-price-plus')).toHaveTextContent('€18.40')
-    expect(within(plus).getByText('€220.80 per user, billed yearly, excl. VAT')).toBeInTheDocument()
+    expect(within(plus).getByText('€220.80 per user, billed yearly, incl. VAT')).toBeInTheDocument()
     await user.click(within(plus).getByRole('button', { name: 'Choose Plus' }))
     await waitFor(() =>
       expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({

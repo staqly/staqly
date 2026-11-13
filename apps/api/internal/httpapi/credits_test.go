@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -88,6 +89,7 @@ func TestXPostsAreMetered(t *testing.T) {
 	e.do(nil, "POST", "/v1/posts/"+p2.ID+"/schedule", e.key, map[string]any{"publish_at": nextMonth}, 200, nil) // next period: fine
 
 	// A bundle is bought: the webhook grants it once (the same session twice, under two event ids).
+	var checkout url.Values
 	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
@@ -101,6 +103,7 @@ func TestXPostsAreMetered(t *testing.T) {
 				r.Form.Get("metadata[staqly_posts]") != "1000" || r.Form.Get("metadata[workspace_id]") != ws.ID {
 				t.Errorf("credits checkout form: %v", r.Form)
 			}
+			checkout = r.Form
 			fmt.Fprint(w, `{"url":"https://checkout.stripe.test/cs_credits"}`)
 		default:
 			w.WriteHeader(404)
@@ -113,6 +116,21 @@ func TestXPostsAreMetered(t *testing.T) {
 	if out.URL != "https://checkout.stripe.test/cs_credits" {
 		t.Fatalf("checkout url: %q", out.URL)
 	}
+	// VAT as on plans: Stripe Tax from the required billing address and the tax ID.
+	if checkout.Get("automatic_tax[enabled]") != "true" || checkout.Get("tax_id_collection[enabled]") != "true" ||
+		checkout.Get("billing_address_collection") != "required" || checkout.Get("customer_update[address]") != "auto" ||
+		checkout.Get("customer_update[name]") != "auto" || checkout.Get("invoice_creation[enabled]") != "true" {
+		t.Errorf("credits checkout tax: %v", checkout)
+	}
+	// Managed Payments: Stripe is the merchant of record and refuses the tax and customer parameters.
+	e.svc.Cfg.Billing.ManagedPayments = true
+	e.pay("POST", "/v1/billing/credits/checkout", map[string]any{"posts": 1000}, 200, &out)
+	if checkout.Get("managed_payments[enabled]") != "true" || checkout.Has("automatic_tax[enabled]") ||
+		checkout.Has("tax_id_collection[enabled]") || checkout.Has("customer_update[name]") || checkout.Has("customer_update[address]") ||
+		checkout.Has("invoice_creation[enabled]") || checkout.Get("billing_address_collection") != "required" {
+		t.Errorf("managed payments credits checkout form: %v", checkout)
+	}
+	e.svc.Cfg.Billing.ManagedPayments = false
 	e.pay("POST", "/v1/billing/credits/checkout", map[string]any{"posts": 300}, 422, nil)
 	e.do(nil, "POST", "/v1/billing/credits/checkout", e.key, map[string]any{"posts": 1000}, 403, nil)
 	session := map[string]any{"id": "cs_credits", "mode": "payment", "payment_status": "paid", "client_reference_id": ws.ID,

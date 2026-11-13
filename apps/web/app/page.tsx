@@ -580,7 +580,7 @@ function Faq() {
   )
 }
 
-// Structured data for search engines: who publishes the site, the product and its plans (per user a month, excl. VAT,
+// Structured data for search engines: who publishes the site, the product and its plans (per user a month, incl. VAT,
 // as on /pricing and in apps/api/internal/app/plans.go). No ratings or reviews: there are none to show.
 // One script per entity, each with its own @context and @type: some crawlers read only a top-level @type, not @graph.
 const jsonLd = [
@@ -605,7 +605,13 @@ const jsonLd = [
       price: String(p.month),
       priceCurrency: 'EUR',
       // Google's software rich result rejects a UnitPriceSpecification here: the unit goes in the description.
-      description: 'Per user per month, VAT excluded',
+      priceSpecification: {
+        '@type': 'PriceSpecification',
+        price: String(p.month),
+        priceCurrency: 'EUR',
+        valueAddedTaxIncluded: true,
+      },
+      description: 'Per user per month, VAT included',
     })),
   },
   {
