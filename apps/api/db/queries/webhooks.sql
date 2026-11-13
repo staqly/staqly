@@ -32,9 +32,11 @@ SET next_attempt_at = @lease_until, attempts = attempts + 1, last_attempt_at = @
 WHERE id = @id AND status = 'pending' AND next_attempt_at = @expected_next;
 
 -- name: FinishDelivery :exec
+-- Records an attempt only while it holds the latest claim (each LeaseDelivery counts one more attempt): a worker
+-- that outlived its lease must not overwrite what the worker that took the delivery over recorded.
 UPDATE webhook_deliveries
 SET status = ?, next_attempt_at = ?, last_status_code = ?, last_error = ?, last_response = ?, delivered_at = ?
-WHERE id = ?;
+WHERE id = ? AND attempts = ?;
 
 -- name: ListDeliveries :many
 SELECT webhook_deliveries.* FROM webhook_deliveries

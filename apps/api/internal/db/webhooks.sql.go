@@ -68,7 +68,7 @@ func (q *Queries) DeleteWebhook(ctx context.Context, arg DeleteWebhookParams) (i
 const finishDelivery = `-- name: FinishDelivery :exec
 UPDATE webhook_deliveries
 SET status = ?, next_attempt_at = ?, last_status_code = ?, last_error = ?, last_response = ?, delivered_at = ?
-WHERE id = ?
+WHERE id = ? AND attempts = ?
 `
 
 type FinishDeliveryParams struct {
@@ -79,8 +79,11 @@ type FinishDeliveryParams struct {
 	LastResponse   string         `json:"last_response"`
 	DeliveredAt    sql.NullString `json:"delivered_at"`
 	ID             string         `json:"id"`
+	Attempts       int64          `json:"attempts"`
 }
 
+// Records an attempt only while it holds the latest claim (each LeaseDelivery counts one more attempt): a worker
+// that outlived its lease must not overwrite what the worker that took the delivery over recorded.
 func (q *Queries) FinishDelivery(ctx context.Context, arg FinishDeliveryParams) error {
 	_, err := q.db.ExecContext(ctx, finishDelivery,
 		arg.Status,
@@ -90,6 +93,7 @@ func (q *Queries) FinishDelivery(ctx context.Context, arg FinishDeliveryParams) 
 		arg.LastResponse,
 		arg.DeliveredAt,
 		arg.ID,
+		arg.Attempts,
 	)
 	return err
 }
