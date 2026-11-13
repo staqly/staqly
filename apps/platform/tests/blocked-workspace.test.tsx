@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { PlanUsagePage } from '@/components/settings/plan-usage-page'
 import { AppShell } from '@/components/shell/app-shell'
-import type { Addon } from '@/lib/api'
+import type { Addon, Billing, BillingDetails, XPosts } from '@/lib/api'
 import { lockReason } from '@/lib/plans'
 import { qk } from '@/lib/queries'
 import { shortDay } from '@/lib/x-posts'
@@ -13,7 +13,7 @@ import { nav } from './navigation'
 import { PLANS, usage } from './plans-fixtures'
 import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
 
-const BILLING = {
+const BILLING: Billing = {
   enabled: true,
   plan: 'plus',
   subscription_status: 'canceled',
@@ -23,9 +23,12 @@ const BILLING = {
   has_customer: true,
   seats: 1,
   trial: 'used',
+  trial_review: null,
+  trial_revoked: null,
+  ended_for: null,
 }
 
-const SUBSCRIPTION = {
+const SUBSCRIPTION: NonNullable<BillingDetails['subscription']> = {
   status: 'canceled',
   current_period_start: '2026-10-01T10:00:00Z',
   current_period_end: '2026-11-01T10:00:00Z',
@@ -37,9 +40,11 @@ const SUBSCRIPTION = {
   quantity: 1,
   currency: 'eur',
   interval: 'month',
+  past_due_for: '',
+  discount: null,
 }
 
-const OPEN_INVOICE = {
+const OPEN_INVOICE: BillingDetails['invoices'][number] = {
   id: 'in_open',
   number: 'A-0029',
   created: '2026-11-01T10:00:00Z',
@@ -54,7 +59,7 @@ const OPEN_INVOICE = {
   invoice_pdf: 'https://invoice.stripe.test/open.pdf',
 }
 
-const XPOSTS = {
+const XPOSTS: XPosts = {
   period: '2026-11',
   period_end: '2026-12-01T00:00:00Z',
   unlimited: false,
@@ -300,6 +305,19 @@ describe('a payment that failed while Stripe still retries', () => {
       expect(screen.queryByTestId('past-due-notice')).not.toBeInTheDocument()
       view.unmount()
     }
+  })
+})
+
+describe('a locked workspace whose payment Stripe still retries', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('shows the locked screen alone, not the past-due strip over it', async () => {
+    renderShell('/posts', { subscription_status: 'past_due' }, true)
+
+    expect(await screen.findByTestId('plan-locked')).toHaveTextContent('The last payment did not go through.')
+    await waitFor(() => expect(api.find('GET', '/v1/billing').length).toBeGreaterThan(0))
+    expect(screen.queryByTestId('past-due-notice')).not.toBeInTheDocument()
+    expect(screen.queryByText('the page')).not.toBeInTheDocument()
   })
 })
 

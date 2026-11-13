@@ -11,6 +11,11 @@ import { nav } from './navigation'
 import { PLANS } from './plans-fixtures'
 import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
 
+// The wizard gives a new workspace this browser's time zone: fixed here, whatever zone the tests run in.
+const browser = vi.hoisted(() => ({ zone: 'UTC' }))
+
+vi.mock('@/lib/time-zone', () => ({ browserTimeZone: () => browser.zone }))
+
 const routes = {
   'GET /v1/providers': { data: [] },
   'GET /v1/channels': { data: [] },
@@ -48,12 +53,13 @@ describe('welcome wizard', () => {
   beforeEach(() => {
     nav.set('/welcome')
     sessionStorage.clear()
+    browser.zone = 'UTC'
   })
 
   it('collects everything first and sets the workspace up only at the end', async () => {
     const api = mockApi({
       ...routes,
-      'PATCH /v1/workspace': { body: { id: 'ws_1', name: 'Acme' } },
+      'PATCH /v1/workspace': { ...sessionFixture('cloud').workspace, name: 'Acme' },
       'POST /v1/invitations': { status: 201, body: {} },
       'POST /v1/api-keys': { status: 201, body: { id: 'key_1', name: 'Claude Code', key: 'stk_agent_secret' } },
     })
@@ -151,7 +157,7 @@ describe('welcome wizard', () => {
         suspended: !paid,
       }),
       'GET /v1/workspace/usage': { suspended: false },
-      'PATCH /v1/workspace': { body: { id: 'ws_1', name: 'Acme' } },
+      'PATCH /v1/workspace': { ...sessionFixture('cloud').workspace, name: 'Acme' },
     })
 
     sessionStorage.setItem('staqly:welcome', JSON.stringify({ name: 'Ana', workspaceName: 'Acme' }))
@@ -183,6 +189,33 @@ describe('welcome wizard', () => {
     expect(sync).toHaveBeenCalledTimes(1)
     sync.mockRestore()
     vi.useRealTimers()
+  })
+
+  it("a new workspace, still in UTC, takes this browser's time zone; one with a zone of its own keeps it", async () => {
+    browser.zone = 'Europe/Warsaw'
+    const user = userEvent.setup()
+    const finish = async () => {
+      expect(await screen.findByRole('heading', { name: 'Connect an agent' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Not now' }))
+      await user.click(await screen.findByRole('button', { name: 'Skip' }))
+      expect(await screen.findByRole('heading', { name: 'You are all set' })).toBeInTheDocument()
+    }
+    const workspace = sessionFixture('cloud').workspace
+    const api = mockApi({ ...routes, 'PATCH /v1/workspace': { ...workspace, timezone: 'Europe/Warsaw' } })
+
+    nav.set('/welcome', 'step=agent')
+
+    const { unmount } = render({})
+
+    await finish()
+    expect(api.find('PATCH', '/v1/workspace').map((c) => c.body)).toEqual([{ timezone: 'Europe/Warsaw' }])
+    unmount()
+
+    sessionStorage.clear()
+    nav.set('/welcome', 'step=agent')
+    render({ workspace: { ...workspace, timezone: 'America/New_York' } })
+    await finish()
+    expect(api.find('PATCH', '/v1/workspace')).toHaveLength(1)
   })
 
   it('Not now on Connect an agent makes no key', async () => {

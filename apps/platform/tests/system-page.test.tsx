@@ -13,7 +13,7 @@ import { makeClient, mockApi, renderWithProviders, sessionFixture } from './util
 const routes = {
   'GET /readyz': { status: 'ok', checks: { database: 'ok', migrations: 'ok', workers: 'ok' } },
   'GET /health': { status: 'ok', version: 'dev' },
-  'GET /v1/jobs/stats': { queued: 0, running: 0, failed: 0, done_today: 0 },
+  'GET /v1/jobs/stats': { queued: 0, running: 0, failed: 0, done_24h: 0, by_kind: {} },
   'GET /v1/jobs': { data: [] },
   'GET /v1/providers': {
     data: [

@@ -264,7 +264,28 @@ describe('media library page', () => {
 
     Object.defineProperty(big, 'size', { value: 5 * 1024 * 1024 * 1024 })
     await user.upload(screen.getByTestId('media-upload-input'), big)
-    expect(await screen.findByText(/Too big: .* Your plan takes files up to/)).toBeInTheDocument()
+    expect(await screen.findByText('Too big: 5 GB. Your plan takes files up to 25 MB.')).toBeInTheDocument()
+  })
+
+  it('refuses a file that is no picture, video or audio before uploading, in plain words', async () => {
+    mockApi({
+      'GET /v1/media': { data: [] },
+      'GET /v1/workspace/usage': usage(PLANS[0]!),
+    })
+    // The file picker's accept list is the first filter; a file dropped on the page passes it by.
+    const user = userEvent.setup({ applyAccept: false })
+
+    renderWithProviders(<MediaPage />, { mode: 'cloud' })
+    expect(await screen.findByText('No media yet')).toBeInTheDocument()
+    await user.upload(
+      screen.getByTestId('media-upload-input'),
+      new File(['%PDF'], 'contract.pdf', { type: 'application/pdf' }),
+    )
+
+    expect(
+      await screen.findByText("This file type can't be uploaded. Pictures, videos and audio can."),
+    ).toBeInTheDocument()
+    expect(screen.getByText('contract.pdf')).toBeInTheDocument()
   })
 })
 

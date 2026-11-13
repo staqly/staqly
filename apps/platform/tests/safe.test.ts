@@ -18,6 +18,7 @@ describe('safeNextPath', () => {
     ['//evil.example'],
     ['//evil.example/schedule'],
     ['https://evil.example'],
+    ['//evil.example/schedule'],
     ['http://app.staqly.test.evil.example/'],
     ['javascript:alert(1)'],
     ['evil.example'],

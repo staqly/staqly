@@ -495,3 +495,149 @@ describe('channels', () => {
     await waitFor(() => expect(peekOAuthReturn()).toBeNull())
   })
 })
+
+async function openMenu(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(await screen.findByRole('button', { name: `Actions for ${name}` }))
+
+  return screen.findByRole('menu')
+}
+
+describe('channel actions', () => {
+  const day = 86_400_000
+
+  it('Remove asks first and says what happens to scheduled posts; Cancel keeps the channel', async () => {
+    const api = mockApi({
+      'GET /v1/channels': { data: [channel()] },
+      'GET /v1/providers': { data: [provider()] },
+      'DELETE /v1/channels/ch_1': { status: 204 },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+    await user.click(within(await openMenu(user, 'Brand on Mastodon')).getByRole('menuitem', { name: 'Remove' }))
+
+    const confirm = await screen.findByRole('alertdialog')
+
+    expect(confirm).toHaveTextContent('Remove Brand on Mastodon?')
+    expect(confirm).toHaveTextContent('scheduled posts lose this channel')
+    await user.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(api.find('DELETE', '/v1/channels/ch_1')).toHaveLength(0)
+    expect(screen.getByTestId('channel-row')).toBeInTheDocument()
+
+    await user.click(within(await openMenu(user, 'Brand on Mastodon')).getByRole('menuitem', { name: 'Remove' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove' }))
+    expect(await screen.findByText('“Brand on Mastodon” was removed')).toBeInTheDocument()
+    expect(api.find('DELETE', '/v1/channels/ch_1')).toHaveLength(1)
+    await waitFor(() => expect(screen.queryByTestId('channel-row')).not.toBeInTheDocument())
+  })
+
+  it('a removal the server refuses is said and the channel stays', async () => {
+    mockApi({
+      'GET /v1/channels': { data: [channel()] },
+      'GET /v1/providers': { data: [provider()] },
+      'DELETE /v1/channels/ch_1': {
+        status: 403,
+        body: { error: { code: 'forbidden', message: 'missing scope channels:manage' } },
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ChannelsPage />, { mode: 'cloud' })
+    await user.click(within(await openMenu(user, 'Brand on Mastodon')).getByRole('menuitem', { name: 'Remove' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove' }))
+    expect(await screen.findByText('Missing scope channels:manage')).toBeInTheDocument()
+    expect(screen.getByTestId('channel-row')).toHaveTextContent('Brand on Mastodon')
+  })
+
+  it('Disable stops a channel and Enable brings it back; one that needs reconnecting offers neither', async () => {
+    let status: 'connected' | 'disabled' = 'connected'
+    const api = mockApi({
+      'GET /v1/channels': {
+        data: [
+          channel(),
+          channel({ id: 'ch_2', name: 'Broken', status: 'needs_reconnect', last_error: 'token expired' }),
+        ],
+      },
+      'GET /v1/providers': { data: [provider()] },
+      'PATCH /v1/channels/ch_1': ({ body }: { body: { status: 'connected' | 'disabled' } }) => {
+        status = body.status
+
+        return channel({ status })
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+    await user.click(within(await openMenu(user, 'Brand on Mastodon')).getByRole('menuitem', { name: 'Disable' }))
+    expect(await screen.findByText('“Brand on Mastodon” is disabled')).toBeInTheDocument()
+    expect(api.find('PATCH', '/v1/channels/ch_1')[0]!.body).toEqual({ status: 'disabled' })
+
+    await user.click(within(await openMenu(user, 'Brand on Mastodon')).getByRole('menuitem', { name: 'Enable' }))
+    expect(await screen.findByText('“Brand on Mastodon” is enabled again')).toBeInTheDocument()
+    expect(api.find('PATCH', '/v1/channels/ch_1')[1]!.body).toEqual({ status: 'connected' })
+
+    const broken = await openMenu(user, 'Broken')
+
+    expect(within(broken).queryByRole('menuitem', { name: /Disable|Enable/ })).not.toBeInTheDocument()
+    expect(within(broken).getByRole('menuitem', { name: 'Reconnect' })).toBeInTheDocument()
+  })
+
+  it('only a working channel asks for a renewal: a broken or disabled one says nothing about Renew by', async () => {
+    const renewBy = new Date(Date.now() + 3 * day).toISOString()
+
+    mockApi({
+      'GET /v1/channels': {
+        data: [
+          channel({ id: 'ch_off', name: 'Paused', status: 'disabled', renew_by: renewBy }),
+          channel({ id: 'ch_bad', name: 'Broken', status: 'needs_reconnect', renew_by: renewBy }),
+          channel({ id: 'ch_ok', name: 'Working', renew_by: renewBy }),
+        ],
+      },
+      'GET /v1/providers': { data: [provider()] },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+
+    const rows = await screen.findAllByTestId('channel-row')
+    const row = (name: string) => rows.find((r) => r.textContent?.includes(name))!
+
+    expect(within(row('Working')).getByTestId('channel-renew-by')).toBeInTheDocument()
+    expect(within(row('Paused')).queryByTestId('channel-renew-by')).not.toBeInTheDocument()
+    expect(within(row('Broken')).queryByTestId('channel-renew-by')).not.toBeInTheDocument()
+    expect(within(row('Broken')).queryByRole('button', { name: 'Renew' })).not.toBeInTheDocument()
+    // The broken one is asked to reconnect instead, and comes first.
+    expect(rows[0]).toHaveTextContent('Broken')
+    expect(within(row('Broken')).getByRole('button', { name: 'Reconnect' })).toBeInTheDocument()
+    expect(within(await openMenu(user, 'Paused')).queryByRole('menuitem', { name: 'Renew sign-in' })).toBeNull()
+  })
+
+  it('a channel over the plan limit is refused in plain words, with the way to the plans', async () => {
+    mockApi({
+      'GET /v1/channels': { data: [channel()] },
+      'GET /v1/providers': { data: [telegram] },
+      'POST /v1/channels': {
+        status: 402,
+        body: {
+          error: {
+            code: 'plan_limit_exceeded',
+            message: 'plan limit reached',
+            details: { limit: 'channels', max: 5, used: 5, plan: 'starter' },
+          },
+        },
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ChannelsPage />, { mode: 'cloud' })
+    await user.click(await screen.findByTestId('add-channel'))
+    await user.click(await screen.findByRole('button', { name: 'Telegram' }))
+    await user.type(await screen.findByLabelText(/Bot token/), '123:abc')
+    await user.type(screen.getByLabelText(/Chat or channel/), '@brand')
+    await user.click(screen.getByRole('button', { name: /^Connect/ }))
+
+    expect(await screen.findByText('Plan limit reached')).toBeInTheDocument()
+    expect(screen.getByText('Your Starter plan includes 5 channels (5 used).')).toBeInTheDocument()
+  })
+})

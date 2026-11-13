@@ -12,7 +12,7 @@ const telegram = provider({
   id: 'telegram',
   name: 'Telegram',
   auth: 'token',
-  credential_fields: [{ key: 'bot_token', label: 'Bot token', type: 'secret', required: true } as never],
+  credential_fields: [{ key: 'bot_token', label: 'Bot token', kind: 'secret', required: true }],
 })
 const link = {
   id: 'chl_1',

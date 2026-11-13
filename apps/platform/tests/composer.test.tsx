@@ -41,7 +41,10 @@ vi.mock('@/components/posts/post-editor', () => ({
 const routes = {
   'GET /v1/collections': { data: [collection(), collection({ id: 'col_2', name: 'Blog' })] },
   'GET /v1/channels': {
-    data: [channel({ comments: true }), channel({ id: 'ch_2', name: 'Brand on Bluesky', provider: 'bluesky' })],
+    data: [
+      channel({ comments: true }),
+      channel({ id: 'ch_2', name: 'Brand on Bluesky', provider: 'bluesky', comments: false }),
+    ],
   },
   'GET /v1/providers': {
     data: [
@@ -65,6 +68,21 @@ const routes = {
     ],
   },
 }
+
+const xPosts = (left: number) => ({
+  period: '2026-11',
+  period_end: '2026-12-01T00:00:00Z',
+  unlimited: false,
+  included: 100,
+  used: 100 - left,
+  included_left: left,
+  credits_left: 0,
+  credits_expire_at: null,
+  left,
+  bundles: [],
+  currency: 'eur',
+  link_post_weight: 14,
+})
 
 /** An AI operation the server offers. */
 const aiOp = (id: string, kind: string) => ({
@@ -157,7 +175,7 @@ describe('composer', () => {
       prompt: 'required',
       image: false,
       mask: false,
-      provider: 'openai',
+      provider: 'openai_compatible',
       model: 'm',
       fallback: '',
     }
@@ -165,7 +183,7 @@ describe('composer', () => {
       ...routes,
       'GET /v1/ai': {
         configured: true,
-        providers: ['openai'],
+        providers: ['fal'],
         operations: [assistant],
         usage: { period: '2026-10', used_usd: 0, limit_usd: 10 },
       },
@@ -741,6 +759,127 @@ describe('composer', () => {
     expect(api.find('POST', '/v1/posts')).toHaveLength(0)
     await user.click(screen.getByTestId('publish-review-confirm'))
     await waitFor(() => expect(api.find('POST', '/v1/posts')).toHaveLength(1))
+  })
+
+  it('a platform that takes one file: after the first, Upload, the library and Design are off and say why', async () => {
+    const limits = { ...provider().limits, max_media: 1, media_kinds: ['image' as const] }
+
+    mockApi({
+      ...routes,
+      'GET /v1/channels': { data: [channel({ id: 'ch_pin', name: 'Brand on Pinterest', provider: 'pinterest' })] },
+      'GET /v1/providers': { data: [provider({ id: 'pinterest', name: 'Pinterest', limits, settings_fields: [] })] },
+      'POST /v1/media': { id: 'med_1', mime_type: 'image/png', original_name: 'a.png', size_bytes: 10 },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_pin')
+
+    const uploadButton = screen.getByRole('button', { name: 'Upload' })
+
+    expect(uploadButton).toBeEnabled()
+    expect(uploadButton).not.toHaveAttribute('title')
+    await user.upload(
+      document.querySelector<HTMLInputElement>('input[type="file"]')!,
+      new File(['a'], 'a.png', { type: 'image/png' }),
+    )
+    expect(await screen.findByRole('img', { name: 'a.png' })).toBeInTheDocument()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Upload' })).toHaveAttribute(
+      'title',
+      'Takes pictures only, 1 file at most.',
+    )
+    expect(screen.getAllByTestId('design-menu')[0]).toBeDisabled()
+  })
+
+  it('a new post that saved but could not go out says why, and trying again sends it, never a second copy', async () => {
+    let refuse = true
+    const api = mockApi({
+      ...routes,
+      'POST /v1/posts': post({ id: 'pst_9', status: 'draft', version: 1 }),
+      'PATCH /v1/posts/pst_9': post({ id: 'pst_9', status: 'draft', version: 2 }),
+      'POST /v1/posts/pst_9/schedule': () =>
+        refuse
+          ? {
+              status: 402,
+              body: { error: { code: 'x_posts_exhausted', message: 'the X posts of this period are used up' } },
+            }
+          : post({ id: 'pst_9', status: 'scheduled', version: 3 }),
+    })
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn<(o: boolean) => void>()
+
+    renderWithProviders(<Composer open onOpenChange={onOpenChange} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1')
+    await user.type(screen.getByTestId('post-content'), 'Hello world')
+    await user.click(screen.getByTestId('publish-now'))
+
+    expect(await screen.findByText('Plan limit reached')).toBeInTheDocument()
+    expect(screen.getByText('The X posts of this period are used up')).toBeInTheDocument()
+    // Nothing went out, so the drawer stays open with the text in it.
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    expect(screen.getByTestId('post-content')).toHaveValue('Hello world')
+    expect(api.find('POST', '/v1/posts')).toHaveLength(1)
+
+    refuse = false
+    await user.click(await screen.findByTestId('publish-now'))
+    await waitFor(() => expect(api.find('POST', '/v1/posts/pst_9/schedule')).toHaveLength(2))
+    // The post made by the first try is the one saved and sent: saved over the version that try wrote.
+    expect(api.find('POST', '/v1/posts')).toHaveLength(1)
+    expect(api.find('PATCH', '/v1/posts/pst_9')).toHaveLength(1)
+    expect(api.find('PATCH', '/v1/posts/pst_9')[0]!.body).toMatchObject({ content: 'Hello world', expected_version: 1 })
+    expect(await screen.findByText(/Publishing in \d s/)).toBeInTheDocument()
+  })
+
+  it('a save the server refuses for a reason of its own (a plan that ended) is said, and nothing is lost', async () => {
+    const api = mockApi({
+      ...routes,
+      'POST /v1/posts': {
+        status: 402,
+        body: { error: { code: 'plan_expired', message: 'the plan of this workspace has ended' } },
+      },
+    })
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn<(o: boolean) => void>()
+
+    renderWithProviders(<Composer open onOpenChange={onOpenChange} collectionId="col_1" />, { mode: 'cloud' })
+    await pickChannels(user, 'ch_1')
+    await user.type(screen.getByTestId('post-content'), 'Hello world')
+    await user.click(screen.getByRole('button', { name: /Save draft/i }))
+
+    expect(await screen.findByText('This workspace is read-only')).toBeInTheDocument()
+    expect(screen.getByText('The plan of this workspace has ended')).toBeInTheDocument()
+    expect(api.find('POST', '/v1/posts')).toHaveLength(1)
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    expect(screen.getByTestId('post-content')).toHaveValue('Hello world')
+  })
+
+  it("says before publishing to X that this period's X posts are used up, and only when they are", async () => {
+    let left = 0
+
+    mockApi({
+      ...routes,
+      'GET /v1/channels': { data: [channel({ id: 'ch_x', name: 'Brand on X', provider: 'x' })] },
+      'GET /v1/providers': { data: [provider({ id: 'x', name: 'X', settings_fields: [] })] },
+      'GET /v1/billing/x-posts': () => xPosts(left),
+    })
+    const user = userEvent.setup()
+    const { unmount } = renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, {
+      mode: 'cloud',
+    })
+
+    await pickChannels(user, 'ch_x')
+    expect(await screen.findByTestId('x-posts-exhausted')).toHaveTextContent(
+      'Your X posts for this period are used up. Buy more or wait until Dec 1.',
+    )
+    unmount()
+
+    left = 3
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'cloud' })
+    await pickChannels(user, 'ch_x')
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByTestId('x-posts-exhausted')).not.toBeInTheDocument()
   })
 
   it('with one channel, offers only what it takes: no comments where it posts none', async () => {
