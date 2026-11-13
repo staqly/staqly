@@ -76,7 +76,7 @@ import {
 } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
 import { formatSchedule, liveLabel } from '@/lib/schedule'
-import { normalizeTag } from '@/lib/tags'
+import { tagInput } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 
 import { ShareDialog, UnpublishDialog } from './post-actions'
@@ -1050,7 +1050,7 @@ function TagsDialog({
             onChange={setAdd}
             placeholder="Add tags"
             options={(known.data ?? []).map((t) => ({ value: t.name, label: `#${t.name}` }))}
-            creatable={{ normalize: normalizeTag }}
+            creatable={tagInput}
           />
         </Field>
         <Field>

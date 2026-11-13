@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import type { MediaLibraryItem } from '@/lib/api'
-import { normalizeTag } from '@/lib/tags'
+import { tagInput } from '@/lib/tags'
 
 const files = (n: number) => `${n} ${n === 1 ? 'file' : 'files'}`
 
@@ -62,7 +62,7 @@ export function TagsDialog({
               value={add}
               onChange={setAdd}
               options={known.map((t) => ({ value: t, label: `#${t}` }))}
-              creatable={{ normalize: normalizeTag }}
+              creatable={tagInput}
             />
           </div>
           {carried.length > 0 && (
