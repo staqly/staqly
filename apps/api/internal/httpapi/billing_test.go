@@ -29,7 +29,7 @@ func (e *env) stripeEvent(id, typ string, object any, secret string) int {
 	e.t.Helper()
 	body, _ := json.Marshal(map[string]any{"id": id, "type": typ, "data": map[string]any{"object": object}})
 	e.rememberSubscription(body)
-	ts := fmt.Sprint(time.Now().Unix())
+	ts := fmt.Sprint(e.svc.Now().Unix()) // signed on the service's clock, which a test may have moved
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(ts + "." + string(body)))
 	req, _ := http.NewRequest("POST", e.srv.URL+"/v1/billing/webhook", bytes.NewReader(body))
@@ -95,8 +95,31 @@ func servePendingSub(w http.ResponseWriter, r *http.Request) bool {
 	if !ok {
 		return false
 	}
-	w.Write(b.([]byte))
+	w.Write(unexpanded(b.([]byte), r))
 	return true
+}
+
+// unexpanded turns a subscription into what Stripe answers a read with: the latest invoice and the default payment
+// method are ids unless the request expands them (expand[]=latest_invoice). A fake that always sends the objects
+// hides a read that forgot to ask: the server would see no unpaid renewal and no card.
+func unexpanded(body []byte, r *http.Request) []byte {
+	var sub map[string]any
+	if json.Unmarshal(body, &sub) != nil {
+		return body
+	}
+	for _, k := range []string{"latest_invoice", "default_payment_method"} {
+		obj, ok := sub[k].(map[string]any)
+		if !ok || slices.Contains(r.URL.Query()["expand[]"], k) {
+			continue
+		}
+		if id, _ := obj["id"].(string); id != "" {
+			sub[k] = id
+		} else {
+			delete(sub, k)
+		}
+	}
+	out, _ := json.Marshal(sub)
+	return out
 }
 
 // subsFirst is a fake Stripe that serves pending subscription reads (see pendingSubs), then h.

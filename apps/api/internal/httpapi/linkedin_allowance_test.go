@@ -107,9 +107,14 @@ func TestLinkedInAllowances(t *testing.T) {
 		!strings.HasPrefix(errBody.Error.Message, "Your LinkedIn posts for this period are used up. Wait until ") {
 		t.Fatalf("exhausted: %+v", errBody.Error)
 	}
-	soon := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
-	e.do(nil, "POST", "/v1/posts/"+p2.ID+"/schedule", e.key, map[string]any{"publish_at": soon}, 402, nil)
-	nextMonth := time.Date(time.Now().Year(), time.Now().Month()+1, 2, 9, 0, 0, 0, time.UTC).Format(time.RFC3339)
+	// Later this month (in the month's last hour that is its last second: an hour from now is next month).
+	monthEnd := time.Date(time.Now().UTC().Year(), time.Now().UTC().Month()+1, 1, 0, 0, 0, 0, time.UTC)
+	soon := time.Now().Add(time.Hour).UTC()
+	if !soon.Before(monthEnd) {
+		soon = monthEnd.Add(-time.Second)
+	}
+	e.do(nil, "POST", "/v1/posts/"+p2.ID+"/schedule", e.key, map[string]any{"publish_at": soon.Format(time.RFC3339)}, 402, nil)
+	nextMonth := monthEnd.Add(33 * time.Hour).Format(time.RFC3339)
 	e.do(nil, "POST", "/v1/posts/"+p2.ID+"/schedule", e.key, map[string]any{"publish_at": nextMonth}, 200, nil)
 
 	// Over at publish time (the room went while it was queued): the target fails with the reason, LinkedIn isn't called.
