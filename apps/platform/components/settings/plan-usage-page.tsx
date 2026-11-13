@@ -148,7 +148,7 @@ const count = (n: number) => n.toLocaleString('en-US')
 /**
  * One allowance line: name, used / limit, a bar, then the status and Buy more. The cells sit on the list's columns
  * (subgrid), so every bar starts and ends at the same place whatever the numbers' width. `bought`: posts bought on
- * top (X), shown as "+ 200 bought" and a muted end of the bar, so the whole allowance reads at a glance.
+ * top (X): the count shows the total (included + bought), its tooltip the split, and the bar's muted end the bought part.
  */
 function PlatformMeter({
   id,
@@ -186,24 +186,31 @@ function PlatformMeter({
     >
       <span className="text-muted-foreground">{name}</span>
       <span className="flex flex-wrap items-center justify-end gap-x-1.5 text-right text-muted-foreground tabular-nums">
-        <span>
-          <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> /{' '}
-          {count(max)}
-        </span>
-        {extra > 0 && (
+        {extra > 0 ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="inline-flex items-center justify-end gap-1 rounded text-xs whitespace-nowrap hover:text-foreground max-sm:basis-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none pointer-coarse:-my-3 pointer-coarse:py-3"
+                className="inline-flex items-center justify-end gap-1 rounded whitespace-nowrap hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none pointer-coarse:-my-3 pointer-coarse:py-3"
                 data-testid={`platform-posts-${id}-bought`}
               >
-                + {count(extra)} bought
+                <span>
+                  <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> /{' '}
+                  {count(Math.max(used, max) + extra)}
+                </span>
                 <CircleHelp className="size-3.5" aria-hidden />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Used after the included ones; they expire {bought!.expires}.</TooltipContent>
+            <TooltipContent>
+              {count(max)} included in the plan + {count(extra)} bought. Included posts are used first; bought ones
+              expire {bought!.expires}.
+            </TooltipContent>
           </Tooltip>
+        ) : (
+          <span>
+            <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> /{' '}
+            {count(max)}
+          </span>
         )}
       </span>
       <span
@@ -212,7 +219,7 @@ function PlatformMeter({
         aria-valuemin={0}
         aria-valuemax={total}
         aria-valuenow={used}
-        aria-valuetext={`${count(used)} of ${count(max)}${extra > 0 ? `, plus ${count(extra)} bought` : ''}`}
+        aria-valuetext={`${count(used)} of ${count(total)}${extra > 0 ? ` (${count(max)} included, ${count(extra)} bought)` : ''}`}
         className="relative h-1.5 overflow-hidden rounded-full bg-muted"
       >
         {extra > 0 && (

@@ -407,7 +407,12 @@ test('a workspace: no plan, trial, paid, add-on, second seat, failed renewal, lo
     await page.getByTestId('buy-x-posts-continue').click()
     await expect(page).toHaveURL(/credits=success/)
     await expect(page.getByText('Payment received')).toBeVisible()
-    await expect(page.getByTestId('platform-posts-x-bought')).toContainText('+ 200 bought')
+    // The count shows the total (included + bought); the bar's text says the split.
+    await expect(page.getByTestId('platform-posts-x-bought')).toBeVisible()
+    await expect(page.getByRole('progressbar', { name: 'X posts' })).toHaveAttribute(
+      'aria-valuetext',
+      /, 200 bought\)$/,
+    )
     // Not the editor's to buy.
     const edApi = await asBrowser(ed.page)
 

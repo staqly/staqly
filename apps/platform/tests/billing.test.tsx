@@ -260,7 +260,7 @@ describe('plan & usage', () => {
     expect(screen.queryByTestId('meter-X posts this month')).not.toBeInTheDocument()
   })
 
-  it("bought X posts show next to the count and as the bar's muted end, explained in a tooltip", async () => {
+  it("bought X posts count in the total and show as the bar's muted end, split in a tooltip", async () => {
     mockApi({
       'GET /v1/billing': BILLING_PRO,
       'GET /v1/billing/details': DETAILS,
@@ -282,8 +282,7 @@ describe('plan & usage', () => {
     const x = await screen.findByTestId('platform-posts-x')
     const bought = await within(x).findByTestId('platform-posts-x-bought')
 
-    expect(x).toHaveTextContent('100 / 100')
-    expect(bought).toHaveTextContent('+ 200 bought')
+    expect(bought).toHaveTextContent('100 / 300')
     // The included posts are used up, the bought ones are not: no "Limit reached".
     expect(x).toHaveAttribute('data-level', 'ok')
     expect(x).not.toHaveTextContent('Limit reached')
@@ -291,10 +290,12 @@ describe('plan & usage', () => {
     const meter = within(x).getByRole('progressbar', { name: 'X posts' })
 
     expect(meter).toHaveAttribute('aria-valuemax', '300')
-    expect(meter).toHaveAttribute('aria-valuetext', '100 of 100, plus 200 bought')
+    expect(meter).toHaveAttribute('aria-valuetext', '100 of 300 (100 included, 200 bought)')
     expect(within(x).getByTestId('platform-posts-x-bought-bar').style.width).toMatch(/^66\.6/)
     await user.hover(bought)
-    expect(await screen.findByRole('tooltip')).toHaveTextContent('Used after the included ones; they expire Nov 24.')
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      '100 included in the plan + 200 bought. Included posts are used first; bought ones expire Nov 24.',
+    )
   })
 
   it('LinkedIn is one block with a line for its posts and one for its videos, with the same warnings as X', async () => {
