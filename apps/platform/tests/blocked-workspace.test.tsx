@@ -312,3 +312,42 @@ describe('short days', () => {
     expect(shortDay(null, now)).toBe('')
   })
 })
+
+describe('a payment that failed mid-period, or still waits', () => {
+  it('a failed seat or add-on payment names what failed and promises no date', async () => {
+    nav.set('/settings/plan')
+    const r = routes({ subscription_status: 'past_due' }, false)
+
+    mockApi({
+      ...r,
+      'GET /v1/billing/details': {
+        ...r['GET /v1/billing/details'],
+        subscription: { ...r['GET /v1/billing/details'].subscription, past_due_for: 'extra' },
+      },
+      'GET /v1/billing/pending-payment': { pending: false },
+    })
+    renderWithProviders(<PlanUsagePage />, { client: client() })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('plan-message')).toHaveTextContent('The payment for an extra seat or an add-on failed'),
+    )
+    expect(screen.getByTestId('plan-message')).not.toHaveTextContent('stays active until')
+    expect(screen.queryByTestId('pending-payment')).not.toBeInTheDocument()
+  })
+
+  it('an upgrade or add-on waiting for its payment is said on Plan & usage, with the way to what to do', async () => {
+    nav.set('/settings/plan')
+    mockApi({
+      ...routes({ subscription_status: 'active' }, false),
+      'GET /v1/billing/pending-payment': { pending: true, reason: 'card_declined', addon: 'channels_pack' },
+    })
+    renderWithProviders(<PlanUsagePage />, { client: client() })
+    const notice = await screen.findByTestId('pending-payment')
+
+    expect(notice).toHaveTextContent('An add-on is waiting for its payment')
+    expect(within(notice).getByRole('link', { name: 'See what to do' })).toHaveAttribute(
+      'href',
+      '/plans/payment-failed',
+    )
+  })
+})

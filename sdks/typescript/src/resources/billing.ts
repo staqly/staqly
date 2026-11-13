@@ -21,7 +21,8 @@ export class BillingResource extends APIResource {
    * `month` or `year`, 20 % off or more; default `month`): returns a Stripe Checkout URL to open in a browser. A workspace
    * that already pays is switched to that plan instead (prorated) and gets the billing page URL. The plan changes
    * when Stripe's webhook arrives. `ConflictError` (409) when billing is off, the price is not set up, or it is the
-   * plan and interval the workspace already has.
+   * plan and interval the workspace already has. For a signed-in person only: with an API key the server answers
+   * 403, whatever the key's scopes (pay in the app).
    */
   checkout(params: { plan?: PlanID; interval?: BillingInterval } = {}, options?: RequestOptions): Promise<BillingURL> {
     return this.http.request({ method: 'POST', path: '/v1/billing/checkout', body: { ...params }, options })
@@ -35,6 +36,7 @@ export class BillingResource extends APIResource {
   /**
    * Buys a bundle of extra posts to X (`posts`: 200, 1000 or 4000): returns a Stripe Checkout URL to open in a
    * browser. The posts are added when Stripe confirms the payment and expire at the end of the billing period.
+   * For a signed-in person only: with an API key the server answers 403.
    */
   creditsCheckout(params: { posts: number; provider?: 'x' }, options?: RequestOptions): Promise<BillingURL> {
     return this.http.request({
@@ -47,7 +49,8 @@ export class BillingResource extends APIResource {
 
   /**
    * Returns a Stripe customer portal URL (payment method, invoices,
-   * cancellation). `ConflictError` (409) before the first checkout.
+   * cancellation). `ConflictError` (409) before the first checkout. For a signed-in person only: with an API key
+   * the server answers 403.
    */
   portal(options?: RequestOptions): Promise<BillingURL> {
     return this.http.request({ method: 'POST', path: '/v1/billing/portal', options })

@@ -143,7 +143,6 @@ func TestDueDeliveriesFairPerWorkspace(t *testing.T) {
 // entitlements look at a customer the subscription isn't on). The fake honours Idempotency-Key like Stripe.
 func TestConcurrentFirstCheckoutsMakeOneCustomer(t *testing.T) {
 	e := newEnv(t)
-	admin := e.keyWith(app.ScopeAdmin)
 	var mu sync.Mutex
 	byKey, sessions, created := map[string]string{}, map[string]bool{}, 0
 	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +176,7 @@ func TestConcurrentFirstCheckoutsMakeOneCustomer(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			e.do(nil, "POST", "/v1/billing/checkout", admin, nil, 200, nil)
+			e.pay("POST", "/v1/billing/checkout", nil, 200, nil)
 		}()
 	}
 	close(start)
@@ -187,7 +186,7 @@ func TestConcurrentFirstCheckoutsMakeOneCustomer(t *testing.T) {
 	}
 	// The workspace keeps the customer the sessions bill: a later checkout uses it without making another.
 	created = 0
-	e.do(nil, "POST", "/v1/billing/checkout", admin, nil, 200, nil)
+	e.pay("POST", "/v1/billing/checkout", nil, 200, nil)
 	if created != 0 || len(sessions) != 1 {
 		t.Fatalf("stored customer differs from the billed one: %v", sessions)
 	}
@@ -226,7 +225,7 @@ func TestPinnedInactivePriceUsesLookupKey(t *testing.T) {
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_inactive", WebhookSecret: testWhsec, APIBase: stripe.URL,
 		Prices: map[string]string{"plus_month": "price_old"}}
 	var out struct{ URL string }
-	e.do(nil, "POST", "/v1/billing/checkout", e.admin, map[string]string{"plan": "plus", "interval": "month"}, 200, &out)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus", "interval": "month"}, 200, &out)
 	if out.URL != "https://checkout.stripe.test/ok" || strings.Join(used, ",") != "price_live_plus" {
 		t.Fatalf("checkout with an inactive pin: %q %v", out.URL, used)
 	}
@@ -318,13 +317,14 @@ func TestCreditRefundsAndDisputesTakeBackUnusedPosts(t *testing.T) {
 	if n := creditsLeft(); n != 70 {
 		t.Fatalf("a repeated or older refund changed the credits: %d", n)
 	}
-	// The rest refunded: only what was used stays (never below it).
+	// The rest refunded: nothing is left. The grant's units are what the refund leaves (none), below what was
+	// used, so a post given back later (a rejected publish) doesn't make one of them usable again.
 	e.stripeEvent("evt_ref_2", "charge.refunded", charge(1000), testWhsec)
 	if n := creditsLeft(); n != 0 {
 		t.Fatalf("after a full refund: %d left", n)
 	}
 	var units, used int64
-	if err := e.svc.DB.QueryRowContext(ctx, `SELECT units, used FROM credit_grants WHERE source = 'stripe:cs_r1'`).Scan(&units, &used); err != nil || units != 30 || used != 30 {
+	if err := e.svc.DB.QueryRowContext(ctx, `SELECT units, used FROM credit_grants WHERE source = 'stripe:cs_r1'`).Scan(&units, &used); err != nil || units != 0 || used != 30 {
 		t.Fatalf("grant after a full refund: units %d used %d (%v)", units, used, err)
 	}
 

@@ -215,6 +215,7 @@ type stripePrice struct {
 	ID        string            `json:"id"`
 	LookupKey string            `json:"lookup_key"`
 	Metadata  map[string]string `json:"metadata"`
+	Product   json.RawMessage   `json:"product"` // an id, or the product when expanded
 	Recurring struct {
 		Interval string `json:"interval"`
 	} `json:"recurring"`
@@ -398,6 +399,9 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	if !s.BillingEnabled() {
 		return "", errBillingOff
 	}
+	if err := requirePerson(p); err != nil {
+		return "", err
+	}
 	plan, interval, err := checkoutPlan(planID, interval)
 	if err != nil {
 		return "", err
@@ -439,7 +443,9 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		return "", err
 	}
 	if w.StripeCustomerID.Valid && w.StripeCustomerID.String != "" {
-		s.expireOpenCheckouts(ctx, customer)
+		if err := s.expireOpenCheckouts(ctx, customer); err != nil {
+			s.logger(ctx).Warn("billing: older open checkouts not expired", "err", err)
+		}
 	}
 	seats, err := s.seatCount(ctx, s.Q, w.ID)
 	if err != nil {
@@ -622,6 +628,22 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 	}
 	if promo != "" {
 		form.Set("discounts[0][promotion_code]", promo)
+	}
+	// Every item of a subscription bills alike (AddAddon picks the add-on's price by the plan's interval): an
+	// interval change takes the add-ons along, each to its price in the new interval.
+	n := 1
+	for _, it := range sub.Items.Data {
+		addon := addonOf(it.Price)
+		if addon == "" || it.Price.Recurring.Interval == "" || it.Price.Recurring.Interval == interval {
+			continue
+		}
+		pr, err := s.lookupPrice(ctx, AddonLookupKey(addon, interval), "", fmt.Sprintf("an add-on of this workspace is not sold %sly on this instance; remove it before changing the interval", interval))
+		if err != nil {
+			return err
+		}
+		form.Set(fmt.Sprintf("items[%d][id]", n), it.ID)
+		form.Set(fmt.Sprintf("items[%d][price]", n), pr.id)
+		n++
 	}
 	// Leaving the trial for another plan: the trial ends now and the new plan is charged at once; the change
 	// waits for that payment (a pending update), so a card that fails leaves the trial as it was.
@@ -838,6 +860,9 @@ func (s *Service) PortalSession(ctx context.Context, p Principal) (string, error
 	if !s.BillingEnabled() {
 		return "", errBillingOff
 	}
+	if err := requirePerson(p); err != nil {
+		return "", err
+	}
 	w, err := s.Q.GetWorkspaceBilling(ctx, p.WorkspaceID)
 	if err != nil {
 		return "", err
@@ -961,6 +986,26 @@ func (sub stripeSubscription) periodStart() int64 {
 	return start
 }
 
+// planPeriod: the period the plan's item is in (0 where Stripe didn't say), and whether it is the newest of the
+// subscription's items. An add-on billed on a shorter interval (bought monthly before the plan went yearly) renews
+// by itself: its period then starts after the plan's, and its renewal is not the plan's.
+func (s *Service) planPeriod(sub stripeSubscription) (start, end int64, newest bool) {
+	start, end = sub.periodStart(), sub.periodEnd()
+	i, ok := s.planItem(sub)
+	if !ok {
+		return start, end, true
+	}
+	it := sub.Items.Data[i]
+	newest = it.CurrentPeriodStart == 0 || it.CurrentPeriodStart >= start
+	if it.CurrentPeriodStart > 0 {
+		start = it.CurrentPeriodStart
+	}
+	if it.CurrentPeriodEnd > 0 {
+		end = it.CurrentPeriodEnd
+	}
+	return start, end, newest
+}
+
 // unpaidRenewal: the latest invoice (expanded: subscriptionExpand) is a renewal's and still open, so the
 // current period hasn't been paid for.
 func (sub stripeSubscription) unpaidRenewal() bool {
@@ -969,6 +1014,17 @@ func (sub stripeSubscription) unpaidRenewal() bool {
 		BillingReason string `json:"billing_reason"`
 	}
 	return json.Unmarshal(sub.LatestInvoice, &inv) == nil && inv.BillingReason == "subscription_cycle" && inv.Status == "open"
+}
+
+// unpaidExtra: the latest invoice is open and not a renewal's: a seat or an add-on charged mid-period whose payment
+// failed. The paid period stands then, and Stripe ends the subscription when its retries of that invoice run out,
+// a day staqly doesn't know.
+func (sub stripeSubscription) unpaidExtra() bool {
+	var inv struct {
+		Status        string `json:"status"`
+		BillingReason string `json:"billing_reason"`
+	}
+	return json.Unmarshal(sub.LatestInvoice, &inv) == nil && inv.Status == "open" && inv.BillingReason != "" && inv.BillingReason != "subscription_cycle"
 }
 
 // endedFor: "payment_failed" for a subscription Stripe ended, or holds unpaid, because a payment failed; ""
@@ -1117,6 +1173,7 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 	if err := s.settleDuplicate(ctx, sub); err != nil {
 		return err
 	}
+	s.voidUnpaidInvoices(ctx, sub)
 	// A trial paid with a card an unpaid trial used ends now (Stripe is called after the transaction). On a
 	// retried event too: the check reads the subscription as it is, so it runs again until it went through.
 	return s.guardCard(ctx, sub)
@@ -1225,9 +1282,10 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 		// Keep the paid end (plus grace); the workspace is suspended if it passes. Stripe starts the new period
 		// (as active, which moved the end a period ahead) about an hour before it charges the renewal: when that
 		// charge fails, the period wasn't paid for, so the end goes back to where the paid one stopped. An
-		// invoice of another kind left unpaid (a seat added mid-period) leaves the paid period alone.
-		start := sub.periodStart()
-		if !sub.unpaidRenewal() || start == 0 {
+		// invoice of another kind left unpaid (a seat added mid-period) leaves the paid period alone, and so does
+		// the renewal of an add-on on a shorter interval than the plan (planPeriod).
+		start, _, plans := s.planPeriod(sub)
+		if !sub.unpaidRenewal() || start == 0 || !plans {
 			return nil
 		}
 		paidUntil := formatTime(time.Unix(start, 0).Add(billingGrace))
@@ -1239,7 +1297,17 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 		}
 		return s.changePlan(ctx, q, actor, cur.Plan, paidUntil, reason)
 	case "active", "trialing":
-		paidUntil := sub.periodEnd()
+		// The same subscription told again (a seat sync, a renewal) leaves a plan the operator set since, while
+		// it runs. Stripe is back in charge with a new subscription, with a plan above the operator's (the
+		// customer paid for more), and once the operator's end date passed (the reconcile round applies the
+		// subscription then).
+		if cur.StripeSubscriptionID.String == sub.ID && (!cur.PlanExpiresAt.Valid || cur.PlanExpiresAt.String > s.now()) &&
+			planRank(planID) <= planRank(cur.Plan) {
+			if set, err := operatorPlan(ctx, q, ws); err != nil || set {
+				return err
+			}
+		}
+		_, paidUntil, _ := s.planPeriod(sub)
 		if sub.Status == "trialing" && sub.TrialEnd > 0 {
 			// The trial's period ends with it; trialEndsAt reads it back as plan_expires_at - billingGrace.
 			paidUntil = sub.TrialEnd
@@ -1337,6 +1405,35 @@ func (s *Service) settleDuplicate(ctx context.Context, sub stripeSubscription) e
 	return s.stripe(ctx, "DELETE", "/v1/subscriptions/"+url.PathEscape(sub.ID), url.Values{"prorate": {"true"}, "invoice_now": {"true"}}, nil)
 }
 
+// voidUnpaidInvoices runs after a subscription was applied (outside the transaction): one Stripe cancelled because a
+// payment kept failing leaves its other open invoices to be collected (a renewal that failed while a seat's invoice
+// was retried), so a card added later is charged for a subscription that is over, and choosing a plan charges
+// again. They are voided: nothing is owed for a plan that ended. An unpaid (not cancelled) subscription keeps its
+// invoices: paying them is what opens it. Best effort, logged: the reconcile round tells an ended subscription
+// again, so it is tried until no invoice is open.
+// ponytail: one invoice list per event or sync of such a subscription; keep a "settled" mark if that adds up.
+func (s *Service) voidUnpaidInvoices(ctx context.Context, sub stripeSubscription) {
+	if sub.Status != "canceled" || sub.CancellationDetails.Reason != "payment_failed" {
+		return
+	}
+	var list struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	q := url.Values{"subscription": {sub.ID}, "status": {"open"}, "limit": {"100"}}
+	if err := s.stripe(ctx, "GET", "/v1/invoices?"+q.Encode(), nil, &list); err != nil {
+		s.logger(ctx).Warn("billing: open invoices of an ended subscription not read", "err", err)
+		return
+	}
+	for _, inv := range list.Data {
+		// One paid or voided meanwhile is refused by Stripe: logged, and not listed as open the next time.
+		if err := s.stripe(ctx, "POST", "/v1/invoices/"+url.PathEscape(inv.ID)+"/void", nil, nil); err != nil {
+			s.logger(ctx).Warn("billing: open invoice of an ended subscription not voided", "err", err)
+		}
+	}
+}
+
 // lockBilling serializes "read a customer's subscription from Stripe, then apply it" (webhook events, syncs), in
 // this process and, on PostgreSQL, across processes: without it a read that stalls commits its older snapshot
 // over a newer one. No transaction is open while Stripe is called.
@@ -1345,8 +1442,9 @@ func (s *Service) lockBilling(ctx context.Context, customer string) (func(), err
 }
 
 // expireOpenCheckouts: a new plan checkout closes the customer's older open ones (another tab), so two can't
-// both be paid. Best effort: settleDuplicate handles the two that still got through.
-func (s *Service) expireOpenCheckouts(ctx context.Context, customer string) {
+// both be paid (best effort there: settleDuplicate handles the two that still got through), and so does deleting
+// the workspace (cancelSubscription: one paid afterwards would bill with no workspace to cancel it from).
+func (s *Service) expireOpenCheckouts(ctx context.Context, customer string) error {
 	var list struct {
 		Data []struct {
 			ID   string `json:"id"`
@@ -1363,9 +1461,7 @@ func (s *Service) expireOpenCheckouts(ctx context.Context, customer string) {
 			err = e
 		}
 	}
-	if err != nil {
-		s.logger(ctx).Warn("billing: older open checkouts not expired", "err", err)
-	}
+	return err
 }
 
 // cancelSubscription ends, right away, every subscription of the workspace's customer (workspace deleted).
@@ -1385,6 +1481,11 @@ func (s *Service) cancelSubscription(ctx context.Context, workspaceID string) er
 		ids = append(ids, w.StripeSubscriptionID.String)
 	}
 	if w.StripeCustomerID.Valid && w.StripeCustomerID.String != "" {
+		// Plan checkouts still open first: paid after the workspace is gone, one would start a subscription
+		// nobody can reach.
+		if err := s.expireOpenCheckouts(ctx, w.StripeCustomerID.String); err != nil {
+			return err
+		}
 		var list struct {
 			Data []stripeSubscription `json:"data"`
 		}
@@ -1499,6 +1600,13 @@ func (s *Service) seatCount(ctx context.Context, q *db.Queries, workspaceID stri
 	n, err := q.CountMembers(ctx, workspaceID)
 	return max(n, 1), err
 }
+
+// A seat or entitlement sync that used up its attempts (Stripe down, or refusing the change for now) is tried
+// again every billingSyncRetryEvery for billingSyncGiveUp (workJob), then fails like any job.
+const (
+	billingSyncRetryEvery = time.Hour
+	billingSyncGiveUp     = 7 * 24 * time.Hour
+)
 
 // queueSeatSync: someone joined or left; in the same transaction, so the job runs only once that is saved,
 // and Stripe is called from the worker (never inside a transaction). One queued sync per workspace: changes

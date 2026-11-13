@@ -350,8 +350,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Pay for a plan, or switch the subscription to another plan (a workspace owner)
-         * @description Without a live subscription: returns a Stripe Checkout URL for the plan billed monthly or yearly;
+         * Pay for a plan, or switch the subscription to another plan (a signed-in workspace owner)
+         * @description Signed-in people only: an API key gets 403, whatever its scopes.
+         *     Without a live subscription: returns a Stripe Checkout URL for the plan billed monthly or yearly;
          *     open it in a browser to pay. Prices are per seat (the members) and exclude VAT (Stripe Tax adds it from
          *     the billing address). Starter starts Stripe's 7-day trial with a card required (nothing is charged until
          *     it ends; cancelled if no card is on file then), once per workspace; Plus, Pro and Business are charged at
@@ -412,8 +413,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Buy extra posts to X (a workspace owner)
-         * @description Returns a Stripe Checkout URL (one-time payment) for a bundle; the posts are added when Stripe reports the payment.
+         * Buy extra posts to X (a signed-in workspace owner)
+         * @description Signed-in people only: an API key gets 403, whatever its scopes. Returns a Stripe Checkout URL (one-time payment) for a bundle; the posts are added when Stripe reports the payment.
          */
         post: operations["createCreditsCheckout"];
         delete?: never;
@@ -454,8 +455,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Add an add-on to the subscription (a workspace owner)
-         * @description Adds it to the live subscription in the subscription's interval, charged at once for the rest of the period
+         * Add an add-on to the subscription (a signed-in workspace owner)
+         * @description Signed-in people only: an API key gets 403, whatever its scopes. Not during the free trial (409, `details.reason` is `trialing`): add-ons come with a paid plan. An id that is not on sale (`GET /v1/billing/addons`) answers 404.
+         *     Adds it to the live subscription in the subscription's interval, charged at once for the rest of the period
          *     with the card on file, and added only once that payment goes through. Its features apply when Stripe
          *     reports them (seconds). When the payment doesn't go through: 402 `payment_failed` whose `details` say why
          *     (`reason`, `addon`, `pay_url`; see `PendingPayment`), the subscription stays as it was without the add-on,
@@ -463,8 +465,8 @@ export interface paths {
          */
         post: operations["addAddon"];
         /**
-         * Remove an add-on (a workspace owner)
-         * @description Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
+         * Remove an add-on (a signed-in workspace owner)
+         * @description Signed-in people only: an API key gets 403, whatever its scopes. An add-on still waiting for its payment (a pending update) is cancelled instead: its invoice is voided and nothing stays due. Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
          */
         delete: operations["removeAddon"];
         options?: never;
@@ -483,7 +485,7 @@ export interface paths {
         put?: never;
         /**
          * Open the Stripe customer portal (admin)
-         * @description Returns a portal URL to change the payment method, see invoices or cancel. 409 before the first checkout.
+         * @description Signed-in people only: an API key gets 403, whatever its scopes. Returns a portal URL to change the payment method, see invoices or cancel. 409 before the first checkout.
          */
         post: operations["createPortalSession"];
         delete?: never;
@@ -524,8 +526,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * End the free trial now and pay for the plan (a workspace owner)
-         * @description Ends the workspace's Stripe trial now: the card on file is charged at once for the plan. The way out of a
+         * End the free trial now and pay for the plan (a signed-in workspace owner)
+         * @description Signed-in people only: an API key gets 403, whatever its scopes.
+         *     Ends the workspace's Stripe trial now: the card on file is charged at once for the plan. The way out of a
          *     trial paused for review (`trial_review`); any owner in a trial may use it. Answers like `GET /v1/billing`;
          *     402 `payment_failed` when the charge didn't go through (update the card in the billing portal), 409 when
          *     the workspace is not in a trial.
@@ -4308,6 +4311,11 @@ export interface components {
              * @example 3
              */
             quantity: number;
+            /**
+             * @description While past_due, what the unpaid invoice is for: renewal (the plan's period) or extra (a seat or an add-on charged mid-period; the paid period stands and Stripe ends the subscription when its retries run out). Empty otherwise.
+             * @enum {string}
+             */
+            past_due_for: "" | "renewal" | "extra";
             /** @description The subscription's discount while it lasts; no other promotion code is taken meanwhile */
             discount: null | {
                 /**
@@ -7361,6 +7369,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PaymentRequired"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             502: components["responses"]["BadGateway"];
         };

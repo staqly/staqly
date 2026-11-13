@@ -516,8 +516,9 @@ paths:
     post:
       operationId: createCheckoutSession
       tags: [billing]
-      summary: Pay for a plan, or switch the subscription to another plan (a workspace owner)
+      summary: Pay for a plan, or switch the subscription to another plan (a signed-in workspace owner)
       description: |
+        Signed-in people only: an API key gets 403, whatever its scopes.
         Without a live subscription: returns a Stripe Checkout URL for the plan billed monthly or yearly;
         open it in a browser to pay. Prices are per seat (the members) and exclude VAT (Stripe Tax adds it from
         the billing address). Starter starts Stripe's 7-day trial with a card required (nothing is charged until
@@ -589,8 +590,10 @@ paths:
     post:
       operationId: createCreditsCheckout
       tags: [billing]
-      summary: Buy extra posts to X (a workspace owner)
-      description: Returns a Stripe Checkout URL (one-time payment) for a bundle; the posts are added when Stripe reports the payment.
+      summary: Buy extra posts to X (a signed-in workspace owner)
+      description: >-
+        Signed-in people only: an API key gets 403, whatever its scopes.
+        Returns a Stripe Checkout URL (one-time payment) for a bundle; the posts are added when Stripe reports the payment.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
@@ -637,8 +640,9 @@ paths:
     post:
       operationId: addAddon
       tags: [billing]
-      summary: Add an add-on to the subscription (a workspace owner)
+      summary: Add an add-on to the subscription (a signed-in workspace owner)
       description: |
+        Signed-in people only: an API key gets 403, whatever its scopes. Not during the free trial (409, `details.reason` is `trialing`): add-ons come with a paid plan. An id that is not on sale (`GET /v1/billing/addons`) answers 404.
         Adds it to the live subscription in the subscription's interval, charged at once for the rest of the period
         with the card on file, and added only once that payment goes through. Its features apply when Stripe
         reports them (seconds). When the payment doesn't go through: 402 `payment_failed` whose `details` say why
@@ -649,13 +653,17 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "402": { $ref: "#/components/responses/PaymentRequired" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "502": { $ref: "#/components/responses/BadGateway" }
     delete:
       operationId: removeAddon
       tags: [billing]
-      summary: Remove an add-on (a workspace owner)
-      description: Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
+      summary: Remove an add-on (a signed-in workspace owner)
+      description: >-
+        Signed-in people only: an API key gets 403, whatever its scopes.
+        An add-on still waiting for its payment (a pending update) is cancelled instead: its invoice is voided and nothing stays due.
+        Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
       responses:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -668,7 +676,9 @@ paths:
       operationId: createPortalSession
       tags: [billing]
       summary: Open the Stripe customer portal (admin)
-      description: Returns a portal URL to change the payment method, see invoices or cancel. 409 before the first checkout.
+      description: >-
+        Signed-in people only: an API key gets 403, whatever its scopes.
+        Returns a portal URL to change the payment method, see invoices or cancel. 409 before the first checkout.
       parameters:
         - { $ref: "#/components/parameters/idempotencyKey" }
       responses:
@@ -719,8 +729,9 @@ paths:
     post:
       operationId: startPaidPlan
       tags: [billing]
-      summary: End the free trial now and pay for the plan (a workspace owner)
+      summary: End the free trial now and pay for the plan (a signed-in workspace owner)
       description: |
+        Signed-in people only: an API key gets 403, whatever its scopes.
         Ends the workspace's Stripe trial now: the card on file is charged at once for the plan. The way out of a
         trial paused for review (`trial_review`); any owner in a trial may use it. Answers like `GET /v1/billing`;
         402 `payment_failed` when the charge didn't go through (update the card in the billing portal), 409 when
@@ -5130,7 +5141,7 @@ components:
         managed_payments: { type: boolean, description: "Checkouts on this server use Stripe Managed Payments: Stripe, through Link, is the merchant of record and sends the receipts and invoices" }
     BillingSubscription:
       type: object
-      required: [status, current_period_start, current_period_end, cancel_at_period_end, cancel_at, canceled_at, trial_end, amount, currency, interval, quantity, discount]
+      required: [status, current_period_start, current_period_end, cancel_at_period_end, cancel_at, canceled_at, trial_end, amount, currency, interval, quantity, past_due_for, discount]
       properties:
         status: { type: string, description: "Stripe's status: active, trialing, past_due, canceled, unpaid, incomplete, ...", examples: [active] }
         current_period_start: { type: [string, "null"], description: Start of the billing period }
@@ -5143,6 +5154,7 @@ components:
         currency: { type: string, examples: [usd] }
         interval: { type: string, examples: [month] }
         quantity: { type: integer, description: "Seats billed: the workspace's members (the server keeps Stripe's quantity in step)", examples: [3] }
+        past_due_for: { type: string, enum: ["", renewal, extra], description: "While past_due, what the unpaid invoice is for: renewal (the plan's period) or extra (a seat or an add-on charged mid-period; the paid period stands and Stripe ends the subscription when its retries run out). Empty otherwise." }
         discount:
           description: The subscription's discount while it lasts; no other promotion code is taken meanwhile
           oneOf:

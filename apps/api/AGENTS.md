@@ -85,7 +85,8 @@ request and credential save, and so do Stripe subscription refreshes (`lockBilli
   `JOB_CONCURRENCY` jobs (default 4, at most half per workspace while others wait:
   `fairStart` snoozes); each kind has a run budget (`jobRunTimeout`, the worker's
   Timeout); retries follow `backoffFor` (1, 5, 15 min) up to `max_attempts`, the last
-  failure calls `jobFailed`. River rescues a job still running after 15 min (a dead
+  failure calls `jobFailed` (`sync_seats` and `sync_entitlements` instead try again every hour for a week:
+  nothing else would put Stripe right before the next subscription event). River rescues a job still running after 15 min (a dead
   process); one rescued on its last attempt is discarded, and `settleRescuedJobs` (the
   minute sweep) calls `jobFailed` for it. Never call a platform inside `s.tx`; providers run from the job. A send whose
   result can't be written is retried in place, then kept as a receipt in the job's output

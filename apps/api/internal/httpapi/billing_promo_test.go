@@ -56,20 +56,19 @@ func TestPromotionCodes(t *testing.T) {
 	}))
 	defer stripe.Close()
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_p", WebhookSecret: testWhsec, APIBase: stripe.URL}
-	admin := e.keyWith(app.ScopeAdmin)
 	var errBody struct{ Error app.Error }
 
 	// No plan yet: the code goes on the Checkout session instead of Checkout's own code box.
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "promotion_code": " BIZ-FREE "}, 200, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business", "promotion_code": " BIZ-FREE "}, 200, nil)
 	if checkout.Get("discounts[0][promotion_code]") != "promo_biz" || checkout.Get("allow_promotion_codes") != "" {
 		t.Fatalf("checkout with a code: %v", checkout)
 	}
 	// An unknown code and one for another plan are refused under the field.
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "promotion_code": "NOPE"}, 422, &errBody)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business", "promotion_code": "NOPE"}, 422, &errBody)
 	if errBody.Error.Fields["promotion_code"] == "" {
 		t.Fatalf("unknown code: %+v", errBody.Error)
 	}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro", "promotion_code": "BIZ-FREE"}, 422, &errBody)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro", "promotion_code": "BIZ-FREE"}, 422, &errBody)
 	if !strings.Contains(errBody.Error.Fields["promotion_code"], "Pro") {
 		t.Fatalf("a code for another plan: %+v", errBody.Error)
 	}
@@ -78,7 +77,7 @@ func TestPromotionCodes(t *testing.T) {
 	if code := e.stripeEvent("evt_p1", "customer.subscription.created", sub, testWhsec); code != 200 {
 		t.Fatalf("subscription event: %d", code)
 	}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "promotion_code": "BIZ-FREE"}, 200, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business", "promotion_code": "BIZ-FREE"}, 200, nil)
 	if updated.Get("items[0][price]") != "price_business_month" || updated.Get("discounts[0][promotion_code]") != "promo_biz" {
 		t.Fatalf("switch with a code: %v", updated)
 	}
@@ -88,11 +87,11 @@ func TestPromotionCodes(t *testing.T) {
 		t.Fatalf("subscription event: %d", code)
 	}
 	updated = nil
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "promotion_code": "BIZ-FREE"}, 200, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business", "promotion_code": "BIZ-FREE"}, 200, nil)
 	if updated.Get("discounts[0][promotion_code]") != "promo_biz" || updated.Get("items[0][price]") != "" {
 		t.Fatalf("code on the current plan: %v", updated)
 	}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business"}, 409, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business"}, 409, nil)
 
 	// One discount at a time: while it lasts, no other code and not the same one again, checked or applied.
 	sub["discounts"] = []string{"di_1"}
@@ -101,13 +100,13 @@ func TestPromotionCodes(t *testing.T) {
 		"/v1/billing/checkout":       {"plan": "business", "promotion_code": "BIZ-FREE"},
 		"/v1/billing/promotion-code": {"promotion_code": "BIZ-FREE"},
 	} {
-		e.do(nil, "POST", path, admin, body, 422, &errBody)
+		e.pay("POST", path, body, 422, &errBody)
 		if !strings.Contains(errBody.Error.Fields["promotion_code"], "already has a discount") || updated != nil {
 			t.Fatalf("%s with a discount on: %+v %v", path, errBody.Error, updated)
 		}
 	}
 	// A switch without a code still works.
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil)
 }
 
 // Checking a promotion code before paying: its discount and the plans it applies to, so the plan picker can show
@@ -200,12 +199,11 @@ func TestUpgradeFromTrialChargesNow(t *testing.T) {
 	}))
 	defer stripe.Close()
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_t", WebhookSecret: testWhsec, APIBase: stripe.URL}
-	admin := e.keyWith(app.ScopeAdmin)
 	if code := e.stripeEvent("evt_t1", "customer.subscription.created", sub, testWhsec); code != 200 {
 		t.Fatalf("subscription event: %d", code)
 	}
 
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business"}, 200, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business"}, 200, nil)
 	if updated.Get("items[0][price]") != "price_business_month" || updated.Get("trial_end") != "now" ||
 		updated.Get("payment_behavior") != "pending_if_incomplete" || updated.Get("proration_behavior") != "always_invoice" {
 		t.Fatalf("upgrade from the trial: %v", updated)
@@ -213,7 +211,7 @@ func TestUpgradeFromTrialChargesNow(t *testing.T) {
 	// The card fails: Stripe keeps the change pending, the trial stays, the dashboard hears why.
 	pending = true
 	var errBody struct{ Error app.Error }
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 402, &errBody)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 402, &errBody)
 	if errBody.Error.Code != "payment_failed" {
 		t.Fatalf("failed payment: %+v", errBody.Error)
 	}

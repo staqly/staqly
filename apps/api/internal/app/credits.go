@@ -255,6 +255,9 @@ func (s *Service) CreditsCheckout(ctx context.Context, p Principal, provider str
 	if !s.BillingEnabled() {
 		return "", errBillingOff
 	}
+	if err := requirePerson(p); err != nil {
+		return "", err
+	}
 	if provider == "" {
 		provider = ProviderX
 	}
@@ -317,7 +320,8 @@ type creditSession struct {
 }
 
 // creditsExpiry: bought posts last until the end of the billing period: the live subscription's period (a
-// month, or a year on yearly billing), else the trial's end, else the end of this month. Read before the
+// month, or a year on yearly billing; in the trial, whose period is a week, a month from now: as long as on a
+// monthly plan), else the trial's end, else the end of this month. Read before the
 // webhook's transaction (it may ask Stripe).
 func (s *Service) creditsExpiry(ctx context.Context, workspaceID string) string {
 	end := s.monthEnd()
@@ -328,6 +332,9 @@ func (s *Service) creditsExpiry(ctx context.Context, workspaceID string) string 
 	if w.StripeSubscriptionID.Valid && liveSubscription(w.SubscriptionStatus.String) {
 		var sub stripeSubscription
 		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String), nil, &sub); err == nil && sub.periodEnd() > 0 {
+			if month := s.Now().AddDate(0, 1, 0); sub.Status == "trialing" && month.Unix() > sub.periodEnd() {
+				return formatTime(month)
+			}
 			return formatTime(time.Unix(sub.periodEnd(), 0))
 		}
 	}

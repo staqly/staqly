@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +34,9 @@ type Entitlement struct {
 	LookupKey string            `json:"lookup_key"`
 	Name      string            `json:"name"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
+	// Quantity: how many of the add-on granting it the subscription holds, when more than one (set at Stripe):
+	// what it adds to a limit counts that many times.
+	Quantity int64 `json:"quantity,omitempty"`
 }
 
 // LimitBonus: what one entitlement adds to a limit (Add), or that it lifts it (Unlimited).
@@ -92,6 +96,7 @@ func ApplyEntitlements(p Plan, ents []Entitlement) Plan {
 			if err != nil || n <= 0 || *ptr == Unlimited {
 				continue
 			}
+			n *= max(e.Quantity, 1)
 			*ptr += n * f.unit
 			p.LimitBonuses = append(p.LimitBonuses, LimitBonus{Limit: f.limit, Add: n * f.unit, From: e.Name})
 		}
@@ -185,11 +190,27 @@ func (s *Service) activeEntitlements(ctx context.Context, customer string) ([]En
 	if err != nil {
 		return nil, err
 	}
+	// A feature made since the catalog was cached (10 minutes) would be kept without its metadata, so without
+	// the limits it raises: read the catalog again, once.
+	if slices.ContainsFunc(list.Data, func(a struct {
+		Feature   string `json:"feature"`
+		LookupKey string `json:"lookup_key"`
+	}) bool {
+		_, ok := features[a.Feature]
+		return !ok
+	}) {
+		featureCache.Lock()
+		featureCache.exp = time.Time{}
+		featureCache.Unlock()
+		if features, err = s.stripeFeatures(ctx); err != nil {
+			return nil, err
+		}
+	}
 	out := []Entitlement{}
 	for _, a := range list.Data {
 		e, ok := features[a.Feature]
 		if !ok {
-			e = Entitlement{LookupKey: a.LookupKey, Name: a.LookupKey} // a feature made in the last 10 minutes
+			e = Entitlement{LookupKey: a.LookupKey, Name: a.LookupKey} // past the catalog's first 100 (stripeFeatures)
 		}
 		if e.LookupKey == "" {
 			e.LookupKey = a.LookupKey
@@ -198,6 +219,44 @@ func (s *Service) activeEntitlements(ctx context.Context, customer string) ([]En
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].LookupKey < out[j].LookupKey })
 	return out, nil
+}
+
+// addonQuantities marks the entitlements of add-ons the subscription holds more than once (a quantity set at
+// Stripe: the app adds one). Stripe's active entitlements say nothing of quantities, so the features of such an
+// add-on's product are read; with every quantity at one, the subscription is all it asks for.
+func (s *Service) addonQuantities(ctx context.Context, subscriptionID string, ents []Entitlement) error {
+	var sub stripeSubscription
+	if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(subscriptionID), nil, &sub); err != nil {
+		return err
+	}
+	for _, it := range sub.Items.Data {
+		var product string
+		if it.Quantity <= 1 || addonOf(it.Price) == "" || json.Unmarshal(it.Price.Product, &product) != nil || product == "" {
+			continue
+		}
+		var list struct {
+			Data []struct {
+				Feature struct {
+					LookupKey string `json:"lookup_key"`
+				} `json:"entitlement_feature"`
+			} `json:"data"`
+		}
+		if err := s.stripe(ctx, "GET", "/v1/products/"+url.PathEscape(product)+"/features?limit=100", nil, &list); err != nil {
+			return err
+		}
+		for i := range ents {
+			if slices.ContainsFunc(list.Data, func(f struct {
+				Feature struct {
+					LookupKey string `json:"lookup_key"`
+				} `json:"entitlement_feature"`
+			}) bool {
+				return f.Feature.LookupKey == ents[i].LookupKey
+			}) {
+				ents[i].Quantity = it.Quantity
+			}
+		}
+	}
+	return nil
 }
 
 // queueEntitlementSync: the subscription (or Stripe's summary of the customer's features) changed. In the
@@ -223,6 +282,11 @@ func (s *Service) runSyncEntitlements(ctx context.Context, workspaceID string) e
 	if w.StripeCustomerID.Valid && w.StripeCustomerID.String != "" {
 		if ents, err = s.activeEntitlements(ctx, w.StripeCustomerID.String); err != nil {
 			return err
+		}
+		if len(ents) > 0 && w.StripeSubscriptionID.Valid && liveSubscription(w.SubscriptionStatus.String) {
+			if err := s.addonQuantities(ctx, w.StripeSubscriptionID.String, ents); err != nil {
+				return err
+			}
 		}
 	}
 	raw, err := json.Marshal(ents)
@@ -346,6 +410,10 @@ func (s *Service) subscriptionInterval(sub stripeSubscription) string {
 	return IntervalMonth
 }
 
+// errAddonInTrial: Stripe charges nothing during a trial, so an add-on bought then would be free until its end.
+var errAddonInTrial = &Error{Code: "conflict", Status: 409, Message: "add-ons come with a paid plan: choose a plan first (or start the paid plan now)",
+	Details: map[string]any{"reason": "trialing"}}
+
 // liveSubscriptionOf: the workspace's live subscription from Stripe, or a conflict saying a plan comes first.
 func (s *Service) liveSubscriptionOf(ctx context.Context, workspaceID string) (stripeSubscription, error) {
 	var sub stripeSubscription
@@ -393,9 +461,29 @@ func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
 	if !s.BillingEnabled() {
 		return errBillingOff
 	}
+	if err := requirePerson(p); err != nil {
+		return err
+	}
+	// Only what the list shows is sold: not a draft, a plan's product or an add-on without a price.
+	all, err := s.stripeAddons(ctx)
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(all, func(a Addon) bool { return a.ID == id }) {
+		return notFound("add-on")
+	}
+	// In the trial, as staqly knows it: refused before Stripe is asked anything about the subscription.
+	if w, err := s.Q.GetWorkspaceBilling(ctx, p.WorkspaceID); err != nil {
+		return err
+	} else if w.SubscriptionStatus.String == "trialing" {
+		return errAddonInTrial
+	}
 	sub, err := s.liveSubscriptionOf(ctx, p.WorkspaceID)
 	if err != nil {
 		return err
+	}
+	if sub.Status == "trialing" { // (the trial began at Stripe and its event isn't in yet)
+		return errAddonInTrial
 	}
 	if _, ok := addonItem(sub, id); ok {
 		return &Error{Code: "conflict", Status: 409, Message: "the workspace already has this add-on"}
@@ -441,13 +529,16 @@ func (s *Service) RemoveAddon(ctx context.Context, p Principal, id string) error
 	if !s.BillingEnabled() {
 		return errBillingOff
 	}
+	if err := requirePerson(p); err != nil {
+		return err
+	}
 	sub, err := s.liveSubscriptionOf(ctx, p.WorkspaceID)
 	if err != nil {
 		return err
 	}
 	item, ok := addonItem(sub, id)
 	if !ok {
-		return notFound("add-on")
+		return s.cancelPendingAddon(ctx, sub.ID, id)
 	}
 	proration := "always_invoice"
 	if sub.Status == "past_due" && s.voidInvoicesOf(ctx, sub.ID, item) {
@@ -457,6 +548,30 @@ func (s *Service) RemoveAddon(ctx context.Context, p Principal, id string) error
 		return err
 	}
 	return s.tx(ctx, func(q *db.Queries) error { return s.queueEntitlementSync(ctx, q, p.WorkspaceID) })
+}
+
+// cancelPendingAddon: the add-on isn't on the subscription yet, it waits for its payment (a pending update).
+// Removing it cancels that update the way Stripe has for it: voiding the invoice the update made (the
+// subscription's latest), so nothing stays due for an add-on nobody wants. Not found when no update holds it.
+func (s *Service) cancelPendingAddon(ctx context.Context, subscriptionID, id string) error {
+	var sub struct {
+		PendingUpdate *stripePendingUpdate `json:"pending_update"`
+		LatestInvoice string               `json:"latest_invoice"`
+	}
+	if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(subscriptionID), nil, &sub); err != nil {
+		return err
+	}
+	waits := false
+	if sub.PendingUpdate != nil {
+		for _, it := range sub.PendingUpdate.SubscriptionItems {
+			var pr stripePrice
+			waits = waits || (json.Unmarshal(it.Price, &pr) == nil && addonOf(pr) == id)
+		}
+	}
+	if !waits || sub.LatestInvoice == "" {
+		return notFound("add-on")
+	}
+	return s.stripe(ctx, "POST", "/v1/invoices/"+url.PathEscape(sub.LatestInvoice)+"/void", nil, nil)
 }
 
 // voidInvoicesOf voids the subscription's open invoices that bill nothing but one item (an add-on charged when it

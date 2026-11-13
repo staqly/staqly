@@ -101,10 +101,10 @@ func TestEntitlementsAndAddons(t *testing.T) {
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_1", WebhookSecret: testWhsec, APIBase: stripe.URL}
 
 	// Add-ons come with a plan: none to add before a subscription.
-	e.do(nil, "POST", "/v1/billing/addons/webhooks_pack", admin, nil, 409, nil)
+	e.pay("POST", "/v1/billing/addons/webhooks_pack", nil, 409, nil)
 	// A checkout makes the customer; the subscription event ties it to the workspace and queues the sync.
 	var out struct{ URL string }
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter", "interval": "month"}, 200, &out)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "month"}, 200, &out)
 	sub := map[string]any{"id": "sub_1", "customer": "cus_1", "status": "active", "metadata": map[string]string{"workspace_id": ws.ID},
 		"items": map[string]any{"data": items}}
 	sub["items"].(map[string]any)["data"].([]any)[0].(map[string]any)["current_period_end"] = time.Now().Add(30 * 24 * time.Hour).Unix()
@@ -128,13 +128,13 @@ func TestEntitlementsAndAddons(t *testing.T) {
 	e.do(nil, "GET", "/v1/billing/addons", reader, nil, 403, nil)
 
 	// Add it: one more item on the subscription in its interval, charged at once and added once paid.
-	e.do(nil, "POST", "/v1/billing/addons/webhooks_pack", admin, nil, 204, nil)
+	e.pay("POST", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
 	if added.Get("items[0][id]") != "" || added.Get("items[0][price]") != "price_addon_webhooks_pack_month" ||
 		added.Get("proration_behavior") != "always_invoice" || added.Get("items[0][quantity]") != "1" ||
 		added.Get("payment_behavior") != "pending_if_incomplete" {
 		t.Fatalf("add-on item: %v", added)
 	}
-	e.do(nil, "POST", "/v1/billing/addons/webhooks_pack", admin, nil, 409, nil) // already there
+	e.pay("POST", "/v1/billing/addons/webhooks_pack", nil, 409, nil) // already there
 	// Stripe reports the new features; the event is applied once and queues the sync.
 	mu.Lock()
 	active = []map[string]any{{"id": "ent_1", "feature": "feat_ch", "lookup_key": "webhooks_extra_2"}, {"id": "ent_2", "feature": "feat_ai", "lookup_key": "ai_pack"}}
@@ -180,8 +180,8 @@ func TestEntitlementsAndAddons(t *testing.T) {
 	}
 
 	// Remove it: the item leaves (the rest credited); Stripe drops the features; back to Starter's limits.
-	e.do(nil, "DELETE", "/v1/billing/addons/webhooks_pack", admin, nil, 204, nil)
-	e.do(nil, "DELETE", "/v1/billing/addons/webhooks_pack", admin, nil, 404, nil)
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 404, nil)
 	mu.Lock()
 	active = []map[string]any{}
 	mu.Unlock()
