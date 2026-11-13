@@ -288,24 +288,20 @@ func (s *Service) CreditsCheckout(ctx context.Context, p Principal, provider str
 		URL string `json:"url"`
 	}
 	form := url.Values{
-		"mode":                       {"payment"},
-		"customer":                   {customer},
-		"client_reference_id":        {w.ID},
-		"line_items[0][price]":       {pr.id},
-		"line_items[0][quantity]":    {"1"},
-		"metadata[workspace_id]":     {w.ID},
-		"metadata[staqly_kind]":      {"credits"},
-		"metadata[staqly_provider]":  {provider},
-		"metadata[staqly_posts]":     {strconv.FormatInt(posts, 10)},
-		"invoice_creation[enabled]":  {"true"}, // a receipt-like invoice in the billing history
-		"billing_address_collection": {"auto"},
-		"tax_id_collection[enabled]": {"true"},
-		"customer_update[name]":      {"auto"},
-		"customer_update[address]":   {"auto"},
-		"success_url":                {back + "?credits=success"},
-		"cancel_url":                 {back + "?credits=canceled"},
+		"mode":                      {"payment"},
+		"customer":                  {customer},
+		"client_reference_id":       {w.ID},
+		"line_items[0][price]":      {pr.id},
+		"line_items[0][quantity]":   {"1"},
+		"metadata[workspace_id]":    {w.ID},
+		"metadata[staqly_kind]":     {"credits"},
+		"metadata[staqly_provider]": {provider},
+		"metadata[staqly_posts]":    {strconv.FormatInt(posts, 10)},
+		"invoice_creation[enabled]": {"true"}, // a receipt-like invoice in the billing history
+		"success_url":               {back + "?credits=success"},
+		"cancel_url":                {back + "?credits=canceled"},
 	}
-	s.managedCheckout(form)
+	s.checkoutTax(form)
 	err = s.stripe(ctx, "POST", "/v1/checkout/sessions", form, &cs)
 	return cs.URL, err
 }
