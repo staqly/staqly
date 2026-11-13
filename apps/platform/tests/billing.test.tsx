@@ -5,13 +5,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { BillingRedirect } from '@/components/settings/billing-redirect'
 import { PlanUsagePage } from '@/components/settings/plan-usage-page'
 import { AppShell } from '@/components/shell/app-shell'
+import type { Billing, BillingDetails, XPosts } from '@/lib/api'
 import { qk } from '@/lib/queries'
 
 import { nav } from './navigation'
 import { PLANS, UNLOCKED, usage } from './plans-fixtures'
 import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
 
-const OFF = {
+const OFF: BillingDetails = {
   enabled: false,
   subscription: null,
   payment_methods: [],
@@ -20,7 +21,7 @@ const OFF = {
   managed_payments: false,
 }
 
-const BILLING_PRO = {
+const BILLING_PRO: Billing = {
   enabled: true,
   plan: 'pro',
   subscription_status: 'active',
@@ -30,9 +31,12 @@ const BILLING_PRO = {
   has_customer: true,
   seats: 3,
   trial: 'none',
+  trial_review: null,
+  trial_revoked: null,
+  ended_for: null,
 }
 
-function invoice(n: number) {
+function invoice(n: number): BillingDetails['invoices'][number] {
   return {
     id: `in_${n}`,
     number: `A-000${n}`,
@@ -49,7 +53,7 @@ function invoice(n: number) {
   }
 }
 
-const SUBSCRIPTION = {
+const SUBSCRIPTION: NonNullable<BillingDetails['subscription']> = {
   status: 'active',
   current_period_start: '2026-10-15T10:00:00Z',
   current_period_end: '2026-11-15T10:00:00Z',
@@ -61,9 +65,11 @@ const SUBSCRIPTION = {
   quantity: 3,
   currency: 'usd',
   interval: 'month',
+  past_due_for: '',
+  discount: null,
 }
 
-const DETAILS = {
+const DETAILS: BillingDetails = {
   enabled: true,
   subscription: SUBSCRIPTION,
   payment_methods: [{ brand: 'visa', last4: '4242', exp_month: 4, exp_year: 2030, default: true }],
@@ -72,7 +78,7 @@ const DETAILS = {
   managed_payments: false,
 }
 
-const XPOSTS = {
+const XPOSTS: XPosts = {
   period: '2026-10',
   period_end: '2026-11-01T00:00:00Z',
   unlimited: false,
@@ -159,7 +165,7 @@ describe('plan & usage', () => {
     expect(within(summary).getByTestId('plan-facts')).toHaveTextContent('$30 per user / month')
     expect(within(summary).getByTestId('plan-facts')).toHaveTextContent('3 users')
     // The day in this machine's time zone (10:00 UTC is the 16th at UTC+14, the 14th west of UTC-10).
-    const due = new Date(SUBSCRIPTION.current_period_end).toLocaleDateString('en-US', {
+    const due = new Date(SUBSCRIPTION.current_period_end!).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -362,6 +368,38 @@ describe('plan & usage', () => {
     await waitFor(() => expect(within(summary).getByTestId('next-payment')).toHaveTextContent('$45 on'))
     expect(await screen.findByText('No invoices yet')).toBeInTheDocument()
     expect(screen.getByText(/not charged until it ends/)).toBeInTheDocument()
+  })
+
+  it('during the trial an add-on cannot be bought yet, and the page says why', async () => {
+    mockApi({
+      'GET /v1/billing': { ...BILLING_PRO, plan: 'starter', subscription_status: 'trialing', trial_ends_at: inDays(5) },
+      'GET /v1/billing/details': { ...DETAILS, subscription: { ...SUBSCRIPTION, status: 'trialing' } },
+      'GET /v1/billing/addons': {
+        data: [
+          {
+            id: 'channels_pack',
+            name: 'Channels pack',
+            description: '10 more channels',
+            features: [],
+            price_month: 9,
+            price_year: 86,
+            currency: 'eur',
+            active: false,
+          },
+        ],
+      },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/billing/pending-payment': { pending: false },
+      'GET /v1/workspace/usage': { ...usage(PLANS[0]), trial_ends_at: inDays(5) },
+    })
+
+    renderPlan()
+
+    expect(await screen.findByText('Add-ons come with a paid plan. Choose a plan first.')).toBeInTheDocument()
+    expect(within(await screen.findByTestId('addons')).getByRole('button', { name: /add/i })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   })
 
   it('the 7-day trial of a server without billing shows 7 days left and Choose a plan', async () => {

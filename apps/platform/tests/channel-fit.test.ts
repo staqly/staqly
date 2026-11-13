@@ -41,7 +41,7 @@ describe('channel fit', () => {
     const media = [file('a.png', 'image/png'), file('clip.mp4', 'video/mp4')]
     const thread = [{ content: 'More', media: [file('b.png', 'image/png')] }]
 
-    expect(channelFit(channel({ provider: 'pinterest' }), pin, media, thread)).toEqual([
+    expect(channelFit(channel({ provider: 'pinterest', comments: false }), pin, media, thread)).toEqual([
       'Takes pictures only, 1 file at most: leaves out clip.mp4',
       "Posts no comments: the comment doesn't go out here",
     ])

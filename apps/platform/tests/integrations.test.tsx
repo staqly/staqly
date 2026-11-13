@@ -5,14 +5,14 @@ import { describe, expect, it } from 'vitest'
 import { ApiKeysManager, SCOPE_INFO, SCOPE_PRESETS } from '@/components/integrations/api-keys'
 import { IntegrationsPage } from '@/components/integrations/pages'
 import { SettingsPage } from '@/components/settings/settings-page'
-import { ALL_SCOPES } from '@/lib/api'
+import { ALL_SCOPES, type APIKey } from '@/lib/api'
 import { qk } from '@/lib/queries'
 import { rememberApiKey } from '@/lib/session-key'
 
 import { nav } from './navigation'
 import { mockApi, renderWithProviders } from './utils'
 
-const KEY = {
+const KEY: APIKey = {
   id: 'key_1',
   name: 'Default key',
   prefix: 'stk_abcd',

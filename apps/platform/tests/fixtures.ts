@@ -16,7 +16,7 @@ export function collection(over: Partial<Collection> = {}): Collection {
     post_count: 3,
     status_counts: { draft: 1, scheduled: 1, published: 1 },
     ...over,
-  } as Collection
+  }
 }
 
 export function group(over: Partial<ChannelGroup> = {}): ChannelGroup {
@@ -46,11 +46,12 @@ export function channel(over: Partial<Channel> = {}): Channel {
     settings: {},
     links: 'keep',
     group_id: 'grp_default',
+    comments: true,
     last_error: '',
     created_at: '2026-01-01T10:00:00Z',
     updated_at: '2026-01-01T10:00:00Z',
     ...over,
-  } as Channel
+  }
 }
 
 export function target(over: Partial<PostTarget> = {}): PostTarget {
@@ -66,9 +67,14 @@ export function target(over: Partial<PostTarget> = {}): PostTarget {
     external_url: '',
     error: '',
     attempts: 0,
+    attempted_at: null,
     published_at: null,
+    removal: '',
+    removal_error: '',
+    removed_at: null,
+    replies: [],
     ...over,
-  } as PostTarget
+  }
 }
 
 export function post(over: Partial<Post> = {}): Post {
@@ -76,12 +82,19 @@ export function post(over: Partial<Post> = {}): Post {
     id: 'pst_1',
     collection_id: 'col_1',
     collection_name: 'Instagram Avatar',
+    title: '',
     content: 'Spring sale starts Monday. Three days, every avatar half price.',
     media: [],
     media_items: [],
     status: 'draft',
     publish_at: null,
+    publish_on: null,
+    repeat_every: '',
     published_at: null,
+    unpublished_at: null,
+    unpublished_by: '',
+    archived_at: null,
+    thread: [],
     tags: [],
     metadata: {},
     source: 'claude-code',
@@ -93,7 +106,7 @@ export function post(over: Partial<Post> = {}): Post {
     created_by: 'Content agent',
     open_comments: 0,
     ...over,
-  } as Post
+  }
 }
 
 export function provider(over: Partial<Provider> = {}): Provider {
@@ -128,9 +141,11 @@ export function provider(over: Partial<Provider> = {}): Provider {
       },
     ],
     app_configured: true,
+    needs_https: false,
+    live_trigger: false,
     docs_url: 'https://docs.staqly.ai/channels/mastodon',
     ...over,
-  } as Provider
+  }
 }
 
 export function schedule(over: Partial<Schedule> = {}): Schedule {
@@ -155,7 +170,7 @@ export function schedule(over: Partial<Schedule> = {}): Schedule {
     created_at: '2026-01-01T10:00:00Z',
     updated_at: '2026-01-01T10:00:00Z',
     ...over,
-  } as Schedule
+  }
 }
 
 export function comment(over: Partial<PostComment> = {}): PostComment {

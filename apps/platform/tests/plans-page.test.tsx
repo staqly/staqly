@@ -4,13 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { PlanGrid, teamTotal } from '@/components/plans/plan-cards'
 import { PlansPage } from '@/components/plans/plans-page'
+import type { BillingDetails } from '@/lib/api'
 import { qk } from '@/lib/queries'
 
 import { nav } from './navigation'
 import { PLANS, usage } from './plans-fixtures'
 import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
 
-const SUB = {
+const SUB: NonNullable<BillingDetails['subscription']> = {
   status: 'active',
   current_period_start: '2026-10-01T00:00:00Z',
   current_period_end: '2026-11-01T00:00:00Z',
@@ -19,8 +20,11 @@ const SUB = {
   canceled_at: null,
   trial_end: null,
   amount: 2900,
+  quantity: 1,
   currency: 'usd',
   interval: 'month',
+  past_due_for: '',
+  discount: null,
 }
 
 const PROMOTIONS: Record<string, unknown> = {

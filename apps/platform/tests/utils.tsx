@@ -5,7 +5,7 @@ import { vi } from 'vitest'
 
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { setCsrfToken } from '@/lib/api'
+import { setCsrfToken, type Role, type Scope, type SessionInfo } from '@/lib/api'
 import { qk } from '@/lib/queries'
 
 export interface Call {
@@ -16,7 +16,7 @@ export interface Call {
   headers: Record<string, string>
 }
 
-type Reply = { status?: number; body?: unknown } | undefined
+type Reply = { status?: number; body?: unknown; headers?: Record<string, string> } | undefined
 type Handler = (call: Call) => Reply | unknown
 
 function filterPosts(out: unknown, query: URLSearchParams): unknown {
@@ -109,12 +109,12 @@ export function mockApi(routes: Record<string, Handler | unknown>) {
       out = { status: 200, body: out }
     }
 
-    const r = out as { status?: number; body?: unknown }
+    const r = out as NonNullable<Reply>
     const status = r.status ?? 200
 
     return new Response(status === 204 ? null : JSON.stringify(r.body ?? {}), {
       status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...r.headers },
     })
   })
 
@@ -136,19 +136,24 @@ export function makeClient() {
   })
 }
 
-export function renderWithProviders(ui: ReactElement, opts: { client?: QueryClient; mode?: 'local' | 'cloud' } = {}) {
+/** `mode`: a session that holds every scope. `role`: a person with that role in a cloud workspace (`sessionAs`). */
+export function renderWithProviders(
+  ui: ReactElement,
+  opts: { client?: QueryClient; mode?: 'local' | 'cloud'; role?: Role } = {},
+) {
   const client = opts.client ?? makeClient()
+  const mode = opts.role ? 'cloud' : opts.mode
 
-  setCsrfToken(opts.mode === 'local' ? '' : 'csrf-test')
+  setCsrfToken(mode === 'local' ? '' : 'csrf-test')
 
-  if (opts.mode) {
+  if (mode) {
     client.setQueryData(qk.setup, {
       initialized: true,
-      mode: opts.mode,
-      signup_open: opts.mode === 'cloud',
-      setup_token_required: opts.mode === 'cloud',
+      mode,
+      signup_open: mode === 'cloud',
+      setup_token_required: mode === 'cloud',
     })
-    client.setQueryData(qk.session, sessionFixture(opts.mode))
+    client.setQueryData(qk.session, opts.role ? sessionAs(opts.role) : sessionFixture(mode))
   }
 
   const result = render(
@@ -163,16 +168,18 @@ export function renderWithProviders(ui: ReactElement, opts: { client?: QueryClie
   return { ...result, client }
 }
 
-export function sessionFixture(mode: 'local' | 'cloud') {
+export function sessionFixture(mode: 'local' | 'cloud'): SessionInfo {
   return {
     mode,
     csrf_token: mode === 'local' ? '' : 'csrf-test',
     workspace: {
       id: 'ws_1',
       name: 'Test WS',
+      logo: '',
       plan: mode === 'local' ? 'unlocked' : 'starter',
       recovery_rotated_at: '2026-01-01T00:00:00Z',
       created_at: '2026-01-01T00:00:00Z',
+      timezone: 'UTC',
     },
     principal: {
       type: mode === 'local' ? 'local' : 'session',
@@ -198,8 +205,50 @@ export function sessionFixture(mode: 'local' | 'cloud') {
         'admin',
       ],
     },
-    features: { ai_summaries: false },
     defaults: { processing_timeout_seconds: 3600 },
+  }
+}
+
+const READ: Scope[] = ['collections:read', 'posts:read', 'media:read', 'events:read', 'channels:read']
+const WRITE: Scope[] = [
+  'collections:write',
+  'posts:write',
+  'posts:delete',
+  'posts:publish',
+  'media:write',
+  'schedules:manage',
+]
+const OPERATE: Scope[] = [
+  'collections:delete',
+  'channels:manage',
+  'webhooks:manage',
+  'alerts:manage',
+  'integrations:manage',
+]
+
+/**
+ * The scopes of each role, as GET /v1/session reports them: the API's `RoleScopes` (apps/api/internal/app/accounts.go),
+ * with every scope for admins and owners. tests/role-matrix.test.tsx fails when the two differ.
+ */
+export const ROLE_SCOPES: Record<Role, Scope[]> = {
+  viewer: READ,
+  editor: [...READ, ...WRITE],
+  operator: [...READ, ...WRITE, ...OPERATE],
+  admin: [...READ, ...WRITE, ...OPERATE, 'admin'],
+  owner: [...READ, ...WRITE, ...OPERATE, 'admin'],
+}
+
+/** A person signed in to a cloud workspace with `role`: an account, and exactly the scopes that role has. */
+export function sessionAs(role: Role, over: Partial<SessionInfo> = {}): SessionInfo {
+  const session = sessionFixture('cloud')
+
+  return {
+    ...session,
+    role,
+    accounts_enabled: true,
+    user: { id: 'usr_me', name: 'Ana Example', email: 'ana@example.com', avatar_url: '' },
+    principal: { ...session.principal, scopes: ROLE_SCOPES[role] },
+    ...over,
   }
 }
 
