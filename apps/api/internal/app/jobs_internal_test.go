@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -559,21 +560,39 @@ func TestRescuedJobIsSettledAgainAfterAFailedSettle(t *testing.T) {
 	}
 }
 
-// refuseWrites makes the database refuse some writes (a SQLite trigger: on = "UPDATE ON post_targets WHEN
+// refuseWrites makes the database refuse some writes (a trigger: on = "UPDATE ON post_targets WHEN
 // NEW.status = 'failed'") and returns what lifts it again. It stands in for a database that is briefly unable
-// to take a write; the test is skipped on PostgreSQL.
+// to take a write.
 func refuseWrites(t *testing.T, s *Service, on string) (lift func()) {
 	t.Helper()
+	create := []string{`CREATE TRIGGER refuse_writes BEFORE ` + on + ` BEGIN SELECT RAISE(ABORT, 'write refused'); END`}
+	drop := []string{`DROP TRIGGER refuse_writes`}
 	if s.pg {
-		t.Skip("uses a SQLite trigger")
+		if strings.Contains(on, "SELECT") {
+			t.Skip("a trigger condition with a subquery is SQLite only")
+		}
+		event, rest, _ := strings.Cut(on, " ON ")
+		table, when, conditional := strings.Cut(rest, " WHEN ")
+		if conditional {
+			when = " WHEN (" + when + ")"
+		}
+		create = []string{
+			`CREATE FUNCTION refuse_writes() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''write refused''; END'`,
+			`CREATE TRIGGER refuse_writes BEFORE ` + event + ` ON ` + table + ` FOR EACH ROW` + when + ` EXECUTE FUNCTION refuse_writes()`,
+		}
+		drop = []string{`DROP TRIGGER refuse_writes ON ` + table, `DROP FUNCTION refuse_writes()`}
 	}
-	if _, err := s.DB.Exec(`CREATE TRIGGER refuse_writes BEFORE ` + on + ` BEGIN SELECT RAISE(ABORT, 'write refused'); END`); err != nil {
-		t.Fatal(err)
+	exec := func(stmts []string) {
+		t.Helper()
+		for _, stmt := range stmts {
+			if _, err := s.DB.Exec(stmt); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
+	exec(create)
 	return func() {
 		t.Helper()
-		if _, err := s.DB.Exec(`DROP TRIGGER refuse_writes`); err != nil {
-			t.Fatal(err)
-		}
+		exec(drop)
 	}
 }

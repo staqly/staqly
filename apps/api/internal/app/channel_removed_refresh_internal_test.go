@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -49,8 +50,9 @@ func TestRefreshAfterChannelRemovalStoresNoCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.refreshIfDue(ctx, row, e, creds); err != nil {
-		t.Fatal(err)
+	// The renewed sign-in is dropped: the caller gets no credentials for the removed channel and tries again.
+	if fresh, err := s.refreshIfDue(ctx, row, e, creds); err == nil || errors.Is(err, providers.ErrReauth) || fresh != nil {
+		t.Fatalf("refresh of a channel removed meanwhile: %v %v, want an error worth a retry", fresh, err)
 	}
 	var stored string
 	if err := s.DB.QueryRowContext(ctx, "SELECT credentials FROM channels WHERE id = ?", ch.ID).Scan(&stored); err != nil {

@@ -400,10 +400,13 @@ It copies the database and archives the files against the Compose volume
 (uploads without the `thumbs` cache, plus `secret.key`, `notify_secret.key` and `access_token` if
 present), all owner-only. Start the container again afterwards (`docker start staqly`).
 `make restore BACKUP=backups/<timestamp>` (`scripts/restore.sh`) restores one; it asks for
-confirmation (`FORCE=1` skips it). It reads the whole backup before it changes anything and puts
+confirmation (`FORCE=1` skips it). It reads the whole backup before it changes anything: a
+`workspace.db` that is not a SQLite database, is cut off, or fails SQLite's integrity check (run
+when `sqlite3` is installed on your machine) is refused before the container is stopped. It puts
 the previous data back if the swap fails, so a damaged backup leaves the install as it was and
-running. `STAQLY_CONTAINER` and `STAQLY_VOLUME` select another
-container or volume.
+running. If the swap was interrupted and the previous data is still in `/data/.restore-old`, the
+container is left stopped and the script says so: move those files back before you start it.
+`STAQLY_CONTAINER` and `STAQLY_VOLUME` select another container or volume.
 
 ## Next steps
 

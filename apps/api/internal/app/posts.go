@@ -1233,31 +1233,34 @@ func (s *Service) CancelPost(ctx context.Context, p Principal, id string) (Post,
 	if err := p.require(ScopePostsPublish); err != nil {
 		return Post{}, err
 	}
-	err := s.tx(ctx, func(q *db.Queries) error {
-		row, err := q.GetPost(ctx, db.GetPostParams{WorkspaceID: p.WorkspaceID, ID: id})
-		if isNoRows(err) {
-			return notFound("post")
-		}
-		if err != nil {
-			return err
-		}
-		if row.Status != "scheduled" {
-			return conflict("only a scheduled post can be taken off the schedule")
-		}
-		now := s.now()
-		if err := s.cancelJobs(ctx, q, "publish_post:"+id); err != nil {
-			return err
-		}
-		if err := q.SetPostStatus(ctx, db.SetPostStatusParams{Status: "draft", PublishedAt: nullStr(""), UpdatedAt: now, ID: id}); err != nil {
-			return err
-		}
-		_, err = s.emit(ctx, q, p, "post.unscheduled", row.CollectionID, id, s.postEventData(ctx, q, p.WorkspaceID, id, nil))
-		return err
-	})
+	err := s.tx(ctx, func(q *db.Queries) error { return s.cancelPostIn(ctx, q, p, id) })
 	if err != nil {
 		return Post{}, err
 	}
 	return s.getPost(ctx, p, id)
+}
+
+// cancelPostIn takes a scheduled post off the schedule inside the caller's transaction.
+func (s *Service) cancelPostIn(ctx context.Context, q *db.Queries, p Principal, id string) error {
+	row, err := q.GetPost(ctx, db.GetPostParams{WorkspaceID: p.WorkspaceID, ID: id})
+	if isNoRows(err) {
+		return notFound("post")
+	}
+	if err != nil {
+		return err
+	}
+	if row.Status != "scheduled" {
+		return conflict("only a scheduled post can be taken off the schedule")
+	}
+	now := s.now()
+	if err := s.cancelJobs(ctx, q, "publish_post:"+id); err != nil {
+		return err
+	}
+	if err := q.SetPostStatus(ctx, db.SetPostStatusParams{Status: "draft", PublishedAt: nullStr(""), UpdatedAt: now, ID: id}); err != nil {
+		return err
+	}
+	_, err = s.emit(ctx, q, p, "post.unscheduled", row.CollectionID, id, s.postEventData(ctx, q, p.WorkspaceID, id, nil))
+	return err
 }
 
 // titleOr is the post's title, or for a post from before titles were required its first line (at most 100
@@ -1426,7 +1429,7 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 	// An earlier attempt of this job sent the post but could not record it: record it now, never send again.
 	job := jobFrom(ctx)
 	if sent, ok := sentReceipt(job); ok {
-		return s.recordSent(ctx, postID, channelID, sent)
+		return s.recordSent(ctx, postID, channelID, sent, func() error { return s.finishTarget(ctx, postID, channelID, "published", sent, "") })
 	}
 	if row.UnpublishedAt.Valid {
 		// Taken down while this channel waited (a retry, a platform's quota): it must not go out afterwards.
@@ -1564,7 +1567,7 @@ func (s *Service) publishTarget(ctx context.Context, postID, channelID string) e
 		}
 		return err // the job retries with backoff; the last failure settles the target (jobFailed)
 	}
-	return s.recordSent(wctx, postID, channelID, result)
+	return s.recordSent(wctx, postID, channelID, result, func() error { return s.finishTarget(wctx, postID, channelID, "published", result, "") })
 }
 
 // settleRetry: the waits between tries to record a send that went out (a variable so tests can shrink it).
@@ -1596,14 +1599,15 @@ func sentReceipt(job *rivertype.JobRow) (providers.Result, bool) {
 	return *out.Sent, true
 }
 
-// recordSent records a send the platform accepted. A database that refuses it is asked again, here and then by
-// the job's next attempts, which find the receipt in the job's output and never call the platform again. When
-// every attempt fails, the target fails with the link and says so (jobFailed): a person checks it, nothing
-// sends it twice. ponytail: a process that dies before the receipt is stored still sends again on its retry.
-func (s *Service) recordSent(ctx context.Context, postID, channelID string, result providers.Result) error {
+// recordSent records a send the platform accepted (settle writes it: a post's target, a thread's reply). A
+// database that refuses it is asked again, here and then by the job's next attempts, which find the receipt in
+// the job's output and never call the platform again. When every attempt fails, the target (or reply) fails
+// with the link and says so (jobFailed): a person checks it, nothing sends it twice. ponytail: a process that
+// dies before the receipt is stored still sends again on its retry.
+func (s *Service) recordSent(ctx context.Context, postID, channelID string, result providers.Result, settle func() error) error {
 	var err error
 	for try := 0; ; try++ {
-		if err = s.finishTarget(ctx, postID, channelID, "published", result, ""); err == nil {
+		if err = settle(); err == nil {
 			return nil
 		}
 		if try == len(settleRetry) || ctx.Err() != nil {
@@ -1654,7 +1658,14 @@ func (s *Service) finishTarget(ctx context.Context, postID, channelID, status st
 // the transaction, so two outcomes at once settle it once), and errStaleAttempt when attempt is given and the
 // target is in a newer one.
 func (s *Service) settleTarget(ctx context.Context, postID, channelID, status string, result providers.Result, errMsg, attempt string) error {
-	row, err := s.Q.GetPostByID(ctx, postID)
+	return s.tx(ctx, func(q *db.Queries) error {
+		return s.settleTargetIn(ctx, q, postID, channelID, status, result, errMsg, attempt)
+	})
+}
+
+// settleTargetIn is settleTarget inside the caller's transaction (cancelling a job settles its target with it).
+func (s *Service) settleTargetIn(ctx context.Context, q *db.Queries, postID, channelID, status string, result providers.Result, errMsg, attempt string) error {
+	row, err := q.GetPostByID(ctx, postID)
 	if isNoRows(err) {
 		return nil
 	}
@@ -1662,26 +1673,24 @@ func (s *Service) settleTarget(ctx context.Context, postID, channelID, status st
 		return err
 	}
 	sys := Principal{WorkspaceID: row.WorkspaceID, Kind: PrincipalSystem, ID: "publisher", Name: "Publisher"}
-	return s.tx(ctx, func(q *db.Queries) error {
-		t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
-		if isNoRows(err) {
-			return nil
-		}
-		if err != nil {
+	t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
+	if isNoRows(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if t.Status != "publishing" {
+		return errTargetSettled
+	}
+	if attempt != "" {
+		if current, err := s.currentAttempt(ctx, q, postID, channelID); err != nil {
 			return err
+		} else if current != "" && current != attempt {
+			return errStaleAttempt
 		}
-		if t.Status != "publishing" {
-			return errTargetSettled
-		}
-		if attempt != "" {
-			if current, err := s.currentAttempt(ctx, q, postID, channelID); err != nil {
-				return err
-			} else if current != "" && current != attempt {
-				return errStaleAttempt
-			}
-		}
-		return s.settleTargetTx(ctx, q, sys, row, t, status, result, errMsg)
-	})
+	}
+	return s.settleTargetTx(ctx, q, sys, row, t, status, result, errMsg)
 }
 
 // currentAttempt is the attempt a target is in: its latest publish job ("" once that job's row was cleaned up,

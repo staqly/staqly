@@ -429,9 +429,10 @@ func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport, started
 	now := s.Now().UTC()
 	status, msg := "ready", ""
 	if err != nil {
+		// Nothing to remove under the export's name: a failed build never got as far as its ZIP (writeExportZip),
+		// and a ZIP that is there belongs to the builder that took the export over after our lease ran out.
 		status, msg = "failed", "export failed"
 		s.logger(ctx).Error("workspace export failed", "err", err)
-		os.Remove(final)
 	}
 	n, ferr := s.W.FinishWorkspaceExport(ctx, db.FinishWorkspaceExportParams{Status: status, SizeBytes: size, Error: msg,
 		FinishedAt: nullStr(formatTime(now)), ExpiresAt: formatTime(now.Add(exportTTL)), StartedAt: nullStr(started),
@@ -502,8 +503,10 @@ func (s *Service) sweepExportFiles(ctx context.Context) {
 				}
 				wsID, name = parts[1], parts[3]
 			}
-			id, ok := strings.CutSuffix(name, ".zip")
-			if !ok || !strings.HasPrefix(id, "exp_") || strings.ContainsAny(id, "/\\") {
+			// "<id>.zip", or a builder's temp file "<id>.zip.<random>.tmp" (left by a crash).
+			id, rest, ok := strings.Cut(name, ".zip")
+			temp := strings.HasSuffix(rest, ".tmp")
+			if !ok || (rest != "" && !temp) || !strings.HasPrefix(id, "exp_") || strings.ContainsAny(id, "/\\") {
 				return nil
 			}
 			var status string
@@ -515,7 +518,7 @@ func (s *Service) sweepExportFiles(ctx context.Context) {
 				row, err = s.Q.GetWorkspaceExport(ctx, db.GetWorkspaceExportParams{WorkspaceID: wsID, ID: id})
 				status = row.Status
 			}
-			if err == nil && (status == "ready" || status == "running") {
+			if err == nil && (status == "running" || (status == "ready" && !temp)) {
 				return nil
 			}
 			if err != nil && !isNoRows(err) {
@@ -554,7 +557,8 @@ type exportMedia struct {
 	File string `json:"file"` // path inside the ZIP, "" if the file was missing on disk
 }
 
-// writeExportZip writes the ZIP to dst via a temp file. Data is read page by
+// writeExportZip writes the ZIP to dst via a temp file of its own (two builders of one export, the second
+// after the first one's lease ran out, never write into each other's file). Data is read page by
 // page outside any transaction (a write lock for the whole export would stall
 // the workspace); ponytail: rows changed during the export may appear in their
 // before or after state — fine for portability, not a point-in-time snapshot
@@ -563,11 +567,11 @@ func (s *Service) writeExportZip(ctx context.Context, wsID, dst string, withMedi
 	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return 0, err
 	}
-	tmp := dst + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	f, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".*.tmp") // 0600
 	if err != nil {
 		return 0, err
 	}
+	tmp := f.Name()
 	defer func() {
 		if err != nil {
 			f.Close()
@@ -638,6 +642,11 @@ func (s *Service) fillExportZip(ctx context.Context, zw *zip.Writer, wsID string
 				continue
 			}
 			src, err := s.openMediaFile(ctx, m.WorkspaceID, m.StorageName)
+			if err != nil && !errors.Is(err, blob.ErrNotExist) {
+				// The store is failing, the file is not gone: an archive without it must not be handed out as
+				// complete. The export fails and can be requested again.
+				return fmt.Errorf("media %s: %w", m.ID, err)
+			}
 			if err != nil {
 				s.logger(ctx).Warn("export: media file missing", "media_id", m.ID)
 			} else {

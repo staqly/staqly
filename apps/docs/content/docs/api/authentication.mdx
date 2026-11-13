@@ -106,11 +106,11 @@ Business any number.
 | `collections:delete` | **Permanently delete** collections (with their schedules; their posts move to Default) |
 | `posts:read` | List, search and read posts, their history, preview, numbers, preview links and feedback, tags, and what your automation is asked for (`GET /v1/work`) |
 | `posts:write` | Create, edit and duplicate posts; create and revoke [preview links](/dashboard/share-a-preview), reply to and resolve feedback |
-| `posts:publish` | Schedule, publish and cancel posts, and change when a scheduled post goes out (also through `PATCH /v1/posts/{id}`); retry a target; report a result for [your own automation](/channels/your-own-automation); retry a job |
+| `posts:publish` | Schedule, publish and cancel posts, and change when a scheduled post goes out (also through `PATCH /v1/posts/{id}`); retry a target; report a result for [your own automation](/channels/your-own-automation); retry or cancel a job |
 | `posts:delete` | **Delete** posts and media files, restore files from Deleted (purging a post with its history stays `admin`) |
 | `channels:read` | List and read channels and the provider catalog |
 | `channels:manage` | Connect, change, test and remove channels; channel groups; [connect links](/channels/connect-links); register developer apps (they hold credentials) |
-| `schedules:manage` | List, create, change, run and delete schedules |
+| `schedules:manage` | List, create, change, run and delete schedules; cancel a schedule's queued run (with `posts:publish`) |
 | `media:read` | List, read and download media files and folders |
 | `media:write` | Upload media files; rename, tag and move them; manage folders |
 | `webhooks:manage` | Manage webhooks and their deliveries |

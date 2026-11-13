@@ -3062,8 +3062,10 @@ export interface paths {
          * Queue a failed job again, now (posts:publish)
          * @description A `publish_target` job is retried like its target (`POST /v1/posts/{id}/targets/{channel}/retry`):
          *     409 `unpublished` for a post that was taken down, 409 unless the target is `failed`, 422 for a
-         *     post carrying a file in Deleted. A `publish_post` job is refused (409) unless its post is still
-         *     `scheduled`: publish or schedule the post instead.
+         *     post carrying a file in Deleted. The retry is a new job (the one returned, with its own id): for
+         *     your own automation that id is the new `attempt_id`, and a late result naming the failed job is
+         *     refused. A `publish_post` job is refused (409) unless its post is still `scheduled`: publish or
+         *     schedule the post instead. Every other kind is the same job, queued again.
          */
         post: operations["retryJob"];
         delete?: never;
@@ -3084,10 +3086,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Cancel a queued job (posts:publish)
+         * Cancel a queued job (posts:publish; a schedule's run also needs schedules:manage)
          * @description 409 once a worker has started the job. What the job would have done is settled: a target fails
          *     (retry brings it back), a scheduled post goes back to draft, a recurring schedule skips this run
-         *     and queues its next one, a one-time schedule turns off.
+         *     and queues its next one, a one-time schedule turns off. Cancelling a schedule's run
+         *     (`run_schedule`) changes the schedule, so it also needs `schedules:manage` (403 without it).
          */
         post: operations["cancelJob"];
         delete?: never;
