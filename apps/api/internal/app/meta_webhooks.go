@@ -19,7 +19,7 @@ import (
 // Meta's webhooks (Instagram, Facebook Pages, Threads): Meta calls the server when someone comments under a post, and
 // (Instagram, story_insights) with a story's final numbers when it expires, which are stored as they come.
 // The server answers by reading that post's comments now (the read_responses job, as the 30-minute sweep does),
-// instead of waiting for the sweep. The payload itself is only a hint: the read asks the platform, so a forged or
+// and its numbers a minute later (check_target, as the 6-hour sweep does), instead of waiting for the sweeps. The payload itself is only a hint: the read asks the platform, so a forged or
 // odd event can at most queue a read of a post that is ours.
 //
 // Set up per app in Meta for Developers (Webhooks): the callback URL is the dashboard's /api/v1/meta/webhook and the
@@ -27,6 +27,12 @@ import (
 
 // metaWebhookDelay: Meta calls before its API shows the new comment, and a burst of comments makes one read.
 const metaWebhookDelay = 10 * time.Second
+
+// metaWebhookNumbersDelay: the same event (a comment, or on Facebook a reaction) also changes the post's numbers,
+// read by a check_target this long after the last event. Each event moves the queued check out again, so a burst of
+// reactions costs one read. ponytail: a post that keeps getting reactions faster than this waits for the quiet, or
+// for the 6-hour sweep and Refresh; give the check a deadline if people miss live numbers on busy posts.
+const metaWebhookNumbersDelay = time.Minute
 
 // MetaWebhookEnabled: the operator set a verify token; without one the endpoint answers 404.
 func (s *Service) MetaWebhookEnabled() bool { return s.metaVerifyToken() != "" }
@@ -106,8 +112,9 @@ func metaPostIDs(v any, out map[string]bool) {
 // maxMetaIDs: an event names a handful of posts; more is not Meta's.
 const maxMetaIDs = 100
 
-// HandleMetaWebhook checks the signature and queues a read of the comments of every published post the event names.
-// It returns how many reads it queued. Meta retries a call that fails, so only a bad signature is an error.
+// HandleMetaWebhook checks the signature and queues a read of the comments and of the numbers (likes, reactions,
+// comments count) of every published post the event names. It returns how many comment reads it queued. Meta retries
+// a call that fails, so only a bad signature is an error.
 func (s *Service) HandleMetaWebhook(ctx context.Context, body []byte, signature string) (int, error) {
 	if !s.metaSigned(body, signature) {
 		return 0, forbidden("the signature doesn't match any Meta app secret")
@@ -135,6 +142,10 @@ func (s *Service) HandleMetaWebhook(ctx context.Context, body []byte, signature 
 		}
 		for _, r := range rows {
 			if err := s.queueReadAt(ctx, r, s.Now().Add(metaWebhookDelay)); err != nil {
+				return queued, err
+			}
+			if err := s.enqueue(ctx, s.W, r.WorkspaceID, "check_target", "check_target:"+r.PostID+":"+r.ChannelID,
+				map[string]any{"post_id": r.PostID, "channel_id": r.ChannelID}, s.Now().Add(metaWebhookNumbersDelay), 3); err != nil {
 				return queued, err
 			}
 			queued++

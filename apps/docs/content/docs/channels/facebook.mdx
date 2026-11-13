@@ -133,8 +133,9 @@ take no comments.
 
 ## Comments right away
 
-By default staqly reads the comments under recent posts every 30 minutes. With Meta's webhooks it reads a post's
-comments within seconds of a new one:
+By default staqly reads the comments under recent posts every 30 minutes and their numbers every 6 hours. With
+Meta's webhooks it reads a post's comments within seconds of a new one, and its numbers (reactions, comments,
+shares) a minute after the last new comment or reaction:
 
 1. On the server, set `PROVIDER_META_WEBHOOK_VERIFY_TOKEN` to any random string and restart it.
 2. In [Meta for Developers](https://developers.facebook.com/apps), **Webhooks** → **Page**: **Callback URL**
