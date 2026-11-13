@@ -830,3 +830,37 @@ func TestBillingDetailsSayWhatIsPastDue(t *testing.T) {
 		}
 	}
 }
+
+// Was a bug: a paying workspace (an active subscription) given a plan by the operator until a date was read-only
+// from that date until the next reconcile round, up to ten minutes: nothing applied Stripe's state at the date.
+// A sync_billing job does, queued with the operator's plan for its end date.
+func TestOperatorPlanEndGivesThePaidPlanBackAtOnce(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	ws := workspaceID(e)
+	admin := e.keyWith(app.ScopeAdmin)
+	ctx := context.Background()
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil) // cus_1
+	sub := subObject("sub_1", ws, "active", "starter", "month")
+	if code := e.stripeEvent("evt_paid", "customer.subscription.created", sub, testWhsec); code != 200 {
+		t.Fatalf("event: %d", code)
+	}
+	f.set("GET /v1/subscriptions", func() (int, any) { return 200, map[string]any{"data": []any{sub}} })
+	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	if err := e.svc.SetPlan(ctx, ws, "business", until.Format(time.RFC3339)); err != nil {
+		t.Fatal(err)
+	}
+	e.svc.RunDueJobsOnce(ctx)
+	if b := e.billing(admin); b.Plan != "business" || b.Suspended {
+		t.Fatalf("while the operator's plan runs: %+v", b)
+	}
+	// The end date: before the job runs the workspace is what the bug left it for ten minutes.
+	e.svc.Now = func() time.Time { return until.Add(time.Second) }
+	if b := e.billing(admin); !b.Suspended {
+		t.Fatalf("setup: the operator's plan has not ended: %+v", b)
+	}
+	e.svc.RunDueJobsOnce(ctx)
+	if b := e.billing(admin); b.Plan != "starter" || b.Suspended {
+		t.Fatalf("at the end of the operator's plan the paying workspace is %+v, want starter and not suspended", b)
+	}
+}

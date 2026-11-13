@@ -8,6 +8,7 @@ import {
   Folder,
   FolderInput,
   FolderPlus,
+  CircleHelp,
   KeyRound,
   Pencil,
   PlugZap,
@@ -51,6 +52,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDropTarget } from '@/hooks/use-drop-target'
@@ -388,7 +390,8 @@ const ChannelRow = memo(function ChannelRow({
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <li
       className={cn(
-        'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:gap-x-6',
+        // Phones: the avatar and the menu stay on the first line of a row that grew a note or a Renew by line.
+        'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 max-sm:items-start gap-y-1 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:gap-x-6',
         draggable && 'cursor-grab active:cursor-grabbing',
         dragging && 'opacity-40',
       )}
@@ -432,12 +435,36 @@ const ChannelRow = memo(function ChannelRow({
         </span>
         {noteShown && <ChannelErrorNote id={noteId} message={channel.last_error} />}
         {renewBy && (
-          <span
-            data-testid="channel-renew-by"
-            title={`${platformName} ends this sign-in then, and posts after that wait. Renew takes one click while you are signed in to ${platformName}.`}
-            className={cn('mt-0.5 block text-xs', TONES.warning.text)}
-          >
-            Renew by {monthDayFormat().format(renewBy)}
+          // The line starts the renewal itself (on phones it is the only button for it, so the row stays short);
+          // the "?" beside it says why, opened by click, tap or keyboard.
+          <span className="mt-0.5 flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="channel-renew-by"
+              disabled={busy}
+              onClick={() => on.renew(channel)}
+              className={cn(
+                'relative rounded-sm text-left text-xs underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-2.5',
+                TONES.warning.text,
+              )}
+            >
+              Renew by {monthDayFormat().format(renewBy)}
+            </button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Why renew ${channel.name}`}
+                  className="relative inline-flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5"
+                >
+                  <CircleHelp className="size-3.5" aria-hidden />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-64 text-xs">
+                {platformName} ends this sign-in on that day, and posts after it wait. Renewing takes one click while
+                you are signed in to {platformName}.
+              </PopoverContent>
+            </Popover>
           </span>
         )}
       </span>
@@ -451,7 +478,13 @@ const ChannelRow = memo(function ChannelRow({
           </Button>
         )}
         {renewBy && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => on.renew(channel)}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="max-sm:hidden"
+            disabled={busy}
+            onClick={() => on.renew(channel)}
+          >
             <KeyRound /> Renew
           </Button>
         )}

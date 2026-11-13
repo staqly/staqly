@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -120,7 +121,7 @@ func (s *Service) livePrice(ctx context.Context, plan Plan, interval string) (pr
 // lookupPrice: a Stripe price (id and unit amount) by lookup key, or a pinned id, cached; missing says what
 // isn't set up.
 func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) (priceCacheEntry, error) {
-	cacheKey := s.Cfg.Billing.APIBase + "|" + s.Cfg.Billing.SecretKey + "|" + key + "|" + pinned // one Stripe account's prices
+	cacheKey := s.priceCacheKey(key, pinned)
 	priceIDs.Lock()
 	c, ok := priceIDs.m[cacheKey]
 	priceIDs.Unlock()
@@ -169,6 +170,28 @@ func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) 
 		found = list.Data[0]
 	}
 	return remember(priceCacheEntry{id: found.ID, cents: found.UnitAmount, currency: found.Currency, exp: s.Now().Add(priceCacheTTL)})
+}
+
+// priceCacheKey: one Stripe account's price by lookup key (and pinned id) in priceIDs.
+func (s *Service) priceCacheKey(key, pinned string) string {
+	return s.Cfg.Billing.APIBase + "|" + s.Cfg.Billing.SecretKey + "|" + key + "|" + pinned
+}
+
+// forgetPrice drops what lookupPrice remembers for a lookup key: Stripe just refused the price it names.
+func (s *Service) forgetPrice(key string) {
+	priceIDs.Lock()
+	delete(priceIDs.m, s.priceCacheKey(key, ""))
+	priceIDs.Unlock()
+}
+
+// stripeParam: the request parameter Stripe refused in err ("" when err is no refusal by Stripe, or names none).
+func stripeParam(err error) string {
+	var e *Error
+	if !errors.As(err, &e) || e.Code != "payment_provider_error" {
+		return ""
+	}
+	param, _ := e.Details["provider_param"].(string)
+	return param
 }
 
 // withLivePrices: a plan with the amounts Stripe actually charges (per seat, monthly and yearly) when billing
@@ -1507,6 +1530,15 @@ func (s *Service) cancelSubscription(ctx context.Context, workspaceID string) er
 	return nil
 }
 
+type stripeHandledKey struct{}
+
+// stripeHandles: a context for a Stripe request whose caller deals with some refusals itself (a lost race
+// answered 409 or 404, a replaced price read again): the ones `known` names, by HTTP status and the parameter
+// Stripe refused, are logged as warnings. Every other refusal is an error, as without it.
+func stripeHandles(ctx context.Context, known func(status int, param string) bool) context.Context {
+	return context.WithValue(ctx, stripeHandledKey{}, known)
+}
+
 // stripe calls the Stripe API with a form-encoded body and decodes the JSON
 // answer into out.
 func (s *Service) stripe(ctx context.Context, method, path string, form url.Values, out any) error {
@@ -1550,7 +1582,11 @@ func (s *Service) stripeKeyed(ctx context.Context, method, path string, form url
 		_ = json.Unmarshal(raw, &e)
 		// Never the query string (ids, a typed promotion code) nor Stripe's message, which may quote them.
 		logPath, _, _ := strings.Cut(path, "?")
-		s.logger(ctx).Error("stripe request failed", "path", logPath, "status", resp.StatusCode, "code", e.Error.Code, "type", e.Error.Type)
+		level := slog.LevelError
+		if known, _ := ctx.Value(stripeHandledKey{}).(func(int, string) bool); known != nil && known(resp.StatusCode, e.Error.Param) {
+			level = slog.LevelWarn
+		}
+		s.logger(ctx).Log(ctx, level, "stripe request failed", "path", logPath, "status", resp.StatusCode, "code", e.Error.Code, "type", e.Error.Type)
 		return &Error{Code: "payment_provider_error", Status: 502, Message: "the payment provider rejected the request",
 			Details: map[string]any{"provider_code": e.Error.Code, "provider_param": e.Error.Param}}
 	}

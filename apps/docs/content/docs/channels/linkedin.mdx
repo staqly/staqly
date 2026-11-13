@@ -77,14 +77,15 @@ self-serve products above come without them. So someone signs in again within 60
 makes that one click:
 
 - In the last 14 days the channel's row on **Channels** says **Renew by** with the date and has a
-  **Renew** button; **Renew sign-in** is in the row's menu all the time. It goes to LinkedIn and
+  **Renew** button (on a phone the **Renew by** line is the button; the **?** beside it says why);
+  **Renew sign-in** is in the row's menu all the time. It goes to LinkedIn and
   comes straight back: while you are signed in to linkedin.com and the sign-in has not run out yet,
   LinkedIn skips its permission page. The channel then has 60 more days.
 - 14 days ahead staqly emits [`channel.expiring`](/api/events) once. The bell shows it; in the cloud
   owners and admins also get an email (**Settings → Notifications**), and an
   [alert](/automation/alerts) or a webhook with that event tells you anywhere else. Over the API the
   date is the channel's `renew_by`.
-- The composer warns when a post is scheduled for after that date.
+- The composer warns when a post is scheduled for after that date, already in the date picker.
 - If nobody renews it, the channel turns **Needs reconnect** when the sign-in runs out (the
   `channel.needs_reconnect` event, one of an alert's defaults) and its posts fail with the reason
   until someone reconnects it.

@@ -648,6 +648,7 @@ paths:
         reports them (seconds). When the payment doesn't go through: 402 `payment_failed` whose `details` say why
         (`reason`, `addon`, `pay_url`; see `PendingPayment`), the subscription stays as it was without the add-on,
         and `GET /v1/billing/pending-payment` reads the same later.
+        A workspace that already has the add-on answers 409, also when another request added it at the same moment.
       responses:
         "204": { description: Added }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -664,6 +665,7 @@ paths:
         Signed-in people only: an API key gets 403, whatever its scopes.
         An add-on still waiting for its payment (a pending update) is cancelled instead: its invoice is voided and nothing stays due.
         Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
+        An add-on the workspace doesn't have answers 404, also when another request removed it at the same moment.
       responses:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Unauthorized" }

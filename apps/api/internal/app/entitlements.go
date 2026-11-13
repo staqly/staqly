@@ -414,6 +414,8 @@ func (s *Service) subscriptionInterval(sub stripeSubscription) string {
 var errAddonInTrial = &Error{Code: "conflict", Status: 409, Message: "add-ons come with a paid plan: choose a plan first (or start the paid plan now)",
 	Details: map[string]any{"reason": "trialing"}}
 
+var errHasAddon = &Error{Code: "conflict", Status: 409, Message: "the workspace already has this add-on"}
+
 // liveSubscriptionOf: the workspace's live subscription from Stripe, or a conflict saying a plan comes first.
 func (s *Service) liveSubscriptionOf(ctx context.Context, workspaceID string) (stripeSubscription, error) {
 	var sub stripeSubscription
@@ -486,10 +488,11 @@ func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
 		return errAddonInTrial
 	}
 	if _, ok := addonItem(sub, id); ok {
-		return &Error{Code: "conflict", Status: 409, Message: "the workspace already has this add-on"}
+		return errHasAddon
 	}
 	interval := s.subscriptionInterval(sub)
-	pr, err := s.lookupPrice(ctx, AddonLookupKey(id, interval), "", fmt.Sprintf("this add-on is not sold %sly on this instance", interval))
+	key, missing := AddonLookupKey(id, interval), fmt.Sprintf("this add-on is not sold %sly on this instance", interval)
+	pr, err := s.lookupPrice(ctx, key, "", missing)
 	if err != nil {
 		return err
 	}
@@ -500,13 +503,37 @@ func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
 		PendingUpdate *stripePendingUpdate `json:"pending_update"`
 		LatestInvoice json.RawMessage      `json:"latest_invoice"`
 	}
-	if err := s.stripe(ctx, "POST", "/v1/subscriptions/"+url.PathEscape(sub.ID), url.Values{
-		"items[0][price]":    {pr.id},
-		"items[0][quantity]": {"1"},
-		"proration_behavior": {"always_invoice"},
-		"payment_behavior":   {"pending_if_incomplete"},
-		"expand[]":           {"latest_invoice"},
-	}, &out); err != nil {
+	// The two refusals handled below, a lost race and a replaced price, are no errors of this server.
+	handled := stripeHandles(ctx, func(_ int, param string) bool { return param == "plan" || strings.HasSuffix(param, "[price]") })
+	add := func(price string) error {
+		return s.stripe(handled, "POST", "/v1/subscriptions/"+url.PathEscape(sub.ID), url.Values{
+			"items[0][price]":    {price},
+			"items[0][quantity]": {"1"},
+			"proration_behavior": {"always_invoice"},
+			"payment_behavior":   {"pending_if_incomplete"},
+			"expand[]":           {"latest_invoice"},
+		}, &out)
+	}
+	err = add(pr.id)
+	// Stripe refused the price: it was replaced since lookupPrice cached it (archived: 400 without a code, "The
+	// price specified is inactive"; deleted: resource_missing; both name the parameter items[0][price]). Once
+	// more with the price the lookup key has now.
+	if strings.HasSuffix(stripeParam(err), "[price]") {
+		s.forgetPrice(key)
+		fresh, lerr := s.lookupPrice(ctx, key, "", missing)
+		if lerr != nil {
+			return lerr
+		}
+		if fresh.id != pr.id {
+			err = add(fresh.id)
+		}
+	}
+	// Another request added it since the subscription was read above (two purchases at once): Stripe refuses a
+	// second item with the same price (400 invalid_request_error without a code, parameter "plan").
+	if stripeParam(err) == "plan" {
+		return errHasAddon
+	}
+	if err != nil {
 		return err
 	}
 	if out.PendingUpdate != nil {
@@ -544,7 +571,15 @@ func (s *Service) RemoveAddon(ctx context.Context, p Principal, id string) error
 	if sub.Status == "past_due" && s.voidInvoicesOf(ctx, sub.ID, item) {
 		proration = "none"
 	}
-	if err := s.stripe(ctx, "DELETE", "/v1/subscription_items/"+url.PathEscape(item)+"?proration_behavior="+proration, nil, nil); err != nil {
+	gone := stripeHandles(ctx, func(status int, _ string) bool { return status == 404 }) // the item, removed meanwhile
+	if err := s.stripe(gone, "DELETE", "/v1/subscription_items/"+url.PathEscape(item)+"?proration_behavior="+proration, nil, nil); err != nil {
+		// Another request removed it since the subscription was read above. Stripe says so with a 404 that has
+		// neither a code nor a parameter ("Invalid subscription_item id"), so the subscription is asked instead.
+		if now, rerr := s.liveSubscriptionOf(ctx, p.WorkspaceID); rerr == nil {
+			if _, still := addonItem(now, id); !still {
+				return notFound("add-on")
+			}
+		}
 		return err
 	}
 	return s.tx(ctx, func(q *db.Queries) error { return s.queueEntitlementSync(ctx, q, p.WorkspaceID) })

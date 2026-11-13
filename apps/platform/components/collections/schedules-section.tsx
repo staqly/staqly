@@ -512,7 +512,10 @@ function ScheduleSheet({
               <FieldError>{errors.endpoint_url}</FieldError>
             </Field>
           </div>
-          <div className="flex justify-end gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div
+            data-slot="sheet-footer"
+            className="flex justify-end gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+          >
             <Button type="button" variant="outline" onClick={() => close(false)}>
               Cancel
             </Button>

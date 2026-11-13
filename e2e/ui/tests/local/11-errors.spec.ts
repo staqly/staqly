@@ -171,9 +171,7 @@ test.describe('the server goes away mid-session', () => {
       env: { DASHBOARD_EXPOSED: 'true' },
       dataDir: srv.dataDir,
     })
-    // The error toast sits over the footer and stays while the pointer rests on it: move away, as a person would.
-    await page.mouse.move(0, 0)
-    await expect(toasts(page)).toHaveCount(0, { timeout: 10_000 })
+    // Right away, the pointer still on the button: the error toast sits above the footer, not over it.
     await publishNow(page)
     await expect.poll(async () => (await getPost(api, col.posts[0]!.id)).status, { timeout: 20_000 }).toBe('publishing')
     await ctx.close()

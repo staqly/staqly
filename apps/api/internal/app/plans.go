@@ -267,6 +267,9 @@ func describeLimit(limit string, max int64) string {
 	case LimitAlerts:
 		return fmt.Sprintf("%d alerts", max)
 	case LimitStorage:
+		if max < gb/10 { // "0.0 GB" for a limit in megabytes
+			return sizeText(max) + " of storage"
+		}
 		return fmt.Sprintf("%.1f GB of storage", float64(max)/gb)
 	case LimitMaxUpload:
 		return fmt.Sprintf("files up to %d MB", max>>20)
@@ -490,7 +493,18 @@ func (s *Service) SetPlan(ctx context.Context, workspaceID, planID, until string
 		reason = "operator_comp"
 	}
 	actor := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "operator", Name: "Operator"}
-	err := s.tx(ctx, func(q *db.Queries) error { return s.changePlan(ctx, q, actor, planID, exp, reason) })
+	err := s.tx(ctx, func(q *db.Queries) error {
+		if err := s.changePlan(ctx, q, actor, planID, exp, reason); err != nil || exp == "" || !s.BillingEnabled() {
+			return err
+		}
+		// At the end date Stripe's subscription is the plan again (applySubscription): read it then, not up to
+		// ten minutes later with the reconcile round, during which a paying workspace would be read-only.
+		end, err := time.Parse(timeFormat, exp)
+		if err != nil {
+			return err
+		}
+		return s.enqueue(ctx, q, workspaceID, "sync_billing", "sync_billing:"+workspaceID, jobPayload{}, end, 0)
+	})
 	if isNotFound(err) {
 		return fmt.Errorf("workspace %s not found", workspaceID)
 	}

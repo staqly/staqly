@@ -271,6 +271,7 @@ still running when its server stopped is picked up again after 15 minutes.
 | `repost` | Reposts a published post from another channel of the workspace (X). |
 | `notify_people`, `notify_person` | Cloud: emails the people who [get notified](/dashboard/notifications) about an event, one job per person. |
 | `sync_seats`, `sync_entitlements` | Cloud with billing: brings the subscription's seats in line with the members, and reads what Stripe grants the workspace. |
+| `sync_billing` | Cloud with billing: reads the workspace's subscription from Stripe when a plan the operator set until a date runs out, so the paid plan is back at once. |
 | `welcome_email` | Cloud: emails an owner once that the workspace's trial started or that it [first paid for a plan](/plans#welcome-emails), and that [a payment failed or the subscription ended for it](/plans#payment-emails). |
 | `ai_run` | Runs one AI request (the [design editor](/dashboard/design-editor), MCP `generate_media`) and keeps its result. |
 

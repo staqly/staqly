@@ -31,6 +31,11 @@ type addonStripe struct {
 	removed   []string     // proration_behavior of each removed item
 	voided    []string
 	calls     []string
+	// What the sandbox answered on 2026-11-13. raced: another request does the same change just before this one's
+	// write arrives (the item is there already, or gone already). archived: this price was replaced by newPrice,
+	// which the lookup key names now. stuck: Stripe refuses to remove the item, which stays.
+	raced, stuck       bool
+	archived, newPrice string
 }
 
 func newAddonStripe(t *testing.T, e *env) *addonStripe {
@@ -67,6 +72,10 @@ func newAddonStripe(t *testing.T, e *env) *addonStripe {
 		enc := json.NewEncoder(w)
 		switch route {
 		case "GET /v1/prices":
+			if f.newPrice != "" {
+				fmt.Fprintf(w, `{"data":[{"id":%q,"unit_amount":900,"currency":"eur"}]}`, f.newPrice)
+				return
+			}
 			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":900,"currency":"eur"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
 		case "GET /v1/products":
 			enc.Encode(map[string]any{"data": []any{map[string]any{"name": "Webhooks pack",
@@ -75,6 +84,17 @@ func newAddonStripe(t *testing.T, e *env) *addonStripe {
 			enc.Encode(sub())
 		case "POST /v1/subscriptions/sub_1", "POST /v1/subscription_items":
 			f.forms = append(f.forms, r.Form)
+			if f.raced {
+				f.addon = true
+				w.WriteHeader(400)
+				fmt.Fprint(w, `{"error":{"message":"A new item with Price price_1 can't be added to this Subscription because an existing Subscription Item si_addon is already using that Price.","param":"plan","type":"invalid_request_error"}}`)
+				return
+			}
+			if f.archived != "" && r.Form.Get("items[0][price]") == f.archived {
+				w.WriteHeader(400)
+				fmt.Fprint(w, `{"error":{"message":"The price specified is inactive. This field only accepts active prices.","param":"items[0][price]","type":"invalid_request_error"}}`)
+				return
+			}
 			switch {
 			case !f.declines:
 				f.addon, f.pending = true, false
@@ -93,7 +113,16 @@ func newAddonStripe(t *testing.T, e *env) *addonStripe {
 			enc.Encode(map[string]any{"data": f.invoices})
 		case "DELETE /v1/subscription_items/si_addon":
 			f.removed = append(f.removed, r.URL.Query().Get("proration_behavior"))
-			f.addon = false
+			if f.stuck {
+				w.WriteHeader(400)
+				fmt.Fprint(w, `{"error":{"message":"fake: not now","type":"invalid_request_error"}}`)
+				return
+			}
+			if f.addon = false; f.raced {
+				w.WriteHeader(404)
+				fmt.Fprint(w, `{"error":{"message":"Invalid subscription_item id: si_addon","type":"invalid_request_error"}}`)
+				return
+			}
 			fmt.Fprint(w, `{"id":"si_addon","deleted":true}`)
 		default:
 			id, ok := strings.CutPrefix(r.URL.Path, "/v1/invoices/")
@@ -471,5 +500,56 @@ func TestPaymentFailureEmails(t *testing.T) {
 	expect("cancelled by the customer", 0)
 	if b := billing(); b.EndedFor != nil || !b.Suspended {
 		t.Fatalf("cancelled by the customer: %+v", b)
+	}
+}
+
+// Was a bug: two purchases of one add-on at once, or two removals, answered 502 payment_provider_error to the one
+// that lost: Stripe refused it because the other had already done it. The loser is told what is true now: 409,
+// the workspace has the add-on; 404, the add-on is no longer there. A refusal nobody can name stays 502.
+func TestAddonChangedByAnotherRequestAtOnce(t *testing.T) {
+	e := newEnv(t)
+	f := newAddonStripe(t, e)
+	set := func(fn func()) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		fn()
+	}
+	var body paymentErr
+	set(func() { f.raced = true })
+	e.pay("POST", "/v1/billing/addons/webhooks_pack", nil, 409, &body)
+	if body.Error.Code != "conflict" || !strings.Contains(body.Error.Message, "already has this add-on") {
+		t.Fatalf("purchase that lost: %+v", body.Error)
+	}
+	// The add-on is on the subscription now (the other request's); a removal that loses to another removal.
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 404, &body)
+	if body.Error.Code != "not_found" {
+		t.Fatalf("removal that lost: %+v", body.Error)
+	}
+	// Stripe refuses the removal and the add-on is still there: no lost race, the refusal is passed on.
+	set(func() { f.raced, f.addon, f.stuck = false, true, true })
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 502, &body)
+	if body.Error.Code != "payment_provider_error" {
+		t.Fatalf("unknown refusal: %+v", body.Error)
+	}
+}
+
+// Was a bug: an add-on's price replaced in Stripe (the old one archived, the new one under the same lookup key)
+// answered 502 to every purchase for up to ten minutes, as long as the old price was remembered. Stripe's
+// refusal of the price drops what was remembered and the purchase goes on with the price on sale now.
+func TestAddonPriceReplacedInStripe(t *testing.T) {
+	e := newEnv(t)
+	f := newAddonStripe(t, e)
+	admin := e.keyWith(app.ScopeAdmin)
+	var list struct{ Data []app.Addon }
+	e.do(nil, "GET", "/v1/billing/addons", admin, nil, 200, &list) // the price is read and remembered
+	f.mu.Lock()
+	f.archived, f.newPrice = "price_addon_webhooks_pack_month", "price_addon_new"
+	f.mu.Unlock()
+	e.pay("POST", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := len(f.forms)
+	if n < 2 || f.forms[n-2].Get("items[0][price]") != f.archived || f.forms[n-1].Get("items[0][price]") != "price_addon_new" || !f.addon {
+		t.Fatalf("purchase after the price was replaced: %v", f.forms)
 	}
 }

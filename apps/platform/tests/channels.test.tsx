@@ -104,6 +104,11 @@ describe('channels', () => {
     await user.click(within(soonRow!).getByRole('button', { name: 'Renew' }))
     await waitFor(() => expect(api.find('GET', '/v1/channels/oauth/mastodon/start')).toHaveLength(1))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // The Renew by line does the same (on phones it is the only button), and the "?" beside it says why.
+    await user.click(within(soonRow!).getByTestId('channel-renew-by'))
+    await waitFor(() => expect(api.find('GET', '/v1/channels/oauth/mastodon/start')).toHaveLength(2))
+    await user.click(within(soonRow!).getByRole('button', { name: /^Why renew / }))
+    expect(await screen.findByText(/ends this sign-in on that day/)).toBeInTheDocument()
   })
 
   it('a renewal started under a group filter comes back to that group', async () => {

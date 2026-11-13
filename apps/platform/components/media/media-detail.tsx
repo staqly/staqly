@@ -515,7 +515,10 @@ function DetailForm({
           </TabsContent>
         </Tabs>
 
-        <div className="flex flex-wrap items-center gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div
+          data-slot="sheet-footer"
+          className="flex flex-wrap items-center gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+        >
           {canWrite &&
             (trashed ? (
               <>

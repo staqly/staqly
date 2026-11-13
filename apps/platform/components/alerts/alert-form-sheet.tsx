@@ -724,7 +724,10 @@ function ChannelForm({ channel, onDone }: { channel: Alert | null; onDone: () =>
         </Section>
       </div>
 
-      <div className="flex justify-end gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div
+        data-slot="sheet-footer"
+        className="flex justify-end gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
         <Button type="button" variant="outline" onClick={onDone}>
           Cancel
         </Button>

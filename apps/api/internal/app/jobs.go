@@ -117,6 +117,8 @@ func (s *Service) execJob(ctx context.Context, kind string, a jobArgs) error {
 		return s.runSyncSeats(ctx, a.WorkspaceID, p.At)
 	case "sync_entitlements":
 		return s.runSyncEntitlements(ctx, a.WorkspaceID)
+	case "sync_billing":
+		return s.runSyncBilling(ctx, a.WorkspaceID)
 	case "ai_run":
 		return s.runAIJob(ctx, a.WorkspaceID, p.AIJobID)
 	case "read_responses":

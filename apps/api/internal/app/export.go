@@ -165,12 +165,14 @@ type WorkspaceExport struct {
 	ExpiresAt   string  `json:"expires_at"`
 	DownloadURL string  `json:"download_url,omitempty"`
 	// IncludesMedia is false for a data-only export (Starter): no media/ files.
-	IncludesMedia bool `json:"includes_media"`
+	IncludesMedia bool   `json:"includes_media"`
+	objectKey     string // where the finished archive is on S3 ("": under exportKey, as before 00021)
 }
 
 func toWorkspaceExport(x db.WorkspaceExport) WorkspaceExport {
 	out := WorkspaceExport{ID: x.ID, Status: x.Status, SizeBytes: x.SizeBytes, Error: x.Error, CreatedAt: x.CreatedAt,
-		StartedAt: ptr(x.StartedAt), FinishedAt: ptr(x.FinishedAt), ExpiresAt: x.ExpiresAt, IncludesMedia: x.IncludesMedia != 0}
+		StartedAt: ptr(x.StartedAt), FinishedAt: ptr(x.FinishedAt), ExpiresAt: x.ExpiresAt, IncludesMedia: x.IncludesMedia != 0,
+		objectKey: x.ObjectKey}
 	if x.Status == "ready" {
 		out.DownloadURL = "/v1/workspace/exports/" + x.ID + "/download"
 	}
@@ -196,6 +198,8 @@ func (s *Service) exportStore() blob.Store {
 	return blob.NewDisk(s.ExportDir())
 }
 
+// exportKey: the archive's name in the store. On S3 every builder uploads under a name of its own, which starts
+// with this one (buildExport), and the export's row says which one is the archive (object_key).
 func (s *Service) exportKey(workspaceID, id string) string {
 	if s.exportsOnS3() {
 		return workspaceKey(workspaceID) + "backups/" + id + ".zip"
@@ -304,7 +308,7 @@ func (s *Service) OpenWorkspaceExport(ctx context.Context, p Principal, id strin
 	case x.Status != "ready":
 		return nil, x, conflict("export is " + x.Status)
 	}
-	f, err := s.exportStore().Open(ctx, s.exportKey(p.WorkspaceID, x.ID)) // the stored id, not the request's
+	f, err := s.exportStore().Open(ctx, firstNonEmpty(x.objectKey, s.exportKey(p.WorkspaceID, x.ID))) // the stored id, not the request's
 	if s.exportsOnS3() && errors.Is(err, blob.ErrNotExist) {
 		// ZIPs made before S3 was enabled remain downloadable until their normal expiry.
 		f, err = os.Open(s.exportPath(x.ID))
@@ -415,11 +419,15 @@ func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport, started
 		}
 	}()
 	size, err := s.writeExportZip(bctx, j.WorkspaceID, final, j.IncludesMedia != 0)
+	// On S3 this builder's archive has a name of its own: one that lost its lease and still got this far would
+	// otherwise put its (older) archive over the one of the builder that took the export over and finished it.
+	object := ""
 	if err == nil && s.exportsOnS3() {
 		var f *os.File
 		f, err = os.Open(final)
 		if err == nil {
-			err = s.Cfg.Blob.Put(bctx, s.exportKey(j.WorkspaceID, j.ID), f, size, "application/zip")
+			object = s.exportKey(j.WorkspaceID, j.ID) + "." + newID("b")
+			err = s.Cfg.Blob.Put(bctx, object, f, size, "application/zip")
 			f.Close()
 		}
 		os.Remove(final)
@@ -436,12 +444,17 @@ func (s *Service) buildExport(ctx context.Context, j db.WorkspaceExport, started
 	}
 	n, ferr := s.W.FinishWorkspaceExport(ctx, db.FinishWorkspaceExportParams{Status: status, SizeBytes: size, Error: msg,
 		FinishedAt: nullStr(formatTime(now)), ExpiresAt: formatTime(now.Add(exportTTL)), StartedAt: nullStr(started),
-		ID: j.ID, Lease: nullStr(lease)})
+		ObjectKey: object, ID: j.ID, Lease: nullStr(lease)})
 	if ferr != nil {
 		s.logger(ctx).Error("export finish failed", "err", ferr)
 		return
 	}
 	if n == 0 {
+		if object != "" { // ours alone, and not the export's archive
+			if err := s.Cfg.Blob.Delete(ctx, object); err != nil {
+				s.logger(ctx).Warn("export object not removed", "err", err) // the hourly sweep removes it
+			}
+		}
 		// Taken over by another builder after the lease ran out: the file under this id is theirs now.
 		if st, err := s.Q.ExportStatusByID(ctx, j.ID); err != nil && !isNoRows(err) || st == "pending" || st == "running" || st == "ready" {
 			return
@@ -503,22 +516,24 @@ func (s *Service) sweepExportFiles(ctx context.Context) {
 				}
 				wsID, name = parts[1], parts[3]
 			}
-			// "<id>.zip", or a builder's temp file "<id>.zip.<random>.tmp" (left by a crash).
+			// "<id>.zip", a builder's temp file "<id>.zip.<random>.tmp" (left by a crash) or, on S3, a builder's
+			// own archive "<id>.zip.<random>".
 			id, rest, ok := strings.Cut(name, ".zip")
 			temp := strings.HasSuffix(rest, ".tmp")
-			if !ok || (rest != "" && !temp) || !strings.HasPrefix(id, "exp_") || strings.ContainsAny(id, "/\\") {
+			if !ok || (rest != "" && !temp && wsID == "") || !strings.HasPrefix(id, "exp_") || strings.ContainsAny(id, "/\\") {
 				return nil
 			}
 			var status string
 			var err error
+			archive := rest == "" // on disk; on S3 the one the row names (a builder that lost left the others)
 			if wsID == "" {
 				status, err = s.Q.ExportStatusByID(ctx, id)
 			} else {
 				var row db.WorkspaceExport
 				row, err = s.Q.GetWorkspaceExport(ctx, db.GetWorkspaceExportParams{WorkspaceID: wsID, ID: id})
-				status = row.Status
+				status, archive = row.Status, key == firstNonEmpty(row.ObjectKey, s.exportKey(wsID, id))
 			}
-			if err == nil && (status == "running" || (status == "ready" && !temp)) {
+			if err == nil && (status == "running" || (status == "ready" && archive)) {
 				return nil
 			}
 			if err != nil && !isNoRows(err) {
@@ -540,7 +555,12 @@ func (s *Service) removeExportFile(ctx context.Context, workspaceID, id string) 
 		s.logger(ctx).Warn("export file not removed", "export_id", id, "err", err)
 	}
 	if s.exportsOnS3() {
-		if err := s.Cfg.Blob.Delete(ctx, s.exportKey(workspaceID, id)); err != nil {
+		// Every object of the export: its archive (under the shared name, or a builder's own) and what a builder
+		// that lost may have left.
+		err := s.Cfg.Blob.Walk(ctx, s.exportKey(workspaceID, id), func(key string, _ int64) error {
+			return s.Cfg.Blob.Delete(ctx, key)
+		})
+		if err != nil {
 			s.logger(ctx).Warn("export object not removed", "export_id", id, "err", err)
 		}
 	}

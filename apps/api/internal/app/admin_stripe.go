@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"regexp"
@@ -44,6 +45,8 @@ type AdminPromoCoupon struct {
 	Currency         string  `json:"currency"`
 	Duration         string  `json:"duration"`
 	DurationInMonths int     `json:"duration_in_months"`
+	// Deleted in Stripe since the code was made ({id, deleted: true}): nothing else is known of it.
+	Deleted bool `json:"deleted,omitempty"`
 }
 
 type AdminPromo struct {
@@ -170,18 +173,23 @@ type stripePromo struct {
 	TimesRedeemed  int    `json:"times_redeemed"`
 	MaxRedemptions int    `json:"max_redemptions"`
 	ExpiresAt      int64  `json:"expires_at"`
-	Coupon         struct {
-		ID               string  `json:"id"`
-		PercentOff       float64 `json:"percent_off"`
-		AmountOff        int64   `json:"amount_off"`
-		Currency         string  `json:"currency"`
-		Duration         string  `json:"duration"`
-		DurationInMonths int     `json:"duration_in_months"`
-	} `json:"coupon"`
+	// The coupon: before Stripe API 2025-09 the code's `coupon`; since then `promotion.coupon`, an id unless the
+	// request expands it (promoCoupon).
+	Coupon    AdminPromoCoupon `json:"coupon"`
+	Promotion struct {
+		Coupon json.RawMessage `json:"coupon"`
+	} `json:"promotion"`
 }
 
+// promoCoupon: asks Stripe for a promotion code's coupon in full; "data." in front for a list.
+const promoCoupon = "promotion.coupon"
+
 func (p stripePromo) admin() AdminPromo {
-	return AdminPromo{ID: p.ID, Code: p.Code, Active: p.Active, Coupon: AdminPromoCoupon(p.Coupon),
+	coupon := p.Coupon
+	if coupon.ID == "" && json.Unmarshal(p.Promotion.Coupon, &coupon) != nil {
+		_ = json.Unmarshal(p.Promotion.Coupon, &coupon.ID) // not expanded: its id
+	}
+	return AdminPromo{ID: p.ID, Code: p.Code, Active: p.Active, Coupon: coupon,
 		TimesRedeemed: p.TimesRedeemed, MaxRedemptions: p.MaxRedemptions, ExpiresAt: unixRFC3339(p.ExpiresAt)}
 }
 
@@ -193,7 +201,7 @@ func (s *Service) AdminListPromotionCodes(ctx context.Context, cursor string, li
 	if limit <= 0 || limit > 100 {
 		limit = 25
 	}
-	form := url.Values{"limit": {strconv.Itoa(limit)}}
+	form := url.Values{"limit": {strconv.Itoa(limit)}, "expand[]": {"data." + promoCoupon}}
 	if cursor != "" {
 		form.Set("starting_after", cursor)
 	}
@@ -271,7 +279,9 @@ func (s *Service) AdminCreatePromotionCode(ctx context.Context, a Admin, in Admi
 	if err := s.stripe(ctx, "POST", "/v1/coupons", cf, &coupon); err != nil {
 		return AdminPromo{}, err
 	}
-	pf := url.Values{"coupon": {coupon.ID}, "code": {in.Code}}
+	// Stripe API 2025-09 and later take the coupon as promotion[coupon] and refuse `coupon` (parameter_unknown);
+	// the versions before take this form too (tried on 2025-08-27.basil).
+	pf := url.Values{"promotion[type]": {"coupon"}, "promotion[coupon]": {coupon.ID}, "code": {in.Code}, "expand[]": {promoCoupon}}
 	if in.MaxRedemptions > 0 {
 		pf.Set("max_redemptions", strconv.Itoa(in.MaxRedemptions))
 	}
@@ -297,7 +307,7 @@ func (s *Service) AdminDeactivatePromotionCode(ctx context.Context, a Admin, id 
 		return AdminPromo{}, errAdminNoBilling
 	}
 	var p stripePromo
-	if err := s.stripe(ctx, "POST", "/v1/promotion_codes/"+url.PathEscape(id), url.Values{"active": {"false"}}, &p); err != nil {
+	if err := s.stripe(ctx, "POST", "/v1/promotion_codes/"+url.PathEscape(id), url.Values{"active": {"false"}, "expand[]": {promoCoupon}}, &p); err != nil {
 		return AdminPromo{}, err
 	}
 	res := p.admin()
