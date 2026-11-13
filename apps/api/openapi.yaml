@@ -2418,7 +2418,7 @@ paths:
       operationId: refreshPostResponses
       tags: [posts]
       summary: Read the post's responses from the platforms now (posts:write)
-      description: Reads the comments from every channel the post is on and returns them, new ones included; a channel that can't be read now is read again in the background. The AI analysis follows a couple of minutes later.
+      description: Reads the comments from every channel the post is on and returns them, new ones included; a channel that can't be read now is read again in the background. The AI analysis of new comments starts at once.
       responses:
         "202": { description: Accepted, content: { application/json: { schema: { $ref: "#/components/schemas/PostResponses" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }

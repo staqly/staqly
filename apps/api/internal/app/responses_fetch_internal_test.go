@@ -76,8 +76,8 @@ func TestReadResponsesQueuesAnalysis(t *testing.T) {
 		t.Fatal(err)
 	}
 	jobs := jobsByKey(t, s, key)
-	if len(jobs) != 1 || jobs[0].ScheduledAt.Before(time.Now().Add(time.Minute)) {
-		t.Fatalf("want one job ~2 minutes out, got %d", len(jobs))
+	if len(jobs) != 1 || jobs[0].ScheduledAt.Before(time.Now().Add(20*time.Second)) || jobs[0].ScheduledAt.After(time.Now().Add(time.Minute)) {
+		t.Fatalf("want one job ~30 s out, got %d", len(jobs))
 	}
 	if !r.since.IsZero() {
 		t.Fatalf("first read since %v", r.since)

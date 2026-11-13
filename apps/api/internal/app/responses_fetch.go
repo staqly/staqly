@@ -14,8 +14,8 @@ import (
 const (
 	responsesWindow      = 7 * 24 * time.Hour // the worker reads targets published this recently
 	responsesEvery       = 30 * time.Minute
-	checkEvery           = 6 * time.Hour   // a recent target's numbers are read in the background this often
-	responsesAnalyzeWait = 2 * time.Minute // debounce: reads inside it join the queued analysis
+	checkEvery           = 6 * time.Hour    // a recent target's numbers are read in the background this often
+	responsesAnalyzeWait = 30 * time.Second // debounce: reads inside it join the queued analysis (one model call)
 )
 
 // ownResponseIDs: the ids that are the account's own posts (the target and its thread parts), so they never count
@@ -41,6 +41,12 @@ func ownResponseIDs(target db.PostTarget) map[string]bool {
 // readResponses reads the responses under one published target (also while it is being taken down: the last read), stores them (the sentiment of a known one stays)
 // and queues the analysis when something new arrived. The provider is called outside any transaction.
 func (s *Service) readResponses(ctx context.Context, postID, channelID string) error {
+	return s.readResponsesThen(ctx, postID, channelID, responsesAnalyzeWait)
+}
+
+// readResponsesThen is readResponses with the analysis of new responses queued `wait` from now: Refresh asks for 0,
+// so the person who pressed it sees the AI's reading as soon as the model answers.
+func (s *Service) readResponsesThen(ctx context.Context, postID, channelID string, wait time.Duration) error {
 	post, err := s.Q.GetPostByID(ctx, postID)
 	if isNoRows(err) {
 		return nil
@@ -150,7 +156,7 @@ func (s *Service) readResponses(ctx context.Context, postID, channelID string) e
 		if fresh == 0 {
 			return nil
 		}
-		return s.debounce(wctx, q, post.WorkspaceID, "analyze_responses", "analyze_responses:"+postID, map[string]any{"post_id": postID}, s.Now().Add(responsesAnalyzeWait), 3)
+		return s.debounce(wctx, q, post.WorkspaceID, "analyze_responses", "analyze_responses:"+postID, map[string]any{"post_id": postID}, s.Now().Add(wait), 3)
 	})
 	return err
 }
