@@ -46,7 +46,7 @@ Admins and owners create API keys for agents under **Integrations → API keys**
 the workspace and never does more than the person who created it may do now:
 
 - if that person is demoted, the key narrows to the new role;
-- if they leave or are removed, the key stops working.
+- if they leave or are removed, the key is revoked: it stops working and no longer counts against the plan's keys.
 
 People are managed by people: inviting, changing roles and removing members needs a signed-in
 person, never an API key. An admin key can list the members.
@@ -145,7 +145,7 @@ at least two (for example an email address and a passkey).
   the person: Google and an email code for the same address sign into one account, whichever came first. The sign-in state rides in a short-lived, sealed, HttpOnly cookie,
   and the redirect after sign-in only goes to a path on the dashboard.
 - A person's role is read on every request, so a demotion or removal applies at once; removal also
-  ends their sessions in that workspace and turns off the API keys they created.
+  ends their sessions in that workspace and revokes the API keys they created.
 - Email codes are counted before the comparison, so parallel guesses cannot exceed five tries. Codes
   for signing in, adding an address and changing one are kept apart, so none does the job of
   another.

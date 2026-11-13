@@ -4440,6 +4440,9 @@ paths:
         Credential and session audit events (api_key.*, session.*,
         recovery_key.*, device.*, device_link.*, sign_in_method.*) are only listed for admin
         principals (dashboard sessions, the Community Edition's access token, keys with the admin scope).
+        Events about a resource that events:read alone does not read are only listed for callers who can list
+        that resource: webhook.* needs webhooks:manage, alert.* alerts:manage, channel_link.* channels:manage,
+        member.* and invitation.* admin. GET /v1/events/export follows the same rule.
       parameters:
         - { name: post_id, in: query, schema: { type: string } }
         - { name: collection_id, in: query, schema: { type: string } }
@@ -6449,7 +6452,7 @@ components:
       type: object
       properties:
         name: { type: string, maxLength: 100 }
-        settings: { type: object, additionalProperties: true, description: "Replaces the settings; `links` (keep, remove, defang; one of the provider's limits.link_modes) sets what the channel does with links" }
+        settings: { type: object, additionalProperties: true, description: "Replaces the settings; `links` (keep, remove, defang; one of the provider's limits.link_modes) sets what the channel does with links. The other keys are the provider's settings_fields; a key it does not define is refused (422), and a channels field takes channels of this workspace on the same platform" }
         status: { type: string, enum: [connected, disabled] }
         fields: { type: object, additionalProperties: { type: string }, description: "Token platforms: fresh credential fields to reconnect with", writeOnly: true }
         group_id: { type: string, description: "Moves the channel to this channel group (grp_...); empty moves it to Default" }

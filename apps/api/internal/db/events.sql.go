@@ -128,27 +128,31 @@ WHERE workspace_id = ?1
   AND (CAST(?15 AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
        OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'
        OR type GLOB 'access_token.*' OR type GLOB 'sign_in_method.*'))
+  -- hidden_families: a JSON array of event families (the part before the dot) the caller may not read
+  -- through the resource's own endpoint (app.hiddenEventFamilies).
+  AND (?16 IS NULL OR substr(type, 1, instr(type, '.') - 1) NOT IN (SELECT value FROM json_each(?16)))
 ORDER BY seq DESC
-LIMIT ?16
+LIMIT ?17
 `
 
 type ListEventsParams struct {
-	WorkspaceID  string      `json:"workspace_id"`
-	PostID       interface{} `json:"post_id"`
-	CollectionID interface{} `json:"collection_id"`
-	ChannelID    interface{} `json:"channel_id"`
-	ScheduleID   interface{} `json:"schedule_id"`
-	Type         interface{} `json:"type"`
-	Types        interface{} `json:"types"`
-	ActorType    interface{} `json:"actor_type"`
-	ActorID      interface{} `json:"actor_id"`
-	Agents       interface{} `json:"agents"`
-	TypePrefix   interface{} `json:"type_prefix"`
-	FromTs       interface{} `json:"from_ts"`
-	ToTs         interface{} `json:"to_ts"`
-	BeforeSeq    interface{} `json:"before_seq"`
-	IncludeAudit int64       `json:"include_audit"`
-	Lim          int64       `json:"lim"`
+	WorkspaceID    string      `json:"workspace_id"`
+	PostID         interface{} `json:"post_id"`
+	CollectionID   interface{} `json:"collection_id"`
+	ChannelID      interface{} `json:"channel_id"`
+	ScheduleID     interface{} `json:"schedule_id"`
+	Type           interface{} `json:"type"`
+	Types          interface{} `json:"types"`
+	ActorType      interface{} `json:"actor_type"`
+	ActorID        interface{} `json:"actor_id"`
+	Agents         interface{} `json:"agents"`
+	TypePrefix     interface{} `json:"type_prefix"`
+	FromTs         interface{} `json:"from_ts"`
+	ToTs           interface{} `json:"to_ts"`
+	BeforeSeq      interface{} `json:"before_seq"`
+	IncludeAudit   int64       `json:"include_audit"`
+	HiddenFamilies interface{} `json:"hidden_families"`
+	Lim            int64       `json:"lim"`
 }
 
 func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]Event, error) {
@@ -168,6 +172,7 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]Event
 		arg.ToTs,
 		arg.BeforeSeq,
 		arg.IncludeAudit,
+		arg.HiddenFamilies,
 		arg.Lim,
 	)
 	if err != nil {

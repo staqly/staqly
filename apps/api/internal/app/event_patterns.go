@@ -56,6 +56,30 @@ func isAuditEvent(typ string) bool {
 	return auditFamilies[fam]
 }
 
+// familyScopes: event families whose resource is read with more than events:read. The event list and
+// the event export hide a family from a caller who could not list the resource itself: the payloads
+// carry it (a webhook's URL, an invitee's or a member's email). Webhook deliveries are not filtered:
+// subscribing already needs webhooks:manage.
+var familyScopes = map[string]string{
+	"webhook": ScopeWebhooksManage, "alert": ScopeAlertsManage, "channel_link": ScopeChannelsManage,
+	"member": ScopeAdmin, "invitation": ScopeAdmin,
+}
+
+// hiddenEventFamilies is the hidden_families argument of ListEvents and ExportEventsPage: nil when p reads all.
+func hiddenEventFamilies(p Principal) any {
+	var out []string
+	for fam, scope := range familyScopes {
+		if !p.Has(scope) {
+			out = append(out, fam)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+
+	return mustJSON(out)
+}
+
 // eventMatches tells whether a webhook or channel pattern covers an event type.
 func eventMatches(pat, typ string) bool {
 	if isAuditEvent(typ) {

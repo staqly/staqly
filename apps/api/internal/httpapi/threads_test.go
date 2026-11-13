@@ -293,6 +293,24 @@ func TestRepostStaysInItsWorkspace(t *testing.T) {
 			t.Errorf("reposters on %s: want an error on the field, got %v", ch, out.Error.Fields)
 		}
 	}
+	// Was a bug: a channel's own settings took any key unchecked (PATCH /v1/channels/{id}), another workspace's
+	// channel id included. A key the platform does not define is refused; a channels field stays in the workspace.
+	for ch, settings := range map[string]map[string]any{custom.ID: {"reposters": victim.ID}, own.ID: {"reposters": victim.ID}} {
+		var out struct {
+			Error struct{ Fields map[string]string }
+		}
+		e.do(nil, "PATCH", "/v1/channels/"+ch, k, map[string]any{"settings": settings}, 422, &out)
+		if out.Error.Fields["settings.reposters"] == "" {
+			t.Errorf("channel settings on %s: want an error on the field, got %v", ch, out.Error.Fields)
+		}
+	}
+	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"settings": map[string]any{"made_up": "x"}}, 422, nil)
+	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"settings": map[string]any{"reposters": []string{victim.ID}}}, 422, nil)
+	e.do(nil, "POST", "/v1/channels", k, map[string]any{"provider": "custom", "name": "New", "settings": map[string]any{"reposters": victim.ID}}, 422, nil)
+	var own2 app.Channel
+	e.do(nil, "POST", "/v1/channels", k, map[string]any{"provider": "test_reposter", "name": "Own 2"}, 201, &own2)
+	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"settings": map[string]any{"reposters": own2.ID}}, 200, nil)
+	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"settings": map[string]any{}}, 200, nil)
 
 	// Settings stored before the check (or by any other way around it) still do not reach the channel: one
 	// target names another workspace's channel, the other a channel of this workspace on another platform.

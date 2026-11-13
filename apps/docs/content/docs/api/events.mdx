@@ -189,6 +189,19 @@ The credential events above (`api_key.*`, `session.*`, `recovery_key.*`, `access
 for admins: dashboard sessions, the Community Edition's access token and keys with the `admin` scope. Other keys don't see
 them.
 
+Events about things that `events:read` alone does not read follow the same idea: both endpoints list a family
+only for callers who can list the resource itself.
+
+| Events | Listed for |
+|---|---|
+| `webhook.*` | `webhooks:manage` |
+| `alert.*` | `alerts:manage` |
+| `channel_link.*` | `channels:manage` |
+| `member.*`, `invitation.*` | `admin` |
+
+A viewer, or a key with only `events:read`, sees post, collection, channel, schedule and workspace events.
+Webhook deliveries are not filtered this way: creating a webhook already needs `webhooks:manage`.
+
 Webhooks and alerts get audit events only when a pattern names their family
 (`"session.*"`, `"api_key.revoked"`), never through `"*"` or another glob, and only an admin may
 subscribe that way (`403` otherwise).
