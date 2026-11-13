@@ -151,7 +151,12 @@ export function PlanSummary({
     start:
       'Start your 7-day free trial to use this workspace: Starter is free for 7 days (card required, cancel anytime), or pick a paid plan. Until then the workspace stays locked.',
     suspended: LOCKED_MESSAGE[reason],
-    past_due: `The last payment failed. Update the payment method: ${plan.name} stays active until ${until}.`,
+    // A seat or an add-on charged mid-period: the plan's period is paid, and Stripe ends the subscription when its
+    // retries run out, so no date is promised (the email says the same: welcome_email.go).
+    past_due:
+      sub?.past_due_for === 'extra'
+        ? `The payment for an extra seat or an add-on failed; ${plan.name} itself is paid. Stripe tries the card again over the next days. If it stays unpaid, the workspace becomes read-only: update the payment method or pay the open invoice.`
+        : `The last payment failed. Update the payment method: ${plan.name} stays active until ${until}.`,
     trial: stripeTrial
       ? `Your free trial ends on ${shortDate(usage.trial_ends_at)}. Then the card on file is charged; cancel before then to pay nothing.`
       : `Your free trial ends on ${shortDate(usage.trial_ends_at)}. Choose a plan to keep going afterwards; an unpaid workspace is locked until it has one.`,

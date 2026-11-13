@@ -466,7 +466,7 @@ export interface paths {
         post: operations["addAddon"];
         /**
          * Remove an add-on (a signed-in workspace owner)
-         * @description Signed-in people only: an API key gets 403, whatever its scopes. Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
+         * @description Signed-in people only: an API key gets 403, whatever its scopes. An add-on still waiting for its payment (a pending update) is cancelled instead: its invoice is voided and nothing stays due. Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
          */
         delete: operations["removeAddon"];
         options?: never;
@@ -4311,6 +4311,11 @@ export interface components {
              * @example 3
              */
             quantity: number;
+            /**
+             * @description While past_due, what the unpaid invoice is for: renewal (the plan's period) or extra (a seat or an add-on charged mid-period; the paid period stands and Stripe ends the subscription when its retries run out). Empty otherwise.
+             * @enum {string}
+             */
+            past_due_for: "" | "renewal" | "extra";
             /** @description The subscription's discount while it lasts; no other promotion code is taken meanwhile */
             discount: null | {
                 /**

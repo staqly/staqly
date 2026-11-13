@@ -11,6 +11,7 @@ import { AddonsSection, bonusHint } from '@/components/billing/addons'
 import { Invoices, PaymentMethods } from '@/components/billing/payments'
 import { PlanSummary } from '@/components/billing/plan-summary'
 import { BuyXPosts, XPostsNote } from '@/components/billing/x-posts'
+import { Callout } from '@/components/common/callout'
 import { ErrorState } from '@/components/common/error-state'
 import { PageContainer } from '@/components/common/page-header'
 import { usePlanActions } from '@/components/plans/plans-page'
@@ -19,7 +20,17 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { api, POST_STATUSES, UNLIMITED, type WorkspaceUsage } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
 import { lockReason } from '@/lib/plans'
-import { qk, useAddons, useBilling, useBillingDetails, useMode, useRole, useUsage, useXPosts } from '@/lib/queries'
+import {
+  qk,
+  useAddons,
+  useBilling,
+  useBillingDetails,
+  useMode,
+  usePendingPayment,
+  useRole,
+  useUsage,
+  useXPosts,
+} from '@/lib/queries'
 import { POST_STATUS_META } from '@/lib/status'
 import { TONES } from '@/lib/tones'
 import { meterTone, usageMeter } from '@/lib/usage'
@@ -379,6 +390,7 @@ export function PlanUsagePage() {
   const payOnline = !!b?.enabled
   const canBuy = isOwner && payOnline
   const portalOpen = isOwner && payOnline && !!b?.has_customer
+  const pending = usePendingPayment({ enabled: canBuy && !!b?.subscription_status })
   const hasXPosts = !isLocal && !!xPosts.data && !xPosts.data.unlimited
   // A locked workspace buys nothing on top (the API answers 402): what opens it comes first.
   const payFirst = !!u?.suspended && !!b && lockReason(b) === 'payment_due'
@@ -509,6 +521,28 @@ export function PlanUsagePage() {
 
   // Add-ons are sold on the subscription, to those who manage the workspace. Extra X posts are bought next to X's bar.
   const hasAddons = manage && payOnline && !!addons.data?.length
+  // A plan change or an add-on charged at once and not paid waits at Stripe for about a day: said here, with the
+  // way to the page that tells why and what to do (the invoice row alone says only "Due").
+  const waiting = pending.data?.pending ? (
+    <Callout
+      tone="warning"
+      role="status"
+      data-testid="pending-payment"
+      action={
+        <Link
+          href="/plans/payment-failed"
+          className="font-medium whitespace-nowrap underline underline-offset-2 hover:no-underline"
+        >
+          See what to do
+        </Link>
+      }
+    >
+      {pending.data.addon
+        ? 'An add-on is waiting for its payment, which did not go through. It is added once it is paid.'
+        : 'A plan change is waiting for its payment, which did not go through. The plan changes once it is paid.'}
+    </Callout>
+  ) : null
+
   const extras =
     !unlocked && hasAddons ? (
       <Group
@@ -553,6 +587,7 @@ export function PlanUsagePage() {
 
       <div className="mt-6 grid gap-8">
         {summary}
+        {waiting}
         {extras}
         {usageGroup}
         {payments}

@@ -662,6 +662,7 @@ paths:
       summary: Remove an add-on (a signed-in workspace owner)
       description: >-
         Signed-in people only: an API key gets 403, whatever its scopes.
+        An add-on still waiting for its payment (a pending update) is cancelled instead: its invoice is voided and nothing stays due.
         Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead.
       responses:
         "204": { description: Removed }
@@ -5137,7 +5138,7 @@ components:
         managed_payments: { type: boolean, description: "Checkouts on this server use Stripe Managed Payments: Stripe, through Link, is the merchant of record and sends the receipts and invoices" }
     BillingSubscription:
       type: object
-      required: [status, current_period_start, current_period_end, cancel_at_period_end, cancel_at, canceled_at, trial_end, amount, currency, interval, quantity, discount]
+      required: [status, current_period_start, current_period_end, cancel_at_period_end, cancel_at, canceled_at, trial_end, amount, currency, interval, quantity, past_due_for, discount]
       properties:
         status: { type: string, description: "Stripe's status: active, trialing, past_due, canceled, unpaid, incomplete, ...", examples: [active] }
         current_period_start: { type: [string, "null"], description: Start of the billing period }
@@ -5150,6 +5151,7 @@ components:
         currency: { type: string, examples: [usd] }
         interval: { type: string, examples: [month] }
         quantity: { type: integer, description: "Seats billed: the workspace's members (the server keeps Stripe's quantity in step)", examples: [3] }
+        past_due_for: { type: string, enum: ["", renewal, extra], description: "While past_due, what the unpaid invoice is for: renewal (the plan's period) or extra (a seat or an add-on charged mid-period; the paid period stands and Stripe ends the subscription when its retries run out). Empty otherwise." }
         discount:
           description: The subscription's discount while it lasts; no other promotion code is taken meanwhile
           oneOf:

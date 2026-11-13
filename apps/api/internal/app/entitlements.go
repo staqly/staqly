@@ -538,7 +538,7 @@ func (s *Service) RemoveAddon(ctx context.Context, p Principal, id string) error
 	}
 	item, ok := addonItem(sub, id)
 	if !ok {
-		return notFound("add-on")
+		return s.cancelPendingAddon(ctx, sub.ID, id)
 	}
 	proration := "always_invoice"
 	if sub.Status == "past_due" && s.voidInvoicesOf(ctx, sub.ID, item) {
@@ -548,6 +548,30 @@ func (s *Service) RemoveAddon(ctx context.Context, p Principal, id string) error
 		return err
 	}
 	return s.tx(ctx, func(q *db.Queries) error { return s.queueEntitlementSync(ctx, q, p.WorkspaceID) })
+}
+
+// cancelPendingAddon: the add-on isn't on the subscription yet, it waits for its payment (a pending update).
+// Removing it cancels that update the way Stripe has for it: voiding the invoice the update made (the
+// subscription's latest), so nothing stays due for an add-on nobody wants. Not found when no update holds it.
+func (s *Service) cancelPendingAddon(ctx context.Context, subscriptionID, id string) error {
+	var sub struct {
+		PendingUpdate *stripePendingUpdate `json:"pending_update"`
+		LatestInvoice string               `json:"latest_invoice"`
+	}
+	if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(subscriptionID), nil, &sub); err != nil {
+		return err
+	}
+	waits := false
+	if sub.PendingUpdate != nil {
+		for _, it := range sub.PendingUpdate.SubscriptionItems {
+			var pr stripePrice
+			waits = waits || (json.Unmarshal(it.Price, &pr) == nil && addonOf(pr) == id)
+		}
+	}
+	if !waits || sub.LatestInvoice == "" {
+		return notFound("add-on")
+	}
+	return s.stripe(ctx, "POST", "/v1/invoices/"+url.PathEscape(sub.LatestInvoice)+"/void", nil, nil)
 }
 
 // voidInvoicesOf voids the subscription's open invoices that bill nothing but one item (an add-on charged when it

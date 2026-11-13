@@ -45,6 +45,7 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 	if err := s.settleDuplicate(ctx, sub); err != nil {
 		return err
 	}
+	s.voidUnpaidInvoices(ctx, sub)
 	return s.guardCard(ctx, sub)
 }
 

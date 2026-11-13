@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"net/url"
 	"time"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
@@ -165,6 +166,17 @@ func (s *Service) runWelcomeEmail(ctx context.Context, workspaceID string, p job
 			return nil // paid meanwhile, or ended (which has its own email)
 		}
 		f.ReadOnly = day(w.PlanExpiresAt.String)
+		// A seat or an add-on charged mid-period, not the plan's renewal: the paid period stands, and Stripe ends
+		// the subscription when its retries run out, so no date is promised.
+		if w.StripeSubscriptionID.Valid && s.BillingEnabled() {
+			var sub stripeSubscription
+			if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String)+subscriptionExpand, nil, &sub); err != nil {
+				return err
+			}
+			if sub.unpaidExtra() {
+				f.Extra, f.ReadOnly = true, time.Time{}
+			}
+		}
 	case emailSubscriptionEnded:
 		if liveSubscription(w.SubscriptionStatus.String) {
 			return nil // a plan again already
@@ -190,6 +202,7 @@ type welcomeFacts struct {
 	Card      bool      // trial: a card is on file and is charged when the trial ends (else: read-only then)
 	Interval  string    // paid: IntervalMonth or IntervalYear ("" when unknown)
 	ReadOnly  time.Time // payment failed: the day the workspace becomes read-only if it stays unpaid (zero: unknown)
+	Extra     bool      // payment failed: for a seat or an add-on added mid-period, not for the plan's renewal
 	Steps     bool      // show the first steps
 	Base      string    // the app's address
 }
@@ -210,8 +223,14 @@ func welcomeEmail(f welcomeFacts) (string, emailDoc) {
 		if !f.ReadOnly.IsZero() {
 			when = "If it is still unpaid on **" + f.ReadOnly.Format("2 January 2006") + "**"
 		}
+		what := "The payment for the **" + f.Plan + "** plan of the workspace **" + f.Workspace + "** didn't go through."
+		if f.Extra {
+			subject = "A payment for your staqly workspace failed"
+			d.Title = "A payment for " + f.Workspace + " failed"
+			what = "The payment for an extra seat or an add-on of the workspace **" + f.Workspace + "** didn't go through. The **" + f.Plan + "** plan itself is paid."
+		}
 		d.Paragraphs = []string{
-			"The payment for the **" + f.Plan + "** plan of the workspace **" + f.Workspace + "** didn't go through.",
+			what,
 			"Stripe tries the card again over the next days, so there is nothing to do if the card is fine. " + when +
 				", the workspace becomes read-only: " + readOnly + ".",
 			"To pay with another card, update it in Settings → Plan & usage.",

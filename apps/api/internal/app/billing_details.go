@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"strconv"
 	"strings"
@@ -38,6 +39,10 @@ type BillingSubscription struct {
 	Interval string `json:"interval"`
 	// Quantity: the seats Stripe bills (the workspace's members; kept in step by the seat sync).
 	Quantity int64 `json:"quantity"`
+	// PastDueFor: while past_due, what the unpaid invoice is for: "renewal" (the plan's period) or "extra" (a seat
+	// or an add-on charged mid-period: the paid period stands, and Stripe ends the subscription when its retries
+	// run out); "" otherwise or when it can't be told.
+	PastDueFor string `json:"past_due_for"`
 	// Discount: the subscription's discount while it lasts (one at a time: no other code is taken meanwhile).
 	Discount *SubscriptionDiscount `json:"discount"`
 }
@@ -106,14 +111,15 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 
 	if w.StripeSubscriptionID.Valid && after == "" {
 		var sub struct {
-			Status             string `json:"status"`
-			CurrentPeriodStart int64  `json:"current_period_start"`
-			CurrentPeriodEnd   int64  `json:"current_period_end"`
-			CancelAtPeriodEnd  bool   `json:"cancel_at_period_end"`
-			CancelAt           int64  `json:"cancel_at"`
-			CanceledAt         int64  `json:"canceled_at"`
-			TrialEnd           int64  `json:"trial_end"`
-			DefaultPM          string `json:"default_payment_method"`
+			Status             string          `json:"status"`
+			CurrentPeriodStart int64           `json:"current_period_start"`
+			CurrentPeriodEnd   int64           `json:"current_period_end"`
+			CancelAtPeriodEnd  bool            `json:"cancel_at_period_end"`
+			CancelAt           int64           `json:"cancel_at"`
+			CanceledAt         int64           `json:"canceled_at"`
+			TrialEnd           int64           `json:"trial_end"`
+			DefaultPM          string          `json:"default_payment_method"`
+			LatestInvoice      json.RawMessage `json:"latest_invoice"`
 			Discounts          []struct {
 				End           int64 `json:"end"`
 				PromotionCode *struct {
@@ -138,7 +144,7 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 			} `json:"items"`
 		}
 		if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String)+
-			"?expand[]=discounts.promotion_code", nil, &sub); err != nil {
+			"?expand[]=discounts.promotion_code&expand[]=latest_invoice", nil, &sub); err != nil {
 			return out, err
 		}
 		// Newer Stripe API versions keep the period on the items.
@@ -161,6 +167,11 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 			bs.Quantity = max(it.Quantity, 1)
 		}
 		bs.CurrentPeriodStart, bs.CurrentPeriodEnd = unixTime(start), unixTime(end)
+		if latest := (stripeSubscription{LatestInvoice: sub.LatestInvoice}); sub.Status == "past_due" && latest.unpaidExtra() {
+			bs.PastDueFor = "extra"
+		} else if sub.Status == "past_due" && latest.unpaidRenewal() {
+			bs.PastDueFor = "renewal"
+		}
 		if len(sub.Discounts) > 0 {
 			d := sub.Discounts[0]
 			bs.Discount = &SubscriptionDiscount{End: unixTime(d.End)}

@@ -686,3 +686,147 @@ func TestPlanExpiresWithThePlansItem(t *testing.T) {
 		t.Fatalf("a monthly plan with a yearly add-on is paid until %s, want the plan's month plus the grace, %s", end, monthEnd.Add(3*day))
 	}
 }
+
+// Was a bug (found on the Stripe sandbox): a subscription Stripe cancelled because a payment kept failing left its
+// other open invoices (a renewal that failed meanwhile) to be collected: a card added later was charged for a plan
+// that had ended, and choosing a plan charged again. They are voided when the subscription ends for non-payment;
+// one the customer cancelled, and one held unpaid (paying opens it), keep theirs.
+func TestSubscriptionEndedForNonPaymentVoidsItsOpenInvoices(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	ws := workspaceID(e)
+	f.set("GET /v1/invoices", func() (int, any) {
+		return 200, map[string]any{"data": []any{map[string]string{"id": "in_renewal"}, map[string]string{"id": "in_paid_meanwhile"}}}
+	})
+	f.set("POST /v1/invoices/in_renewal/void", func() (int, any) { return 200, map[string]string{"id": "in_renewal", "status": "void"} })
+	f.set("POST /v1/invoices/in_paid_meanwhile/void", func() (int, any) { // Stripe refuses: tolerated
+		return 400, map[string]any{"error": map[string]string{"code": "invoice_not_open"}}
+	})
+	tell := func(id, status, reason string) {
+		t.Helper()
+		sub := subObject("sub_1", ws, status, "plus", "month")
+		if reason != "" {
+			sub["cancellation_details"] = map[string]any{"reason": reason}
+		}
+		if code := e.stripeEvent(id, "customer.subscription.updated", sub, testWhsec); code != 200 {
+			t.Fatalf("%s: %d", id, code)
+		}
+	}
+	tell("evt_1", "active", "")
+	tell("evt_2", "past_due", "")
+	tell("evt_3", "unpaid", "")
+	if n := f.called("GET /v1/invoices"); n != 0 {
+		t.Fatalf("invoices of a live or unpaid subscription were read %d times: paying them is the way out", n)
+	}
+	tell("evt_4", "canceled", "payment_failed")
+	if a, b := f.called("POST /v1/invoices/in_renewal/void"), f.called("POST /v1/invoices/in_paid_meanwhile/void"); a != 1 || b != 1 {
+		t.Fatalf("a subscription ended for non-payment: its open invoices were voided %d and %d times, want 1 each (a later card would be charged): %v", a, b, f.calls)
+	}
+
+	// Cancelled by the customer: nothing is voided.
+	e2 := newEnv(t)
+	f2 := withStripe(t, e2)
+	sub := subObject("sub_2", workspaceID(e2), "canceled", "plus", "month")
+	sub["cancellation_details"] = map[string]any{"reason": "cancellation_requested"}
+	if code := e2.stripeEvent("evt_5", "customer.subscription.deleted", sub, testWhsec); code != 200 {
+		t.Fatalf("cancelled: %d", code)
+	}
+	if n := f2.called("GET /v1/invoices"); n != 0 {
+		t.Fatalf("a subscription the customer cancelled had its invoices read %d times", n)
+	}
+}
+
+// Was a bug (found on the Stripe sandbox): an add-on waiting for its payment (a pending update) couldn't be
+// removed: 404, and its invoice stayed due until Stripe dropped the update, about a day later. Removing it voids
+// the update's invoice, which is how Stripe cancels a pending update.
+func TestRemoveAddonCancelsOneWaitingForItsPayment(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	ws := workspaceID(e)
+	live := subObject("sub_1", ws, "active", "starter", "month")
+	if code := e.stripeEvent("evt_1", "customer.subscription.created", live, testWhsec); code != 200 {
+		t.Fatalf("event: %d", code)
+	}
+	waiting := subObject("sub_1", ws, "active", "starter", "month")
+	waiting["latest_invoice"] = "in_addon"
+	waiting["pending_update"] = map[string]any{"expires_at": time.Now().Add(23 * time.Hour).Unix(), "subscription_items": []any{
+		map[string]any{"id": "si_sub_1", "price": stripePriceObject("starter", "month")},
+		map[string]any{"price": map[string]any{"id": "price_addon", "lookup_key": app.AddonLookupKey("webhooks_pack", "month")}},
+	}}
+	f.set("GET /v1/subscriptions/sub_1", func() (int, any) { return 200, waiting })
+	f.set("POST /v1/invoices/in_addon/void", func() (int, any) { return 200, map[string]string{"id": "in_addon", "status": "void"} })
+
+	e.pay("DELETE", "/v1/billing/addons/other_pack", nil, 404, nil) // not the one that waits
+	if n := f.called("POST /v1/invoices/in_addon/void"); n != 0 {
+		t.Fatalf("another add-on's removal voided the waiting invoice %d times", n)
+	}
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
+	if n := f.called("POST /v1/invoices/in_addon/void"); n != 1 {
+		t.Fatalf("the waiting add-on's invoice was voided %d times, want 1: %v", n, f.calls)
+	}
+	f.set("GET /v1/subscriptions/sub_1", func() (int, any) { return 200, live }) // the update is gone
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 404, nil)
+}
+
+// Was a bug (found on the Stripe sandbox): a failed payment for an extra seat or an add-on was told like a failed
+// renewal: "the payment for the Plus plan failed" and a day the workspace becomes read-only (the paid period's end
+// plus the grace) that staqly doesn't control: Stripe ends the subscription when its retries run out, earlier. The
+// email says what failed and promises no day; GET /v1/billing/details tells the Plan page which it is.
+func TestFailedSeatPaymentPromisesNoDate(t *testing.T) {
+	w := newWelcomeEnv(t, true, true)
+	owner := w.mustSignIn(ana, "")
+	ws := w.session(owner).Workspace.ID
+	sub := w.f.sub("sub_a", ws, "active", "")
+	w.f.set(w.env, sub, "active")
+	w.f.mu.Lock()
+	sub["latest_invoice"] = map[string]any{"id": "in_seat", "billing_reason": "subscription_update", "status": "open"}
+	w.f.mu.Unlock()
+	w.f.set(w.env, sub, "past_due")
+	var b app.Billing
+	w.as(owner, "GET", "/v1/billing", nil, 200, &b)
+	until, _ := time.Parse(time.RFC3339, deref(b.PlanExpiresAt))
+	got := w.received("Subject: A payment for your staqly workspace failed", "Subject: The payment for staqly Starter failed")
+	if len(got) != 1 {
+		t.Fatalf("emails for a failed seat payment: %d\n%s", len(got), strings.Join(got, "\n---\n"))
+	}
+	for _, want := range []string{"Subject: A payment for your staqly workspace failed", "an extra seat or an add-on", "plan itself is paid", "If it stays unpaid", "becomes read-only"} {
+		if !strings.Contains(got[0], want) {
+			t.Fatalf("the email lacks %q:\n%s", want, got[0])
+		}
+	}
+	if day := until.Format("2 January 2006"); strings.Contains(got[0], day) || strings.Contains(got[0], "The payment for the") {
+		t.Fatalf("the email promises %s or blames the plan:\n%s", day, got[0])
+	}
+}
+
+// past_due_for in GET /v1/billing/details: what the unpaid invoice of a past_due subscription is for.
+func TestBillingDetailsSayWhatIsPastDue(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	ws := workspaceID(e)
+	admin := e.keyWith(app.ScopeAdmin)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil) // cus_1
+	sub := subObject("sub_1", ws, "active", "plus", "month")
+	f.set("GET /v1/subscriptions/sub_1", func() (int, any) { return 200, sub })
+	empty := func() (int, any) { return 200, map[string]any{"data": []any{}} }
+	f.set("GET /v1/customers/cus_1", func() (int, any) { return 200, map[string]string{"id": "cus_1"} })
+	f.set("GET /v1/customers/cus_1/payment_methods", empty)
+	f.set("GET /v1/invoices", empty)
+	for i, c := range []struct{ status, reason, invoice, want string }{
+		{"active", "subscription_cycle", "paid", ""},
+		{"past_due", "subscription_update", "open", "extra"},
+		{"past_due", "subscription_cycle", "open", "renewal"},
+		{"past_due", "subscription_cycle", "paid", ""},
+	} {
+		sub["status"] = c.status
+		sub["latest_invoice"] = map[string]any{"id": "in_1", "billing_reason": c.reason, "status": c.invoice}
+		if code := e.stripeEvent(fmt.Sprint("evt_", i), "customer.subscription.updated", sub, testWhsec); code != 200 {
+			t.Fatalf("event %d: %d", i, code)
+		}
+		var d app.BillingDetails
+		e.do(nil, "GET", "/v1/billing/details", admin, nil, 200, &d)
+		if d.Subscription == nil || d.Subscription.PastDueFor != c.want {
+			t.Fatalf("%s with a %s %s invoice: %+v, want past_due_for %q", c.status, c.invoice, c.reason, d.Subscription, c.want)
+		}
+	}
+}

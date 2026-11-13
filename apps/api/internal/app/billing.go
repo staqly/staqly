@@ -1016,6 +1016,17 @@ func (sub stripeSubscription) unpaidRenewal() bool {
 	return json.Unmarshal(sub.LatestInvoice, &inv) == nil && inv.BillingReason == "subscription_cycle" && inv.Status == "open"
 }
 
+// unpaidExtra: the latest invoice is open and not a renewal's: a seat or an add-on charged mid-period whose payment
+// failed. The paid period stands then, and Stripe ends the subscription when its retries of that invoice run out,
+// a day staqly doesn't know.
+func (sub stripeSubscription) unpaidExtra() bool {
+	var inv struct {
+		Status        string `json:"status"`
+		BillingReason string `json:"billing_reason"`
+	}
+	return json.Unmarshal(sub.LatestInvoice, &inv) == nil && inv.Status == "open" && inv.BillingReason != "" && inv.BillingReason != "subscription_cycle"
+}
+
 // endedFor: "payment_failed" for a subscription Stripe ended, or holds unpaid, because a payment failed; ""
 // otherwise (Billing.EndedFor).
 func (sub stripeSubscription) endedFor() string {
@@ -1162,6 +1173,7 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 	if err := s.settleDuplicate(ctx, sub); err != nil {
 		return err
 	}
+	s.voidUnpaidInvoices(ctx, sub)
 	// A trial paid with a card an unpaid trial used ends now (Stripe is called after the transaction). On a
 	// retried event too: the check reads the subscription as it is, so it runs again until it went through.
 	return s.guardCard(ctx, sub)
@@ -1391,6 +1403,35 @@ func (s *Service) settleDuplicate(ctx context.Context, sub stripeSubscription) e
 	s.logger(ctx).Warn("stripe: second live subscription of a workspace cancelled, unused time credited",
 		"workspace_id", ws, "kept", kept.ID, "cancelled", sub.ID)
 	return s.stripe(ctx, "DELETE", "/v1/subscriptions/"+url.PathEscape(sub.ID), url.Values{"prorate": {"true"}, "invoice_now": {"true"}}, nil)
+}
+
+// voidUnpaidInvoices runs after a subscription was applied (outside the transaction): one Stripe cancelled because a
+// payment kept failing leaves its other open invoices to be collected (a renewal that failed while a seat's invoice
+// was retried), so a card added later is charged for a subscription that is over, and choosing a plan charges
+// again. They are voided: nothing is owed for a plan that ended. An unpaid (not cancelled) subscription keeps its
+// invoices: paying them is what opens it. Best effort, logged: the reconcile round tells an ended subscription
+// again, so it is tried until no invoice is open.
+// ponytail: one invoice list per event or sync of such a subscription; keep a "settled" mark if that adds up.
+func (s *Service) voidUnpaidInvoices(ctx context.Context, sub stripeSubscription) {
+	if sub.Status != "canceled" || sub.CancellationDetails.Reason != "payment_failed" {
+		return
+	}
+	var list struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	q := url.Values{"subscription": {sub.ID}, "status": {"open"}, "limit": {"100"}}
+	if err := s.stripe(ctx, "GET", "/v1/invoices?"+q.Encode(), nil, &list); err != nil {
+		s.logger(ctx).Warn("billing: open invoices of an ended subscription not read", "err", err)
+		return
+	}
+	for _, inv := range list.Data {
+		// One paid or voided meanwhile is refused by Stripe: logged, and not listed as open the next time.
+		if err := s.stripe(ctx, "POST", "/v1/invoices/"+url.PathEscape(inv.ID)+"/void", nil, nil); err != nil {
+			s.logger(ctx).Warn("billing: open invoice of an ended subscription not voided", "err", err)
+		}
+	}
 }
 
 // lockBilling serializes "read a customer's subscription from Stripe, then apply it" (webhook events, syncs), in
