@@ -106,7 +106,7 @@ export async function axe(page: Page, opts: { exclude?: string[] } = {}): Promis
 /** Unique, readable names for things a test creates. */
 export const uniq = (prefix: string) => `${prefix} ${Date.now().toString(36).slice(-5)}`
 
-/** Closes every toast (they sit over the bottom-right corner, where form buttons often are). */
+/** Closes every toast (they sit over the top of the page, in the middle). */
 export async function dismissToasts(page: Page): Promise<void> {
   const close = page.getByRole('region', { name: /Notifications/ }).getByRole('button', { name: 'Close toast' })
 

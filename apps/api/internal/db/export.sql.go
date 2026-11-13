@@ -11,7 +11,7 @@ import (
 )
 
 const activeWorkspaceExport = `-- name: ActiveWorkspaceExport :one
-SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media FROM workspace_exports WHERE workspace_id = ? AND status IN ('pending', 'running') LIMIT 1
+SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media, object_key FROM workspace_exports WHERE workspace_id = ? AND status IN ('pending', 'running') LIMIT 1
 `
 
 func (q *Queries) ActiveWorkspaceExport(ctx context.Context, workspaceID string) (WorkspaceExport, error) {
@@ -31,6 +31,7 @@ func (q *Queries) ActiveWorkspaceExport(ctx context.Context, workspaceID string)
 		&i.FinishedAt,
 		&i.ExpiresAt,
 		&i.IncludesMedia,
+		&i.ObjectKey,
 	)
 	return i, err
 }
@@ -461,7 +462,8 @@ func (q *Queries) ExportStatusByID(ctx context.Context, id string) (string, erro
 }
 
 const finishWorkspaceExport = `-- name: FinishWorkspaceExport :execrows
-UPDATE workspace_exports SET status = ?, size_bytes = ?, error = ?, finished_at = ?, expires_at = ?, started_at = ?
+UPDATE workspace_exports SET status = ?, size_bytes = ?, error = ?, finished_at = ?, expires_at = ?, started_at = ?,
+    object_key = ?
 WHERE id = ? AND status = 'running' AND started_at = ?
 `
 
@@ -472,6 +474,7 @@ type FinishWorkspaceExportParams struct {
 	FinishedAt sql.NullString `json:"finished_at"`
 	ExpiresAt  string         `json:"expires_at"`
 	StartedAt  sql.NullString `json:"started_at"`
+	ObjectKey  string         `json:"object_key"`
 	ID         string         `json:"id"`
 	Lease      sql.NullString `json:"lease"`
 }
@@ -479,6 +482,7 @@ type FinishWorkspaceExportParams struct {
 // Only the builder that still holds the lease finishes: a purge or workspace deletion may have expired (or
 // removed) the export while it was being built, or another process took it over. started_at goes back to
 // when the build began.
+// object_key: where this builder put the archive on S3 (” on disk and for a failed build).
 func (q *Queries) FinishWorkspaceExport(ctx context.Context, arg FinishWorkspaceExportParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, finishWorkspaceExport,
 		arg.Status,
@@ -487,6 +491,7 @@ func (q *Queries) FinishWorkspaceExport(ctx context.Context, arg FinishWorkspace
 		arg.FinishedAt,
 		arg.ExpiresAt,
 		arg.StartedAt,
+		arg.ObjectKey,
 		arg.ID,
 		arg.Lease,
 	)
@@ -497,7 +502,7 @@ func (q *Queries) FinishWorkspaceExport(ctx context.Context, arg FinishWorkspace
 }
 
 const getWorkspaceExport = `-- name: GetWorkspaceExport :one
-SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media FROM workspace_exports WHERE workspace_id = ? AND id = ?
+SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media, object_key FROM workspace_exports WHERE workspace_id = ? AND id = ?
 `
 
 type GetWorkspaceExportParams struct {
@@ -522,6 +527,7 @@ func (q *Queries) GetWorkspaceExport(ctx context.Context, arg GetWorkspaceExport
 		&i.FinishedAt,
 		&i.ExpiresAt,
 		&i.IncludesMedia,
+		&i.ObjectKey,
 	)
 	return i, err
 }
@@ -554,7 +560,7 @@ func (q *Queries) ListWorkspaceExportIDs(ctx context.Context, workspaceID string
 }
 
 const listWorkspaceExports = `-- name: ListWorkspaceExports :many
-SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media FROM workspace_exports WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 20
+SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media, object_key FROM workspace_exports WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 20
 `
 
 func (q *Queries) ListWorkspaceExports(ctx context.Context, workspaceID string) ([]WorkspaceExport, error) {
@@ -580,6 +586,7 @@ func (q *Queries) ListWorkspaceExports(ctx context.Context, workspaceID string) 
 			&i.FinishedAt,
 			&i.ExpiresAt,
 			&i.IncludesMedia,
+			&i.ObjectKey,
 		); err != nil {
 			return nil, err
 		}
@@ -604,7 +611,7 @@ func (q *Queries) MarkWorkspaceExportExpired(ctx context.Context, id string) err
 }
 
 const pendingWorkspaceExports = `-- name: PendingWorkspaceExports :many
-SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media FROM workspace_exports WHERE status = 'pending' ORDER BY created_at LIMIT ?
+SELECT id, workspace_id, status, actor_type, actor_id, actor_name, size_bytes, error, created_at, started_at, finished_at, expires_at, includes_media, object_key FROM workspace_exports WHERE status = 'pending' ORDER BY created_at LIMIT ?
 `
 
 func (q *Queries) PendingWorkspaceExports(ctx context.Context, limit int64) ([]WorkspaceExport, error) {
@@ -630,6 +637,7 @@ func (q *Queries) PendingWorkspaceExports(ctx context.Context, limit int64) ([]W
 			&i.FinishedAt,
 			&i.ExpiresAt,
 			&i.IncludesMedia,
+			&i.ObjectKey,
 		); err != nil {
 			return nil, err
 		}

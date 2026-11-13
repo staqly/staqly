@@ -22,7 +22,7 @@ dev: ## Build from this checkout with the dev stack (debug logs, mailpit :8025, 
 # For this run the session cookie is Secure and the visitor's address comes from the X-Forwarded-For entry Cloudflare
 # adds (COOKIE_SECURE, TRUST_PROXY): without it every visitor would share one address and one sign-in rate limit.
 TUNNEL_FILE = $(shell echo $(TUNNEL))
-TUNNEL_LOG := $(or $(TMPDIR),/tmp/)staqly-tunnel.log
+TUNNEL_LOG := $(patsubst %/,%,$(or $(TMPDIR),/tmp))/staqly-tunnel.log
 
 dev-tunnel: ## Dev stack behind a named Cloudflare tunnel (Instagram tests): make dev-tunnel TUNNEL=~/.cloudflared/<name>.yml
 	@test -n "$(TUNNEL)" || { echo "Usage: make dev-tunnel TUNNEL=~/.cloudflared/<name>.yml (hostnames for localhost:8080 and localhost:MAXIOFS_PORT)"; exit 1; }

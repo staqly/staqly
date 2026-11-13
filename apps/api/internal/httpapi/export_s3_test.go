@@ -43,7 +43,12 @@ func TestWorkspaceExportS3Lifecycle(t *testing.T) {
 			e.do(nil, "POST", "/v1/workspace/export", key, nil, 202, &job)
 			e.svc.ProcessExports(ctx)
 			e.do(nil, "GET", "/v1/workspace/exports/"+job.ID, key, nil, 200, &job)
-			data := fake.Get("media", "workspaces/"+workspaceID(e)+"/backups/"+job.ID+".zip")
+			// One object, under the builder's own name: "<id>.zip.<builder>".
+			keys := backupKeys(fake)
+			if len(keys) != 1 || !strings.HasPrefix(keys[0], "workspaces/"+workspaceID(e)+"/backups/"+job.ID+".zip.") {
+				t.Fatalf("export not stored in workspace backups folder: %v", keys)
+			}
+			data := fake.Get("media", keys[0])
 			if job.Status != "ready" || int64(len(data)) != job.SizeBytes || len(data) == 0 {
 				t.Fatalf("export not stored in workspace backups folder: %+v, bytes=%d", job, len(data))
 			}

@@ -120,7 +120,7 @@ func (s *Service) livePrice(ctx context.Context, plan Plan, interval string) (pr
 // lookupPrice: a Stripe price (id and unit amount) by lookup key, or a pinned id, cached; missing says what
 // isn't set up.
 func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) (priceCacheEntry, error) {
-	cacheKey := s.Cfg.Billing.APIBase + "|" + s.Cfg.Billing.SecretKey + "|" + key + "|" + pinned // one Stripe account's prices
+	cacheKey := s.priceCacheKey(key, pinned)
 	priceIDs.Lock()
 	c, ok := priceIDs.m[cacheKey]
 	priceIDs.Unlock()
@@ -169,6 +169,28 @@ func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) 
 		found = list.Data[0]
 	}
 	return remember(priceCacheEntry{id: found.ID, cents: found.UnitAmount, currency: found.Currency, exp: s.Now().Add(priceCacheTTL)})
+}
+
+// priceCacheKey: one Stripe account's price by lookup key (and pinned id) in priceIDs.
+func (s *Service) priceCacheKey(key, pinned string) string {
+	return s.Cfg.Billing.APIBase + "|" + s.Cfg.Billing.SecretKey + "|" + key + "|" + pinned
+}
+
+// forgetPrice drops what lookupPrice remembers for a lookup key: Stripe just refused the price it names.
+func (s *Service) forgetPrice(key string) {
+	priceIDs.Lock()
+	delete(priceIDs.m, s.priceCacheKey(key, ""))
+	priceIDs.Unlock()
+}
+
+// stripeParam: the request parameter Stripe refused in err ("" when err is no refusal by Stripe, or names none).
+func stripeParam(err error) string {
+	var e *Error
+	if !errors.As(err, &e) || e.Code != "payment_provider_error" {
+		return ""
+	}
+	param, _ := e.Details["provider_param"].(string)
+	return param
 }
 
 // withLivePrices: a plan with the amounts Stripe actually charges (per seat, monthly and yearly) when billing

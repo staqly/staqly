@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
@@ -50,7 +50,10 @@ const paused = () =>
   })
 
 describe('a free trial that reused an unpaid one', () => {
-  beforeEach(() => forgetTrialUsedSeen())
+  beforeEach(() => {
+    forgetTrialUsedSeen()
+    localStorage.clear()
+  })
   afterEach(() => {
     nav.reset()
     act(() => closeTrialUsed())
@@ -103,6 +106,38 @@ describe('a free trial that reused an unpaid one', () => {
 
     expect(dialog).toHaveTextContent('This card was already used for a free trial')
     expect(dialog).toHaveTextContent('Your plan was charged today')
+  })
+
+  it('a charged card is explained once per browser: "Got it" is remembered for the workspace', async () => {
+    setup('owner', { revoked: 'card', status: 'active' })
+
+    await userEvent
+      .setup()
+      .click(within(await screen.findByTestId('trial-used')).getByRole('button', { name: 'Got it' }))
+    await waitFor(() => expect(screen.queryByTestId('trial-used')).not.toBeInTheDocument())
+
+    // A full page load later the billing state still says so.
+    cleanup()
+    forgetTrialUsedSeen()
+    const again = setup('owner', { revoked: 'card', status: 'active' })
+
+    await waitFor(() => expect(again.calls.some((c) => c.path === '/v1/billing')).toBe(true))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50))) // the answer is in and rendered
+    expect(screen.queryByTestId('trial-used')).not.toBeInTheDocument()
+  })
+
+  it('a card whose charge failed keeps returning with every page load', async () => {
+    setup('owner', { revoked: 'card', status: 'past_due' })
+    await userEvent
+      .setup()
+      .click(within(await screen.findByTestId('trial-used')).getByRole('button', { name: 'Not now' }))
+    await waitFor(() => expect(screen.queryByTestId('trial-used')).not.toBeInTheDocument())
+
+    cleanup()
+    forgetTrialUsedSeen()
+    setup('owner', { revoked: 'card', status: 'past_due' })
+
+    expect(await screen.findByTestId('trial-used')).toHaveAttribute('data-kind', 'card')
   })
 
   it('a card whose charge failed points to Plan & usage', async () => {

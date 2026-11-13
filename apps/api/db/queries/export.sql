@@ -64,7 +64,9 @@ UPDATE workspace_exports SET status = 'pending', started_at = NULL WHERE status 
 -- Only the builder that still holds the lease finishes: a purge or workspace deletion may have expired (or
 -- removed) the export while it was being built, or another process took it over. started_at goes back to
 -- when the build began.
-UPDATE workspace_exports SET status = ?, size_bytes = ?, error = ?, finished_at = ?, expires_at = ?, started_at = @started_at
+-- object_key: where this builder put the archive on S3 ('' on disk and for a failed build).
+UPDATE workspace_exports SET status = ?, size_bytes = ?, error = ?, finished_at = ?, expires_at = ?, started_at = @started_at,
+    object_key = @object_key
 WHERE id = ? AND status = 'running' AND started_at = @lease;
 
 -- name: ExpiredWorkspaceExports :many

@@ -761,6 +761,7 @@ type WorkspaceExport struct {
 	FinishedAt    sql.NullString `json:"finished_at"`
 	ExpiresAt     string         `json:"expires_at"`
 	IncludesMedia int64          `json:"includes_media"`
+	ObjectKey     string         `json:"object_key"`
 }
 
 type WorkspaceInvitation struct {
