@@ -27,7 +27,11 @@ func xLength(text string) int {
 		case r == 0x200D: // zero-width joiner: the next rune belongs to the same emoji
 			joined = true
 			continue
-		case joined, r == 0xFE0F, r >= 0x1F3FB && r <= 0x1F3FF, r == 0x20E3, r >= 0xE0020 && r <= 0xE007F:
+		case r == 0x20E3: // keycap: its base (0-9, #, *) counted 1, the whole emoji is 2
+			joined = false
+			n++
+			continue
+		case joined, r == 0xFE0F, r >= 0x1F3FB && r <= 0x1F3FF, r >= 0xE0020 && r <= 0xE007F:
 			joined = false // part of the emoji before it
 			continue
 		case r >= 0x1F1E6 && r <= 0x1F1FF: // regional indicators: a pair is one flag

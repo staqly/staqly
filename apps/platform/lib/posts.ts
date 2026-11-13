@@ -85,7 +85,14 @@ export function xLength(text: string) {
       continue
     }
 
-    if (joined || r === 0xfe0f || (r >= 0x1f3fb && r <= 0x1f3ff) || r === 0x20e3 || (r >= 0xe0020 && r <= 0xe007f)) {
+    if (r === 0x20e3) {
+      joined = false
+      n++ // keycap: its base (0-9, #, *) counted 1, the whole emoji is 2
+
+      continue
+    }
+
+    if (joined || r === 0xfe0f || (r >= 0x1f3fb && r <= 0x1f3ff) || (r >= 0xe0020 && r <= 0xe007f)) {
       joined = false // part of the emoji before it
 
       continue
