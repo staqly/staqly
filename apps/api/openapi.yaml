@@ -6603,7 +6603,7 @@ components:
     Provider:
       type: object
       description: A platform staqly can publish to
-      required: [id, name, auth, status, limits, credential_fields, settings_fields, app_configured, docs_url, needs_https, live_trigger]
+      required: [id, name, auth, status, limits, credential_fields, settings_fields, app_configured, docs_url, needs_https, live_trigger, deletes_posts]
       properties:
         id: { type: string, examples: [custom, telegram, bluesky, mastodon] }
         name: { type: string }
@@ -6618,6 +6618,7 @@ components:
         bot_name: { type: string, description: "Telegram: the server's bot's display name, shown beside its @username" }
         needs_https: { type: boolean, description: "The platform calls back over https only: connecting needs the dashboard on an https address (the dashboard shows it as not available otherwise)" }
         live_trigger: { type: boolean, description: "The platform says when a channel's stream starts, so a post can wait for it (publish_on, event live). Kick today" }
+        deletes_posts: { type: boolean, description: "Unpublish deletes a post on the platform through its API. False: the person deletes it there (Remove by hand), e.g. Instagram (Standalone), whose API deletes comments only" }
 
     MoltbookAgent:
       type: object

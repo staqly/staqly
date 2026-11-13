@@ -44,6 +44,22 @@ export function liveTargets(post: Pick<Post, 'targets'>): PostTarget[] {
   )
 }
 
+type CatalogEntry = { id: string; name: string; deletes_posts?: boolean }
+
+/** Live channels on a platform whose API can't delete a post (Instagram (Standalone)): left out of Unpublish. */
+export function keptTargets(post: Pick<Post, 'targets'>, providers: readonly CatalogEntry[] | undefined) {
+  return liveTargets(post).filter((t) => providers?.find((p) => p.id === t.provider)?.deletes_posts === false)
+}
+
+/** Why Unpublish can do nothing for the post ('' when it can): every live channel keeps posts (see keptTargets). */
+export function unpublishBlocked(post: Pick<Post, 'targets'>, providers: readonly CatalogEntry[] | undefined) {
+  const kept = keptTargets(post, providers)
+
+  return kept.length > 0 && kept.length === liveTargets(post).length
+    ? `${providers!.find((p) => p.id === kept[0]!.provider)!.name} can't delete posts through its API: delete it there yourself`
+    : ''
+}
+
 /** Every channel it went out on had it deleted on the platform itself, outside staqly. */
 export function deletedOutside(post: Pick<Post, 'targets'>) {
   const out = publishedTargets(post)

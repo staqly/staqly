@@ -24,7 +24,7 @@ import { threadsOf } from '@/lib/annotations'
 import { api, type Post, type PostComment, type PreviewLink } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
-import { canUnpublish, liveTargets, postTitle, wentOut } from '@/lib/posts'
+import { canUnpublish, keptTargets, liveTargets, postTitle, unpublishBlocked, wentOut } from '@/lib/posts'
 import { awaitOutcome } from '@/lib/publish-outcome'
 import {
   invalidateAfterPostChange,
@@ -32,6 +32,7 @@ import {
   refetchPostListsFromStart,
   removePostFromLists,
   syncPostInCache,
+  useProviders,
   useRole,
 } from '@/lib/queries'
 import { safeHttpUrl } from '@/lib/safe'
@@ -283,9 +284,13 @@ export function ShareDialog({
 export function UnpublishDialog({ post, onClose }: { post: Post; onClose: () => void }) {
   const qc = useQueryClient()
   const targets = liveTargets(post)
+  const { data: providers } = useProviders()
+  // A platform whose API can't delete posts (Instagram (Standalone)) is shown but can't be picked.
+  const kept = new Set(keptTargets(post, providers).map((t) => t.channel_id))
   const [picked, setPicked] = useState(() => new Set(targets.map((t) => t.channel_id)))
+  const chosen = [...picked].filter((id) => !kept.has(id))
   const unpublish = useMutation({
-    mutationFn: () => api.unpublishPost(post.id, [...picked]),
+    mutationFn: () => api.unpublishPost(post.id, chosen),
     onSuccess: (p) => {
       syncPostInCache(qc, p)
       invalidateAfterPostChange(qc, p.id)
@@ -309,7 +314,8 @@ export function UnpublishDialog({ post, onClose }: { post: Post; onClose: () => 
           {targets.map((t) => (
             <label key={t.channel_id} className="flex items-center gap-2 text-foreground">
               <Checkbox
-                checked={picked.has(t.channel_id)}
+                checked={picked.has(t.channel_id) && !kept.has(t.channel_id)}
+                disabled={kept.has(t.channel_id)}
                 onCheckedChange={(c) =>
                   setPicked((s) => {
                     const next = new Set(s)
@@ -325,6 +331,9 @@ export function UnpublishDialog({ post, onClose }: { post: Post; onClose: () => 
                 }
               />
               <ProviderIcon id={t.provider} className="size-4" /> {t.channel_name}
+              {kept.has(t.channel_id) && (
+                <span className="text-xs text-muted-foreground">delete it there yourself: its API can&apos;t</span>
+              )}
             </label>
           ))}
         </span>
@@ -332,7 +341,7 @@ export function UnpublishDialog({ post, onClose }: { post: Post; onClose: () => 
       confirmLabel="Unpublish"
       variant="destructive"
       // No channel picked would mean "all" to the API: never send that by accident.
-      onConfirm={() => picked.size > 0 && unpublish.mutate()}
+      onConfirm={() => chosen.length > 0 && unpublish.mutate()}
     />
   )
 }
@@ -349,6 +358,8 @@ export function PostActions({ post, onDeleted }: { post: Post; onDeleted: () => 
   const [shareOpen, setShareOpen] = useState(false)
   const [unpublishOpen, setUnpublishOpen] = useState(false)
   const { canWrite } = useRole()
+  const { data: providers } = useProviders()
+  const blocked = unpublishBlocked(post, providers)
   // A post that went out is history: it stays (the API refuses to delete it), so there is no Delete.
   const deletable = !wentOut(post)
   const comments = useQuery({ queryKey: commentsKey(post.id), queryFn: () => api.postComments(post.id) })
@@ -426,8 +437,10 @@ export function PostActions({ post, onDeleted }: { post: Post; onDeleted: () => 
             size="icon-sm"
             variant="ghost"
             aria-label="Unpublish"
-            tooltip="Unpublish"
-            onClick={() => setUnpublishOpen(true)}
+            // Greyed out, not hidden, so the tooltip says why (aria-disabled keeps the hover and focus).
+            aria-disabled={!!blocked || undefined}
+            tooltip={blocked ? `Unpublish: ${blocked}` : 'Unpublish'}
+            onClick={() => !blocked && setUnpublishOpen(true)}
             data-testid="post-unpublish"
           >
             <Undo2 />

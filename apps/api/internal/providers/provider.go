@@ -422,6 +422,12 @@ type Remover interface {
 	Remove(ctx context.Context, c Credentials, externalID string) error
 }
 
+// PostKeeper is a Remover that can delete a post's thread parts but never the post itself (Instagram login):
+// clients grey out Unpublish for it, and the API leaves the post to the person ("Remove by hand").
+type PostKeeper interface {
+	KeepsPosts()
+}
+
 // Result of a publish: how the platform names the post and where it lives.
 type Result struct {
 	ExternalID string `json:"external_id"`

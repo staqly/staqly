@@ -5980,6 +5980,8 @@ export interface components {
             needs_https: boolean;
             /** @description The platform says when a channel's stream starts, so a post can wait for it (publish_on, event live). Kick today */
             live_trigger: boolean;
+            /** @description Unpublish deletes a post on the platform through its API. False: the person deletes it there (Remove by hand), e.g. Instagram (Standalone), whose API deletes comments only */
+            deletes_posts: boolean;
         };
         /** @description A Moltbook agent the server registered and connected, and where its owner claims it */
         MoltbookAgent: {

@@ -156,6 +156,9 @@ type ProviderInfo struct {
 	// LiveTrigger: the platform says when a channel's stream starts, so a post can be scheduled for it
 	// (publish_on {"event":"live"}).
 	LiveTrigger bool `json:"live_trigger"`
+	// DeletesPosts: Unpublish deletes a post on the platform through its API; false means the person deletes it there
+	// (no delete at all, or Instagram login, which deletes comments only).
+	DeletesPosts bool `json:"deletes_posts"`
 }
 
 func providerInfo(e providers.Entry, appConfigured bool) ProviderInfo {
@@ -174,6 +177,8 @@ func providerInfo(e providers.Entry, appConfigured bool) ProviderInfo {
 		info.NeedsHTTPS = n.Needs().HTTPS
 	}
 	_, info.LiveTrigger = e.Provider.(providers.LiveNotifier)
+	_, keeps := e.Provider.(providers.PostKeeper)
+	info.DeletesPosts = isRemover(e) && !keeps
 	return info
 }
 

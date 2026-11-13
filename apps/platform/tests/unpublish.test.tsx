@@ -6,9 +6,9 @@ import { PostStatusBadge } from '@/components/common/status-badge'
 import { PostActions } from '@/components/posts/post-actions'
 import { PostStats } from '@/components/posts/post-stats'
 import { TargetStatus } from '@/components/posts/target-status'
-import { canUnpublish } from '@/lib/posts'
+import { canUnpublish, unpublishBlocked } from '@/lib/posts'
 
-import { post, target } from './fixtures'
+import { post, provider, target } from './fixtures'
 import { mockApi, renderWithProviders } from './utils'
 
 const out = (over = {}) =>
@@ -63,6 +63,50 @@ describe('unpublish', () => {
 
     await waitFor(() => expect(api.find('POST', url)).toHaveLength(1))
     expect(api.find('POST', url)[0]?.body).toEqual({ channel_ids: ['ch_1'] })
+  })
+
+  it('greys out Unpublish when no channel of the post can delete posts through its API (Instagram Standalone)', async () => {
+    const standalone = provider({ id: 'instagram_standalone', name: 'Instagram (Standalone)', deletes_posts: false })
+    const ig = out({
+      targets: [target({ provider: 'instagram_standalone', channel_name: 'Mia', status: 'published' })],
+    })
+
+    expect(unpublishBlocked(ig, [standalone])).toMatch(/Instagram \(Standalone\) can't delete posts/)
+    expect(unpublishBlocked(ig, undefined)).toBe('')
+    mockApi({
+      'GET /v1/session': { mode: 'local', role: 'owner' },
+      'GET /v1/posts/pst_1/comments': { data: [] },
+      'GET /v1/providers': { data: [standalone] },
+    })
+    renderWithProviders(<PostActions post={ig} onDeleted={() => {}} />)
+    const button = await screen.findByTestId('post-unpublish')
+
+    await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'))
+    await userEvent.click(button)
+    expect(screen.queryByTestId('unpublish-dialog')).toBeNull()
+  })
+
+  it('a post also on such a platform leaves that channel out of Unpublish', async () => {
+    const standalone = provider({ id: 'instagram_standalone', name: 'Instagram (Standalone)', deletes_posts: false })
+    const mixed = out({
+      targets: [
+        target({ status: 'published' }),
+        target({ channel_id: 'ch_ig', provider: 'instagram_standalone', channel_name: 'Mia', status: 'published' }),
+      ],
+    })
+    const api = mockApi({
+      'GET /v1/session': { mode: 'local', role: 'owner' },
+      'GET /v1/posts/pst_1/comments': { data: [] },
+      'GET /v1/providers': { data: [provider(), standalone] },
+      'POST /v1/posts/pst_1/unpublish': mixed,
+    })
+
+    renderWithProviders(<PostActions post={mixed} onDeleted={() => {}} />)
+    await userEvent.click(await screen.findByTestId('post-unpublish'))
+    await waitFor(() => expect(screen.getAllByRole('checkbox')[1]).toBeDisabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Unpublish' }))
+    await waitFor(() => expect(api.find('POST', '/v1/posts/pst_1/unpublish')).toHaveLength(1))
+    expect(api.find('POST', '/v1/posts/pst_1/unpublish')[0]?.body).toEqual({ channel_ids: ['ch_1'] })
   })
 
   it('hides Unpublish for viewers', async () => {

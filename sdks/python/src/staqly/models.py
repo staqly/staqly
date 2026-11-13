@@ -1575,6 +1575,9 @@ class Provider(StaqlyModel):
     needs_https: bool = False
     #: The platform says when a channel's stream starts, so a post can wait for it (``publish_on``).
     live_trigger: bool = False
+    #: Unpublish deletes a post on the platform through its API; False: the person deletes it there (Instagram
+    #: (Standalone) deletes comments only).
+    deletes_posts: bool = True
     #: Telegram: the server's own bot (@username) that connects a chat with /connect CODE.
     bot: str = ""
     #: That bot's display name.

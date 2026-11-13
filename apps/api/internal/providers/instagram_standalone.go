@@ -18,6 +18,9 @@ func init() {
 		Limits{MaxChars: 2200, MaxMedia: 10, MediaKinds: []string{"image", "video"}, NeedsMedia: true, CommentsTextOnly: true})}}, StatusAvailable)
 }
 
+// KeepsPosts: Instagram login has no delete for posts (only for comments); see Instagram.Remove.
+func (InstagramStandalone) KeepsPosts() {}
+
 // CheckApp: Instagram login has no app token to ask for; a wrong key shows at the first sign-in.
 func (InstagramStandalone) CheckApp(context.Context, App, string) (bool, error) { return true, nil }
 

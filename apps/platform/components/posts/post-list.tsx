@@ -52,7 +52,7 @@ import {
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { api, ApiError, type Collection, type Post, type PostQuery, type PostPage } from '@/lib/api'
+import { api, ApiError, type Collection, type Post, type PostQuery, type PostPage, type Provider } from '@/lib/api'
 import { formatDateTime, timeAgo } from '@/lib/format'
 import { namedToast, toastApiError } from '@/lib/notify'
 import {
@@ -62,6 +62,7 @@ import {
   isLocked,
   postTitle,
   publishedTargets,
+  unpublishBlocked,
   wentOut,
 } from '@/lib/posts'
 import { undoDelayMs, undoToast } from '@/lib/publish-undo'
@@ -330,6 +331,7 @@ function RowMenu({
 }) {
   const [used, setUsed] = useState<'mounted' | 'keyboard' | null>(null)
   const content = useRef<HTMLDivElement>(null)
+  const qc = useQueryClient()
   const label = `More actions for ${postTitle(post, 40)}`
 
   // Opened from the keyboard before the menu existed (Radix didn't see the key): start on the first item, as it
@@ -379,6 +381,9 @@ function RowMenu({
   const canPublish = canReschedule(post) && (post.targets?.length ?? 0) > 0
   const canUnschedule = post.status === 'scheduled'
   const unpublishable = canUnpublish(post)
+  // Read from the cache, not a query per row (thousands of rows): the catalog is loaded by the composer and Channels;
+  // before it is, Unpublish stays on and the API answers "Remove by hand".
+  const blocked = unpublishBlocked(post, qc.getQueryData<Provider[]>(qk.providers))
   const links = (waiting ? [] : publishedTargets(post)).flatMap((t) => {
     const url = safeHttpUrl(t.external_url)
 
@@ -425,7 +430,11 @@ function RowMenu({
                 </DropdownMenuItem>
               )}
               {unpublishable && (
-                <DropdownMenuItem onSelect={() => onAction('unpublish', post)}>
+                <DropdownMenuItem
+                  disabled={!!blocked}
+                  title={blocked || undefined}
+                  onSelect={() => onAction('unpublish', post)}
+                >
                   <Undo2 /> Unpublish
                 </DropdownMenuItem>
               )}

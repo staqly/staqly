@@ -143,6 +143,7 @@ export function provider(over: Partial<Provider> = {}): Provider {
     app_configured: true,
     needs_https: false,
     live_trigger: false,
+    deletes_posts: true,
     docs_url: 'https://docs.staqly.ai/channels/mastodon',
     ...over,
   }
