@@ -53,6 +53,7 @@ const POST_EVENT_GROUPS: { title: string; events: { value: string; hint: string 
       { value: 'schedule.failed', hint: 'A schedule run failed' },
       { value: 'channel.connected', hint: 'A channel was connected' },
       { value: 'channel.needs_reconnect', hint: 'A channel lost its sign-in' },
+      { value: 'channel.expiring', hint: 'A sign-in runs out in two weeks and needs renewing' },
       { value: 'channel.disconnected', hint: 'A channel was removed' },
     ],
   },

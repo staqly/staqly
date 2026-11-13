@@ -47,6 +47,7 @@ const LABELS: Record<string, string> = {
   'channel_link.revoked': 'Connect link revoked',
   'channel.updated': 'Channel updated',
   'channel.needs_reconnect': 'Channel needs reconnecting',
+  'channel.expiring': 'Channel sign-in runs out soon',
   'channel.disconnected': 'Channel removed',
   'schedule.created': 'Schedule created',
   'schedule.updated': 'Schedule updated',
@@ -129,7 +130,7 @@ function eventTone(type: string): Tone {
     return 'danger'
   }
 
-  if (/^(needs_reconnect|posts_requested)$/.test(verb)) {
+  if (/^(needs_reconnect|expiring|posts_requested)$/.test(verb)) {
     return 'warning'
   }
 

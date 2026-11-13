@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/riverqueue/river"
+
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/providers"
 )
@@ -45,6 +47,9 @@ type Channel struct {
 	UpdatedAt string `json:"updated_at"`
 	// Activity is read from the channel's targets; only GET /channels and GET /channels/{id} include it.
 	Activity *ChannelActivity `json:"activity,omitempty"`
+	// RenewBy: the platform ends this sign-in then and staqly can't renew it itself (LinkedIn without refresh
+	// tokens): someone signs in again before. Only GET /channels, GET /channels/{id} and channel.expiring have it.
+	RenewBy *string `json:"renew_by,omitempty"`
 }
 
 // ChannelActivity: when the channel last published (and which post), its next scheduled post and how many
@@ -860,6 +865,7 @@ func (s *Service) ListChannels(ctx context.Context, p Principal, f ChannelFilter
 			continue
 		}
 		c.Activity = activity(c.ID)
+		c.RenewBy = s.renewBy(r)
 		out = append(out, c)
 	}
 	return out, nil
@@ -908,7 +914,40 @@ func (s *Service) GetChannel(ctx context.Context, p Principal, id string) (Chann
 	out := toChannelOut(row)
 	out.GroupID = group(row.GroupID)
 	out.Activity = activity(row.ID)
+	out.RenewBy = s.renewBy(row)
 	return out, nil
+}
+
+// renewNotice is how long before an unrenewable sign-in runs out people are told (channel.expiring).
+const renewNotice = 14 * 24 * time.Hour
+
+// runsOut: when the platform ends these credentials unless the person signs in again (providers.Unrenewable).
+func runsOut(provider string, creds providers.Credentials) (time.Time, bool) {
+	if e, ok := providers.Get(provider); ok {
+		if u, ok := e.Provider.(providers.Unrenewable); ok {
+			return u.RunsOut(creds)
+		}
+	}
+	return time.Time{}, false
+}
+
+// renewBy is a channel's renew_by: nil for a sign-in staqly renews itself, or one already refused.
+func (s *Service) renewBy(row db.Channel) *string {
+	if e, ok := providers.Get(row.Provider); !ok || row.Status == "needs_reconnect" {
+		return nil
+	} else if _, ok := e.Provider.(providers.Unrenewable); !ok {
+		return nil // nothing to unseal for every other platform
+	}
+	var creds providers.Credentials
+	if s.unseal(row.Credentials, &creds) != nil {
+		return nil
+	}
+	exp, ok := runsOut(row.Provider, creds)
+	if !ok {
+		return nil
+	}
+	at := formatTime(exp)
+	return &at
 }
 
 func (s *Service) channelRow(ctx context.Context, p Principal, id string) (db.Channel, error) {
@@ -1213,6 +1252,9 @@ func (s *Service) scheduleRefresh(ctx context.Context, row db.Channel, creds pro
 		return
 	}
 	runAt := exp.Add(-24 * time.Hour)
+	if _, ok := runsOut(row.Provider, creds); ok && exp.Add(-renewNotice).After(s.Now()) {
+		runAt = exp.Add(-renewNotice) // nothing to renew: the look that far ahead tells people (refreshChannel)
+	}
 	if runAt.Before(s.Now()) {
 		// Short-lived tokens (X: 2 hours) refresh half an hour before they run out, not again and again
 		// right away; one about to expire is refreshed when it is used (refreshIfDue).
@@ -1222,6 +1264,56 @@ func (s *Service) scheduleRefresh(ctx context.Context, row db.Channel, creds pro
 		}
 	}
 	_ = s.enqueue(ctx, s.W, row.WorkspaceID, "refresh_channel", "refresh_channel:"+row.ID, map[string]any{"channel_id": row.ID}, runAt, 3)
+}
+
+// advanceRenewalNotices runs when the queue starts: a sign-in that can't be renewed and was connected before
+// channel.expiring existed still has its look queued a day before the end. That look moves to renewNotice ahead
+// (now, when that has passed), so those channels are announced like new ones. Only a queued look dated before the
+// end moves: after the announcement the next one waits past the end, so every later start leaves it alone.
+func (s *Service) advanceRenewalNotices(ctx context.Context) {
+	for _, e := range providers.All() {
+		if _, ok := e.Provider.(providers.Unrenewable); !ok {
+			continue
+		}
+		rows, err := s.Q.ConnectedChannelsOfProvider(ctx, e.ID())
+		if err != nil {
+			s.logger(ctx).Warn("renewal notices: channels not read", "provider", e.ID(), "err", err)
+			continue
+		}
+		for _, r := range rows {
+			row, err := s.Q.GetChannelByID(ctx, r.ID)
+			if err != nil {
+				continue
+			}
+			var creds providers.Credentials
+			if s.unseal(row.Credentials, &creds) != nil {
+				continue
+			}
+			exp, ok := runsOut(row.Provider, creds)
+			if !ok || !exp.After(s.Now()) {
+				continue
+			}
+			want := exp.Add(-renewNotice)
+			if want.Before(s.Now()) {
+				want = s.Now()
+			}
+			key := "refresh_channel:" + row.ID
+			err = s.tx(ctx, func(q *db.Queries) error {
+				queued, err := s.river.JobListTx(ctx, s.sqlTx(q), river.NewJobListParams().Kinds("refresh_channel").States(queuedJobStates...).
+					Where(s.jobArgsWhere("key"), river.NamedArgs{"key": key}).First(1))
+				if err != nil || len(queued.Jobs) == 0 {
+					return err // none, or running right now
+				}
+				if at := queued.Jobs[0].ScheduledAt; !at.Before(exp) || !at.After(want.Add(time.Minute)) {
+					return nil // announced already, or early enough
+				}
+				return s.enqueue(ctx, q, row.WorkspaceID, "refresh_channel", key, map[string]any{"channel_id": row.ID}, want, 3)
+			})
+			if err != nil {
+				s.logger(ctx).Warn("renewal notices: look not moved", "channel_id", row.ID, "err", err)
+			}
+		}
+	}
 }
 
 func credentialsExpiry(creds providers.Credentials) (time.Time, bool) {
@@ -1299,10 +1391,21 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 	s.syncComments(ctx, row, creds, fresh)
 	if old, ok := credentialsExpiry(creds); ok {
 		if exp, ok := credentialsExpiry(fresh); ok && exp.Equal(old) {
-			// Nothing was renewed (a platform without refresh tokens, like LinkedIn for most apps): look again when
-			// the token runs out, so the channel turns needs_reconnect and alerts then, not at its next post.
-			_ = s.enqueue(ctx, s.W, row.WorkspaceID, "refresh_channel", "refresh_channel:"+row.ID, map[string]any{"channel_id": row.ID}, exp.Add(time.Minute), 3)
-			return nil
+			// Nothing was renewed (a platform without refresh tokens, like LinkedIn for most apps): people are told
+			// now, once (this look runs once per sign-in, and the event and the next look are one transaction), and
+			// the next look is when the token runs out, so the channel turns needs_reconnect and alerts then, not
+			// at its next post.
+			sys := Principal{WorkspaceID: row.WorkspaceID, Kind: PrincipalSystem, ID: "channels", Name: "Channels"}
+			return s.tx(ctx, func(q *db.Queries) error {
+				if _, ok := runsOut(row.Provider, fresh); ok {
+					out := toChannelOut(row)
+					out.RenewBy = s.renewBy(row)
+					if _, err := s.emitRef(ctx, q, sys, "channel.expiring", Ref{Channel: row.ID}, map[string]any{"channel": out}); err != nil {
+						return err
+					}
+				}
+				return s.enqueue(ctx, q, row.WorkspaceID, "refresh_channel", "refresh_channel:"+row.ID, map[string]any{"channel_id": row.ID}, exp.Add(time.Minute), 3)
+			})
 		}
 	}
 	s.scheduleRefresh(ctx, row, fresh)

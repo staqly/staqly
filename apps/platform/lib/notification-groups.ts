@@ -16,6 +16,7 @@ export const NOTIFICATION_TYPES = [
   'schedule.posts_requested',
   'schedule.failed',
   'channel.needs_reconnect',
+  'channel.expiring',
   'channel.connected',
   'workspace.plan_changed',
 ]

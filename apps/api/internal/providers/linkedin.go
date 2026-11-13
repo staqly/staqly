@@ -177,6 +177,14 @@ func (l LinkedIn) refresh(ctx context.Context, app App, c Credentials, check str
 	return t.into(c, time.Now()), nil
 }
 
+// RunsOut: without a refresh token the token's 60 days end unless the member signs in again.
+func (LinkedIn) RunsOut(c Credentials) (time.Time, bool) {
+	if c["refresh_token"] != "" {
+		return time.Time{}, false
+	}
+	return credentialsExpiry(c)
+}
+
 // credentialsExpiry reads "expires_at" (RFC3339).
 func credentialsExpiry(c Credentials) (time.Time, bool) {
 	t, err := time.Parse(time.RFC3339, c["expires_at"])

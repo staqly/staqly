@@ -6440,6 +6440,7 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         activity: { $ref: "#/components/schemas/ChannelActivity" }
+        renew_by: { type: string, format: date-time, description: "The platform ends this channel's sign-in then and staqly can't renew it by itself (LinkedIn, unless its app gets refresh tokens): someone signs in again before, through the OAuth flow. `channel.expiring` is emitted once, 14 days ahead. Absent for a sign-in staqly renews itself. Only GET /v1/channels, GET /v1/channels/{id} and the `channel.expiring` event include it." }
 
     ChannelActivity:
       type: object
@@ -6639,7 +6640,7 @@ components:
       type: object
       required: [event, email, in_app]
       properties:
-        event: { type: string, enum: [post.published, post.failed, post.feedback_added, channel.needs_reconnect, schedule.posts_requested, invitation.accepted] }
+        event: { type: string, enum: [post.published, post.failed, post.feedback_added, channel.needs_reconnect, channel.expiring, schedule.posts_requested, invitation.accepted] }
         email: { type: boolean }
         in_app: { type: boolean, description: Shown in the bell }
     NotificationPrefs:
