@@ -48,6 +48,18 @@ func TestMetaWebhookQueuesACommentsRead(t *testing.T) {
 	if err != nil || len(page.Data) != 1 {
 		t.Fatalf("jobs %+v %v", page.Data, err)
 	}
+	// The event changed the post's numbers too (a comment count; on Facebook a reaction): one check, a minute later.
+	checks, err := s.ListJobs(ctx, p, JobFilter{Kind: "check_target"})
+	if err != nil || len(checks.Data) != 1 {
+		t.Fatalf("numbers checks %+v %v", checks.Data, err)
+	}
+	// A second event in the burst moves the same check out instead of adding one.
+	if _, err := s.HandleMetaWebhook(ctx, []byte(body), metaSign("meta-secret", body)); err != nil {
+		t.Fatal(err)
+	}
+	if checks, err = s.ListJobs(ctx, p, JobFilter{Kind: "check_target"}); err != nil || len(checks.Data) != 1 {
+		t.Fatalf("a burst makes one numbers check: %+v %v", checks.Data, err)
+	}
 	other := `{"object":"page","entry":[{"changes":[{"field":"feed","value":{"item":"comment","post_id":"999_1"}}]}]}`
 	if n, err := s.HandleMetaWebhook(ctx, []byte(other), metaSign("meta-secret", other)); err != nil || n != 0 {
 		t.Fatalf("someone else's post: %d %v", n, err)
