@@ -39,7 +39,7 @@ func newEnv(t *testing.T, admins ...string) *env {
 	return &env{t: t, svc: svc, h: adminapi.New(svc, log, adminapi.Config{})}
 }
 
-func (e *env) do(method, path string, body any) *httptest.ResponseRecorder {
+func (e *env) do(method, path string, body any, hdr ...string) *httptest.ResponseRecorder {
 	e.t.Helper()
 	var rd io.Reader
 	if body != nil {
@@ -56,6 +56,9 @@ func (e *env) do(method, path string, body any) *httptest.ResponseRecorder {
 		if e.csrf != "" {
 			r.Header.Set("X-CSRF-Token", e.csrf)
 		}
+	}
+	for i := 0; i+1 < len(hdr); i += 2 {
+		r.Header.Set(hdr[i], hdr[i+1])
 	}
 	w := httptest.NewRecorder()
 	e.h.ServeHTTP(w, r)
