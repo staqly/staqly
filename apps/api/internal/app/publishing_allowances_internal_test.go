@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -271,6 +272,55 @@ func TestPublishingAllowanceRefundsPurchasedCredits(t *testing.T) {
 		if err != nil || x.CreditsLeft != int64(2-i) || x.IncludedLeft != 0 {
 			t.Fatalf("attempt %d: purchased credits not preserved/accounted: %+v, %v", i, x, err)
 		}
+	}
+}
+
+// Was a bug: a publish holds a bought X credit while X is asked; the purchase is refunded in full meanwhile; X then
+// rejects the post, and releasing the reservation brought the refunded credit back.
+func TestPublishingAllowanceReleaseKeepsRefundedCreditsRefunded(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		units int64 // the bought bundle
+	}{{"a bundle of one", 1}, {"a bundle of five", 5}} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, p, posts, _, _ := allowanceFixture(t, "x", &allowanceProvider{})
+			ctx := context.Background()
+			if _, err := s.W.InsertUsageEvent(ctx, db.InsertUsageEventParams{WorkspaceID: p.WorkspaceID, Provider: ProviderX, Ref: "last-included",
+				Period: s.period(), Units: 1, Included: 1, CreatedAt: s.now()}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.W.InsertCreditGrant(ctx, db.InsertCreditGrantParams{ID: "purchased", WorkspaceID: p.WorkspaceID, Provider: ProviderX,
+				Units: tc.units, Source: "stripe:cs_1", ExpiresAt: formatTime(s.monthEnd()), CreatedAt: s.now()}); err != nil {
+				t.Fatal(err)
+			}
+			ref := "refunded:" + posts[0].ID
+			fresh, err := s.reservePublishingAllowance(ctx, p.WorkspaceID, ref, ProviderX, 1, false)
+			if err != nil || !fresh {
+				t.Fatalf("reserve: fresh=%v, %v", fresh, err)
+			}
+			if x, err := s.xPosts(ctx, s.Q, p.WorkspaceID); err != nil || x.CreditsLeft != tc.units-1 {
+				t.Fatalf("setup: one bought credit is reserved: %+v, %v", x, err)
+			}
+			// charge.refunded for the whole purchase, as HandleStripeWebhook applies it.
+			cs := creditSession{ID: "cs_1", Metadata: map[string]string{"staqly_posts": strconv.FormatInt(tc.units, 10)}}
+			if err := s.tx(ctx, func(q *db.Queries) error {
+				return s.revokeCredits(ctx, q, cs, creditRefund{PaymentIntent: "pi_1", Amount: 900, Taken: 900}, "charge.refunded")
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// X rejects the post: the reservation is released.
+			if err := s.finishPublishingAllowance(ctx, p.WorkspaceID, ref, ProviderX, fresh,
+				&providers.Failure{Kind: providers.ErrRejected, Msg: "invalid post"}); err != nil {
+				t.Fatal(err)
+			}
+			x, err := s.xPosts(ctx, s.Q, p.WorkspaceID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if x.CreditsLeft != 0 {
+				t.Fatalf("a fully refunded purchase left %d bought credits to publish with after the reserved one was released, want 0", x.CreditsLeft)
+			}
+		})
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -185,11 +186,27 @@ func (s *Service) activeEntitlements(ctx context.Context, customer string) ([]En
 	if err != nil {
 		return nil, err
 	}
+	// A feature made since the catalog was cached (10 minutes) would be kept without its metadata, so without
+	// the limits it raises: read the catalog again, once.
+	if slices.ContainsFunc(list.Data, func(a struct {
+		Feature   string `json:"feature"`
+		LookupKey string `json:"lookup_key"`
+	}) bool {
+		_, ok := features[a.Feature]
+		return !ok
+	}) {
+		featureCache.Lock()
+		featureCache.exp = time.Time{}
+		featureCache.Unlock()
+		if features, err = s.stripeFeatures(ctx); err != nil {
+			return nil, err
+		}
+	}
 	out := []Entitlement{}
 	for _, a := range list.Data {
 		e, ok := features[a.Feature]
 		if !ok {
-			e = Entitlement{LookupKey: a.LookupKey, Name: a.LookupKey} // a feature made in the last 10 minutes
+			e = Entitlement{LookupKey: a.LookupKey, Name: a.LookupKey} // past the catalog's first 100 (stripeFeatures)
 		}
 		if e.LookupKey == "" {
 			e.LookupKey = a.LookupKey

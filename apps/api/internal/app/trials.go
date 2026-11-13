@@ -353,6 +353,13 @@ func (s *Service) StartPaidPlan(ctx context.Context, p Principal) (Billing, erro
 	if w.SubscriptionStatus.String != "trialing" || !w.StripeSubscriptionID.Valid {
 		return Billing{}, conflict("this workspace is not in a free trial; choose a plan in Settings → Plan & usage")
 	}
+	// Ended and applied under the customer's lock (lockBilling): an answer that stalls must not be applied over
+	// what a webhook brought since.
+	unlock, err := s.lockBilling(ctx, w.StripeCustomerID.String)
+	if err != nil {
+		return Billing{}, err
+	}
+	defer unlock()
 	sub, err := s.endTrialNow(ctx, w.StripeSubscriptionID.String, "start")
 	if err != nil {
 		return Billing{}, err
@@ -542,6 +549,12 @@ func (s *Service) paymentMethodAttached(ctx context.Context, eventID string, raw
 	if err != nil {
 		return err
 	}
+	// Under the customer's lock, as after a subscription event: the check may end the trial and apply the result.
+	unlock, err := s.lockBilling(ctx, pm.Customer)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	return s.guardCardOf(ctx, pm.Customer, ws, pm.Card.Fingerprint)
 }
 

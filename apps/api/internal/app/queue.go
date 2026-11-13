@@ -367,6 +367,13 @@ func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 		metricJobs.Inc(j.Kind, "snoozed")
 		s.logger(ctx).Warn("job waits for the platform's limit", "attempt", j.Attempt, "until", s.Now().Add(wait), "err", err)
 		return river.JobSnooze(wait) // a snooze spends no attempt
+	case (j.Kind == "sync_seats" || j.Kind == "sync_entitlements") && j.Attempt >= j.MaxAttempts && s.Now().Sub(j.CreatedAt) < billingSyncGiveUp:
+		// Out of attempts while Stripe still has the old seats or features: nothing else would put them right
+		// before the next subscription event (up to a year away), so the job keeps trying, with its payload (the
+		// time of the change, which the seats are prorated from).
+		metricJobs.Inc(j.Kind, "snoozed")
+		s.logger(ctx).Warn("billing sync job failed; it tries again later", "attempt", j.Attempt, "err", err)
+		return river.JobSnooze(billingSyncRetryEvery) // a snooze spends no attempt
 	case j.Attempt >= j.MaxAttempts:
 		metricJobs.Inc(j.Kind, "failed")
 		s.logger(ctx).Warn("job failed", "attempt", j.Attempt, "err", err)

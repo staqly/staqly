@@ -301,6 +301,11 @@ period to the card on file and adds the add-on once that payment goes through; i
 subscription stays as it was and the API answers 402 `payment_failed`, like an upgrade. **Remove**
 (`DELETE /v1/billing/addons/{id}`) takes it off now and [credits](#credits) the unused rest.
 
+An add-on is billed like the plan, monthly or yearly. Changing the plan's interval moves the add-ons
+to it in the same step: monthly to yearly charges their year with the plan's, yearly to monthly
+credits their unused rest. An add-on that isn't sold in the new interval stops the change (409
+`not_available`): remove it first.
+
 ### Defining an add-on in Stripe
 
 Operators of a cloud server sell add-ons by making them in Stripe; staqly reads them from there (the

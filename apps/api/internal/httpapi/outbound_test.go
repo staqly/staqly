@@ -318,13 +318,14 @@ func TestCreditRefundsAndDisputesTakeBackUnusedPosts(t *testing.T) {
 	if n := creditsLeft(); n != 70 {
 		t.Fatalf("a repeated or older refund changed the credits: %d", n)
 	}
-	// The rest refunded: only what was used stays (never below it).
+	// The rest refunded: nothing is left. The grant's units are what the refund leaves (none), below what was
+	// used, so a post given back later (a rejected publish) doesn't make one of them usable again.
 	e.stripeEvent("evt_ref_2", "charge.refunded", charge(1000), testWhsec)
 	if n := creditsLeft(); n != 0 {
 		t.Fatalf("after a full refund: %d left", n)
 	}
 	var units, used int64
-	if err := e.svc.DB.QueryRowContext(ctx, `SELECT units, used FROM credit_grants WHERE source = 'stripe:cs_r1'`).Scan(&units, &used); err != nil || units != 30 || used != 30 {
+	if err := e.svc.DB.QueryRowContext(ctx, `SELECT units, used FROM credit_grants WHERE source = 'stripe:cs_r1'`).Scan(&units, &used); err != nil || units != 0 || used != 30 {
 		t.Fatalf("grant after a full refund: units %d used %d (%v)", units, used, err)
 	}
 

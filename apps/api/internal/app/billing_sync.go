@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
@@ -15,7 +16,8 @@ import (
 
 const billingSyncEvery = 10 * time.Minute
 
-// syncSubscription reads the customer's newest subscription from Stripe and applies it to the workspace.
+// syncSubscription reads the customer's subscription from Stripe and applies it to the workspace: the newest live
+// one, else the newest (a cancelled duplicate is newer than the one that was kept: settleDuplicate).
 func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 	var list struct {
 		Data []stripeSubscription `json:"data"`
@@ -26,7 +28,7 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 		return err
 	}
 	defer unlock()
-	q := url.Values{"customer": {customer}, "status": {"all"}, "limit": {"1"}, "expand[]": {"data.default_payment_method", "data.latest_invoice"}}
+	q := url.Values{"customer": {customer}, "status": {"all"}, "limit": {"10"}, "expand[]": {"data.default_payment_method", "data.latest_invoice"}}
 	if err := s.stripe(ctx, "GET", "/v1/subscriptions?"+q.Encode(), nil, &list); err != nil {
 		return err
 	}
@@ -34,6 +36,9 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 		return nil // no subscription yet: a checkout not finished
 	}
 	sub := list.Data[0]
+	if i := slices.IndexFunc(list.Data, func(s stripeSubscription) bool { return liveSubscription(s.Status) }); i >= 0 {
+		sub = list.Data[i]
+	}
 	if err := s.tx(ctx, func(q *db.Queries) error { return s.applySubscription(ctx, q, sub, "billing.sync") }); err != nil {
 		return err
 	}
