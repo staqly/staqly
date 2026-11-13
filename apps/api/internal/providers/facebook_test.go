@@ -265,6 +265,10 @@ func TestFacebookConnect(t *testing.T) {
 	if q.Query().Get("scope") != facebookScopes || q.Query().Get("state") != "st" || q.Query().Get("client_id") != "cid" {
 		t.Fatalf("auth url %s", u)
 	}
+	// Audience comments read other people's comments: the sign-in has to ask for it.
+	if !strings.Contains(q.Query().Get("scope"), "pages_read_user_content") {
+		t.Fatalf("auth url does not ask for pages_read_user_content: %s", u)
+	}
 	ctx := context.Background()
 	creds, person, err := fb.Exchange(ctx, app, "https://app.example/cb", "code1", nil)
 	if err != nil {
