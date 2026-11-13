@@ -74,6 +74,9 @@ export function timeAgo(value?: string | null, now: number = Date.now()): string
   return d.toLocaleString()
 }
 
+/** "Oct 19", for pages that don't load the calendar's formats (lib/schedule.ts). */
+export const monthDayFormat = lazyDateFormat({ month: 'short', day: 'numeric' })
+
 export function formatDateTime(value?: string | null): string {
   const d = parseDate(value)
 

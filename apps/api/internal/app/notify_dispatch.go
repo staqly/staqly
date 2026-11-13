@@ -372,6 +372,8 @@ func eventLabel(e notifyEntry) string {
 		return "Scheduled"
 	case "channel.needs_reconnect":
 		return "Channel needs reconnecting"
+	case "channel.expiring":
+		return "Channel sign-in runs out soon"
 	case "channel.connected":
 		return "Channel connected"
 	case "schedule.posts_requested":
@@ -434,7 +436,8 @@ func (s *Service) buildMessage(ctx context.Context, ch *notifyChannel, rows []db
 				Name string `json:"name"`
 			} `json:"collection"`
 			Channel *struct {
-				Name string `json:"name"`
+				Name    string `json:"name"`
+				RenewBy string `json:"renew_by"`
 			} `json:"channel"`
 			Schedule *struct {
 				Name string `json:"name"`
@@ -446,6 +449,9 @@ func (s *Service) buildMessage(ctx context.Context, ch *notifyChannel, rows []db
 		e.Collection = data.Collection.Name
 		if data.Channel != nil {
 			e.Channel = data.Channel.Name
+			if t, err := time.Parse(timeFormat, data.Channel.RenewBy); err == nil && ev.Type == "channel.expiring" {
+				e.Note = "Sign in again by " + t.Format("2 January") + " to keep publishing"
+			}
 		}
 		if data.Error != "" {
 			e.Note = "Error: " + data.Error

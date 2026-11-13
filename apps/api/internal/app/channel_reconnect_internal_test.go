@@ -113,6 +113,11 @@ func (f *fakeNoRenew) Refresh(_ context.Context, _ providers.App, c providers.Cr
 	return nil, &providers.Failure{Kind: providers.ErrReauth, Msg: "signs apps out after 60 days; reconnect the account"}
 }
 
+func (f *fakeNoRenew) RunsOut(c providers.Credentials) (time.Time, bool) {
+	exp, err := time.Parse(time.RFC3339, c["expires_at"])
+	return exp, err == nil
+}
+
 // A token that can't be renewed is looked at again when it runs out: the channel turns needs_reconnect (and
 // alerts) then, even if nothing is published, instead of failing its next post.
 func TestUnrenewableTokenNeedsReconnectWhenItRunsOut(t *testing.T) {
@@ -148,6 +153,24 @@ func TestUnrenewableTokenNeedsReconnectWhenItRunsOut(t *testing.T) {
 	js := jobsByKey(t, s, "refresh_channel:chn_x")
 	if len(js) != 1 || js[0].ScheduledAt.Sub(exp.Add(time.Minute)).Abs() > time.Second {
 		t.Fatalf("refresh jobs %+v, want one at %s", js, exp.Add(time.Minute))
+	}
+	// That look told people, once, with the date; the channel carries it too.
+	soon, _ := s.ListEvents(ctx, p, EventFilter{ChannelID: "chn_x", Type: "channel.expiring"})
+	if len(soon.Data) != 1 || !strings.Contains(string(soon.Data[0].Data), formatTime(exp)) {
+		t.Fatalf("channel.expiring events: %+v", soon.Data)
+	}
+	if ch, err := s.GetChannel(ctx, p, "chn_x"); err != nil || ch.RenewBy == nil || *ch.RenewBy != formatTime(exp) {
+		t.Fatalf("renew_by: %+v %v", ch.RenewBy, err)
+	}
+	// A sign-in with longer to go is looked at two weeks ahead, not a day.
+	row0, _ := s.Q.GetChannelByID(ctx, "chn_x")
+	far := base.Add(60 * 24 * time.Hour)
+	s.scheduleRefresh(ctx, row0, providers.Credentials{"access_token": "at", "expires_at": far.Format(time.RFC3339)})
+	if js := jobsByKey(t, s, "refresh_channel:chn_x"); len(js) != 1 || js[0].ScheduledAt.Sub(far.Add(-renewNotice)).Abs() > time.Second {
+		t.Fatalf("refresh jobs %+v, want one at %s", js, far.Add(-renewNotice))
+	}
+	if err := s.enqueue(ctx, s.W, p.WorkspaceID, "refresh_channel", "refresh_channel:chn_x", map[string]any{"channel_id": "chn_x"}, exp.Add(time.Minute), 3); err != nil {
+		t.Fatal(err)
 	}
 
 	// Then: it ran out, the channel needs reconnecting and says so.

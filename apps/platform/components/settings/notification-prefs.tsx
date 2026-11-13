@@ -21,6 +21,7 @@ const LABELS: Record<string, [string, string]> = {
   'post.failed': ['Post failed to publish', 'Which channel refused it and why'],
   'post.feedback_added': ['Feedback on a preview', 'A reviewer commented on a shared post'],
   'channel.needs_reconnect': ['Channel needs reconnecting', 'For owners and admins'],
+  'channel.expiring': ['Channel sign-in runs out soon', 'Two weeks ahead, for owners and admins'],
   'schedule.posts_requested': ['Schedule out of posts', 'For owners and admins'],
   'invitation.accepted': ['Someone joined', 'For owners and admins'],
 }

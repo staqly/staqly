@@ -321,3 +321,16 @@ func TestLinkedInQuotaWaitsForTheNextUTCDay(t *testing.T) {
 		t.Fatalf("retry at %v (%v), want just after %v", at, err, next)
 	}
 }
+
+// Only a sign-in without a refresh token runs out on its own date.
+func TestLinkedInRunsOut(t *testing.T) {
+	exp := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	c := Credentials{"access_token": "at", "expires_at": exp.Format(time.RFC3339)}
+	if got, ok := (LinkedIn{}).RunsOut(c); !ok || !got.Equal(exp) {
+		t.Fatalf("without a refresh token: %v %v", got, ok)
+	}
+	c["refresh_token"] = "rt"
+	if _, ok := (LinkedInPage{}).RunsOut(c); ok {
+		t.Fatal("a sign-in with a refresh token renews itself")
+	}
+}

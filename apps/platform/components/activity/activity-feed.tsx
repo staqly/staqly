@@ -52,6 +52,7 @@ const EVENT_TYPES = [
   'channel.connected',
   'channel.updated',
   'channel.needs_reconnect',
+  'channel.expiring',
   'channel.disconnected',
   'schedule.created',
   'schedule.updated',

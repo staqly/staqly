@@ -2250,6 +2250,21 @@ function ComposerBody({
                   invalid={!!errors.targets}
                 />
                 <FieldError>{errors.targets}</FieldError>
+                {/* A sign-in the platform ends before this post's time (renew_by): it would wait for a reconnect. */}
+                {!locked &&
+                  publishAt &&
+                  picked
+                    .filter((c) => c.renew_by && new Date(c.renew_by) < publishAt)
+                    .map((c) => (
+                      <Callout key={c.id} tone="warning" size="xs" data-testid="channel-renew-first">
+                        The sign-in of {c.name} runs out {dateFormats.monthDay().format(new Date(c.renew_by!))}, before
+                        this post goes out.{' '}
+                        <Link href="/channels" className="underline underline-offset-2 hover:no-underline">
+                          Renew it on Channels
+                        </Link>{' '}
+                        by then, or the post will wait.
+                      </Callout>
+                    ))}
                 {/* Posts to X are metered: say so before publishing when this period's are used up. */}
                 {!locked && xOut && picked.some((c) => c.provider === 'x') && (
                   <Callout tone="danger" size="xs" data-testid="x-posts-exhausted">

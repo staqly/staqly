@@ -1,4 +1,5 @@
 import type { StashEvent } from './api'
+import { monthDayFormat, parseDate } from './format'
 import { groupNotificationEvents, OUTCOMES } from './notification-groups'
 import type { Tone } from './tones'
 
@@ -139,6 +140,17 @@ export function notificationFor(e: StashEvent): Notification | null {
         text: `${channelName || 'A channel'} needs to be reconnected${str(d.error) ? `: ${str(d.error)}` : ''}`,
         href: '/channels',
       }
+    case 'channel.expiring': {
+      const by = parseDate(str(obj(d.channel)?.renew_by))
+
+      return {
+        ...base,
+        tone: 'warning',
+        text: `${channelName || 'A channel'}: renew the sign-in${by ? ` by ${monthDayFormat().format(by)}` : ' soon'}, or its posts will wait`,
+        href: '/channels',
+      }
+    }
+
     case 'channel.connected':
       return {
         ...base,

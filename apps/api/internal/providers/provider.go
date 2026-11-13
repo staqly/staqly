@@ -302,6 +302,13 @@ type Replier interface {
 	Reply(ctx context.Context, c Credentials, parentExternalID string, p PostContent, s Settings) (Result, error)
 }
 
+// Unrenewable is implemented by platforms whose sign-in can run out with no way to renew it but the person signing
+// in again (LinkedIn without a refresh token). RunsOut answers when, for credentials that are in that case: the
+// app shows the date and tells people ahead of time.
+type Unrenewable interface {
+	RunsOut(c Credentials) (time.Time, bool)
+}
+
 // Account is one place a sign-in may publish as: a Facebook Page, a LinkedIn Page, a YouTube channel, a Google
 // Business location, a Tumblr blog, a Slack channel...
 type Account struct {

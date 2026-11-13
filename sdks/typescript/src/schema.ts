@@ -5794,6 +5794,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             activity?: components["schemas"]["ChannelActivity"];
+            /**
+             * Format: date-time
+             * @description The platform ends this channel's sign-in then and staqly can't renew it by itself (LinkedIn, unless its app gets refresh tokens): someone signs in again before, through the OAuth flow. `channel.expiring` is emitted once, 14 days ahead. Absent for a sign-in staqly renews itself. Only GET /v1/channels, GET /v1/channels/{id} and the `channel.expiring` event include it.
+             */
+            renew_by?: string;
         };
         /** @description Read from the channel's targets. Only GET /v1/channels and GET /v1/channels/{id} include it (not webhook payloads). */
         ChannelActivity: {
@@ -6064,7 +6069,7 @@ export interface components {
         };
         NotificationChoice: {
             /** @enum {string} */
-            event: "post.published" | "post.failed" | "post.feedback_added" | "channel.needs_reconnect" | "schedule.posts_requested" | "invitation.accepted";
+            event: "post.published" | "post.failed" | "post.feedback_added" | "channel.needs_reconnect" | "channel.expiring" | "schedule.posts_requested" | "invitation.accepted";
             email: boolean;
             /** @description Shown in the bell */
             in_app: boolean;

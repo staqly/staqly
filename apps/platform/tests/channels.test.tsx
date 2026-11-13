@@ -77,6 +77,35 @@ describe('channels', () => {
     expect(within(tg).getAllByTestId('channel-row')[0]).toHaveTextContent('News bot')
   })
 
+  it('a sign-in that runs out within two weeks says Renew by and renews in one click; one further away only in the menu', async () => {
+    const day = 86_400_000
+    const api = mockApi({
+      'GET /v1/channels': {
+        data: [
+          channel({ renew_by: new Date(Date.now() + 5 * day).toISOString() }),
+          channel({ id: 'ch_2', name: 'Later', renew_by: new Date(Date.now() + 40 * day).toISOString() }),
+        ],
+      },
+      'GET /v1/providers': { data: [provider()] },
+      'GET /v1/channels/oauth/mastodon/start': { url: 'https://mastodon.example/authorize' },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+    const [soonRow, laterRow] = await screen.findAllByTestId('channel-row')
+
+    expect(within(soonRow!).getByTestId('channel-renew-by')).toHaveTextContent(/^Renew by /)
+    expect(within(laterRow!).queryByTestId('channel-renew-by')).not.toBeInTheDocument()
+    expect(within(laterRow!).queryByRole('button', { name: 'Renew' })).not.toBeInTheDocument()
+    await user.click(within(laterRow!).getByRole('button', { name: 'Actions for Later' }))
+    expect(await screen.findByRole('menuitem', { name: 'Renew sign-in' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    // Straight to the platform: no drawer, nothing to type.
+    await user.click(within(soonRow!).getByRole('button', { name: 'Renew' }))
+    await waitFor(() => expect(api.find('GET', '/v1/channels/oauth/mastodon/start')).toHaveLength(1))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('why a channel needs reconnecting is a short note read with its status, the whole text on hover or with More', async () => {
     const why =
       'Telegram: this channel was connected through @staqly_bot, but this server now posts as @staqly_dev_bot: add @staqly_dev_bot to the chat and connect it again'

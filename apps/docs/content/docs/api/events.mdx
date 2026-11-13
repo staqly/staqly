@@ -134,6 +134,7 @@ publishing history.
 | `channel_link.revoked` | A connect link was revoked | `channel_link_id` |
 | `channel.updated` | Renamed, settings changed, disabled or enabled | `channel` |
 | `channel.needs_reconnect` | A publish, a test or a token refresh failed with the stored credentials | `channel`, `error` |
+| `channel.expiring` | A sign-in staqly can't renew by itself (LinkedIn without refresh tokens) runs out in 14 days; once per sign-in | `channel` (with `renew_by`) |
 | `channel.disconnected` | A channel was removed | `channel` |
 | `schedule.created`, `schedule.updated`, `schedule.deleted` | A [schedule](/automation/schedules) was created, changed or deleted | `schedule` |
 | `schedule.ran` | A run finished | `schedule`, `result` (what it did, in words), `published_post_ids` |

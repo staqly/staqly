@@ -1406,6 +1406,9 @@ class Channel(StaqlyModel):
     updated_at: datetime
     #: When the channel last published and its next scheduled post; only from list and get.
     activity: ChannelActivity | None = None
+    #: The platform ends this sign-in then and staqly can't renew it itself: someone signs in again before.
+    #: Only ``list`` and ``get``; ``None`` for a sign-in staqly renews.
+    renew_by: datetime | None = None
 
 
 class ChannelGroup(StaqlyModel):
