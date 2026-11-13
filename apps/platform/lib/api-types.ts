@@ -414,7 +414,7 @@ export interface paths {
         put?: never;
         /**
          * Buy extra posts to X (a signed-in workspace owner)
-         * @description Signed-in people only: an API key gets 403, whatever its scopes. Returns a Stripe Checkout URL (one-time payment) for a bundle; the posts are added when Stripe reports the payment.
+         * @description Signed-in people only: an API key gets 403, whatever its scopes. Returns a Stripe Checkout URL (one-time payment) for a bundle; the posts are added when Stripe reports the payment. A read-only workspace (its plan ended) answers 402 `plan_expired`: extra posts come with a plan.
          */
         post: operations["createCreditsCheckout"];
         delete?: never;
@@ -467,7 +467,7 @@ export interface paths {
         post: operations["addAddon"];
         /**
          * Remove an add-on (a signed-in workspace owner)
-         * @description Signed-in people only: an API key gets 403, whatever its scopes. An add-on still waiting for its payment (a pending update) is cancelled instead: its invoice is voided and nothing stays due. Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead. An add-on the workspace doesn't have answers 404, also when another request removed it at the same moment.
+         * @description Signed-in people only: an API key gets 403, whatever its scopes. An add-on still waiting for its payment (a pending update) is cancelled instead: its invoice is voided and nothing stays due. Removes it from the subscription now; the unused rest of the period is credited at once to the customer's balance at Stripe, which pays the next invoices. An add-on that was never paid is not credited; its open invoice is voided instead. An add-on the workspace doesn't have answers 404, also when another request removed it at the same moment. A read-only workspace (its plan ended) answers 402 `plan_expired`.
          */
         delete: operations["removeAddon"];
         options?: never;

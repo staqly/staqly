@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +25,7 @@ import (
 type fakeStripe struct {
 	mu     sync.Mutex
 	calls  []string
+	forms  map[string]url.Values // the last form each route was sent
 	routes map[string]func() (int, any)
 }
 
@@ -32,6 +34,12 @@ func (f *fakeStripe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	key := r.Method + " " + r.URL.Path
 	f.calls = append(f.calls, key)
+	if r.ParseForm() == nil {
+		if f.forms == nil {
+			f.forms = map[string]url.Values{}
+		}
+		f.forms[key] = r.PostForm
+	}
 	if servePendingSub(w, r) {
 		return
 	}

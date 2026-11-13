@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -39,7 +40,7 @@ func TestPromotionCodes(t *testing.T) {
 			}
 			fmt.Fprint(w, `{"data":[]}`)
 		case "GET /v1/coupons/biz_free":
-			fmt.Fprint(w, `{"id":"biz_free","valid":true,"applies_to":{"products":["prod_business"]}}`)
+			fmt.Fprint(w, stripeCoupon(r, `"id":"biz_free","valid":true`, "prod_business"))
 		case "POST /v1/customers", "POST /v1/customers/cus_p":
 			fmt.Fprint(w, `{"id":"cus_p"}`)
 		case "POST /v1/checkout/sessions":
@@ -125,6 +126,10 @@ func TestCheckPromotionCode(t *testing.T) {
 		case path == "GET /v1/promotion_codes":
 			// Like Stripe: the lookup ignores case and answers with the code as it was made.
 			code := strings.ToUpper(r.URL.Query().Get("code"))
+			if code == "OLDIE" { // before Stripe API 2025-09: the code carries its coupon, an object
+				fmt.Fprint(w, `{"data":[{"id":"promo_old","code":"OLDIE","coupon":{"id":"old","valid":true,"percent_off":99}}]}`)
+				return
+			}
 			coupon := map[string]string{"BIZ-FREE": "biz_free", "SPRING20": "spring", "DEAD": "dead", "GONE": "gone"}[code]
 			if coupon == "" {
 				fmt.Fprint(w, `{"data":[]}`)
@@ -132,13 +137,15 @@ func TestCheckPromotionCode(t *testing.T) {
 			}
 			fmt.Fprintf(w, `{"data":[{"id":"promo_%s","code":%q,"promotion":{"type":"coupon","coupon":%q}}]}`, coupon, code, coupon)
 		case path == "GET /v1/coupons/biz_free":
-			fmt.Fprint(w, `{"id":"biz_free","valid":true,"percent_off":100,"duration":"once","applies_to":{"products":["prod_business"]}}`)
+			fmt.Fprint(w, stripeCoupon(r, `"id":"biz_free","valid":true,"percent_off":100,"duration":"once"`, "prod_business"))
 		case path == "GET /v1/coupons/spring":
-			fmt.Fprint(w, `{"id":"spring","valid":true,"percent_off":20,"duration":"repeating","duration_in_months":3}`)
+			fmt.Fprint(w, stripeCoupon(r, `"id":"spring","valid":true,"percent_off":20,"duration":"repeating","duration_in_months":3`, ""))
 		case path == "GET /v1/coupons/dead":
-			fmt.Fprint(w, `{"id":"dead","valid":false,"percent_off":10}`)
+			fmt.Fprint(w, stripeCoupon(r, `"id":"dead","valid":false,"percent_off":10`, ""))
 		case path == "GET /v1/coupons/gone":
-			fmt.Fprint(w, `{"id":"gone","valid":true,"amount_off":500,"currency":"eur","applies_to":{"products":["prod_old"]}}`)
+			fmt.Fprint(w, stripeCoupon(r, `"id":"gone","valid":true,"amount_off":500,"currency":"eur"`, "prod_old"))
+		case path == "GET /v1/coupons/old":
+			fmt.Fprint(w, stripeCoupon(r, `"id":"old","valid":true,"percent_off":15,"duration":"forever"`, "prod_pro"))
 		default:
 			w.WriteHeader(404)
 		}
@@ -156,6 +163,12 @@ func TestCheckPromotionCode(t *testing.T) {
 	e.do(nil, "POST", "/v1/billing/promotion-code", admin, map[string]string{"promotion_code": "BIZ-FREE"}, 200, &c)
 	if c.PercentOff != 100 || c.Duration != "once" || strings.Join(c.Plans, ",") != "business" {
 		t.Fatalf("a code for Business: %+v", c)
+	}
+	// A code from before Stripe API 2025-09 (its coupon an object on the code): the coupon is read all the same, for
+	// what it takes off now and the products it is limited to.
+	e.do(nil, "POST", "/v1/billing/promotion-code", admin, map[string]string{"promotion_code": "OLDIE"}, 200, &c)
+	if c.PercentOff != 15 || c.Duration != "forever" || strings.Join(c.Plans, ",") != "pro" {
+		t.Fatalf("a code in the old shape: %+v", c)
 	}
 	// Codes are case sensitive: spring20 is not SPRING20, though Stripe's lookup finds it.
 	for _, code := range []string{"NOPE", "DEAD", "GONE", " ", "spring20", "Biz-Free"} {
@@ -230,4 +243,14 @@ func TestAdminCannotRevokeOrRotateAnOwnersKey(t *testing.T) {
 	e.as(admin, "POST", "/v1/api-keys", map[string]any{"name": "mine", "scopes": []string{"posts:read"}}, 201, &own)
 	e.as(admin, "DELETE", "/v1/api-keys/"+own.ID, nil, 204, nil)
 	e.as(owner, "DELETE", "/v1/api-keys/"+key.ID, nil, 204, nil)
+}
+
+// stripeCoupon is a coupon as Stripe answers GET /v1/coupons/{id}: the products it is limited to (applies_to) come
+// only when the request expands them. A fake that always sends them hides a read that forgot to ask, and such a
+// code would then count for every plan.
+func stripeCoupon(r *http.Request, fields, product string) string {
+	if product != "" && slices.Contains(r.URL.Query()["expand[]"], "applies_to") {
+		fields += fmt.Sprintf(`,"applies_to":{"products":[%q]}`, product)
+	}
+	return "{" + fields + "}"
 }

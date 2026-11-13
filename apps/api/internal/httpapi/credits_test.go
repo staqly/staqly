@@ -77,9 +77,14 @@ func TestXPostsAreMetered(t *testing.T) {
 	if errBody.Error.Code != "x_posts_exhausted" || !strings.Contains(errBody.Error.Message, "Your X posts for this period are used up") {
 		t.Fatalf("exhausted: %+v", errBody.Error)
 	}
-	soon := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
-	e.do(nil, "POST", "/v1/posts/"+p2.ID+"/schedule", e.key, map[string]any{"publish_at": soon}, 402, nil)
-	nextMonth := time.Date(time.Now().Year(), time.Now().Month()+1, 2, 9, 0, 0, 0, time.UTC).Format(time.RFC3339)
+	// Later this month (in the month's last hour that is its last second: an hour from now is next month).
+	monthEnd := time.Date(time.Now().UTC().Year(), time.Now().UTC().Month()+1, 1, 0, 0, 0, 0, time.UTC)
+	soon := time.Now().Add(time.Hour).UTC()
+	if !soon.Before(monthEnd) {
+		soon = monthEnd.Add(-time.Second)
+	}
+	e.do(nil, "POST", "/v1/posts/"+p2.ID+"/schedule", e.key, map[string]any{"publish_at": soon.Format(time.RFC3339)}, 402, nil)
+	nextMonth := monthEnd.Add(33 * time.Hour).Format(time.RFC3339)
 	e.do(nil, "POST", "/v1/posts/"+p2.ID+"/schedule", e.key, map[string]any{"publish_at": nextMonth}, 200, nil) // next period: fine
 
 	// A bundle is bought: the webhook grants it once (the same session twice, under two event ids).
@@ -166,31 +171,36 @@ func TestXPostsCheckedAtPublishTime(t *testing.T) {
 	withFakeX(t)
 	e := newEnv(t)
 	ctx := context.Background()
-	var ws app.Workspace
-	e.do(nil, "GET", "/v1/workspace", e.key, nil, 200, &ws)
-	if err := e.svc.SetPlan(ctx, ws.ID, "starter", time.Now().Add(20*24*time.Hour).UTC().Format(time.RFC3339)); err != nil {
+	ws := workspaceID(e)
+	start, setClock := futureClock(e)
+	if err := e.svc.SetPlan(ctx, ws, "starter", start.Add(20*24*time.Hour).Format(time.RFC3339)); err != nil {
 		t.Fatal(err)
 	}
 	c := e.collection("X")
 	var ch app.Channel
 	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "x", "name": "Test X"}, 201, &ch)
 	p := e.post(c.ID, map[string]any{"content": "later", "targets": []map[string]any{{"channel_id": ch.ID}}})
-	at := time.Now().Add(2 * time.Second).UTC().Format(time.RFC3339Nano)
-	e.do(nil, "POST", "/v1/posts/"+p.ID+"/schedule", e.key, map[string]any{"publish_at": at}, 200, nil)
+	e.do(nil, "POST", "/v1/posts/"+p.ID+"/schedule", e.key, map[string]any{"publish_at": start.Add(time.Hour).Format(time.RFC3339)}, 200, nil)
 	// Meanwhile the month's posts are used up.
-	e.svc.DB.Exec(`INSERT INTO usage_events (workspace_id, provider, ref, period, units, included, credits, overage, created_at)
-		VALUES (?, 'x', 'seed', ?, 50, 50, 0, 0, ?)`, ws.ID, time.Now().UTC().Format("2006-01"), time.Now().UTC().Format("2006-01-02T15:04:05.000000Z"))
-	deadline := time.Now().Add(15 * time.Second)
-	var got app.Post
-	for time.Now().Before(deadline) {
-		e.svc.RunDueJobsOnce(ctx)
-		e.do(nil, "GET", "/v1/posts/"+p.ID, e.key, nil, 200, &got)
-		if got.Status == "failed" {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
+	if _, err := e.svc.DB.Exec(`INSERT INTO usage_events (workspace_id, provider, ref, period, units, included, credits, overage, created_at)
+		VALUES (?, 'x', 'seed', ?, 50, 50, 0, 0, ?)`, ws, start.Format("2006-01"), start.Format("2006-01-02T15:04:05.000000Z")); err != nil {
+		t.Fatal(err)
 	}
+	e.svc.RunDueJobsOnce(ctx) // not due yet
+	var got app.Post
+	e.do(nil, "GET", "/v1/posts/"+p.ID, e.key, nil, 200, &got)
+	if got.Status != "scheduled" {
+		t.Fatalf("before its time: %+v", got)
+	}
+	setClock(start.Add(time.Hour))
+	e.svc.RunDueJobsOnce(ctx)
+	e.do(nil, "GET", "/v1/posts/"+p.ID, e.key, nil, 200, &got)
 	if got.Status != "failed" || !strings.Contains(got.Targets[0].Error, "used up") {
 		t.Fatalf("at publish time: %+v", got)
+	}
+	var x app.XPosts
+	e.do(nil, "GET", "/v1/billing/x-posts", e.key, nil, 200, &x)
+	if x.Used != 50 {
+		t.Fatalf("a refused post was counted: %+v", x)
 	}
 }
