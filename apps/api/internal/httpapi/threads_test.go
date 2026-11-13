@@ -311,6 +311,20 @@ func TestRepostStaysInItsWorkspace(t *testing.T) {
 	e.do(nil, "POST", "/v1/channels", k, map[string]any{"provider": "test_reposter", "name": "Own 2"}, 201, &own2)
 	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"settings": map[string]any{"reposters": own2.ID}}, 200, nil)
 	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"settings": map[string]any{}}, 200, nil)
+	// Old data: a key stored before the check passes unchanged (the app saves {...settings, links}); a changed
+	// or new undefined key is still refused.
+	if _, err := e.svc.DB.Exec(`UPDATE channels SET settings = ? WHERE id = ?`, `{"legacy":{"a":[1,"b"]},"old":"x"}`, own.ID); err != nil {
+		t.Fatal(err)
+	}
+	var saved app.Channel
+	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"name": "Renamed",
+		"settings": map[string]any{"legacy": map[string]any{"a": []any{1, "b"}}, "old": "x", "links": "keep", "reposters": own2.ID}}, 200, &saved)
+	if saved.Name != "Renamed" || saved.Settings["old"] != "x" || saved.Settings["legacy"] == nil || saved.Settings["reposters"] != own2.ID {
+		t.Fatalf("a save with the stored keys: %+v", saved)
+	}
+	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"settings": map[string]any{"old": "y"}}, 422, nil)
+	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"settings": map[string]any{"old": "x", "made_up": "x"}}, 422, nil)
+	e.do(nil, "PATCH", "/v1/channels/"+own.ID, k, map[string]any{"settings": map[string]any{"old": "x"}}, 200, nil)
 
 	// Settings stored before the check (or by any other way around it) still do not reach the channel: one
 	// target names another workspace's channel, the other a channel of this workspace on another platform.

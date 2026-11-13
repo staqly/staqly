@@ -5821,7 +5821,7 @@ export interface components {
         };
         ChannelPatch: {
             name?: string;
-            /** @description Replaces the settings; `links` (keep, remove, defang; one of the provider's limits.link_modes) sets what the channel does with links. The other keys are the provider's settings_fields; a key it does not define is refused (422), and a channels field takes channels of this workspace on the same platform */
+            /** @description Replaces the settings; `links` (keep, remove, defang; one of the provider's limits.link_modes) sets what the channel does with links. The other keys are the provider's settings_fields; a key it does not define is refused (422) unless the channel already stores it with the same value, and a channels field takes channels of this workspace on the same platform */
             settings?: {
                 [key: string]: unknown;
             };

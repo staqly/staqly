@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -95,13 +96,17 @@ func channelLinks(c db.Channel) string {
 
 // checkChannelSettings validates a channel's settings: `links`, which staqly reads itself, and defaults for
 // the platform's own settings fields. Any other key is refused instead of stored unchecked; a channels field
-// names channels of this workspace on the same platform, like a target's (reposts.go).
+// names channels of this workspace on the same platform, like a target's (reposts.go). An undefined key
+// the channel already stores passes with its value unchanged: older clients wrote any key, a provider merged
+// into another (migrations 00016-00019) kept the old one's, and the app saves the settings back whole.
 func (s *Service) checkChannelSettings(ctx context.Context, q *db.Queries, workspaceID string, ch db.Channel, e providers.Entry, settings map[string]any) error {
 	fields := e.SettingsFields()
+	stored := map[string]any{}
+	_ = json.Unmarshal([]byte(ch.Settings), &stored)
 	channels := map[string]string{}
 	for k, v := range settings {
 		i := slices.IndexFunc(fields, func(f providers.Field) bool { return f.Key == k })
-		if k != "links" && i < 0 {
+		if old, has := stored[k]; k != "links" && i < 0 && !(has && reflect.DeepEqual(old, v)) {
 			return invalid("settings."+k, "is not a setting of this platform")
 		}
 		if i >= 0 && fields[i].Kind == "channels" && v != nil {
