@@ -79,6 +79,7 @@ may use and allows it. Staqly asks for these permissions:
 | `pages_manage_engagement` | Post the comments of a post's thread as the Page |
 | `read_insights` | Read a post's views and reach (**Statistics**) |
 | `pages_manage_metadata` | Subscribe the Page to the app's webhook, so new comments show within seconds ([Comments right away](#comments-right-away)) |
+| `pages_read_user_content` | Read what people commented under the Page's posts, with their names ([Audience comments](/dashboard/posts#audience-comments)) |
 
 Staqly then lists the Pages: pick one or more, and each becomes a channel showing the Page's name,
 `@username` (or its id, for a Page without one) and picture. A Page staqly finds through a business
@@ -161,7 +162,7 @@ shares (videos and reels have no shares count). A feed post also shows its views
 the person who connected the Page can analyze it); a Page connected without that permission shows the rest. Videos
 and reels show no views yet.
 
-[Audience comments](/dashboard/posts#audience-comments) also need `pages_read_user_content`, which the Meta app must have approved through App Review: without it Meta may hide commenters' names or text.
+[Audience comments](/dashboard/posts#audience-comments) need `pages_read_user_content`, which staqly asks for when the Page connects and the Meta app must have approved through App Review: without it Meta may hide commenters' names or text. A Page connected before v0.37 needs one reconnect to grant it.
 
 
 ## When publishing fails

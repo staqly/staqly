@@ -36,9 +36,10 @@ var (
 
 // facebookScopes: list the Pages (pages_show_list, and business_management for Pages a business portfolio owns),
 // publish as them (pages_manage_posts, pages_read_engagement), comment as them (pages_manage_engagement), read a
-// post's views and reach (read_insights) and send the Page's comments to staqly's webhook (pages_manage_metadata).
+// post's views and reach (read_insights), send the Page's comments to staqly's webhook (pages_manage_metadata) and
+// read what people commented under its posts, names and text (pages_read_user_content; the channel connects without it).
 const facebookScopes = "pages_show_list,pages_manage_posts,pages_read_engagement,pages_manage_engagement,business_management," +
-	"read_insights,pages_manage_metadata"
+	"read_insights,pages_manage_metadata,pages_read_user_content"
 
 func init() {
 	l := Limits{MaxChars: 63206, MaxMedia: 10, MediaKinds: []string{"image", "video"}}
