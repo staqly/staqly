@@ -151,10 +151,22 @@ export function LiveUpdates() {
 
     if (missed) {
       void qc.invalidateQueries({ queryKey: ['post'] })
+      void qc.invalidateQueries({ queryKey: ['post-responses'] })
     } else {
       for (const id of new Set(others.map((e) => e.post_id).filter(Boolean))) {
         void qc.invalidateQueries({ queryKey: ['post', id] })
       }
+    }
+
+    // The AI's reading of a post's comments arrives on its own a couple of minutes after them: the comments open on
+    // screen take it in (and any comment read since) without a refresh.
+    for (const id of new Set(
+      fresh
+        .filter((e) => e.type === 'post.responses_analyzed')
+        .map((e) => e.post_id)
+        .filter(Boolean),
+    )) {
+      void qc.invalidateQueries({ queryKey: qk.postResponses(id!) })
     }
   }, [events.data, qc])
 

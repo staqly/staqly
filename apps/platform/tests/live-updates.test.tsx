@@ -82,6 +82,33 @@ describe('live updates', () => {
     fetchEvents.mockRestore()
   })
 
+  it("reloads a post's comments when the AI's reading of them arrives, and no other post's", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
+    const initial = [event(1)]
+
+    qc.setQueryData(qk.postResponses('pst_read'), { overall: null, channels: [] })
+    qc.setQueryData(qk.postResponses('pst_other'), { overall: null, channels: [] })
+    qc.setQueryData(qk.recentEvents, initial)
+    const fetchEvents = vi.spyOn(api, 'events').mockResolvedValue({ data: initial })
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <LiveUpdates />
+      </QueryClientProvider>,
+    )
+
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [
+        { ...event(2, 'post.responses_analyzed'), post_id: 'pst_read', actor: { type: 'system' } } as StashEvent,
+        ...initial,
+      ])
+    })
+    await waitFor(() => expect(qc.getQueryState(qk.postResponses('pst_read'))?.isInvalidated).toBe(true))
+    expect(qc.getQueryState(qk.postResponses('pst_other'))?.isInvalidated).toBe(false)
+    unmount()
+    qc.clear()
+    fetchEvents.mockRestore()
+  })
+
   it('keeps unrelated caches fresh when the window overlaps the previous poll', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
     const initial = [event(1)]

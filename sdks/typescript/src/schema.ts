@@ -1930,7 +1930,7 @@ export interface paths {
         put?: never;
         /**
          * Read the post's responses from the platforms now (posts:write)
-         * @description Queues the reading and the AI analysis; returns what is stored at this moment.
+         * @description Reads the comments from every channel the post is on and returns them, new ones included; a channel that can't be read now is read again in the background. The AI analysis follows a couple of minutes later.
          */
         post: operations["refreshPostResponses"];
         delete?: never;

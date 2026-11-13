@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
+	"github.com/staqly/staqly/apps/api/internal/providers"
 )
 
 func wantCode(t *testing.T, err error, code string) {
@@ -54,6 +56,27 @@ func TestRefreshNeedsWrite(t *testing.T) {
 	ro.Kind, ro.UserID, ro.Scopes = PrincipalAPIKey, "", []string{ScopePostsRead}
 	if _, err := s.RefreshPostResponses(context.Background(), ro, post.ID); err == nil {
 		t.Fatal("read-only key refreshed")
+	}
+}
+
+// Refresh reads the comments in the request: the answer already has the new one, nothing waits in the queue.
+func TestRefreshReadsNow(t *testing.T) {
+	s, p, post, _, r := readerOn(t, "fakers3")
+	r.out = []providers.Response{{ID: "9", Author: "Ann", Text: "Love it", CreatedAt: time.Now().UTC()}}
+	got, err := s.RefreshPostResponses(context.Background(), p, post.ID)
+	if err != nil || len(got.Channels) != 1 || len(got.Channels[0].Responses) != 1 || got.Channels[0].Responses[0].Text != "Love it" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if n := len(jobsByKey(t, s, "read_responses:"+post.ID+":"+got.Channels[0].ChannelID)); n != 0 {
+		t.Fatalf("a read that worked queues nothing, got %d", n)
+	}
+	// A read that fails for another reason than a refusal goes to the queue, which retries it.
+	r.err = errors.New("network down")
+	if _, err := s.RefreshPostResponses(context.Background(), p, post.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(jobsByKey(t, s, "read_responses:"+post.ID+":"+got.Channels[0].ChannelID)); n != 1 {
+		t.Fatalf("a failed read is queued, got %d", n)
 	}
 }
 
