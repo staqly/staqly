@@ -66,7 +66,7 @@ import { qk, refetchPostListsFromStart, useChannelGroups, useChannels, useProvid
 import { safeHttpUrl } from '@/lib/safe'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
-import { clearOAuthReturn } from '@/lib/welcome'
+import { clearOAuthReturn, setOAuthReturn } from '@/lib/welcome'
 
 import { ChannelAvatar } from './channel-avatars'
 import { ConnectLinkButton } from './connect-link-dialog'
@@ -889,7 +889,13 @@ export function ChannelsPage() {
     // The same sign-in as connecting: the platform sends the browser back and the same account renews this channel.
     mutationFn: (c: Channel) => api.oauthStart(c.provider),
     onSuccess: ({ url }) => {
-      clearOAuthReturn()
+      // Back to the group the person was looking at; Default is where the callback lands anyway.
+      if (groupParam) {
+        setOAuthReturn(`/channels?group=${encodeURIComponent(groupParam)}`)
+      } else {
+        clearOAuthReturn()
+      }
+
       window.location.assign(url)
     },
     onError: (e) => toastApiError(e),

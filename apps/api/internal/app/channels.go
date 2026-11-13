@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/riverqueue/river"
+
 	"github.com/staqly/staqly/apps/api/internal/db"
 	"github.com/staqly/staqly/apps/api/internal/providers"
 )
@@ -1262,6 +1264,56 @@ func (s *Service) scheduleRefresh(ctx context.Context, row db.Channel, creds pro
 		}
 	}
 	_ = s.enqueue(ctx, s.W, row.WorkspaceID, "refresh_channel", "refresh_channel:"+row.ID, map[string]any{"channel_id": row.ID}, runAt, 3)
+}
+
+// advanceRenewalNotices runs when the queue starts: a sign-in that can't be renewed and was connected before
+// channel.expiring existed still has its look queued a day before the end. That look moves to renewNotice ahead
+// (now, when that has passed), so those channels are announced like new ones. Only a queued look dated before the
+// end moves: after the announcement the next one waits past the end, so every later start leaves it alone.
+func (s *Service) advanceRenewalNotices(ctx context.Context) {
+	for _, e := range providers.All() {
+		if _, ok := e.Provider.(providers.Unrenewable); !ok {
+			continue
+		}
+		rows, err := s.Q.ConnectedChannelsOfProvider(ctx, e.ID())
+		if err != nil {
+			s.logger(ctx).Warn("renewal notices: channels not read", "provider", e.ID(), "err", err)
+			continue
+		}
+		for _, r := range rows {
+			row, err := s.Q.GetChannelByID(ctx, r.ID)
+			if err != nil {
+				continue
+			}
+			var creds providers.Credentials
+			if s.unseal(row.Credentials, &creds) != nil {
+				continue
+			}
+			exp, ok := runsOut(row.Provider, creds)
+			if !ok || !exp.After(s.Now()) {
+				continue
+			}
+			want := exp.Add(-renewNotice)
+			if want.Before(s.Now()) {
+				want = s.Now()
+			}
+			key := "refresh_channel:" + row.ID
+			err = s.tx(ctx, func(q *db.Queries) error {
+				queued, err := s.river.JobListTx(ctx, s.sqlTx(q), river.NewJobListParams().Kinds("refresh_channel").States(queuedJobStates...).
+					Where(s.jobArgsWhere("key"), river.NamedArgs{"key": key}).First(1))
+				if err != nil || len(queued.Jobs) == 0 {
+					return err // none, or running right now
+				}
+				if at := queued.Jobs[0].ScheduledAt; !at.Before(exp) || !at.After(want.Add(time.Minute)) {
+					return nil // announced already, or early enough
+				}
+				return s.enqueue(ctx, q, row.WorkspaceID, "refresh_channel", key, map[string]any{"channel_id": row.ID}, want, 3)
+			})
+			if err != nil {
+				s.logger(ctx).Warn("renewal notices: look not moved", "channel_id", row.ID, "err", err)
+			}
+		}
+	}
 }
 
 func credentialsExpiry(creds providers.Credentials) (time.Time, bool) {

@@ -106,6 +106,23 @@ describe('channels', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('a renewal started under a group filter comes back to that group', async () => {
+    mockApi({
+      'GET /v1/channels': {
+        data: [channel({ group_id: 'grp_2', renew_by: new Date(Date.now() + 86_400_000).toISOString() })],
+      },
+      'GET /v1/channel-groups': { data: [group(), group({ id: 'grp_2', name: 'Clients', default: false })] },
+      'GET /v1/providers': { data: [provider()] },
+      'GET /v1/channels/oauth/mastodon/start': { url: 'https://mastodon.example/authorize' },
+    })
+    const user = userEvent.setup()
+
+    nav.set('/channels', 'group=grp_2')
+    renderWithProviders(<ChannelsPage />, { mode: 'local' })
+    await user.click(await screen.findByRole('button', { name: 'Renew' }))
+    await waitFor(() => expect(peekOAuthReturn()).toBe('/channels?group=grp_2'))
+  })
+
   it('why a channel needs reconnecting is a short note read with its status, the whole text on hover or with More', async () => {
     const why =
       'Telegram: this channel was connected through @staqly_bot, but this server now posts as @staqly_dev_bot: add @staqly_dev_bot to the chat and connect it again'

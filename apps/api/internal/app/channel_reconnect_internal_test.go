@@ -212,3 +212,68 @@ func TestRefreshFailingOfflineKeepsTheChannel(t *testing.T) {
 		t.Fatalf("refresh jobs %+v, want one at %s", js, want)
 	}
 }
+
+// Channels connected before channel.expiring existed have their look queued a day before the end: a start moves it
+// two weeks ahead (to now, inside the two weeks), and people are told once however often the server starts.
+func TestStartMovesRenewalNoticeAhead(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	base := s.Now()
+	orig, _ := providers.Get("x")
+	providers.Register(&fakeNoRenew{Base: providers.NewBase("x", "X", providers.AuthOAuth2, providers.Limits{MaxChars: 280}), now: func() time.Time { return s.Now() }}, providers.StatusAvailable)
+	t.Cleanup(func() { providers.Register(orig.Provider, orig.Status) })
+	s.Getenv = func(k string) string {
+		if k == providerEnv("x")+"CLIENT_ID" {
+			return "client"
+		}
+		return ""
+	}
+	ends := map[string]time.Time{"chn_soon": base.Add(10 * 24 * time.Hour).UTC().Truncate(time.Second), "chn_far": base.Add(40 * 24 * time.Hour).UTC().Truncate(time.Second)}
+	for id, exp := range ends {
+		sealed, err := s.seal(providers.Credentials{"access_token": "at", "expires_at": exp.Format(time.RFC3339)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.W.CreateChannel(ctx, db.CreateChannelParams{ID: id, WorkspaceID: p.WorkspaceID, Provider: "x", Name: id,
+			Status: "connected", Credentials: sealed, Settings: "{}", CreatedAt: s.now(), UpdatedAt: s.now()}); err != nil {
+			t.Fatal(err)
+		}
+		// As queued before this release: a day before the end.
+		if err := s.enqueue(ctx, s.W, p.WorkspaceID, "refresh_channel", "refresh_channel:"+id, map[string]any{"channel_id": id}, exp.Add(-24*time.Hour), 3); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := func(id string) time.Time {
+		t.Helper()
+		js := jobsByKey(t, s, "refresh_channel:"+id)
+		if len(js) != 1 {
+			t.Fatalf("%s: %d refresh jobs, want 1", id, len(js))
+		}
+		return js[0].ScheduledAt
+	}
+
+	s.advanceRenewalNotices(ctx)
+	if got := at("chn_far"); got.Sub(ends["chn_far"].Add(-renewNotice)).Abs() > time.Second {
+		t.Fatalf("far: look at %s, want two weeks before %s", got, ends["chn_far"])
+	}
+	if got := at("chn_soon"); got.Sub(s.Now()).Abs() > time.Minute {
+		t.Fatalf("soon (inside the two weeks): look at %s, want now", got)
+	}
+	// The look runs, tells people and waits for the end; later starts change nothing and nobody is told again.
+	if err := s.refreshChannel(ctx, "chn_soon"); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		s.advanceRenewalNotices(ctx)
+	}
+	if got := at("chn_soon"); got.Sub(ends["chn_soon"].Add(time.Minute)).Abs() > time.Second {
+		t.Fatalf("soon, after the notice: look at %s, want the end", got)
+	}
+	if got := at("chn_far"); got.Sub(ends["chn_far"].Add(-renewNotice)).Abs() > time.Second {
+		t.Fatalf("far, after more starts: look at %s", got)
+	}
+	evs, _ := s.ListEvents(ctx, p, EventFilter{Type: "channel.expiring"})
+	if len(evs.Data) != 1 {
+		t.Fatalf("channel.expiring events: %d, want 1", len(evs.Data))
+	}
+}
