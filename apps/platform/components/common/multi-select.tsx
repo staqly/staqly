@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -77,8 +77,11 @@ export function MultiSelect({
   mono?: boolean
   size?: 'sm' | 'default'
   className?: string
-  /** Typed values can be added (tags): the search box is always there and offers "Add". */
-  creatable?: { normalize?: (v: string) => string }
+  /**
+   * Typed values can be added (tags): the search box is always there and offers "Add". `split` turns one typed or
+   * pasted text into several values; a value longer than `maxLength` is refused there and then.
+   */
+  creatable?: { normalize?: (v: string) => string; split?: (v: string) => string[]; maxLength?: number }
   disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -95,8 +98,21 @@ export function MultiSelect({
 
   // Picks covered by another pick (implied, e.g. under a wildcard) are not counted twice.
   const picked = options.filter((o) => value.includes(o.value) && !o.implied)
-  const typed = creatable ? (creatable.normalize ?? ((v: string) => v.trim()))(search) : ''
-  const canAdd = !!typed && !options.some((o) => o.value === typed)
+  const normalize = creatable?.normalize ?? ((v: string) => v.trim())
+  // What was typed, as the values it adds: one, or several when pasted as a list.
+  const typed = creatable
+    ? [...new Set((creatable.split?.(search) ?? [search]).map((v) => normalize(v)).filter(Boolean))]
+    : []
+  const tooLong = typed.filter((v) => creatable?.maxLength && [...v].length > creatable.maxLength)
+  const canAdd = typed.some((v) => !options.some((o) => o.value === v))
+  const add = () => {
+    if (typed.length === 0 || tooLong.length > 0) {
+      return
+    }
+
+    onChange([...value, ...typed.filter((v) => !value.includes(v))])
+    setSearch('')
+  }
   const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v])
   const searchable = !!creatable || given.length > 8
   const itemValue = (o: MultiOption) => `${o.label} ${o.value} ${o.hint ?? ''}`
@@ -170,24 +186,52 @@ export function MultiSelect({
       >
         <Command ref={list} tabIndex={-1} value={active} onValueChange={setActive} className="outline-none">
           {/* Long lists (collections) get a search box; short ones find an item by typing its name. */}
+          {creatable && picked.length > 0 && (
+            // What is picked, each with its own remove button: clicking a ticked item below does the same, but
+            // nobody finds that.
+            <ul aria-label={`${label} picked`} className="flex flex-wrap gap-1 border-b p-2">
+              {picked.map((o) => (
+                <li
+                  key={o.value}
+                  className="inline-flex max-w-full items-center gap-0.5 rounded-md bg-muted py-0.5 pr-0.5 pl-2 text-xs"
+                >
+                  <span className="truncate" title={o.label}>
+                    {o.label}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${o.label}`}
+                    title={`Remove ${o.label}`}
+                    className="relative grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground outline-ring after:absolute after:-inset-1 hover:bg-background hover:text-foreground focus-visible:outline-1 pointer-coarse:after:-inset-2.5"
+                    onClick={() => toggle(o.value)}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           {searchable && (
             <CommandInput
               placeholder={creatable ? 'Search or add...' : 'Search...'}
               value={search}
               onValueChange={setSearch}
-              // Tab adds what was typed (or picks the tag of that name), like Enter on "Add"; empty, it moves on.
               onKeyDown={(e) => {
-                if (e.key !== 'Tab' || e.shiftKey || !typed) {
+                // Backspace in the empty box takes the last pick off, as in any tag field.
+                if (creatable && e.key === 'Backspace' && !search && picked.length > 0) {
+                  e.preventDefault()
+                  toggle(picked.at(-1)!.value)
+
+                  return
+                }
+
+                // Tab adds what was typed (or picks the tag of that name), like Enter on "Add"; empty, it moves on.
+                if (e.key !== 'Tab' || e.shiftKey || typed.length === 0) {
                   return
                 }
 
                 e.preventDefault()
-
-                if (!value.includes(typed)) {
-                  onChange([...value, typed])
-                }
-
-                setSearch('')
+                add()
               }}
             />
           )}
@@ -198,15 +242,17 @@ export function MultiSelect({
             {canAdd && (
               <CommandGroup forceMount>
                 {/* Always listed: the search filter would hide it whenever the typed text was normalized. */}
-                <CommandItem
-                  forceMount
-                  value={`__add ${typed}`}
-                  onSelect={() => {
-                    onChange([...value, typed])
-                    setSearch('')
-                  }}
-                >
-                  Add “{typed}”
+                <CommandItem forceMount value={`__add ${typed.join(' ')}`} disabled={tooLong.length > 0} onSelect={add}>
+                  {tooLong.length > 0 ? (
+                    <span className="grid min-w-0">
+                      <span className="truncate">“{tooLong[0]}”</span>
+                      <span className="text-xs text-muted-foreground">
+                        Too long: at most {creatable?.maxLength} characters
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="wrap-anywhere">Add {typed.map((v) => `“${v}”`).join(', ')}</span>
+                  )}
                 </CommandItem>
               </CommandGroup>
             )}

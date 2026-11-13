@@ -61,7 +61,7 @@ import {
 import { toastApiError } from '@/lib/notify'
 import { ProviderIcon } from '@/lib/providers'
 import { useRole } from '@/lib/queries'
-import { normalizeTag } from '@/lib/tags'
+import { tagInput } from '@/lib/tags'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
@@ -443,7 +443,7 @@ function DetailForm({
                 onChange={setTags}
                 disabled={!editable}
                 options={(tree.data?.tags ?? []).map((t) => ({ value: t.tag, label: `#${t.tag}` }))}
-                creatable={{ normalize: normalizeTag }}
+                creatable={tagInput}
               />
             </Field>
             <Field>

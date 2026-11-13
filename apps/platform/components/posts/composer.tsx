@@ -96,7 +96,7 @@ import {
   useXPosts,
 } from '@/lib/queries'
 import { dateFormats, formatSchedule, formatTime, liveLabel, nextFullHour } from '@/lib/schedule'
-import { appendHashtags, hashtagsFor, normalizeTag } from '@/lib/tags'
+import { appendHashtags, hashtagsFor, tagInput } from '@/lib/tags'
 import { cn } from '@/lib/utils'
 import { xPostsWarning } from '@/lib/x-posts'
 import { displayZone } from '@/lib/zone'
@@ -2305,7 +2305,7 @@ function ComposerBody({
                   onChange={setTags}
                   disabled={locked}
                   options={(knownTags.data ?? []).map((t) => ({ value: t.name, label: `#${t.name}` }))}
-                  creatable={{ normalize: normalizeTag }}
+                  creatable={tagInput}
                 />
               </div>
 

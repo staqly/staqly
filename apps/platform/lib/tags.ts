@@ -4,6 +4,20 @@ export function normalizeTag(v: string): string {
 }
 
 /**
+ * Several tags typed or pasted at once: split on commas and before every "#" ("#gym #lift, news" is three), so
+ * "client a" stays one tag ("client-a").
+ */
+export function splitTags(v: string): string[] {
+  return v.split(/,|\s+(?=#)/)
+}
+
+/** What the API takes for a post's or a file's tag (maxTagLen in apps/api/internal/app). */
+export const maxTagLength = 40
+
+/** The tag fields' typing rules (MultiSelect `creatable`). */
+export const tagInput = { normalize: normalizeTag, split: splitTags, maxLength: maxTagLength }
+
+/**
  * The text a channel receives with the post's tags as hashtags at the end, as the API sends it
  * (providers.AppendHashtags): "client-a" becomes #clienta, a tag the text already has is left out.
  */
