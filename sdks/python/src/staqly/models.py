@@ -379,6 +379,10 @@ class Invoice(StaqlyModel):
     status: str
     hosted_invoice_url: str
     invoice_pdf: str
+    #: Refunded of what was paid (Stripe keeps a refunded invoice paid); amount_paid when fully refunded.
+    amount_refunded: int = 0
+    #: A dispute (chargeback) on its payment is open or was lost.
+    disputed: bool = False
 
 
 class BillingDetails(StaqlyModel):

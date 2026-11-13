@@ -57,6 +57,8 @@ const OPEN_INVOICE: BillingDetails['invoices'][number] = {
   status: 'open',
   hosted_invoice_url: 'https://invoice.stripe.test/open',
   invoice_pdf: 'https://invoice.stripe.test/open.pdf',
+  amount_refunded: 0,
+  disputed: false,
 }
 
 const XPOSTS: XPosts = {

@@ -76,6 +76,9 @@ type Invoice struct {
 	Status           string  `json:"status"`
 	HostedInvoiceURL string  `json:"hosted_invoice_url"`
 	InvoicePDF       string  `json:"invoice_pdf"`
+	// AmountRefunded and Disputed: Stripe keeps a refunded or disputed invoice `paid`; these come from its payments' charges.
+	AmountRefunded int64 `json:"amount_refunded"`
+	Disputed       bool  `json:"disputed"`
 }
 
 type stripeCard struct {
@@ -205,7 +208,8 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 		}
 	}
 
-	q := url.Values{"customer": {w.StripeCustomerID.String}, "limit": {strconv.Itoa(invoicesPerPage)}}
+	q := url.Values{"customer": {w.StripeCustomerID.String}, "limit": {strconv.Itoa(invoicesPerPage)},
+		"expand[]": {"data.payments"}}
 	if after != "" {
 		q.Set("starting_after", after)
 	}
@@ -224,12 +228,27 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 			Status           string `json:"status"`
 			HostedInvoiceURL string `json:"hosted_invoice_url"`
 			InvoicePDF       string `json:"invoice_pdf"`
+			Payments         struct {
+				Data []struct {
+					Status  string `json:"status"`
+					Payment struct {
+						PaymentIntent string `json:"payment_intent"`
+					} `json:"payment"`
+				} `json:"data"`
+			} `json:"payments"`
 		} `json:"data"`
 	}
 	if err := s.stripe(ctx, "GET", "/v1/invoices?"+q.Encode(), nil, &inv); err != nil {
 		return out, err
 	}
 	out.HasMoreInvoices = inv.HasMore
+	oldestPaid := int64(0)
+	for _, i := range inv.Data {
+		if i.Status != "draft" && i.AmountPaid > 0 && (oldestPaid == 0 || i.Created < oldestPaid) {
+			oldestPaid = i.Created
+		}
+	}
+	charges := s.chargesSince(ctx, w.StripeCustomerID.String, oldestPaid)
 	for _, i := range inv.Data {
 		if i.Status == "draft" {
 			continue // not issued yet
@@ -238,12 +257,60 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 		if t := unixTime(i.Created); t != nil {
 			created = *t
 		}
-		out.Invoices = append(out.Invoices, Invoice{ID: i.ID, Number: i.Number, Created: created,
+		o := Invoice{ID: i.ID, Number: i.Number, Created: created,
 			PeriodStart: unixTime(i.PeriodStart), PeriodEnd: unixTime(i.PeriodEnd), Total: i.Total,
 			AmountPaid: i.AmountPaid, AmountDue: i.AmountDue, Currency: i.Currency, Status: i.Status,
-			HostedInvoiceURL: i.HostedInvoiceURL, InvoicePDF: i.InvoicePDF})
+			HostedInvoiceURL: i.HostedInvoiceURL, InvoicePDF: i.InvoicePDF}
+		for _, p := range i.Payments.Data {
+			if c, ok := charges[p.Payment.PaymentIntent]; ok && p.Status == "paid" {
+				o.AmountRefunded += c.AmountRefunded
+				o.Disputed = o.Disputed || c.disputed()
+			}
+		}
+		out.Invoices = append(out.Invoices, o)
 	}
 	return out, nil
+}
+
+type stripeCharge struct {
+	PaymentIntent  string `json:"payment_intent"`
+	Status         string `json:"status"`
+	AmountRefunded int64  `json:"amount_refunded"`
+	Disputed       bool   `json:"disputed"`
+	Dispute        *struct {
+		Status string `json:"status"`
+	} `json:"dispute"`
+}
+
+// disputed: a dispute still open or lost (a won one, or an inquiry closed without one, leaves the payment standing).
+func (c stripeCharge) disputed() bool {
+	return c.Disputed && (c.Dispute == nil || (c.Dispute.Status != "won" && c.Dispute.Status != "warning_closed"))
+}
+
+// chargesSince reads the customer's succeeded charges created from `since` on, by payment intent: one call for a
+// page of invoices (an invoice's charges come after it). Nil when nothing was paid or Stripe fails: the invoices
+// then show as Stripe has them.
+// shortcut: the newest 100 charges only, enough for a page of 24 invoices; page through them if a customer ever has more.
+func (s *Service) chargesSince(ctx context.Context, customer string, since int64) map[string]stripeCharge {
+	if since == 0 {
+		return nil
+	}
+	q := url.Values{"customer": {customer}, "created[gte]": {strconv.FormatInt(since, 10)}, "limit": {"100"},
+		"expand[]": {"data.dispute"}}
+	var list struct {
+		Data []stripeCharge `json:"data"`
+	}
+	if err := s.stripe(ctx, "GET", "/v1/charges?"+q.Encode(), nil, &list); err != nil {
+		s.logger(ctx).Warn("billing details: charges unread, refunds not shown", "err", err)
+		return nil
+	}
+	out := map[string]stripeCharge{}
+	for _, c := range list.Data {
+		if c.Status == "succeeded" && c.PaymentIntent != "" {
+			out[c.PaymentIntent] = c
+		}
+	}
+	return out
 }
 
 // unixTime formats a Stripe timestamp; 0 (unset) is nil.

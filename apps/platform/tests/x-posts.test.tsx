@@ -76,8 +76,7 @@ describe('X posts', () => {
       </>,
       { mode: 'cloud' },
     )
-    expect(await screen.findByTestId('x-posts-line')).toHaveTextContent('None bought this period.')
-    expect(screen.getByText(/used up/)).toBeInTheDocument()
+    expect(await screen.findByText(/used up/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Buy more X posts' }))
     expect(await screen.findByRole('radio', { name: /1,000 X posts/ })).toHaveAttribute('aria-checked', 'true')
     await user.click(screen.getByRole('radio', { name: /4,000 X posts/ }))

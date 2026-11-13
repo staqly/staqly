@@ -407,7 +407,7 @@ test('a workspace: no plan, trial, paid, add-on, second seat, failed renewal, lo
     await page.getByTestId('buy-x-posts-continue').click()
     await expect(page).toHaveURL(/credits=success/)
     await expect(page.getByText('Payment received')).toBeVisible()
-    await expect(page.getByTestId('x-posts-line')).toContainText('200')
+    await expect(page.getByTestId('platform-posts-x-bought')).toContainText('+ 200 bought')
     // Not the editor's to buy.
     const edApi = await asBrowser(ed.page)
 

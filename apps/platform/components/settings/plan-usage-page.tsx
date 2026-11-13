@@ -1,7 +1,7 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { BellRing, HardDrive, KeyRound, Layers, Share2, Webhook } from 'lucide-react'
+import { BellRing, CircleHelp, HardDrive, KeyRound, Layers, Share2, Webhook } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useEffect } from 'react'
@@ -17,6 +17,7 @@ import { PageContainer } from '@/components/common/page-header'
 import { usePlanActions } from '@/components/plans/plans-page'
 import { SettingsHeader } from '@/components/settings/settings-header'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api, POST_STATUSES, UNLIMITED, type WorkspaceUsage } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
 import { lockReason } from '@/lib/plans'
@@ -35,6 +36,7 @@ import { POST_STATUS_META } from '@/lib/status'
 import { TONES } from '@/lib/tones'
 import { meterTone, usageMeter } from '@/lib/usage'
 import { cn } from '@/lib/utils'
+import { shortDay } from '@/lib/x-posts'
 
 import { SettingsNav } from './settings-nav'
 
@@ -145,7 +147,8 @@ const count = (n: number) => n.toLocaleString('en-US')
 
 /**
  * One allowance line: name, used / limit, a bar, then the status and Buy more. The cells sit on the list's columns
- * (subgrid), so every bar starts and ends at the same place whatever the numbers' width.
+ * (subgrid), so every bar starts and ends at the same place whatever the numbers' width. `bought`: posts bought on
+ * top (X), shown as "+ 200 bought" and a muted end of the bar, so the whole allowance reads at a glance.
  */
 function PlatformMeter({
   id,
@@ -155,6 +158,7 @@ function PlatformMeter({
   max,
   hint,
   action,
+  bought,
 }: {
   id: string
   name: string
@@ -163,10 +167,15 @@ function PlatformMeter({
   max: number
   hint?: string
   action?: React.ReactNode
+  bought?: { left: number; expires: string }
 }) {
-  const { level, pct } = usageMeter(used, max)
+  const extra = bought && bought.left > 0 ? bought.left : 0
+  // Bought posts are used after the included ones: what is left of them always sits at the end of the bar.
+  const total = Math.max(used, max) + extra
+  const { level, pct } = usageMeter(used, total)
   const tone = meterTone(level)
   const status = level === 'full' ? 'Limit reached' : level === 'warn' ? 'Almost full' : ''
+  const boughtPct = total > 0 ? (extra / total) * 100 : 0
 
   return (
     <li
@@ -176,20 +185,45 @@ function PlatformMeter({
       title={hint}
     >
       <span className="text-muted-foreground">{name}</span>
-      <span className="text-right text-muted-foreground tabular-nums">
-        <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> / {count(max)}
+      <span className="flex flex-wrap items-center justify-end gap-x-1.5 text-right text-muted-foreground tabular-nums">
+        <span>
+          <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> /{' '}
+          {count(max)}
+        </span>
+        {extra > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center justify-end gap-1 rounded text-xs whitespace-nowrap hover:text-foreground max-sm:basis-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none pointer-coarse:-my-3 pointer-coarse:py-3"
+                data-testid={`platform-posts-${id}-bought`}
+              >
+                + {count(extra)} bought
+                <CircleHelp className="size-3.5" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Used after the included ones; they expire {bought!.expires}.</TooltipContent>
+          </Tooltip>
+        )}
       </span>
       <span
         role="progressbar"
         aria-label={label}
         aria-valuemin={0}
-        aria-valuemax={max}
+        aria-valuemax={total}
         aria-valuenow={used}
-        aria-valuetext={`${count(used)} of ${count(max)}`}
-        className="h-1.5 overflow-hidden rounded-full bg-muted"
+        aria-valuetext={`${count(used)} of ${count(max)}${extra > 0 ? `, plus ${count(extra)} bought` : ''}`}
+        className="relative h-1.5 overflow-hidden rounded-full bg-muted"
       >
+        {extra > 0 && (
+          <span
+            className="absolute inset-y-0 right-0 bg-muted-foreground/25"
+            style={{ width: `${boughtPct}%` }}
+            data-testid={`platform-posts-${id}-bought-bar`}
+          />
+        )}
         <span
-          className={cn('block h-full rounded-full transition-[width] duration-500', tone.fill)}
+          className={cn('relative block h-full rounded-full transition-[width] duration-500', tone.fill)}
           style={{ width: `${Math.max(pct, used > 0 ? 4 : 0)}%` }}
         />
       </span>
@@ -460,6 +494,9 @@ export function PlanUsagePage() {
                     max={limitOf(m.key)}
                     hint={bonusHint(plan, m.key) || undefined}
                     action={p.id === 'x' && x && canBuy ? <BuyXPosts x={x} blocked={blocked} /> : undefined}
+                    bought={
+                      p.id === 'x' && x ? { left: x.credits_left, expires: shortDay(x.credits_expire_at) } : undefined
+                    }
                   />
                 ))}
               </ul>

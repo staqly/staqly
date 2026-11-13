@@ -407,9 +407,28 @@ func TestBillingDetails(t *testing.T) {
 				{"id":"pm_2","card":{"brand":"mastercard","last4":"4444","exp_month":12,"exp_year":2031}}]}`)
 		case "GET /v1/invoices":
 			invoiceQueries = append(invoiceQueries, r.URL.RawQuery)
+			if r.URL.Query().Get("expand[]") != "data.payments" {
+				t.Errorf("invoices read without their payments: %s", r.URL.RawQuery)
+			}
+			paid := func(id string, amount int, pi string) string {
+				return fmt.Sprintf(`{"id":%q,"number":"N-%s","created":%d,"total":%d,"amount_paid":%d,"currency":"eur","status":"paid",
+					"payments":{"data":[{"status":"paid","payment":{"type":"payment_intent","payment_intent":%q}}]}}`, id, id, start, amount, amount, pi)
+			}
 			fmt.Fprintf(w, `{"has_more":%t,"data":[
 				{"id":"in_2","number":"A-0002","created":%d,"total":3000,"amount_paid":3000,"currency":"usd","status":"paid","hosted_invoice_url":"https://invoice.stripe.test/2","invoice_pdf":"https://invoice.stripe.test/2.pdf"},
-				{"id":"in_draft","status":"draft","created":%d}]}`, r.URL.Query().Get("starting_after") == "", start, start)
+				%s,%s,%s,%s,
+				{"id":"in_draft","status":"draft","created":%d}]}`, r.URL.Query().Get("starting_after") == "", start,
+				paid("in_full", 1000, "pi_full"), paid("in_part", 3000, "pi_part"), paid("in_disp", 2000, "pi_disp"), paid("in_won", 2000, "pi_won"), start)
+		case "GET /v1/charges":
+			if q := r.URL.Query(); q.Get("customer") != "cus_1" || q.Get("created[gte]") != fmt.Sprint(start) || q.Get("expand[]") != "data.dispute" {
+				t.Errorf("charges query: %s", r.URL.RawQuery)
+			}
+			fmt.Fprint(w, `{"data":[
+				{"payment_intent":"pi_full","status":"succeeded","amount":1000,"amount_refunded":1000,"refunded":true},
+				{"payment_intent":"pi_full","status":"failed","amount":1000,"amount_refunded":0},
+				{"payment_intent":"pi_part","status":"succeeded","amount":3000,"amount_refunded":500},
+				{"payment_intent":"pi_disp","status":"succeeded","amount":2000,"disputed":true,"dispute":{"status":"needs_response"}},
+				{"payment_intent":"pi_won","status":"succeeded","amount":2000,"disputed":true,"dispute":{"status":"won"}}]}`)
 		default:
 			w.WriteHeader(404)
 		}
@@ -445,8 +464,17 @@ func TestBillingDetails(t *testing.T) {
 	if len(d.PaymentMethods) != 2 || d.PaymentMethods[1].Last4 != "4444" || !d.PaymentMethods[1].Default || d.PaymentMethods[0].Default {
 		t.Fatalf("payment methods: %+v", d.PaymentMethods)
 	}
-	if len(d.Invoices) != 1 || d.Invoices[0].Number != "A-0002" || d.Invoices[0].InvoicePDF == "" || !d.HasMoreInvoices {
+	if len(d.Invoices) != 5 || d.Invoices[0].Number != "A-0002" || d.Invoices[0].InvoicePDF == "" || !d.HasMoreInvoices {
 		t.Fatalf("invoices (drafts left out): %+v", d.Invoices)
+	}
+	// Stripe keeps refunded and disputed invoices `paid`: their charges tell.
+	for i, want := range []struct {
+		refunded int64
+		disputed bool
+	}{{0, false}, {1000, false}, {500, false}, {0, true}, {0, false}} {
+		if got := d.Invoices[i]; got.AmountRefunded != want.refunded || got.Disputed != want.disputed {
+			t.Fatalf("invoice %s: refunded %d disputed %t, want %+v", got.ID, got.AmountRefunded, got.Disputed, want)
+		}
 	}
 	e.do(nil, "GET", "/v1/billing/details?starting_after=in_2", admin, nil, 200, &d)
 	if d.Subscription != nil || d.HasMoreInvoices || len(invoiceQueries) != 2 || !strings.Contains(invoiceQueries[1], "starting_after=in_2") {

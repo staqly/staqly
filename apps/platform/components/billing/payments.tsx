@@ -24,6 +24,23 @@ const INVOICE_STATUS: Record<string, [string, Tone]> = {
   uncollectible: ['Not paid', 'danger'],
 }
 
+/** Stripe keeps a refunded or disputed invoice `paid`: the badge says what happened to its payment. */
+export function invoiceStatus(inv: Invoice, planEnded?: boolean): [string, Tone] {
+  if (planEnded && inv.status === 'open') {
+    return ['Unpaid', 'neutral'] // an ended plan's unpaid invoice is history: "Due" would read as the way back in
+  }
+
+  if (inv.disputed) {
+    return ['Disputed', 'danger']
+  }
+
+  if (inv.amount_refunded > 0) {
+    return inv.amount_refunded >= inv.amount_paid ? ['Refunded', 'neutral'] : ['Partially refunded', 'warning']
+  }
+
+  return INVOICE_STATUS[inv.status] ?? [inv.status, 'neutral']
+}
+
 /** A card inside a Plan & usage group: a small heading, a line under it, an action on the right. */
 function Panel({
   title,
@@ -139,11 +156,10 @@ function InvoiceRows({ invoices, planEnded }: { invoices: Invoice[]; planEnded?:
         </TableHeader>
         <TableBody>
           {invoices.map((inv) => {
-            // An ended plan's unpaid invoice is history: "Due" and "Pay" would read as the way back in.
+            // An ended plan's unpaid invoice is history: "Pay" would read as the way back in.
             const unpaid = planEnded && inv.status === 'open'
-            const [label, tone] = unpaid
-              ? ['Unpaid', 'neutral' as Tone]
-              : (INVOICE_STATUS[inv.status] ?? [inv.status, 'neutral' as Tone])
+            const [label, tone] = invoiceStatus(inv, planEnded)
+            const partlyRefunded = inv.amount_refunded > 0 && inv.amount_refunded < inv.amount_paid
             const hosted = safeHttpUrl(inv.hosted_invoice_url)
             const pdf = safeHttpUrl(inv.invoice_pdf)
 
@@ -151,7 +167,14 @@ function InvoiceRows({ invoices, planEnded }: { invoices: Invoice[]; planEnded?:
               <TableRow key={inv.id} data-testid="invoice-row">
                 <TableCell className="whitespace-nowrap">{shortDate(inv.created)}</TableCell>
                 <TableCell className="font-mono text-xs">{inv.number || '-'}</TableCell>
-                <TableCell className="text-right tabular-nums">{cents(inv.total, inv.currency)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {cents(inv.total, inv.currency)}
+                  {partlyRefunded && (
+                    <span className="block text-xs text-muted-foreground" data-testid="invoice-refunded">
+                      {cents(inv.amount_refunded, inv.currency)} refunded
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Pill label={label} tone={tone} />
                 </TableCell>
