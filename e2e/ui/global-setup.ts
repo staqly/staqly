@@ -1,5 +1,6 @@
 // Builds staqly with the dashboard embedded, starts a local-mode and a
-// cloud-mode server plus a loopback receiver, seeds both workspaces through
+// cloud-mode server plus a loopback receiver (and a second cloud server with
+// billing on, against the Stripe stand-in of lib/stripe.ts), seeds both workspaces through
 // the REST API and signs a browser in to each (local: the #token= link the
 // server prints, cloud: the admin API key). Everything the specs need lands in
 // .state/state.json; the browser sessions in .state/local.json / cloud.json.
@@ -13,6 +14,7 @@ import { FAL_E2E_KEY, startReceiver } from './lib/receiver.js'
 import { seedWorkspace } from './lib/seed.js'
 import { buildBinary, type RunningServer, startServer, tokenLink } from './lib/stack.js'
 import { type State, state, STATE_DIR } from './lib/state.js'
+import { startStripe, STRIPE_KEY, STRIPE_WHSEC } from './lib/stripe.js'
 
 const port = (name: string, def: number) => Number(process.env[name] ?? def)
 
@@ -27,23 +29,36 @@ async function reusable(): Promise<boolean> {
   try {
     const s = state()
 
-    return (await fetch(`${s.local.api}/health`)).ok && (await fetch(`${s.cloud.api}/health`)).ok
+    return (
+      (await fetch(`${s.local.api}/health`)).ok &&
+      (await fetch(`${s.cloud.api}/health`)).ok &&
+      (await fetch(`${s.billing.api}/health`)).ok
+    )
   } catch {
     return false
   }
 }
 
 export default async function globalSetup(_config: FullConfig): Promise<() => Promise<void>> {
+  const billingPort = port('UI_BILLING_PORT', 61533)
+  const startFakeStripe = () =>
+    startStripe(port('UI_STRIPE_PORT', 61591), `http://127.0.0.1:${billingPort}/v1/billing/webhook`)
+
   if (await reusable()) {
     const again = await startReceiver(port('UI_RECEIVER_PORT', 61590))
+    const stripeAgain = await startFakeStripe()
 
-    return again.close
+    return async () => {
+      await again.close()
+      await stripeAgain.close()
+    }
   }
 
   rmSync(STATE_DIR, { recursive: true, force: true })
   mkdirSync(STATE_DIR, { recursive: true })
   const bin = await buildBinary()
   const receiver = await startReceiver(port('UI_RECEIVER_PORT', 61590))
+  const stripe = await startFakeStripe()
   const servers: RunningServer[] = []
   const stop = async () => {
     if (process.env.UI_KEEP === '1') {
@@ -54,6 +69,7 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
 
     await Promise.all(servers.map((s) => s.stop()))
     await receiver.close()
+    await stripe.close()
 
     for (const s of servers) {
       rmSync(s.dataDir, { recursive: true, force: true })
@@ -85,6 +101,23 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
     })
 
     servers.push(cloud)
+    // Cloud with billing: every Stripe call goes to the stand-in. Workspaces start as on staqly cloud (no
+    // TRIAL_PLAN: a plan is chosen and paid for), so the other cloud specs keep their server without billing.
+    const billing = await startServer(bin, {
+      mode: 'cloud',
+      port: billingPort,
+      dashboardPort: port('UI_BILLING_DASHBOARD_PORT', 61580),
+      env: {
+        SETUP_TOKEN,
+        TRUST_PROXY: 'true',
+        TRIAL_PLAN: '',
+        STRIPE_SECRET_KEY: STRIPE_KEY,
+        STRIPE_WEBHOOK_SECRET: STRIPE_WHSEC,
+        STRIPE_API_BASE: stripe.url,
+      },
+    })
+
+    servers.push(billing)
 
     const localApi = new Api(local.api, local.token)
     const localSeed = await seedWorkspace(localApi, receiver.url)
@@ -155,6 +188,13 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
         recoveryKey: signup.recovery_key,
         agentKey: agent.key,
         readOnlyKey: readOnly.key,
+        setupToken: SETUP_TOKEN,
+      },
+      billing: {
+        api: billing.api,
+        dash: billing.dash,
+        log: `${billing.dataDir}.log`,
+        stripe: stripe.url,
         setupToken: SETUP_TOKEN,
       },
     }

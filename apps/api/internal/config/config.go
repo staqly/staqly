@@ -365,6 +365,8 @@ func Load() (Config, error) {
 				Prices:        stripePrices(),
 				// Stripe Managed Payments: Stripe is the merchant of record (tax, invoices, disputes).
 				ManagedPayments: envBool("STRIPE_MANAGED_PAYMENTS", false),
+				// Tests only: a Stripe stand-in (e2e/ui/lib/stripe.ts). Refused with a live key below.
+				APIBase: strings.TrimRight(os.Getenv("STRIPE_API_BASE"), "/"),
 			},
 			// Only for test and demo servers: the plan a new workspace's trial gives (default starter).
 			TrialPlan: os.Getenv("TRIAL_PLAN"),
@@ -395,6 +397,15 @@ func Load() (Config, error) {
 	}
 	if err := aiConfig(&c.App.AI); err != nil {
 		return Config{}, err
+	}
+	if b := c.App.Billing; b.APIBase != "" {
+		// The secret key goes to this address with every call: a real account's key must never leave for it.
+		if u, err := url.Parse(b.APIBase); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return Config{}, errors.New("STRIPE_API_BASE must be an http(s) URL")
+		}
+		if !strings.HasPrefix(b.SecretKey, "sk_test_") {
+			return Config{}, errors.New("STRIPE_API_BASE is for tests: it needs a STRIPE_SECRET_KEY starting with sk_test_")
+		}
 	}
 	if c.App.Blob, err = storage(c.App.UploadDir, dataDir); err != nil {
 		return Config{}, err

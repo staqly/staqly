@@ -227,6 +227,31 @@ func TestStripePricePlaceholdersAreIgnored(t *testing.T) {
 	}
 }
 
+// STRIPE_API_BASE sends Stripe's calls (and the secret key) elsewhere: a test key only, an http(s) URL only.
+func TestStripeAPIBaseIsForTestKeys(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("STRIPE_API_BASE", "http://127.0.0.1:9/")
+	for key, ok := range map[string]bool{"sk_test_1": true, "sk_live_1": false, "rk_live_1": false, "": false} {
+		t.Setenv("STRIPE_SECRET_KEY", key)
+		c, err := Load()
+		if (err == nil) != ok {
+			t.Fatalf("key %q: err = %v", key, err)
+		}
+		if ok && c.App.Billing.APIBase != "http://127.0.0.1:9" {
+			t.Fatalf("api base = %q", c.App.Billing.APIBase)
+		}
+	}
+	t.Setenv("STRIPE_SECRET_KEY", "sk_test_1")
+	t.Setenv("STRIPE_API_BASE", "127.0.0.1:9")
+	if _, err := Load(); err == nil {
+		t.Fatal("not a URL: must refuse to start")
+	}
+	t.Setenv("STRIPE_API_BASE", "")
+	if c, err := Load(); err != nil || c.App.Billing.APIBase != "" {
+		t.Fatalf("unset: %q %v", c.App.Billing.APIBase, err)
+	}
+}
+
 // Google Analytics is off unless GOOGLE_ANALYTICS_ID is set, and it must be a GA4 measurement id.
 func TestGoogleAnalyticsConfig(t *testing.T) {
 	clearEnv(t)

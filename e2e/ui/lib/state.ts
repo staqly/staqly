@@ -25,6 +25,8 @@ export interface State {
     readOnlyKey: string
     setupToken: string
   }
+  /** Cloud mode with billing on, against the Stripe stand-in (lib/stripe.ts). */
+  billing: { api: string; dash: string; log: string; stripe: string; setupToken: string }
 }
 
 let cached: State | undefined
