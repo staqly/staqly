@@ -353,6 +353,11 @@ describe('cloud: sessions, device links and recovery', () => {
     expect((await admin.billing.get()).enabled).toBe(false)
     const ts = await errorOf(admin.billing.checkout())
 
+    // Not any failure: billing is off on this server (with it on, a key is refused with 403: ui/tests/billing).
+    expect(ts).toBeInstanceOf(ConflictError)
+    expect([ts.status, ts.code]).toEqual([409, 'not_available'])
+    expect((await errorOf(admin.billing.portal())).status).toBe(409)
+
     for (const mode of MODES) {
       expect((await py.call<{ enabled: boolean }>(mode, pyAdmin, 'billing.get')).enabled).toBe(false)
       const e = await py.fail(mode, pyAdmin, 'billing.checkout')

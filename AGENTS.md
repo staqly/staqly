@@ -33,7 +33,7 @@ pnpm turbo run test --filter=@staqly/api   # one package (api, cli, dashboard, s
 pnpm gen           # sqlc queries, dashboard API types, TypeScript SDK schema
 pnpm test:e2e      # Docker end-to-end suite (e2e/, compose.e2e.yml)
 pnpm --filter @staqly/e2e test:cross-client   # live, no Docker: TS + Python SDKs, CLI, curl, MCP against `staqly serve` (e2e/cross-client)
-pnpm --filter @staqly/e2e test:ui   # the dashboard in a real browser (Playwright + axe) against `staqly serve` (e2e/ui)
+pnpm --filter @staqly/e2e test:ui   # the dashboard in a real browser (Playwright + axe) against `staqly serve` (e2e/ui); its `billing` project runs cloud mode against a Stripe stand-in (`STRIPE_API_BASE`, never real Stripe)
 pnpm --filter @staqly/e2e test:ui-responsive   # after `make dashboard`: every dashboard route at phone/tablet/desktop widths, fails on overflow, overlaps, small touch targets (e2e/ui-responsive)
 make up            # compose.yml alone with the released image, open a signed-in browser (users run `docker run`, not this)
 make dev           # build from this checkout with the dev stack (compose.dev.yml: mailpit, Stripe CLI)
@@ -46,7 +46,8 @@ make release VERSION=v0.2.0  # tag origin/main (right after the merge is fine); 
 
 Run `pnpm check` before finishing a change; run `pnpm test:e2e` for anything
 touching auth, Docker, the dashboard proxy, webhooks or MCP.
-Run `test:ui` for dashboard changes a user sees (flows, keyboard, accessibility).
+Run `test:ui` for dashboard changes a user sees (flows, keyboard, accessibility), and
+`test:ui --project=billing` for anything touching billing, plans or the locked workspace.
 Run `test:cross-client` for changes to an SDK, the CLI, idempotency, errors or
 anything clients must see the same way.
 Run `test:ui-responsive` for dashboard layout changes.

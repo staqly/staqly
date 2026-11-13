@@ -322,7 +322,8 @@ server with `DASHBOARD_EXPOSED=true` (as in the Docker image; every browser
 signs in once with the access token the server made in its data directory, the
 global setup with the `#token=` link it prints) and a cloud-mode server with `SETUP_TOKEN`,
 each with a temporary data directory, plus a loopback receiver for webhooks,
-alerts and a schedule's endpoint. Both workspaces are seeded over REST: three
+alerts and a schedule's endpoint, and a second cloud-mode server with billing on
+whose Stripe is a stand-in (`ui/lib/stripe.ts`, the `billing` project). The first two workspaces are seeded over REST: three
 channels on your own automation and a disabled one, collections (14 active and
 one archived), posts in every status (drafts, scheduled in the coming days,
 publishing, published with links, failed on one channel) with pictures, a
@@ -342,6 +343,7 @@ npx playwright show-report ui/.report                       # the HTML report (t
 Needs Go, Node and a Playwright Chromium (`npx playwright install chromium`
 once). Ports (127.0.0.1): `UI_LOCAL_PORT` (61333) / `UI_LOCAL_DASHBOARD_PORT`
 (61080), `UI_CLOUD_PORT` (61433) / `UI_CLOUD_DASHBOARD_PORT` (61480),
+`UI_BILLING_PORT` (61533) / `UI_BILLING_DASHBOARD_PORT` (61580), `UI_STRIPE_PORT` (61591),
 `UI_RECEIVER_PORT` (61590) and `UI_DOWN_PORT` (61633, +50 for its dashboard)
 for the server the error spec stops and restarts. `UI_BIN=/path/to/staqly`
 skips both builds, `UI_SKIP_DASHBOARD=1` reuses the export already in
@@ -368,6 +370,7 @@ own). Not part of `pnpm test:e2e`; runs nightly in CI (`ui.yml`).
 | `cloud/01-auth` | Deep link to /login and back; empty, wrong, agent (no admin) and admin keys; log out; recovery (wrong key, new keys shown once behind the acknowledgement, the used key refused afterwards); /setup with a wrong and the right setup token |
 | `cloud/02-api-keys` | Active, revoked and last-used keys; create with validation and the presets (Read-only agent, Publisher automation, Full access), a key that works with exactly its scopes; an expiry in the past; rotate (old key refused, new one works) and revoke; axe on API keys, the key dialog, plan & usage, login and setup |
 | `cloud/03-empty-workspace` | A new workspace's empty states (schedule, channels, alerts, webhooks, the Default collection, the composer without channels) and its first post arriving live |
+| `billing/01-billing` | Cloud with billing, on a third server whose Stripe is the stand-in `ui/lib/stripe.ts` (`STRIPE_API_BASE`; no real Stripe is called, nothing is charged): a new account has no plan (writes 402, its owner is sent to the welcome, whose last step is the plan); Starter's trial through Checkout; add-ons refused in the trial; leaving the trial for Plus; an add-on bought and refused twice; a second person joins and Stripe bills two seats; an admin API key and the CLI read billing and get 403 on every billing write, before Stripe is asked; a forged Stripe event changes nothing; a failed renewal shows the notice to the owner only and the workspace still works; Stripe giving up locks it for everyone (the locked screen's text and way out per role, writes 402, the data stays, Plan & usage says why); a new plan opens it again for both seats, without a second trial; a lower plan; a bundle of X posts; deleting the workspace cancels the subscription. Fails on any Stripe call the stand-in does not know and on any error in the server's log |
 
 ## Responsive layout check (live, no Docker)
 

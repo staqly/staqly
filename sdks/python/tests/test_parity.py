@@ -3,6 +3,7 @@ neither falls behind."""
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -10,8 +11,11 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 TS = ROOT.parent / "typescript" / "src"
+# Outside the monorepo (the published sdist) there is nothing to compare with; in CI a missing neighbour is a
+# moved directory, and skipping would let the SDKs drift apart unseen.
 pytestmark = pytest.mark.skipif(
-    not TS.exists(), reason="the TypeScript SDK is not next to this one (outside the monorepo)"
+    not TS.exists() and not os.environ.get("CI"),
+    reason="the TypeScript SDK is not next to this one (outside the monorepo)",
 )
 
 
@@ -43,6 +47,28 @@ def test_both_sdks_call_the_same_operations() -> None:
     )
     assert sorted(ts - py) == [], "operations only the TypeScript SDK calls"
     assert sorted(py - ts) == [], "operations only the Python SDK calls"
+
+
+def test_both_sdks_raise_the_same_error_for_a_status() -> None:
+    """The same status is the same typed error in both SDKs (errors.ts makeAPIError, errors.py _BY_STATUS)."""
+    from staqly import errors
+
+    source = (TS / "errors.ts").read_text()
+    ts = {int(m.group(1)): m.group(2) for m in re.finditer(r"case (\d+):\s*return new (\w+)\(", source)}
+    # 402 is checked before the switch, together with the plan_limit_exceeded code.
+    m = re.search(r"status === (\d+)\) \{\s*return new (\w+)\(", source)
+    assert m, "errors.ts changed: update this test's regular expressions"
+    ts[int(m.group(1))] = m.group(2)
+    assert len(ts) >= 11, "errors.ts changed: update this test's regular expressions"
+    assert ts == {status: cls.__name__ for status, cls in errors._BY_STATUS.items()}
+    assert "status >= 500" in source and "InternalServerError" in source
+    # Every error class one SDK exports, the other does too (a caller's abort is JavaScript's alone).
+    ts_classes = set(
+        re.findall(r"export class (\w+Error) extends", "".join(f.read_text() for f in TS.rglob("*.ts")))
+    )
+    py_classes = {n for n in errors.__all__ if n.endswith("Error")}
+    assert ts_classes - py_classes == {"APIUserAbortError"}
+    assert py_classes - ts_classes == set()
 
 
 SPEC = ROOT.parents[1] / "apps" / "api" / "openapi.yaml"
@@ -91,7 +117,9 @@ NOT_IN_SDK_PREFIXES = (
 )
 
 
-@pytest.mark.skipif(not SPEC.exists(), reason="openapi.yaml not found (outside the monorepo)")
+@pytest.mark.skipif(
+    not SPEC.exists() and not os.environ.get("CI"), reason="openapi.yaml not found (outside the monorepo)"
+)
 def test_every_operation_is_in_the_sdk_or_left_out_on_purpose() -> None:
     import yaml
 
@@ -106,3 +134,6 @@ def test_every_operation_is_in_the_sdk_or_left_out_on_purpose() -> None:
     missing = sorted(ops - _python() - left_out)
     assert missing == [], "add these to both SDKs, or to NOT_IN_SDK with the reason"
     assert sorted(left_out & _python()) == [], "the SDK calls these: take them off NOT_IN_SDK"
+    assert sorted(NOT_IN_SDK - ops) == [], "the API no longer has these: take them off NOT_IN_SDK"
+    stale = [p for p in NOT_IN_SDK_PREFIXES if not any(op[1].startswith(p) for op in ops)]
+    assert stale == [], "no operation starts with these: take them off NOT_IN_SDK_PREFIXES"

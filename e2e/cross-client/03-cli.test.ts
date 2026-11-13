@@ -819,7 +819,7 @@ describe('cloud-only CLI: billing without Stripe, operator commands', () => {
     const co = await admin(['billing', 'checkout'])
 
     expect(co.code).toBe(1)
-    expect(co.err.length).toBeGreaterThan(0)
+    expect(co.err).toContain('billing is not enabled on this instance')
   })
 
   it('staqly serve workspaces / stats / set-plan run against a live data directory', async () => {
