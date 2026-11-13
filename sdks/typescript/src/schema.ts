@@ -3700,7 +3700,7 @@ export interface paths {
         };
         /**
          * Workspace activity log, newest first (events:read)
-         * @description Credential and session audit events (api_key.*, session.*, recovery_key.*, device.*, device_link.*, sign_in_method.*) are only listed for admin principals (dashboard sessions, the Community Edition's access token, keys with the admin scope).
+         * @description Credential and session audit events (api_key.*, session.*, recovery_key.*, device.*, device_link.*, sign_in_method.*) are only listed for admin principals (dashboard sessions, the Community Edition's access token, keys with the admin scope). Events about a resource that events:read alone does not read are only listed for callers who can list that resource: webhook.* needs webhooks:manage, alert.* alerts:manage, channel_link.* channels:manage, member.* and invitation.* admin. GET /v1/events/export follows the same rule.
          */
         get: operations["listEvents"];
         put?: never;
@@ -5821,7 +5821,7 @@ export interface components {
         };
         ChannelPatch: {
             name?: string;
-            /** @description Replaces the settings; `links` (keep, remove, defang; one of the provider's limits.link_modes) sets what the channel does with links */
+            /** @description Replaces the settings; `links` (keep, remove, defang; one of the provider's limits.link_modes) sets what the channel does with links. The other keys are the provider's settings_fields; a key it does not define is refused (422) unless the channel already stores it with the same value, and a channels field takes channels of this workspace on the same platform */
             settings?: {
                 [key: string]: unknown;
             };

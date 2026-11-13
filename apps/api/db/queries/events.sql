@@ -25,6 +25,9 @@ WHERE workspace_id = @workspace_id
   AND (CAST(@include_audit AS INTEGER) = 1 OR NOT (type GLOB 'api_key.*' OR type GLOB 'session.*'
        OR type GLOB 'recovery_key.*' OR type GLOB 'device.*' OR type GLOB 'device_link.*'
        OR type GLOB 'access_token.*' OR type GLOB 'sign_in_method.*'))
+  -- hidden_families: a JSON array of event families (the part before the dot) the caller may not read
+  -- through the resource's own endpoint (app.hiddenEventFamilies).
+  AND (sqlc.narg(hidden_families) IS NULL OR substr(type, 1, instr(type, '.') - 1) NOT IN (SELECT value FROM json_each(sqlc.narg(hidden_families))))
 ORDER BY seq DESC
 LIMIT @lim;
 

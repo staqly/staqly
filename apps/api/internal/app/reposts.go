@@ -14,12 +14,13 @@ import (
 // platform that repost the post once it is out. Each repost is its own job, so one account failing does not
 // hold back the others; a repost that fails is logged and dropped, the post stays published.
 
-// checkChannelSettings validates the channels fields of a target: every id is another channel of this
-// workspace on the same platform. "reposters" is read for every target once it is out (enqueueReposts), so a
-// platform that does not declare it refuses it instead of storing it unchecked.
-func (s *Service) checkChannelSettings(ctx context.Context, q *db.Queries, workspaceID string, ch db.Channel, fields []providers.Field, settings map[string]string) error {
+// checkTargetChannels validates the channels fields of a target (or of its channel's defaults; prefix leads
+// the error's field): every id is another channel of this workspace on the same platform. "reposters" is read
+// for every target once it is out (enqueueReposts), so a platform that does not declare it refuses it instead
+// of storing it unchecked.
+func (s *Service) checkTargetChannels(ctx context.Context, q *db.Queries, workspaceID string, ch db.Channel, fields []providers.Field, settings map[string]string, prefix string) error {
 	if settings["reposters"] != "" && !slices.ContainsFunc(fields, func(f providers.Field) bool { return f.Key == "reposters" && f.Kind == "channels" }) {
-		return invalid("targets."+ch.ID+".settings.reposters", "this platform has no reposts")
+		return invalid(prefix+"reposters", "this platform has no reposts")
 	}
 	for _, f := range fields {
 		if f.Kind != "channels" {
@@ -29,7 +30,7 @@ func (s *Service) checkChannelSettings(ctx context.Context, q *db.Queries, works
 		if len(ids) == 0 {
 			continue
 		}
-		key := "targets." + ch.ID + ".settings." + f.Key
+		key := prefix + f.Key
 		rows, err := q.ChannelsByIDs(ctx, db.ChannelsByIDsParams{WorkspaceID: workspaceID, Ids: mustJSON(ids)})
 		if err != nil {
 			return err

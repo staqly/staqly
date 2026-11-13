@@ -923,6 +923,22 @@ func (s *Service) RemoveMember(ctx context.Context, p Principal, userID string) 
 			WorkspaceID: p.WorkspaceID, UserID: nullStr(userID)}); err != nil {
 			return err
 		}
+		// Their keys here already answer 401 (no member behind them); revoked, they stop counting against the plan.
+		keys, err := q.ListAPIKeys(ctx, p.WorkspaceID)
+		if err != nil {
+			return err
+		}
+		for _, k := range keys {
+			if k.RevokedAt.Valid || k.CreatedByUserID.String != userID {
+				continue
+			}
+			if _, err := q.RevokeAPIKey(ctx, db.RevokeAPIKeyParams{RevokedAt: nullStr(s.now()), WorkspaceID: p.WorkspaceID, ID: k.ID}); err != nil {
+				return err
+			}
+			if _, err := s.emit(ctx, q, p, "api_key.revoked", "", "", map[string]any{"api_key_id": k.ID, "reason": "member_removed"}); err != nil {
+				return err
+			}
+		}
 		_, err = s.emit(ctx, q, p, "member.removed", "", "", map[string]any{"user_id": userID, "role": m.Role, "left": self})
 		return err
 	})

@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -92,8 +94,32 @@ func channelLinks(c db.Channel) string {
 	return e.Limits().Links
 }
 
-// checkChannelSettings validates the channel settings staqly reads itself.
-func checkChannelSettings(e providers.Entry, settings map[string]any) error {
+// checkChannelSettings validates a channel's settings: `links`, which staqly reads itself, and defaults for
+// the platform's own settings fields. Any other key is refused instead of stored unchecked; a channels field
+// names channels of this workspace on the same platform, like a target's (reposts.go). An undefined key
+// the channel already stores passes with its value unchanged: older clients wrote any key, a provider merged
+// into another (migrations 00016-00019) kept the old one's, and the app saves the settings back whole.
+func (s *Service) checkChannelSettings(ctx context.Context, q *db.Queries, workspaceID string, ch db.Channel, e providers.Entry, settings map[string]any) error {
+	fields := e.SettingsFields()
+	stored := map[string]any{}
+	_ = json.Unmarshal([]byte(ch.Settings), &stored)
+	channels := map[string]string{}
+	for k, v := range settings {
+		i := slices.IndexFunc(fields, func(f providers.Field) bool { return f.Key == k })
+		if old, has := stored[k]; k != "links" && i < 0 && !(has && reflect.DeepEqual(old, v)) {
+			return invalid("settings."+k, "is not a setting of this platform")
+		}
+		if i >= 0 && fields[i].Kind == "channels" && v != nil {
+			ids, ok := v.(string)
+			if !ok {
+				return invalid("settings."+k, "must be channel ids separated by commas")
+			}
+			channels[k] = ids
+		}
+	}
+	if err := s.checkTargetChannels(ctx, q, workspaceID, ch, fields, channels, "settings."); err != nil {
+		return err
+	}
 	v, ok := settings["links"]
 	if !ok || v == nil {
 		return nil
@@ -518,7 +544,7 @@ func (s *Service) saveChannel(ctx context.Context, p Principal, e providers.Entr
 	if settings == nil {
 		settings = map[string]any{}
 	}
-	if err := checkChannelSettings(e, settings); err != nil {
+	if err := s.checkChannelSettings(ctx, s.Q, p.WorkspaceID, db.Channel{Provider: e.ID()}, e, settings); err != nil {
 		return Channel{}, err
 	}
 	fp := s.channelFingerprint(e.ID(), creds, profile)
@@ -973,7 +999,7 @@ func (s *Service) UpdateChannel(ctx context.Context, p Principal, id string, in 
 			if !ok {
 				return invalid("settings", "this channel's provider is not part of this build")
 			}
-			if err := checkChannelSettings(e, in.Settings); err != nil {
+			if err := s.checkChannelSettings(ctx, q, p.WorkspaceID, row, e, in.Settings); err != nil {
 				return err
 			}
 			row.Settings = mustJSON(in.Settings)

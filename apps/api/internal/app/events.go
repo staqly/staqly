@@ -195,7 +195,7 @@ func (s *Service) ListEvents(ctx context.Context, p Principal, f EventFilter) (E
 		rows, err = s.Q.ListEvents(ctx, db.ListEventsParams{
 			WorkspaceID: p.WorkspaceID, PostID: optAny(f.PostID), CollectionID: optAny(f.CollectionID),
 			ChannelID: optAny(f.ChannelID), ScheduleID: optAny(f.ScheduleID), Type: optAny(f.Type), ActorType: optAny(f.ActorType), ActorID: optAny(f.ActorID), Agents: agents, Types: types, TypePrefix: optAny(f.TypePrefix),
-			FromTs: from, ToTs: to, BeforeSeq: before, IncludeAudit: int64(audit), Lim: int64(lim + 1),
+			FromTs: from, ToTs: to, BeforeSeq: before, IncludeAudit: int64(audit), HiddenFamilies: hiddenEventFamilies(p), Lim: int64(lim + 1),
 		})
 	}
 	if err != nil {
